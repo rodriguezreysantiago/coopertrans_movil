@@ -269,7 +269,14 @@ export const loginConDni = onCall(
 // hacerlo directo a Firestore. Esta callable es para cuando hay que
 // tocar ROL o ambos.
 
-const ROLES_VALIDOS = ["CHOFER", "PLANTA", "SUPERVISOR", "ADMIN"];
+const ROLES_VALIDOS = [
+  "CHOFER",
+  "PLANTA",
+  "GOMERIA",
+  "SEG_HIGIENE",
+  "SUPERVISOR",
+  "ADMIN",
+];
 const AREAS_VALIDAS = [
   "MANEJO",
   "ADMINISTRACION",

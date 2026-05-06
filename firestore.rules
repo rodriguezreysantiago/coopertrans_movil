@@ -51,6 +51,30 @@ service cloud.firestore {
       return isAdmin() || isSupervisor();
     }
 
+    /// Rol especializado: gomero/encargado de cubiertas. Opera SOLO
+    /// el módulo Gomería (alta de cubiertas, instalación, recapado).
+    function isGomeria() {
+      return isSignedIn() && request.auth.token.rol == 'GOMERIA';
+    }
+
+    /// Rol especializado: Seguridad e Higiene. Monitorea conducta y
+    /// eventos Volvo (alertas, eco-driving, descargas PTO, mapa).
+    function isSegHigiene() {
+      return isSignedIn() && request.auth.token.rol == 'SEG_HIGIENE';
+    }
+
+    /// Quiénes pueden operar el módulo Gomería: admin/supervisor +
+    /// el rol especializado GOMERIA.
+    function puedeOperarGomeria() {
+      return isAdminOrSupervisor() || isGomeria();
+    }
+
+    /// Quiénes pueden ver los tableros Volvo (alertas, eco-driving,
+    /// descargas PTO, mapa de eventos): admin/supervisor + SEG_HIGIENE.
+    function puedeVerVolvoTableros() {
+      return isAdminOrSupervisor() || isSegHigiene();
+    }
+
     function isSelf(dni) {
       return isSignedIn() && request.auth.uid == dni;
     }
@@ -252,13 +276,12 @@ service cloud.firestore {
     // crearlas ni borrarlas — todo create/delete pasa por Admin SDK.
 
     match /VOLVO_ALERTAS/{doc} {
-      allow read: if isAdminOrSupervisor();
-      // Update: admin/supervisor marcan como atendida desde el tablero.
-      // El payload de la alerta lo escribe el poller via Admin SDK, no
-      // hace falta protegerlo a nivel de rules — un admin "rebelde" no
-      // gana nada cambiando el `tipo` o `severidad` de un evento ya
-      // registrado, y AUDITORIA_ACCIONES guarda quién marcó qué.
-      allow update: if isAdminOrSupervisor();
+      // Lectura y "marcar atendida" disponible para admin, supervisor
+      // y el rol SEG_HIGIENE (Seguridad e Higiene).
+      allow read: if puedeVerVolvoTableros();
+      // Update: marcar como atendida desde el tablero. AUDITORIA_ACCIONES
+      // guarda quién marcó qué.
+      allow update: if puedeVerVolvoTableros();
       allow create, delete: if false;
     }
 
@@ -350,8 +373,8 @@ service cloud.firestore {
     // en cubiertas/modelos ya cargados con esa marca.
 
     match /CUBIERTAS_MARCAS/{doc} {
-      // Lectura: cualquier admin/supervisor (incluido supervisor de gomería).
-      allow read: if isAdminOrSupervisor();
+      // Lectura: admin/supervisor + rol GOMERIA (operador del módulo).
+      allow read: if puedeOperarGomeria();
       // Escritura: solo admin. La gomería usa lo que el admin definió.
       allow write: if isAdmin();
     }
@@ -364,7 +387,8 @@ service cloud.firestore {
     // modelos pero no edita el catálogo.
 
     match /CUBIERTAS_MODELOS/{doc} {
-      allow read: if isAdminOrSupervisor();
+      // Lectura: admin/supervisor + GOMERIA. Escritura: solo admin.
+      allow read: if puedeOperarGomeria();
       allow write: if isAdmin();
     }
 
@@ -376,14 +400,13 @@ service cloud.firestore {
     // de instalación/retiro/recapado.
 
     match /CUBIERTAS/{doc} {
-      allow read: if isAdminOrSupervisor();
+      allow read: if puedeOperarGomeria();
       // Crear: el alta debe atribuirse a quien escribe (no falsificable).
-      allow create: if isAdminOrSupervisor()
+      allow create: if puedeOperarGomeria()
         && request.resource.data.creado_por_dni == request.auth.uid;
-      // Update / delete: admin/supervisor sin restricción de keys —
-      // todas las mutaciones del ciclo de vida pasan por `GomeriaService`
-      // de forma transaccional y ya valida estructura.
-      allow update, delete: if isAdminOrSupervisor();
+      // Update / delete: admin/supervisor + GOMERIA. Las mutaciones del
+      // ciclo de vida pasan por `GomeriaService` que valida estructura.
+      allow update, delete: if puedeOperarGomeria();
     }
 
     // ========================================================================
@@ -398,13 +421,13 @@ service cloud.firestore {
     // del histórico — solo se puede "cerrar" la activa.
 
     match /CUBIERTAS_INSTALADAS/{doc} {
-      // Lectura: admin/supervisor (incluye supervisor de gomería).
-      allow read: if isAdminOrSupervisor();
+      // Lectura: admin/supervisor + GOMERIA.
+      allow read: if puedeOperarGomeria();
 
-      // Crear: requiere admin/supervisor + estructura mínima + `hasta == null`
-      // (las nuevas siempre arrancan activas). `instalado_por_dni` debe ser
-      // quien escribe — no se puede atribuir el cambio a otro.
-      allow create: if isAdminOrSupervisor()
+      // Crear: requiere admin/supervisor o GOMERIA + estructura mínima
+      // + `hasta == null` (las nuevas siempre arrancan activas).
+      // `instalado_por_dni` debe ser quien escribe.
+      allow create: if puedeOperarGomeria()
         && request.resource.data.instalado_por_dni == request.auth.uid
         && request.resource.data.cubierta_id is string
         && request.resource.data.unidad_id is string
@@ -418,7 +441,7 @@ service cloud.firestore {
       // (b) registrar una lectura de control (presión / profundidad de
       //     banda) sin cerrar — `hasta` queda en null.
       // Cualquier otro cambio se rechaza para mantener el log inmutable.
-      allow update: if isAdminOrSupervisor()
+      allow update: if puedeOperarGomeria()
         && resource.data.hasta == null
         && (
           (request.resource.data.diff(resource.data).affectedKeys()
@@ -448,8 +471,8 @@ service cloud.firestore {
     // los crea/borra dentro de la transaction de instalar/retirar.
 
     match /CUBIERTAS_POSICIONES_ACTIVAS/{doc} {
-      allow read: if isAdminOrSupervisor();
-      allow create, delete: if isAdminOrSupervisor();
+      allow read: if puedeOperarGomeria();
+      allow create, delete: if puedeOperarGomeria();
       // No update: si la posición cambia de cubierta hay que borrar
       // y recrear (la dos operaciones son del flujo retirar+instalar
       // o del flujo "rotar").
@@ -457,8 +480,8 @@ service cloud.firestore {
     }
 
     match /CUBIERTAS_ACTIVAS/{doc} {
-      allow read: if isAdminOrSupervisor();
-      allow create, delete: if isAdminOrSupervisor();
+      allow read: if puedeOperarGomeria();
+      allow create, delete: if puedeOperarGomeria();
       allow update: if false;
     }
 
@@ -471,8 +494,8 @@ service cloud.firestore {
     // está en la lista. Soft-delete con `activo`.
 
     match /CUBIERTAS_PROVEEDORES/{doc} {
-      allow read: if isAdminOrSupervisor();
-      allow write: if isAdminOrSupervisor();
+      allow read: if puedeOperarGomeria();
+      allow write: if puedeOperarGomeria();
     }
 
     // ========================================================================
@@ -485,10 +508,10 @@ service cloud.firestore {
     // DESCARTADA según el resultado.
 
     match /CUBIERTAS_RECAPADOS/{doc} {
-      allow read: if isAdminOrSupervisor();
+      allow read: if puedeOperarGomeria();
 
       // Crear envío a recapado: estructura mínima + en proceso (no cerrado).
-      allow create: if isAdminOrSupervisor()
+      allow create: if puedeOperarGomeria()
         && request.resource.data.enviado_por_dni == request.auth.uid
         && request.resource.data.cubierta_id is string
         && request.resource.data.proveedor is string
@@ -499,7 +522,7 @@ service cloud.firestore {
       // Cerrar el recapado al recibir la cubierta. Se permite setear
       // `fecha_retorno`, `resultado`, `costo`, `notas` y los campos de
       // auditoría del cierre. El resto es inmutable.
-      allow update: if isAdminOrSupervisor()
+      allow update: if puedeOperarGomeria()
         && resource.data.fecha_retorno == null
         && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['fecha_retorno', 'resultado', 'costo', 'notas',
@@ -523,8 +546,9 @@ service cloud.firestore {
     // los mismos campos sin pérdida.
 
     match /VOLVO_SCORES_DIARIOS/{doc} {
-      allow read: if isAdminOrSupervisor();
-      // Escritura: solo desde el poller via Admin SDK (bypass de rules).
+      // Lectura admin/supervisor + SEG_HIGIENE (para pantalla
+      // eco-driving). Escritura: solo el poller via Admin SDK.
+      allow read: if puedeVerVolvoTableros();
       allow write: if false;
     }
 
@@ -543,13 +567,13 @@ service cloud.firestore {
     // sin afectar integridad de datos.
 
     match /META/cubiertas_counter {
-      allow read: if isAdminOrSupervisor();
+      allow read: if puedeOperarGomeria();
       // Create: solo si el contador arranca en 1 (primer alta del sistema).
-      allow create: if isAdminOrSupervisor()
+      allow create: if puedeOperarGomeria()
         && request.resource.data.proximo == 1;
       // Update: solo +1 monotónico. No permite saltos ni decrementos —
       // un bug del cliente o un set manual no puede romper la secuencia.
-      allow update: if isAdminOrSupervisor()
+      allow update: if puedeOperarGomeria()
         && request.resource.data.proximo == resource.data.proximo + 1;
       allow delete: if false;
     }

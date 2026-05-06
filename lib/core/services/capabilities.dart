@@ -86,6 +86,23 @@ class Capabilities {
     AppRoles.planta: {
       // Igual que chofer: no entra al panel admin.
     },
+    AppRoles.gomeria: {
+      // Rol especializado: solo opera el módulo Gomería. Entra al panel
+      // admin para acceder al hub de gomería; ningún otro tile aparece.
+      Capability.verPanelAdmin,
+      Capability.verGomeria,
+    },
+    AppRoles.segHigiene: {
+      // Rol especializado de Seguridad e Higiene: monitorea conducta y
+      // eventos Volvo (alertas, eco-driving, descargas PTO, mapa). No
+      // gestiona personal, flota ni bot.
+      // Hoy las 4 pantallas Volvo (alertas, eco-driving, descargas, mapa)
+      // comparten una sola capability `verAlertasVolvo`. Si más adelante
+      // queremos darle solo eco-driving sin alertas, separamos en
+      // capabilities distintas y ajustamos los gates de las pantallas.
+      Capability.verPanelAdmin,
+      Capability.verAlertasVolvo,
+    },
     AppRoles.supervisor: {
       Capability.verPanelAdmin,
       Capability.verListaPersonal,
@@ -131,6 +148,8 @@ class Capabilities {
     return {
       AppRoles.chofer: _porRol[AppRoles.chofer] ?? {},
       AppRoles.planta: _porRol[AppRoles.planta] ?? {},
+      AppRoles.gomeria: _porRol[AppRoles.gomeria] ?? {},
+      AppRoles.segHigiene: _porRol[AppRoles.segHigiene] ?? {},
       AppRoles.supervisor: supervisor,
       AppRoles.admin: {...supervisor, ...adminExtra},
     };

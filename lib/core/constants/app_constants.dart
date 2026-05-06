@@ -185,24 +185,32 @@ class AppRoles {
   AppRoles._();
 
   // ─── Roles del sistema (definen QUÉ puede hacer cada usuario) ───
-  // 4 roles ordenados de menor a mayor poder. Cada uno hereda los
-  // permisos del anterior y suma los suyos:
+  // 6 roles. Los 4 base + 2 especializados:
   //
-  //   CHOFER     — empleado de manejo con vehículo asignado.
-  //                Ve sus vencimientos personales + su unidad.
-  //   PLANTA     — empleado sin vehículo (planta, taller, gomería,
-  //                administración). Solo ve sus vencimientos
-  //                personales. NO ve "Mi unidad".
-  //   SUPERVISOR — gestiona personal + flota + vencimientos +
-  //                revisiones + bot. NO puede crear/borrar admins
-  //                ni cambiar roles de otros.
-  //   ADMIN      — control total. Crea admins, cambia roles, audita.
+  //   CHOFER       — empleado de manejo con vehículo asignado.
+  //                  Ve sus vencimientos personales + su unidad.
+  //   PLANTA       — empleado sin vehículo (planta, taller, gomería,
+  //                  administración). Solo ve sus vencimientos
+  //                  personales. NO ve "Mi unidad".
+  //   GOMERIA      — gomero/encargado de cubiertas. Ve y opera SOLO
+  //                  el módulo Gomería (stock, instalación, recapados).
+  //                  No accede al resto del panel admin.
+  //   SEG_HIGIENE  — Seguridad e Higiene. Ve los tableros Volvo
+  //                  (alertas, eco-driving, descargas PTO, mapa) para
+  //                  monitorear conducta y eventos de la flota. No
+  //                  edita personal, flota ni opera el bot.
+  //   SUPERVISOR   — mando medio. Gestiona personal + flota +
+  //                  vencimientos + revisiones + bot. NO puede
+  //                  crear/borrar admins ni cambiar roles de otros.
+  //   ADMIN        — control total. Crea admins, cambia roles, audita.
   //
   // Compatibilidad: 'USUARIO' es el rol legacy que tenían los choferes
-  // antes de esta migración. Se mantiene como alias hasta que el
-  // script de migración de datos los pase todos a CHOFER.
+  // antes de la migración a 4 roles. Se mantiene como alias hasta que
+  // el script de migración los pase todos a CHOFER.
   static const String chofer = 'CHOFER';
   static const String planta = 'PLANTA';
+  static const String gomeria = 'GOMERIA';
+  static const String segHigiene = 'SEG_HIGIENE';
   static const String supervisor = 'SUPERVISOR';
   static const String admin = 'ADMIN';
 
@@ -210,12 +218,21 @@ class AppRoles {
   static const String usuarioLegacy = 'USUARIO';
 
   /// Lista de todos los roles válidos (para validar entradas).
-  static const List<String> todos = [chofer, planta, supervisor, admin];
+  static const List<String> todos = [
+    chofer,
+    planta,
+    gomeria,
+    segHigiene,
+    supervisor,
+    admin,
+  ];
 
   /// Etiqueta legible para mostrar en UI.
   static const Map<String, String> etiquetas = {
     chofer: 'Chofer',
     planta: 'Planta',
+    gomeria: 'Gomería',
+    segHigiene: 'Seguridad e Higiene',
     supervisor: 'Supervisor',
     admin: 'Admin',
   };
