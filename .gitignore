@@ -59,6 +59,9 @@ app.*.map.json
 commit_msg.txt
 commit_msg*.txt
 
+# Outputs de scripts de auditoría/diagnóstico (regenerables, no van al repo).
+fechas_rto_a_corregir.csv
+
 # State directory de Claude Code (worktrees temporales del agent,
 # session state, etc). 100% local de la maquina, no deberia trackearse.
 # Excepción: settings.json del proyecto SÍ se trackea — define el
