@@ -94,9 +94,12 @@ describe('planificarEnvioAgrupado — origen NO agrupable', () => {
 });
 
 describe('ORIGENES_AGRUPABLES contiene los esperados', () => {
-  test('volvo_alert_high y volvo_alert_mantenimiento están', () => {
+  test('volvo_alert_high está, volvo_alert_mantenimiento NO (cron diario consolida)', () => {
     assert.ok(ORIGENES_AGRUPABLES.has('volvo_alert_high'));
-    assert.ok(ORIGENES_AGRUPABLES.has('volvo_alert_mantenimiento'));
+    // Desde el commit b587822 (2026-05-05), mantenimiento ya no se encola
+    // individualmente — onAlertaVolvoMantenimientoCreated solo persiste en
+    // VOLVO_ALERTAS y el cron diario arma 1 mensaje consolidado.
+    assert.ok(!ORIGENES_AGRUPABLES.has('volvo_alert_mantenimiento'));
   });
 
   test('cron_aviso_vencimiento NO está (tiene su propia agrupación al encolar)', () => {
@@ -226,39 +229,24 @@ describe('planificarEnvioAgrupado — agrupación volvo_alert_high', () => {
   });
 });
 
-describe('planificarEnvioAgrupado — agrupación volvo_alert_mantenimiento', () => {
-  test('2 pendientes al jefe de mant → mensaje agrupado', async () => {
-    const dest = '35244439';
-    const doc1 = fakeDoc({
+describe('planificarEnvioAgrupado — volvo_alert_mantenimiento NO se agrupa', () => {
+  // Desde commit b587822 (2026-05-05) la consolidación de mantenimiento
+  // se hace en cron_mantenimiento_diario (1 mensaje/día al jefe de mant).
+  // Si por defensa llega un doc con origen='volvo_alert_mantenimiento' a
+  // COLA_WHATSAPP, el agrupador lo ignora y se envía individual.
+  test('origen volvo_alert_mantenimiento → null (envío individual)', async () => {
+    const docActual = fakeDoc({
       id: 'mant1',
       data: {
         origen: 'volvo_alert_mantenimiento',
-        destinatario_id: dest,
+        destinatario_id: '35244439',
         mensaje: '🔧 Alerta de mantenimiento ...',
         alert_patente: 'AC383ND',
         alert_tipo: 'CATALYST',
-        alert_creado_en: tsHace(60 * 60 * 1000),
       },
     });
-    const doc2 = fakeDoc({
-      id: 'mant2',
-      data: {
-        origen: 'volvo_alert_mantenimiento',
-        destinatario_id: dest,
-        mensaje: '🔧 Alerta de mantenimiento ...',
-        alert_patente: 'AB493CP',
-        alert_tipo: 'FUEL',
-        alert_creado_en: tsHace(2 * 60 * 60 * 1000),
-      },
-    });
-    const db = fakeDbConDocs([doc1, doc2]);
-    const result = await planificarEnvioAgrupado(db, doc1);
-    assert.ok(result);
-    assert.strictEqual(result.otrosDocsAgrupados.length, 1);
-    assert.match(result.mensajeCombinado, /Alertas de mantenimiento agrupadas/);
-    assert.match(result.mensajeCombinado, /2 alertas en 2 tractores/);
-    assert.match(result.mensajeCombinado, /AC383ND/);
-    assert.match(result.mensajeCombinado, /AB493CP/);
+    const result = await planificarEnvioAgrupado(fakeDbConDocs([docActual]), docActual);
+    assert.strictEqual(result, null);
   });
 });
 

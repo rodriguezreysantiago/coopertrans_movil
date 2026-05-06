@@ -145,6 +145,45 @@ function limpiarLocksChromium() {
   }
 }
 
+// Mata procesos `chrome.exe` que quedaron zombis del intento anterior
+// del bot (puppeteer no siempre cierra limpio si node crasheó, kill -9,
+// o el padre se cerró sin SIGTERM). Solo Windows. Filtra por CommandLine
+// que contenga el path raíz del bot — NO toca Chrome del usuario ni
+// instancias de Puppeteer de otros proyectos.
+//
+// Sin esto, `client.initialize()` falla con
+// "The browser is already running for ...\.wwebjs_auth\session" y los
+// retries de `_safeInitialize()` rebotan todos contra el mismo zombi.
+// Diagnosticado el 2026-05-06.
+function matarProcesosChromiumZombi() {
+  if (process.platform !== 'win32') return;
+  const root = path.resolve(__dirname, '..');
+  const psCmd =
+    `Get-CimInstance Win32_Process -Filter "Name='chrome.exe'" | ` +
+    `Where-Object { $_.CommandLine -like '*${root}*' } | ` +
+    `ForEach-Object { Stop-Process -Id $_.ProcessId -Force; ` +
+    `Write-Output $_.ProcessId }`;
+  try {
+    const { execFileSync } = require('child_process');
+    const out = execFileSync(
+      'powershell.exe',
+      ['-NoProfile', '-Command', psCmd],
+      { encoding: 'utf-8', timeout: 10000 }
+    );
+    const pids = out.trim().split(/\s+/).filter(Boolean);
+    if (pids.length > 0) {
+      log.info(
+        `Procesos Chromium zombi del bot anterior matados: ${pids.length} ` +
+        `(PIDs ${pids.join(', ')}).`
+      );
+    } else {
+      log.info('No había procesos Chromium zombi del bot.');
+    }
+  } catch (e) {
+    log.warn(`No pude matar procesos Chromium zombi: ${e.message}`);
+  }
+}
+
 // Cola en memoria con los doc IDs pendientes en orden FIFO.
 const colaProcesar = [];
 let procesando = false;
@@ -654,6 +693,9 @@ async function _verificarNoHayOtraInstancia(db) {
 
 async function main() {
   log.info(`Iniciando whatsapp-bot (PC_ID=${PC_ID})...`);
+  // Orden importa: matar procesos primero (al morir dejan locks frescos),
+  // limpiar locks Singleton* después.
+  matarProcesosChromiumZombi();
   limpiarLocksChromium();
 
   const db = fs.inicializar();
