@@ -253,12 +253,73 @@ function _detenerWatchdogReady() {
   }
 }
 
+// ─── Detección de browser muerto ───────────────────────────────────
+//
+// Bug observado 2026-05-06: después de horas de uso normal el browser
+// de Puppeteer se desconecta sin que `whatsapp-web.js` emita el evento
+// `disconnected`. El watchdog de READY no aplica (sólo cubre el arranque
+// inicial). Resultado: cada llamada a `getNumberId`/`sendMessage` falla
+// con "Attempted to use detached Frame ...", el index.js lo trata como
+// transient y reencola — loop infinito sin recovery.
+//
+// Mitigación: detectamos esos errores específicos en el wrapper y
+// disparamos `_gestionarBrowserMuerto()` que marca el cliente como no
+// listo, lo destruye y arranca el flujo de reconexión.
+
+const _PATRONES_BROWSER_MUERTO = [
+  /detached frame/i,
+  /target closed/i,
+  /protocol error.*target/i,
+  /browser is closed/i,
+  /browser has disconnected/i,
+  /session closed/i,
+  /connection closed/i,
+];
+
+function _esErrorBrowserMuerto(e) {
+  const msg = (e && e.message) || String(e || '');
+  return _PATRONES_BROWSER_MUERTO.some((re) => re.test(msg));
+}
+
+let _browserMuertoEnCurso = false;
+function _gestionarBrowserMuerto(e) {
+  if (_browserMuertoEnCurso) return;
+  _browserMuertoEnCurso = true;
+  listo = false;
+  health.setEstadoCliente('DESCONECTADO');
+  health.registrarError(
+    'cliente_wa',
+    `Browser de Puppeteer muerto: ${e.message}`
+  );
+  log.error(
+    `Browser de Puppeteer muerto. Reinicializando cliente. Causa: ${e.message}`
+  );
+  // destroy + reconexión en background — el caller actual no espera.
+  setImmediate(async () => {
+    try {
+      await client.destroy();
+    } catch (destroyErr) {
+      log.warn(`Error al destruir cliente muerto: ${destroyErr.message}`);
+    } finally {
+      _browserMuertoEnCurso = false;
+      _intentarReconexion();
+    }
+  });
+}
+
 // ─── API pública ───────────────────────────────────────────────────
 
 async function tieneWhatsApp(wid) {
   if (!client || !listo) throw new Error('Cliente no inicializado');
-  const numberId = await client.getNumberId(wid.replace('@c.us', ''));
-  return numberId !== null;
+  try {
+    const numberId = await client.getNumberId(wid.replace('@c.us', ''));
+    return numberId !== null;
+  } catch (e) {
+    if (_esErrorBrowserMuerto(e)) {
+      _gestionarBrowserMuerto(e);
+    }
+    throw e;
+  }
 }
 
 /**
@@ -280,7 +341,15 @@ async function enviarMensaje(wid, texto) {
     return `dryrun_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
   }
   if (!client || !listo) throw new Error('Cliente no inicializado');
-  const sent = await client.sendMessage(wid, texto);
+  let sent;
+  try {
+    sent = await client.sendMessage(wid, texto);
+  } catch (e) {
+    if (_esErrorBrowserMuerto(e)) {
+      _gestionarBrowserMuerto(e);
+    }
+    throw e;
+  }
   try {
     return sent && sent.id && sent.id._serialized ? sent.id._serialized : null;
   } catch (_) {
@@ -300,7 +369,14 @@ function onMensajeEntrante(handler) {
 
 async function responder(msg, texto) {
   if (!client || !listo) throw new Error('Cliente no inicializado');
-  await msg.reply(texto);
+  try {
+    await msg.reply(texto);
+  } catch (e) {
+    if (_esErrorBrowserMuerto(e)) {
+      _gestionarBrowserMuerto(e);
+    }
+    throw e;
+  }
 }
 
 async function destroy() {
