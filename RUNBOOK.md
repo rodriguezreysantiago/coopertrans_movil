@@ -827,6 +827,23 @@ git status   # debe decir "working tree clean"
 
 Cliente Flutter: la pantalla "Estado del Bot" muestra heartbeat OK pero los push notifications de admin no llegan. Causa típica: la sesión del admin está cacheando claims viejos. **Logout + login** en la app suele arreglarlo (renueva el JWT con custom claims actuales).
 
+### El bot arrancó OK pero después de horas se cuelga (encola en loop, no envía)
+
+Síntoma: en `bot.out.log` ves cada 15s los mismos doc IDs entrando a la cola sin enviarse, y en `bot.err.log` warnings repetidos:
+```
+[WARN] Verificación de XXXXX@c.us falló (transient): Attempted to use detached Frame '...'
+```
+
+Significa que el browser de Puppeteer se desconectó (memoria, push de WhatsApp Web, kicked por device, etc.) pero el cliente `whatsapp-web.js` **no emite `disconnected`** y el bot queda llamando un frame muerto.
+
+**Fix automatizado** (commit `673d503`): el wrapper de `whatsapp.js` detecta los patrones `detached Frame` / `target closed` / `browser is closed` y dispara `_gestionarBrowserMuerto()` que destruye el cliente y arranca el flujo de reconexión. Con el bot al día (>= `673d503`) se recupera solo en ~10-15s.
+
+**Fix manual** si necesitás resolverlo a mano (ej. con un bot viejo):
+```powershell
+Restart-Service CoopertransMovilBot
+# o si está corriendo manual con node, Ctrl+C + relanzar
+```
+
 ### El bot arranca y se cierra en seguida — `client.initialize() falló: The browser is already running`
 
 Síntoma en `bot.err.log`:
