@@ -77,6 +77,8 @@ windows/runner/resources/*.ico.bak-*
 # aplique el `!.claude/settings.json` siguiente.
 .claude/*
 !.claude/settings.json
+!.claude/scripts/
+!.claude/scripts/**
 
 # Buffer local del SDK nativo de Sentry — guarda eventos pendientes
 # de envío antes de transmitirlos al server. Local de la PC, no

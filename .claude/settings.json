@@ -1,4 +1,26 @@
 {
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/scripts/session_start.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/scripts/session_end.py"
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "defaultMode": "acceptEdits",
     "allow": [

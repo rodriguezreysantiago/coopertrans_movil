@@ -69,6 +69,33 @@ git push origin main
 # 4) Si tenés el bot corriendo acá, decidir qué hacer (ver paso 4)
 ```
 
+### Setup one-time en CADA PC nueva (Win) o en la Mac
+
+Ejecutar UNA SOLA VEZ después de clonar el repo:
+
+```bash
+cd <ruta-al-repo>
+
+# 1) Activar git hooks versionados (post-commit que respalda docs a Drive).
+git config core.hooksPath .githooks
+
+# 2) Decirle al post-commit dónde está tu Google Drive en esta máquina.
+#    El path varía por OS (Windows usa la letra de unidad mapeada por
+#    Drive Desktop; Mac usa CloudStorage):
+#
+#    Windows típico:
+git config claudesync.drivepath "G:/Mi unidad/ClaudeCodeSync/proyecto-docs"
+#
+#    Mac típico (ajustar el email):
+#    git config claudesync.drivepath "$HOME/Library/CloudStorage/GoogleDrive-santiagocoopertrans@gmail.com/My Drive/ClaudeCodeSync/proyecto-docs"
+```
+
+Después de eso queda automatizado:
+- Cada commit copia los .md críticos (`ESTADO_PROYECTO.md`, `RUNBOOK.md`, `MANUAL_USUARIO.md`, `POLITICA_PRIVACIDAD.md`, `docs/PLAY_STORE_LISTING.md`, etc.) a Drive.
+- Si Drive no está conectado o el path es inválido, el hook saltea silenciosamente (no bloquea el commit).
+
+Los hooks de Claude Code (`SessionStart` con `git pull` automático + `Stop` con alerta de cambios sin pushear) **ya vienen** en `.claude/settings.json` versionado — se activan solos al clonar.
+
 ### Paso 2 — Sync de código en la PC nueva (oficina)
 
 ```bash

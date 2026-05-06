@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Hook git post-commit: backup pasivo a Google Drive de los docs criticos
+# del proyecto, asi cuando llegas a otra PC podes mirarlos en Drive aunque
+# no hayas pulleado todavia.
+#
+# Setup one-time por maquina (despues de clonar el repo):
+#   git config core.hooksPath .githooks
+#   git config claudesync.drivepath "G:/Mi unidad/ClaudeCodeSync/proyecto-docs"
+#       (en Mac, ej.: ~/Library/CloudStorage/GoogleDrive-tu@gmail.com/My Drive/ClaudeCodeSync/proyecto-docs)
+#
+# El hook es BEST-EFFORT: si Drive no esta accesible o el path no esta
+# configurado, no falla — el commit se hace igual y el repo sigue siendo
+# fuente de verdad. Solo se pierde el backup pasivo.
+
+set -e
+
+DRIVE_PATH="$(git config --get claudesync.drivepath || true)"
+if [ -z "$DRIVE_PATH" ]; then
+    # Sin path configurado, salgo en silencio.
+    exit 0
+fi
+
+if [ ! -d "$DRIVE_PATH" ]; then
+    echo "claudesync: drive path '$DRIVE_PATH' no existe — saltando backup."
+    exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
+# Lista de docs informativos del proyecto que querramos espejar en Drive.
+# Si agregas/sacas docs, edita esta lista y commitea.
+DOCS=(
+    "ESTADO_PROYECTO.md"
+    "RUNBOOK.md"
+    "MANUAL_USUARIO.md"
+    "POLITICA_PRIVACIDAD.md"
+    "DEMO_CHECKLIST.md"
+    "README.md"
+    "AUDITORIA_2026-04-28.md"
+    "docs/PLAY_STORE_LISTING.md"
+)
+
+copiados=0
+for doc in "${DOCS[@]}"; do
+    src="$REPO_ROOT/$doc"
+    if [ -f "$src" ]; then
+        # Mantener subcarpeta si la hay (ej. docs/PLAY_STORE_LISTING.md).
+        dst_dir="$DRIVE_PATH/$(dirname "$doc")"
+        mkdir -p "$dst_dir"
+        cp "$src" "$DRIVE_PATH/$doc"
+        copiados=$((copiados + 1))
+    fi
+done
+
+if [ $copiados -gt 0 ]; then
+    echo "claudesync: $copiados doc(s) backupeados a Drive ($DRIVE_PATH)."
+fi
+
+exit 0
