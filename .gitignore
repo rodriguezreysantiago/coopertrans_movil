@@ -62,6 +62,12 @@ commit_msg*.txt
 # Outputs de scripts de auditoría/diagnóstico (regenerables, no van al repo).
 fechas_rto_a_corregir.csv
 
+# Backups locales del .ico de Windows previo a cambios (regenerables, locales).
+windows/runner/resources/*.ico.bak-*
+
+# Cache local de Firebase CLI (regenerable, no debería trackearse).
+.firebase/
+
 # State directory de Claude Code (worktrees temporales del agent,
 # session state, etc). 100% local de la maquina, no deberia trackearse.
 # Excepción: settings.json del proyecto SÍ se trackea — define el
