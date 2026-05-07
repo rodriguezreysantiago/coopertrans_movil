@@ -99,13 +99,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
           // del sidebar (NavigationRail / BottomBar) para mantener
           // coherencia visual: el admin reconoce cada item por el mismo
           // label en cualquier parte de la app.
-          if (Capabilities.can(PrefsService.rol, Capability.verRevisiones))
+          // Orden alineado con el sidebar del shell (decisión Vecchi
+          // 2026-05-07): Personal → Flota → Revisiones → Vencimientos →
+          // Logística → Gomería → Service → Alertas → Reportes → Sync →
+          // Estado Bot. El mismo orden tiene que verse en cualquier
+          // entrada del admin (rail/bottombar y panel central).
+          if (Capabilities.can(PrefsService.rol, Capability.verListaPersonal))
             const _AdminTile(
-              titulo: 'REVISIONES',
-              subtitulo: 'Aprobar/rechazar trámites cargados por choferes',
-              icono: Icons.fact_check_outlined,
-              color: AppColors.accentTeal,
-              ruta: '/admin_revisiones',
+              titulo: 'PERSONAL',
+              subtitulo: 'Lista de legajos y choferes',
+              icono: Icons.badge_outlined,
+              color: AppColors.accentBlue,
+              ruta: '/admin_personal_lista',
             ),
           if (Capabilities.can(PrefsService.rol, Capability.verListaFlota))
             const _AdminTile(
@@ -114,6 +119,38 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               icono: Icons.local_shipping_outlined,
               color: AppColors.accentPurple,
               ruta: '/admin_vehiculos_lista',
+            ),
+          if (Capabilities.can(PrefsService.rol, Capability.verRevisiones))
+            const _AdminTile(
+              titulo: 'REVISIONES',
+              subtitulo: 'Aprobar/rechazar trámites cargados por choferes',
+              icono: Icons.fact_check_outlined,
+              color: AppColors.accentTeal,
+              ruta: '/admin_revisiones',
+            ),
+          if (Capabilities.can(PrefsService.rol, Capability.verVencimientos))
+            const _AdminTile(
+              titulo: 'VENCIMIENTOS',
+              subtitulo: 'Calendario y listas por categoría',
+              icono: Icons.event_note,
+              color: AppColors.accentGreen,
+              ruta: '/admin_vencimientos_menu',
+            ),
+          if (Capabilities.can(PrefsService.rol, Capability.verLogistica))
+            const _AdminTile(
+              titulo: 'LOGÍSTICA',
+              subtitulo: 'Empresas, ubicaciones y tarifas',
+              icono: Icons.route_outlined,
+              color: AppColors.accentGreen,
+              ruta: AppRoutes.adminLogisticaHub,
+            ),
+          if (Capabilities.can(PrefsService.rol, Capability.verGomeria))
+            const _AdminTile(
+              titulo: 'GOMERÍA',
+              subtitulo: 'Stock, instalación y recapados de cubiertas',
+              icono: Icons.tire_repair,
+              color: AppColors.accentOrange,
+              ruta: AppRoutes.adminGomeriaHub,
             ),
           if (Capabilities.can(PrefsService.rol, Capability.verMantenimiento))
             const _AdminTile(
@@ -130,38 +167,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               icono: Icons.notifications_active_outlined,
               color: AppColors.accentRed,
               ruta: AppRoutes.adminVolvoAlertas,
-            ),
-          if (Capabilities.can(PrefsService.rol, Capability.verGomeria))
-            const _AdminTile(
-              titulo: 'GOMERÍA',
-              subtitulo: 'Stock, instalación y recapados de cubiertas',
-              icono: Icons.tire_repair,
-              color: AppColors.accentOrange,
-              ruta: AppRoutes.adminGomeriaHub,
-            ),
-          if (Capabilities.can(PrefsService.rol, Capability.verLogistica))
-            const _AdminTile(
-              titulo: 'LOGÍSTICA',
-              subtitulo: 'Empresas, ubicaciones y tarifas',
-              icono: Icons.route_outlined,
-              color: AppColors.accentGreen,
-              ruta: AppRoutes.adminLogisticaHub,
-            ),
-          if (Capabilities.can(PrefsService.rol, Capability.verListaPersonal))
-            const _AdminTile(
-              titulo: 'PERSONAL',
-              subtitulo: 'Lista de legajos y choferes',
-              icono: Icons.badge_outlined,
-              color: AppColors.accentBlue,
-              ruta: '/admin_personal_lista',
-            ),
-          if (Capabilities.can(PrefsService.rol, Capability.verVencimientos))
-            const _AdminTile(
-              titulo: 'VENCIMIENTOS',
-              subtitulo: 'Calendario y listas por categoría',
-              icono: Icons.event_note,
-              color: AppColors.accentGreen,
-              ruta: '/admin_vencimientos_menu',
             ),
           if (Capabilities.can(PrefsService.rol, Capability.verReportes))
             const _AdminTile(

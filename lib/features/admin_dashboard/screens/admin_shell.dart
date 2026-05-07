@@ -54,6 +54,15 @@ class _AdminShellState extends State<AdminShell> {
   /// Definición declarativa de las secciones del shell.
   /// Cada una incluye su pantalla, label, icon y un builder opcional
   /// para badges dinámicos.
+  // Orden definido por Vecchi 2026-05-07: Personal → Flota →
+  // Revisiones → Vencimientos → Logística → Gomería → Service →
+  // Alertas → Reportes → Sync → Estado Bot. El bloque Volvo
+  // (Eco-Driving / Descargas / Mapa) queda intercalado después de
+  // Alertas porque las 4 pantallas comparten capability y fuente de
+  // datos — visualmente conviene agruparlas. El panel central
+  // (admin_panel_screen.dart) usa el mismo orden para las 11 entradas
+  // operativas (sin Inicio ni el bloque Volvo, que ya tiene su propio
+  // tile principal en "Alertas").
   late final List<_ShellSection> _sections = [
     _ShellSection(
       label: 'Inicio',
@@ -61,6 +70,20 @@ class _AdminShellState extends State<AdminShell> {
       iconActive: Icons.dashboard,
       build: () => const AdminPanelScreen(),
       requiredCapability: Capability.verPanelAdmin,
+    ),
+    _ShellSection(
+      label: 'Personal',
+      icon: Icons.badge_outlined,
+      iconActive: Icons.badge,
+      build: () => const AdminPersonalListaScreen(),
+      requiredCapability: Capability.verListaPersonal,
+    ),
+    _ShellSection(
+      label: 'Flota',
+      icon: Icons.local_shipping_outlined,
+      iconActive: Icons.local_shipping,
+      build: () => const AdminVehiculosListaScreen(),
+      requiredCapability: Capability.verListaFlota,
     ),
     _ShellSection(
       label: 'Revisiones',
@@ -80,11 +103,25 @@ class _AdminShellState extends State<AdminShell> {
       build: () => const AdminRevisionesScreen(),
     ),
     _ShellSection(
-      label: 'Flota',
-      icon: Icons.local_shipping_outlined,
-      iconActive: Icons.local_shipping,
-      build: () => const AdminVehiculosListaScreen(),
-      requiredCapability: Capability.verListaFlota,
+      label: 'Vencimientos',
+      icon: Icons.assignment_late_outlined,
+      iconActive: Icons.assignment_late,
+      build: () => const AdminVencimientosMenuScreen(),
+      requiredCapability: Capability.verVencimientos,
+    ),
+    _ShellSection(
+      label: 'Logística',
+      icon: Icons.route_outlined,
+      iconActive: Icons.route,
+      requiredCapability: Capability.verLogistica,
+      build: () => const LogisticaHubScreen(),
+    ),
+    _ShellSection(
+      label: 'Gomería',
+      icon: Icons.tire_repair_outlined,
+      iconActive: Icons.tire_repair,
+      requiredCapability: Capability.verGomeria,
+      build: () => const GomeriaHubScreen(),
     ),
     _ShellSection(
       label: 'Service',
@@ -117,32 +154,15 @@ class _AdminShellState extends State<AdminShell> {
           .snapshots(),
       build: () => const AdminVolvoAlertasScreen(),
     ),
-    _ShellSection(
-      label: 'Gomería',
-      icon: Icons.tire_repair_outlined,
-      iconActive: Icons.tire_repair,
-      // Mismo orden que en el listado del panel Inicio: tras Alertas
-      // y antes del cluster Eco/Descargas/Mapa.
-      requiredCapability: Capability.verGomeria,
-      build: () => const GomeriaHubScreen(),
-    ),
-    _ShellSection(
-      label: 'Logística',
-      icon: Icons.route_outlined,
-      iconActive: Icons.route,
-      // Va después de Gomería: ambos son catálogos operativos. La idea
-      // es que en el futuro Logística contenga también el módulo de
-      // viajes (planeamiento de rutas + asignación chofer/vehículo).
-      requiredCapability: Capability.verLogistica,
-      build: () => const LogisticaHubScreen(),
-    ),
+    // ─── Bloque Volvo (Eco / Descargas / Mapa) ──────────────────────
+    // Agrupado después de Alertas porque las 4 pantallas comparten
+    // capability `verAlertasVolvo` y fuente de datos. No están como
+    // tile separado en el panel central — el tile "Alertas" cubre
+    // visualmente al bloque entero.
     _ShellSection(
       label: 'Eco-Driving',
       icon: Icons.eco_outlined,
       iconActive: Icons.eco,
-      // Reusamos la misma capability que Alertas Volvo: si el rol puede
-      // ver eventos del Vehicle Alerts API, también puede ver los scores
-      // agregados (misma fuente de datos, distinto endpoint).
       requiredCapability: Capability.verAlertasVolvo,
       build: () => const AdminEcoDrivingScreen(),
     ),
@@ -172,20 +192,7 @@ class _AdminShellState extends State<AdminShell> {
       requiredCapability: Capability.verAlertasVolvo,
       build: () => const AdminMapaFlotaScreen(),
     ),
-    _ShellSection(
-      label: 'Personal',
-      icon: Icons.badge_outlined,
-      iconActive: Icons.badge,
-      build: () => const AdminPersonalListaScreen(),
-      requiredCapability: Capability.verListaPersonal,
-    ),
-    _ShellSection(
-      label: 'Vencimientos',
-      icon: Icons.assignment_late_outlined,
-      iconActive: Icons.assignment_late,
-      build: () => const AdminVencimientosMenuScreen(),
-      requiredCapability: Capability.verVencimientos,
-    ),
+    // ─── Cierre: reportes + diagnóstico técnico ─────────────────────
     _ShellSection(
       label: 'Reportes',
       icon: Icons.analytics_outlined,
