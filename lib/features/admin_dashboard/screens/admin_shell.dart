@@ -142,19 +142,22 @@ class _AdminShellState extends State<AdminShell> {
       requiredCapability: Capability.verAlertasVolvo,
       build: () => const AdminDescargasPtoScreen(),
     ),
-    // "Flota" muestra la posición ACTUAL de toda la flota según Sitrack
+    // "Mapa" muestra la posición ACTUAL de toda la flota según Sitrack
     // (tractores Volvo + no-Volvo). Reusa la capability de Volvo porque
     // el acceso es del mismo nivel admin/supervisor.
     //
-    // El "Mapa Volvo" (eventos Volvo geo-localizados, heatmap OVERSPEED,
-    // ruta del chofer) ya NO es tab del shell. Vive como acción "Ver en
-    // mapa" dentro del tablero de Alertas — están conceptualmente
-    // ligados (el mapa muestra los mismos eventos del tablero) y antes
-    // confundía tener dos accesos paralelos.
+    // El "Mapa Volvo" anterior (eventos Volvo geo-localizados, heatmap
+    // OVERSPEED, ruta del chofer) ya NO es tab del shell. Vive como
+    // acción "Ver en mapa" dentro del tablero de Alertas — están
+    // conceptualmente ligados (el mapa muestra los mismos eventos del
+    // tablero) y antes confundía tener dos accesos paralelos. Reusamos
+    // el label "Mapa" (en vez de "Flota") porque es más reconocible:
+    // cuando el admin piensa "dónde están mis camiones AHORA" busca
+    // "Mapa", no "Flota".
     _ShellSection(
-      label: 'Flota',
-      icon: Icons.travel_explore_outlined,
-      iconActive: Icons.travel_explore,
+      label: 'Mapa',
+      icon: Icons.map_outlined,
+      iconActive: Icons.map,
       requiredCapability: Capability.verAlertasVolvo,
       build: () => const AdminMapaFlotaScreen(),
     ),
