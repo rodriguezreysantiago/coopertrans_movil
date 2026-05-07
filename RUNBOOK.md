@@ -71,30 +71,72 @@ git push origin main
 
 ### Setup one-time en CADA PC nueva (Win) o en la Mac
 
-Ejecutar UNA SOLA VEZ después de clonar el repo:
+Ejecutar UNA SOLA VEZ después de clonar el repo. Los hooks de Claude Code (`SessionStart` con `git pull` automático + `Stop` con alerta de cambios sin pushear) ya vienen en `.claude/settings.json` versionado — se activan solos. Lo que sí hay que configurar por máquina es:
 
-```bash
-cd <ruta-al-repo>
+#### Windows
 
-# 1) Activar git hooks versionados (post-commit que respalda docs a Drive).
+```powershell
+cd C:\Users\Colo Logistica\logistica_app_profesional
+
+# 1) Git hooks versionados (post-commit que respalda docs a Drive).
 git config core.hooksPath .githooks
 
-# 2) Decirle al post-commit dónde está tu Google Drive en esta máquina.
-#    El path varía por OS (Windows usa la letra de unidad mapeada por
-#    Drive Desktop; Mac usa CloudStorage):
-#
-#    Windows típico:
+# 2) Path de Drive en Win (asume que Drive Desktop mapeo G:).
 git config claudesync.drivepath "G:/Mi unidad/ClaudeCodeSync/proyecto-docs"
-#
-#    Mac típico (ajustar el email):
-#    git config claudesync.drivepath "$HOME/Library/CloudStorage/GoogleDrive-santiagocoopertrans@gmail.com/My Drive/ClaudeCodeSync/proyecto-docs"
+mkdir -Force "G:\Mi unidad\ClaudeCodeSync\proyecto-docs"
+
+# 3) Sentry CLI + config (para upload de symbols Dart en builds Android).
+npm install -g @sentry/cli
+git config sentry.org      "coopertrans"
+git config sentry.project  "flutter"
+git config sentry.authtoken "sntryu_..."   # token con scopes Project + Release Admin
 ```
 
-Después de eso queda automatizado:
-- Cada commit copia los .md críticos (`ESTADO_PROYECTO.md`, `RUNBOOK.md`, `MANUAL_USUARIO.md`, `POLITICA_PRIVACIDAD.md`, `docs/PLAY_STORE_LISTING.md`, etc.) a Drive.
-- Si Drive no está conectado o el path es inválido, el hook saltea silenciosamente (no bloquea el commit).
+#### Mac
 
-Los hooks de Claude Code (`SessionStart` con `git pull` automático + `Stop` con alerta de cambios sin pushear) **ya vienen** en `.claude/settings.json` versionado — se activan solos al clonar.
+```bash
+cd ~/ruta/al/repo/logistica_app_profesional
+
+# 1) Git hooks versionados.
+git config core.hooksPath .githooks
+
+# 2) Path de Drive en Mac (CloudStorage). Verificar primero el path real:
+ls "$HOME/Library/CloudStorage/" | grep -i drive
+# Despues, ajustar al email de la cuenta:
+git config claudesync.drivepath "$HOME/Library/CloudStorage/GoogleDrive-santiagocoopertrans@gmail.com/My Drive/ClaudeCodeSync/proyecto-docs"
+mkdir -p "$HOME/Library/CloudStorage/GoogleDrive-santiagocoopertrans@gmail.com/My Drive/ClaudeCodeSync/proyecto-docs"
+
+# 3) Sentry CLI + config (para upload de Dart symbols + iOS dSYMs en builds iOS).
+brew install getsentry/tools/sentry-cli   # o: npm install -g @sentry/cli
+git config sentry.org      "coopertrans"
+git config sentry.project  "flutter"
+git config sentry.authtoken "sntryu_..."   # token con scopes Project + Release Admin
+
+# 4) (Solo Mac) workaround Ruby 4.0 + CocoaPods 1.16:
+#    En vez de `pod install` directo, siempre:
+#      cd ios
+#      LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install
+#      cd ..
+```
+
+Después de eso queda todo automatizado:
+- Cada `git commit` copia los `.md` críticos a Drive (`ESTADO_PROYECTO.md`, `RUNBOOK.md`, `MANUAL_USUARIO.md`, `POLITICA_PRIVACIDAD.md`, `docs/PLAY_STORE_LISTING.md`, etc.).
+- Cada vez que arranca Claude Code: `git pull --ff-only` automático.
+- Cada vez que cierra Claude Code: aviso si quedaron cambios sin commitear o commits sin pushear.
+- Los scripts `release_android.ps1` (Win) y `release_ios.sh` (Mac) suben los symbols a Sentry automáticamente como parte del build.
+
+### Generar token de Sentry (one-time, sirve para todas las maquinas)
+
+1. https://coopertrans.sentry.io/settings/account/api/auth-tokens/
+2. **Create New Token** → nombre `cli-symbols-upload`.
+3. Permissions:
+   - **Project** → `Admin` (cubre `project:read/write/admin/releases`).
+   - **Release** → `Admin`.
+   - El resto en `No Access`.
+4. Click Create → copiar el token (`sntryu_...`) — solo se muestra UNA vez.
+5. Pegarlo en cada máquina con `git config sentry.authtoken "..."`.
+
+Si el token se filtra (por error en chat, log, etc.), **revocarlo** desde la misma URL y generar uno nuevo — actualizar las máquinas con el nuevo `git config`.
 
 ### Paso 2 — Sync de código en la PC nueva (oficina)
 
