@@ -260,14 +260,26 @@ if ($releaseExiste) {
 
 Write-Host ""
 Write-Host "[2/3] Creando release $tag en GitHub..." -ForegroundColor Cyan
-Invoke-Native { & gh release create $tag $assets --title "Coopertrans Movil $tag" --notes $Notes }
+
+# Pasamos las notes via archivo temporal en vez de --notes inline.
+# Si los commits del log tienen comillas dobles (ej. fix(x): aviso "pasá
+# el iButton"), PowerShell pasa la string al exe sin escape — la comilla
+# inicial cierra el arg --notes y las palabras siguientes quedan como
+# args sueltos a gh.exe ("no matches found for `el`"). --notes-file
+# bypasea ese problema porque gh lee el texto del archivo directo.
+$notesPath = Join-Path $env:TEMP "release_notes_$($version -replace '\+','-build').txt"
+Set-Content -Path $notesPath -Value $Notes -Encoding UTF8
+
+Invoke-Native { & gh release create $tag $assets --title "Coopertrans Movil $tag" --notes-file $notesPath }
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Error al crear release. El zip quedó en $zipPath" -ForegroundColor Red
+    Write-Host "Las notes quedaron en $notesPath" -ForegroundColor DarkGray
     exit 1
 }
 
 # --- 8. Cleanup ----------------------------------------------------
 Remove-Item $zipPath -Force
+Remove-Item $notesPath -Force -ErrorAction SilentlyContinue
 
 Write-Host ""
 Write-Host "[3/3] Release publicado correctamente." -ForegroundColor Green
