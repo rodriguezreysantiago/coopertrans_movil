@@ -15,6 +15,7 @@ import '../../../shared/widgets/app_widgets.dart';
 
 import '../services/empleado_actions.dart';
 import 'admin_personal_form_screen.dart';
+import 'chofer_actividad_screen.dart';
 
 // 10 widgets visuales (card, detalle, header, datos editables, filas
 // de vencimiento, asignacion de unidad) extraidos para mantener

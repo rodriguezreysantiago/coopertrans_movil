@@ -554,14 +554,25 @@ class GomeriaService {
         // no contamos km negativos.
         kmRecorridos = diff < 0 ? 0 : diff;
       }
+    } else if (inst.unidadTipo == TipoUnidadCubierta.enganche) {
+      // Fase 2 Gomería: la cubierta de enganche acumula km del/los
+      // tractor(es) que arrastraron al enganche durante el período de
+      // instalación de la cubierta. Sumamos las asignaciones de
+      // ASIGNACIONES_ENGANCHE que solapan con [inst.desde, ahora]
+      // usando los snapshots `odometer_inicial`/`odometer_final` que
+      // persiste `AsignacionEngancheService` desde Fase 2.
+      kmRecorridos = await _calcularKmCubiertaEnganche(
+        engancheId: inst.unidadId,
+        instalado: Timestamp.fromDate(inst.desde),
+        retirado: Timestamp.now(),
+      );
     }
-    // Enganche: km_recorridos null hasta Fase 2.
+    final ahora = Timestamp.now();
 
     // Writes secuenciales con cleanup best-effort si una falla mid-way.
     // Orden: cerrar el log primero (la fuente de verdad); después
     // actualizar la cubierta y liberar los locks. Si el segundo bloque
     // falla, la operación queda parcial pero el log ya está cerrado.
-    final ahora = Timestamp.now();
     await instRef.update({
       'hasta': ahora,
       'km_unidad_al_retirar': kmActualTractor,
@@ -1368,5 +1379,99 @@ class GomeriaService {
             // es chica (<10 típicamente).
             .where((r) => r.fechaRetorno != null)
             .toList());
+  }
+
+  // ==========================================================================
+  // CÁLCULO DE KM PARA CUBIERTAS DE ENGANCHE (Fase 2 Gomería)
+  // ==========================================================================
+
+  /// Calcula los km que una cubierta de enganche acumuló durante el
+  /// período `[instalado, retirado]`.
+  ///
+  /// La cubierta vive en un enganche; el enganche puede haber pasado
+  /// por varios tractores en su vida (cambia el tractor que lo arrastra
+  /// pero la cubierta sigue ahí). Por cada asignación
+  /// tractor↔enganche que solapa con la vida de la cubierta, sumamos
+  /// los km del tractor durante esa asignación.
+  ///
+  /// **Versión MVP**: solo cuenta las asignaciones COMPLETAMENTE
+  /// contenidas dentro de `[instalado, retirado]`. Las que solapan
+  /// parcial al inicio o al final se ignoran (subestimación). Para
+  /// el caso típico (cubierta instalada 6+ meses, asignación de
+  /// enganche cambia esporádicamente), la mayoría de asignaciones
+  /// caen dentro o son legacy sin telemetría — el sub-conteo es
+  /// menor que el error de imputarlo a otro lado.
+  ///
+  /// Asignaciones SIN `odometer_inicial`/`odometer_final` (legacy
+  /// previas a Fase 2 Sitrack) se skipean. La cuenta queda incompleta
+  /// para esas — documentado en el log al cliente.
+  Future<double?> _calcularKmCubiertaEnganche({
+    required String engancheId,
+    required Timestamp instalado,
+    required Timestamp retirado,
+  }) async {
+    // Query: asignaciones del enganche que arrancaron antes del retiro
+    // (cualquiera que pueda solapar). El filtro fino (descartar las que
+    // terminaron antes de la instalación, las parciales) lo hacemos
+    // client-side — Firestore no permite dos rangos de inequality en
+    // campos distintos sin armar índices compuestos para cada caso.
+    final snap = await _db
+        .collection(AppCollections.asignacionesEnganche)
+        .where('enganche_id', isEqualTo: engancheId)
+        .where('desde', isLessThanOrEqualTo: retirado)
+        .get();
+
+    double total = 0;
+    int contadas = 0;
+    int skippedSinTelemetria = 0;
+    int skippedParciales = 0;
+
+    for (final d in snap.docs) {
+      final data = d.data();
+      final desde = data['desde'] as Timestamp?;
+      final hasta = data['hasta'] as Timestamp?; // null = activa
+      final odoIni = (data['odometer_inicial'] as num?)?.toDouble();
+      final odoFin = (data['odometer_final'] as num?)?.toDouble();
+
+      if (desde == null) continue;
+
+      // Asignación que terminó antes de la instalación de la cubierta:
+      // no aplica.
+      if (hasta != null && hasta.compareTo(instalado) <= 0) continue;
+
+      // MVP: solo contamos asignaciones COMPLETAMENTE contenidas en el
+      // intervalo. `desde >= instalado` y `hasta <= retirado` (con la
+      // interpretación de `hasta == null` = activa = se extiende más
+      // allá del retiro de la cubierta — eso lo skipea como parcial).
+      final empezoAntes = desde.compareTo(instalado) < 0;
+      final terminaDespues = hasta == null || hasta.compareTo(retirado) > 0;
+      if (empezoAntes || terminaDespues) {
+        skippedParciales++;
+        continue;
+      }
+
+      if (odoIni == null || odoFin == null) {
+        skippedSinTelemetria++;
+        continue;
+      }
+
+      final diff = odoFin - odoIni;
+      // Si el odómetro retrocedió (sync raro / reset manual / cambio
+      // de equipo Sitrack), no contamos km negativos — sería peor que
+      // cero por la sustracción.
+      if (diff > 0) {
+        total += diff;
+        contadas++;
+      }
+    }
+
+    // Si no contamos NADA (sin asignaciones dentro del rango con
+    // telemetría), devolvemos null en lugar de 0 para distinguir "no
+    // pude calcular" de "manejó pero hizo 0 km".
+    if (contadas == 0 &&
+        (skippedSinTelemetria > 0 || skippedParciales > 0)) {
+      return null;
+    }
+    return total;
   }
 }

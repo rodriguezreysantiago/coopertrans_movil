@@ -432,6 +432,14 @@ class _DetalleChofer extends StatelessWidget {
               v.trim().isEmpty ? null : v.trim().toUpperCase(),
             ),
           ),
+          const SizedBox(height: 12),
+          // Botón "Ver actividad": abre tablero con km manejados,
+          // tractores usados y eventos Volvo del chofer en los
+          // últimos 7/30/90 días.
+          _BotonVerActividad(
+            dni: dni,
+            nombreCompleto: (data['NOMBRE'] ?? '').toString(),
+          ),
         ],
 
         const SizedBox(height: 30),
@@ -540,6 +548,37 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Botón "Ver actividad" — abre el tablero personal del chofer
+/// (km manejados, tractores usados, eventos Volvo en los últimos
+/// 7/30/90 días). Solo aparece para empleados de manejo.
+class _BotonVerActividad extends StatelessWidget {
+  final String dni;
+  final String nombreCompleto;
+
+  const _BotonVerActividad({required this.dni, required this.nombreCompleto});
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: () => Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => ChoferActividadScreen(
+            dni: dni,
+            nombreCompleto: nombreCompleto,
+          ),
+        ),
+      ),
+      icon: const Icon(Icons.insights, size: 18),
+      label: const Text('Ver actividad'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.accentBlue,
+        side: BorderSide(color: AppColors.accentBlue.withAlpha(120)),
+        minimumSize: const Size(double.infinity, 44),
       ),
     );
   }

@@ -3367,3 +3367,159 @@ export const sitrackPosicionPoller = onSchedule(
     });
   }
 );
+
+// ============================================================================
+// resumenDriftsAsignacionesDiario
+// ============================================================================
+//
+// Cron L-V 19:00 ART que arma un resumen de los tractores con drift
+// detectado (chofer físico vía iButton ≠ chofer asignado en el sistema)
+// y lo encola como WhatsApp para el admin (Santiago, definido en
+// MANTENIMIENTO_DESTINATARIO_DNI).
+//
+// Source: SITRACK_POSICIONES filtrado por `drift_tipo != null/empty`.
+// El campo lo popula el cron `sitrackPosicionPoller` cada 5 min con
+// uno de tres valores: SIN_ASIGNACION, CHOFER_DISTINTO,
+// CHOFER_NO_IDENTIFICADO.
+//
+// Si no hay drifts, no se encola mensaje (silent log). Si hay > 20
+// drifts, agrupamos por tipo y solo listamos el detalle de los primeros
+// 10 — para no saturar el WhatsApp del admin con un texto interminable.
+//
+// Idempotencia: cron schedule corre 1x/día, no hay flag de "ya enviado"
+// — si el cron se dispara dos veces el mismo día por algún glitch de
+// GCP (raro), llegan dos mensajes idénticos. Aceptable.
+
+const ETIQUETAS_DRIFT: Record<string, string> = {
+  CHOFER_DISTINTO: "Chofer distinto al asignado",
+  SIN_ASIGNACION: "Sin asignación en sistema",
+  CHOFER_NO_IDENTIFICADO: "Chofer no se identificó (iButton)",
+};
+
+export const resumenDriftsAsignacionesDiario = onSchedule(
+  {
+    schedule: "0 19 * * 1-5",
+    timeZone: "America/Argentina/Buenos_Aires",
+    timeoutSeconds: 60,
+    memory: "256MiB",
+  },
+  async () => {
+    logger.info("[resumenDriftsAsignacionesDiario] iniciando");
+
+    // ─── Leer drifts actuales ──────────────────────────────────────
+    // Filtramos por drift_tipo != null en código (Firestore no tiene
+    // operador "IS NOT NULL" — `where("drift_tipo", "!=", null)` no
+    // matchea docs sin el campo). Levantamos toda la colección (~55
+    // docs, batch única) y filtramos.
+    const snap = await db.collection("SITRACK_POSICIONES").get();
+    const drifts = snap.docs
+      .map((d) => ({ patente: d.id, data: d.data() }))
+      .filter((x) => {
+        const tipo = (x.data.drift_tipo ?? "").toString();
+        return tipo.length > 0;
+      });
+
+    if (drifts.length === 0) {
+      logger.info("[resumenDriftsAsignacionesDiario] sin drifts hoy, no se encola");
+      return;
+    }
+
+    // ─── Lookup teléfono del admin ─────────────────────────────────
+    const adminDni = MANTENIMIENTO_DESTINATARIO_DNI;
+    const empSnap = await db.collection("EMPLEADOS").doc(adminDni).get();
+    const tel = empSnap.exists ?
+      (empSnap.data()?.TELEFONO ?? "").toString().trim() :
+      "";
+    if (!tel) {
+      logger.error(
+        "[resumenDriftsAsignacionesDiario] admin sin TELEFONO, no se puede notificar",
+        { adminDni, driftsCount: drifts.length }
+      );
+      return;
+    }
+
+    // ─── Armar mensaje ─────────────────────────────────────────────
+    const fechaTxt = _formatFechaArg(Date.now());
+
+    // Conteo por tipo (para el header).
+    const conteoPorTipo: Record<string, number> = {};
+    for (const x of drifts) {
+      const tipo = (x.data.drift_tipo ?? "").toString();
+      conteoPorTipo[tipo] = (conteoPorTipo[tipo] ?? 0) + 1;
+    }
+    const breakdown = Object.entries(conteoPorTipo)
+      .map(([tipo, n]) => `${n}× ${ETIQUETAS_DRIFT[tipo] ?? tipo}`)
+      .join(", ");
+
+    // Listar detalle, máx 10 ítems para no inflar el mensaje.
+    const MAX_DETALLE = 10;
+    const sorted = [...drifts].sort((a, b) =>
+      a.patente.localeCompare(b.patente)
+    );
+    const aMostrar = sorted.slice(0, MAX_DETALLE);
+    const restantes = sorted.length - aMostrar.length;
+
+    const bloques = aMostrar.map((x) => {
+      const tipo = (x.data.drift_tipo ?? "").toString();
+      const sitDni = (x.data.driver_dni ?? "").toString();
+      const sitApe = (x.data.driver_apellido ?? "").toString();
+      const asigDni = (x.data.asignacion_dni ?? "").toString();
+      const asigNom = (x.data.asignacion_nombre ?? "").toString();
+
+      const fisico = sitDni ?
+        (sitApe ? `${sitApe} (DNI ${sitDni})` : `DNI ${sitDni}`) :
+        "(no se identificó)";
+      const asignado = asigDni ?
+        (asigNom ? `${asigNom} (DNI ${asigDni})` : `DNI ${asigDni}`) :
+        "(sin asignación)";
+
+      return `🚛 *${x.patente}*\n` +
+        `   Sistema: ${asignado}\n` +
+        `   Físico (iButton): ${fisico}\n` +
+        `   ⚠️ ${ETIQUETAS_DRIFT[tipo] ?? tipo}`;
+    });
+
+    const cantidad = drifts.length;
+    const cabecera =
+      `🔍 *Drift de asignaciones — ${fechaTxt}*\n\n` +
+      `${cantidad} ` +
+      (cantidad === 1 ? "inconsistencia" : "inconsistencias") +
+      ` chofer físico vs sistema (${breakdown}):\n\n`;
+
+    const cola = restantes > 0 ?
+      `\n\n_Y ${restantes} más. Resolvé desde Personal → ficha del chofer._` :
+      "\n\n_Resolvé desde Personal → ficha del chofer._";
+
+    const mensaje =
+      cabecera +
+      bloques.join("\n\n") +
+      cola +
+      "\n\n" +
+      BANNER_TESTING +
+      "_Aviso automático diario de drift — Coopertrans Móvil._";
+
+    // ─── Encolar en COLA_WHATSAPP ──────────────────────────────────
+    await db.collection("COLA_WHATSAPP").add({
+      telefono: tel,
+      mensaje,
+      estado: "PENDIENTE",
+      encolado_en: FieldValue.serverTimestamp(),
+      enviado_en: null,
+      error: null,
+      intentos: 0,
+      origen: "drift_diario",
+      destinatario_coleccion: "EMPLEADOS",
+      destinatario_id: adminDni,
+      campo_base: "DRIFT_ASIGNACIONES",
+      admin_dni: "BOT",
+      admin_nombre: "Cron resumen drifts",
+    });
+
+    logger.info("[resumenDriftsAsignacionesDiario] encolado", {
+      adminDni,
+      driftsCount: cantidad,
+      mostrados: aMostrar.length,
+      restantes,
+    });
+  }
+);

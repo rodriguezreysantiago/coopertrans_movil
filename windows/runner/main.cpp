@@ -1,4 +1,4 @@
-#include <flutter/dart_project.h>
+﻿#include <flutter/dart_project.h>
 #include <flutter/flutter_view_controller.h>
 #include <windows.h>
 
@@ -35,12 +35,14 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // Usar escape Unicode ó (= 'o' acentuada) para evitar el bug de
   // encoding cuando MSVC interpreta el .cpp UTF-8 como Latin-1. Sin
   // esto, "Movil" en la barra de Windows aparece como "MA(c)vil".
+  // Escape Unicode \u00F3 = '\u00F3' acentuada \u2014 sin esto MSVC interpreta
+  // el .cpp UTF-8 como Latin-1 y "Movil" sale como "MA(c)vil".
   // La versi\u00F3n va en el t\u00EDtulo para que admin/operador pueda
-  // verificar de un vistazo qu\u00E9 binario est\u00E1 corriendo, sin entrar a
-  // la app ni mirar Propiedades del .exe. Mantener sincronizada con
-  // pubspec.yaml \u2014 el script `scripts/bump_version.ps1` actualiza
-  // los tres lugares (pubspec, app_constants, main.cpp) de un saque.
-  if (!window.Create(L"Coopertrans M\u00F3vil \u2014 v 1.0.8+16", origin, size)) {
+  // verificar de un vistazo qu\u00E9 binario est\u00E1 corriendo. Usar guion
+  // ASCII en lugar de em-dash por el mismo motivo de encoding.
+  // Mantener sincronizada con pubspec.yaml \u2014 `scripts/bump_version.ps1`
+  // actualiza los 3 lugares (pubspec, app_constants, main.cpp).
+  if (!window.Create(L"Coopertrans Móvil — v 1.0.15 (build 17)", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
