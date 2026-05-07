@@ -920,8 +920,9 @@ class _PanelTelemetria extends StatelessWidget {
   Widget build(BuildContext context) {
     final km = _toDouble(data['KM_ACTUAL']);
     final fuel = _toDouble(data['NIVEL_COMBUSTIBLE']);
+    final adblue = _toDouble(data['NIVEL_ADBLUE']);
     final auton = _toDouble(data['AUTONOMIA_KM']);
-    final hayTelemetria = fuel != null || auton != null;
+    final hayTelemetria = fuel != null || adblue != null || auton != null;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
@@ -946,7 +947,19 @@ class _PanelTelemetria extends StatelessWidget {
                 ),
                 if (fuel != null)
                   Expanded(
-                    child: _CeldaCombustible(porcentaje: fuel),
+                    child: _CeldaPorcentaje(
+                      porcentaje: fuel,
+                      icono: Icons.local_gas_station,
+                      etiqueta: 'COMBUSTIBLE',
+                    ),
+                  ),
+                if (adblue != null)
+                  Expanded(
+                    child: _CeldaPorcentaje(
+                      porcentaje: adblue,
+                      icono: Icons.water_drop_outlined,
+                      etiqueta: 'ADBLUE',
+                    ),
                   ),
                 if (auton != null)
                   Expanded(
@@ -1040,9 +1053,21 @@ class _CeldaTelemetria extends StatelessWidget {
   }
 }
 
-class _CeldaCombustible extends StatelessWidget {
+/// Celda de telemetría tipo "porcentaje con barrita de progreso" —
+/// usada para combustible y AdBlue. El color por umbral lo define
+/// `_colorCombustible` (mismo criterio que combustible: > 50 verde,
+/// 20-50 naranja, < 20 rojo) — útil porque AdBlue bajo también es
+/// urgencia operativa (Euro VI deratea en pocos km).
+class _CeldaPorcentaje extends StatelessWidget {
   final double porcentaje;
-  const _CeldaCombustible({required this.porcentaje});
+  final IconData icono;
+  final String etiqueta;
+
+  const _CeldaPorcentaje({
+    required this.porcentaje,
+    required this.icono,
+    required this.etiqueta,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1051,7 +1076,7 @@ class _CeldaCombustible extends StatelessWidget {
 
     return Column(
       children: [
-        Icon(Icons.local_gas_station, color: color, size: 22),
+        Icon(icono, color: color, size: 22),
         const SizedBox(height: 6),
         Text(
           '${pct.toStringAsFixed(0)}%',
@@ -1075,9 +1100,9 @@ class _CeldaCombustible extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        const Text(
-          'COMBUSTIBLE',
-          style: TextStyle(
+        Text(
+          etiqueta,
+          style: const TextStyle(
             color: Colors.white38,
             fontSize: 9,
             fontWeight: FontWeight.bold,
