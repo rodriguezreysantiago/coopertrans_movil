@@ -122,19 +122,18 @@ class ChoferActividadService {
     final asignFuture = _db
         .collection(AppCollections.asignacionesVehiculo)
         .where('chofer_dni', isEqualTo: dniLimpio)
-        // Asignaciones cuyo `desde` esté en la ventana O que hayan
-        // empezado antes pero sigan activas al inicio de la ventana.
-        // Firestore no permite OR multi-campo simple, así que pedimos
-        // las que `desde >= cutoff` y filtramos las activas pre-cutoff
-        // en una segunda query (más simple que componer un índice).
+        // Asignaciones cuyo `desde` esté en la ventana. Las que
+        // empezaron antes pero siguen activas las traemos en una
+        // segunda query simple (chofer_dni + hasta == null) y luego
+        // filtramos client-side las que arrancaron antes del cutoff.
+        // Esto evita un índice compuesto (chofer + hasta + desde).
         .where('desde', isGreaterThanOrEqualTo: cutoffTs)
         .get();
 
-    final asignActivasViejasFuture = _db
+    final asignActivasFuture = _db
         .collection(AppCollections.asignacionesVehiculo)
         .where('chofer_dni', isEqualTo: dniLimpio)
         .where('hasta', isNull: true)
-        .where('desde', isLessThan: cutoffTs)
         .get();
 
     final eventosFuture = _db
@@ -145,21 +144,22 @@ class ChoferActividadService {
 
     final results = await Future.wait([
       asignFuture,
-      asignActivasViejasFuture,
+      asignActivasFuture,
       eventosFuture,
     ]);
     final asignSnap = results[0];
-    final asignActivasViejasSnap = results[1];
+    final asignActivasSnap = results[1];
     final eventosSnap = results[2];
 
     // Consolidar todas las asignaciones (algunas pueden duplicarse
-    // entre las dos queries en el caso bordes — usamos doc.id como
-    // dedupe natural).
+    // entre las dos queries — usamos doc.id como dedupe natural).
+    // De las activas, solo nos interesan las que arrancaron ANTES
+    // del cutoff (las que arrancaron después ya vienen en la 1ra query).
     final asignacionesPorId = <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
     for (final d in asignSnap.docs) {
       asignacionesPorId[d.id] = d;
     }
-    for (final d in asignActivasViejasSnap.docs) {
+    for (final d in asignActivasSnap.docs) {
       asignacionesPorId[d.id] = d;
     }
 

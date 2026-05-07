@@ -82,6 +82,38 @@
         { "fieldPath": "cubierta_id", "order": "ASCENDING" },
         { "fieldPath": "fecha_envio", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "ASIGNACIONES_VEHICULO",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "chofer_dni", "order": "ASCENDING" },
+        { "fieldPath": "desde", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ASIGNACIONES_VEHICULO",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "chofer_dni", "order": "ASCENDING" },
+        { "fieldPath": "hasta", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "VOLVO_ALERTAS",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "chofer_dni", "order": "ASCENDING" },
+        { "fieldPath": "creado_en", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ASIGNACIONES_ENGANCHE",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "enganche_id", "order": "ASCENDING" },
+        { "fieldPath": "desde", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
