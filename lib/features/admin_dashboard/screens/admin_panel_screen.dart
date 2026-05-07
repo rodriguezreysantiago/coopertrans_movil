@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -216,18 +218,25 @@ class _Saludo extends StatefulWidget {
 }
 
 class _SaludoState extends State<_Saludo> {
-  String? _apodoResuelto; // null si todavía no leyó, '' si no tiene
+  /// Inicializado SÍNCRONO desde `PrefsService.apodo` (cacheado al login)
+  /// para evitar el flicker "Buen día, Santiago" → "Buen día, Santi"
+  /// que pasaba cuando esto era un Future a Firestore. Si la cache está
+  /// vacía (admins legacy logueados pre-fix 2026-05-07), el lookup
+  /// async corre una vez y cachea el resultado para próximas sesiones.
+  late String _apodoResuelto = PrefsService.apodo.trim();
 
   @override
   void initState() {
     super.initState();
-    _resolverApodo();
+    if (_apodoResuelto.isEmpty) {
+      _resolverApodoLegacy();
+    }
   }
 
-  /// Lee una sola vez el APODO del legajo del admin logueado. La lectura
-  /// es barata (un doc) y se hace en background — la primera frame se
-  /// renderiza con el fallback y después se actualiza si hay apodo.
-  Future<void> _resolverApodo() async {
+  /// Solo se invoca para admins que iniciaron sesión antes de que
+  /// PrefsService cacheara el APODO. Una vez resuelto, queda guardado
+  /// y la próxima sesión arranca síncrona.
+  Future<void> _resolverApodoLegacy() async {
     final dni = PrefsService.dni;
     if (dni.isEmpty) return;
     try {
@@ -237,7 +246,10 @@ class _SaludoState extends State<_Saludo> {
           .get();
       if (!mounted) return;
       final apodo = (snap.data()?['APODO'] ?? '').toString().trim();
+      if (apodo.isEmpty) return; // sin apodo cargado, mantenemos fallback
       setState(() => _apodoResuelto = apodo);
+      // Cacheamos para próximas sesiones (fire-and-forget, no bloquea UI).
+      unawaited(PrefsService.setApodo(apodo));
     } catch (_) {
       // Si Firestore falla o el doc no existe, dejamos el fallback.
     }
@@ -264,9 +276,8 @@ class _SaludoState extends State<_Saludo> {
   Widget build(BuildContext context) {
     final nombreFull = PrefsService.nombre;
     // Prioridad: APODO si está cargado → fallback al segundo token.
-    final apodoLimpio = (_apodoResuelto ?? '').trim();
-    final nombre = apodoLimpio.isNotEmpty
-        ? apodoLimpio
+    final nombre = _apodoResuelto.isNotEmpty
+        ? _apodoResuelto
         : _primerNombre(nombreFull);
     final saludo =
         nombre != null ? '${_saludoHora()}, $nombre' : _saludoHora();

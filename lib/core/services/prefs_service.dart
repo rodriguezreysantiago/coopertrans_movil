@@ -29,6 +29,12 @@ class PrefsService {
   static const String _keyRol = 'rol';
   static const String _keyIsLoggedIn = 'isLoggedIn';
 
+  /// APODO del empleado, cacheado para que el saludo "Buen día, Santi"
+  /// se renderice SÍNCRONO (sin esperar a Firestore al armar el dashboard).
+  /// Sumado 2026-05-07 para sacar el flicker "Bienvenido Santiago" →
+  /// "Bienvenido Santi" que pasaba al loguear.
+  static const String _keyApodo = 'apodo';
+
   /// DNI del último usuario que logueó OK. Se mantiene **incluso después
   /// de logout** para auto-completar el campo en la pantalla de login.
   /// La contraseña NO se guarda nunca (eso sería un riesgo de seguridad).
@@ -52,6 +58,7 @@ class PrefsService {
   // ─── Cache en memoria (devuelto por los getters sync) ─────────────
   static String _dni = '';
   static String _nombre = '';
+  static String _apodo = '';
   static String _rol = '';
   static bool _isLoggedIn = false;
   static String _lastDni = '';
@@ -64,6 +71,7 @@ class PrefsService {
 
     _dni = await _secure.read(key: _keyDni) ?? '';
     _nombre = await _secure.read(key: _keyNombre) ?? '';
+    _apodo = await _secure.read(key: _keyApodo) ?? '';
     _rol = await _secure.read(key: _keyRol) ?? '';
     _lastDni = await _secure.read(key: _keyLastDni) ?? '';
     final loggedRaw = await _secure.read(key: _keyIsLoggedIn);
@@ -134,6 +142,7 @@ class PrefsService {
   // ─── Getters sync (leen del cache) ────────────────────────────────
   static String get dni => _dni;
   static String get nombre => _nombre;
+  static String get apodo => _apodo;
   static String get rol => _rol;
   static bool get isLoggedIn => _isLoggedIn;
   static String get lastDni => _lastDni;
@@ -141,23 +150,36 @@ class PrefsService {
   // ─── Setters ──────────────────────────────────────────────────────
 
   /// Guardar datos del login. Actualiza cache + secure storage.
+  /// `apodo` es opcional — string vacío significa "sin apodo cargado",
+  /// el saludo cae al primer nombre del NOMBRE.
   static Future<void> guardarUsuario({
     required String dni,
     required String nombre,
     required String rol,
+    String apodo = '',
   }) async {
     _dni = dni;
     _nombre = nombre;
+    _apodo = apodo;
     _rol = rol;
     _isLoggedIn = true;
     _lastDni = dni;
 
     await _secure.write(key: _keyDni, value: dni);
     await _secure.write(key: _keyNombre, value: nombre);
+    await _secure.write(key: _keyApodo, value: apodo);
     await _secure.write(key: _keyRol, value: rol);
     await _secure.write(key: _keyIsLoggedIn, value: 'true');
     // Recordatorio del último DNI para auto-completar próximos logins.
     await _secure.write(key: _keyLastDni, value: dni);
+  }
+
+  /// Actualiza solo el apodo cacheado. Usado por el dashboard cuando
+  /// detecta (vía Firestore) un apodo distinto al guardado — para que
+  /// la próxima sesión arranque con el valor correcto sin flicker.
+  static Future<void> setApodo(String apodo) async {
+    _apodo = apodo;
+    await _secure.write(key: _keyApodo, value: apodo);
   }
 
   /// Cierra sesión: limpia cache y storage de identidad. NO borra
@@ -165,11 +187,13 @@ class PrefsService {
   static Future<void> limpiarSesion() async {
     _dni = '';
     _nombre = '';
+    _apodo = '';
     _rol = '';
     _isLoggedIn = false;
 
     await _secure.delete(key: _keyDni);
     await _secure.delete(key: _keyNombre);
+    await _secure.delete(key: _keyApodo);
     await _secure.delete(key: _keyRol);
     // Aseguramos que el flag de logueo pase explícitamente a false
     // (no lo borramos para que getters lean 'false' explícito).

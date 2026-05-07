@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../../../core/services/prefs_service.dart';
 import '../../auth/services/auth_service.dart';
 import '../../sync_dashboard/providers/sync_dashboard_provider.dart';
 import '../../vehicles/providers/vehiculo_provider.dart';
@@ -215,15 +216,26 @@ class _NombreSaludo extends StatefulWidget {
 }
 
 class _NombreSaludoState extends State<_NombreSaludo> {
-  String? _apodoResuelto; // null = no leído todavía; '' = sin apodo cargado
+  /// Inicializado SÍNCRONO desde `PrefsService.apodo` (cacheado al login)
+  /// para evitar el flicker "Bienvenido Santiago" → "Bienvenido Santi"
+  /// que pasaba cuando esto era un Future a Firestore. Si la cache está
+  /// vacía (usuarios legacy logueados pre-fix 2026-05-07), el lookup
+  /// async se ejecuta una vez y cachea el resultado para próximas
+  /// sesiones.
+  late String _apodoResuelto = PrefsService.apodo.trim();
 
   @override
   void initState() {
     super.initState();
-    _resolverApodo();
+    if (_apodoResuelto.isEmpty) {
+      _resolverApodoLegacy();
+    }
   }
 
-  Future<void> _resolverApodo() async {
+  /// Solo se invoca para usuarios que iniciaron sesión antes de que
+  /// PrefsService cacheara el APODO. Una vez resuelto, queda guardado
+  /// y la próxima sesión arranca síncrona.
+  Future<void> _resolverApodoLegacy() async {
     final dni = widget.dni.trim();
     if (dni.isEmpty) return;
     try {
@@ -233,7 +245,10 @@ class _NombreSaludoState extends State<_NombreSaludo> {
           .get();
       if (!mounted) return;
       final apodo = (snap.data()?['APODO'] ?? '').toString().trim();
+      if (apodo.isEmpty) return; // sin apodo cargado, dejamos el fallback
       setState(() => _apodoResuelto = apodo);
+      // Cacheamos para próximas sesiones (sin await — no bloquea UI).
+      unawaited(PrefsService.setApodo(apodo));
     } catch (_) {
       // Si Firestore falla, dejamos el fallback del primer nombre.
     }
@@ -251,9 +266,8 @@ class _NombreSaludoState extends State<_NombreSaludo> {
 
   @override
   Widget build(BuildContext context) {
-    final apodoLimpio = (_apodoResuelto ?? '').trim();
-    final nombre = apodoLimpio.isNotEmpty
-        ? apodoLimpio
+    final nombre = _apodoResuelto.isNotEmpty
+        ? _apodoResuelto
         : _primerNombre(widget.nombreFull);
     return Text(
       nombre,

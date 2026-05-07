@@ -223,6 +223,7 @@ export const loginConDni = onCall(
     // ─── Emisión del custom token ──────────────────────────────────
     // UID = DNI para que `request.auth.uid` en las rules sea el DNI.
     const nombre = (empleado.NOMBRE ?? "Usuario").toString();
+    const apodo = (empleado.APODO ?? "").toString().trim();
     const area = (empleado.AREA ?? "MANEJO").toString();
     // Normalizamos roles: el legacy USUARIO se trata como CHOFER.
     // Lista válida nueva: CHOFER, PLANTA, SUPERVISOR, ADMIN.
@@ -248,6 +249,11 @@ export const loginConDni = onCall(
       // tenga que decodificar el JWT solo para mostrar el nombre.
       dni,
       nombre,
+      // Apodo: el cliente lo cachea en PrefsService para mostrar el
+      // saludo "Buen día, Santi" SIN tener que hacer una lectura asíncrona
+      // a Firestore al renderizar el dashboard (eliminamos el flicker
+      // "Bienvenido Santiago" → "Bienvenido Santi" — fix 2026-05-07).
+      apodo,
       rol,
       area,
     };

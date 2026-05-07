@@ -135,6 +135,7 @@ class AuthService {
             'No se pudo iniciar sesión (respuesta sin token).');
       }
       final nombre = (result['nombre'] ?? 'Usuario').toString();
+      final apodo = (result['apodo'] ?? '').toString().trim();
       final rol = (result['rol'] ?? 'USUARIO').toString();
 
       // 2) Iniciamos sesión en Firebase Auth con el custom token.
@@ -142,9 +143,12 @@ class AuthService {
 
       // 3) Persistimos los datos en SharedPreferences para que la app
       //    los muestre rápido sin tocar Firestore en cada pantalla.
+      // Apodo cacheado para que el saludo del dashboard sea síncrono
+      // (sin flicker "Bienvenido Santiago" → "Bienvenido Santi").
       await PrefsService.guardarUsuario(
         dni: cleanDni,
         nombre: nombre,
+        apodo: apodo,
         rol: rol,
       );
 
