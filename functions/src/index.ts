@@ -2850,3 +2850,257 @@ export const botHealthWatchdog = onSchedule(
     });
   }
 );
+
+// ============================================================================
+// sitrackPosicionPoller — última posición de toda la flota
+// ============================================================================
+//
+// Toda la flota (55 tractores hoy) está en Sitrack — incluye también
+// unidades sin Volvo Connect, así que es la mejor fuente para responder
+// "dónde está cada tractor ahora". Volvo Vehicle Alerts solo nos dispara
+// eventos puntuales (overspeed/idling/etc), no la posición continua —
+// si un tractor lleva 1h sin generar evento, no sabemos dónde está. Con
+// Sitrack sí.
+//
+// Endpoint: GET /v2/report (último reporte de cada unidad de la cuenta).
+// Auth: Basic HTTPS con usuario web service. Cuota: hasta 1000 unidades
+// por cuenta — sobra para Vecchi.
+//
+// Estrategia:
+//   1. Cron cada 5 min llama al endpoint, recibe array con un item por
+//      unidad activa.
+//   2. Por cada item válido (con lat/lng y gpsValidity confiable),
+//      mergeamos en `SITRACK_POSICIONES/{patente}` — doc id = patente,
+//      no historizamos. Es snapshot del último estado.
+//   3. Cursor de health en `META/sitrack_posicion_cursor` para que el
+//      tablero de admin pueda detectar caídas del poller.
+//
+// Por qué `merge: true` y no `set` total: en algunos polls Sitrack puede
+// devolver un reporte sin algunos campos opcionales (driver_dni vacío
+// si el chofer todavía no se identificó); merge mantiene los últimos
+// conocidos en lugar de borrarlos. La info de "frescura" del campo
+// individual va via timestamps (ignition_date, report_date).
+
+const sitrackUsername = defineSecret("SITRACK_USERNAME");
+const sitrackPassword = defineSecret("SITRACK_PASSWORD");
+
+const SITRACK_BASE_AR = "https://externalappgw.ar.sitrack.com";
+
+interface SitrackReportItem {
+  reportId?: string;
+  reportDate?: string;
+  inputDate?: string;
+  assetId?: string;
+  assetName?: string;
+  deviceId?: string;
+  holderId?: string;
+  eventId?: number;
+  eventName?: string;
+  latitude?: number;
+  longitude?: number;
+  location?: string;
+  heading?: number;
+  speed?: number;
+  ignition?: 0 | 1;
+  ignitionDate?: string;
+  odometer?: number;
+  gpsOdometer?: number;
+  hourmeter?: number;
+  deviceHourmeter?: number;
+  driverName?: string;
+  driverLastName?: string;
+  driverDocumentNumber?: string;
+  driverDocumentType?: string;
+  // gpsValidity: 0..89 = confiable; >= 90 = no confiable.
+  gpsValidity?: number;
+  gpsSatellites?: number;
+  gpsDop?: number;
+  areaType?: string;
+  batteryVoltage?: number;
+  backupBatteryVoltage?: number;
+  trailerId?: string;
+  trailerName?: string;
+}
+
+export const sitrackPosicionPoller = onSchedule(
+  {
+    schedule: "every 5 minutes",
+    timeZone: "America/Argentina/Buenos_Aires",
+    secrets: [sitrackUsername, sitrackPassword],
+    timeoutSeconds: 60,
+    memory: "256MiB",
+  },
+  async () => {
+    logger.info("[sitrackPosicionPoller] iniciando ciclo");
+
+    // ─── Auth Basic HTTPS ──────────────────────────────────────────
+    const authHeader = "Basic " + Buffer.from(
+      `${sitrackUsername.value()}:${sitrackPassword.value()}`
+    ).toString("base64");
+
+    // ─── Fetch ─────────────────────────────────────────────────────
+    const url = `${SITRACK_BASE_AR}/v2/report`;
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers: {
+          "Authorization": authHeader,
+          "Accept": "application/json",
+        },
+      });
+    } catch (e) {
+      logger.error("[sitrackPosicionPoller] fetch falló", {
+        error: (e as Error).message,
+      });
+      return;
+    }
+
+    if (!res.ok) {
+      logger.warn("[sitrackPosicionPoller] HTTP error", {
+        statusCode: res.status,
+      });
+      return;
+    }
+
+    let reports: SitrackReportItem[];
+    try {
+      reports = (await res.json()) as SitrackReportItem[];
+    } catch (e) {
+      logger.error("[sitrackPosicionPoller] JSON parse falló", {
+        error: (e as Error).message,
+      });
+      return;
+    }
+
+    if (!Array.isArray(reports)) {
+      logger.warn("[sitrackPosicionPoller] respuesta no es array", {
+        tipo: typeof reports,
+      });
+      return;
+    }
+
+    // ─── Persistir en SITRACK_POSICIONES ───────────────────────────
+    // Batch único: 55 docs entran cómodos en un solo batch (límite 500).
+    const batch = db.batch();
+    let escritos = 0;
+    let descartados = 0;
+
+    for (const r of reports) {
+      const patente = (r.assetId ?? "").toString().trim().toUpperCase();
+      if (!patente) {
+        descartados++;
+        continue;
+      }
+
+      // gpsValidity >= 90 → posición no confiable (poca señal de
+      // satélites). Lo dice el doc explícitamente. En esos casos el
+      // doc en SITRACK_POSICIONES queda "stale" hasta el próximo
+      // reporte confiable — preferimos no pisar la última posición
+      // buena con una mala.
+      if (typeof r.gpsValidity === "number" && r.gpsValidity >= 90) {
+        descartados++;
+        continue;
+      }
+
+      const lat = typeof r.latitude === "number" ? r.latitude : null;
+      const lng = typeof r.longitude === "number" ? r.longitude : null;
+      if (lat === null || lng === null) {
+        descartados++;
+        continue;
+      }
+
+      const reportTs = r.reportDate ? new Date(r.reportDate) : null;
+      const ignitionTs = r.ignitionDate ? new Date(r.ignitionDate) : null;
+
+      // Odómetro: preferimos el "principal" (de la ECU si tiene ICAN,
+      // sino calculado por GPS). gpsOdometer queda como respaldo de
+      // visualización.
+      const odometer = typeof r.odometer === "number"
+        ? r.odometer
+        : typeof r.gpsOdometer === "number"
+          ? r.gpsOdometer
+          : null;
+      const hourmeter = typeof r.hourmeter === "number"
+        ? r.hourmeter
+        : typeof r.deviceHourmeter === "number"
+          ? r.deviceHourmeter
+          : null;
+
+      // Chofer identificado vía iButton/tarjeta: DNI es el match
+      // exacto contra EMPLEADOS/{dni}. driverName/driverLastName
+      // pueden venir mezclados según cómo registraron al chofer en
+      // el portal Sitrack — los guardamos crudos para el cross-check
+      // posterior (Fase 3).
+      const driverDni = (r.driverDocumentNumber ?? "").toString().trim();
+      const driverNombre = (r.driverName ?? "").toString().trim();
+      const driverApellido = (r.driverLastName ?? "").toString().trim();
+
+      const doc: Record<string, unknown> = {
+        // Identificación
+        patente,
+        asset_name: r.assetName ?? "",
+        holder_id: (r.holderId ?? "").toString(),
+        device_id: (r.deviceId ?? "").toString(),
+        // Posición
+        lat,
+        lng,
+        location: r.location ?? "",
+        heading: typeof r.heading === "number" ? r.heading : null,
+        speed: typeof r.speed === "number" ? r.speed : null,
+        // Estado motor
+        ignition: r.ignition === 1,
+        ignition_date: ignitionTs ? Timestamp.fromDate(ignitionTs) : null,
+        odometer,
+        hourmeter,
+        // Chofer (puede no haberse identificado todavía → strings vacíos)
+        driver_dni: driverDni,
+        driver_nombre: driverNombre,
+        driver_apellido: driverApellido,
+        // Evento que disparó el reporte
+        event_id: typeof r.eventId === "number" ? r.eventId : null,
+        event_name: r.eventName ?? "",
+        // Calidad GPS
+        gps_validity: typeof r.gpsValidity === "number" ? r.gpsValidity : null,
+        gps_satellites: typeof r.gpsSatellites === "number" ? r.gpsSatellites : null,
+        // Trailer (sensor de enganche, hoy no instalado en ningún tractor
+        // — lo guardamos por si en el futuro se instala)
+        trailer_id: r.trailerId ?? "",
+        trailer_name: r.trailerName ?? "",
+        // Timestamps
+        report_date: reportTs ? Timestamp.fromDate(reportTs) : null,
+        consultado_en: FieldValue.serverTimestamp(),
+        // Auditoría / debugging
+        report_id: r.reportId ?? "",
+      };
+
+      batch.set(
+        db.collection("SITRACK_POSICIONES").doc(patente),
+        doc,
+        { merge: true }
+      );
+      escritos++;
+    }
+
+    if (escritos > 0) {
+      await batch.commit();
+    }
+
+    // ─── Health cursor ─────────────────────────────────────────────
+    await db.collection("META").doc("sitrack_posicion_cursor").set(
+      {
+        ultimo_exito_at: FieldValue.serverTimestamp(),
+        ultimo_recibidos: reports.length,
+        ultimo_escritos: escritos,
+        ultimo_descartados: descartados,
+      },
+      { merge: true }
+    );
+
+    logger.info("[sitrackPosicionPoller] OK", {
+      recibidos: reports.length,
+      escritos,
+      descartados,
+    });
+  }
+);

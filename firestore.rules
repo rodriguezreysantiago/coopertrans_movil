@@ -286,6 +286,26 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // SITRACK_POSICIONES — última posición conocida de cada unidad
+    // ========================================================================
+    // Doc id = patente. Lo escribe la scheduled function
+    // `sitrackPosicionPoller` cada 5 min llamando al endpoint /v2/report
+    // de Sitrack. Es snapshot, no histórico — cada poll reemplaza
+    // (con merge) los campos del doc.
+    //
+    // El cliente Flutter solo lee (mapa flota en vivo). Toda escritura
+    // pasa por la Cloud Function (Admin SDK saltea las rules), así que
+    // create/update/delete desde el cliente quedan cerrados.
+
+    match /SITRACK_POSICIONES/{patente} {
+      // Mismos roles que pueden ver tableros Volvo (admin / supervisor /
+      // SEG_HIGIENE). El mapa de la flota es dato sensible — ubicación
+      // del personal — y no corresponde exponerlo a roles operativos.
+      allow read: if puedeVerVolvoTableros();
+      allow create, update, delete: if false;
+    }
+
+    // ========================================================================
     // ASIGNACIONES_VEHICULO — log temporal de quién manejó qué unidad
     // ========================================================================
     // Cada doc representa el período en que un chofer manejó una patente.

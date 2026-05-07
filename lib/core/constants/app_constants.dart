@@ -27,6 +27,7 @@ class AppRoutes {
   static const String adminEcoDriving = '/admin_eco_driving';
   static const String adminDescargasPto = '/admin_descargas_pto';
   static const String adminMapaVolvo = '/admin_mapa_volvo';
+  static const String adminMapaFlota = '/admin_mapa_flota';
   static const String syncDashboard = '/sync_dashboard';
   static const String adminEstadoBot = '/admin_estado_bot';
 
@@ -85,6 +86,15 @@ class AppCollections {
   /// scheduled function `volvoAlertasPoller` cada 5 min — el admin
   /// los marca como atendidos desde el tablero.
   static const String volvoAlertas = 'VOLVO_ALERTAS';
+
+  /// Última posición conocida de cada unidad de la flota según Sitrack.
+  /// Doc id = patente. Se reemplaza completo en cada poll (no es
+  /// histórico, es un snapshot). La popula `sitrackPosicionPoller`
+  /// cada 5 min llamando al endpoint `/v2/report` de Sitrack.
+  /// Toda la flota (55 tractores hoy) está en Sitrack — incluye
+  /// también unidades sin Volvo Connect, así que es la mejor fuente
+  /// para "dónde está cada tractor ahora".
+  static const String sitrackPosiciones = 'SITRACK_POSICIONES';
 
   /// Registro temporal inmutable de asignaciones chofer↔vehículo.
   /// Cada doc: `{vehiculo_id, chofer_dni, desde, hasta, ...}`. La

@@ -29,6 +29,7 @@ import '../features/gomeria/screens/gomeria_unidades_lista_screen.dart';
 import '../features/eco_driving/screens/admin_descargas_pto_screen.dart';
 import '../features/eco_driving/screens/admin_eco_driving_screen.dart';
 import '../features/eco_driving/screens/admin_mapa_volvo_screen.dart';
+import '../features/fleet_map/screens/admin_mapa_flota_screen.dart';
 import '../features/employees/screens/admin_personal_lista_screen.dart';
 import '../features/vehicles/screens/admin_vehiculos_lista_screen.dart';
 import '../features/vehicles/screens/admin_mantenimiento_screen.dart';
@@ -252,6 +253,17 @@ class AppRouter {
       case AppRoutes.adminMapaVolvo:
         return _buildRoute(
           _protegerAdmin(const AdminMapaVolvoScreen()),
+          settings,
+        );
+
+      // ================= MAPA FLOTA EN VIVO =================
+      // Posición actual de TODA la flota según Sitrack (toda la flota
+      // tiene Sitrack — incluye también unidades sin Volvo Connect).
+      // Lee de SITRACK_POSICIONES que la Cloud Function
+      // `sitrackPosicionPoller` actualiza cada 5 min.
+      case AppRoutes.adminMapaFlota:
+        return _buildRoute(
+          _protegerAdmin(const AdminMapaFlotaScreen()),
           settings,
         );
 
