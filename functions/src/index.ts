@@ -2191,12 +2191,14 @@ export const onAlertaVolvoCreated = onDocumentCreated(
     //     desde sitrackPosicionPoller cuando detecta drift_tipo
     //     CHOFER_NO_IDENTIFICADO — usa otra fuente de datos.
     //
-    // FUEL ("Cambio anormal de combustible") SÍ llega al chofer —
-    // puede ser robo / vaciado raro y conviene que esté avisado.
+    // FUEL ("Cambio anormal de combustible") tampoco llega al chofer:
+    // por experiencia operativa de Vecchi, los disparos son ruidosos
+    // y el chofer no puede investigar (lo ve el admin en el resumen).
     const TIPOS_BLACKLIST_CHOFER = new Set([
       "WITHOUT_ADBLUE",
       "ADBLUELEVEL_LOW",
       "CATALYST",
+      "FUEL",
       "TELL_TALE",
       "DRIVING_WITHOUT_BEING_LOGGED_IN",
     ]);
