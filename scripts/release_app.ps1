@@ -86,8 +86,23 @@ if ($releaseExiste) {
         $assetsRemotos = @()
     }
     Write-Host ""
-    Write-Host "AVISO: el release $tag ya existe en GitHub." -ForegroundColor Yellow
-    Write-Host "  Voy a reusarlo en vez de crear uno nuevo." -ForegroundColor Yellow
+    Write-Host "==========================================" -ForegroundColor Yellow
+    Write-Host "  AVISO IMPORTANTE: $tag ya existe en GitHub." -ForegroundColor Yellow
+    Write-Host "==========================================" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Si tu codigo cambio desde la ultima publicacion," -ForegroundColor Yellow
+    Write-Host "  los OPERADORES NO van a recibir el update aunque" -ForegroundColor Yellow
+    Write-Host "  reemplaces el zip — el launcher de cada PC compara" -ForegroundColor Yellow
+    Write-Host "  VERSION.txt local vs el tag, y si coincide no descarga." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Lo correcto en ese caso es:" -ForegroundColor Yellow
+    Write-Host "    1) Bumpear pubspec.yaml (ej: 1.0.4+12 -> 1.0.5+13)" -ForegroundColor Yellow
+    Write-Host "    2) flutter build windows --release" -ForegroundColor Yellow
+    Write-Host "    3) Volver a correr este script" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Republicar la misma version solo sirve para corregir" -ForegroundColor DarkGray
+    Write-Host "  el zip antes de que algun PC lo haya descargado." -ForegroundColor DarkGray
+    Write-Host ""
     Write-Host "  Assets remotos actuales:" -ForegroundColor DarkGray
     if ($assetsRemotos.Count -eq 0) {
         Write-Host "    (ninguno)" -ForegroundColor DarkGray
@@ -96,6 +111,12 @@ if ($releaseExiste) {
             $mb = [math]::Round($a.size / 1MB, 1)
             Write-Host "    $($a.name) ($mb MB)" -ForegroundColor DarkGray
         }
+    }
+    Write-Host ""
+    $continuar = Read-Host "Continuar igual con republicacion de $tag? (s/N)"
+    if ($continuar -ne 's' -and $continuar -ne 'S') {
+        Write-Host "Cancelado. Bumpea la version y volve." -ForegroundColor Cyan
+        exit 0
     }
 }
 
