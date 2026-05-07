@@ -42,6 +42,11 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
   bool? _filtroIgnicionOn; // null=todos, true=ON, false=OFF
   /// Si true, oculta tractores con > 1h sin reportar.
   bool _ocultarStale = false;
+  /// Si true, muestra SOLO los tractores con drift detectado.
+  /// El cron del poller marca `drift_tipo` en cada doc cuando el chofer
+  /// que reporta Sitrack (iButton) no coincide con la asignación activa
+  /// del sistema. Útil para que el admin atienda solo los inconsistentes.
+  bool _soloDrift = false;
 
   final _mapController = MapController();
 
@@ -80,6 +85,8 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
           final visibles = allDocs.where((d) {
             final data = d.data();
             final ignition = data['ignition'] == true;
+            final driftTipo = (data['drift_tipo'] ?? '').toString();
+            if (_soloDrift && driftTipo.isEmpty) return false;
             if (_filtroIgnicionOn != null && ignition != _filtroIgnicionOn) {
               return false;
             }
@@ -99,6 +106,7 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
           int conIgnicionOn = 0;
           int conIgnicionOff = 0;
           int stale = 0;
+          int drifts = 0;
           for (final d in allDocs) {
             final data = d.data();
             if (data['ignition'] == true) {
@@ -111,6 +119,9 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
                 ahora.difference(reportTs).inMinutes > 60) {
               stale++;
             }
+            if ((data['drift_tipo'] ?? '').toString().isNotEmpty) {
+              drifts++;
+            }
           }
 
           return Column(
@@ -120,13 +131,16 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
                 conIgnicionOn: conIgnicionOn,
                 conIgnicionOff: conIgnicionOff,
                 stale: stale,
+                drifts: drifts,
                 visibles: visibles.length,
                 filtroIgnicion: _filtroIgnicionOn,
                 ocultarStale: _ocultarStale,
+                soloDrift: _soloDrift,
                 onFiltroIgnicion: (v) =>
                     setState(() => _filtroIgnicionOn = v),
                 onOcultarStaleToggle: (v) =>
                     setState(() => _ocultarStale = v),
+                onSoloDriftToggle: (v) => setState(() => _soloDrift = v),
               ),
               Expanded(
                 child: _Mapa(
@@ -167,22 +181,28 @@ class _Toolbar extends StatelessWidget {
   final int conIgnicionOn;
   final int conIgnicionOff;
   final int stale;
+  final int drifts;
   final int visibles;
   final bool? filtroIgnicion;
   final bool ocultarStale;
+  final bool soloDrift;
   final ValueChanged<bool?> onFiltroIgnicion;
   final ValueChanged<bool> onOcultarStaleToggle;
+  final ValueChanged<bool> onSoloDriftToggle;
 
   const _Toolbar({
     required this.total,
     required this.conIgnicionOn,
     required this.conIgnicionOff,
     required this.stale,
+    required this.drifts,
     required this.visibles,
     required this.filtroIgnicion,
     required this.ocultarStale,
+    required this.soloDrift,
     required this.onFiltroIgnicion,
     required this.onOcultarStaleToggle,
+    required this.onSoloDriftToggle,
   });
 
   @override
@@ -219,6 +239,13 @@ class _Toolbar extends StatelessWidget {
                   label: '> 1H',
                   valor: '$stale',
                   color: AppColors.accentRed),
+              const SizedBox(width: 12),
+              _ContadorMini(
+                  label: 'DRIFT',
+                  valor: '$drifts',
+                  color: drifts > 0
+                      ? AppColors.accentOrange
+                      : Colors.white38),
               const Spacer(),
               Text(
                 'Mostrando $visibles',
@@ -260,6 +287,14 @@ class _Toolbar extends StatelessWidget {
                   activo: ocultarStale,
                   colorActivo: AppColors.accentRed,
                   onChange: onOcultarStaleToggle,
+                ),
+                const SizedBox(width: 4),
+                _ToggleChip(
+                  label: 'SOLO DRIFT',
+                  icono: Icons.warning_amber_outlined,
+                  activo: soloDrift,
+                  colorActivo: AppColors.accentOrange,
+                  onChange: onSoloDriftToggle,
                 ),
               ],
             ),
@@ -456,8 +491,13 @@ class _Mapa extends StatelessWidget {
     final reportTs = (data['report_date'] as Timestamp?)?.toDate();
     final minDesdeReporte =
         reportTs == null ? null : ahora.difference(reportTs).inMinutes;
+    final tieneDrift = (data['drift_tipo'] ?? '').toString().isNotEmpty;
 
-    final color = _colorMarker(ignition: ignition, minStale: minDesdeReporte);
+    final color = _colorMarker(
+      ignition: ignition,
+      minStale: minDesdeReporte,
+      tieneDrift: tieneDrift,
+    );
 
     return Marker(
       point: LatLng(lat, lng),
@@ -469,7 +509,12 @@ class _Mapa extends StatelessWidget {
           decoration: BoxDecoration(
             color: color,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2),
+            // Borde más grueso/contrastado si hay drift, para que salte
+            // a la vista incluso cuando hay muchos markers cerca.
+            border: Border.all(
+              color: tieneDrift ? Colors.white : Colors.white,
+              width: tieneDrift ? 3 : 2,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withAlpha(120),
@@ -478,22 +523,25 @@ class _Mapa extends StatelessWidget {
               ),
             ],
           ),
-          child: const Icon(
-            Icons.local_shipping,
+          child: Icon(
+            tieneDrift ? Icons.warning_amber : Icons.local_shipping,
             color: Colors.white,
-            size: 18,
+            size: tieneDrift ? 20 : 18,
           ),
         ),
       ),
     );
   }
 
-  /// Verde si motor ON y reporte fresco. Gris si motor OFF y fresco.
-  /// Rojo si > 60 min sin reportar (ignición no confiable).
+  /// Naranja si tiene drift (chofer físico ≠ asignado). Rojo si > 60 min
+  /// sin reportar. Verde si motor ON. Gris si motor OFF.
+  /// Drift gana sobre stale, y stale gana sobre ignición.
   static Color _colorMarker({
     required bool ignition,
     required int? minStale,
+    required bool tieneDrift,
   }) {
+    if (tieneDrift) return AppColors.accentOrange;
     if (minStale != null && minStale > 60) return AppColors.accentRed;
     if (ignition) return AppColors.accentGreen;
     return Colors.white60;
@@ -525,6 +573,9 @@ class _DetalleSheet extends StatelessWidget {
     final driverApellido = (data['driver_apellido'] ?? '').toString();
     final driverNombre = (data['driver_nombre'] ?? '').toString();
     final eventName = (data['event_name'] ?? '').toString();
+    final driftTipo = (data['drift_tipo'] ?? '').toString();
+    final asignacionDni = (data['asignacion_dni'] ?? '').toString();
+    final asignacionNombre = (data['asignacion_nombre'] ?? '').toString();
     final fmt = DateFormat('dd/MM HH:mm');
 
     final choferTexto = driverDni.isEmpty
@@ -578,6 +629,16 @@ class _DetalleSheet extends StatelessWidget {
               _BadgeIgnicion(on: ignition),
             ],
           ),
+          if (driftTipo.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _DriftBanner(
+              tipo: driftTipo,
+              sitrackDni: driverDni,
+              sitrackApellido: driverApellido,
+              asignacionDni: asignacionDni,
+              asignacionNombre: asignacionNombre,
+            ),
+          ],
           const SizedBox(height: 16),
           _Fila(
             label: 'Chofer',
@@ -769,4 +830,99 @@ class _BadgeIgnicion extends StatelessWidget {
 
 extension _StringIfEmpty on String {
   String ifEmpty(String fallback) => isEmpty ? fallback : this;
+}
+
+/// Banner naranja en el sheet del tractor cuando el chofer físico
+/// (Sitrack, vía iButton) no coincide con la asignación activa del
+/// sistema. El cron `sitrackPosicionPoller` setea `drift_tipo` con
+/// uno de tres valores que determinan el copy mostrado.
+class _DriftBanner extends StatelessWidget {
+  final String tipo;
+  final String sitrackDni;
+  final String sitrackApellido;
+  final String asignacionDni;
+  final String asignacionNombre;
+
+  const _DriftBanner({
+    required this.tipo,
+    required this.sitrackDni,
+    required this.sitrackApellido,
+    required this.asignacionDni,
+    required this.asignacionNombre,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    String titulo;
+    String detalle;
+    switch (tipo) {
+      case 'CHOFER_DISTINTO':
+        titulo = 'Chofer distinto al asignado';
+        final fisico = sitrackApellido.isNotEmpty
+            ? '$sitrackApellido (DNI $sitrackDni)'
+            : 'DNI $sitrackDni';
+        final asignado = asignacionNombre.isNotEmpty
+            ? '$asignacionNombre (DNI $asignacionDni)'
+            : 'DNI $asignacionDni';
+        detalle = 'Sistema: $asignado.\nFísico (iButton): $fisico.';
+        break;
+      case 'SIN_ASIGNACION':
+        final fisico = sitrackApellido.isNotEmpty
+            ? '$sitrackApellido (DNI $sitrackDni)'
+            : 'DNI $sitrackDni';
+        titulo = 'Manejando sin estar asignado';
+        detalle = 'El tractor no tiene asignación activa, pero $fisico '
+            'está identificado en él via iButton.';
+        break;
+      case 'CHOFER_NO_IDENTIFICADO':
+        final asignado = asignacionNombre.isNotEmpty
+            ? '$asignacionNombre (DNI $asignacionDni)'
+            : 'DNI $asignacionDni';
+        titulo = 'Chofer no se identificó';
+        detalle = 'Sistema asignado: $asignado.\n'
+            'El motor está encendido pero nadie pasó el iButton.';
+        break;
+      default:
+        titulo = 'Inconsistencia detectada';
+        detalle = 'Tipo: $tipo';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.accentOrange.withAlpha(30),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.accentOrange.withAlpha(120)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_amber,
+              color: AppColors.accentOrange, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  titulo,
+                  style: const TextStyle(
+                    color: AppColors.accentOrange,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  detalle,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

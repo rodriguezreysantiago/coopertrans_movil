@@ -2980,11 +2980,45 @@ export const sitrackPosicionPoller = onSchedule(
       return;
     }
 
+    // ─── Drift detection: leer asignaciones activas ────────────────
+    // Cargamos en memoria todas las ASIGNACIONES_VEHICULO con hasta=null
+    // (~30 docs activas para una flota de 55). Por cada patente que
+    // Sitrack reporta, comparamos el DNI del chofer físico (driverDoc-
+    // umentNumber del iButton) con el DNI del chofer asignado por el
+    // sistema. Si no coinciden, marcamos drift_tipo en el doc para que
+    // la pantalla del admin lo destaque.
+    interface AsignacionActiva {
+      choferDni: string;
+      choferNombre: string;
+    }
+    const asignacionesPorPatente = new Map<string, AsignacionActiva>();
+    try {
+      const asignSnap = await db
+        .collection("ASIGNACIONES_VEHICULO")
+        .where("hasta", "==", null)
+        .get();
+      for (const d of asignSnap.docs) {
+        const data = d.data();
+        const patente = (data.vehiculo_id ?? "").toString().trim().toUpperCase();
+        const dni = (data.chofer_dni ?? "").toString().trim();
+        const nombre = (data.chofer_nombre ?? "").toString().trim();
+        if (patente && dni) {
+          asignacionesPorPatente.set(patente, { choferDni: dni, choferNombre: nombre });
+        }
+      }
+    } catch (e) {
+      // Si falla, seguimos sin drift detection (no rompemos el poller).
+      logger.warn("[sitrackPosicionPoller] no pude leer ASIGNACIONES_VEHICULO", {
+        error: (e as Error).message,
+      });
+    }
+
     // ─── Persistir en SITRACK_POSICIONES ───────────────────────────
     // Batch único: 55 docs entran cómodos en un solo batch (límite 500).
     const batch = db.batch();
     let escritos = 0;
     let descartados = 0;
+    let conDrift = 0;
 
     for (const r of reports) {
       const patente = (r.assetId ?? "").toString().trim().toUpperCase();
@@ -3030,11 +3064,33 @@ export const sitrackPosicionPoller = onSchedule(
       // Chofer identificado vía iButton/tarjeta: DNI es el match
       // exacto contra EMPLEADOS/{dni}. driverName/driverLastName
       // pueden venir mezclados según cómo registraron al chofer en
-      // el portal Sitrack — los guardamos crudos para el cross-check
-      // posterior (Fase 3).
+      // el portal Sitrack — los guardamos crudos para el cross-check.
       const driverDni = (r.driverDocumentNumber ?? "").toString().trim();
       const driverNombre = (r.driverName ?? "").toString().trim();
       const driverApellido = (r.driverLastName ?? "").toString().trim();
+
+      // ─── Drift detection ─────────────────────────────────────────
+      // Comparamos el DNI físico (Sitrack) vs el asignado por el
+      // sistema. Casos:
+      //   - SIN_ASIGNACION: Sitrack reporta chofer pero el sistema
+      //     no tiene a nadie asignado a esa patente. Alguien manejando
+      //     sin estar registrado.
+      //   - CHOFER_DISTINTO: Ambos lados reportan, pero los DNIs no
+      //     coinciden. Falta actualizar la asignación.
+      //   - CHOFER_NO_IDENTIFICADO: ignición ON, hay asignación, pero
+      //     Sitrack no reporta DNI — el chofer subió sin pasar el
+      //     iButton. Si ignición OFF, no es drift (tractor parado).
+      const ignitionOn = r.ignition === 1;
+      const asignacion = asignacionesPorPatente.get(patente);
+      let driftTipo: string | null = null;
+      if (driverDni && !asignacion) {
+        driftTipo = "SIN_ASIGNACION";
+      } else if (driverDni && asignacion && asignacion.choferDni !== driverDni) {
+        driftTipo = "CHOFER_DISTINTO";
+      } else if (!driverDni && asignacion && ignitionOn) {
+        driftTipo = "CHOFER_NO_IDENTIFICADO";
+      }
+      if (driftTipo) conDrift++;
 
       const doc: Record<string, unknown> = {
         // Identificación
@@ -3057,6 +3113,13 @@ export const sitrackPosicionPoller = onSchedule(
         driver_dni: driverDni,
         driver_nombre: driverNombre,
         driver_apellido: driverApellido,
+        // Drift: comparación del DNI Sitrack vs ASIGNACIONES_VEHICULO.
+        // null cuando todo coincide o cuando el tractor está parado
+        // sin identificar (no es drift). La pantalla del admin filtra
+        // por drift_tipo != null para destacar inconsistencias.
+        drift_tipo: driftTipo,
+        asignacion_dni: asignacion?.choferDni ?? "",
+        asignacion_nombre: asignacion?.choferNombre ?? "",
         // Evento que disparó el reporte
         event_id: typeof r.eventId === "number" ? r.eventId : null,
         event_name: r.eventName ?? "",
@@ -3101,6 +3164,7 @@ export const sitrackPosicionPoller = onSchedule(
       recibidos: reports.length,
       escritos,
       descartados,
+      conDrift,
     });
   }
 );
