@@ -71,6 +71,7 @@ class VehiculoRepository {
     required String patente,
     double? km,
     double? nivelCombustiblePct,
+    double? nivelAdbluePct,
     double? autonomiaKm,
     double? serviceDistanceKm,
   }) async {
@@ -83,6 +84,10 @@ class VehiculoRepository {
     if (nivelCombustiblePct != null) {
       updates['NIVEL_COMBUSTIBLE'] = nivelCombustiblePct;
       updates['ULTIMA_LECTURA_COMBUSTIBLE'] = FieldValue.serverTimestamp();
+    }
+    if (nivelAdbluePct != null) {
+      updates['NIVEL_ADBLUE'] = nivelAdbluePct;
+      updates['ULTIMA_LECTURA_ADBLUE'] = FieldValue.serverTimestamp();
     }
     if (autonomiaKm != null) updates['AUTONOMIA_KM'] = autonomiaKm;
     // serviceDistance puede ser negativo (vencido) — lo guardamos igual.

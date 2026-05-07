@@ -666,6 +666,12 @@ class _DetalleSheet extends StatelessWidget {
               valor: '${hourmeter.toStringAsFixed(1)} h',
               icono: Icons.access_time,
             ),
+          // Telemetría Volvo Connect (combustible, AdBlue, autonomía).
+          // Vive en el doc VEHICULOS — no en SITRACK_POSICIONES — porque
+          // la pobla `vehiculo_manager.actualizarTelemetria` cuando el
+          // admin entra a la pantalla de unidades. Solo aparece si hay
+          // dato (las unidades sin Volvo Connect quedan sin estos campos).
+          _TelemetriaVolvoFila(patente: patente),
           _Fila(
             label: 'Último reporte',
             valor: reportTs == null ? '—' : fmt.format(reportTs),
@@ -830,6 +836,74 @@ class _BadgeIgnicion extends StatelessWidget {
 
 extension _StringIfEmpty on String {
   String ifEmpty(String fallback) => isEmpty ? fallback : this;
+}
+
+/// Bloque de telemetría Volvo Connect (combustible / AdBlue / autonomía)
+/// para una patente. Lee de VEHICULOS/{patente} una sola vez al abrir
+/// el sheet — no necesita stream porque los valores cambian con baja
+/// frecuencia (cron cada ~6h o sync manual desde la pantalla de
+/// unidades). Si la unidad no tiene Volvo Connect (campos ausentes),
+/// el widget no renderiza nada — silencioso.
+class _TelemetriaVolvoFila extends StatelessWidget {
+  final String patente;
+  const _TelemetriaVolvoFila({required this.patente});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      future: FirebaseFirestore.instance
+          .collection(AppCollections.vehiculos)
+          .doc(patente)
+          .get(),
+      builder: (ctx, snap) {
+        if (!snap.hasData || snap.data?.data() == null) {
+          return const SizedBox.shrink();
+        }
+        final data = snap.data!.data()!;
+        final combustible = (data['NIVEL_COMBUSTIBLE'] as num?)?.toDouble();
+        final adblue = (data['NIVEL_ADBLUE'] as num?)?.toDouble();
+        final autonomia = (data['AUTONOMIA_KM'] as num?)?.toDouble();
+
+        if (combustible == null && adblue == null && autonomia == null) {
+          // Unidad sin Volvo Connect → no mostramos placeholder.
+          return const SizedBox.shrink();
+        }
+
+        return Column(
+          children: [
+            if (combustible != null)
+              _Fila(
+                label: 'Combustible',
+                valor: '${combustible.clamp(0, 100).toStringAsFixed(0)} %',
+                icono: Icons.local_gas_station,
+                colorIcono: _colorPorcentaje(combustible),
+              ),
+            if (adblue != null)
+              _Fila(
+                label: 'AdBlue',
+                valor: '${adblue.clamp(0, 100).toStringAsFixed(0)} %',
+                icono: Icons.water_drop_outlined,
+                colorIcono: _colorPorcentaje(adblue),
+              ),
+            if (autonomia != null)
+              _Fila(
+                label: 'Autonomía',
+                valor: '${autonomia.toStringAsFixed(0)} km',
+                icono: Icons.timeline,
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// Verde >50%, naranja 20-50%, rojo <20%. Mismo criterio que el
+  /// listado de unidades.
+  static Color _colorPorcentaje(double pct) {
+    if (pct > 50) return AppColors.accentGreen;
+    if (pct >= 20) return AppColors.accentOrange;
+    return AppColors.accentRed;
+  }
 }
 
 /// Banner naranja en el sheet del tractor cuando el chofer físico

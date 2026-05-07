@@ -36,6 +36,13 @@ class VolvoTelemetria {
   /// Nivel de combustible 0..100. Lo entrega Volvo en porcentaje.
   final double? nivelCombustiblePct;
 
+  /// Nivel de AdBlue (DEF — Diesel Exhaust Fluid) 0..100. Sin AdBlue
+  /// el camión derateca en pocos km (Euro VI obliga). Volvo lo expone
+  /// con varios nombres según firmware (`catalystFuelLevel`,
+  /// `defLevel`, `adBlueLevel`, etc.) — el parser prueba todos los
+  /// paths conocidos.
+  final double? nivelAdbluePct;
+
   /// Autonomía estimada en kilómetros que el vehículo puede recorrer
   /// con el combustible actual antes de quedarse vacío.
   final double? autonomiaKm;
@@ -53,6 +60,7 @@ class VolvoTelemetria {
   const VolvoTelemetria({
     this.odometroMetros,
     this.nivelCombustiblePct,
+    this.nivelAdbluePct,
     this.autonomiaKm,
     this.serviceDistanceMetros,
     this.leidoEn,
@@ -67,6 +75,7 @@ class VolvoTelemetria {
   bool get tieneAlgunDato =>
       odometroMetros != null ||
       nivelCombustiblePct != null ||
+      nivelAdbluePct != null ||
       autonomiaKm != null ||
       serviceDistanceMetros != null;
 }
@@ -412,6 +421,12 @@ class VolvoApiService {
     }
     fuelPct ??= _toDouble(r['fuelLevel1']) ?? _toDouble(r['fuelLevel']);
 
+    // Nivel de AdBlue (DEF): los nombres varían entre firmwares y
+    // versiones del API. Probamos los conocidos en orden de
+    // preferencia. Todos vienen como porcentaje 0..100 — clampeamos
+    // al final por las dudas que un firmware exotico devuelva 0..1.
+    double? adbluePct = _extraerAdbluePct(r, snap, volvoSnap);
+
     // Autonomía: estimatedDistanceToEmpty puede aparecer en muchos
     // contenedores. _extraerAutonomiaMetros recorre todos los posibles
     // y devuelve metros (luego convertimos a km).
@@ -451,10 +466,55 @@ class VolvoApiService {
     return VolvoTelemetria(
       odometroMetros: odoMetros,
       nivelCombustiblePct: fuelPct,
+      nivelAdbluePct: adbluePct,
       autonomiaKm: autonomiaKm,
       serviceDistanceMetros: serviceDist,
       leidoEn: leidoEn,
     );
+  }
+
+  /// Extrae el % de AdBlue (DEF) probando los nombres más usados por
+  /// distintos firmwares y versiones del Vehicle Status API.
+  ///
+  /// Volvo no estandariza esto en una sola key — históricamente vimos:
+  ///   - `catalystFuelLevel`     (común en Vehicle API v1.0.6+ diésel Euro VI)
+  ///   - `defLevel`              (rFMS)
+  ///   - `adBlueLevel`           (firmwares viejos)
+  ///   - `dieselExhaustFluidLevel` (alias largo)
+  ///   - `ureaLevel`             (algunos OEM)
+  ///
+  /// Probamos en cada uno de los contenedores donde Volvo aplana el
+  /// snapshot: el doc raíz, `snapshotData`, `volvoGroupSnapshot`.
+  /// Devuelve null si nada matchea.
+  ///
+  /// Si algún firmware devuelve 0..1 en lugar de 0..100, lo
+  /// normalizamos multiplicando por 100. Heurística: cualquier valor
+  /// `<= 1` lo tratamos como fracción.
+  double? _extraerAdbluePct(Map raw, dynamic snap, dynamic volvoSnap) {
+    const keys = [
+      'catalystFuelLevel',
+      'defLevel',
+      'adBlueLevel',
+      'dieselExhaustFluidLevel',
+      'ureaLevel',
+    ];
+    final candidatos = <Map>[
+      raw,
+      if (snap is Map) snap,
+      if (volvoSnap is Map) volvoSnap,
+    ];
+    for (final container in candidatos) {
+      for (final k in keys) {
+        final v = _toDouble(container[k]);
+        if (v != null) {
+          // Normalizar 0..1 → 0..100 si aplica.
+          final pct = v <= 1 ? v * 100 : v;
+          // Clamp defensivo.
+          if (pct >= 0 && pct <= 100) return pct;
+        }
+      }
+    }
+    return null;
   }
 
   /// Extrae `estimatedDistanceToEmpty` (en metros) recorriendo todos los

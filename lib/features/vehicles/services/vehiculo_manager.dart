@@ -160,6 +160,7 @@ class VehiculoManager {
         patente: patente,
         km: km,
         nivelCombustiblePct: tele.nivelCombustiblePct,
+        nivelAdbluePct: tele.nivelAdbluePct,
         autonomiaKm: tele.autonomiaKm,
         serviceDistanceKm: tele.serviceDistanceKm,
       );
