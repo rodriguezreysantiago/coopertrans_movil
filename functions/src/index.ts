@@ -3016,16 +3016,16 @@ export const sitrackPosicionPoller = onSchedule(
       // Odómetro: preferimos el "principal" (de la ECU si tiene ICAN,
       // sino calculado por GPS). gpsOdometer queda como respaldo de
       // visualización.
-      const odometer = typeof r.odometer === "number"
-        ? r.odometer
-        : typeof r.gpsOdometer === "number"
-          ? r.gpsOdometer
-          : null;
-      const hourmeter = typeof r.hourmeter === "number"
-        ? r.hourmeter
-        : typeof r.deviceHourmeter === "number"
-          ? r.deviceHourmeter
-          : null;
+      const odometer = typeof r.odometer === "number" ?
+        r.odometer :
+        typeof r.gpsOdometer === "number" ?
+          r.gpsOdometer :
+          null;
+      const hourmeter = typeof r.hourmeter === "number" ?
+        r.hourmeter :
+        typeof r.deviceHourmeter === "number" ?
+          r.deviceHourmeter :
+          null;
 
       // Chofer identificado vía iButton/tarjeta: DNI es el match
       // exacto contra EMPLEADOS/{dni}. driverName/driverLastName
