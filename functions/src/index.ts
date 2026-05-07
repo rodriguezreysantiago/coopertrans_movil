@@ -2295,50 +2295,17 @@ export const onAlertaVolvoCreated = onDocumentCreated(
     // siempre sabe a qué momento se refiere el aviso.
     const fechaTxt = _formatFechaArg(creadoMs);
 
-    // ─── Dedup diaria por (chofer + tipoEfectivo + fecha ART) ─────
-    // Evita el caso real (incidente 2026-05-07): Raul recibió 6 mensajes
-    // del MISMO tipo (WITHOUT_ADBLUE) en 6 horas porque el camión seguía
-    // sin AdBlue todo el día y Volvo dispara el evento periódicamente.
-    // Una sola alerta por (chofer, tipo, día) es suficiente — las
-    // repetidas se siguen registrando en VOLVO_ALERTAS para histórico,
-    // solo no spamean al chofer.
+    // Nota: NO hay dedup diaria a este nivel — los eventos de manejo
+    // (OVERSPEED, IDLING, HARSH, PTO, SEATBELT, etc.) son el insumo
+    // principal del seguimiento del chofer. Cada uno se encola y el
+    // bot Node.js los AGRUPA al enviarlos (ver `agrupador.js`): si el
+    // chofer ya tiene varios PENDIENTES, los combina en un único
+    // mensaje "se detectaron N eventos: 5x Exceso, 3x Ralentí...".
+    // Eso resuelve el spam sin perder información.
     //
-    // Atomicidad: usamos `.create()` que tira si el doc ya existe. Si
-    // dos triggers del mismo tipo llegan en paralelo (raro pero posible
-    // si Volvo envía dos eventos simultáneos), uno gana y el otro hace
-    // skip — sin race condition.
-    const fechaArt = new Intl.DateTimeFormat("en-CA", {
-      timeZone: "America/Argentina/Buenos_Aires",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(new Date(creadoMs));
-
-    const dedupDocId =
-      `dedup_${choferDoc.id}_${tipoEfectivo}_${fechaArt}`;
-    const dedupRef = db.collection("META").doc(dedupDocId);
-
-    try {
-      await dedupRef.create({
-        chofer_dni: choferDoc.id,
-        tipo_efectivo: tipoEfectivo,
-        fecha_art: fechaArt,
-        primer_alert_id: event.params.alertId,
-        primer_aviso_at: FieldValue.serverTimestamp(),
-      });
-    } catch (_) {
-      // Ya existe → ya enviamos un aviso de este tipo hoy.
-      logger.info(
-        "[onAlertaVolvoCreated] dedup hit, ya se mando hoy, skip",
-        {
-          alertId: event.params.alertId,
-          choferDni: choferDoc.id,
-          tipoEfectivo,
-          fechaArt,
-        }
-      );
-      return;
-    }
+    // Los tipos repetitivos de mantenimiento (Sin AdBlue cada hora,
+    // testigo de tablero parpadeante, etc.) NO llegan al chofer
+    // gracias a `TIPOS_BLACKLIST_CHOFER` arriba.
 
     let etiqueta = ETIQUETAS_TIPO_ALERTA[tipo] ?? tipo;
     // subTipoResolvido se guarda en COLA_WHATSAPP como `alert_sub_tipo`
@@ -2361,8 +2328,9 @@ export const onAlertaVolvoCreated = onDocumentCreated(
 
     // Variantes random del mensaje — anti-baneo de WhatsApp. Mandar el
     // MISMO texto a múltiples destinatarios en poco tiempo es señal
-    // típica de spam y dispara bandera. Rotamos entre 3 variantes con
-    // mismo contenido informativo pero distinta redacción.
+    // típica de spam y dispara bandera. Cuanto más variantes, menos
+    // probable que dos mensajes consecutivos sean iguales. Pasamos de
+    // 3 a 8 redacciones con mismo contenido informativo.
     const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
     const variantes = [
       `${saludo},\n\n` +
@@ -2384,6 +2352,40 @@ export const onAlertaVolvoCreated = onDocumentCreated(
         `el ${fechaTxt} a las ${horaTxt}:\n\n` +
         `⚠️ ${etiqueta}\n\n` +
         "Cualquier comentario sobre la situación, mejor en la oficina.\n\n" +
+        BANNER_TESTING + "_Coopertrans Móvil — Mensaje automático._",
+      `${saludo}, ¿cómo va el día?\n\n` +
+        `Recibimos un aviso del tractor ${patente} ` +
+        `(${fechaTxt} a las ${horaTxt}):\n\n` +
+        `⚠️ ${etiqueta}\n\n` +
+        "Si pasó algo puntual contanos. Si no, prestá atención al " +
+        "próximo tramo.\n\n" +
+        BANNER_TESTING + "_Coopertrans Móvil — Mensaje automático._",
+      `${saludo}.\n\n` +
+        `Te avisamos: el tractor ${patente} disparó un evento ` +
+        `el ${fechaTxt} ${horaTxt}.\n\n` +
+        `⚠️ ${etiqueta}\n\n` +
+        "Acordate de revisar tu manejo. Cualquier cosa nos contás " +
+        "en la oficina.\n\n" +
+        BANNER_TESTING + "_Coopertrans Móvil — Mensaje automático._",
+      `${saludo},\n\n` +
+        `Llegó un alerta del tractor ${patente} ` +
+        `(${fechaTxt}, ${horaTxt}):\n\n` +
+        `⚠️ ${etiqueta}\n\n` +
+        "Te pedimos un manejo más cuidadoso en lo que sigue. Si hubo " +
+        "una situación particular, escribinos.\n\n" +
+        BANNER_TESTING + "_Coopertrans Móvil — Mensaje automático._",
+      `${saludo}.\n\n` +
+        `Saltó un evento en el TRACTOR ${patente} hoy ` +
+        `${horaTxt} (${fechaTxt}):\n\n` +
+        `⚠️ ${etiqueta}\n\n` +
+        "Si fue una maniobra obligada por el tránsito, dejame saber. " +
+        "Si no, ajustá tu manejo en lo que viene.\n\n" +
+        BANNER_TESTING + "_Coopertrans Móvil — Mensaje automático._",
+      `${saludo}, te paso un aviso desde la oficina.\n\n` +
+        `Detectamos un evento en el tractor ${patente} ` +
+        `el ${fechaTxt} a las ${horaTxt}:\n\n` +
+        `⚠️ ${etiqueta}\n\n` +
+        "Te pedimos ir más tranquilo. Cualquier comentario lo charlamos.\n\n" +
         BANNER_TESTING + "_Coopertrans Móvil — Mensaje automático._",
     ];
     const mensaje = variantes[Math.floor(Math.random() * variantes.length)];
