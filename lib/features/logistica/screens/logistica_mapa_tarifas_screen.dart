@@ -78,10 +78,8 @@ class _LogisticaMapaTarifasScreenState
           return StreamBuilder<List<TarifaLogistica>>(
             stream: LogisticaService.streamTarifas(soloActivas: true),
             builder: (ctx, tarSnap) {
-              if (tarSnap.connectionState == ConnectionState.waiting ||
-                  ubicSnap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+              // Errores primero — un stream caído ahora muestra mensaje
+              // explícito en vez de loading infinito.
               if (tarSnap.hasError) {
                 return AppEmptyState(
                   icon: Icons.error_outline,
@@ -95,6 +93,14 @@ class _LogisticaMapaTarifasScreenState
                   title: 'Error cargando ubicaciones',
                   subtitle: ubicSnap.error.toString(),
                 );
+              }
+              // Spinner SOLO si NINGUNO de los dos emitió todavía.
+              // Antes: si UNO estaba en waiting, bloqueaba aunque el
+              // otro ya hubiera emitido — quedaba en spinner sin
+              // razón cuando los streams llegaban en momentos
+              // distintos (caso frecuente con Firestore live queries).
+              if (!tarSnap.hasData && !ubicSnap.hasData) {
+                return const Center(child: CircularProgressIndicator());
               }
               final tarifas = tarSnap.data ?? const [];
               final tarifasConCoords = _filtrarConCoords(
