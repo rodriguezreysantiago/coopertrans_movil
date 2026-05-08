@@ -29,6 +29,27 @@ class MapConstants {
   static const String tileUrl =
       'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
 
+  /// URL de tiles satelitales. Mapbox Satellite (consume el token).
+  /// Útil para identificar puntos rurales por aspecto físico (silos,
+  /// galpones, accesos a campos) cuando el mapa callejero no tiene
+  /// suficiente detalle. Cuando se accede a esta URL en runtime hay
+  /// que reemplazar `{token}` por `mapboxToken` (no hay subdomains
+  /// — Mapbox usa un solo host).
+  static const String tileSatelliteUrlTemplate =
+      'https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/'
+      '256/{z}/{x}/{y}?access_token={token}';
+
+  /// URL de tiles satelitales LISTA para usar — token ya inyectado.
+  /// Si el token no está configurado, devuelve string vacío (el
+  /// caller debería skippear el toggle en ese caso).
+  static String get tileSatelliteUrl => tieneMapbox
+      ? tileSatelliteUrlTemplate.replaceAll('{token}', mapboxToken)
+      : '';
+
+  /// Atribución para vista satelital — exigida por Mapbox.
+  static const String attributionSatelite =
+      '© Mapbox · © Maxar';
+
   /// Subdomains para `TileLayer.subdomains`.
   static const List<String> tileSubdomains = ['a', 'b', 'c', 'd'];
 

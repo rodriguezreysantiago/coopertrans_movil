@@ -88,6 +88,9 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
   bool _buscando = false;
   bool _confirmando = false;
   String? _errorBusqueda;
+  /// Modo satelital. Útil para identificar silos / galpones / accesos
+  /// rurales por aspecto físico. Default = false (mapa callejero).
+  bool _modoSatelite = false;
 
   @override
   void initState() {
@@ -480,14 +483,64 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                     },
                   ),
                   children: [
-                    TileLayer(
-                      urlTemplate: MapConstants.tileUrl,
-                      subdomains: MapConstants.tileSubdomains,
-                      userAgentPackageName: MapConstants.userAgent,
-                      maxZoom: 19,
-                    ),
+                    if (_modoSatelite && MapConstants.tieneMapbox)
+                      TileLayer(
+                        urlTemplate: MapConstants.tileSatelliteUrl,
+                        userAgentPackageName: MapConstants.userAgent,
+                        maxZoom: 22,
+                      )
+                    else
+                      TileLayer(
+                        urlTemplate: MapConstants.tileUrl,
+                        subdomains: MapConstants.tileSubdomains,
+                        userAgentPackageName: MapConstants.userAgent,
+                        maxZoom: 19,
+                      ),
                   ],
                 ),
+                // Toggle satelital flotante arriba a la derecha.
+                // Solo visible si Mapbox está configurado — si no hay
+                // token, el satelital no funciona y mejor no mostrarlo.
+                if (MapConstants.tieneMapbox)
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Material(
+                      color: Colors.black.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(8),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => setState(
+                            () => _modoSatelite = !_modoSatelite),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _modoSatelite
+                                    ? Icons.map_outlined
+                                    : Icons.satellite_alt_outlined,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _modoSatelite ? 'MAPA' : 'SATÉLITE',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.1,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 // Crosshair central
                 IgnorePointer(
                   child: Column(

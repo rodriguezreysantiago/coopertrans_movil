@@ -32,6 +32,7 @@ class LogisticaMapaTarifasScreen extends StatefulWidget {
 class _LogisticaMapaTarifasScreenState
     extends State<LogisticaMapaTarifasScreen> {
   final _mapCtl = MapController();
+  bool _modoSatelite = false;
 
   /// Cache local de rutas OSRM por id de tarifa. Se va llenando
   /// progresivamente en background. La UI usa la ruta real si está,
@@ -203,7 +204,9 @@ class _LogisticaMapaTarifasScreenState
             ),
           ),
         Expanded(
-          child: FlutterMap(
+          child: Stack(
+            children: [
+              FlutterMap(
             mapController: _mapCtl,
             options: MapOptions(
               initialCameraFit: CameraFit.bounds(
@@ -214,12 +217,19 @@ class _LogisticaMapaTarifasScreenState
               maxZoom: 18,
             ),
             children: [
-              TileLayer(
-                urlTemplate: MapConstants.tileUrl,
-                subdomains: MapConstants.tileSubdomains,
-                userAgentPackageName: MapConstants.userAgent,
-                maxZoom: 19,
-              ),
+              if (_modoSatelite && MapConstants.tieneMapbox)
+                TileLayer(
+                  urlTemplate: MapConstants.tileSatelliteUrl,
+                  userAgentPackageName: MapConstants.userAgent,
+                  maxZoom: 22,
+                )
+              else
+                TileLayer(
+                  urlTemplate: MapConstants.tileUrl,
+                  subdomains: MapConstants.tileSubdomains,
+                  userAgentPackageName: MapConstants.userAgent,
+                  maxZoom: 19,
+                ),
               // Líneas de tarifas (debajo de los pins). Si ya tenemos
               // la ruta OSRM (siguen las carreteras) la usamos; sino
               // fallback a línea recta entre origen y destino.
@@ -265,6 +275,49 @@ class _LogisticaMapaTarifasScreenState
                   ),
                 ),
               ),
+            ],
+          ),
+              // Toggle satelital flotante. Solo si Mapbox está configurado.
+              if (MapConstants.tieneMapbox)
+                Positioned(
+                  top: 12,
+                  right: 12,
+                  child: Material(
+                    color: Colors.black.withValues(alpha: 0.7),
+                    borderRadius: BorderRadius.circular(8),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => setState(
+                          () => _modoSatelite = !_modoSatelite),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              _modoSatelite
+                                  ? Icons.map_outlined
+                                  : Icons.satellite_alt_outlined,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _modoSatelite ? 'MAPA' : 'SATÉLITE',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
