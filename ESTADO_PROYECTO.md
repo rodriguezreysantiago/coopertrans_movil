@@ -1016,6 +1016,50 @@ Re-escrita `feedback_windows_cloud_firestore_bugs.md` con la causa raíz correct
 
 `project_modulo_gomeria.md` actualizada con el estado final post-refactor (7 colecciones totales contando los locks, 65 tests, todas las operaciones operativas).
 
+### 6.17 Sesión 2026-05-08 — Empresas Empleadoras + watchdog diario + filtros del bot + carga masiva de ubicaciones
+
+#### 6.17.1 Toggle vista satelital en mapas
+Botón flotante top-right que alterna callejero (Carto Voyager) ↔ satélite (Mapbox Satellite v9). Útil para identificar puntos rurales por aspecto físico (silos, galpones, accesos a campo) cuando el callejero no tiene detalle suficiente. Aplicado en 3 mapas: `UbicacionMapPicker`, `LogisticaMapaTarifasScreen`, `AdminMapaVolvoScreen`. Solo aparece si hay token Mapbox configurado. Constantes nuevas en `MapConstants.tileSatelliteUrl` + `attributionSatelite`. Commits `b38991f`, `6d160ec`.
+
+#### 6.17.2 Empresas Empleadoras — 4 docs comunes por razón social
+Sistema nuevo: 4 documentos laborales que ANTES se cargaban empleado por empleado, ahora se cargan UNA SOLA VEZ por empresa empleadora y todos los empleados de esa razón social los ven en MIS VENCIMIENTOS (read-only, ícono lock).
+
+**Docs**: Póliza ART, Formulario 931, SCVO (rotulado "Seguro de Vida" para el chofer), Libre deuda sindical.
+
+**Modelo**: colección `EMPRESAS_EMPLEADORAS` con docId = CUIT (parseado del campo `EMPRESA` que ya guarda cada legajo). Catálogo hardcoded en `AppEmpresasEmpleadoras.catalogo` con las 2 razones sociales actuales (Vecchi Ariel + Sucesión Vecchi Carlos). Storage path `EMPRESAS_EMPLEADORAS/{cuit}/{campoUrl}_{ts}.{ext}`.
+
+**UI**: pantalla admin nueva `/admin_empresas_empleadoras` (tile dentro del menú VENCIMIENTOS, no en el panel principal — se movió para no saturar). Tarjeta por empresa con 4 filas editables (fecha + archivo PDF). Capability `verVencimientos`.
+
+**Limpieza**: la sección "Seguros y aportes" del legajo del empleado se eliminó. `AppDocsEmpleado.etiquetas` (en `vencimientos_config.dart`) y `DOCS_EMPLEADO` (en `whatsapp-bot/src/cron.js`) ya no incluyen ART/F.931/Seguro Vida/Sindicato — el bot no manda WhatsApp al chofer por estos docs (decisión Vecchi: el chofer no puede hacer nada al respecto, sería ruido).
+
+Commits `35967e1`, `87d6b4f`, `f5efaf1`, `84d9ed9`, `2aa09e7`. Detalle en `project_empresas_empleadoras.md`.
+
+#### 6.17.3 Filtros y nuevos resúmenes del bot WhatsApp
+- **ADBLUE fuera del resumen Seg e Higiene**: `ADBLUELEVEL_LOW` y `WITHOUT_ADBLUE` quedan EXCLUIDOS del resumen Volvo HIGH a Molina (son temas mecánicos del taller, no de seguridad). Siguen entrando al resumen mantenimiento de Emmanuel. Constante `TIPOS_EXCLUIDOS_SEG_HIGIENE` en `cron.js`. Commit `72ee6f2`.
+- **Resumen vencimientos próximos a Giagante**: cron nuevo `cron_vencimientos_proximos_diario` en bot. Consolida diariamente todo lo que vence en próximos 7 días en 3 universos (legajo de cada chofer + papeles de cada unidad + 4 docs por empresa empleadora) y manda 1 WhatsApp al encargado de documentación. Destinatario configurable por env var `DOCUMENTACION_DESTINATARIO_DNI` (default operativo: 26456455 = Giagante Guillermo). Si no hay nada que vence, no manda mensaje. 8 tests nuevos (108 totales en el bot). Commits `1569fe3`, `3b7dfb2`.
+
+#### 6.17.4 Watchdog del bot — caída inmediata → resumen diario 8 AM
+ANTES `botHealthWatchdog` mandaba WhatsApp **inmediato** al detectar que el bot estaba sin heartbeat. Problema: el cron corre cada 15 min, así que el aviso podía llegar mucho después de la caída — cuando capaz ya recuperó. Genera ruido y fuerza a chequear cuando no hace falta.
+
+Cambio:
+- `botHealthWatchdog` ya NO encola WhatsApp. Solo registra eventos en la nueva colección `BOT_EVENTOS` (tipo: `caida` con `minutosSinHeartbeat`, `recuperado` con `duracionMin` total estimada).
+- Cron nuevo `resumenBotDiario` corre 8 AM ART, lee `BOT_EVENTOS` últimas 24h, arma resumen consolidado (caídas + recuperaciones + tiempo total caído) y manda 1 WhatsApp a Santiago. Si no hubo eventos, silencio.
+- Idempotencia diaria via `AVISOS_AUTOMATICOS_HISTORICO`.
+- Firestore rule nueva para `BOT_EVENTOS` (read admin/supervisor, write false — solo Admin SDK).
+
+Commits `d17fad0`, `7586725`. Pendiente deploy de las 2 funciones.
+
+#### 6.17.5 Carga masiva de 47 ubicaciones de la lista de Maps
+Santiago tenía una lista colaborativa de Google Maps con 47 destinos de carga/descarga. Las listas nuevas de Maps (`maps.app.goo.gl`) NO se exportan via Takeout, ni se pueden scrapear (Chrome MCP rechaza `google.com` por privacy, computer-use enmascara browsers). Único camino operativo: el user pegó las URLs `/maps/place/...` una por una y el parser sacó las coordenadas precisas de los pares `!3d!4d`. CSV guardado en `scripts/ubicaciones_logistica.csv` (47 filas con localidad/provincia inferidas por contexto), cargadas con el script existente `importar_ubicaciones_logistica.py` (idempotente por nombre). Las ubicaciones quedaron sin empresa asociada — Santiago las completa después en la app. Commit `164899a`.
+
+#### 6.17.6 Versión publicada
+**1.0.31+34 publicada en Windows** (release_completo.ps1 desde la PowerShell de Santiago — el script falla si lo dispara el sandbox de Claude Code por loopback IOException de Java/Gradle, pero corre OK desde la PowerShell del user). AAB Android lo subió Santiago manualmente a Play Console. Después de la sesión la versión visible es 1.0.39+ — Santiago corrió release_completo varias veces durante el día con ajustes.
+
+Lección documentada en `project_pendientes_post_migracion.md`: para releases siempre pasarle el comando a Santiago, NO disparar yo en background.
+
+#### 6.17.7 Memoria + docs
+Actualizados: `MEMORY.md` (index), `project_alertas_y_resumenes_whatsapp.md` (filtro ADBLUE + cron Giagante + watchdog daily), `project_pendientes_post_migracion.md` (cierre de la sesión + lecciones aprendidas), `ESTADO_PROYECTO.md` (esta sección). Nuevo: `project_empresas_empleadoras.md`. Sync automático a Drive vía claudesync hook.
+
 ## 7. Pendientes / roadmap
 
 ### Migración Firebase Auth (branch `feature/firebase-auth`) — ✅ COMPLETADA 2026-04-29
