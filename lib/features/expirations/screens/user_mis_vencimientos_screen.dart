@@ -81,44 +81,11 @@ class _UserMisVencimientosScreenState
         ));
       });
 
-      // Sumamos también los docs a nivel EMPRESA (Póliza ART + F.931).
-      // El chofer no los edita, pero sí queremos avisarle del
-      // vencimiento — si la empresa no renueva, le repercute en su
-      // legajo igual.
-      final cuit = AppEmpresasEmpleadoras.cuitDeStringEmpresa(
-          (data['EMPRESA'] ?? '').toString());
-      if (cuit != null && cuit.isNotEmpty) {
-        try {
-          final empSnap = await FirebaseFirestore.instance
-              .collection(AppCollections.empresasEmpleadoras)
-              .doc(cuit)
-              .get();
-          final empData = empSnap.data();
-          if (empData != null) {
-            const docsEmpresa = <String, ({String etiqueta, String campo})>{
-              AppDocsEmpresa.sufijoPolizaArt: (
-                etiqueta: AppDocsEmpresa.etiquetaPolizaArt,
-                campo: AppDocsEmpresa.campoFechaPolizaArt,
-              ),
-              AppDocsEmpresa.sufijoForm931: (
-                etiqueta: AppDocsEmpresa.etiquetaForm931,
-                campo: AppDocsEmpresa.campoFechaForm931,
-              ),
-            };
-            for (final entry in docsEmpresa.entries) {
-              final fechaStr = empData[entry.value.campo]?.toString();
-              if (fechaStr == null || fechaStr.isEmpty) continue;
-              final fecha = AppFormatters.tryParseFecha(fechaStr);
-              if (fecha == null || fecha.isBefore(hoy)) continue;
-              avisos.add(VencimientoAviso(
-                fecha: fecha,
-                tipoDoc: entry.value.etiqueta,
-                campoBase: entry.key,
-              ));
-            }
-          }
-        } catch (_) {/* best-effort, no rompe la pantalla */}
-      }
+      // Nota: NO agendamos push para Póliza ART ni Formulario 931. Esos
+      // docs son responsabilidad de la empresa empleadora — el chofer
+      // no puede hacer nada al respecto si vencen, sería ruido. Los ve
+      // en MIS VENCIMIENTOS read-only y listo. La oficina los renueva
+      // una vez por empresa desde "Empresas y seguros".
 
       await NotificationService.cancelarTodosLosRecordatorios();
       if (avisos.isNotEmpty) {
