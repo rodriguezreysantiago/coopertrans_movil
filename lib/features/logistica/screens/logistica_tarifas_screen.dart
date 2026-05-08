@@ -174,16 +174,16 @@ class _CardTarifa extends StatelessWidget {
     this.ubicacionesPorId = const {},
   });
 
-  /// Distancia geodésica origen→destino en km, o null si alguna de
-  /// las dos ubicaciones no está cargada o no tiene coords.
-  double? get _distanciaKm {
+  /// Par de coords origen-destino si las dos ubicaciones tienen
+  /// lat/lng cargadas; null si falta alguna.
+  ({LatLng origen, LatLng destino})? get _ods {
     final o = ubicacionesPorId[tarifa.ubicacionOrigenId];
     final d = ubicacionesPorId[tarifa.ubicacionDestinoId];
     if (o?.lat == null || o?.lng == null) return null;
     if (d?.lat == null || d?.lng == null) return null;
-    return LogisticaGeoUtils.distanciaKm(
-      LatLng(o!.lat!, o.lng!),
-      LatLng(d!.lat!, d.lng!),
+    return (
+      origen: LatLng(o!.lat!, o.lng!),
+      destino: LatLng(d!.lat!, d.lng!),
     );
   }
 
@@ -230,7 +230,7 @@ class _CardTarifa extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           // Línea 2: origen → destino
-          _RutaOrigenDestino(tarifa: tarifa, distanciaKm: _distanciaKm),
+          _RutaOrigenDestino(tarifa: tarifa, ods: _ods),
           const SizedBox(height: 10),
           // Línea 3: tarifas
           _TarifasMontos(tarifa: tarifa),
@@ -263,8 +263,8 @@ class _CardTarifa extends StatelessWidget {
 
 class _RutaOrigenDestino extends StatelessWidget {
   final TarifaLogistica tarifa;
-  final double? distanciaKm;
-  const _RutaOrigenDestino({required this.tarifa, this.distanciaKm});
+  final ({LatLng origen, LatLng destino})? ods;
+  const _RutaOrigenDestino({required this.tarifa, this.ods});
 
   @override
   Widget build(BuildContext context) {
@@ -286,16 +286,9 @@ class _RutaOrigenDestino extends StatelessWidget {
             children: [
               const Icon(Icons.arrow_forward,
                   color: Colors.white38, size: 18),
-              if (distanciaKm != null) ...[
+              if (ods != null) ...[
                 const SizedBox(height: 2),
-                Text(
-                  '${distanciaKm!.toStringAsFixed(0)} km',
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                _DistanciaTexto(origen: ods!.origen, destino: ods!.destino),
               ],
             ],
           ),
@@ -514,6 +507,57 @@ class _ChipFlete extends StatelessWidget {
           letterSpacing: 1.0,
         ),
       ),
+    );
+  }
+}
+
+/// Texto de distancia entre dos puntos. Mientras espera la ruta real
+/// de OSRM, muestra la distancia geodésica como fallback inmediato.
+/// Cuando vuelve la ruta, refresca con km reales + tiempo estimado.
+/// Si OSRM falla (sin red, par fuera del grafo), se queda con la
+/// geodésica (mejor que nada).
+class _DistanciaTexto extends StatelessWidget {
+  final LatLng origen;
+  final LatLng destino;
+  const _DistanciaTexto({required this.origen, required this.destino});
+
+  @override
+  Widget build(BuildContext context) {
+    final geodesicaKm = LogisticaGeoUtils.distanciaKm(origen, destino);
+    return FutureBuilder<GeoRuta?>(
+      future: LogisticaGeoUtils.obtenerRuta(origen, destino),
+      builder: (ctx, snap) {
+        final ruta = snap.data;
+        if (ruta != null) {
+          return Column(
+            children: [
+              Text(
+                '${ruta.distanciaKm.toStringAsFixed(0)} km',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                ruta.duracionFormateada,
+                style: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 9,
+                ),
+              ),
+            ],
+          );
+        }
+        return Text(
+          '${geodesicaKm.toStringAsFixed(0)} km',
+          style: const TextStyle(
+            color: Colors.white38,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+        );
+      },
     );
   }
 }

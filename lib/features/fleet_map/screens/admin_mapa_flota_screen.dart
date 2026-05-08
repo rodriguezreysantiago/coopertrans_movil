@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
+import '../../../shared/constants/map_constants.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
 /// Pantalla "Mapa flota en vivo" del admin.
@@ -468,8 +469,9 @@ class _Mapa extends StatelessWidget {
       ),
       children: [
         TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.coopertrans.movil',
+          urlTemplate: MapConstants.tileUrl,
+          subdomains: MapConstants.tileSubdomains,
+          userAgentPackageName: MapConstants.userAgent,
         ),
         MarkerLayer(
           markers: docs.map((d) => _markerDeDoc(d)).toList(),

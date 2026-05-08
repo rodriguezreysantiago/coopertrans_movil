@@ -23,6 +23,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../shared/constants/app_colors.dart';
+import '../../../shared/constants/map_constants.dart';
 import '../services/logistica_geo_utils.dart';
 
 class UbicacionMapPickerResultado {
@@ -307,9 +308,9 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                   ),
                   children: [
                     TileLayer(
-                      urlTemplate:
-                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.coopertrans.movil',
+                      urlTemplate: MapConstants.tileUrl,
+                      subdomains: MapConstants.tileSubdomains,
+                      userAgentPackageName: MapConstants.userAgent,
                       maxZoom: 19,
                     ),
                   ],

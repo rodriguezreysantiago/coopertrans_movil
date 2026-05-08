@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
+import '../../../shared/constants/map_constants.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../utils/etiquetas_alerta_volvo.dart';
 import '../widgets/evento_volvo_detalle_sheet.dart';
@@ -529,8 +530,9 @@ class _Mapa extends StatelessWidget {
       ),
       children: [
         TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-          userAgentPackageName: 'com.coopertrans.movil',
+          urlTemplate: MapConstants.tileUrl,
+          subdomains: MapConstants.tileSubdomains,
+          userAgentPackageName: MapConstants.userAgent,
         ),
         // Capa heatmap (debajo de la ruta y los markers para no taparlos).
         if (celdasHeatmap.isNotEmpty) _capaHeatmap(),

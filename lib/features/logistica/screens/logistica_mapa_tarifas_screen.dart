@@ -11,12 +11,14 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../shared/constants/app_colors.dart';
+import '../../../shared/constants/map_constants.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../models/tarifa_logistica.dart';
 import '../models/ubicacion_logistica.dart';
 import '../services/logistica_geo_utils.dart';
 import '../services/logistica_service.dart';
+import '../widgets/acciones_navegacion_sheet.dart';
 
 class LogisticaMapaTarifasScreen extends StatefulWidget {
   const LogisticaMapaTarifasScreen({super.key});
@@ -30,10 +32,34 @@ class _LogisticaMapaTarifasScreenState
     extends State<LogisticaMapaTarifasScreen> {
   final _mapCtl = MapController();
 
+  /// Cache local de rutas OSRM por id de tarifa. Se va llenando
+  /// progresivamente en background. La UI usa la ruta real si está,
+  /// sino dibuja línea recta como fallback inmediato.
+  final Map<String, GeoRuta> _rutasPorTarifa = {};
+
+  /// Set de tarifas cuyo fetch ya disparé (para no relanzar). Distinto
+  /// del cache global de `LogisticaGeoUtils` para tener visibilidad
+  /// local del estado de carga sin hits en el cache externo.
+  final Set<String> _yaSolicitadas = {};
+
   @override
   void dispose() {
     _mapCtl.dispose();
     super.dispose();
+  }
+
+  /// Lanza fetch en background para cada tarifa que aún no tenga
+  /// ruta local. Llamado cada vez que se reconstruye la lista de
+  /// tarifas con coords (por updates del stream).
+  void _precargarRutas(List<_TarifaConRuta> tarifas) {
+    for (final t in tarifas) {
+      if (_yaSolicitadas.contains(t.tarifa.id)) continue;
+      _yaSolicitadas.add(t.tarifa.id);
+      LogisticaGeoUtils.obtenerRuta(t.origen, t.destino).then((ruta) {
+        if (!mounted || ruta == null) return;
+        setState(() => _rutasPorTarifa[t.tarifa.id] = ruta);
+      });
+    }
   }
 
   @override
@@ -74,6 +100,12 @@ class _LogisticaMapaTarifasScreenState
                 tarifas,
                 ubicacionesPorId,
               );
+              // Disparar precarga de rutas OSRM para todas las
+              // tarifas con coords. Best-effort; las que fallan
+              // quedan con línea recta.
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _precargarRutas(tarifasConCoords);
+              });
               return _buildMapa(
                 context,
                 tarifasConCoords: tarifasConCoords,
@@ -176,17 +208,21 @@ class _LogisticaMapaTarifasScreenState
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                userAgentPackageName: 'com.coopertrans.movil',
+                urlTemplate: MapConstants.tileUrl,
+                subdomains: MapConstants.tileSubdomains,
+                userAgentPackageName: MapConstants.userAgent,
                 maxZoom: 19,
               ),
-              // Líneas de tarifas (debajo de los pins).
+              // Líneas de tarifas (debajo de los pins). Si ya tenemos
+              // la ruta OSRM (siguen las carreteras) la usamos; sino
+              // fallback a línea recta entre origen y destino.
               PolylineLayer(
                 polylines: tarifasConCoords.map((t) {
                   final inactiva = !t.tarifa.activa;
+                  final rutaReal = _rutasPorTarifa[t.tarifa.id];
+                  final puntos = rutaReal?.puntos ?? [t.origen, t.destino];
                   return Polyline(
-                    points: [t.origen, t.destino],
+                    points: puntos,
                     strokeWidth: 3,
                     color: inactiva
                         ? Colors.white24
@@ -259,7 +295,10 @@ class _LogisticaMapaTarifasScreenState
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.background,
-      builder: (_) => _DetalleTarifaSheet(tarifaConRuta: t),
+      builder: (_) => _DetalleTarifaSheet(
+        tarifaConRuta: t,
+        rutaReal: _rutasPorTarifa[t.tarifa.id],
+      ),
     );
   }
 }
@@ -374,12 +413,16 @@ class _LeyendaInferior extends StatelessWidget {
 
 class _DetalleTarifaSheet extends StatelessWidget {
   final _TarifaConRuta tarifaConRuta;
-  const _DetalleTarifaSheet({required this.tarifaConRuta});
+  final GeoRuta? rutaReal;
+  const _DetalleTarifaSheet({
+    required this.tarifaConRuta,
+    this.rutaReal,
+  });
 
   @override
   Widget build(BuildContext context) {
     final t = tarifaConRuta.tarifa;
-    final dist = tarifaConRuta.distanciaKm;
+    final distGeodesica = tarifaConRuta.distanciaKm;
     final margenBruto = t.tarifaReal - t.tarifaChofer;
     return Padding(
       padding: const EdgeInsets.all(20),
@@ -410,11 +453,23 @@ class _DetalleTarifaSheet extends StatelessWidget {
             style: const TextStyle(color: Colors.white60, fontSize: 12),
           ),
           const Divider(color: Colors.white12, height: 24),
-          _InfoFila(
-            icono: Icons.straighten,
-            etiqueta: 'Distancia (línea recta)',
-            valor: '${dist.toStringAsFixed(0)} km',
-          ),
+          if (rutaReal != null) ...[
+            _InfoFila(
+              icono: Icons.route_outlined,
+              etiqueta: 'Distancia por ruta',
+              valor: '${rutaReal!.distanciaKm.toStringAsFixed(0)} km',
+            ),
+            _InfoFila(
+              icono: Icons.schedule,
+              etiqueta: 'Tiempo estimado de manejo',
+              valor: rutaReal!.duracionFormateada,
+            ),
+          ] else
+            _InfoFila(
+              icono: Icons.straighten,
+              etiqueta: 'Distancia (línea recta)',
+              valor: '${distGeodesica.toStringAsFixed(0)} km',
+            ),
           _InfoFila(
             icono: Icons.local_shipping_outlined,
             etiqueta: 'Tipo',
@@ -442,6 +497,48 @@ class _DetalleTarifaSheet extends StatelessWidget {
               valor: '${t.dadorNombre}'
                   '${t.porcentajeComisionDador != null ? " (${t.porcentajeComisionDador!.toStringAsFixed(1)}%)" : ""}',
             ),
+          const Divider(color: Colors.white12, height: 24),
+          // Acciones de navegación: abrir origen o destino en
+          // Maps/Waze para llegar al lugar real.
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => AccionesNavegacionSheet.abrir(
+                    context,
+                    lat: tarifaConRuta.origen.latitude,
+                    lng: tarifaConRuta.origen.longitude,
+                    label: tarifaConRuta.nombreOrigen,
+                  ),
+                  icon: const Icon(Icons.navigation_outlined, size: 16),
+                  label: const Text('IR AL ORIGEN'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.accentBlue,
+                    side: const BorderSide(color: AppColors.accentBlue),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => AccionesNavegacionSheet.abrir(
+                    context,
+                    lat: tarifaConRuta.destino.latitude,
+                    lng: tarifaConRuta.destino.longitude,
+                    label: tarifaConRuta.nombreDestino,
+                  ),
+                  icon: const Icon(Icons.navigation_outlined, size: 16),
+                  label: const Text('IR AL DESTINO'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.accentTeal,
+                    side: const BorderSide(color: AppColors.accentTeal),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

@@ -31,6 +31,30 @@ class GeoLugar {
   });
 }
 
+/// Resultado de routing OSRM. `puntos` define la geometría de la ruta
+/// real (cada vértice es un giro o ajuste). Para dibujar la línea
+/// curva en el mapa.
+class GeoRuta {
+  final double distanciaKm;
+  final Duration duracion;
+  final List<LatLng> puntos;
+
+  const GeoRuta({
+    required this.distanciaKm,
+    required this.duracion,
+    required this.puntos,
+  });
+
+  /// "3h 20min" o "45min" según corresponda. Útil para mostrar al lado
+  /// de la distancia en cards.
+  String get duracionFormateada {
+    final h = duracion.inHours;
+    final m = duracion.inMinutes - h * 60;
+    if (h == 0) return '${m}min';
+    return '${h}h ${m}min';
+  }
+}
+
 class LogisticaGeoUtils {
   LogisticaGeoUtils._();
 
@@ -126,8 +150,88 @@ class LogisticaGeoUtils {
   }
 
   /// Distancia geodésica entre dos puntos en kilómetros (línea recta).
-  /// Para distancia por ruta real ver `project_planeamiento_viajes_futuro.md`.
+  /// Útil como fallback cuando OSRM no responde, o para sort rápido.
   static double distanciaKm(LatLng a, LatLng b) {
     return const Distance().as(LengthUnit.Kilometer, a, b);
+  }
+
+  // ─── Routing ─────────────────────────────────────────────────────
+
+  // Cliente Dio dedicado para OSRM. Server público (free, sin API
+  // key, sin SLA). Para producción seria a futuro evaluar Mapbox
+  // Directions o levantar un OSRM propio.
+  static final Dio _dioOsrm = Dio(
+    BaseOptions(
+      baseUrl: 'https://router.project-osrm.org',
+      headers: {
+        'User-Agent': 'CoopertransMovil/1.0 (santiagocoopertrans@gmail.com)',
+      },
+      connectTimeout: const Duration(seconds: 8),
+      receiveTimeout: const Duration(seconds: 12),
+    ),
+  );
+
+  // Cache en memoria: mismo par origen-destino no se recalcula
+  // dentro de la sesión. Las rutas son inmutables — los caminos no
+  // cambian (salvo cierres temporales que OSRM no modela).
+  static final Map<String, GeoRuta> _cacheRutas = {};
+
+  /// Obtiene la ruta real (línea siguiendo carreteras) entre dos
+  /// puntos, con distancia y tiempo estimado de manejo. Devuelve null
+  /// si OSRM no puede resolver (sin red, par fuera del grafo, etc).
+  /// El caller debe tener fallback (mostrar línea recta + distancia
+  /// geodésica con `distanciaKm`).
+  static Future<GeoRuta?> obtenerRuta(LatLng origen, LatLng destino) async {
+    final key = '${origen.latitude},${origen.longitude}|'
+        '${destino.latitude},${destino.longitude}';
+    final cached = _cacheRutas[key];
+    if (cached != null) return cached;
+
+    try {
+      // OSRM espera lon,lat (no lat,lon). overview=full devuelve la
+      // geometría completa; geometries=geojson para parsearla
+      // directo a List<LatLng>.
+      final coords = '${origen.longitude},${origen.latitude};'
+          '${destino.longitude},${destino.latitude}';
+      final res = await _dioOsrm.get<Map<String, dynamic>>(
+        '/route/v1/driving/$coords',
+        queryParameters: {
+          'overview': 'full',
+          'geometries': 'geojson',
+        },
+      );
+      final data = res.data;
+      if (data == null || data['code'] != 'Ok') return null;
+      final routes = data['routes'] as List<dynamic>?;
+      if (routes == null || routes.isEmpty) return null;
+      final r = routes.first as Map<String, dynamic>;
+      final distanciaM = (r['distance'] as num?)?.toDouble() ?? 0;
+      final duracionS = (r['duration'] as num?)?.toDouble() ?? 0;
+      final geometry = r['geometry'] as Map<String, dynamic>?;
+      final coordsRaw = geometry?['coordinates'] as List<dynamic>? ?? [];
+      // OSRM devuelve [lon, lat] — invertir para LatLng.
+      final puntos = coordsRaw.map((c) {
+        final pair = c as List<dynamic>;
+        return LatLng(
+          (pair[1] as num).toDouble(),
+          (pair[0] as num).toDouble(),
+        );
+      }).toList();
+      final ruta = GeoRuta(
+        distanciaKm: distanciaM / 1000,
+        duracion: Duration(seconds: duracionS.round()),
+        puntos: puntos,
+      );
+      _cacheRutas[key] = ruta;
+      return ruta;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Limpia el cache de rutas. Útil si en algún momento queremos
+  /// forzar recálculo (raro — las rutas son estables).
+  static void invalidarCacheRutas() {
+    _cacheRutas.clear();
   }
 }
