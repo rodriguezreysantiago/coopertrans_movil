@@ -66,27 +66,48 @@ async function main() {
   console.log(`Origenes target: ${[...ORIGENES_TIEMPO_SENSIBLE].join(', ')}`);
   console.log('');
 
-  // Firestore no permite IN con > 30 valores ni filtros >= en otro
-  // campo simultáneamente sin índice. Estamos en 5 valores y 1 where
-  // de timestamp, va sobre índice automático. OK.
+  // Combinar where(==) + where(in) + where(<) requiere un índice
+  // compuesto que no quiero crear solo para este script one-shot.
+  // En su lugar: traemos todos los PENDIENTE (single-where, índice
+  // automático de Firestore) y filtramos origen + encolado_en
+  // client-side. Para volúmenes típicos (decenas a cientos de
+  // pendientes) el costo es despreciable.
   const snap = await db
     .collection('COLA_WHATSAPP')
     .where('estado', '==', 'PENDIENTE')
-    .where('origen', 'in', [...ORIGENES_TIEMPO_SENSIBLE])
-    .where('encolado_en', '<', cutoffTs)
     .get();
 
   if (snap.empty) {
-    console.log('No hay docs candidatos a purgar. Cola limpia.');
+    console.log('No hay PENDIENTE en COLA_WHATSAPP. Cola limpia.');
     return;
   }
 
-  console.log(`Encontrados ${snap.size} docs candidatos:`);
+  // Filtrar client-side: origen ∈ tiempo-sensibles Y encolado_en < cutoff.
+  const candidatos = snap.docs.filter((d) => {
+    const data = d.data();
+    if (!ORIGENES_TIEMPO_SENSIBLE.has(data.origen)) return false;
+    const enc = data.encolado_en;
+    if (!enc || typeof enc.toMillis !== 'function') return false;
+    return enc.toMillis() < cutoffMs;
+  });
+
+  if (candidatos.length === 0) {
+    console.log(
+      `Hay ${snap.size} PENDIENTE en total, pero ninguno calza ` +
+        '(origen tiempo-sensible + más viejo que la ventana). Nada para purgar.'
+    );
+    return;
+  }
+
+  console.log(
+    `Encontrados ${candidatos.length} candidatos ` +
+      `(de ${snap.size} PENDIENTE total):`
+  );
   console.log('');
 
   // Agrupar por origen para que el reporte sea legible.
   const porOrigen = {};
-  for (const doc of snap.docs) {
+  for (const doc of candidatos) {
     const data = doc.data();
     const origen = data.origen || '(sin origen)';
     if (!porOrigen[origen]) porOrigen[origen] = [];
@@ -122,15 +143,14 @@ async function main() {
   }
 
   // Borrar en batches de 500 (límite de Firestore batch).
-  const docs = snap.docs;
   let borrados = 0;
-  for (let i = 0; i < docs.length; i += 500) {
-    const slice = docs.slice(i, i + 500);
+  for (let i = 0; i < candidatos.length; i += 500) {
+    const slice = candidatos.slice(i, i + 500);
     const batch = db.batch();
     for (const d of slice) batch.delete(d.ref);
     await batch.commit();
     borrados += slice.length;
-    console.log(`Borrados ${borrados}/${docs.length}...`);
+    console.log(`Borrados ${borrados}/${candidatos.length}...`);
   }
   console.log('');
   console.log(`OK. ${borrados} docs purgados de COLA_WHATSAPP.`);
