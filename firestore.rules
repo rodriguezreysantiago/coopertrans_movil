@@ -231,6 +231,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // BOT_EVENTOS — log de caídas/recuperaciones del bot (2026-05-08).
+    // Lo popula `botHealthWatchdog` (Admin SDK). El cron `resumenBotDiario`
+    // lo lee y arma resumen WhatsApp. Si en el futuro queremos mostrar
+    // histórico de caídas en la pantalla "Estado del bot", admin lo lee.
+    match /BOT_EVENTOS/{doc} {
+      allow read: if isAdminOrSupervisor();
+      allow write: if false;
+    }
+
     // ========================================================================
     // BOT_CONTROL — kill-switch del bot (pausar / reanudar desde la app)
     // ========================================================================

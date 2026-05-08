@@ -3060,7 +3060,7 @@ export const backupFirestoreScheduled = onSchedule(
 );
 
 // ============================================================================
-// botHealthWatchdog — alerta a Santiago si el bot dejó de latir
+// botHealthWatchdog — registra caídas y recuperaciones del bot
 // ============================================================================
 //
 // El bot Node.js corre en la PC de Santiago y escribe heartbeat a
@@ -3070,14 +3070,18 @@ export const backupFirestoreScheduled = onSchedule(
 // nadie lo note (PC apagada por reinicio de Windows, NSSM crasheado,
 // etc.) y los choferes dejan de recibir avisos críticos.
 //
-// Esta function corre cada 15 min y compara `ultimoHeartbeat` con ahora.
-// Si la diferencia es > UMBRAL_STALE_MIN, encola un WhatsApp a
-// MANTENIMIENTO_DESTINATARIO_DNI (Santiago) con el aviso. Idempotencia:
-// solo notifica cuando el bot pasa de "vivo" a "stale" — guarda flag
-// `BOT_HEALTH/main.notificadoCaida` para no spamear avisos cada 15 min.
+// **Cambio 2026-05-08**: ANTES esta función mandaba un WhatsApp inmediato
+// cuando detectaba la caída. Eso quedaba viejo rápido (caída a las 15:38,
+// veo el aviso a las 18:10 cuando ya recuperó hace rato → ruido). Ahora
+// solo REGISTRA los eventos en `BOT_EVENTOS` (caída y recuperación). El
+// resumen consolidado lo manda `resumenBotDiario` al día siguiente a
+// las 8 AM.
 //
-// Cuando el bot vuelve y manda heartbeat fresco, el siguiente run del
-// watchdog limpia la flag y registra log informativo.
+// Esta function corre cada 15 min, compara `ultimoHeartbeat` con ahora.
+// Si la diferencia es > UMBRAL_STALE_MIN, escribe evento `caida`.
+// Idempotencia: solo registra UNA vez por episodio (flag
+// `notificadoCaida` en BOT_HEALTH). Cuando el bot vuelve, escribe evento
+// `recuperado` con la duración total y limpia la flag.
 
 const BOT_HEALTH_STALE_UMBRAL_MIN = 10;
 
@@ -3104,13 +3108,32 @@ export const botHealthWatchdog = onSchedule(
 
     const minDesdeHb = (Date.now() - ultimoHb.toMillis()) / 60000;
     const yaNotificado = data.notificadoCaida === true;
+    const pcId = (data.pcId ?? "desconocida").toString();
 
     if (minDesdeHb <= BOT_HEALTH_STALE_UMBRAL_MIN) {
-      // Bot vivo. Si había flag de caída anterior, limpiarla y loguear.
+      // Bot vivo.
       if (yaNotificado) {
-        await ref.update({ notificadoCaida: false, recuperadoEn: FieldValue.serverTimestamp() });
-        logger.info("[botHealthWatchdog] bot recuperado", {
+        // Volvió de una caída — registrar evento `recuperado` con la
+        // duración total estimada (desde la última caída detectada
+        // hasta ahora).
+        const caidaDetectadaEn = data.notificadoCaidaEn as Timestamp | undefined;
+        const duracionMin = caidaDetectadaEn ?
+          Math.round((Date.now() - caidaDetectadaEn.toMillis()) / 60000) :
+          null;
+        await db.collection("BOT_EVENTOS").add({
+          tipo: "recuperado",
+          pcId,
+          detectadoEn: FieldValue.serverTimestamp(),
+          duracionMin,
+          caidaDetectadaEn: caidaDetectadaEn ?? null,
+        });
+        await ref.update({
+          notificadoCaida: false,
+          recuperadoEn: FieldValue.serverTimestamp(),
+        });
+        logger.info("[botHealthWatchdog] bot recuperado, evento registrado", {
           minDesdeUltimoHb: minDesdeHb.toFixed(1),
+          duracionMin,
         });
       }
       return;
@@ -3118,53 +3141,23 @@ export const botHealthWatchdog = onSchedule(
 
     // Bot stale.
     if (yaNotificado) {
-      // Ya avisamos antes — no spamear.
-      logger.info("[botHealthWatchdog] bot sigue caído, ya notificado", {
+      // Ya registramos el evento de caída, no duplicar.
+      logger.info("[botHealthWatchdog] bot sigue caído, evento ya registrado", {
         minDesdeUltimoHb: minDesdeHb.toFixed(1),
       });
       return;
     }
 
-    // Primera detección de caída — notificar al admin.
-    const adminDni = MANTENIMIENTO_DESTINATARIO_DNI;
-    const empSnap = await db.collection("EMPLEADOS").doc(adminDni).get();
-    const tel = empSnap.exists ?
-      (empSnap.data()?.TELEFONO ?? "").toString().trim() :
-      "";
-    if (!tel) {
-      logger.error("[botHealthWatchdog] admin sin TELEFONO, no se puede notificar caída del bot", {
-        adminDni,
-      });
-      return;
-    }
-
-    const minRedondeo = Math.round(minDesdeHb);
-    const fechaTxt = _formatFechaArg(ultimoHb.toMillis());
-    const horaTxt = _formatHoraArg(ultimoHb.toMillis());
-    const pcId = (data.pcId ?? "desconocida").toString();
-    const mensaje =
-      "🚨 *Bot WhatsApp caído*\n\n" +
-      `Sin heartbeat desde ${fechaTxt} ${horaTxt} ` +
-      `(hace ${minRedondeo} min) en PC \`${pcId}\`.\n\n` +
-      "Los avisos de vencimientos y alertas Volvo están en cola pero " +
-      "no se están enviando. Revisá la PC del bot o reiniciá el servicio.\n\n" +
-      BANNER_TESTING +
-      "_Aviso automático del watchdog. Solo se envía 1 vez por caída._";
-
-    await db.collection("COLA_WHATSAPP").add({
-      telefono: tel,
-      mensaje,
-      estado: "PENDIENTE",
-      encolado_en: FieldValue.serverTimestamp(),
-      enviado_en: null,
-      error: null,
-      intentos: 0,
-      origen: "bot_watchdog",
-      destinatario_coleccion: "EMPLEADOS",
-      destinatario_id: adminDni,
-      campo_base: "BOT_WATCHDOG",
-      admin_dni: "BOT",
-      admin_nombre: "Bot watchdog",
+    // Primera detección de caída — registrar evento. NO mandamos
+    // WhatsApp inmediato (el aviso quedaría viejo si la caída fue
+    // hace varias horas). El resumen diario a las 8 AM consolida todo.
+    const minutosSinHeartbeat = Math.round(minDesdeHb);
+    await db.collection("BOT_EVENTOS").add({
+      tipo: "caida",
+      pcId,
+      detectadoEn: FieldValue.serverTimestamp(),
+      ultimoHeartbeatEn: ultimoHb,
+      minutosSinHeartbeat,
     });
 
     await ref.update({
@@ -3172,19 +3165,171 @@ export const botHealthWatchdog = onSchedule(
       notificadoCaidaEn: FieldValue.serverTimestamp(),
     });
 
-    // Paradoja del watchdog: el aviso queda en COLA_WHATSAPP, pero el
-    // bot que tiene que enviarlo ESTÁ CAÍDO. ¿Cómo le llega a Santiago?
-    // - Cuando el bot vuelva (al reiniciar manualmente o auto), procesa
-    //   la cola y le manda el WhatsApp con el mensaje "estuviste caído".
-    //   Útil como confirmación post-mortem.
-    // - Para alerting REAL en tiempo real (sin depender del bot caído),
-    //   lo correcto sería usar Firebase Cloud Messaging push directo a
-    //   Santiago (notificación nativa del cliente Flutter), o un email
-    //   via Gmail SMTP. Pendiente para futura iteración.
-    logger.warn("[botHealthWatchdog] bot caído — aviso encolado para admin", {
-      adminDni,
-      minDesdeUltimoHb: minRedondeo,
+    logger.warn("[botHealthWatchdog] bot caído — evento registrado para resumen diario", {
+      minDesdeUltimoHb: minutosSinHeartbeat,
       pcId,
+    });
+  }
+);
+
+// ============================================================================
+// resumenBotDiario — resumen consolidado de eventos del bot (8 AM diario)
+// ============================================================================
+//
+// Lee `BOT_EVENTOS` de las últimas 24h y arma un resumen con caídas y
+// recuperaciones del bot. Lo manda al admin (Santiago) por WhatsApp.
+// Si NO hubo eventos, NO se manda nada (silencio = todo OK).
+//
+// Reemplaza el aviso inmediato del watchdog (decisión 2026-05-08): mandar
+// alerta cuando se detecta la caída quedaba viejo (por el cron cada 15
+// min, tarda en detectar; cuando llega al user puede haber pasado horas
+// y ya recuperó). Mejor consolidar al día siguiente.
+
+export const resumenBotDiario = onSchedule(
+  {
+    schedule: "0 8 * * *",
+    timeZone: "America/Argentina/Buenos_Aires",
+    timeoutSeconds: 60,
+    memory: "256MiB",
+  },
+  async () => {
+    logger.info("[resumenBotDiario] iniciando");
+
+    // Idempotencia diaria.
+    const hoyKey = _formatFechaArg(Date.now()).replace(/\//g, "-");
+    const histRef = db
+      .collection("AVISOS_AUTOMATICOS_HISTORICO")
+      .doc(`bot_resumen_${hoyKey}_${MANTENIMIENTO_DESTINATARIO_DNI}`);
+    const histSnap = await histRef.get();
+    if (histSnap.exists) {
+      logger.info("[resumenBotDiario] ya enviado hoy, skip");
+      return;
+    }
+
+    // Eventos de las últimas 24h.
+    const desde = Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
+    const evSnap = await db
+      .collection("BOT_EVENTOS")
+      .where("detectadoEn", ">=", desde)
+      .orderBy("detectadoEn", "asc")
+      .get();
+
+    if (evSnap.empty) {
+      logger.info("[resumenBotDiario] sin eventos en últimas 24h, no se envía");
+      // Marcamos histórico igual para no chequear mil veces el mismo día.
+      await histRef.set({
+        tipo: "bot_resumen_diario",
+        destinatario_dni: MANTENIMIENTO_DESTINATARIO_DNI,
+        fecha: hoyKey,
+        cantidad_eventos: 0,
+        cola_doc_id: null,
+        creado_en: FieldValue.serverTimestamp(),
+      });
+      return;
+    }
+
+    // Lookup destinatario.
+    const adminDni = MANTENIMIENTO_DESTINATARIO_DNI;
+    const empSnap = await db.collection("EMPLEADOS").doc(adminDni).get();
+    const tel = empSnap.exists ?
+      (empSnap.data()?.TELEFONO ?? "").toString().trim() :
+      "";
+    if (!tel) {
+      logger.error("[resumenBotDiario] admin sin TELEFONO", {adminDni});
+      return;
+    }
+
+    // Armar mensaje.
+    const lineas: string[] = [];
+    let totalCaidas = 0;
+    let totalRecuperaciones = 0;
+    let minutosCaidoTotal = 0;
+
+    for (const doc of evSnap.docs) {
+      const d = doc.data();
+      const tipo = String(d.tipo ?? "");
+      const detectadoEn = d.detectadoEn as Timestamp | undefined;
+      if (!detectadoEn) continue;
+      const horaTxt = _formatHoraArg(detectadoEn.toMillis());
+      const fechaTxt = _formatFechaArg(detectadoEn.toMillis());
+      const pcId = (d.pcId ?? "?").toString();
+
+      if (tipo === "caida") {
+        totalCaidas++;
+        const minSinHb = d.minutosSinHeartbeat ?? "?";
+        lineas.push(
+          `🔴 *Caída detectada* — ${fechaTxt} ${horaTxt} (PC \`${pcId}\`, ` +
+          `${minSinHb} min sin heartbeat al detectar)`
+        );
+      } else if (tipo === "recuperado") {
+        totalRecuperaciones++;
+        const dur = typeof d.duracionMin === "number" ? d.duracionMin : null;
+        if (dur !== null) minutosCaidoTotal += dur;
+        const durTxt = dur !== null ? `${dur} min` : "?";
+        lineas.push(
+          `🟢 *Recuperado* — ${fechaTxt} ${horaTxt} (PC \`${pcId}\`, ` +
+          `caído ~${durTxt})`
+        );
+      } else {
+        lineas.push(`• ${tipo} ${fechaTxt} ${horaTxt}`);
+      }
+    }
+
+    const titulo =
+      totalCaidas === 0 && totalRecuperaciones > 0 ?
+        "🤖 *Resumen del bot — recuperaciones de caídas previas*" :
+        totalCaidas > 0 ?
+          `🤖 *Resumen del bot — ${totalCaidas} ` +
+          `caída${totalCaidas !== 1 ? "s" : ""} en últimas 24h*` :
+          "🤖 *Resumen del bot — eventos del día*";
+
+    const subtotal = minutosCaidoTotal > 0 ?
+      `\n\nTiempo total caído estimado: ${minutosCaidoTotal} min.` :
+      "";
+
+    const mensaje =
+      titulo + "\n\n" +
+      lineas.join("\n") +
+      subtotal + "\n\n" +
+      BANNER_TESTING +
+      "_Si hubo caídas que no detectaste, verificá el servicio (NSSM " +
+      "del bot) en la PC correspondiente._";
+
+    // Encolar.
+    const colaRef = await db.collection("COLA_WHATSAPP").add({
+      telefono: tel,
+      mensaje,
+      estado: "PENDIENTE",
+      encolado_en: FieldValue.serverTimestamp(),
+      enviado_en: null,
+      error: null,
+      intentos: 0,
+      origen: "cron_bot_resumen_diario",
+      destinatario_coleccion: "EMPLEADOS",
+      destinatario_id: adminDni,
+      campo_base: "BOT_RESUMEN_DIARIO",
+      admin_dni: "BOT",
+      admin_nombre: "Bot watchdog",
+    });
+
+    await histRef.set({
+      tipo: "bot_resumen_diario",
+      destinatario_dni: adminDni,
+      fecha: hoyKey,
+      cantidad_eventos: evSnap.size,
+      cantidad_caidas: totalCaidas,
+      cantidad_recuperaciones: totalRecuperaciones,
+      minutos_caido_total: minutosCaidoTotal,
+      cola_doc_id: colaRef.id,
+      creado_en: FieldValue.serverTimestamp(),
+    });
+
+    logger.info("[resumenBotDiario] OK", {
+      eventos: evSnap.size,
+      caidas: totalCaidas,
+      recuperaciones: totalRecuperaciones,
+      minutosCaidoTotal,
+      colaDocId: colaRef.id,
     });
   }
 );
