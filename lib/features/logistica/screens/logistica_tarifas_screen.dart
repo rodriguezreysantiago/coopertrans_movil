@@ -53,6 +53,13 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
+                if (snap.hasError) {
+                  return AppEmptyState(
+                    icon: Icons.error_outline,
+                    title: 'Error cargando la lista',
+                    subtitle: snap.error.toString(),
+                  );
+                }
                 final all = snap.data ?? const [];
                 final filtradas = _aplicarFiltro(all, _filtro);
                 if (filtradas.isEmpty) {

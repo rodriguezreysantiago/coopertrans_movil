@@ -30,6 +30,13 @@ class LogisticaUbicacionesScreen extends StatelessWidget {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
+          if (snap.hasError) {
+            return AppEmptyState(
+              icon: Icons.error_outline,
+              title: 'Error cargando la lista',
+              subtitle: snap.error.toString(),
+            );
+          }
           final items = snap.data ?? const [];
           if (items.isEmpty) {
             return const AppEmptyState(

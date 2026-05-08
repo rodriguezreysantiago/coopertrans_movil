@@ -51,6 +51,18 @@ class _ListaEmpresas extends StatelessWidget {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
+            // Mostrar error real (típico: "requires an index" si falta
+            // el índice compuesto en firestore.indexes.json). Sin esto
+            // el StreamBuilder mostraría empty state y el operador
+            // pensaría que "no se guarda nada" cuando en realidad la
+            // query falla en Firestore.
+            if (snap.hasError) {
+              return AppEmptyState(
+                icon: Icons.error_outline,
+                title: 'Error cargando la lista',
+                subtitle: snap.error.toString(),
+              );
+            }
             final items = snap.data ?? const [];
             if (items.isEmpty) {
               return AppEmptyState(
