@@ -391,33 +391,56 @@ class LogisticaGeoUtils {
         urlTrim.contains('goo.gl/maps') ||
         urlTrim.contains('g.co/kgs')) {
       try {
-        // followRedirects: false para capturar la Location header.
-        // Algunos shortlinks redirigen 2-3 veces — Dio sigue todos los
-        // por default, así que tomamos la URL final del response.
-        final res = await Dio()
-            .get<dynamic>(
-              urlTrim,
-              options: Options(
-                followRedirects: true,
-                validateStatus: (s) => s != null && s < 400,
-                receiveTimeout: const Duration(seconds: 10),
-              ),
-            );
-        // Probar primero la URL final (tras redirects).
-        final urlFinal =
-            res.realUri.toString();
+        final res = await Dio().get<dynamic>(
+          urlTrim,
+          options: Options(
+            followRedirects: true,
+            validateStatus: (s) => s != null && s < 400,
+            receiveTimeout: const Duration(seconds: 10),
+            // User-Agent de browser real — Google a veces sirve HTML
+            // distinto si detecta cliente robot, y eso esconde las
+            // coords en el body.
+            headers: {
+              'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                  'AppleWebKit/537.36 (KHTML, like Gecko) '
+                  'Chrome/120.0 Safari/537.36',
+            },
+          ),
+        );
+
+        // Intento 1: la URL final del redirect ya tiene las coords.
+        // Si Dio resolvió todos los redirects, realUri es el "place"
+        // completo con `@lat,lng` y/o `!3d!4d`.
+        final urlFinal = res.realUri.toString();
         final coordsResolved = _extraerCoordsDeUrl(urlFinal);
         if (coordsResolved != null) return coordsResolved;
-        // Fallback: a veces las coords vienen en el body HTML del
-        // redirect en `,@-38.379,-60.275,` o similar.
+
+        // Intento 2: Google a veces sirve un HTML interstitial con
+        // un meta refresh hacia la URL larga. Buscamos cualquier URL
+        // de google.com/maps en el body y le aplicamos el parser.
         final body = res.data?.toString() ?? '';
-        final m = RegExp(r'[\?&!@]?(?:-?\d+\.\d+),(-?\d+\.\d+)')
-            .firstMatch(body);
-        if (m != null) {
-          final lat = double.tryParse(m.group(0)!.split(',')[0]
-              .replaceAll(RegExp(r'[^\-0-9.]'), ''));
-          final lng = double.tryParse(m.group(1)!);
-          if (lat != null && lng != null) return LatLng(lat, lng);
+        final mUrl = RegExp(
+          r'https?://[^\s"<>]*google\.com/maps[^\s"<>]*',
+        ).firstMatch(body);
+        if (mUrl != null) {
+          final coordsBody = _extraerCoordsDeUrl(mUrl.group(0)!);
+          if (coordsBody != null) return coordsBody;
+        }
+
+        // Intento 3: pares lat,lng sueltos en el body (formato JSON
+        // o JS). Iteramos todos los matches y nos quedamos con el
+        // primero que pase validación de rangos (-90/90, -180/180)
+        // — el body puede tener números similares (precios, IDs)
+        // que accidentalmente coincidan con el regex.
+        final regexCoords = RegExp(r'(-?\d+\.\d{4,}),(-?\d+\.\d{4,})');
+        for (final m in regexCoords.allMatches(body)) {
+          final lat = double.tryParse(m.group(1)!);
+          final lng = double.tryParse(m.group(2)!);
+          if (lat == null || lng == null) continue;
+          if (lat < -90 || lat > 90) continue;
+          if (lng < -180 || lng > 180) continue;
+          return LatLng(lat, lng);
         }
       } catch (_) {
         return null;
