@@ -58,7 +58,7 @@ class MapConstants {
   static const String mapboxToken = String.fromEnvironment(
     'MAPBOX_TOKEN',
     defaultValue:
-        'pk.eyJ1Ijoic2FudGlhZ29jb29wZXJ0cmFucyIsImEiOiJjbW93eTVkZXkwa3pzMnNwb2syZWNsOWRqIn0.ubklwgcfVEjZtiyvmgSIvQ',
+        'pk.eyJ1Ijoic2FudGlhZ29jb29wZXJ0cmFucyIsImEiOiJjbW93eWNpcWYwa3Z2MnFwb3dnZDRiaXRpIn0.ceoTO-MxvclzrlLlfXxflA',
   );
 
   /// `true` si hay token Mapbox configurado. Si está vacío (override
