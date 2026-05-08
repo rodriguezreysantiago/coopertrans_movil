@@ -46,6 +46,10 @@ class _AdminMapaVolvoScreenState extends State<AdminMapaVolvoScreen> {
   /// rango. Aplicar a TODA la flota (ignora filtros de patente / tipo
   /// — el heatmap es vista agregada, no filtrada).
   bool _heatmapActivo = false;
+  /// Vista satelital (Mapbox Satellite v9). Útil para identificar el
+  /// contexto físico de un evento (lugar de un OVERSPEED en una recta
+  /// rural, charla en zona industrial, etc.).
+  bool _modoSatelite = false;
 
   final _mapController = MapController();
 
@@ -165,6 +169,9 @@ class _AdminMapaVolvoScreenState extends State<AdminMapaVolvoScreen> {
                   docs: visibles,
                   puntosRuta: puntosRuta,
                   celdasHeatmap: celdasHeatmap,
+                  modoSatelite: _modoSatelite,
+                  onToggleSatelite: () =>
+                      setState(() => _modoSatelite = !_modoSatelite),
                 ),
               ),
             ],
@@ -508,6 +515,8 @@ class _Mapa extends StatelessWidget {
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
   final List<_PuntoRuta> puntosRuta;
   final List<_CeldaHeatmap> celdasHeatmap;
+  final bool modoSatelite;
+  final VoidCallback onToggleSatelite;
 
   const _Mapa({
     required this.controller,
@@ -516,40 +525,83 @@ class _Mapa extends StatelessWidget {
     required this.docs,
     required this.puntosRuta,
     required this.celdasHeatmap,
+    required this.modoSatelite,
+    required this.onToggleSatelite,
   });
 
   @override
   Widget build(BuildContext context) {
-    return FlutterMap(
-      mapController: controller,
-      options: MapOptions(
-        initialCenter: centroInicial,
-        initialZoom: zoomInicial,
-        minZoom: 4,
-        maxZoom: 18,
-      ),
+    final hayMapbox = MapConstants.tieneMapbox;
+    final usaSatelite = modoSatelite && hayMapbox;
+    return Stack(
       children: [
-        TileLayer(
-          urlTemplate: MapConstants.tileUrl,
-          subdomains: MapConstants.tileSubdomains,
-          userAgentPackageName: MapConstants.userAgent,
-        ),
-        // Capa heatmap (debajo de la ruta y los markers para no taparlos).
-        if (celdasHeatmap.isNotEmpty) _capaHeatmap(),
-        // Capa ruta (línea coloreada por velocidad). Va debajo de los
-        // markers para que los pins queden tappables.
-        if (puntosRuta.length >= 2) _capaRuta(),
-        MarkerLayer(
-          markers: docs
-              .map((d) => _markerDeDoc(context, d))
-              .whereType<Marker>()
-              .toList(),
-        ),
-        const RichAttributionWidget(
-          attributions: [
-            TextSourceAttribution('© OpenStreetMap'),
+        FlutterMap(
+          mapController: controller,
+          options: MapOptions(
+            initialCenter: centroInicial,
+            initialZoom: zoomInicial,
+            minZoom: 4,
+            maxZoom: usaSatelite ? 22 : 18,
+          ),
+          children: [
+            if (usaSatelite)
+              TileLayer(
+                urlTemplate: MapConstants.tileSatelliteUrl,
+                userAgentPackageName: MapConstants.userAgent,
+                maxZoom: 22,
+              )
+            else
+              TileLayer(
+                urlTemplate: MapConstants.tileUrl,
+                subdomains: MapConstants.tileSubdomains,
+                userAgentPackageName: MapConstants.userAgent,
+              ),
+            // Capa heatmap (debajo de la ruta y los markers para no taparlos).
+            if (celdasHeatmap.isNotEmpty) _capaHeatmap(),
+            // Capa ruta (línea coloreada por velocidad). Va debajo de los
+            // markers para que los pins queden tappables.
+            if (puntosRuta.length >= 2) _capaRuta(),
+            MarkerLayer(
+              markers: docs
+                  .map((d) => _markerDeDoc(context, d))
+                  .whereType<Marker>()
+                  .toList(),
+            ),
+            RichAttributionWidget(
+              attributions: [
+                TextSourceAttribution(
+                  usaSatelite
+                      ? MapConstants.attributionSatelite
+                      : MapConstants.attribution,
+                ),
+              ],
+            ),
           ],
         ),
+        if (hayMapbox)
+          Positioned(
+            top: 12,
+            right: 12,
+            child: Material(
+              color: Colors.black.withAlpha(170),
+              shape: const CircleBorder(),
+              elevation: 4,
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: onToggleSatelite,
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Icon(
+                    modoSatelite
+                        ? Icons.map_outlined
+                        : Icons.satellite_alt_outlined,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
