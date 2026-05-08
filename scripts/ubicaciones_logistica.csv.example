@@ -1,6 +1,8 @@
-nombre,localidad,provincia,direccion,lat,lng
-ACOPIO LARTIRIGOYEN — TRES ARROYOS,Tres Arroyos,Buenos Aires,Ruta 3 km 487,-38.3795,-60.2756
-PUERTO QUEQUÉN,Quequén,Buenos Aires,Costanera 100,-38.5694,-58.7019
-SILO BAHÍA BLANCA — INGENIERO WHITE,Bahía Blanca,Buenos Aires,Puerto sector 4,-38.7800,-62.2667
-PLANTA ACINDAR — VILLA CONSTITUCIÓN,Villa Constitución,Santa Fe,,-33.2300,-60.3300
-DEPÓSITO COFCO — TRES ARROYOS,Tres Arroyos,Buenos Aires,,,
+nombre,localidad,provincia,direccion,lat,lng,empresa_nombre
+PLANTA PROFERTIL,Bahía Blanca,Buenos Aires,Puerto Ing. White,-38.7800,-62.2667,PROFERTIL S.A.
+ACOPIO LARTIRIGOYEN — TRES ARROYOS,Tres Arroyos,Buenos Aires,Ruta 3 km 487,-38.3795,-60.2756,ACOPIO LARTIRIGOYEN SRL
+PUERTO QUEQUÉN — CARGILL,Quequén,Buenos Aires,Costanera 100,-38.5694,-58.7019,CARGILL ARGENTINA
+PUERTO QUEQUÉN — BUNGE,Quequén,Buenos Aires,Costanera 200,-38.5650,-58.6980,BUNGE ARGENTINA
+PLANTA ACINDAR — VILLA CONSTITUCIÓN,Villa Constitución,Santa Fe,,-33.2300,-60.3300,ACINDAR
+DEPÓSITO COFCO — TRES ARROYOS,Tres Arroyos,Buenos Aires,,,,COFCO INTERNATIONAL
+UBICACION GENERICA SIN EMPRESA,Olavarría,Buenos Aires,,,,

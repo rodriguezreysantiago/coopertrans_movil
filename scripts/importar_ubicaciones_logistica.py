@@ -16,17 +16,22 @@
 # Default CSV: scripts/ubicaciones_logistica.csv
 #
 # Formato CSV (con header):
-#   nombre,localidad,provincia,direccion,lat,lng
-#   ACOPIO LARTIRIGOYEN — TRES ARROYOS,Tres Arroyos,Buenos Aires,Ruta 3 km 487,-38.3795,-60.2756
-#   PUERTO QUEQUÉN,Quequén,Buenos Aires,,-38.5694,-58.7019
+#   nombre,localidad,provincia,direccion,lat,lng,empresa_nombre
+#   PLANTA PROFERTIL,Bahía Blanca,Buenos Aires,Puerto Ing. White,-38.78,-62.27,PROFERTIL
+#   PUERTO QUEQUÉN,Quequén,Buenos Aires,,-38.5694,-58.7019,
 #
 # Campos:
-#   - nombre*:    obligatorio, se normaliza a UPPER al guardar
-#   - localidad*: obligatorio
-#   - provincia*: obligatorio
-#   - direccion:  opcional, vacío → no se setea el campo
-#   - lat:        opcional, debe estar entre -90 y 90
-#   - lng:        opcional, debe estar entre -180 y 180
+#   - nombre*:        obligatorio, se normaliza a UPPER al guardar
+#   - localidad*:     obligatorio
+#   - provincia*:     obligatorio
+#   - direccion:      opcional, vacío → no se setea el campo
+#   - lat:            opcional, debe estar entre -90 y 90
+#   - lng:            opcional, debe estar entre -180 y 180
+#   - empresa_nombre: opcional, busca la empresa por nombre (case-
+#                     insensitive) en EMPRESAS_LOGISTICA. Si no la
+#                     encuentra, error (no se carga la fila — primero
+#                     cargá la empresa). Si está vacío, ubicación queda
+#                     "huérfana" sin empresa asociada.
 #
 # Si lat o lng está pero no el otro, error (no se carga la fila).
 
@@ -53,7 +58,7 @@ def conectar():
 
 def cargar_existentes(db):
     """Devuelve un set con los nombres normalizados (UPPER) ya
-    presentes en EMPRESAS_LOGISTICA. Para chequeo de duplicados."""
+    presentes en UBICACIONES_LOGISTICA. Para chequeo de duplicados."""
     snap = db.collection("UBICACIONES_LOGISTICA").stream()
     nombres = set()
     for doc in snap:
@@ -61,6 +66,22 @@ def cargar_existentes(db):
         if nombre:
             nombres.add(nombre)
     return nombres
+
+
+def cargar_empresas(db):
+    """Devuelve un dict {nombre_upper: (id, nombre_original)} con todas
+    las empresas activas. Usado para resolver `empresa_nombre` del CSV
+    contra el catálogo y guardar empresa_id + snapshot del nombre."""
+    snap = db.collection("EMPRESAS_LOGISTICA").stream()
+    empresas = {}
+    for doc in snap:
+        data = doc.to_dict()
+        if data.get("activa") is False:
+            continue
+        nombre = (data.get("nombre") or "").strip()
+        if nombre:
+            empresas[nombre.upper()] = (doc.id, nombre)
+    return empresas
 
 
 def parsear_lat_lng(valor, etiqueta, contexto):
@@ -116,6 +137,10 @@ def main():
     print("📡 Leyendo ubicaciones existentes...")
     existentes = cargar_existentes(db)
     print(f"   {len(existentes)} ubicación(es) ya en Firestore.")
+
+    print("📡 Leyendo empresas (para asociar por nombre)...")
+    empresas = cargar_empresas(db)
+    print(f"   {len(empresas)} empresa(s) activas.")
     print("")
 
     a_crear = []
@@ -157,6 +182,22 @@ def main():
 
         direccion = (row.get("direccion") or "").strip() or None
 
+        # Lookup empresa opcional. Si vino nombre_empresa pero no
+        # matchea ninguna en el catálogo, error (mejor abortar la
+        # fila que perder la asociación).
+        empresa_nombre_csv = (row.get("empresa_nombre") or "").strip()
+        empresa_id = None
+        empresa_nombre_snapshot = None
+        if empresa_nombre_csv:
+            match = empresas.get(empresa_nombre_csv.upper())
+            if match is None:
+                print(f"❌ Fila {nro_fila}: empresa "
+                      f"'{empresa_nombre_csv}' no existe en EMPRESAS_LOGISTICA. "
+                      f"Cargala primero o dejá el campo vacío.")
+                errores += 1
+                continue
+            empresa_id, empresa_nombre_snapshot = match
+
         doc = {
             "nombre": nombre_norm,
             "localidad": localidad,
@@ -171,6 +212,9 @@ def main():
             doc["lat"] = lat
         if lng is not None:
             doc["lng"] = lng
+        if empresa_id:
+            doc["empresa_id"] = empresa_id
+            doc["empresa_nombre"] = empresa_nombre_snapshot
 
         a_crear.append((nombre_norm, doc))
         # Sumamos al set para que duplicados dentro del mismo CSV
@@ -192,7 +236,8 @@ def main():
         print("🧪 DRY-RUN: no se escribió nada. Los a crear son:")
         for nombre, doc in a_crear[:20]:
             coords = f"({doc.get('lat')},{doc.get('lng')})" if "lat" in doc else "(sin coords)"
-            print(f"   - {nombre} | {doc['localidad']}, {doc['provincia']} {coords}")
+            empresa = f" → {doc['empresa_nombre']}" if "empresa_nombre" in doc else ""
+            print(f"   - {nombre} | {doc['localidad']}, {doc['provincia']} {coords}{empresa}")
         if len(a_crear) > 20:
             print(f"   ... y {len(a_crear) - 20} más")
         print("")

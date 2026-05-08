@@ -233,6 +233,7 @@ class _LogisticaTarifaFormScreenState
           _SelectorUbicacion(
             etiqueta: 'Ubicación origen',
             valor: _ubicOrigen,
+            filtroEmpresaId: _empOrigen?.id,
             onChange: (u) => setState(() => _ubicOrigen = u),
           ),
 
@@ -249,6 +250,7 @@ class _LogisticaTarifaFormScreenState
           _SelectorUbicacion(
             etiqueta: 'Ubicación destino',
             valor: _ubicDestino,
+            filtroEmpresaId: _empDestino?.id,
             onChange: (u) => setState(() => _ubicDestino = u),
           ),
 
@@ -748,11 +750,17 @@ class _SelectorUbicacion extends StatelessWidget {
   final String etiqueta;
   final UbicacionLogistica? valor;
   final ValueChanged<UbicacionLogistica> onChange;
+  /// Si está seteado, el sheet de selección filtra a las ubicaciones
+  /// asociadas a esa empresa (más rápido encontrar para el operador).
+  /// El sheet además ofrece un toggle "Mostrar todas" por si la
+  /// ubicación todavía no fue asociada.
+  final String? filtroEmpresaId;
 
   const _SelectorUbicacion({
     required this.etiqueta,
     required this.valor,
     required this.onChange,
+    this.filtroEmpresaId,
   });
 
   @override
@@ -811,14 +819,28 @@ class _SelectorUbicacion extends StatelessWidget {
       context: context,
       backgroundColor: AppColors.background,
       isScrollControlled: true,
-      builder: (_) => const _ListaSelectorUbicacion(),
+      builder: (_) => _ListaSelectorUbicacion(
+        filtroEmpresaId: filtroEmpresaId,
+      ),
     );
     if (res != null) onChange(res);
   }
 }
 
-class _ListaSelectorUbicacion extends StatelessWidget {
-  const _ListaSelectorUbicacion();
+class _ListaSelectorUbicacion extends StatefulWidget {
+  final String? filtroEmpresaId;
+  const _ListaSelectorUbicacion({this.filtroEmpresaId});
+
+  @override
+  State<_ListaSelectorUbicacion> createState() =>
+      _ListaSelectorUbicacionState();
+}
+
+class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
+  /// Si el operador toggleó "Mostrar todas", desactivamos el filtro
+  /// por empresa. Útil cuando la ubicación deseada aún no fue
+  /// asociada a la empresa.
+  bool _mostrarTodas = false;
 
   @override
   Widget build(BuildContext context) {
@@ -838,16 +860,33 @@ class _ListaSelectorUbicacion extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: Text(
-              'SELECCIONAR UBICACIÓN',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(
+              children: [
+                const Text(
+                  'SELECCIONAR UBICACIÓN',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                const Spacer(),
+                if (widget.filtroEmpresaId != null)
+                  FilterChip(
+                    label: Text(
+                      _mostrarTodas ? 'Mostrar solo de la empresa' : 'Mostrar todas',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    selected: _mostrarTodas,
+                    onSelected: (v) =>
+                        setState(() => _mostrarTodas = v),
+                    selectedColor:
+                        AppColors.accentBlue.withValues(alpha: 0.4),
+                  ),
+              ],
             ),
           ),
           Expanded(
@@ -858,8 +897,24 @@ class _ListaSelectorUbicacion extends StatelessWidget {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final items = snap.data ?? const [];
+                final all = snap.data ?? const [];
+                // Filtrar por empresa si el caller pasó filtroEmpresaId
+                // y el usuario NO toggleó "Mostrar todas".
+                final items = (widget.filtroEmpresaId != null && !_mostrarTodas)
+                    ? all.where((u) =>
+                        u.empresaId == widget.filtroEmpresaId).toList()
+                    : all;
                 if (items.isEmpty) {
+                  if (widget.filtroEmpresaId != null && !_mostrarTodas) {
+                    return const AppEmptyState(
+                      icon: Icons.place_outlined,
+                      title: 'Sin ubicaciones de esta empresa',
+                      subtitle:
+                          'Tocá "Mostrar todas" arriba para ver todas las '
+                          'ubicaciones, o asociá ubicaciones a esta '
+                          'empresa desde el catálogo Ubicaciones.',
+                    );
+                  }
                   return const AppEmptyState(
                     icon: Icons.place_outlined,
                     title: 'Sin ubicaciones activas',

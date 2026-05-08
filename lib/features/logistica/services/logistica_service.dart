@@ -103,6 +103,8 @@ class LogisticaService {
     String? direccion,
     double? lat,
     double? lng,
+    String? empresaId,
+    String? empresaNombre,
   }) async {
     final nombreNorm = nombre.trim().toUpperCase();
     if (nombreNorm.isEmpty) {
@@ -129,6 +131,9 @@ class LogisticaService {
         'direccion': direccion.trim(),
       if (lat != null) 'lat': lat,
       if (lng != null) 'lng': lng,
+      if (empresaId != null && empresaId.isNotEmpty) 'empresa_id': empresaId,
+      if (empresaNombre != null && empresaNombre.isNotEmpty)
+        'empresa_nombre': empresaNombre,
       'activa': true,
       'creado_en': FieldValue.serverTimestamp(),
       'creado_por': PrefsService.dni,
