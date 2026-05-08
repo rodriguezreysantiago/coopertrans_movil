@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:intl/intl.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -473,8 +474,32 @@ class _Mapa extends StatelessWidget {
           subdomains: MapConstants.tileSubdomains,
           userAgentPackageName: MapConstants.userAgent,
         ),
-        MarkerLayer(
-          markers: docs.map((d) => _markerDeDoc(d)).toList(),
+        // Agrupamos pins muy cerca (radio chico de 40px) para evitar
+        // superposición cuando varios tractores están en el mismo
+        // predio (acopio, base operativa). A zoom alto se separan.
+        MarkerClusterLayerWidget(
+          options: MarkerClusterLayerOptions(
+            maxClusterRadius: 40,
+            size: const Size(38, 38),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.all(50),
+            markers: docs.map((d) => _markerDeDoc(d)).toList(),
+            builder: (ctx, markers) => Container(
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.accentPurple,
+              ),
+              child: Center(
+                child: Text(
+                  markers.length.toString(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
         const RichAttributionWidget(
           attributions: [

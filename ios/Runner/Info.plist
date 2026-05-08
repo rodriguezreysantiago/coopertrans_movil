@@ -74,5 +74,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Coopertrans Móvil usa el GPS solo cuando tocás "Usar mi ubicación" al cargar una ubicación nueva (silo, planta, depósito). No trackea movimiento ni accede al GPS en background.</string>
 </dict>
 </plist>

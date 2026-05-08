@@ -104,6 +104,15 @@ dependencies:
   # API key — usa OSM público.
   flutter_map: ^8.3.0
   latlong2: ^0.9.1    # Tipos LatLng. Pin a 0.9 porque flutter_map 8.3 limita a esa rama
+  # Cluster de pins en mapas — agrupa markers por proximidad para que
+  # no se superpongan cuando hay muchos. Usado en el mapa de tarifas
+  # y mapa de flota.
+  flutter_map_marker_cluster: ^8.2.2
+  # GPS del device para el botón "Usar mi ubicación" del picker.
+  # Solo lo usamos en Android/iOS — en Windows desktop el plugin
+  # no expone GPS (no hay GPS estándar en PCs); el operador puede
+  # mover el mapa a mano o pegar coords manuales.
+  geolocator: ^14.0.0
 
   # ================= OCR =================
   # Reconocimiento de texto on-device (sin envío a servidores).

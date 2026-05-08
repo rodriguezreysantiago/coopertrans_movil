@@ -17,9 +17,12 @@
 // debajo del crosshair, el centro siempre es el punto).
 
 import 'dart:async';
+import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../shared/constants/app_colors.dart';
@@ -141,6 +144,85 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
       _busquedaCtl.text = lugar.displayName.split(',').take(2).join(',').trim();
     });
     _mapCtl.move(lugar.punto, 13);
+  }
+
+  /// Pide permiso de GPS al usuario (si hace falta), captura la
+  /// ubicación actual y centra el mapa ahí. Para Android/iOS — en
+  /// Windows desktop el plugin geolocator devuelve error porque no
+  /// hay backend de GPS estándar; ahí mostramos snackbar y volvemos.
+  Future<void> _usarMiUbicacion() async {
+    // Solo Android/iOS soportan GPS de forma confiable. En desktop
+    // el plugin no tiene backend.
+    if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Esta función solo está disponible en Android e iOS. '
+            'En la PC, mové el mapa o pegá las coords manualmente.',
+          ),
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+    try {
+      // Verificar/pedir permiso de location.
+      var permiso = await Geolocator.checkPermission();
+      if (permiso == LocationPermission.denied) {
+        permiso = await Geolocator.requestPermission();
+      }
+      if (permiso == LocationPermission.denied ||
+          permiso == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Permiso de ubicación denegado. Activalo en '
+              'Configuración → Apps → Coopertrans Móvil.',
+            ),
+            duration: Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+      // Verificar que el GPS esté prendido en el device.
+      final servActivo = await Geolocator.isLocationServiceEnabled();
+      if (!servActivo) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'El GPS está apagado. Prendelo y reintentá.',
+            ),
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+      // Capturar posición. Aceptamos precisión media — buscamos un
+      // pin aproximado, no tracking. Timeout corto: si tarda >10s,
+      // probablemente está en interior sin señal.
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+      if (!mounted) return;
+      final punto = LatLng(pos.latitude, pos.longitude);
+      setState(() {
+        _puntoCentral = punto;
+      });
+      _mapCtl.move(punto, 16);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo obtener tu ubicación: $e'),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   Future<void> _confirmar() async {
@@ -360,7 +442,20 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                     textAlign: TextAlign.center,
                   );
                 }),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
+                // GPS — solo tiene sentido en Android/iOS. En Windows
+                // mostramos el botón pero al taparlo da feedback de
+                // "no soportado" para que el operador entienda y
+                // use el buscador o coords manuales.
+                TextButton.icon(
+                  onPressed: _confirmando ? null : _usarMiUbicacion,
+                  icon: const Icon(Icons.my_location, size: 18),
+                  label: const Text('USAR MI UBICACIÓN'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.accentTeal,
+                  ),
+                ),
+                const SizedBox(height: 6),
                 Row(
                   children: [
                     Expanded(

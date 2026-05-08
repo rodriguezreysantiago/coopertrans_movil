@@ -8,6 +8,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../shared/constants/app_colors.dart';
@@ -230,11 +231,33 @@ class _LogisticaMapaTarifasScreenState
                   );
                 }).toList(),
               ),
-              // Pins en cada extremo (deduplicados por coord). Si la
-              // misma ubicación aparece en varias tarifas, mostramos
-              // un solo pin — evita superposición.
-              MarkerLayer(
-                markers: _buildMarkers(tarifasConCoords),
+              // Pins en cada extremo (deduplicados por coord +
+              // agrupados con cluster cuando se solapan a bajo
+              // zoom). El cluster muestra "5" o "12" según cantidad
+              // y al hacer tap se zoomea.
+              MarkerClusterLayerWidget(
+                options: MarkerClusterLayerOptions(
+                  maxClusterRadius: 60,
+                  size: const Size(40, 40),
+                  alignment: Alignment.center,
+                  padding: const EdgeInsets.all(50),
+                  markers: _buildMarkers(tarifasConCoords),
+                  builder: (ctx, markers) => Container(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.accentBlue,
+                    ),
+                    child: Center(
+                      child: Text(
+                        markers.length.toString(),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),

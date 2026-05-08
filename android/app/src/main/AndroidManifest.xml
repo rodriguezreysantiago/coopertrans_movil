@@ -23,6 +23,13 @@
          celulares modernos aunque el canal est� creado. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- GPS para el bot�n "Usar mi ubicaci�n" del picker de ubicaciones
+         de log�stica. Solo cuando la app est� en uso (no background).
+         Privacy: el �nico uso es capturar coords manuales del operador
+         al cargar un silo/planta nueva — no se trackea movimiento. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <!-- C�mara: image_picker la usa cuando el chofer/admin elige
          "Tomar foto con la c�mara" para subir comprobantes o foto de perfil. -->
     <uses-permission android:name="android.permission.CAMERA" />
