@@ -476,11 +476,11 @@ class _UserMisVencimientosScreenState
                 campoUrl: AppDocsEmpresa.campoArchivoScvo,
               ),
               _CardVencimientoEmpresa(
-                titulo: AppDocsEmpresa.etiquetaCuotaSindical,
+                titulo: AppDocsEmpresa.etiquetaLibreDeudaSindical,
                 cuitEmpresa: AppEmpresasEmpleadoras.cuitDeStringEmpresa(
                     (data['EMPRESA'] ?? '').toString()),
-                campoFecha: AppDocsEmpresa.campoFechaCuotaSindical,
-                campoUrl: AppDocsEmpresa.campoArchivoCuotaSindical,
+                campoFecha: AppDocsEmpresa.campoFechaLibreDeudaSindical,
+                campoUrl: AppDocsEmpresa.campoArchivoLibreDeudaSindical,
               ),
               const SizedBox(height: 20),
 

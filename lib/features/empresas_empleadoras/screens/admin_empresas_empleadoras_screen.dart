@@ -136,9 +136,9 @@ class _CardEmpresa extends StatelessWidget {
               const Divider(color: Colors.white10, height: 8),
               _FilaDocEmpresa(
                 cuit: info.cuit,
-                etiqueta: AppDocsEmpresa.etiquetaCuotaSindical,
-                campoFecha: AppDocsEmpresa.campoFechaCuotaSindical,
-                campoUrl: AppDocsEmpresa.campoArchivoCuotaSindical,
+                etiqueta: AppDocsEmpresa.etiquetaLibreDeudaSindical,
+                campoFecha: AppDocsEmpresa.campoFechaLibreDeudaSindical,
+                campoUrl: AppDocsEmpresa.campoArchivoLibreDeudaSindical,
                 data: data,
               ),
             ],

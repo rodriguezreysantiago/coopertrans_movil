@@ -302,12 +302,17 @@ class AppDocsEmpresa {
   static const String campoFechaScvo = 'VENCIMIENTO_SCVO';
   static const String campoArchivoScvo = 'ARCHIVO_SCVO';
 
-  /// Comprobante de pago de cuota sindical de la empresa al sindicato
-  /// (Camioneros u otro). Mismo label en ambos contextos.
-  static const String etiquetaCuotaSindical = 'Pago de cuota sindical';
-  static const String sufijoCuotaSindical = 'CUOTA_SINDICAL';
-  static const String campoFechaCuotaSindical = 'VENCIMIENTO_CUOTA_SINDICAL';
-  static const String campoArchivoCuotaSindical = 'ARCHIVO_CUOTA_SINDICAL';
+  /// Certificado de libre deuda sindical (sindicato Camioneros u otro)
+  /// — emitido a la empresa, mismo papel para todos los empleados de
+  /// esa razón social. Mismo label en ambos contextos. Reusamos el
+  /// sufijo legacy `LIBRE_DE_DEUDA_SINDICAL` que ya estaba en
+  /// `AppDocsEmpleado.etiquetas` antes de la migración a empresa.
+  static const String etiquetaLibreDeudaSindical = 'Libre de deuda sindical';
+  static const String sufijoLibreDeudaSindical = 'LIBRE_DE_DEUDA_SINDICAL';
+  static const String campoFechaLibreDeudaSindical =
+      'VENCIMIENTO_LIBRE_DE_DEUDA_SINDICAL';
+  static const String campoArchivoLibreDeudaSindical =
+      'ARCHIVO_LIBRE_DE_DEUDA_SINDICAL';
 }
 
 /// Catálogo hardcoded de las 2 empresas empleadoras de Vecchi (2026-05-08).
