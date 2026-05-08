@@ -1,10 +1,13 @@
 // Thumbnail estático de un punto geográfico, para mostrar al lado de
 // cards de ubicación.
 //
-// Si MAPBOX_TOKEN está configurado vía --dart-define, usa la
-// Mapbox Static Images API (50K loads/mes free, después
-// USD 0.04/1000). Si no hay token, fallback a un placeholder
-// gráfico con ícono y coords — sin costo, sin imagen real.
+// Usa Mapbox Static Images API. El token se embebe como defaultValue
+// (mismo patrón que Sentry y que LogisticaGeoUtils para geocoding).
+// 50K loads/mes free, después USD 0.04/1000. Para Vecchi: ~9K/mes
+// estimados, sobra el free tier.
+//
+// Si por alguna razón el token está vacío (override en build) o el
+// fetch falla, fallback a un placeholder gráfico con ícono.
 //
 // Cache: usa `Image.network` que cachea automáticamente en disco /
 // memoria via flutter framework. La misma URL se carga una vez.
@@ -12,6 +15,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/constants/app_colors.dart';
+import '../../../shared/constants/map_constants.dart';
 
 class MiniMapaThumbnail extends StatelessWidget {
   final double lat;
@@ -27,8 +31,11 @@ class MiniMapaThumbnail extends StatelessWidget {
     this.zoom = 12,
   });
 
-  static const String _mapboxToken = String.fromEnvironment('MAPBOX_TOKEN');
-  static bool get _tieneMapbox => _mapboxToken.isNotEmpty;
+  // Token Mapbox centralizado en MapConstants — compartido con
+  // LogisticaGeoUtils (Geocoding API). Rotar el token = 1 sola
+  // edición en map_constants.dart.
+  static String get _mapboxToken => MapConstants.mapboxToken;
+  static bool get _tieneMapbox => MapConstants.tieneMapbox;
 
   @override
   Widget build(BuildContext context) {

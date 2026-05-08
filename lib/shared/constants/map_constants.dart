@@ -35,4 +35,34 @@ class MapConstants {
   /// Texto de atribución que mostramos en `RichAttributionWidget` o
   /// `SimpleAttributionWidget` para cumplir términos de uso.
   static const String attribution = '© OpenStreetMap · © CARTO';
+
+  /// Token público Mapbox (embebido como defaultValue, mismo patrón
+  /// que SENTRY_DSN). Los tokens `pk.` de Mapbox NO son secret — están
+  /// diseñados para usarse en clientes públicos (apps mobile/desktop/
+  /// web) y son extraíbles del binario igualmente. La protección
+  /// contra abuso está en los scopes del token (configurados desde
+  /// Mapbox Account: solo GEOCODING:READ y STYLES:READ habilitados)
+  /// y los rate limits por token (Mapbox cap automático).
+  ///
+  /// Usado por:
+  ///   - `LogisticaGeoUtils.buscar` / `.reverso` (Geocoding API)
+  ///   - `MiniMapaThumbnail` (Static Images API)
+  ///
+  /// Para rotar: crear nuevo token en Mapbox Account → Tokens, cambiar
+  /// el defaultValue de abajo + commit + redeploy. El token viejo
+  /// queda activo hasta que lo borres en Mapbox.
+  ///
+  /// Para deshabilitar Mapbox en dev (forzar fallback a Nominatim,
+  /// sin static thumbnails):
+  ///   flutter run -d windows --dart-define=MAPBOX_TOKEN=
+  static const String mapboxToken = String.fromEnvironment(
+    'MAPBOX_TOKEN',
+    defaultValue:
+        'pk.eyJ1Ijoic2FudGlhZ29jb29wZXJ0cmFucyIsImEiOiJjbW93eTVkZXkwa3pzMnNwb2syZWNsOWRqIn0.ubklwgcfVEjZtiyvmgSIvQ',
+  );
+
+  /// `true` si hay token Mapbox configurado. Si está vacío (override
+  /// en build), los servicios usan fallback (Nominatim para geocoding,
+  /// placeholder con ícono para thumbnails).
+  static bool get tieneMapbox => mapboxToken.isNotEmpty;
 }

@@ -14,6 +14,8 @@
 import 'package:dio/dio.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../shared/constants/map_constants.dart';
+
 /// Resultado de búsqueda en Nominatim.
 class GeoLugar {
   final String displayName;
@@ -58,11 +60,10 @@ class GeoRuta {
 class LogisticaGeoUtils {
   LogisticaGeoUtils._();
 
-  // Token Mapbox via --dart-define=MAPBOX_TOKEN=pk.... Si no está
-  // seteado, los métodos de búsqueda/reverso caen automáticamente a
-  // Nominatim (gratis pero menos preciso para silos rurales AR).
-  static const String _mapboxToken = String.fromEnvironment('MAPBOX_TOKEN');
-  static bool get _tieneMapbox => _mapboxToken.isNotEmpty;
+  // Token Mapbox centralizado en MapConstants.mapboxToken para que
+  // rotar sea 1 sola edición (compartido con MiniMapaThumbnail).
+  static String get _mapboxToken => MapConstants.mapboxToken;
+  static bool get _tieneMapbox => MapConstants.tieneMapbox;
 
   // Cliente Dio dedicado para Nominatim (fallback gratis).
   static final Dio _dioNominatim = Dio(
