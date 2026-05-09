@@ -661,13 +661,17 @@ async function _runOnce(fs) {
               .where('creado_en', '>=', desde)
               .get();
             // Tipos excluidos del resumen a Seg e Higiene — son
-            // mecánicos, no de conducta. ADBLUE bajo / sin AdBlue es
-            // tema del taller, no del jefe de seguridad. Si Volvo lo
-            // marcó como HIGH (por el riesgo de derate), igual entra
-            // al resumen de mantenimiento más abajo, no a este.
+            // mecánicos, no de conducta. AdBlue es tema del taller,
+            // no del jefe de seguridad. TELL_TALE (luz de tablero)
+            // también es mecánico — el chofer no puede investigar
+            // qué luz se encendió, lo evalúa el taller.
+            // Si Volvo los marcó como HIGH (por riesgo de derate o
+            // alguna condición crítica), igual entran al resumen de
+            // mantenimiento más abajo, no a este.
             const TIPOS_EXCLUIDOS_SEG_HIGIENE = new Set([
               'ADBLUELEVEL_LOW',
               'WITHOUT_ADBLUE',
+              'TELL_TALE',
             ]);
             const eventos = alertasSnap.docs
               .map((d) => {
