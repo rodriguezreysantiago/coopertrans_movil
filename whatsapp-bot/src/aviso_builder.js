@@ -61,16 +61,24 @@ function build({ item, destinatarioNombre }) {
 }
 
 /**
- * Elige una variante random del array `arr`. Usado por construirCuerpo
- * para que el mismo nivel de urgencia no genere siempre el mismo texto
- * — eso reduce la huella anti-baneo de WhatsApp (mensajes idénticos
- * enviados a múltiples contactos en poco tiempo es señal de spam).
+ * Elige una variante del array `arr` con round-robin determinístico.
  *
- * Math.random() es suficiente — no necesitamos aleatoriedad
- * criptográfica, solo distribución razonable.
+ * Antes usaba `Math.random()`: en ráfagas (varios choferes recibiendo
+ * el mismo tipo de aviso en pocos segundos) había chance ~1/N de que
+ * dos mensajes tocaran la misma variante — patrón de spam para WA.
+ * Round-robin garantiza que las primeras N llamadas consecutivas
+ * tocan las N variantes distintas, sin repetición predecible.
+ *
+ * Counter de módulo: cada llamada incrementa, todos los buckets
+ * comparten el contador. Como los arrays tienen tamaños distintos,
+ * las posiciones (counter % arr.length) rotan a velocidades distintas
+ * y se distribuyen bien.
  */
+let _rrCounter = 0;
 function _pick(arr) {
-  return arr[Math.floor(Math.random() * arr.length)];
+  const idx = _rrCounter % arr.length;
+  _rrCounter = (_rrCounter + 1) | 0; // wrap a int32 para no inflar al infinito
+  return arr[idx];
 }
 
 function construirCuerpo({ item, saludo, esVehiculo, referencia, fechaFmt }) {

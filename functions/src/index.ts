@@ -2388,7 +2388,7 @@ export const onAlertaVolvoCreated = onDocumentCreated(
         "Te pedimos ir más tranquilo. Cualquier comentario lo charlamos.\n\n" +
         BANNER_TESTING + "_Coopertrans Móvil — Mensaje automático._",
     ];
-    const mensaje = variantes[Math.floor(Math.random() * variantes.length)];
+    const mensaje = variantes[_rrPick(variantes.length)];
 
     try {
       const colaRef = await db.collection("COLA_WHATSAPP").add({
@@ -2438,6 +2438,30 @@ export const onAlertaVolvoCreated = onDocumentCreated(
     }
   }
 );
+
+/**
+ * Round-robin determinístico para elegir variantes anti-baneo.
+ *
+ * Antes usábamos Math.random() — en ráfagas (vigilador detecta varios
+ * choferes excediendo en el mismo poll, alertas Volvo en paralelo)
+ * había chance ~1/N de que dos mensajes consecutivos tocaran la
+ * misma variante, patrón de spam para WhatsApp. Round-robin garantiza
+ * que las primeras N llamadas tocan las N variantes distintas, sin
+ * repetición predecible.
+ *
+ * Counter persiste en memoria del Cloud Function — Cloud Run mantiene
+ * la instancia caliente entre invocaciones cercanas, así que en
+ * ráfagas el counter avanza aunque sean llamadas separadas. Si la
+ * instancia se enfría y arranca otra fría, vuelve a 0 — eso es OK,
+ * lo importante es la diversidad dentro de la ráfaga.
+ */
+let _rrCounter = 0;
+function _rrPick(len: number): number {
+  if (len <= 0) return 0;
+  const idx = _rrCounter % len;
+  _rrCounter = (_rrCounter + 1) | 0; // wrap a int32 para no inflar
+  return idx;
+}
 
 /**
  * Devuelve el segundo token capitalizado de un nombre tipo
@@ -3848,7 +3872,7 @@ async function _encolarAvisoChoferNoIdentificado(
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
   ];
-  const mensaje = variantes[Math.floor(Math.random() * variantes.length)];
+  const mensaje = variantes[_rrPick(variantes.length)];
 
   await db.collection("COLA_WHATSAPP").add({
     telefono: tel,
@@ -4346,7 +4370,7 @@ async function _encolarAvisoPausaContinua(
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
   ];
-  const mensaje = variantes[Math.floor(Math.random() * variantes.length)];
+  const mensaje = variantes[_rrPick(variantes.length)];
 
   await db.collection("COLA_WHATSAPP").add({
     telefono: tel,
@@ -4428,7 +4452,7 @@ async function _encolarAvisoLimiteDiario(
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
   ];
-  const mensaje = variantes[Math.floor(Math.random() * variantes.length)];
+  const mensaje = variantes[_rrPick(variantes.length)];
 
   await db.collection("COLA_WHATSAPP").add({
     telefono: tel,

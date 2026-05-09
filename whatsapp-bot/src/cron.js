@@ -133,7 +133,12 @@ async function _obtenerDestinatarioConsolidado(db, dni, empleadosByDni) {
     const snap = await db.collection('EMPLEADOS').doc(k).get();
     if (!snap.exists) return null;
     return { id: snap.id, data: snap.data() || {} };
-  } catch {
+  } catch (e) {
+    // Antes era catch silencioso → si Firestore fallaba (timeout, rule
+    // rota), el cron skipeaba el envío sin que nadie se entere. Con la
+    // garantía nueva de "siempre llega resumen" eso se manifiesta
+    // rápido — pero igual queremos el log para diagnóstico.
+    log.warn(`Lookup empleado ${k} fallo: ${e.message}`);
     return null;
   }
 }
@@ -311,6 +316,13 @@ async function _runOnce(fs) {
 
     // 2) Vencimientos de unidades (asignadas al chofer)
     const vehiculosSnap = await db.collection('VEHICULOS').get();
+    // Index por id de patente para evitar O(N) lookups en el loop de
+    // envío (antes se hacía vehiculosSnap.docs.find(d => d.id === ...)
+    // por cada item agrupado — N×M iteraciones).
+    const vehiculosByPatente = new Map();
+    for (const d of vehiculosSnap.docs) {
+      vehiculosByPatente.set(d.id, d);
+    }
     for (const vDoc of vehiculosSnap.docs) {
       const v = vDoc.data();
       // Soft-delete: vehiculos dados de baja NO reciben avisos.
@@ -420,7 +432,8 @@ async function _runOnce(fs) {
         const item = items[0];
         if (item.tipo === 'service') {
           // Service usa builder dedicado.
-          const v = vehiculosSnap.docs.find((d) => d.id === item.referencia.split(' ').pop());
+          const patenteItem = item.referencia.split(' ').pop();
+          const v = vehiculosByPatente.get(patenteItem);
           mensaje = avisoService.build({
             patente: item.referencia,
             marca: v ? v.data().MARCA : '',
