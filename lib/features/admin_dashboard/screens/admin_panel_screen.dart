@@ -311,6 +311,10 @@ class _SaludoState extends State<_Saludo> {
         children: [
           Text(
             saludo,
+            // En iPhone SE/12 mini con apodos largos se salía del width.
+            // Ellipsiza a 1 línea para mantener prolijidad.
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 22,
@@ -718,6 +722,8 @@ class _AdminTile extends StatelessWidget {
               children: [
                 Text(
                   titulo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
@@ -728,6 +734,12 @@ class _AdminTile extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   subtitulo,
+                  // 2 líneas máximo: subtítulos como "Eventos en vivo de
+                  // la flota Volvo (IDLING, OVERSPEED, ...)" wrappeaban
+                  // a 3 líneas en iPhone SE haciendo cards de altura
+                  // dispar — feo al ojo.
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                       color: Colors.white60, fontSize: 11),
                 ),

@@ -437,32 +437,155 @@ class _AdminShellState extends State<AdminShell> {
     );
   }
 
+  /// Bottom bar mobile — máximo 4 destinos principales + ítem "Más" que
+  /// abre un BottomSheet con el resto de las secciones.
+  ///
+  /// Razón: con 11-12 secciones visibles el `NavigationBar` Material 3
+  /// daba ~33 dp por item en iPhone (393 dp width) y los labels se
+  /// cortaban en "Inici", "Person", "Reporte"... La mejor práctica es
+  /// limitar el bar a 5 destinos visuales (≤ 78 dp por item).
+  ///
+  /// Los 4 fijos son los más usados día a día (Inicio, Personal, Flota,
+  /// Revisiones). El resto vive detrás de "Más" — a un tap de distancia,
+  /// pero sin saturar la barra.
+  static const _seccionesPrincipalesBottomBar = {
+    'Inicio',
+    'Personal',
+    'Flota',
+    'Revisiones',
+  };
+
   Widget _buildBottomBar() {
+    final visibles = _seccionesVisibles;
+    // Filtramos las "principales" en el orden en que aparecen en
+    // _sections (no por orden alfabético) — para mantener coherencia
+    // visual con el rail desktop.
+    final principales = <MapEntry<int, _ShellSection>>[];
+    final otras = <MapEntry<int, _ShellSection>>[];
+    for (var i = 0; i < visibles.length; i++) {
+      final s = visibles[i];
+      if (_seccionesPrincipalesBottomBar.contains(s.label)) {
+        principales.add(MapEntry(i, s));
+      } else {
+        otras.add(MapEntry(i, s));
+      }
+    }
+
+    // Si la sección actual NO está en las principales, marcamos "Más"
+    // como activo para que el usuario sepa dónde está parado.
+    final indiceActualEntrePrincipales = principales.indexWhere(
+      (e) => e.key == _currentIndex,
+    );
+    final streamsOcultos = otras
+        .map((e) => e.value.badgeStream)
+        .whereType<Stream<QuerySnapshot>>()
+        .toList();
+
+    final selectedBarIndex = indiceActualEntrePrincipales >= 0
+        ? indiceActualEntrePrincipales
+        : principales.length; // último = "Más"
+
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         border: Border(top: BorderSide(color: Colors.white.withAlpha(15))),
       ),
       child: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (i) => setState(() => _currentIndex = i),
+        selectedIndex: selectedBarIndex,
+        onDestinationSelected: (i) {
+          if (i < principales.length) {
+            setState(() => _currentIndex = principales[i].key);
+          } else {
+            _abrirSheetMas(otras);
+          }
+        },
         backgroundColor: Colors.transparent,
         height: 70,
         labelBehavior:
             NavigationDestinationLabelBehavior.onlyShowSelected,
-        destinations: _seccionesVisibles
-            .asMap()
-            .entries
-            .map(
-              (e) => NavigationDestination(
-                icon: _buildIconWithBadge(e.value, e.key, esActiva: false),
-                selectedIcon:
-                    _buildIconWithBadge(e.value, e.key, esActiva: true),
-                label: e.value.label,
-              ),
-            )
-            .toList(),
+        destinations: [
+          ...principales.map(
+            (e) => NavigationDestination(
+              icon: _buildIconWithBadge(e.value, e.key, esActiva: false),
+              selectedIcon:
+                  _buildIconWithBadge(e.value, e.key, esActiva: true),
+              label: e.value.label,
+            ),
+          ),
+          NavigationDestination(
+            icon: _IconoMas(streams: streamsOcultos),
+            selectedIcon: const Icon(Icons.more_horiz),
+            label: 'Más',
+          ),
+        ],
       ),
+    );
+  }
+
+  /// Bottom sheet con las secciones que no entran en la barra fija.
+  /// Cada item muestra su badge si la sección lo tiene configurado.
+  Future<void> _abrirSheetMas(
+    List<MapEntry<int, _ShellSection>> otras,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Handle visual del sheet (gesto de cierre intuitivo).
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  child: Text(
+                    'MÁS SECCIONES',
+                    style: TextStyle(
+                      color: AppColors.accentGreen,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...otras.map(
+                  (e) => ListTile(
+                    leading: _buildIconWithBadge(
+                      e.value, e.key, esActiva: false,
+                    ),
+                    title: Text(
+                      e.value.label,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    onTap: () {
+                      Navigator.of(sheetCtx).pop();
+                      setState(() => _currentIndex = e.key);
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -514,6 +637,77 @@ class _AdminShellState extends State<AdminShell> {
                     color: Colors.white,
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Icono "Más" del bottom bar mobile.
+///
+/// Recibe los streams de badge de las secciones ocultas y muestra un
+/// puntito rojo cuando alguno tiene docs pendientes — así el admin no
+/// pierde la señal visual de "hay algo que atender allá adentro".
+///
+/// Sin StreamBuilder por sección sería costoso; combinamos múltiples
+/// streams con un solo StreamGroup para hacer un único rebuild cuando
+/// cambia cualquiera de los pendientes.
+class _IconoMas extends StatelessWidget {
+  final List<Stream<QuerySnapshot>> streams;
+  const _IconoMas({required this.streams});
+
+  /// Combina los streams en uno solo que emite `true` mientras alguno
+  /// tenga docs > 0. Implementación simple: por cada stream, mantiene
+  /// su último count en un mapa y emite el OR del conjunto.
+  Stream<bool> _hayPendientes() async* {
+    if (streams.isEmpty) {
+      yield false;
+      return;
+    }
+    final counts = List<int>.filled(streams.length, 0);
+    final controller = StreamController<bool>();
+    for (var i = 0; i < streams.length; i++) {
+      streams[i].listen(
+        (snap) {
+          counts[i] = snap.docs.length;
+          controller.add(counts.any((c) => c > 0));
+        },
+        onError: (_) {},
+      );
+    }
+    yield* controller.stream;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const icon = Icon(Icons.more_horiz_outlined);
+    if (streams.isEmpty) return icon;
+    return StreamBuilder<bool>(
+      stream: _hayPendientes(),
+      builder: (ctx, snap) {
+        final mostrarPunto = snap.data == true;
+        if (!mostrarPunto) return icon;
+        return Stack(
+          clipBehavior: Clip.none,
+          children: [
+            icon,
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  color: AppColors.accentRed,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.surface,
+                    width: 1.5,
                   ),
                 ),
               ),
