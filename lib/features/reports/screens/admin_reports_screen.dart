@@ -9,6 +9,7 @@ import '../../vehicles/services/volvo_api_service.dart';
 import '../services/report_checklist.dart';
 import '../services/report_consumo.dart';
 import '../services/report_flota.dart';
+import '../services/report_gomeria.dart';
 
 /// Centro de Reportes (admin).
 ///
@@ -33,6 +34,15 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       await ReportChecklistService.mostrarOpcionesYGenerar(context);
+    } catch (e) {
+      if (mounted) _mostrarSnack(messenger, 'Error: $e', esError: true);
+    }
+  }
+
+  Future<void> _ejecutarReporteGomeria() async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ReportGomeriaService.mostrarOpcionesYGenerar(context);
     } catch (e) {
       if (mounted) _mostrarSnack(messenger, 'Error: $e', esError: true);
     }
@@ -166,6 +176,16 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 icono: Icons.local_gas_station_rounded,
                 color: AppColors.accentOrange,
                 onTap: _generando ? null : _ejecutarReporteConsumo,
+              ),
+              const SizedBox(height: 12),
+              _ReportCard(
+                titulo: 'Gomería',
+                descripcion:
+                    'Estado actual de la flota, histórico de recapados y '
+                    'costo por km por modelo (cohort 2 cuando haya datos).',
+                icono: Icons.tire_repair_rounded,
+                color: AppColors.accentTeal,
+                onTap: _generando ? null : _ejecutarReporteGomeria,
               ),
             ],
           ),
