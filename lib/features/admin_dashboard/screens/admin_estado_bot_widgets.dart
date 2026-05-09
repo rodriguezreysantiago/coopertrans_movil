@@ -122,6 +122,8 @@ class _BannerEstado extends StatelessWidget {
                   children: [
                     Text(
                       tituloPrincipal,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: color,
                         fontSize: 18,
@@ -132,6 +134,8 @@ class _BannerEstado extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       'Cliente WhatsApp: ${_etiquetarEstado(estadoCliente)}',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 13,
@@ -684,6 +688,10 @@ class _FilaError extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             msg,
+            // Stack-traces y mensajes crudos pueden ser de 200+ chars.
+            // 4 líneas + ellipsis para no inundar la card.
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 12,
@@ -819,6 +827,8 @@ class _Fila extends StatelessWidget {
           Expanded(
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
           ),
@@ -929,6 +939,8 @@ class _ToggleKillSwitch extends StatelessWidget {
                   children: [
                     Text(
                       pausado ? 'Bot pausado por admin' : 'Bot operando normal',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: pausado ? AppColors.warning : Colors.white,
                         fontWeight: FontWeight.bold,
@@ -942,6 +954,8 @@ class _ToggleKillSwitch extends StatelessWidget {
                               ? 'No envía mensajes hasta reanudar.'
                               : 'Motivo: $motivo')
                           : 'Tocá el toggle para pausar el envío.',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white60,
                         fontSize: 11,

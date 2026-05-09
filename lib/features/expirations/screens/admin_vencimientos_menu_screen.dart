@@ -149,6 +149,8 @@ class _MenuTile extends StatelessWidget {
                 children: [
                   Text(
                     titulo,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
@@ -158,6 +160,8 @@ class _MenuTile extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     subtitulo,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white54,
                       fontSize: 12,

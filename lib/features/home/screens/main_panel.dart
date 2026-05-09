@@ -325,6 +325,8 @@ class _MenuButton extends StatelessWidget {
               Text(
                 titulo,
                 textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,

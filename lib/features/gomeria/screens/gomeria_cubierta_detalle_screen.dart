@@ -438,6 +438,8 @@ class _ControlTile extends StatelessWidget {
               Expanded(
                 child: Text(
                   AppFormatters.formatearFechaHoraSinSegundos(c.fecha),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 13,
@@ -445,10 +447,15 @@ class _ControlTile extends StatelessWidget {
                   ),
                 ),
               ),
-              Text(
-                '${c.unidadId} · $etiquetaPos',
-                style:
-                    const TextStyle(color: Colors.white54, fontSize: 11),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  '${c.unidadId} · $etiquetaPos',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style:
+                      const TextStyle(color: Colors.white54, fontSize: 11),
+                ),
               ),
             ],
           ),

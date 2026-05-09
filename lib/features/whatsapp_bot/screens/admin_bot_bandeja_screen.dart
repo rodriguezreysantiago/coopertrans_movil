@@ -321,13 +321,18 @@ class _ItemAmbiguo extends StatelessWidget {
                 const Icon(Icons.event_note,
                     size: 12, color: AppColors.accentGreen),
                 const SizedBox(width: 4),
-                Text(
-                  'Fecha detectada: $fechaDet',
-                  style: const TextStyle(
-                    color: AppColors.accentGreen,
-                    fontSize: 11,
+                Flexible(
+                  child: Text(
+                    'Fecha detectada: $fechaDet',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.accentGreen,
+                      fontSize: 11,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 8),
               ],
               const Spacer(),
               _BadgeRazon(razon: razon, candidatos: candidatos),

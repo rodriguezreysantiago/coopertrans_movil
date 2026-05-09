@@ -220,44 +220,53 @@ class _Toolbar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              _ContadorMini(
-                  label: 'TOTAL',
-                  valor: '$total',
-                  color: AppColors.accentBlue),
-              const SizedBox(width: 12),
-              _ContadorMini(
-                  label: 'EN MARCHA',
-                  valor: '$conIgnicionOn',
-                  color: AppColors.accentGreen),
-              const SizedBox(width: 12),
-              _ContadorMini(
-                  label: 'APAGADOS',
-                  valor: '$conIgnicionOff',
-                  color: Colors.white54),
-              const SizedBox(width: 12),
-              _ContadorMini(
-                  label: '> 1H',
-                  valor: '$stale',
-                  color: AppColors.accentRed),
-              const SizedBox(width: 12),
-              _ContadorMini(
-                  label: 'DRIFT',
-                  valor: '$drifts',
-                  color: drifts > 0
-                      ? AppColors.accentOrange
-                      : Colors.white38),
-              const Spacer(),
-              Text(
-                'Mostrando $visibles',
-                style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                ),
+          // 5 contadores + texto "Mostrando X" en una sola Row sumaba
+          // ~400 dp en mobile (iPhone SE = 375 dp). Se rompía el toolbar.
+          // Ahora: contadores con scroll horizontal + texto fijo abajo.
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _ContadorMini(
+                    label: 'TOTAL',
+                    valor: '$total',
+                    color: AppColors.accentBlue),
+                const SizedBox(width: 12),
+                _ContadorMini(
+                    label: 'EN MARCHA',
+                    valor: '$conIgnicionOn',
+                    color: AppColors.accentGreen),
+                const SizedBox(width: 12),
+                _ContadorMini(
+                    label: 'APAGADOS',
+                    valor: '$conIgnicionOff',
+                    color: Colors.white54),
+                const SizedBox(width: 12),
+                _ContadorMini(
+                    label: '> 1H',
+                    valor: '$stale',
+                    color: AppColors.accentRed),
+                const SizedBox(width: 12),
+                _ContadorMini(
+                    label: 'DRIFT',
+                    valor: '$drifts',
+                    color: drifts > 0
+                        ? AppColors.accentOrange
+                        : Colors.white38),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              'Mostrando $visibles',
+              style: const TextStyle(
+                color: Colors.white60,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
               ),
-            ],
+            ),
           ),
           const SizedBox(height: 6),
           SizedBox(

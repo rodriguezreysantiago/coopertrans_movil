@@ -100,6 +100,8 @@ class _CardUbicacion extends StatelessWidget {
               children: [
                 Text(
                   ubicacion.nombre,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color:
                         ubicacion.activa ? Colors.white : Colors.white38,
@@ -134,6 +136,8 @@ class _CardUbicacion extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   ubicacion.etiquetaCompleta,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white60,
                     fontSize: 12,
@@ -146,13 +150,17 @@ class _CardUbicacion extends StatelessWidget {
                       const Icon(Icons.my_location,
                           color: AppColors.accentTeal, size: 12),
                       const SizedBox(width: 4),
-                      Text(
-                        '${ubicacion.lat!.toStringAsFixed(4)}, '
-                        '${ubicacion.lng!.toStringAsFixed(4)}',
-                        style: const TextStyle(
-                          color: AppColors.accentTeal,
-                          fontSize: 11,
-                          fontFamily: 'monospace',
+                      Flexible(
+                        child: Text(
+                          '${ubicacion.lat!.toStringAsFixed(4)}, '
+                          '${ubicacion.lng!.toStringAsFixed(4)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.accentTeal,
+                            fontSize: 11,
+                            fontFamily: 'monospace',
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),

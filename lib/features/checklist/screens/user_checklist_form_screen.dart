@@ -395,8 +395,12 @@ class _ItemPregunta extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          // Wrap en lugar de Row: si en pantalla angosta los 3 chips
+          // no entran, se reacomodan en lugar de overflowing.
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceEvenly,
             children: ['BUE', 'REG', 'MAL'].map((estado) {
               final seleccionado = respuesta == estado;
               return ChoiceChip(

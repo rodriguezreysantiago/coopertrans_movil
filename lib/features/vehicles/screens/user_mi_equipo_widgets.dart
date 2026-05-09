@@ -224,11 +224,15 @@ class _CardUnidad extends StatelessWidget {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              Text(
-                                (v['MARCA'] ?? 'S/D').toString(),
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
+                              Flexible(
+                                child: Text(
+                                  (v['MARCA'] ?? 'S/D').toString(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -243,6 +247,7 @@ class _CardUnidad extends StatelessWidget {
                               Flexible(
                                 child: Text(
                                   (v['MODELO'] ?? 'S/D').toString(),
+                                  maxLines: 1,
                                   style: const TextStyle(
                                     color: Colors.white70,
                                     fontSize: 12,
@@ -377,17 +382,23 @@ class _DatoTelemetria extends StatelessWidget {
       children: [
         Icon(icono, color: color, size: 22),
         const SizedBox(height: 6),
-        Text(
-          valor,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            valor,
+            maxLines: 1,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
           ),
         ),
         const SizedBox(height: 2),
         Text(
           etiqueta,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Colors.white38,
             fontSize: 9,

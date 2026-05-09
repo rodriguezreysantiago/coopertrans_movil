@@ -394,16 +394,19 @@ class _EventoPtoCard extends StatelessWidget {
               const Icon(Icons.local_shipping,
                   color: AppColors.accentGreen, size: 18),
               const SizedBox(width: 8),
-              Text(
-                patente,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  letterSpacing: 0.5,
+              Expanded(
+                child: Text(
+                  patente,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
-              const Spacer(),
               if (creado != null)
                 Text(
                   AppFormatters.formatearFechaHoraSinSegundos(creado),
@@ -418,10 +421,14 @@ class _EventoPtoCard extends StatelessWidget {
               const Icon(Icons.person_outline,
                   color: Colors.white60, size: 14),
               const SizedBox(width: 4),
-              Text(
-                chofer,
-                style: const TextStyle(
-                    color: Colors.white70, fontSize: 12),
+              Expanded(
+                child: Text(
+                  chofer,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: Colors.white70, fontSize: 12),
+                ),
               ),
             ],
           ),
@@ -440,13 +447,17 @@ class _EventoPtoCard extends StatelessWidget {
                   const Icon(Icons.location_on_outlined,
                       color: AppColors.accentBlue, size: 14),
                   const SizedBox(width: 4),
-                  Text(
-                    'Ver en Google Maps · '
-                    '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}',
-                    style: const TextStyle(
-                      color: AppColors.accentBlue,
-                      fontSize: 11,
-                      decoration: TextDecoration.underline,
+                  Flexible(
+                    child: Text(
+                      'Ver en Google Maps · '
+                      '${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.accentBlue,
+                        fontSize: 11,
+                        decoration: TextDecoration.underline,
+                      ),
                     ),
                   ),
                 ],
@@ -467,14 +478,20 @@ class _EventoPtoCard extends StatelessWidget {
             width: 70,
             child: Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style:
                   const TextStyle(color: Colors.white54, fontSize: 11),
             ),
           ),
-          Text(
-            value,
-            style:
-                const TextStyle(color: Colors.white70, fontSize: 11),
+          Expanded(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style:
+                  const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
           ),
         ],
       ),

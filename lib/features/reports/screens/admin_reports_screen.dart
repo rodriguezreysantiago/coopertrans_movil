@@ -241,6 +241,8 @@ class _ReportCard extends StatelessWidget {
               children: [
                 Text(
                   titulo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -250,6 +252,8 @@ class _ReportCard extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   descripcion,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white54,
                     fontSize: 12,

@@ -560,16 +560,25 @@ class _AlertaCard extends StatelessWidget {
                 const Icon(Icons.local_shipping_outlined,
                     size: 16, color: Colors.white70),
                 const SizedBox(width: 4),
-                Text(patente,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w600, color: Colors.white)),
+                Flexible(
+                  child: Text(patente,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, color: Colors.white)),
+                ),
                 const SizedBox(width: 16),
                 const Icon(Icons.access_time,
                     size: 14, color: Colors.white54),
                 const SizedBox(width: 4),
-                Text(
-                  _formatTimestamp(creadoEn),
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                Flexible(
+                  child: Text(
+                    _formatTimestamp(creadoEn),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
                 ),
               ],
             ),

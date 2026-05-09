@@ -290,7 +290,10 @@ class _AdminVencimientosCalendarioScreenState
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '${items.length}',
+                      // Cap visual: con celdas estrechas (375/7 ≈ 53 dp)
+                      // un día con >9 vencimientos puede tapar el día
+                      // siguiente. "9+" es señal suficiente.
+                      items.length > 9 ? '9+' : '${items.length}',
                       style: const TextStyle(
                         color: Colors.black,
                         fontSize: 9,

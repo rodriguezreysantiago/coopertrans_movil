@@ -198,7 +198,11 @@ class _LoginCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 420,
+      // En iPhone SE (375 dp) un width fijo de 420 dp + padding 35 daba
+      // overflow horizontal garantizado. Cambiamos a maxWidth: el card
+      // sigue topando en 420 dp en desktop/tablet, pero en mobile se
+      // adapta al ancho disponible.
+      constraints: const BoxConstraints(maxWidth: 420),
       padding: const EdgeInsets.all(35),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,

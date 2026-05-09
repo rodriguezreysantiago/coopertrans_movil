@@ -387,33 +387,42 @@ class _HistoricoCiclos extends StatelessWidget {
       );
     }
 
+    // Tabla con 7 columnas — en mobile (<400 dp) las 4 Expanded del medio
+    // (Tot/OK/Err/Skip) quedan ~50 dp y los números de 3 dígitos chocan.
+    // Forzamos un mínimo de ancho con scroll horizontal: en desktop entra
+    // sin scroll (Expanded distribuye), en mobile aparece scrollbar.
     return AppCard(
       margin: EdgeInsets.zero,
       padding: EdgeInsets.zero,
-      child: Column(
-        children: [
-          // Header de la "tabla"
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            child: Row(
-              children: [
-                SizedBox(width: 36, child: _Hdr('#')),
-                SizedBox(width: 60, child: _Hdr('Hora')),
-                Expanded(child: _Hdr('Tot')),
-                Expanded(child: _Hdr('OK')),
-                Expanded(child: _Hdr('Err')),
-                Expanded(child: _Hdr('Skip')),
-                SizedBox(width: 50, child: _Hdr('Dur')),
-              ],
-            ),
-          ),
-          const Divider(color: Colors.white10, height: 1),
-          for (int i = 0; i < ciclos.length; i++) ...[
-            _CicloTile(c: ciclos[i]),
-            if (i < ciclos.length - 1)
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 480),
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                child: Row(
+                  children: [
+                    SizedBox(width: 36, child: _Hdr('#')),
+                    SizedBox(width: 60, child: _Hdr('Hora')),
+                    Expanded(child: _Hdr('Tot')),
+                    Expanded(child: _Hdr('OK')),
+                    Expanded(child: _Hdr('Err')),
+                    Expanded(child: _Hdr('Skip')),
+                    SizedBox(width: 50, child: _Hdr('Dur')),
+                  ],
+                ),
+              ),
               const Divider(color: Colors.white10, height: 1),
-          ],
-        ],
+              for (int i = 0; i < ciclos.length; i++) ...[
+                _CicloTile(c: ciclos[i]),
+                if (i < ciclos.length - 1)
+                  const Divider(color: Colors.white10, height: 1),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -551,17 +560,26 @@ class _LiveCard extends StatelessWidget {
           children: [
             Icon(icon, color: color, size: 22),
             const SizedBox(height: 8),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: color,
+            // FittedBox: si "1.234" no entra (3 cards en mobile, ~105 dp
+            // por card) escala automáticamente. fontSize 24 es ambicioso.
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
               ),
             ),
             const SizedBox(height: 2),
             Text(
               label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: const TextStyle(
                 color: Colors.white60,
                 fontSize: 11,
@@ -653,17 +671,24 @@ class _StatTile extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: accent,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: accent,
+              ),
             ),
           ),
           const SizedBox(height: 6),
           Text(
             label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 11,
               color: Colors.white54,

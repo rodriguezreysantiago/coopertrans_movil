@@ -386,9 +386,10 @@ class _CubiertaTile extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   c.modeloEtiqueta,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style:
                       const TextStyle(color: Colors.white70, fontSize: 12),
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Wrap(

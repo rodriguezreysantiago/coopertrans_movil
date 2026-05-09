@@ -365,8 +365,13 @@ class _Header extends StatelessWidget {
         const SizedBox(height: 18),
         Text(
           (data['NOMBRE'] ?? 'Usuario').toString(),
+          // Nombres largos ("GONZALEZ RODRIGUEZ JUAN CARLOS") rompían
+          // el header en mobile. 2 líneas + center + ellipsis.
+          maxLines: 2,
+          textAlign: TextAlign.center,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            fontSize: 26,
+            fontSize: 24,
             fontWeight: FontWeight.bold,
             color: Colors.white,
           ),
@@ -553,9 +558,13 @@ class _InfoTile extends StatelessWidget {
       ),
       subtitle: Text(
         valor,
+        // RAZÓN SOCIAL puede ser larga ("VECCHI ARIEL Y …"). 2 líneas
+        // + ellipsis para que el ListTile no rompa en mobile.
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
         style: const TextStyle(
           color: Colors.white,
-          fontSize: 16,
+          fontSize: 14,
           fontWeight: FontWeight.w600,
         ),
       ),

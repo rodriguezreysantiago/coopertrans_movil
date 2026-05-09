@@ -356,22 +356,23 @@ class _Punto extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           empresa,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Colors.white,
             fontSize: 13,
             fontWeight: FontWeight.bold,
           ),
-          overflow: TextOverflow.ellipsis,
         ),
         const SizedBox(height: 2),
         Text(
           ubicacion,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Colors.white60,
             fontSize: 11,
           ),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 2,
         ),
       ],
     );
@@ -451,6 +452,8 @@ class _MontoBloque extends StatelessWidget {
       children: [
         Text(
           etiqueta,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: color,
             fontSize: 9,
@@ -459,16 +462,25 @@ class _MontoBloque extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 2),
-        Text(
-          '\$ ${AppFormatters.formatearMonto(monto)}',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
+        // FittedBox: en mobile 3 columnas Expanded daban ~110 dp por
+        // bloque. "$ 1.234.567,89" en fontSize 13 bold no entraba.
+        // Con scaleDown se achica a la fuerza máxima que entre.
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            '\$ ${AppFormatters.formatearMonto(monto)}',
+            maxLines: 1,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ),
         Text(
           sufijo,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Colors.white54,
             fontSize: 10,

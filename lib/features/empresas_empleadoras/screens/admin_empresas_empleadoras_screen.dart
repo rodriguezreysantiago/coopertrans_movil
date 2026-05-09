@@ -91,6 +91,8 @@ class _CardEmpresa extends StatelessWidget {
                       children: [
                         Text(
                           info.nombre.toUpperCase(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -101,6 +103,8 @@ class _CardEmpresa extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           'CUIT ${info.cuit}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                               color: Colors.white54, fontSize: 11),
                         ),
@@ -189,6 +193,8 @@ class _FilaDocEmpresa extends StatelessWidget {
                 children: [
                   Text(
                     etiqueta,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style:
                         const TextStyle(color: Colors.white54, fontSize: 11),
                   ),
@@ -197,6 +203,8 @@ class _FilaDocEmpresa extends StatelessWidget {
                     tieneFecha
                         ? AppFormatters.formatearFecha(fecha)
                         : 'Sin fecha',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,

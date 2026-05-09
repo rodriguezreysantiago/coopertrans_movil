@@ -187,7 +187,10 @@ class _ResumenFleet extends StatelessWidget {
                 crossAxisCount: 2,
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 8,
-                childAspectRatio: 4.2,
+                // 4.2 → 3.5: tile menos plano. En 4.2 el alto era ~39 dp,
+                // justo para texto fontSize 11 + número fontSize 16. iOS
+                // line-height de Cupertino lo zafaba.
+                childAspectRatio: 3.5,
                 children: subScoresPrincipales
                     .map((k) => _MiniSubScore(label: VolvoSubScoreLabels.label(k), score: promedios[k]))
                     .toList(),
@@ -380,6 +383,8 @@ class _FilaRanking extends StatelessWidget {
                 children: [
                   Text(
                     item.patente,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -391,6 +396,8 @@ class _FilaRanking extends StatelessWidget {
                     '${item.diasConData} día${item.diasConData == 1 ? '' : 's'} con data'
                     '${item.kmTotalesEnRango != null ? ' · ${NumberFormat.decimalPattern('es_AR').format(item.kmTotalesEnRango!.round())} km' : ''}'
                     '${item.consumoPromedioLPor100Km != null ? ' · ${item.consumoPromedioLPor100Km!.toStringAsFixed(1)} L/100km' : ''}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(color: Colors.white54, fontSize: 11),
                   ),
                 ],

@@ -135,6 +135,8 @@ class _CardEmpresa extends StatelessWidget {
                   children: [
                     Text(
                       empresa.etiquetaPrincipal,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: empresa.activa ? Colors.white : Colors.white38,
                         fontSize: 15,
@@ -148,6 +150,8 @@ class _CardEmpresa extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         empresa.etiquetaSecundaria!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: empresa.activa
                               ? Colors.white54

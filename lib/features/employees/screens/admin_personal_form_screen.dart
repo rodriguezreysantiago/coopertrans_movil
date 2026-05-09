@@ -497,25 +497,31 @@ class _RoleSelector extends StatelessWidget {
             children: [
               Icon(_icono(r), size: 18, color: AppColors.accentGreen),
               const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    AppRoles.etiquetas[r] ?? r,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      AppRoles.etiquetas[r] ?? r,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                      ),
                     ),
-                  ),
-                  Text(
-                    _descripcion(r),
-                    style: const TextStyle(
-                      color: Colors.white54,
-                      fontSize: 10,
+                    Text(
+                      _descripcion(r),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 10,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

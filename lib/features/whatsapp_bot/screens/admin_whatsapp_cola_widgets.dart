@@ -123,16 +123,22 @@ class _MiniContador extends StatelessWidget {
             ),
             child: Column(
               children: [
-                Text(
-                  '$count',
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '$count',
+                    maxLines: 1,
+                    style: TextStyle(
+                      color: color,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
                   ),
                 ),
                 Text(
                   label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: activo ? Colors.white : Colors.white60,
                     fontSize: 10,

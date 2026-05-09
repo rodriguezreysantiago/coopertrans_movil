@@ -337,6 +337,8 @@ class _Toolbar extends StatelessWidget {
                   '$visibles de $conGps eventos georref. '
                   '(${sinGps > 0 ? "$sinGps sin GPS · " : ""}rango $rangoDias d)'
                   '${rutaActiva ? " · ruta activa" : ""}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                       color: Colors.white70, fontSize: 11),
                 ),

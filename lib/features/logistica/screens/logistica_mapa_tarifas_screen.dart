@@ -447,7 +447,8 @@ class _LeyendaInferior extends StatelessWidget {
                 return GestureDetector(
                   onTap: () => onTapTarifa(t),
                   child: Container(
-                    width: 200,
+                    // 200 → 180: dos tiles + spacing entran en mobile.
+                    width: 180,
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
                       color: Colors.white10,
@@ -520,6 +521,8 @@ class _DetalleTarifaSheet extends StatelessWidget {
               Expanded(
                 child: Text(
                   '${t.empresaOrigenNombre} → ${t.empresaDestinoNombre}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -532,6 +535,8 @@ class _DetalleTarifaSheet extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             '${tarifaConRuta.nombreOrigen}  →  ${tarifaConRuta.nombreDestino}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: Colors.white60, fontSize: 12),
           ),
           const Divider(color: Colors.white12, height: 24),

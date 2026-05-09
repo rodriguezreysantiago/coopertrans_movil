@@ -335,28 +335,57 @@ class _GridEje extends StatelessWidget {
     // pares IZQ_EXT|IZQ_INT (que físicamente están pegadas). Para el
     // eje de dirección (2 posiciones) no hay duales: simétrico nomás.
     final esDual = posiciones.length == 4;
-    final widgets = <Widget>[];
-    for (var i = 0; i < posiciones.length; i++) {
-      final p = posiciones[i];
-      widgets.add(Expanded(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: _PosicionTile(
-            posicion: p,
-            instalada: instaladas[p.codigo],
-            kmActualUnidad: kmActualUnidad,
-            onTap: () => onTap(p),
-          ),
-        ),
-      ));
-      // Gap pronunciado en el medio (entre las dos ruedas internas)
-      // para representar el eje del camión.
-      if (esDual && i == 1) {
-        widgets.add(const SizedBox(width: 28));
-      }
-    }
-    return Row(children: widgets);
+
+    // En mobile (< 480 dp) un eje dual con 4 tiles en una sola Row
+    // dejaba ~79 dp por tile y el modelo ("Bridgestone R268 295/80R22.5"
+    // fontSize 9 maxLines 2) wrappeaba a 3 líneas → overflow.
+    // Splitting en 2 filas IZQ + DER para mobile, manteniendo la
+    // representación física correcta. Eje no dual (2 ruedas) entra OK
+    // en cualquier ancho.
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final usar2x2 = esDual && constraints.maxWidth < 480;
+        if (usar2x2) {
+          return Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(child: _wrapTile(posiciones[0])),
+                  Expanded(child: _wrapTile(posiciones[1])),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: _wrapTile(posiciones[2])),
+                  Expanded(child: _wrapTile(posiciones[3])),
+                ],
+              ),
+            ],
+          );
+        }
+        // Layout original 1x4 con gap eje en el medio.
+        final widgets = <Widget>[];
+        for (var i = 0; i < posiciones.length; i++) {
+          widgets.add(Expanded(child: _wrapTile(posiciones[i])));
+          if (esDual && i == 1) {
+            widgets.add(const SizedBox(width: 28));
+          }
+        }
+        return Row(children: widgets);
+      },
+    );
   }
+
+  Widget _wrapTile(PosicionCubierta p) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: _PosicionTile(
+          posicion: p,
+          instalada: instaladas[p.codigo],
+          kmActualUnidad: kmActualUnidad,
+          onTap: () => onTap(p),
+        ),
+      );
 }
 
 class _PosicionTile extends StatelessWidget {
@@ -911,10 +940,15 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
         padding: const EdgeInsets.symmetric(vertical: 1),
         child: Row(
           children: [
+            // 180 → 140: en mobile el dialog tenía ~327 dp internos y
+            // sólo 147 quedaban para el valor (insuficiente para
+            // "1.234.567 km"). Bajamos label a 140 + ellipsis ambos.
             SizedBox(
-              width: 180,
+              width: 140,
               child: Text(
                 etiqueta,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style:
                     const TextStyle(color: Colors.white60, fontSize: 12),
               ),
@@ -922,6 +956,8 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
             Expanded(
               child: Text(
                 valor,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: Colors.white, fontSize: 12),
               ),
             ),

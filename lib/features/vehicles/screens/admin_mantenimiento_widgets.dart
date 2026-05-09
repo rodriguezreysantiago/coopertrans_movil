@@ -174,6 +174,8 @@ class _TractorCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   const Text(
                     'Cargá el último service desde la ficha para ver KM al próximo',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: AppColors.accentAmber,
                       fontSize: 10,
@@ -191,6 +193,8 @@ class _TractorCard extends StatelessWidget {
                       kmRecorridos: kmRecorridos,
                       fuenteManual: ultimoServiceFuenteManual,
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       color: Colors.white38,
                       fontSize: 10,

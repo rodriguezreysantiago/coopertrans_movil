@@ -272,6 +272,10 @@ class _EmpresaTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   empresa,
+                  // Razón social larga ("VECCHI ARIEL Y …") rompía
+                  // la card en mobile. 2 líneas + ellipsis para prolijidad.
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -335,12 +339,16 @@ class _DateTile extends StatelessWidget {
                   children: [
                     Text(
                       label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                           color: Colors.white54, fontSize: 12),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       AppFormatters.formatearFecha(fecha ?? ''),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -354,8 +362,14 @@ class _DateTile extends StatelessWidget {
           ),
           VencimientoBadge(fecha: fecha),
           const SizedBox(width: 4),
+          // visualDensity.compact: cada IconButton pasa de 48 dp a ~36 dp.
+          // Con 2 botones + thumb 40 + badge ~70 + Expanded label, el ancho
+          // disponible para la fecha en mobile se ajusta y deja de chocar.
           if (tieneArchivo)
             IconButton(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.all(6),
+              constraints: const BoxConstraints(),
               icon: const Icon(Icons.visibility,
                   color: AppColors.accentGreen, size: 22),
               tooltip: 'Ver archivo',
@@ -367,7 +381,11 @@ class _DateTile extends StatelessWidget {
                 ),
               ),
             ),
+          const SizedBox(width: 4),
           IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: const EdgeInsets.all(6),
+            constraints: const BoxConstraints(),
             icon: Icon(
               tieneArchivo ? Icons.file_upload_outlined : Icons.upload_file,
               color: tieneArchivo ? AppColors.accentBlue : Colors.white54,

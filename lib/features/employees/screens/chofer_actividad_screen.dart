@@ -112,6 +112,8 @@ class _Header extends StatelessWidget {
               children: [
                 Text(
                   nombre,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 16,
@@ -120,6 +122,8 @@ class _Header extends StatelessWidget {
                 ),
                 Text(
                   'DNI $dni',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white54, fontSize: 11),
                 ),
               ],
