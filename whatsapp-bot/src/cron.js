@@ -651,13 +651,17 @@ async function _runOnce(fs) {
                 `Resumen alertas Volvo no se envia hoy.`
             );
           } else {
-            // Query VOLVO_ALERTAS de las ultimas 24h con severidad HIGH.
+            // Query VOLVO_ALERTAS de las últimas 24 h. Traemos TODO
+            // (sin filtrar por severidad en la query) y filtramos
+            // client-side: regla = severidad HIGH ∨ tipo forzado.
+            // Esto permite garantizar que ciertos eventos críticos
+            // (AEBS, ESP) entren al resumen aunque Volvo no siempre
+            // los marque como HIGH.
             const desde = admin.firestore.Timestamp.fromMillis(
               Date.now() - 24 * 60 * 60 * 1000
             );
             const alertasSnap = await db
               .collection('VOLVO_ALERTAS')
-              .where('severidad', '==', 'HIGH')
               .where('creado_en', '>=', desde)
               .get();
             // Tipos excluidos del resumen a Seg e Higiene — son
@@ -673,11 +677,22 @@ async function _runOnce(fs) {
               'WITHOUT_ADBLUE',
               'TELL_TALE',
             ]);
+            // Tipos que SIEMPRE entran al resumen aunque la severidad
+            // que les ponga Volvo no sea HIGH. Son eventos críticos
+            // de seguridad activa que el Jefe Seg e Higiene tiene que
+            // ver siempre (decisión Santiago 2026-05-09):
+            // - AEBS: Frenado automático de emergencia.
+            // - ESP: Control de estabilidad.
+            const TIPOS_FORZADOS_SEG_HIGIENE = new Set([
+              'AEBS',
+              'ESP',
+            ]);
             const eventos = alertasSnap.docs
               .map((d) => {
                 const data = d.data();
                 const patente = String(data.patente || '—').trim();
                 const tipo = String(data.tipo || '').trim();
+                const severidad = String(data.severidad || '').toUpperCase();
                 // Volvo Vehicle Alerts API devuelve un solo tipo "GENERIC"
                 // que envuelve varios sub-eventos (SEATBELT, TELL_TALE,
                 // ALERTA_FATIGA, etc.). El subtipo viene en
@@ -706,12 +721,18 @@ async function _runOnce(fs) {
                 const choferNombre = chofer
                   ? aviso.resolverNombreSaludo(chofer.data)
                   : null;
-                return { patente, tipo, subTipo, choferNombre, fechaHora };
+                return { patente, tipo, subTipo, severidad, choferNombre, fechaHora };
               })
-              .filter((ev) =>
-                !TIPOS_EXCLUIDOS_SEG_HIGIENE.has(ev.tipo) &&
-                !TIPOS_EXCLUIDOS_SEG_HIGIENE.has(ev.subTipo)
-              );
+              .filter((ev) => {
+                // Excluir mecánicos (AdBlue, TELL_TALE).
+                if (TIPOS_EXCLUIDOS_SEG_HIGIENE.has(ev.tipo)) return false;
+                if (TIPOS_EXCLUIDOS_SEG_HIGIENE.has(ev.subTipo)) return false;
+                // Incluir si severidad HIGH ó tipo forzado (AEBS / ESP).
+                if (ev.severidad === 'HIGH') return true;
+                if (TIPOS_FORZADOS_SEG_HIGIENE.has(ev.tipo)) return true;
+                if (TIPOS_FORZADOS_SEG_HIGIENE.has(ev.subTipo)) return true;
+                return false;
+              });
 
             if (eventos.length === 0) {
               log.info(
