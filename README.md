@@ -4,7 +4,7 @@
 
 Sistema de gestión de flota para la empresa de transporte **Vecchi / Sucesión Vecchi** (Bahía Blanca). Maneja personal, flota, vencimientos de papeles, checklists, revisiones, integración con Volvo Connect (telemetría + Vehicle Alerts API + Scores API) y un bot de WhatsApp para avisos automáticos.
 
-> Producto comercializado como **Coopertrans Móvil** (rebrand 2026-05-02). El nombre interno del paquete Dart sigue siendo `logistica_app_profesional` por costo de refactor — sin impacto al usuario final.
+> Producto comercializado como **Coopertrans Móvil**. Rebrand visual 2026-05-02. Rename del paquete Dart + carpeta del proyecto a `coopertrans_movil` ejecutado 2026-05-08 (commit `22b6825`).
 
 ## Stack
 
@@ -20,7 +20,7 @@ Sistema de gestión de flota para la empresa de transporte **Vecchi / Sucesión 
 ```powershell
 # Clonar
 git clone https://github.com/rodriguezreysantiago/logistica_app_profesional.git
-cd logistica_app_profesional
+cd coopertrans_movil
 
 flutter pub get
 flutter run -d windows
@@ -51,7 +51,7 @@ El primer arranque pide escanear un QR desde el celular descartable. La sesión 
 ## Estructura general
 
 ```
-logistica_app_profesional/
+coopertrans_movil/
 ├── lib/                  # App Flutter
 │   ├── core/             # services, constants, theme
 │   ├── features/         # admin_dashboard, auth, employees, vehicles,
@@ -150,6 +150,28 @@ Escucha `COLA_WHATSAPP` en Firestore. Cron cada 60 min escanea EMPLEADOS y VEHIC
 - **DNI = doc.id en EMPLEADOS** (sin formato, solo dígitos).
 - **Patente = doc.id en VEHICULOS** (sin guiones, en mayúsculas).
 - **Fechas**: formato ISO `YYYY-MM-DD` en Firestore. Parseo manual para evitar shift UTC vs local.
+
+## Release de una versión nueva
+
+Script todo-en-uno (bump + build Windows + instalador + GitHub Release + AAB Android):
+
+```powershell
+.\scripts\release_completo.ps1                  # bump patch+1+build+1, todo
+.\scripts\release_completo.ps1 -DryRun          # ver qué haría sin tocar nada
+.\scripts\release_completo.ps1 -SkipAndroid     # solo Windows
+.\scripts\release_completo.ps1 -Version 1.2.3+45  # versión explícita
+```
+
+Después subir manual el AAB a Play Console (Closed Testing → nueva
+versión → upload). El AAB queda en
+`build/app/outputs/bundle/release/app-release.aab`.
+
+⚠️ **Bug conocido**: si renombrás la carpeta del proyecto, el cache
+de CMake en `build/windows/x64/CMakeCache.txt` queda con el path
+absoluto viejo y `flutter build windows` falla con
+`The current CMakeCache.txt directory is different than the
+directory ... where CMakeCache.txt was created`. Fix: `flutter
+clean` antes de buildear.
 
 ## Licencia
 
