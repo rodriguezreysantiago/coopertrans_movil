@@ -32,6 +32,9 @@ import '../features/logistica/screens/logistica_mapa_tarifas_screen.dart';
 import '../features/logistica/screens/logistica_tarifa_form_screen.dart';
 import '../features/logistica/screens/logistica_tarifas_screen.dart';
 import '../features/logistica/screens/logistica_ubicaciones_screen.dart';
+import '../features/logistica/screens/logistica_viaje_detalle_screen.dart';
+import '../features/logistica/screens/logistica_viaje_form_screen.dart';
+import '../features/logistica/screens/logistica_viajes_lista_screen.dart';
 import '../features/eco_driving/screens/admin_descargas_pto_screen.dart';
 import '../features/eco_driving/screens/admin_eco_driving_screen.dart';
 import '../features/eco_driving/screens/admin_mapa_volvo_screen.dart';
@@ -378,6 +381,25 @@ class AppRouter {
       case AppRoutes.adminLogisticaMapaTarifas:
         return _buildRoute(
           _protegerAdmin(const LogisticaMapaTarifasScreen()),
+          settings,
+        );
+      case AppRoutes.adminLogisticaViajes:
+        return _buildRoute(
+          _protegerAdmin(const LogisticaViajesListaScreen()),
+          settings,
+        );
+      case AppRoutes.adminLogisticaViajeForm:
+        final args = settings.arguments as Map<String, dynamic>?;
+        final viajeId = args?['viajeId'] as String?;
+        return _buildRoute(
+          _protegerAdmin(LogisticaViajeFormScreen(viajeId: viajeId)),
+          settings,
+        );
+      case AppRoutes.adminLogisticaViajeDetalle:
+        final args = settings.arguments as Map<String, dynamic>?;
+        final viajeId = args?['viajeId'] as String? ?? '';
+        return _buildRoute(
+          _protegerAdmin(LogisticaViajeDetalleScreen(viajeId: viajeId)),
           settings,
         );
 

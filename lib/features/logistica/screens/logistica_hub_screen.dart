@@ -16,7 +16,8 @@ import '../services/logistica_service.dart';
 /// - **TARIFAS**: rutas con precio (origen → destino, tarifa real +
 ///   tarifa chofer). El corazón del módulo.
 /// - **MAPA**: vista geográfica de las tarifas activas con coords.
-/// - **VIAJES**: deshabilitado — placeholder del próximo módulo.
+/// - **VIAJES**: ejecución y liquidación. Cada viaje apunta a una
+///   tarifa snapshot inmutable + chofer + unidad.
 ///
 /// Layout responsivo: en pantallas anchas (Windows desktop, iPad
 /// landscape) muestra hasta 5 columnas con tiles compactos. En
@@ -110,13 +111,19 @@ class LogisticaHubScreen extends StatelessWidget {
                       color: AppColors.accentAmber,
                       ruta: AppRoutes.adminLogisticaMapaTarifas,
                     ),
-                    const _HubTile(
+                    _HubTile(
                       titulo: 'VIAJES',
-                      subtitulo: 'Próximamente',
+                      subtitulo: 'Ejecución y liquidación',
                       icono: Icons.route_outlined,
-                      color: Colors.white24,
-                      ruta: '',
-                      deshabilitado: true,
+                      color: AppColors.accentOrange,
+                      ruta: AppRoutes.adminLogisticaViajes,
+                      contador: _StreamCount(
+                        coleccion: FirebaseFirestore.instance
+                            .collection(AppCollections.viajesLogistica),
+                        soloActivas: false,
+                        color: AppColors.accentOrange,
+                        campoActivo: 'activo',
+                      ),
                     ),
                   ],
                 );
@@ -183,7 +190,6 @@ class _HubTile extends StatelessWidget {
   final IconData icono;
   final Color color;
   final String ruta;
-  final bool deshabilitado;
   final Widget? contador;
 
   const _HubTile({
@@ -192,16 +198,13 @@ class _HubTile extends StatelessWidget {
     required this.icono,
     required this.color,
     required this.ruta,
-    this.deshabilitado = false,
     this.contador,
   });
 
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      onTap: deshabilitado
-          ? null
-          : () => Navigator.pushNamed(context, ruta),
+      onTap: () => Navigator.pushNamed(context, ruta),
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -221,8 +224,8 @@ class _HubTile extends StatelessWidget {
             children: [
               Text(
                 titulo,
-                style: TextStyle(
-                  color: deshabilitado ? Colors.white38 : Colors.white,
+                style: const TextStyle(
+                  color: Colors.white,
                   fontSize: 13,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.0,
@@ -233,8 +236,8 @@ class _HubTile extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 subtitulo,
-                style: TextStyle(
-                  color: deshabilitado ? Colors.white24 : Colors.white60,
+                style: const TextStyle(
+                  color: Colors.white60,
                   fontSize: 11,
                 ),
                 maxLines: 2,
@@ -251,20 +254,25 @@ class _HubTile extends StatelessWidget {
 /// Contador en vivo para el corner del tile. Muestra "30" si
 /// soloActivas=true y hay 30 docs con activa==true. Se actualiza
 /// solo cuando cambia la colección.
+///
+/// `campoActivo` permite usar este widget contra colecciones que usan
+/// `activo` (Viajes) en lugar de `activa` (Empresas/Ubicaciones/Tarifas).
 class _StreamCount extends StatelessWidget {
   final CollectionReference<Map<String, dynamic>> coleccion;
   final bool soloActivas;
   final Color color;
+  final String campoActivo;
 
   const _StreamCount({
     required this.coleccion,
     required this.soloActivas,
     required this.color,
+    this.campoActivo = 'activa',
   });
 
   Stream<int> _stream() {
     Query<Map<String, dynamic>> q = coleccion;
-    if (soloActivas) q = q.where('activa', isEqualTo: true);
+    if (soloActivas) q = q.where(campoActivo, isEqualTo: true);
     // .limit(999) cap defensivo — para mostrar el conteo no necesitamos
     // más, y limita el costo de lectura aunque haya miles de docs.
     return q

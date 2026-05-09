@@ -49,6 +49,10 @@
   static const String adminLogisticaTarifas = '/admin_logistica_tarifas';
   static const String adminLogisticaTarifaForm = '/admin_logistica_tarifa_form';
   static const String adminLogisticaMapaTarifas = '/admin_logistica_mapa_tarifas';
+  // Viajes — ejecución y liquidación (2026-05-09).
+  static const String adminLogisticaViajes = '/admin_logistica_viajes';
+  static const String adminLogisticaViajeForm = '/admin_logistica_viaje_form';
+  static const String adminLogisticaViajeDetalle = '/admin_logistica_viaje_detalle';
 
   /// ABM de docs por empresa empleadora (Póliza ART + Formulario 931).
   /// Admin/Supervisor: una sola pantalla con tarjeta por empresa, cada
