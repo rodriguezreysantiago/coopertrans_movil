@@ -9,9 +9,10 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test"
+    "test": "node --test test/"
   },
   "dependencies": {
+    "archiver": "^7.0.1",
     "dotenv": "^17.4.2",
     "firebase-admin": "^13.8.0",
     "qrcode-terminal": "^0.12.0",

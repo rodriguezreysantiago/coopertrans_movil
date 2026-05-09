@@ -57,6 +57,7 @@ const wa = require('./whatsapp');
 const cron = require('./cron');
 const health = require('./health');
 const control = require('./control');
+const backupAuth = require('./backup_auth');
 const messageHandler = require('./message_handler');
 const agrupador = require('./agrupador');
 
@@ -842,6 +843,11 @@ async function main() {
   health.iniciar(db, fs, wa);
 
   cron.start(fs);
+
+  // Backup automático de .wwebjs_auth/ a Cloud Storage. Opt-in via
+  // WWEBJS_BACKUP_ENABLED en .env. Si está apagado, no hace nada.
+  // Frecuencia configurable (default 24h) + retención automática.
+  backupAuth.iniciar(db);
 
   // Handler de mensajes entrantes — registrado SIEMPRE para que los
   // comandos admin (/estado, /pausar, etc) funcionen aunque
