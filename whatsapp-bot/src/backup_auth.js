@@ -156,65 +156,123 @@ async function _ejecutarBackup() {
 }
 
 /**
- * Patrones glob de carpetas/archivos a EXCLUIR del backup. Son caches
- * volátiles del Chromium embebido (whatsapp-web.js usa puppeteer
- * por debajo) que:
- *   1. Están locked por el navegador mientras el bot corre — el zip
- *      tira EBUSY al intentar leerlos (bug detectado 2026-05-09).
- *   2. NO son necesarios para recovery — Chromium los regenera en
- *      el próximo arranque. Solo necesitamos persistir el estado
- *      de auth (Cookies, Local Storage, IndexedDB, Session Storage).
+ * Nombres de directorios (no globs) cuyos contenidos no incluimos
+ * en el backup. Son caches volátiles del Chromium embebido que
+ * whatsapp-web.js usa internamente: están locked mientras el bot
+ * corre, y se regeneran solos en el próximo arranque.
  *
- * Si en algún futuro la sesión no recovery con estos excludes,
- * agregar más a la lista. Mejor zip incompleto que crash diario.
+ * Match: si el path relativo del archivo CONTIENE un segmento con
+ * cualquiera de estos nombres, se skipea. Sin globs porque algunos
+ * caches anidan distinto en versiones distintas de Chromium.
  */
-const EXCLUDES_BACKUP = [
-  '**/Cache/**',
-  '**/Cache_Data/**',
-  '**/Code Cache/**',
-  '**/GPUCache/**',
-  '**/ShaderCache/**',
-  '**/GraphiteDawnCache/**',
-  '**/component_crx_cache/**',
-  '**/optimization_guide_*/**',
-  '**/Service Worker/CacheStorage/**',
-  '**/Service Worker/ScriptCache/**',
-];
+const DIRS_EXCLUIDOS = new Set([
+  'Cache',
+  'Cache_Data',
+  'Code Cache',
+  'GPUCache',
+  'ShaderCache',
+  'GraphiteDawnCache',
+  'component_crx_cache',
+  'CacheStorage',
+  'ScriptCache',
+  'Network',
+  // 'optimization_guide_*' — match por prefix abajo
+]);
 
 /**
- * Comprime una carpeta a un Buffer en memoria, excluyendo caches
- * volátiles que están locked y no son necesarios para recovery.
+ * Comprime una carpeta a un Buffer en memoria, tolerando archivos
+ * que estén locked (EBUSY) o desaparecidos durante el walk.
  *
- * Sin escribir a disco temporal — más rápido, no deja archivos sueltos
- * si el bot crashea, y `.wwebjs_auth/` típicamente queda en < 30 MB
- * después de los excludes.
+ * Estrategia (decisión 2026-05-09):
+ *   1. Caminamos el árbol manualmente con `fs.readdir`.
+ *   2. Cada archivo se lee con `readFile` y se agrega al zip.
+ *   3. Si un archivo falla con EBUSY, EACCES, ENOENT, etc. — log
+ *      a DEBUG y SKIP. El zip sigue construyéndose.
+ *   4. Skipeamos directorios cuyos nombres están en DIRS_EXCLUIDOS
+ *      (caches del Chromium) — ahorra trabajo + evita locks típicos.
  *
- * Usa `archive.glob` con `ignore` en lugar de `archive.directory`
- * para poder filtrar. `nodir: true` evita meter directorios vacíos.
+ * Por qué este approach en lugar de `archive.directory()` o
+ * `archive.glob()`:
+ *   - archive.directory hace stream de cada archivo. Si uno tira
+ *     EBUSY, archiver emite 'error' y el zip entero aborta. No
+ *     hay forma estándar de continuar.
+ *   - archive.glob tiene el mismo problema con archivos locked.
+ *   - Manual walking + readFile permite try/catch por archivo y
+ *     archive.append(buffer) en lugar de stream — desacopla la
+ *     lectura de la escritura del zip.
+ *
+ * `.wwebjs_auth/` típicamente queda en < 30 MB después de excluir
+ * caches.
  */
-function _comprimirCarpeta(archiver, carpeta) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    const archive = archiver('zip', { zlib: { level: 9 } });
+async function _comprimirCarpeta(archiver, carpeta) {
+  const archive = archiver('zip', { zlib: { level: 9 } });
+  const chunks = [];
+  const skipped = [];
 
-    archive.on('data', (chunk) => chunks.push(chunk));
-    archive.on('warning', (e) => {
-      // Avisos no fatales (ej. archivo borrado mientras se zipeaba,
-      // o archivo locked que igual queremos saltar). Los logueamos
-      // a debug para que no llenen el log normal.
-      log.debug(`archiver warning: ${e.message}`);
-    });
-    archive.on('error', (e) => reject(e));
-    archive.on('end', () => resolve(Buffer.concat(chunks)));
-
-    archive.glob('**/*', {
-      cwd: carpeta,
-      dot: true, // incluye archivos/carpetas que empiezan con `.`
-      nodir: true, // no agregar entradas de directorios vacíos
-      ignore: EXCLUDES_BACKUP,
-    });
-    archive.finalize();
+  archive.on('data', (chunk) => chunks.push(chunk));
+  archive.on('warning', (e) => {
+    log.debug(`archiver warning: ${e.message}`);
   });
+
+  const finalPromise = new Promise((resolve, reject) => {
+    archive.on('error', reject);
+    archive.on('end', () => {
+      if (skipped.length > 0) {
+        log.info(
+          `Backup .wwebjs_auth/: ${skipped.length} archivo(s) locked ` +
+          `skipeados (caches volátiles del Chromium).`
+        );
+      }
+      resolve(Buffer.concat(chunks));
+    });
+  });
+
+  await _walkAndAppend(archive, carpeta, '', skipped);
+  archive.finalize();
+
+  return finalPromise;
+}
+
+/**
+ * Caminata recursiva tolerante a errores. Para cada archivo: intenta
+ * leer y agregar al archivo zip. Si falla (locked, permisos, race
+ * con borrado), lo skipea y sigue.
+ */
+async function _walkAndAppend(archive, dirAbs, relBase, skipped) {
+  let entries;
+  try {
+    entries = await fs.promises.readdir(dirAbs, { withFileTypes: true });
+  } catch (e) {
+    skipped.push(`(readdir ${e.code}) ${relBase || '.'}`);
+    return;
+  }
+  for (const ent of entries) {
+    const fullAbs = path.join(dirAbs, ent.name);
+    const rel = relBase ? `${relBase}/${ent.name}` : ent.name;
+
+    if (ent.isDirectory()) {
+      // Skip de directorios excluidos por nombre exacto + prefix
+      // para optimization_guide_* (Chromium 117+).
+      if (
+        DIRS_EXCLUIDOS.has(ent.name) ||
+        ent.name.startsWith('optimization_guide_')
+      ) {
+        continue;
+      }
+      await _walkAndAppend(archive, fullAbs, rel, skipped);
+    } else if (ent.isFile()) {
+      try {
+        const data = await fs.promises.readFile(fullAbs);
+        archive.append(data, { name: rel });
+      } catch (e) {
+        // EBUSY (locked), EACCES (permisos), ENOENT (race con borrado),
+        // EPERM (Windows particular), EMFILE (too many files), etc.
+        // En todos los casos: skip y seguir.
+        skipped.push(`(${e.code || 'ERR'}) ${rel}`);
+      }
+    }
+    // Otros tipos (symlinks, devices) los ignoramos silenciosamente.
+  }
 }
 
 function _construirNombre(pcId) {
