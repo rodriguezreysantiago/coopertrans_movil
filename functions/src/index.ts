@@ -3786,6 +3786,7 @@ async function _encolarAvisoChoferNoIdentificado(
 
   // Variantes para no repetir el mismo texto cada 5 min — anti-baneo
   // de WhatsApp y para que el chofer no lo perciba como auto-spam.
+  // Mínimo 6 variantes (decisión 2026-05-09).
   const variantes = [
     `${saludo},\n\n` +
       `Estás manejando el TRACTOR ${patente} pero todavía no pasaste ` +
@@ -3802,6 +3803,24 @@ async function _encolarAvisoChoferNoIdentificado(
       `Estamos viendo que manejás el ${patente} sin haber pasado ` +
       "el iButton de Sitrack. Necesitamos que te identifiques así " +
       "queda el registro del viaje.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}, ¿pasaste el iButton?\n\n` +
+      `El ${patente} viene andando pero Sitrack no te tiene ` +
+      "identificado. Pasalo apenas tengas un momento para que el " +
+      "viaje quede a tu nombre.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}, atención.\n\n` +
+      `Estamos detectando movimiento del TRACTOR ${patente} sin ` +
+      "tu identificación. Pasá el iButton cuando puedas para no " +
+      "perder el registro del tramo.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}.\n\n` +
+      `Recordatorio rápido: el ${patente} está en marcha sin chofer ` +
+      "logueado en Sitrack. Pasá el iButton cuando puedas — es " +
+      "importante para que quede el registro completo.\n\n" +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
   ];
@@ -4233,6 +4252,7 @@ async function _encolarAvisoPausaContinua(
   const saludoNombre = apodo || _primerNombre(nombreFull) || "";
   const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
 
+  // Mínimo 6 variantes anti-baneo (decisión 2026-05-09).
   const variantes = [
     `${saludo},\n\n` +
       "Llevás 3 horas y 45 minutos manejando. En máximo 15 min " +
@@ -4246,6 +4266,34 @@ async function _encolarAvisoPausaContinua(
       "Tenés 15 minutos para parar.\n\n" +
       `Buscá un lugar seguro y tomate una pausa con el ${patente} ` +
       "antes de seguir.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}, atención.\n\n` +
+      "Tu manejo continuo llegó a 3:45. En 15 minutos se cumple el " +
+      "límite de 4 horas — tenés que parar.\n\n" +
+      `Estacioná el ${patente} en un lugar seguro y descansá un rato ` +
+      "antes de retomar.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}.\n\n` +
+      "Te paso un aviso desde la oficina: quedan 15 min antes de " +
+      "cumplir 4 horas continuas al volante. Es momento de parar.\n\n" +
+      `Buscá dónde estacionar el ${patente} y tomate la pausa ` +
+      "obligatoria.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}, te aviso.\n\n` +
+      "Estás muy cerca del límite de 4 horas continuas. Quedan 15 " +
+      "minutos para hacer una pausa.\n\n" +
+      `Frená el ${patente} en un lugar seguro y descansá antes de ` +
+      "seguir el camino.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}.\n\n` +
+      "Por seguridad y por norma, después de 4 horas continuas hay " +
+      "que parar. Llevás 3:45 — quedan 15 min.\n\n" +
+      `Buscá un lugar seguro para frenar el ${patente} y reseteá ` +
+      "el contador con un descanso.\n\n" +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
   ];
@@ -4287,6 +4335,7 @@ async function _encolarAvisoLimiteDiario(
   const saludoNombre = apodo || _primerNombre(nombreFull) || "";
   const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
 
+  // Mínimo 6 variantes anti-baneo (decisión 2026-05-09).
   const variantes = [
     `${saludo},\n\n` +
       "Llevás 11 horas y 30 minutos de manejo en el día. En 30 min " +
@@ -4300,6 +4349,33 @@ async function _encolarAvisoLimiteDiario(
       "Te quedan 30 minutos.\n\n" +
       `Frená el ${patente} en un lugar seguro y descansá. ` +
       "Mañana seguís.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}, atención.\n\n` +
+      "Tu jornada de hoy ya cubre 11:30 al volante. En 30 min llegás " +
+      "al tope diario de 12 horas.\n\n" +
+      `Estacioná el ${patente} en un lugar seguro — la jornada ` +
+      "termina acá. Mañana retomás.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}.\n\n` +
+      "Te paso un aviso de jornada: estás muy cerca del máximo " +
+      "diario de 12 horas. En media hora se cumple.\n\n" +
+      `Buscá dónde parar el ${patente} y descansá hasta mañana.\n\n` +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}, recordatorio.\n\n` +
+      "Llevás 11h30 hoy. En 30 minutos llegás al máximo permitido " +
+      "por jornada.\n\n" +
+      `Frená el ${patente} en un lugar seguro y cortá la jornada — ` +
+      "mañana seguís el viaje.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}.\n\n` +
+      "Por norma de manejo, después de 12 horas en el día hay que " +
+      "parar. Llevás 11:30 — quedan 30 min.\n\n" +
+      `Buscá un lugar seguro para el ${patente} y descansá. ` +
+      "La jornada termina hoy acá.\n\n" +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
   ];

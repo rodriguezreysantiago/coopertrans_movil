@@ -83,6 +83,9 @@ function construirCuerpo({ item, saludo, esVehiculo, referencia, fechaFmt }) {
         `${saludo}. Te aviso desde la oficina: ${ref} venció ayer (era el ${fechaFmt}). Es importante regularizarlo cuanto antes. ¿Cuándo podés acercarte a presentar el comprobante?`,
         `${saludo}. ${ref} venció ayer (${fechaFmt}). Avisame cuándo podés pasar por la oficina con el comprobante.`,
         `${saludo}, te escribo desde la oficina. ${ref} venció ayer (${fechaFmt}). Necesitamos regularizarlo lo antes posible — ¿podés acercarte hoy o mañana?`,
+        `${saludo}, atención. ${ref} se venció ayer (${fechaFmt}). Coordiná con la oficina para presentar el comprobante en el día de hoy.`,
+        `${saludo}. Aviso: ${ref} cumplió plazo ayer (${fechaFmt}). Pasá por la oficina hoy para destrabar la renovación.`,
+        `${saludo}, recordatorio. La fecha de ${ref} fue ayer (${fechaFmt}). Es importante que regularices cuanto antes — cualquier duda nos avisás.`,
       ]);
     }
     if (hace <= 7) {
@@ -90,6 +93,9 @@ function construirCuerpo({ item, saludo, esVehiculo, referencia, fechaFmt }) {
         `${saludo}. Recordatorio: ${ref} sigue vencido (venció hace ${hace} días, el ${fechaFmt}). Es importante que lo regularices cuanto antes. ¿Cuándo lo podés presentar?`,
         `${saludo}. ${ref} venció hace ${hace} días (${fechaFmt}). Pasá por la oficina con el comprobante para destrabarlo.`,
         `${saludo}, recordatorio. ${ref} venció el ${fechaFmt} (${hace} días atrás). Coordiná un pase por la oficina lo antes posible.`,
+        `${saludo}, aviso. Hace ${hace} días que se venció ${ref} (${fechaFmt}). Necesitamos que pases por la oficina con la documentación renovada.`,
+        `${saludo}. ${ref} lleva ${hace} días vencido (${fechaFmt}). Te pido que coordines con la oficina esta semana para regularizar.`,
+        `${saludo}, te escribo desde la oficina. ${ref} venció hace ${hace} días (${fechaFmt}). Acercate con el comprobante — cuanto antes mejor.`,
       ]);
     }
     if (hace <= 30) {
@@ -97,11 +103,18 @@ function construirCuerpo({ item, saludo, esVehiculo, referencia, fechaFmt }) {
         `${saludo}. ATENCIÓN: ${ref} lleva ${hace} días vencido (el ${fechaFmt}). Es urgente regularizarlo — coordiná con la oficina cuanto antes para evitar problemas operativos.`,
         `${saludo}. ${ref} lleva ${hace} días vencido (${fechaFmt}). Coordiná con la oficina hoy mismo, sino se complica para asignarte trabajo.`,
         `${saludo}, situación urgente. ${ref} venció hace ${hace} días (${fechaFmt}). Pasá YA por la oficina para destrabar.`,
+        `${saludo}. Te aviso con urgencia: ${ref} lleva ${hace} días sin renovar (vencía el ${fechaFmt}). Necesitamos resolverlo esta semana.`,
+        `${saludo}, atención. ${ref} venció hace ${hace} días (${fechaFmt}). Si no lo regularizás, no te vamos a poder asignar viajes — coordiná con la oficina ya.`,
+        `${saludo}. Aviso urgente desde la oficina: ${ref} venció hace ${hace} días (${fechaFmt}). Pasá lo antes posible para que no se complique más.`,
       ]);
     }
     return _pick([
       `${saludo}. URGENTE: ${ref} lleva más de un mes vencido (${hace} días, era el ${fechaFmt}). La situación ya es crítica. Por favor pasá HOY por la oficina para coordinar la renovación.`,
       `${saludo}. ${ref} venció hace ${hace} días (${fechaFmt}) — más de un mes. Esto es crítico. Pasá HOY por la oficina sí o sí.`,
+      `${saludo}, situación crítica. ${ref} cumplió ${hace} días vencido (${fechaFmt}). Necesitamos que pases hoy por la oficina — no podemos seguir asignando viajes con esto pendiente.`,
+      `${saludo}. Aviso CRÍTICO: ${ref} viene vencido hace ${hace} días (${fechaFmt}) — ya pasó el mes. Acercate hoy a la oficina para coordinar la renovación.`,
+      `${saludo}, atención máxima. ${ref} lleva ${hace} días sin renovar (vencía el ${fechaFmt}). Es URGENTE pasar hoy por la oficina.`,
+      `${saludo}. Te escribo con urgencia: ${ref} venció hace ${hace} días (${fechaFmt}). La situación es crítica — pasá HOY sin falta.`,
     ]);
   }
 
@@ -110,6 +123,9 @@ function construirCuerpo({ item, saludo, esVehiculo, referencia, fechaFmt }) {
       `${saludo}. Te aviso que ${ref} vence HOY (${fechaFmt}). Por favor pasá lo antes posible por la oficina.`,
       `${saludo}. ${ref} vence HOY (${fechaFmt}). Necesitamos el comprobante hoy mismo.`,
       `${saludo}, atención. Hoy (${fechaFmt}) vence ${ref}. Pasá por la oficina antes de que cierre.`,
+      `${saludo}, recordatorio. ${ref} cumple plazo HOY (${fechaFmt}). Acercate cuanto antes con el comprobante de renovación.`,
+      `${saludo}. Aviso: ${ref} vence en el día de hoy (${fechaFmt}). Pasá por la oficina antes del cierre para evitar quedar vencido.`,
+      `${saludo}, te escribo desde la oficina. Hoy (${fechaFmt}) es el último día de ${ref}. Necesitamos verte con el comprobante.`,
     ]);
   }
 
@@ -119,6 +135,9 @@ function construirCuerpo({ item, saludo, esVehiculo, referencia, fechaFmt }) {
       `${saludo}. Recordatorio importante: ${ref} vence en ${item.dias} ${dia} (el ${fechaFmt}). Si todavía no empezaste el trámite, hacelo ya.`,
       `${saludo}. ${ref} vence en ${item.dias} ${dia} (${fechaFmt}). Arrancá la renovación si todavía no la iniciaste.`,
       `${saludo}, te aviso. ${ref} se vence el ${fechaFmt} (faltan ${item.dias} ${dia}). Es importante que ya estés en el trámite.`,
+      `${saludo}, atención. En ${item.dias} ${dia} vence ${ref} (${fechaFmt}). Si no lo arrancaste todavía, esta semana es clave.`,
+      `${saludo}. Aviso: queda${item.dias === 1 ? '' : 'n'} ${item.dias} ${dia} para que venza ${ref} (${fechaFmt}). Acelerá la renovación.`,
+      `${saludo}, recordatorio desde la oficina. ${ref} vence el ${fechaFmt} — faltan ${item.dias} ${dia}. Necesitamos que avances con la renovación esta semana.`,
     ]);
   }
 
@@ -127,6 +146,9 @@ function construirCuerpo({ item, saludo, esVehiculo, referencia, fechaFmt }) {
       `${saludo}. Te aviso que ${ref} vence en ${item.dias} días (${fechaFmt}). Es buen momento para empezar el trámite de renovación.`,
       `${saludo}. ${ref} vence el ${fechaFmt} (en ${item.dias} días). Conviene que arranques con la renovación.`,
       `${saludo}, recordatorio. Faltan ${item.dias} días para que venza ${ref} (${fechaFmt}). Andá iniciando el trámite.`,
+      `${saludo}, te aviso. En ${item.dias} días vence ${ref} (${fechaFmt}). Si arrancás esta semana llegás cómodo con la renovación.`,
+      `${saludo}. Aviso: ${ref} cumple plazo el ${fechaFmt} (faltan ${item.dias} días). Es buen momento para coordinar la renovación.`,
+      `${saludo}, recordatorio desde la oficina. ${ref} vence en ${item.dias} días (${fechaFmt}). Conviene anotar la fecha y arrancar el trámite.`,
     ]);
   }
 
@@ -134,6 +156,9 @@ function construirCuerpo({ item, saludo, esVehiculo, referencia, fechaFmt }) {
     `${saludo}. Aviso preventivo: ${ref} vence el ${fechaFmt} (en ${item.dias} días). Andá viendo el trámite.`,
     `${saludo}. ${ref} vence el ${fechaFmt} (faltan ${item.dias} días). Te aviso con anticipación para que tengas margen.`,
     `${saludo}, aviso anticipado. ${ref} vence en ${item.dias} días (${fechaFmt}). Empezá a pensar en la renovación.`,
+    `${saludo}. Te paso un recordatorio anticipado: ${ref} vence el ${fechaFmt} (${item.dias} días). Vas a tiempo para arrancar la renovación.`,
+    `${saludo}, aviso. Faltan ${item.dias} días para que venza ${ref} (${fechaFmt}). Te aviso con anticipación así organizás el trámite con tiempo.`,
+    `${saludo}, recordatorio preventivo. ${ref} cumple plazo el ${fechaFmt} (en ${item.dias} días). Andá pensando cuándo iniciar la renovación.`,
   ]);
 }
 
