@@ -656,6 +656,34 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // CUBIERTAS_CONTROLES — histórico inmutable de lecturas presión/banda
+    // ========================================================================
+    // Cada `registrarLectura()` del GomeriaService crea 1 doc acá Y pisa
+    // los `ultima_*` de la CUBIERTAS_INSTALADAS. La verdad histórica para
+    // auditoría / trending vive en esta colección — la "última" es solo
+    // un atajo para la grilla.
+
+    match /CUBIERTAS_CONTROLES/{doc} {
+      allow read: if puedeOperarGomeria();
+
+      // Crear: estructura mínima + auth.uid coincide con
+      // registrado_por_dni para no permitir suplantación.
+      // Al menos uno de los 2 campos de medición debe estar.
+      allow create: if puedeOperarGomeria()
+        && request.resource.data.registrado_por_dni == request.auth.uid
+        && request.resource.data.cubierta_id is string
+        && request.resource.data.instalacion_id is string
+        && request.resource.data.unidad_id is string
+        && request.resource.data.posicion is string
+        && request.resource.data.fecha is timestamp
+        && (request.resource.data.keys().hasAny(['presion_psi', 'profundidad_banda_mm']));
+
+      // Inmutable: nunca se modifican los controles ya creados —
+      // si hubo error de carga se anota una lectura nueva.
+      allow update, delete: if false;
+    }
+
+    // ========================================================================
     // VOLVO_SCORES_DIARIOS — scores de eco-driving (Volvo Group Scores API)
     // ========================================================================
     // La scheduled function `volvoScoresPoller` corre 1x por día a las 04:00

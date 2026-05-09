@@ -7,6 +7,7 @@ import '../../../core/services/app_logger.dart';
 import '../../../core/services/audit_log_service.dart';
 import '../constants/posiciones.dart';
 import '../models/cubierta.dart';
+import '../models/cubierta_control.dart';
 import '../models/cubierta_instalada.dart';
 import '../models/cubierta_modelo.dart';
 import '../models/cubierta_recapado.dart';
@@ -669,10 +670,23 @@ class GomeriaService {
   // CONTROL — registrar última lectura de presión / profundidad de banda
   // ===========================================================================
 
-  /// Registra una lectura de control de la cubierta instalada (pisada
-  /// sobre la doc activa de `CUBIERTAS_INSTALADAS`). Si la lectura
-  /// histórica fuese necesaria a futuro, hay que crear una colección
-  /// `CUBIERTAS_CONTROLES` aparte. Por ahora capturamos solo la última.
+  /// Registra una lectura de control de presión y/o profundidad de
+  /// banda. Hace dos cosas en paralelo:
+  ///
+  /// 1. Crea un doc inmutable en `CUBIERTAS_CONTROLES` (histórico
+  ///    completo de lecturas — fuente de verdad para auditoría /
+  ///    trending de desgaste).
+  /// 2. Pisa los campos `ultima_*` en la `CUBIERTAS_INSTALADAS`
+  ///    correspondiente (atajo para listados que muestran solo la
+  ///    última lectura sin joinear).
+  ///
+  /// Si la creación del control falla pero el update de la instalación
+  /// ya pasó, queda inconsistencia; al revés también. Como la lectura
+  /// es informativa (no operativa), aceptamos best-effort: hacemos el
+  /// `add` primero y si falla NO seguimos. Si el update de la
+  /// instalación falla después, el control histórico queda y el
+  /// `ultima_*` se queda con la lectura anterior — al próximo control
+  /// se sincroniza solo.
   Future<void> registrarLectura({
     required String instalacionId,
     int? presionPsi,
@@ -690,18 +704,61 @@ class GomeriaService {
       throw ArgumentError(
           'Pasá al menos uno: presión o profundidad de banda');
     }
-    await _db
-        .collection(AppCollections.cubiertasInstaladas)
-        .doc(id)
-        .update({
+
+    // Leer la instalación para snapshot a CUBIERTAS_CONTROLES.
+    final instRef =
+        _db.collection(AppCollections.cubiertasInstaladas).doc(id);
+    final instSnap = await instRef.get();
+    if (!instSnap.exists) {
+      throw StateError('Instalación $id no existe');
+    }
+    final instData = instSnap.data() ?? const <String, dynamic>{};
+
+    final ahora = FieldValue.serverTimestamp();
+    final nombreLimpio = supervisorNombre?.trim();
+    final tieneNombre = nombreLimpio != null && nombreLimpio.isNotEmpty;
+
+    await _db.collection(AppCollections.cubiertasControles).add({
+      'cubierta_id': (instData['cubierta_id'] ?? '').toString(),
+      'cubierta_codigo': (instData['cubierta_codigo'] ?? '').toString(),
+      'instalacion_id': id,
+      'unidad_id': (instData['unidad_id'] ?? '').toString(),
+      'posicion': (instData['posicion'] ?? '').toString(),
+      if (presionPsi != null) 'presion_psi': presionPsi,
+      if (profundidadBandaMm != null)
+        'profundidad_banda_mm': profundidadBandaMm,
+      'fecha': ahora,
+      'registrado_por_dni': supervisorLimpio,
+      if (tieneNombre) 'registrado_por_nombre': nombreLimpio,
+    });
+
+    await instRef.update({
       if (presionPsi != null) 'ultima_presion_psi': presionPsi,
       if (profundidadBandaMm != null)
         'ultima_profundidad_banda_mm': profundidadBandaMm,
-      'ultima_lectura_en': FieldValue.serverTimestamp(),
+      'ultima_lectura_en': ahora,
       'ultima_lectura_por_dni': supervisorLimpio,
-      if (supervisorNombre != null && supervisorNombre.trim().isNotEmpty)
-        'ultima_lectura_por_nombre': supervisorNombre.trim(),
+      if (tieneNombre) 'ultima_lectura_por_nombre': nombreLimpio,
     });
+  }
+
+  /// Stream del histórico de controles de UNA cubierta (todas las
+  /// instalaciones, en orden cronológico inverso). Pensado para la
+  /// pantalla de detalle de cubierta — muestra la evolución de la
+  /// presión/banda en el tiempo.
+  ///
+  /// Si la cubierta tuvo varias instalaciones (se retiró, volvió a
+  /// instalarse después), el stream incluye los controles de todas
+  /// ellas — el caller puede agruparlos por `instalacionId` si quiere
+  /// distinguir.
+  Stream<List<CubiertaControl>> streamControlesPorCubierta(
+      String cubiertaId) {
+    return _db
+        .collection(AppCollections.cubiertasControles)
+        .where('cubierta_id', isEqualTo: cubiertaId)
+        .orderBy('fecha', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map(CubiertaControl.fromDoc).toList());
   }
 
   // ===========================================================================

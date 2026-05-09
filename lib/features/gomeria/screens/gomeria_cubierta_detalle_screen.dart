@@ -5,6 +5,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../constants/posiciones.dart';
 import '../models/cubierta.dart';
+import '../models/cubierta_control.dart';
 import '../models/cubierta_instalada.dart';
 import '../models/cubierta_recapado.dart';
 import '../services/gomeria_service.dart';
@@ -83,6 +84,22 @@ class GomeriaCubiertaDetalleScreen extends StatelessWidget {
                     return Column(
                       children: [
                         for (final r in recs) _RecapadoTile(r: r),
+                      ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                const _SeccionTitulo('Histórico de controles'),
+                StreamBuilder<List<CubiertaControl>>(
+                  stream: service.streamControlesPorCubierta(cubiertaId),
+                  builder: (ctx, snap) {
+                    final ctrls = snap.data ?? const <CubiertaControl>[];
+                    if (ctrls.isEmpty) {
+                      return const _Vacio('Sin controles registrados.');
+                    }
+                    return Column(
+                      children: [
+                        for (final c in ctrls) _ControlTile(c: c),
                       ],
                     );
                   },
@@ -386,6 +403,80 @@ class _RecapadoTile extends StatelessWidget {
                 fontSize: 11,
                 fontStyle: FontStyle.italic,
               ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ControlTile extends StatelessWidget {
+  final CubiertaControl c;
+  const _ControlTile({required this.c});
+
+  @override
+  Widget build(BuildContext context) {
+    final pos = posicionPorCodigo[c.posicion];
+    final etiquetaPos = pos?.etiqueta ?? c.posicion;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(8),
+        border:
+            Border.all(color: AppColors.accentTeal.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.compress, size: 16, color: AppColors.accentTeal),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  AppFormatters.formatearFechaHoraSinSegundos(c.fecha),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Text(
+                '${c.unidadId} · $etiquetaPos',
+                style:
+                    const TextStyle(color: Colors.white54, fontSize: 11),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              if (c.presionPsi != null)
+                Text(
+                  'Presión: ${c.presionPsi} PSI',
+                  style:
+                      const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              if (c.profundidadBandaMm != null)
+                Text(
+                  'Banda: ${c.profundidadBandaMm!.toStringAsFixed(1)} mm',
+                  style:
+                      const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+            ],
+          ),
+          if (c.registradoPorNombre != null &&
+              c.registradoPorNombre!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Registrado por ${c.registradoPorNombre}',
+              style: const TextStyle(color: Colors.white38, fontSize: 11),
             ),
           ],
         ],

@@ -163,6 +163,15 @@ class AppCollections {
   /// DESCARTADA_POR_PROVEEDOR), notas}`.
   static const String cubiertasRecapados = 'CUBIERTAS_RECAPADOS';
 
+  /// Histórico inmutable de controles de presión y profundidad de banda
+  /// realizados sobre cubiertas instaladas. 1 doc por lectura — la
+  /// "última" en `CUBIERTAS_INSTALADAS` se mantiene como atajo para
+  /// la grilla, pero la verdad histórica vive acá. Doc:
+  /// `{cubierta_id, cubierta_codigo, instalacion_id, unidad_id,
+  /// posicion, presion_psi, profundidad_banda_mm, fecha,
+  /// registrado_por_dni, registrado_por_nombre}`.
+  static const String cubiertasControles = 'CUBIERTAS_CONTROLES';
+
   /// Docs de control transaccional para garantizar unicidad de
   /// instalación. DocId: `{patente}__{POSICION}` (ej.
   /// `AB123CD__DIR_IZQ`). El doc EXISTE si y solo si esa posición está
