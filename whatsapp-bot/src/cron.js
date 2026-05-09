@@ -874,9 +874,18 @@ async function _runOnce(fs) {
               let esMant = TIPOS_MANT_DIRECTOS.has(tipo);
               let subTipo = null;
               if (!esMant && tipo === 'GENERIC') {
-                const subType = String(
-                  (data.detalle_generic?.type ?? '')
-                ).toUpperCase();
+                // Volvo entrega los GENERIC con subtipo en
+                // `detalle_generic.triggerType` (alertas HIGH como
+                // TELL_TALE) o en `detalle_generic.type` (alertas de
+                // mantenimiento). Leemos ambos defensivamente — sin
+                // esto el cron pierde TELL_TALE: Volvo lo manda en
+                // triggerType y este loop solo miraba type (bug
+                // detectado 2026-05-09: el resumen de Emma nunca
+                // incluía las luces de tablero).
+                const subType =
+                  String(data.detalle_generic?.triggerType ?? '').toUpperCase() ||
+                  String(data.detalle_generic?.type ?? '').toUpperCase() ||
+                  '';
                 if (SUBTIPOS_MANT_GENERIC.has(subType)) {
                   esMant = true;
                   subTipo = subType;
