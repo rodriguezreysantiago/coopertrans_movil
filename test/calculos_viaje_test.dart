@@ -83,41 +83,57 @@ void main() {
   });
 
   group('calcularMontosBrutos — POR_TONELADA', () {
-    test('multiplica tarifa por TN x tn (kg/1000) en ambos montos', () {
-      // Tarifa 5000 \$/TN x 30 TN = 150000.
+    test('descargados tienen prioridad sobre cargados (cifra final)', () {
+      // Cargados 30000 (estimado), descargados 28500 (real). Usa 28500.
       final m = CalculosViaje.calcularMontosBrutos(
         unidadTarifa: UnidadTarifa.porTonelada,
         tarifaReal: 5000,
         tarifaChofer: 2000,
         kgCargados: 30000,
+        kgDescargados: 28500,
       );
-      expect(m.montoVecchi, 150000);
-      expect(m.montoChofer, 60000);
+      expect(m.montoVecchi, 142500); // 28.5 * 5000
+      expect(m.montoChofer, 57000); // 28.5 * 2000
     });
 
-    test('kg parciales: 27500 kg → 27.5 TN', () {
+    test('sin descargados, usa cargados como estimado', () {
+      // Viaje en curso, todavía no descargó. Calcula con cargados.
       final m = CalculosViaje.calcularMontosBrutos(
         unidadTarifa: UnidadTarifa.porTonelada,
         tarifaReal: 5000,
         tarifaChofer: 2000,
-        kgCargados: 27500,
+        kgCargados: 30000,
+        kgDescargados: null,
+      );
+      expect(m.montoVecchi, 150000); // 30 * 5000
+      expect(m.montoChofer, 60000); // 30 * 2000
+    });
+
+    test('kg parciales: 27500 kg descargados → 27.5 TN', () {
+      final m = CalculosViaje.calcularMontosBrutos(
+        unidadTarifa: UnidadTarifa.porTonelada,
+        tarifaReal: 5000,
+        tarifaChofer: 2000,
+        kgCargados: 28000,
+        kgDescargados: 27500,
       );
       expect(m.montoVecchi, 137500);
       expect(m.montoChofer, 55000);
     });
 
-    test('kg null → 0 (todavía no se cargó)', () {
+    test('ambos null → 0 (viaje recién planeado)', () {
       final m = CalculosViaje.calcularMontosBrutos(
         unidadTarifa: UnidadTarifa.porTonelada,
         tarifaReal: 5000,
         tarifaChofer: 2000,
         kgCargados: null,
+        kgDescargados: null,
       );
       expect(m.montoVecchi, 0);
       expect(m.montoChofer, 0);
     });
 
-    test('kg = 0 → 0', () {
+    test('kg cargados = 0 y descargados null → 0', () {
       final m = CalculosViaje.calcularMontosBrutos(
         unidadTarifa: UnidadTarifa.porTonelada,
         tarifaReal: 5000,
@@ -126,6 +142,19 @@ void main() {
       );
       expect(m.montoVecchi, 0);
       expect(m.montoChofer, 0);
+    });
+
+    test('kg descargados = 0 → cae a cargados (defensa contra typo)', () {
+      // Si el operador puso descargados=0 por error, usar cargados.
+      final m = CalculosViaje.calcularMontosBrutos(
+        unidadTarifa: UnidadTarifa.porTonelada,
+        tarifaReal: 5000,
+        tarifaChofer: 2000,
+        kgCargados: 30000,
+        kgDescargados: 0,
+      );
+      expect(m.montoVecchi, 150000);
+      expect(m.montoChofer, 60000);
     });
   });
 
@@ -208,19 +237,32 @@ void main() {
       expect(m.comisionChoferPct, 18);
     });
 
-    test('POR_TONELADA con monto chofer no múltiplo de 5: aplica redondeo', () {
-      // Tarifa chofer $1.234/TN × 27.5 TN = $33.935 → redondeado 33935 (sí ✓).
-      // ¿O debería bajar? 33935/5 = 6787 (entero) → 6787*5 = 33935. Es múltiplo.
-      // Probemos otro: $1.237/TN × 27.5 = $34.017,50 → redondeado 34015.
+    test('POR_TONELADA con descargados aplica redondeo a múltiplo de 5', () {
+      // Tarifa chofer 1237/TN x 27.5 TN = 34017.50 → redondeado 34015.
       final m = CalculosViaje.calcularTodo(
         unidadTarifa: UnidadTarifa.porTonelada,
         tarifaReal: 5000,
         tarifaChofer: 1237,
-        kgCargados: 27500,
+        kgCargados: 28000,
+        kgDescargados: 27500,
       );
       expect(m.montoVecchi, 137500);
       expect(m.montoChofer, closeTo(34017.5, 0.01));
       expect(m.montoChoferRedondeado, 34015);
+    });
+
+    test('POR_TONELADA estimado en curso (sin descargados): usa cargados', () {
+      // Viaje EN_CURSO: cargó 30000 kg pero todavía no descargó.
+      // El cálculo usa cargados como estimado.
+      final m = CalculosViaje.calcularTodo(
+        unidadTarifa: UnidadTarifa.porTonelada,
+        tarifaReal: 5000,
+        tarifaChofer: 2000,
+        kgCargados: 30000,
+      );
+      expect(m.montoVecchi, 150000);
+      expect(m.montoChofer, 60000);
+      expect(m.montoChoferRedondeado, 60000);
     });
 
     test('POR_TONELADA sin kg → todos los montos en 0', () {
@@ -228,7 +270,6 @@ void main() {
         unidadTarifa: UnidadTarifa.porTonelada,
         tarifaReal: 5000,
         tarifaChofer: 2000,
-        kgCargados: null,
       );
       expect(m.montoVecchi, 0);
       expect(m.montoChofer, 0);

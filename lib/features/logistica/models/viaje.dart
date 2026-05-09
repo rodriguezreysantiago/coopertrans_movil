@@ -3,17 +3,21 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'tarifa_logistica.dart';
 
 /// Estado del ciclo de vida de un viaje. Transiciones esperadas:
-///   PROGRAMADO  → EN_CURSO  → COMPLETADO
+///   PLANEADO  → EN_CURSO  → COMPLETADO
 ///                 ↓
 ///              CANCELADO  (por evento climático, mecánico, etc.)
 ///                 ↓
 ///              POSTERGADO (con `fechaPostergadoA` para reanudar)
 ///
+/// PLANEADO es el default al crear: el viaje está en agenda pero
+/// todavía no arrancó. Si por algún motivo no se realiza, pasa
+/// directo a CANCELADO o POSTERGADO sin pasar por EN_CURSO.
+///
 /// El estado lo cambia el admin / supervisor manualmente en el form.
 /// No hay transiciones automáticas — el operador es el que sabe la
 /// realidad operativa.
 enum EstadoViaje {
-  programado('PROGRAMADO', 'Programado'),
+  planeado('PLANEADO', 'Planeado'),
   enCurso('EN_CURSO', 'En curso'),
   completado('COMPLETADO', 'Completado'),
   cancelado('CANCELADO', 'Cancelado'),
@@ -24,9 +28,12 @@ enum EstadoViaje {
   const EstadoViaje(this.codigo, this.etiqueta);
 
   static EstadoViaje fromCodigo(String? codigo) {
+    // Compat retro: 'PROGRAMADO' antiguo se mapea a planeado por si
+    // hay docs viejos en Firestore (antes del rename 2026-05-09).
+    if (codigo == 'PROGRAMADO') return EstadoViaje.planeado;
     return EstadoViaje.values.firstWhere(
       (e) => e.codigo == codigo,
-      orElse: () => EstadoViaje.programado,
+      orElse: () => EstadoViaje.planeado,
     );
   }
 }

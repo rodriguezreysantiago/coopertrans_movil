@@ -12,8 +12,10 @@ import '../models/viaje.dart';
 ///   2. Redondeo: solo al monto del CHOFER (lo que se le paga en
 ///      mano). Vecchi factura el monto exacto al cliente.
 ///   3. Para tarifas POR_TONELADA: el monto se calcula sobre los
-///      kg CARGADOS (no descargados). Los kg descargados se registran
-///      aparte para auditoría pero no entran al cálculo.
+///      kg DESCARGADOS (lo efectivamente entregado al cliente).
+///      Mientras el viaje está en curso (sin descargar), el cálculo
+///      cae a kg CARGADOS como ESTIMADO. Cuando el operador carga
+///      kg descargados, los montos se recalculan con esos.
 ///   4. Liquidación al chofer = monto_chofer_redondeado − adelanto
 ///      + gastos_total. Los gastos extraordinarios (peajes,
 ///      combustible, comida) los paga el chofer y Vecchi se los
@@ -45,25 +47,33 @@ class CalculosViaje {
   /// Calcula los montos brutos sin aplicar comisión ni redondeo.
   /// Devuelve (montoVecchi, montoChofer) según el tipo de tarifa.
   ///
-  /// Si tarifa es POR_VIAJE: devuelve la tarifa fija tal cual.
-  /// Si tarifa es POR_TONELADA: multiplica por kgCargados/1000 (la
-  /// tarifa está expresada como $/TN, así que dividimos kg por 1000
-  /// para convertir a toneladas antes de multiplicar). Si kg es null,
-  /// devuelve 0 (todavía no se cargó).
+  /// - POR_VIAJE: devuelve la tarifa fija tal cual.
+  /// - POR_TONELADA: usa los kg DESCARGADOS si están (lo efectivamente
+  ///   entregado al cliente). Si todavía no descargó, cae a kg
+  ///   CARGADOS como estimado. La fórmula es `tarifa * kg / 1000`
+  ///   (la tarifa está en $/TN, dividimos kg por 1000 para convertir
+  ///   a toneladas).
+  /// - Si no hay ni cargados ni descargados, devuelve 0 (viaje
+  ///   recién planeado, antes de carga).
   static MontosBrutos calcularMontosBrutos({
     required UnidadTarifa unidadTarifa,
     required double tarifaReal,
     required double tarifaChofer,
     double? kgCargados,
+    double? kgDescargados,
   }) {
     if (unidadTarifa == UnidadTarifa.porViaje) {
       return MontosBrutos(montoVecchi: tarifaReal, montoChofer: tarifaChofer);
     }
-    // POR_TONELADA: tarifa está en $/TN. Convertir kg → TN.
-    if (kgCargados == null || kgCargados <= 0) {
+    // POR_TONELADA: kg descargados tienen prioridad (cifra final).
+    // Si no están, usamos kg cargados como estimado en curso.
+    final kgEfectivo = (kgDescargados != null && kgDescargados > 0)
+        ? kgDescargados
+        : kgCargados;
+    if (kgEfectivo == null || kgEfectivo <= 0) {
       return const MontosBrutos(montoVecchi: 0, montoChofer: 0);
     }
-    final tn = kgCargados / 1000.0;
+    final tn = kgEfectivo / 1000.0;
     return MontosBrutos(
       montoVecchi: tarifaReal * tn,
       montoChofer: tarifaChofer * tn,
@@ -106,6 +116,7 @@ class CalculosViaje {
     required double tarifaReal,
     required double tarifaChofer,
     double? kgCargados,
+    double? kgDescargados,
     double adelanto = 0,
     Iterable<GastoViaje>? gastos,
     double? comisionPct,
@@ -116,6 +127,7 @@ class CalculosViaje {
       tarifaReal: tarifaReal,
       tarifaChofer: tarifaChofer,
       kgCargados: kgCargados,
+      kgDescargados: kgDescargados,
     );
     final redondeado = redondearMultiploDe5Descendente(brutos.montoChofer);
     final gastosTot = sumarGastos(gastos);
