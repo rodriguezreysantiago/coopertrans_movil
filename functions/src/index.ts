@@ -3234,7 +3234,7 @@ export const resumenBotDiario = onSchedule(
       const fechaTxt = _formatFechaArg(Date.now());
       const mensajeOk =
         `🤖 *Resumen del bot — ${fechaTxt}*\n\n` +
-        `✅ Sin caídas ni eventos en las últimas 24 h.\n\n` +
+        "✅ Sin caídas ni eventos en las últimas 24 h.\n\n" +
         BANNER_TESTING +
         "_Si dejaras de recibir este resumen a las 8 AM, " +
         "verificá que la Cloud Function `resumenBotDiario` esté activa._";
@@ -3955,8 +3955,8 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
     if (drifts.length === 0) {
       const mensajeOk =
         `📋 *Resumen drifts asignaciones — ${fechaTxt}*\n\n` +
-        `✅ Sin drifts: todas las asignaciones coinciden con el ` +
-        `chofer físico de Sitrack.\n\n` +
+        "✅ Sin drifts: todas las asignaciones coinciden con el " +
+        "chofer físico de Sitrack.\n\n" +
         BANNER_TESTING +
         "_Coopertrans Móvil — Aviso automático._";
       await db.collection("COLA_WHATSAPP").add({
@@ -4629,8 +4629,8 @@ export const resumenExcesosJornadaDiario = onSchedule(
       const mensajeOk =
         `${saludoOk},\n\n` +
         `📋 *Resumen excesos de jornada — ${fmtFechaOk}*\n\n` +
-        `✅ Sin excesos: ningún chofer cruzó las 4 h continuas ` +
-        `ni las 12 h diarias ayer.\n\n` +
+        "✅ Sin excesos: ningún chofer cruzó las 4 h continuas " +
+        "ni las 12 h diarias ayer.\n\n" +
         BANNER_TESTING +
         "_Coopertrans Móvil — Aviso automático._";
       await db.collection("COLA_WHATSAPP").add({
