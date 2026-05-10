@@ -597,14 +597,13 @@ class _KpiCard extends StatelessWidget {
         : null;
 
     // Layout defensivo contra overflow en iOS:
-    // - El bloque central (valor + sublabel) va dentro de Flexible para
-    //   que ceda altura si la card es ajustada. mainAxisSize: min lo
-    //   mantiene compacto cuando hay aire de sobra (el spaceBetween
-    //   externo igual lo posiciona en el medio visual).
-    // - El Text del valor va en FittedBox(scaleDown) — si por alguna
-    //   combinación de fontSize + line-height no entra, se achica en
-    //   lugar de overflowing.
-    // - El label inferior va en Flexible — si falta alto, ellipsiza.
+    // - El bloque central (valor + sublabel) va envuelto en un FittedBox
+    //   externo (scaleDown) que escala uniformemente todo el bloque si
+    //   el alto del Expanded no alcanza. iOS deja <1 px de holgura por
+    //   rounding del line-height; sin el FittedBox externo no había
+    //   forma de que el Column interno cediera (mainAxisSize.min no
+    //   pasa constraints al child cuando el parent lo fuerza tight).
+    // - El label inferior queda en Flexible para ellipsizar si no entra.
     return AppCard(
       onTap: tap,
       padding: const EdgeInsets.all(14),
@@ -612,7 +611,6 @@ class _KpiCard extends StatelessWidget {
       borderColor: urgente ? color.withAlpha(160) : null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -630,37 +628,38 @@ class _KpiCard extends StatelessWidget {
                     color: Colors.white54, size: 14),
             ],
           ),
-          Flexible(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    valor,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 30,
-                      fontWeight: FontWeight.bold,
-                      height: 1,
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      valor,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 30,
+                        fontWeight: FontWeight.bold,
+                        height: 1,
+                      ),
                     ),
-                  ),
+                    if (sublabel != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        sublabel!,
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                if (sublabel != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    sublabel!,
-                    style: const TextStyle(
-                      color: Colors.white38,
-                      fontSize: 10,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ],
+              ),
             ),
           ),
           Flexible(
