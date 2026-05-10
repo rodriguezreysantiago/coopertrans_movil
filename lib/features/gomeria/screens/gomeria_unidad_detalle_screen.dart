@@ -69,8 +69,10 @@ class _GomeriaUnidadDetalleScreenState
               final activas = snap.data ?? const <CubiertaInstalada>[];
               // Mapeo posicion_codigo → CubiertaInstalada activa.
               final mapa = <String, CubiertaInstalada>{};
+              var cantLegacy = 0;
               for (final i in activas) {
                 mapa[i.posicion] = i;
+                if (i.legacyInicial) cantLegacy++;
               }
               return SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
@@ -85,6 +87,7 @@ class _GomeriaUnidadDetalleScreenState
                       cantInstaladas: activas.length,
                       cantPosiciones: cantPosiciones,
                       kmActual: kmActual,
+                      cantLegacy: cantLegacy,
                     ),
                     const SizedBox(height: 16),
                     EsquemaUnidadView(
@@ -146,6 +149,7 @@ class _Cabecera extends StatelessWidget {
   final int cantInstaladas;
   final int cantPosiciones;
   final double? kmActual;
+  final int cantLegacy;
 
   const _Cabecera({
     required this.unidadId,
@@ -155,6 +159,7 @@ class _Cabecera extends StatelessWidget {
     required this.cantInstaladas,
     required this.cantPosiciones,
     required this.kmActual,
+    required this.cantLegacy,
   });
 
   @override
@@ -238,6 +243,47 @@ class _Cabecera extends StatelessWidget {
                       ? '${AppFormatters.formatearMiles(kmActual)} km actuales'
                       : 'Sin lectura de odómetro',
                   style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ],
+          if (cantLegacy > 0) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Container(
+                  width: 16,
+                  height: 16,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.65),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      width: 1,
+                    ),
+                  ),
+                  child: const Text(
+                    'L',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      height: 1.0,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '$cantLegacy ${cantLegacy == 1 ? "cubierta sin datos previos" : "cubiertas sin datos previos"} (carga inicial)',
+                    style: const TextStyle(
+                      color: Colors.white60,
+                      fontSize: 12,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),

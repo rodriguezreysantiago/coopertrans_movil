@@ -100,6 +100,14 @@ class CubiertaInstalada {
   final String? ultimaLecturaPorDni;
   final String? ultimaLecturaPorNombre;
 
+  /// `true` si esta instalación fue creada por el script de carga
+  /// inicial (`importar_cubiertas_legacy.py`, cohort 1). Significa que
+  /// no tenemos datos históricos reales: la cubierta ya estaba montada
+  /// físicamente cuando el sistema arrancó. La UI muestra una "L" en
+  /// la cubierta para que el operador sepa que faltan datos previos
+  /// (modelo "SIN IDENTIFICAR", vidas y km acumulados desconocidos).
+  final bool legacyInicial;
+
   const CubiertaInstalada({
     required this.id,
     required this.cubiertaId,
@@ -125,6 +133,7 @@ class CubiertaInstalada {
     required this.ultimaLecturaEn,
     required this.ultimaLecturaPorDni,
     required this.ultimaLecturaPorNombre,
+    this.legacyInicial = false,
   });
 
   bool get esActiva => hasta == null;
@@ -200,6 +209,7 @@ class CubiertaInstalada {
       ultimaLecturaEn: (d['ultima_lectura_en'] as Timestamp?)?.toDate(),
       ultimaLecturaPorDni: d['ultima_lectura_por_dni']?.toString(),
       ultimaLecturaPorNombre: d['ultima_lectura_por_nombre']?.toString(),
+      legacyInicial: d['legacy_inicial'] == true,
     );
   }
 }

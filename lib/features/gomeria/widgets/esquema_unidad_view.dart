@@ -372,7 +372,44 @@ class _EsquemaUnidadPainter extends CustomPainter {
       } else {
         _patronTraccion(canvas, rect, color);
       }
+      // Badge "L" para cohort 1 legacy: el operador necesita saber que
+      // de esta cubierta no tenemos modelo/vidas/km previos reales.
+      if (instalada.legacyInicial) {
+        _badgeLegacy(canvas, rect);
+      }
     }
+  }
+
+  /// Badge pequeño "L" en la esquina superior izquierda — marca cubiertas
+  /// del seed inicial (cohort 1) cuyos datos previos son desconocidos.
+  void _badgeLegacy(Canvas canvas, Rect rect) {
+    final radio = rect.width * 0.18;
+    final centro = Offset(rect.left + radio, rect.top + radio);
+    final fill = Paint()
+      ..style = PaintingStyle.fill
+      ..color = Colors.black.withValues(alpha: 0.65);
+    final stroke = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0
+      ..color = Colors.white.withValues(alpha: 0.85);
+    canvas.drawCircle(centro, radio, fill);
+    canvas.drawCircle(centro, radio, stroke);
+    final tp = TextPainter(
+      text: TextSpan(
+        text: 'L',
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: radio * 1.5,
+          fontWeight: FontWeight.bold,
+          height: 1.0,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    tp.paint(
+      canvas,
+      Offset(centro.dx - tp.width / 2, centro.dy - tp.height / 2),
+    );
   }
 
   /// Patrón direccional: 3 chevrons en V apilados verticalmente.

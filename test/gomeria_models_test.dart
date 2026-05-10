@@ -657,6 +657,29 @@ void main() {
       expect(i.ultimaPresionPsi, 105);
       expect(i.ultimaProfundidadBandaMm, 11.5);
     });
+
+    test('legacy_inicial true → flag = true', () {
+      final i = CubiertaInstalada.fromMap('i1', {
+        'cubierta_id': 'c1',
+        'unidad_id': 'TR123',
+        'unidad_tipo': 'TRACTOR',
+        'posicion': 'DIR_IZQ',
+        'desde': Timestamp.fromDate(DateTime(2026, 5, 8)),
+        'legacy_inicial': true,
+      });
+      expect(i.legacyInicial, isTrue);
+    });
+
+    test('legacy_inicial ausente → flag = false (default)', () {
+      final i = CubiertaInstalada.fromMap('i1', {
+        'cubierta_id': 'c1',
+        'unidad_id': 'TR123',
+        'unidad_tipo': 'TRACTOR',
+        'posicion': 'DIR_IZQ',
+        'desde': Timestamp.fromDate(DateTime(2026, 5, 8)),
+      });
+      expect(i.legacyInicial, isFalse);
+    });
   });
 
   // ===========================================================================
