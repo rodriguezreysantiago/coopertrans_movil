@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
+import '../../../shared/utils/responsive_grid.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../constants/posiciones.dart';
 import '../models/cubierta_instalada.dart';
@@ -45,15 +46,17 @@ class GomeriaHubScreen extends StatelessWidget {
               child: LayoutBuilder(
                 builder: (ctx, constraints) {
                   const spacing = 16.0;
-                  final cellWidth = (constraints.maxWidth - spacing) / 2;
-                  final cellHeight = (constraints.maxHeight - spacing) / 2;
-                  // Defensivo: si la pantalla es absurdamente chica
-                  // (landscape de mobile bajo + banner enorme), evitamos
-                  // ratio negativo o NaN. Mínimo 0.5 → cards altas y
-                  // angostas; máximo 2.0 → cards anchas y bajas.
-                  final ratio = (cellHeight > 0)
-                      ? (cellWidth / cellHeight).clamp(0.5, 2.0)
-                      : 1.0;
+                  // Helper compartido — defensa contra alto cero / NaN
+                  // y clamp 0.5..2.0 para evitar cards ridículamente
+                  // altas/anchas en pantallas extremas.
+                  final ratio = computeGridRatio(
+                    boxWidth: constraints.maxWidth,
+                    boxHeight: constraints.maxHeight,
+                    cols: 2,
+                    rows: 2,
+                    spacing: spacing,
+                    clampMin: 0.5,
+                  );
                   return GridView.count(
                     crossAxisCount: 2,
                     crossAxisSpacing: spacing,

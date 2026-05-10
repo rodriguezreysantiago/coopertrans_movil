@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
+import '../../../shared/utils/responsive_grid.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/logistica_service.dart';
 
@@ -64,15 +65,17 @@ class LogisticaHubScreen extends StatelessWidget {
                   const totalTiles = 5;
                   final filas = (totalTiles / columnas).ceil();
                   const spacing = 12.0;
-                  final cellWidth =
-                      (constraints.maxWidth - spacing * (columnas - 1)) /
-                          columnas;
-                  final cellHeight =
-                      (constraints.maxHeight - spacing * (filas - 1)) /
-                          filas;
-                  final ratio = (cellHeight > 0)
-                      ? (cellWidth / cellHeight).clamp(0.45, 2.0)
-                      : 1.05;
+                  // Helper compartido — clamp 0.45..2.0 + fallback
+                  // 1.05 (cuadrado-ish) si los constraints son
+                  // inválidos (alto cero, etc).
+                  final ratio = computeGridRatio(
+                    boxWidth: constraints.maxWidth,
+                    boxHeight: constraints.maxHeight,
+                    cols: columnas,
+                    rows: filas,
+                    spacing: spacing,
+                    fallback: 1.05,
+                  );
                   return GridView.count(
                     crossAxisCount: columnas,
                     crossAxisSpacing: spacing,

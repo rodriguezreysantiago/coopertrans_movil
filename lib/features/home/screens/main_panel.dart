@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
+import '../../../shared/utils/responsive_grid.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../../core/services/prefs_service.dart';
 import '../../auth/services/auth_service.dart';
@@ -74,15 +75,17 @@ class MainPanel extends StatelessWidget {
                       // botones, idem 2 filas pero llenas. Mismo cálculo.
                       final n = _isAdmin ? 4 : 3;
                       final filas = (n / cols).ceil();
-                      final cellWidth =
-                          (constraints.maxWidth - spacing * (cols - 1)) /
-                              cols;
-                      final cellHeight =
-                          (constraints.maxHeight - spacing * (filas - 1)) /
-                              filas;
-                      final ratio = (cellHeight > 0)
-                          ? (cellWidth / cellHeight).clamp(0.5, 2.0)
-                          : 1.2;
+                      // Helper compartido — clamp 0.5..2.0 + fallback
+                      // 1.2 (botones más anchos que altos por diseño).
+                      final ratio = computeGridRatio(
+                        boxWidth: constraints.maxWidth,
+                        boxHeight: constraints.maxHeight,
+                        cols: cols,
+                        rows: filas,
+                        spacing: spacing,
+                        clampMin: 0.5,
+                        fallback: 1.2,
+                      );
                       return GridView.count(
                         crossAxisCount: cols,
                         crossAxisSpacing: spacing,

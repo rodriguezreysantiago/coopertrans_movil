@@ -120,13 +120,44 @@ void main() async {
       (options) {
         options.dsn = sentryDsn;
         options.environment = sentryEnv;
-        // tracesSampleRate: 0.2 = 20% de transactions trackeadas para
-        // perf monitoring. En una flota chica con uso bajo es razonable;
-        // bajar a 0.05 si crece el volumen y los costos suben.
-        options.tracesSampleRate = 0.2;
+        // tracesSampleRate: 0.05 = 5% de transactions trackeadas para
+        // perf monitoring. Bajado de 0.2 (2026-05-10) ahora que la app
+        // está en producción interna con 90+ empleados — con 20% el
+        // volumen de transactions trackeadas crecía linealmente con
+        // los usuarios y se acercaba al free tier de 5K events/mes.
+        // Con 5% queda margen 4× para crecimiento y los errores reales
+        // (que NO son sample-rated, siempre se mandan) tienen
+        // prioridad de bandwidth.
+        options.tracesSampleRate = 0.05;
         // sendDefaultPii: false por privacidad (no mandar IPs ni
         // identificadores del usuario sin consentimiento explícito).
         options.sendDefaultPii = false;
+        // beforeSend: filtra errores triviales antes de mandarlos a
+        // Sentry. Los errores que NO aportan información de bug real
+        // pero generan ruido (network glitches transient, cancelados
+        // por el usuario) se descartan en cliente — ahorra cuota Sentry
+        // y reduce el "noise" del dashboard. Errores de red persistentes
+        // o errores de lógica siguen llegando normales.
+        options.beforeSend = (event, hint) {
+          final msg = (event.message?.formatted ?? '').toLowerCase();
+          final errType =
+              (event.exceptions?.firstOrNull?.type ?? '').toLowerCase();
+          // SocketException con "failed host lookup" / "connection
+          // refused" es un network glitch típico (wifi se cae, 4G
+          // perdido). El usuario va a reintentar; no es bug.
+          if (msg.contains('failed host lookup') ||
+              msg.contains('connection refused') ||
+              msg.contains('connection closed') ||
+              msg.contains('connection timed out')) {
+            return null;
+          }
+          // CancelledByUserException de file_picker / image_picker
+          // (chofer abre el picker y cancela). Es flujo normal.
+          if (errType.contains('cancelledbyuser')) {
+            return null;
+          }
+          return event;
+        };
       },
       appRunner: () => runApp(_armarApp()),
     );

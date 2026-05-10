@@ -838,7 +838,15 @@ export async function registrarIntentoFallido(
         rawIntentos :
         Number(rawIntentos ?? 0);
     const intentos = (Number.isFinite(numIntentos) ? numIntentos : 0) + 1;
-    const update: Record<string, unknown> = {
+    // Tipado del payload: TS 5.5+ exige que tx.update reciba
+    // UpdateData<T> = `{[k: string]: FieldValue | Partial<unknown>
+    // | undefined}` — con `Record<string, unknown>` falla porque
+    // `unknown` no es asignable a `FieldValue | Partial<unknown>`.
+    // Declarar como `any` mantiene el shape flexible que necesitamos
+    // (numbers, FieldValue, Timestamp coexisten) sin engañar al
+    // typechecker en otros llamadores.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const update: {[k: string]: any} = {
       intentos,
       ultimoIntento: FieldValue.serverTimestamp(),
     };
@@ -4711,7 +4719,7 @@ export const resumenExcesosJornadaDiario = onSchedule(
           (eS.data()?.NOMBRE ?? "").toString().trim() :
           "";
         nombrePorDni.set(x.choferDni, n);
-      } catch (_) {
+      } catch {
         nombrePorDni.set(x.choferDni, "");
       }
     }
