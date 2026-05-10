@@ -800,6 +800,54 @@ Corré la app y hacé que tire un error a propósito (ej. login con password mal
 
 ---
 
+## Costos GCP — budget + alertas
+
+**Budget activo** (configurado 2026-05-11):
+- **Billing account**: `012131-B936BA-6291CB` ("Pago de Firebase")
+- **Proyecto cubierto**: `coopertrans-movil` (project number `808925655961`)
+- **Monto**: USD 10/mes (calendar period)
+- **Alertas por email** (a `santiagocoopertrans@gmail.com`):
+  - 50% (USD 5) — warning informativo
+  - 90% (USD 9) — atención
+  - 100% (USD 10) — crítico
+- **Display name**: "Firebase Project coopertrans-movil"
+
+USD 10/mes da margen 10× sobre el uso típico actual de la flota (~few USD/mes). Si una Cloud Function entra en loop infinito o algún polling se dispara, las alertas llegan **antes** de que la factura cause sorpresas.
+
+### Comandos de inspección
+
+```powershell
+# Ver budgets del billing account
+gcloud beta billing budgets list --billing-account=012131-B936BA-6291CB
+
+# Ver detalles de un budget específico
+gcloud beta billing budgets describe `
+  billingAccounts/012131-B936BA-6291CB/budgets/<BUDGET_ID> `
+  --billing-account=012131-B936BA-6291CB
+
+# Ver el billing account asociado a un proyecto
+gcloud beta billing projects describe coopertrans-movil
+
+# Listar todos los billing accounts donde Santiago tiene acceso
+gcloud beta billing accounts list
+```
+
+### Si el budget se vuelve restrictivo (la app crece)
+
+El monto USD 10 está pensado para etapa testeo + Closed Testing. Si la operación crece significativamente:
+
+1. Bajar `tracesSampleRate` de Sentry (ya en 0.05 desde 2026-05-11; se puede bajar más a 0.01).
+2. Activar TTL más agresivo en TELEMETRIA_HISTORICO (hoy 18 meses; se puede bajar a 12).
+3. Subir el budget a USD 25-50 desde GCP Console.
+
+### Si las alertas llegan inesperadamente
+
+1. Abrir `https://console.cloud.google.com/billing/012131-B936BA-6291CB/reports?project=coopertrans-movil` para ver el desglose por SKU/servicio.
+2. Filtrar por las últimas 24h — el spike usualmente viene de Cloud Functions (loop), Firestore reads (query sin limit), o Storage egress (download masivo).
+3. Si es Cloud Functions: `firebase functions:log` para encontrar la función culpable y matarla con `gcloud functions delete <name> --region=southamerica-east1`.
+
+---
+
 ## CI/CD — GitHub Actions
 
 Workflow en `.github/workflows/ci.yml` que corre **3 jobs en paralelo** en cada push a `main` (y a ramas `claude/**` que es donde Claude Code commitea), y en cada PR hacia `main`. Si alguno falla, GitHub marca el commit con ✗ rojo. Si pasan los tres, ✓ verde.
