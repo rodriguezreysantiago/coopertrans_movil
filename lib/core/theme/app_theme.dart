@@ -20,8 +20,10 @@ class AppTheme {
 
   // _secondaryColor / _errorColor son semánticos (warnings, errores), NO
   // brand. Se mantienen para que la jerarquía visual no se rompa.
-  static const Color _secondaryColor = Colors.orangeAccent;
-  static const Color _errorColor = Colors.redAccent;
+  // Migrados a tokens AppColors (2026-05-10) para que cualquier cambio
+  // futuro de paleta semántica se haga en un solo lugar.
+  static const Color _secondaryColor = AppColors.accentOrange;
+  static const Color _errorColor = AppColors.accentRed;
   static const Color _textPrimary = Colors.white;
   static const Color _textSecondary = Colors.white54;
 

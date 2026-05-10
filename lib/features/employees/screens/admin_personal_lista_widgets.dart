@@ -156,7 +156,7 @@ class _RolBadge extends StatelessWidget {
       case AppRoles.supervisor:
         return AppColors.accentOrange;
       case AppRoles.planta:
-        return Colors.lightBlueAccent;
+        return AppColors.accentLightBlue;
     }
     return Colors.white60;
   }

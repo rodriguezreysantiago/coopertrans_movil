@@ -138,7 +138,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               titulo: 'SERVICE',
               subtitulo: 'Próximos services de la flota Volvo',
               icono: Icons.build_circle_outlined,
-              color: Colors.deepOrangeAccent,
+              color: AppColors.accentDeepOrange,
               ruta: AppRoutes.adminMantenimiento,
             ),
           if (Capabilities.can(PrefsService.rol, Capability.verAlertasVolvo))
@@ -170,7 +170,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               titulo: 'ESTADO BOT',
               subtitulo: 'Bot WhatsApp: cola, cron, errores y heartbeat',
               icono: Icons.smart_toy_outlined,
-              color: Colors.lightGreenAccent,
+              color: AppColors.accentLightGreen,
               ruta: AppRoutes.adminEstadoBot,
             ),
           const SizedBox(height: 28),

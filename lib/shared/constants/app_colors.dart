@@ -101,6 +101,19 @@ class AppColors {
   /// "diferenciador" en admin_panel.
   static const Color accentPurple = Colors.purpleAccent;
 
+  /// Deep orange — variante más fuerte de [accentOrange]. Usado para
+  /// diferenciar visualmente el tile SERVICE del tile GOMERÍA en el
+  /// panel admin (ambos son del rubro mantenimiento pero distintos).
+  static const Color accentDeepOrange = Colors.deepOrangeAccent;
+
+  /// Light green — variante suave de [accentGreen]. Usado para el tile
+  /// ESTADO BOT en el panel admin (no es alerta, es info de servicio).
+  static const Color accentLightGreen = Colors.lightGreenAccent;
+
+  /// Light blue — variante suave de [accentBlue]. Usado para el badge
+  /// del rol PLANTA (info de jerarquía, no atención ni acción).
+  static const Color accentLightBlue = Colors.lightBlueAccent;
+
   // ===========================================================================
   // BACKGROUND / SURFACE
   // ===========================================================================
