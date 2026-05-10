@@ -76,7 +76,7 @@ Ejecutar UNA SOLA VEZ después de clonar el repo. Los hooks de Claude Code (`Ses
 #### Windows
 
 ```powershell
-cd C:\Users\Colo Logistica\logistica_app_profesional
+cd C:\Users\Colo Logistica\coopertrans_movil
 
 # 1) Git hooks versionados (post-commit que respalda docs a Drive).
 git config core.hooksPath .githooks
@@ -95,7 +95,7 @@ git config sentry.authtoken "sntryu_..."   # token con scopes Project + Release 
 #### Mac
 
 ```bash
-cd ~/ruta/al/repo/logistica_app_profesional
+cd ~/ruta/al/repo/coopertrans_movil
 
 # 1) Git hooks versionados.
 git config core.hooksPath .githooks
@@ -141,7 +141,7 @@ Si el token se filtra (por error en chat, log, etc.), **revocarlo** desde la mis
 ### Paso 2 — Sync de código en la PC nueva (oficina)
 
 ```bash
-cd C:\Users\santi\logistica_app_profesional
+cd C:\Users\Colo Logistica\coopertrans_movil
 
 # 1) Bajar todo lo que se pusheó desde la otra PC
 git fetch origin
@@ -171,7 +171,7 @@ flutter run -d windows
 
 > Si el build Windows falla con `Filename too long` en submódulos de
 > sentry-native, el path del cwd es muy profundo. Asegurate de
-> trabajar desde `C:\Users\santi\logistica_app_profesional\` y NO
+> trabajar desde `C:\Users\Colo Logistica\coopertrans_movil\` y NO
 > desde un worktree dentro de `.claude/worktrees/...`.
 
 ### Paso 4 — Bot WhatsApp: ¿dónde corre ahora?
@@ -195,7 +195,7 @@ nssm stop CoopertransBot
 nssm status CoopertransBot   # debería mostrar SERVICE_STOPPED
 
 # === En la PC de OFICINA, levantarlo ===
-cd C:\Users\santi\logistica_app_profesional\whatsapp-bot
+cd C:\Users\Colo Logistica\coopertrans_movil\whatsapp-bot
 
 # 1) Sync del código del bot también (es parte del mismo repo)
 git pull origin main
@@ -304,7 +304,7 @@ Si el heartbeat es de hace > 2 min, el bot está caído **aunque el servicio dig
 ### Restart limpio
 
 ```powershell
-cd C:\Users\santi\logistica_app_profesional\whatsapp-bot
+cd C:\Users\Colo Logistica\coopertrans_movil\whatsapp-bot
 .\scripts\stop_bot.ps1   # auto-eleva UAC, espera grace period 90s
 .\scripts\start_bot.ps1  # hace git pull + npm install + nssm start
 ```
@@ -320,16 +320,16 @@ El "calvario operativo" del 1-mayo PM (sec. 6.11.11 del `ESTADO_PROYECTO.md`) de
 Stop-Service CoopertransMovilBot -Force
 
 # 2. Borrar la sesión rota (requiere admin porque LocalSystem la creó)
-Remove-Item C:\Users\santi\logistica_app_profesional\whatsapp-bot\.wwebjs_auth -Recurse -Force
+Remove-Item C:\Users\Colo Logistica\coopertrans_movil\whatsapp-bot\.wwebjs_auth -Recurse -Force
 
 # 3. Borrar cache de Chromium
-Remove-Item C:\Users\santi\logistica_app_profesional\whatsapp-bot\.wwebjs_cache -Recurse -Force
+Remove-Item C:\Users\Colo Logistica\coopertrans_movil\whatsapp-bot\.wwebjs_cache -Recurse -Force
 
 # 4. Start service. Va a pedir QR fresco.
 Start-Service CoopertransMovilBot
 
 # 5. Mirar logs de NSSM para ver el QR
-Get-Content C:\Users\santi\logistica_app_profesional\whatsapp-bot\logs\bot.out.log -Tail 50 -Wait
+Get-Content C:\Users\Colo Logistica\coopertrans_movil\whatsapp-bot\logs\bot.out.log -Tail 50 -Wait
 ```
 
 **Importante**: nunca correr `node src/index.js` a mano si el servicio NSSM está activo. Una sesión a la vez. Mezclar ambos quema la sesión persistida.
@@ -677,7 +677,7 @@ La sesión es el "estado autenticado" de WhatsApp Web. Si se pierde, hay que ree
    - **Programa**: `powershell.exe`
    - **Argumentos**:
      ```
-     -NoProfile -ExecutionPolicy Bypass -File "C:\Users\santi\logistica_app_profesional\whatsapp-bot\scripts\backup_wwebjs_auth.ps1"
+     -NoProfile -ExecutionPolicy Bypass -File "C:\Users\Colo Logistica\coopertrans_movil\whatsapp-bot\scripts\backup_wwebjs_auth.ps1"
      ```
 5. **Condiciones**: marcar "Despertar el equipo para ejecutar esta tarea" si la PC duerme.
 6. **Configuración** → "Si la tarea falla, reintentar cada": 5 minutos, hasta 3 intentos.

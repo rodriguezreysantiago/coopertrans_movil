@@ -121,7 +121,7 @@ se cae:
 4. Action: `Start a program`.
    - Program: `C:\Program Files\nodejs\node.exe`
    - Arguments: `src/index.js`
-   - Start in: `C:\Users\santi\logistica_app_profesional\whatsapp-bot`
+   - Start in: `C:\Users\Colo Logistica\coopertrans_movil\whatsapp-bot`
 5. En la pestaña Settings, marcá `If the task fails, restart every: 1
    minute, attempt 3 times`.
 
