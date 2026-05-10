@@ -1,5 +1,5 @@
 /// Helpers para calcular `childAspectRatio` de GridViews que tienen que
-/// llenar TODO el alto disponible sin scrollear.
+/// llenar todo el alto disponible sin scrollear.
 ///
 /// **Por qué existe**: el patrón "hub responsive" (Gomería / Logística /
 /// main_panel del chofer) calcula el ratio dinámicamente según los
