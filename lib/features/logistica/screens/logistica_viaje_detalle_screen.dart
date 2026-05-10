@@ -31,6 +31,12 @@ class LogisticaViajeDetalleScreen extends StatelessWidget {
       body: StreamBuilder<Viaje?>(
         stream: ViajesService.streamViaje(viajeId),
         builder: (ctx, snap) {
+          if (snap.hasError) {
+            return AppErrorState(
+              title: 'No se pudo cargar el viaje',
+              subtitle: snap.error.toString(),
+            );
+          }
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }

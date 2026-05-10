@@ -75,6 +75,12 @@ class _GomeriaUnidadesListaScreenState
                   .where('TIPO', whereIn: _tiposParaQuery())
                   .snapshots(),
               builder: (ctx, snap) {
+                if (snap.hasError) {
+                  return AppErrorState(
+                    title: 'No se pudieron cargar las unidades',
+                    subtitle: snap.error.toString(),
+                  );
+                }
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }

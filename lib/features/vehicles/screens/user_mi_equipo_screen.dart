@@ -52,6 +52,12 @@ class _UserMiEquipoScreenState extends State<UserMiEquipoScreen> {
       body: StreamBuilder<DocumentSnapshot>(
         stream: _empleadoStream,
         builder: (context, empSnap) {
+          if (empSnap.hasError) {
+            return AppErrorState(
+              title: 'No se pudo cargar tu perfil',
+              subtitle: empSnap.error.toString(),
+            );
+          }
           if (empSnap.connectionState == ConnectionState.waiting) {
             return const AppLoadingState();
           }

@@ -72,6 +72,12 @@ class _EnProcesoTab extends StatelessWidget {
     return StreamBuilder<List<CubiertaRecapado>>(
       stream: service.streamRecapadosEnProceso(),
       builder: (ctx, snap) {
+        if (snap.hasError) {
+          return AppErrorState(
+            title: 'No se pudieron cargar los recapados',
+            subtitle: snap.error.toString(),
+          );
+        }
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -119,6 +125,12 @@ class _HistoricoTab extends StatelessWidget {
     return StreamBuilder<List<CubiertaRecapado>>(
       stream: service.streamRecapadosCerrados(),
       builder: (ctx, snap) {
+        if (snap.hasError) {
+          return AppErrorState(
+            title: 'No se pudo cargar el histórico',
+            subtitle: snap.error.toString(),
+          );
+        }
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }

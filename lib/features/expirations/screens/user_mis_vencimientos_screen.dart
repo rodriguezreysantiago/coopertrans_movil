@@ -374,6 +374,12 @@ class _UserMisVencimientosScreenState
       body: StreamBuilder<DocumentSnapshot>(
         stream: _empleadoStream,
         builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return AppErrorState(
+              title: 'No se pudieron cargar tus vencimientos',
+              subtitle: snapshot.error.toString(),
+            );
+          }
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const AppLoadingState();
           }

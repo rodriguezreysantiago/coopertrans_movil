@@ -59,6 +59,12 @@ class _MarcasTab extends StatelessWidget {
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: col.orderBy('nombre').snapshots(),
           builder: (ctx, snap) {
+            if (snap.hasError) {
+              return AppErrorState(
+                title: 'No se pudieron cargar las marcas',
+                subtitle: snap.error.toString(),
+              );
+            }
             if (snap.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }
@@ -175,6 +181,12 @@ class _ModelosTab extends StatelessWidget {
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: colModelos.orderBy('marca_nombre').snapshots(),
           builder: (ctx, snap) {
+            if (snap.hasError) {
+              return AppErrorState(
+                title: 'No se pudieron cargar los modelos',
+                subtitle: snap.error.toString(),
+              );
+            }
             if (snap.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator());
             }

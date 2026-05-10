@@ -33,6 +33,12 @@ class GomeriaCubiertaDetalleScreen extends StatelessWidget {
       body: StreamBuilder<Cubierta?>(
         stream: service.streamCubierta(cubiertaId),
         builder: (ctx, snap) {
+          if (snap.hasError) {
+            return AppErrorState(
+              title: 'No se pudo cargar la cubierta',
+              subtitle: snap.error.toString(),
+            );
+          }
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }

@@ -60,12 +60,24 @@ class _GomeriaUnidadDetalleScreenState
             .doc(widget.unidadId)
             .snapshots(),
         builder: (ctx, vehSnap) {
+          if (vehSnap.hasError) {
+            return AppErrorState(
+              title: 'No se pudo cargar la unidad',
+              subtitle: vehSnap.error.toString(),
+            );
+          }
           final kmActual =
               (vehSnap.data?.data()?['KM_ACTUAL'] as num?)?.toDouble();
           return StreamBuilder<List<CubiertaInstalada>>(
             stream: _service
                 .streamInstalacionesActivasPorUnidad(widget.unidadId),
             builder: (ctx, snap) {
+              if (snap.hasError) {
+                return AppErrorState(
+                  title: 'No se pudieron cargar las cubiertas instaladas',
+                  subtitle: snap.error.toString(),
+                );
+              }
               final activas = snap.data ?? const <CubiertaInstalada>[];
               // Mapeo posicion_codigo → CubiertaInstalada activa.
               final mapa = <String, CubiertaInstalada>{};
