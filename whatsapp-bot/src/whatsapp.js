@@ -357,8 +357,25 @@ async function enviarMensaje(wid, texto) {
   }
 }
 
+// Defensivo: guardamos el último handler registrado para poder
+// removerlo si se vuelve a llamar `onMensajeEntrante`. Hoy index.js lo
+// llama solo una vez en el bootstrap (no hay leak real), pero si una
+// refactor futura lo invoca 2 veces, sin este guardia se duplicaría
+// silenciosamente y cada mensaje se procesaría N veces.
+let _messageHandler = null;
+
 function onMensajeEntrante(handler) {
   if (!client) throw new Error('Cliente no inicializado');
+  // Si ya había un handler registrado, lo sacamos antes de registrar
+  // el nuevo — evita acumulación de listeners en re-registros.
+  if (_messageHandler) {
+    try {
+      client.removeListener('message_create', _messageHandler);
+    } catch (e) {
+      log.warn(`No se pudo remover handler anterior: ${e.message}`);
+    }
+  }
+  _messageHandler = handler;
   // `message_create` dispara para TODOS los mensajes (entrantes y
   // salientes). Es más permisivo que `message`, que en algunas
   // versiones de wwebjs no dispara en conversaciones nuevas

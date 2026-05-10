@@ -108,22 +108,57 @@ async function marcarProcesando(docRef) {
  * ambas marcaban PROCESANDO y las dos enviaban el mensaje (chofer
  * recibe duplicado, riesgo de baneo de WhatsApp).
  *
+ * Retry defensivo: el `runTransaction` de Firebase Admin ya reintenta
+ * automáticamente conflictos de versión (hasta 5 veces internas), pero
+ * NO reintenta errores transient de red (DEADLINE_EXCEEDED,
+ * UNAVAILABLE). Si la transacción tira por red, sin este wrapper el
+ * caller lo trata como error fatal y el doc queda sin procesar hasta
+ * el próximo polling. Acá hacemos hasta 3 reintentos con backoff
+ * (200ms / 500ms / 1000ms) y solo después propagamos el error.
+ *
  * @returns {Promise<boolean>} true si tomamos el lock, false si otro
- *   proceso ya lo tenía.
+ *   proceso ya lo tenía o el doc ya no está PENDIENTE.
  */
 async function marcarProcesandoSiPendiente(docRef) {
   const db = docRef.firestore;
-  return await db.runTransaction(async (tx) => {
-    const snap = await tx.get(docRef);
-    if (!snap.exists) return false;
-    if (snap.data().estado !== ESTADO.pendiente) return false;
-    tx.update(docRef, {
-      estado: ESTADO.procesando,
-      intentos: admin.firestore.FieldValue.increment(1),
-      procesando_en: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    return true;
-  });
+  const maxIntentos = 3;
+  const backoffMs = [200, 500, 1000];
+  let ultimoError = null;
+  for (let intento = 0; intento < maxIntentos; intento++) {
+    try {
+      return await db.runTransaction(async (tx) => {
+        const snap = await tx.get(docRef);
+        if (!snap.exists) return false;
+        if (snap.data().estado !== ESTADO.pendiente) return false;
+        tx.update(docRef, {
+          estado: ESTADO.procesando,
+          intentos: admin.firestore.FieldValue.increment(1),
+          procesando_en: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return true;
+      });
+    } catch (e) {
+      ultimoError = e;
+      const code = (e && e.code) || '';
+      const msg = (e && e.message) || '';
+      // Solo reintentamos errores claramente transient; errores de
+      // permisos, validación o lógicos los propagamos sin demora.
+      const esTransient =
+        code === 4 || // DEADLINE_EXCEEDED
+        code === 14 || // UNAVAILABLE
+        code === 10 || // ABORTED (raro acá porque runTransaction ya retry interno)
+        /deadline.exceeded|unavailable|aborted|network|timeout/i.test(msg);
+      if (!esTransient || intento === maxIntentos - 1) {
+        throw e;
+      }
+      log.warn(
+        `marcarProcesandoSiPendiente fallo transient (intento ${intento + 1}/${maxIntentos}): ${msg}`
+      );
+      await new Promise((r) => setTimeout(r, backoffMs[intento]));
+    }
+  }
+  // Inalcanzable, pero defensivo.
+  throw ultimoError || new Error('marcarProcesandoSiPendiente: error desconocido');
 }
 
 /**

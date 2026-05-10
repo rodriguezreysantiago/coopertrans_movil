@@ -50,8 +50,40 @@ async function estaPausado() {
   try {
     const snap = await _db.collection('BOT_CONTROL').doc('main').get();
     const data = snap.exists ? snap.data() || {} : {};
-    const pausado = data.pausado === true;
+    let pausado = data.pausado === true;
     const motivo = data.motivo || null;
+    // Auto-reanudación si vencio el `pausado_hasta` (set por /pausar Nh).
+    // Si admin hizo `/pausar 24h` el comando guardo `pausado_hasta = now+24h`.
+    // Pasadas las 24h, el bot se reanuda solo y limpia el flag — sin
+    // necesidad de que admin acuerde de mandar /reanudar. Antes este
+    // chequeo no existia: si admin se olvidaba, el bot quedaba muerto.
+    if (
+      pausado &&
+      data.pausado_hasta &&
+      typeof data.pausado_hasta.toMillis === 'function' &&
+      data.pausado_hasta.toMillis() <= ahora
+    ) {
+      log.info(
+        `Bot AUTO-REANUDADO: vencio "pausado_hasta" (${new Date(data.pausado_hasta.toMillis()).toISOString()}).`
+      );
+      try {
+        await _db.collection('BOT_CONTROL').doc('main').set(
+          {
+            pausado: false,
+            reanudado_en: new Date(),
+            pausado_hasta: null,
+            motivo: null,
+          },
+          { merge: true }
+        );
+      } catch (e) {
+        // Si no podemos escribir el flag, igual reanudamos en memoria — el
+        // proximo ciclo reintentara. Mejor un envio de mas que dejar la
+        // cola muerta.
+        log.warn(`No se pudo persistir auto-reanudacion: ${e.message}`);
+      }
+      pausado = false;
+    }
     // Logueamos solo cuando cambia el estado, no en cada lectura.
     if (pausado !== _cache.pausado) {
       if (pausado) {

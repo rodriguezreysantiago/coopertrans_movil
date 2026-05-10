@@ -18,9 +18,10 @@ describe('backup_auth._construirNombre', () => {
 
   test('sanitiza caracteres raros del pcId', () => {
     // Path traversal y caracteres no válidos para nombres de archivo
-    // se convierten a _.
+    // se convierten a _. Cada caracter no permitido (incluyendo '.')
+    // pasa a un underscore individual: '../etc/passwd' → '___etc_passwd'.
     const nombre = _construirNombre('../etc/passwd');
-    assert.match(nombre, /^_\._\.etc_passwd_\d{4}-\d{2}-\d{2}-\d{4}\.zip$/);
+    assert.match(nombre, /^___etc_passwd_\d{4}-\d{2}-\d{2}-\d{4}\.zip$/);
     assert.doesNotMatch(nombre, /\.\.\//);
   });
 

@@ -171,24 +171,69 @@ async function _comandoEstado(msg, { db, fs, control }) {
   await msg.reply(txt);
 }
 
-async function _comandoPausar(msg, { db }, args) {
-  // args[0] opcional: duración tipo "24h", "30m", "2d"
-  const motivo = args.length > 0
-    ? `Pausado por admin desde WhatsApp${args[0] ? ` (${args[0]})` : ''}`
-    : 'Pausado por admin desde WhatsApp';
+/**
+ * Parsea una duración tipo "30m", "24h", "2d", "90s" a milisegundos.
+ * Devuelve null si el formato es inválido.
+ *
+ * Cap superior: 30 días (evita pausas "eternas" por accidente al tipear
+ * "30000d" — antes de este parser, cualquier cosa quedaba como string
+ * en el motivo y la pausa duraba indefinidamente).
+ */
+function _parsearDuracion(raw) {
+  if (!raw) return null;
+  const m = String(raw).trim().match(/^(\d+)\s*([smhdSMHD])$/);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const unidad = m[2].toLowerCase();
+  const factor = { s: 1000, m: 60 * 1000, h: 60 * 60 * 1000, d: 24 * 60 * 60 * 1000 }[unidad];
+  if (!factor) return null;
+  const ms = n * factor;
+  // Cap 30 días — pausas más largas son casi siempre typos.
+  const maxMs = 30 * 24 * 60 * 60 * 1000;
+  return Math.min(ms, maxMs);
+}
+
+async function _comandoPausar(msg, { db, control }, args) {
+  // args[0] opcional: duración tipo "24h", "30m", "2d", "90s".
+  // Si se especifica, calculamos `pausado_hasta` y el bot se reanuda
+  // solo cuando llegue esa fecha (sin necesidad de /reanudar manual).
+  const duracionRaw = args.length > 0 ? args[0] : null;
+  let pausadoHasta = null;
+  let motivoExtra = '';
+  if (duracionRaw) {
+    const ms = _parsearDuracion(duracionRaw);
+    if (ms == null) {
+      await msg.reply(
+        `❌ Duración inválida: "${duracionRaw}".\n` +
+        `Formato: Ns / Nm / Nh / Nd (ej: 30m, 24h, 2d). Cap: 30d.`
+      );
+      return;
+    }
+    pausadoHasta = new Date(Date.now() + ms);
+    motivoExtra = ` por ${duracionRaw} (hasta ${pausadoHasta.toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })})`;
+  }
+  const motivo = `Pausado por admin desde WhatsApp${motivoExtra}`;
 
   await db.collection('BOT_CONTROL').doc('main').set(
     {
       pausado: true,
       pausado_en: new Date(),
+      pausado_hasta: pausadoHasta, // null = indefinido
       motivo,
       pausado_por_canal: 'WHATSAPP_COMMAND',
     },
     { merge: true }
   );
-  await msg.reply(
-    `🛑 Bot pausado.\nMotivo: ${motivo}\n\nMandá /reanudar para volver a operar.`
-  );
+  // Invalidar cache de control.js para que el próximo `estaPausado()`
+  // releya el doc fresco (sin esperar el TTL de 2s).
+  if (control && typeof control.invalidarCache === 'function') {
+    control.invalidarCache();
+  }
+  const sufijo = pausadoHasta
+    ? `\n⏱ Reanudación automática: ${pausadoHasta.toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' })}`
+    : '\n\nMandá /reanudar para volver a operar.';
+  await msg.reply(`🛑 Bot pausado.\nMotivo: ${motivo}${sufijo}`);
 }
 
 async function _comandoReanudar(msg, { db }) {
