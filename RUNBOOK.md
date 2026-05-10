@@ -176,45 +176,74 @@ flutter run -d windows
 
 ### Paso 4 — Bot WhatsApp: ¿dónde corre ahora?
 
+**Modelo actual** (definido 2026-05-10): el bot corre **siempre en
+PC oficina** (instancia primaria). PC casa lo tiene instalado pero
+**en standby** (servicio en `Manual` o `Disabled`, sin auto-start)
+como **backup de contingencia** si la oficina falla físicamente.
+
 **El bot solo puede correr en UNA PC a la vez** (anti-doble-bot
 chequea heartbeat compartido en `BOT_HEALTH/main` para evitar
-mensajes duplicados a choferes — ver `start_bot.ps1`).
+mensajes duplicados a choferes — ver `start_bot.ps1`). Si por
+accidente quedan ambos prendidos en simultáneo, la primera en
+levantar el lock gana y la otra se autocierra.
 
-#### Caso A: el bot estaba corriendo en casa y ahora estás en oficina
+#### Caso normal: bot en PC oficina
 
-Si querés que el bot siga corriendo desde casa (más estable porque
-esa PC tiene menos chance de apagarse), **no hacés nada**: la oficina
-solo edita código, el bot sigue donde está.
+```powershell
+# Verificar estado
+Get-Service CoopertransMovilBot
+# Esperado en operación normal:
+#   Status      : Running
+#   StartType   : Automatic   (o Manual si se prefiere control explícito)
 
-Si querés moverlo a la oficina:
+# Si está Stopped, arrancarlo:
+Start-Service CoopertransMovilBot
 
-```bash
-# === En la PC de CASA, parar el bot ===
-nssm stop CoopertransBot
-# Verificar que paró
-nssm status CoopertransBot   # debería mostrar SERVICE_STOPPED
+# Validar que arrancó OK:
+Get-Content whatsapp-bot\logs\bot.out.log -Tail 30 -Wait
+# Buscar línea "WhatsApp listo para enviar" + "Polling de COLA_WHATSAPP"
+```
 
-# === En la PC de OFICINA, levantarlo ===
-cd C:\Users\Colo Logistica\coopertrans_movil\whatsapp-bot
+#### Si la PC oficina falla → activar backup en PC casa
 
-# 1) Sync del código del bot también (es parte del mismo repo)
+```powershell
+# === En la PC de OFICINA (si todavía responde) ===
+Stop-Service CoopertransMovilBot
+Set-Service CoopertransMovilBot -StartupType Disabled
+
+# === En la PC de CASA (la que va a tomar el bot) ===
+cd C:\Users\Colo Logistica\coopertrans_movil
+
+# 1) Sync del código (es parte del mismo repo)
 git pull origin main
 
 # 2) Instalar dependencias si cambiaron
+cd whatsapp-bot
 npm ci
+cd ..
 
-# 3) Si nunca se instaló como servicio en esta PC, ver
-#    whatsapp-bot/scripts/install_nssm.ps1 (paso one-shot).
+# 3) Levantar el bot (anti-doble-bot validará que no haya otro vivo)
+Set-Service CoopertransMovilBot -StartupType Automatic
+Start-Service CoopertransMovilBot
 
-# 4) Levantar el bot (anti-doble-bot validará que no haya otro vivo)
-nssm start CoopertransBot
-
-# 5) Verificar
-nssm status CoopertransBot   # SERVICE_RUNNING
+# 4) Verificar
+Get-Service CoopertransMovilBot
 # y mirar la pantalla "Estado del Bot" en la app — heartbeat < 30s
 ```
 
-#### Caso B: el bot está pausado / no querés bot ahora
+#### Cuando vuelve la PC oficina
+
+```powershell
+# === En la PC de CASA, parar el bot y volver a standby ===
+Stop-Service CoopertransMovilBot
+Set-Service CoopertransMovilBot -StartupType Manual
+
+# === En la PC de OFICINA ===
+Set-Service CoopertransMovilBot -StartupType Automatic   # o Manual
+Start-Service CoopertransMovilBot
+```
+
+#### Caso testing: no querés bot real
 
 Si solo vas a hacer testing local sin bot real, dejá el servicio
 parado en ambas PCs y trabajá tranquilo. El admin puede ver en la
@@ -272,7 +301,9 @@ git log --oneline --name-only origin/main..HEAD 2>/dev/null   # vacío = ok
 # confirmar que las rules/indexes/functions deployadas están al día.
 
 # 5. Bot
-# Decidir si lo querés correr en oficina (paso 4 caso A) o dejarlo en casa.
+# Modelo actual: el bot corre siempre en PC oficina. PC casa es backup
+# standby. Verificar Get-Service CoopertransMovilBot — debe estar Running
+# en oficina, Stopped/Disabled en casa.
 
 # 6. Arrancar
 flutter run -d windows
@@ -286,7 +317,7 @@ flutter run -d windows
 
 ## Bot WhatsApp no envía mensajes
 
-El bot corre como **servicio NSSM en una PC con Windows** (PC casa). El proceso se llama `CoopertransMovilBot`.
+El bot corre como **servicio NSSM en una PC con Windows** (PC oficina, modelo actual desde 2026-05-10; PC casa lo tiene instalado en standby como backup). El proceso se llama `CoopertransMovilBot`.
 
 ### Verificar si el bot está corriendo
 
@@ -1003,7 +1034,7 @@ git status -uno                                 # cambios sin .claude/
 | **Google Cloud Console** | https://console.cloud.google.com/?project=coopertrans-movil — project number `808925655961`. |
 | **GitHub** | https://github.com/rodriguezreysantiago/logistica_app_profesional |
 | **WhatsApp del bot** | ⚠️ TODO: completar número del celular descartable. Solo Santiago lo conoce hoy. Una vez completado, ese número va al campo de Bitwarden item "WhatsApp del bot" si todavía no está. |
-| **`ADMIN_PHONES`** (whitelist comandos del bot) | En `whatsapp-bot/.env` de la PC casa (NO en git por seguridad). |
+| **`ADMIN_PHONES`** (whitelist comandos del bot) | En `whatsapp-bot/.env` de la PC oficina (instancia primaria) y PC casa (backup standby). NO en git por seguridad — duplicar a mano si se cambia. |
 
 ### Credenciales sensibles (NUNCA por chat / repo)
 
