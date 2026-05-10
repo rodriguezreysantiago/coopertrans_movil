@@ -176,10 +176,14 @@ flutter run -d windows
 
 ### Paso 4 — Bot WhatsApp: ¿dónde corre ahora?
 
-**Modelo actual** (definido 2026-05-10): el bot corre **siempre en
-PC oficina** (instancia primaria). PC casa lo tiene instalado pero
-**en standby** (servicio en `Manual` o `Disabled`, sin auto-start)
-como **backup de contingencia** si la oficina falla físicamente.
+**Modelo actual** (definido 2026-05-10): el bot está instalado **solo
+en PC oficina** como instancia primaria, y en **PC casa** como backup
+standby por si la oficina falla físicamente. **Etapa testeo**: el bot
+se arranca manualmente sólo en días hábiles cuando hace falta — NO
+está en auto-start (`StartType: Manual`). Domingo / feriados / horario
+no hábil → bot apagado, sin gasto de WhatsApp Web ni riesgo de baneo
+por mensajes fuera de turno. Cuando se pase a operación 24×7 (post
+testeo) → cambiar a `StartType: Automatic` para que sobreviva reboots.
 
 **El bot solo puede correr en UNA PC a la vez** (anti-doble-bot
 chequea heartbeat compartido en `BOT_HEALTH/main` para evitar
@@ -187,17 +191,23 @@ mensajes duplicados a choferes — ver `start_bot.ps1`). Si por
 accidente quedan ambos prendidos en simultáneo, la primera en
 levantar el lock gana y la otra se autocierra.
 
-#### Caso normal: bot en PC oficina
+#### Caso normal: bot en PC oficina (etapa testeo)
 
 ```powershell
 # Verificar estado
 Get-Service CoopertransMovilBot
-# Esperado en operación normal:
-#   Status      : Running
-#   StartType   : Automatic   (o Manual si se prefiere control explícito)
+# Esperado en etapa testeo:
+#   Status      : Running    (durante días hábiles, prendido por Santiago)
+#   Status      : Stopped    (fines de semana / feriados / horario no hábil)
+#   StartType   : Manual     (NO arranca solo en boot — decisión consciente)
 
-# Si está Stopped, arrancarlo:
+# Arrancar al inicio del día hábil:
 Start-Service CoopertransMovilBot
+
+# Detener al fin del día hábil (opcional — el bot ya respeta horario
+# hábil a nivel polling, pero apagar el proceso ahorra recursos y
+# elimina cualquier riesgo de mensaje accidental fuera de turno):
+Stop-Service CoopertransMovilBot
 
 # Validar que arrancó OK:
 Get-Content whatsapp-bot\logs\bot.out.log -Tail 30 -Wait
@@ -239,8 +249,10 @@ Stop-Service CoopertransMovilBot
 Set-Service CoopertransMovilBot -StartupType Manual
 
 # === En la PC de OFICINA ===
-Set-Service CoopertransMovilBot -StartupType Automatic   # o Manual
+Set-Service CoopertransMovilBot -StartupType Manual
 Start-Service CoopertransMovilBot
+# Recordatorio: en etapa testeo el bot va Manual on-demand. Cuando se
+# pase a 24×7 post-testeo, cambiar a Automatic en lugar de Manual.
 ```
 
 #### Caso testing: no querés bot real
