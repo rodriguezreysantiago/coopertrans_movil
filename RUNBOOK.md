@@ -329,7 +329,7 @@ Remove-Item C:\Users\santi\logistica_app_profesional\whatsapp-bot\.wwebjs_cache 
 Start-Service CoopertransMovilBot
 
 # 5. Mirar logs de NSSM para ver el QR
-Get-Content C:\Users\santi\logistica_app_profesional\whatsapp-bot\logs\bot-out.log -Tail 50 -Wait
+Get-Content C:\Users\santi\logistica_app_profesional\whatsapp-bot\logs\bot.out.log -Tail 50 -Wait
 ```
 
 **Importante**: nunca correr `node src/index.js` a mano si el servicio NSSM está activo. Una sesión a la vez. Mezclar ambos quema la sesión persistida.
@@ -962,8 +962,8 @@ Eso es el state directory del agent (Claude Code). Está ignorado por `.gitignor
 ```powershell
 # === Bot ===
 Get-Service CoopertransMovilBot                   # Estado del servicio
-Get-Content whatsapp-bot\logs\bot-out.log -Tail 50 -Wait   # Logs en vivo
-Get-Content whatsapp-bot\logs\bot-err.log -Tail 50         # Errores
+Get-Content whatsapp-bot\logs\bot.out.log -Tail 50 -Wait   # Logs en vivo (punto, no guion)
+Get-Content whatsapp-bot\logs\bot.err.log -Tail 50         # Errores
 
 # === Tests (deben pasar antes de cada deploy) ===
 flutter test                                    # 67/67 tests cliente
