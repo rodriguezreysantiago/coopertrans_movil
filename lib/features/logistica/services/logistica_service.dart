@@ -219,6 +219,49 @@ class LogisticaService {
     await ubicacionesCol.doc(id).update(cambios);
   }
 
+  /// Cuenta cuántas tarifas usan esta ubicación (como origen o destino).
+  /// Útil antes de borrar — si > 0, NO se debe permitir hard-delete
+  /// porque rompería los snapshots históricos de viajes pasados.
+  static Future<int> contarTarifasQueUsanUbicacion(String ubicacionId) async {
+    if (ubicacionId.isEmpty) return 0;
+    // Firestore no soporta OR de queries en un solo round-trip;
+    // hacemos 2 queries paralelas y sumamos los counts.
+    final results = await Future.wait([
+      tarifasCol
+          .where('ubicacion_origen_id', isEqualTo: ubicacionId)
+          .count()
+          .get(),
+      tarifasCol
+          .where('ubicacion_destino_id', isEqualTo: ubicacionId)
+          .count()
+          .get(),
+    ]);
+    return (results[0].count ?? 0) + (results[1].count ?? 0);
+  }
+
+  /// Elimina (hard-delete) una ubicación de Firestore. Solo se permite
+  /// si NO está siendo usada por ninguna tarifa — sino tira
+  /// [StateError] con un mensaje accionable.
+  ///
+  /// Si la ubicación tiene viajes históricos asociados, esos viajes
+  /// conservan el `tarifaSnapshot` con la etiqueta cacheada al momento
+  /// del viaje (no se rompen). Por eso es seguro borrar acá: las
+  /// tarifas son la única referencia "viva" que apunta por id.
+  static Future<void> eliminarUbicacion(String id) async {
+    if (id.isEmpty) {
+      throw ArgumentError('id de ubicación vacío.');
+    }
+    final usos = await contarTarifasQueUsanUbicacion(id);
+    if (usos > 0) {
+      throw StateError(
+        'No se puede eliminar: la ubicación está en $usos '
+        '${usos == 1 ? "tarifa" : "tarifas"} activa(s). '
+        'Primero borrá o reasigná esas tarifas.',
+      );
+    }
+    await ubicacionesCol.doc(id).delete();
+  }
+
   // ─── TARIFAS ───────────────────────────────────────────────────────────
   static CollectionReference<Map<String, dynamic>> get tarifasCol =>
       _db.collection(AppCollections.tarifasLogistica);

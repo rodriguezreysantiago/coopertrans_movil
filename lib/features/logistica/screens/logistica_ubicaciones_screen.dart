@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../shared/constants/app_colors.dart';
+import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../../shared/widgets/dato_editable.dart';
 import '../models/empresa_logistica.dart';
@@ -418,12 +419,77 @@ class _EditarUbicacionSheetState extends State<_EditarUbicacionSheet> {
                   onLatManual: (v) => _setCampo('lat', v),
                   onLngManual: (v) => _setCampo('lng', v),
                 ),
+                const SizedBox(height: 24),
+                // Botón de eliminación con check de referencias en
+                // tarifas. Si la ubicación está en uso, el service
+                // tira StateError con un mensaje accionable que
+                // mostramos al operador.
+                OutlinedButton.icon(
+                  onPressed: _eliminar,
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text('ELIMINAR UBICACIÓN'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.accentRed,
+                    side: const BorderSide(color: AppColors.accentRed),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    textStyle: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// Confirma con el operador + elimina la ubicación si no está en
+  /// uso. Si está usada por tarifas, el service tira un StateError con
+  /// mensaje claro y lo mostramos en SnackBar.
+  Future<void> _eliminar() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final confirma = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        backgroundColor: Theme.of(dCtx).colorScheme.surface,
+        title: const Text('¿Eliminar ubicación?'),
+        content: Text(
+          '${_ubicacion.nombre}\n\n'
+          'Esta acción no se puede deshacer. Si la ubicación está usada '
+          'por alguna tarifa, no se va a poder borrar.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dCtx).pop(false),
+            child: const Text('CANCELAR'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.accentRed,
+            ),
+            onPressed: () => Navigator.of(dCtx).pop(true),
+            child: const Text('ELIMINAR'),
+          ),
+        ],
+      ),
+    );
+    if (confirma != true) return;
+    try {
+      await LogisticaService.eliminarUbicacion(_ubicacion.id);
+      if (!mounted) return;
+      navigator.pop(); // Cerrar el bottom sheet.
+      AppFeedback.successOn(messenger, 'Ubicación eliminada.');
+    } on StateError catch (e) {
+      if (!mounted) return;
+      AppFeedback.errorOn(messenger, e.message);
+    } catch (e) {
+      if (!mounted) return;
+      AppFeedback.errorOn(messenger, 'Error al eliminar: $e');
+    }
   }
 }
 
