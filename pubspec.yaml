@@ -162,3 +162,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/gomeria/
+    - assets/brand/

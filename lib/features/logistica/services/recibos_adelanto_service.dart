@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -96,6 +97,20 @@ class RecibosAdelantoService {
   }) async {
     final doc = pw.Document();
     final fechaImpresion = DateTime.now();
+
+    // Cargar logo VAVG desde assets/brand/. Se carga UNA vez antes
+    // de construir las páginas (vs. cargarlo dos veces, una por
+    // mitad). Si falla la carga (ej. asset corrupto), seguimos sin
+    // logo en lugar de romper el PDF entero — el comprobante sin
+    // logo igual sirve para auditoría.
+    pw.MemoryImage? logo;
+    try {
+      final bytes = await rootBundle.load('assets/brand/vavg_logo.png');
+      logo = pw.MemoryImage(bytes.buffer.asUint8List());
+    } catch (_) {
+      logo = null;
+    }
+
     doc.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
@@ -112,6 +127,7 @@ class RecibosAdelantoService {
                   fechaImpresion: fechaImpresion,
                   esReimpresion: esReimpresion,
                   copia: 'COPIA OFICINA',
+                  logo: logo,
                 ),
               ),
               // ─── Línea de corte (punteada) ───
@@ -139,6 +155,7 @@ class RecibosAdelantoService {
                   fechaImpresion: fechaImpresion,
                   esReimpresion: esReimpresion,
                   copia: 'COPIA CHOFER',
+                  logo: logo,
                 ),
               ),
             ],
@@ -160,6 +177,7 @@ class _Mitad {
     required DateTime fechaImpresion,
     required bool esReimpresion,
     required String copia,
+    required pw.MemoryImage? logo,
   }) {
     final monto = viaje.adelantoMonto ?? 0;
     final fechaAdelanto = viaje.adelantoFecha ?? viaje.fechaCarga ?? fechaImpresion;
@@ -179,10 +197,20 @@ class _Mitad {
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.stretch,
         children: [
-          // ─── Encabezado: razón social + N° recibo + tipo de copia ───
+          // ─── Encabezado: logo + razón social + N° recibo + tipo
+          // de copia. Logo VAVG arriba a la izquierda (si pudo
+          // cargarse), texto "TRANSPORTE COOPER-TRANS" al lado. ───
           pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
+              if (logo != null) ...[
+                pw.SizedBox(
+                  width: 60,
+                  height: 36,
+                  child: pw.Image(logo, fit: pw.BoxFit.contain),
+                ),
+                pw.SizedBox(width: 10),
+              ],
               pw.Expanded(
                 flex: 3,
                 child: pw.Column(
@@ -295,57 +323,35 @@ class _Mitad {
             ),
           ),
           pw.Spacer(),
-          // ─── Firma ───
-          pw.Row(
-            crossAxisAlignment: pw.CrossAxisAlignment.end,
-            children: [
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.center,
-                  children: [
-                    pw.Container(
-                      height: 1,
-                      color: PdfColors.black,
-                      margin: const pw.EdgeInsets.symmetric(horizontal: 30),
+          // ─── Firma del chofer (única — la de "quien entrega" se
+          // sacó 2026-05-12 a pedido del operador: el comprobante
+          // queda firmado solo por quien recibe el adelanto, que es
+          // lo que se necesita para auditoría) ───
+          pw.Center(
+            child: pw.SizedBox(
+              width: 180,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Container(
+                    height: 1,
+                    color: PdfColors.black,
+                  ),
+                  pw.SizedBox(height: 3),
+                  pw.Text(
+                    'Firma del chofer',
+                    style: const pw.TextStyle(
+                      fontSize: 8,
+                      color: PdfColors.grey700,
                     ),
-                    pw.SizedBox(height: 3),
-                    pw.Text(
-                      'Firma del chofer',
-                      style: const pw.TextStyle(
-                        fontSize: 8,
-                        color: PdfColors.grey700,
-                      ),
-                    ),
-                    pw.Text(
-                      choferNombre,
-                      style: const pw.TextStyle(
-                        fontSize: 9,
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                  pw.Text(
+                    choferNombre,
+                    style: const pw.TextStyle(fontSize: 9),
+                  ),
+                ],
               ),
-              pw.Expanded(
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.center,
-                  children: [
-                    pw.Container(
-                      height: 1,
-                      color: PdfColors.black,
-                      margin: const pw.EdgeInsets.symmetric(horizontal: 30),
-                    ),
-                    pw.SizedBox(height: 3),
-                    pw.Text(
-                      'Firma de quien entrega',
-                      style: const pw.TextStyle(
-                        fontSize: 8,
-                        color: PdfColors.grey700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+            ),
           ),
           pw.SizedBox(height: 6),
           // Pie con timestamp de impresión (chiquito, esquina inferior).
