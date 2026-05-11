@@ -113,10 +113,8 @@ class _LogisticaMapaTarifasScreenState
                 return const Center(child: CircularProgressIndicator());
               }
               final tarifas = tarSnap.data ?? const [];
-              final tarifasConCoords = _filtrarConCoords(
-                tarifas,
-                ubicacionesPorId,
-              );
+              final diag = _diagnosticar(tarifas, ubicacionesPorId);
+              final tarifasConCoords = diag.conCoords;
               // Disparar precarga de rutas OSRM para todas las
               // tarifas con coords. Best-effort; las que fallan
               // quedan con línea recta.
@@ -126,6 +124,7 @@ class _LogisticaMapaTarifasScreenState
               return _buildMapa(
                 context,
                 tarifasConCoords: tarifasConCoords,
+                tarifasFiltradas: diag.filtradas,
                 tarifasTotales: tarifas.length,
                 ubicacionesPorId: ubicacionesPorId,
               );
@@ -136,33 +135,152 @@ class _LogisticaMapaTarifasScreenState
     );
   }
 
-  /// Filtra tarifas activas con ubicaciones origen+destino cargadas y
-  /// con coords en ambas puntas. Las restantes (sin coords) se cuentan
-  /// aparte para mostrar "X de Y tarifas sin georreferenciar".
-  List<_TarifaConRuta> _filtrarConCoords(
+  /// Devuelve el diagnóstico completo (tarifas OK + tarifas filtradas
+  /// con su motivo). Lo usa el botón "Diagnóstico" del banner para
+  /// listar al operador exactamente qué tarifa falla y por qué.
+  _DiagnosticoMapa _diagnosticar(
     List<TarifaLogistica> tarifas,
     Map<String, UbicacionLogistica> ubicaciones,
   ) {
-    final res = <_TarifaConRuta>[];
+    final ok = <_TarifaConRuta>[];
+    final filtradas = <_TarifaFiltrada>[];
     for (final t in tarifas) {
       final o = ubicaciones[t.ubicacionOrigenId];
       final d = ubicaciones[t.ubicacionDestinoId];
-      if (o?.lat == null || o?.lng == null) continue;
-      if (d?.lat == null || d?.lng == null) continue;
-      res.add(_TarifaConRuta(
-        tarifa: t,
-        origen: LatLng(o!.lat!, o.lng!),
-        destino: LatLng(d!.lat!, d.lng!),
-        nombreOrigen: o.nombre,
-        nombreDestino: d.nombre,
-      ));
+
+      // Diagnóstico granular: distinguimos cada motivo para guiar al
+      // operador a arreglar exactamente lo que falta.
+      String? motivo;
+      if (o == null) {
+        motivo = 'La ubicación de ORIGEN no existe '
+            '(id "${t.ubicacionOrigenId}"). Capaz fue borrada — '
+            'editá la tarifa y reasigná un origen válido.';
+      } else if (o.lat == null || o.lng == null) {
+        motivo = 'La ubicación de origen "${o.nombre}" no tiene '
+            'coordenadas cargadas. Andá a Ubicaciones, abrí esa '
+            'ubicación y tocá "Elegir en mapa".';
+      } else if (d == null) {
+        motivo = 'La ubicación de DESTINO no existe '
+            '(id "${t.ubicacionDestinoId}"). Capaz fue borrada — '
+            'editá la tarifa y reasigná un destino válido.';
+      } else if (d.lat == null || d.lng == null) {
+        motivo = 'La ubicación de destino "${d.nombre}" no tiene '
+            'coordenadas cargadas. Andá a Ubicaciones, abrí esa '
+            'ubicación y tocá "Elegir en mapa".';
+      }
+
+      if (motivo == null) {
+        ok.add(_TarifaConRuta(
+          tarifa: t,
+          origen: LatLng(o!.lat!, o.lng!),
+          destino: LatLng(d!.lat!, d.lng!),
+          nombreOrigen: o.nombre,
+          nombreDestino: d.nombre,
+        ));
+      } else {
+        filtradas.add(_TarifaFiltrada(tarifa: t, motivo: motivo));
+      }
     }
-    return res;
+    return _DiagnosticoMapa(conCoords: ok, filtradas: filtradas);
+  }
+
+  /// Sheet con la lista de tarifas filtradas y el motivo. Útil para
+  /// que el operador entienda QUÉ corregir cuando dice "tengo la
+  /// tarifa cargada pero no aparece".
+  void _mostrarDiagnostico(
+    BuildContext context,
+    List<_TarifaFiltrada> filtradas,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.background,
+      isScrollControlled: true,
+      builder: (_) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          maxChildSize: 0.9,
+          minChildSize: 0.3,
+          builder: (ctx, controller) {
+            return Column(
+              children: [
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_outlined,
+                          color: AppColors.accentOrange),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Tarifas que no se muestran en el mapa',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    controller: controller,
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    itemCount: filtradas.length,
+                    separatorBuilder: (_, __) => const Divider(
+                      color: Colors.white12,
+                      height: 16,
+                    ),
+                    itemBuilder: (_, i) {
+                      final f = filtradas[i];
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${f.tarifa.empresaOrigenNombre} → '
+                            '${f.tarifa.empresaDestinoNombre}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            f.motivo,
+                            style: const TextStyle(
+                              color: AppColors.accentOrange,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   Widget _buildMapa(
     BuildContext context, {
     required List<_TarifaConRuta> tarifasConCoords,
+    required List<_TarifaFiltrada> tarifasFiltradas,
     required int tarifasTotales,
     required Map<String, UbicacionLogistica> ubicacionesPorId,
   }) {
@@ -173,8 +291,20 @@ class _LogisticaMapaTarifasScreenState
         subtitle: tarifasTotales == 0
             ? 'No hay tarifas activas. Cargá tarifas y ubicaciones con coordenadas.'
             : 'Tenés $tarifasTotales tarifa(s) activa(s) pero ninguna con '
-                'origen y destino georreferenciado. Editá las ubicaciones y '
-                'agregá coordenadas con el botón "Elegir en mapa".',
+                'origen y destino georreferenciado.\n\n'
+                'Tocá "Diagnóstico" para ver qué le falta a cada una.',
+        action: tarifasFiltradas.isEmpty
+            ? null
+            : OutlinedButton.icon(
+                onPressed: () =>
+                    _mostrarDiagnostico(context, tarifasFiltradas),
+                icon: const Icon(Icons.warning_amber_outlined),
+                label: const Text('VER DIAGNÓSTICO'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.accentOrange,
+                  side: const BorderSide(color: AppColors.accentOrange),
+                ),
+              ),
       );
     }
 
@@ -207,6 +337,24 @@ class _LogisticaMapaTarifasScreenState
                       color: Colors.white70,
                       fontSize: 12,
                     ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: () =>
+                      _mostrarDiagnostico(context, tarifasFiltradas),
+                  icon: const Icon(Icons.warning_amber_outlined, size: 14),
+                  label: const Text(
+                    'DIAGNÓSTICO',
+                    style: TextStyle(fontSize: 11),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.accentOrange,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 0,
+                    ),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ),
               ],
@@ -517,6 +665,24 @@ class _TarifaConRuta {
   });
 
   double get distanciaKm => LogisticaGeoUtils.distanciaKm(origen, destino);
+}
+
+/// Tarifa que NO se puede mostrar en el mapa + el motivo concreto.
+/// Lo usa el sheet de diagnóstico para que el operador vea
+/// exactamente qué corregir (ej. "la ubicación origen no tiene
+/// coords cargadas" en lugar del genérico "sin georreferenciar").
+class _TarifaFiltrada {
+  final TarifaLogistica tarifa;
+  final String motivo;
+  const _TarifaFiltrada({required this.tarifa, required this.motivo});
+}
+
+/// Resultado del análisis de tarifas para el mapa: las que se pueden
+/// dibujar + las filtradas con su motivo.
+class _DiagnosticoMapa {
+  final List<_TarifaConRuta> conCoords;
+  final List<_TarifaFiltrada> filtradas;
+  const _DiagnosticoMapa({required this.conCoords, required this.filtradas});
 }
 
 /// Leyenda inferior con conteo + lista resumida de tarifas
