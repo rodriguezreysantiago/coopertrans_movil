@@ -32,21 +32,12 @@ class _EmpleadoCard extends StatelessWidget {
     // raro y conviene que el admin corrija el rol también.
     final mostrarFlota = area == AppAreas.manejo;
     final urlPerfil = data['ARCHIVO_PERFIL']?.toString();
-    final tieneFoto =
-        urlPerfil != null && urlPerfil.isNotEmpty && urlPerfil != '-';
 
     return AppCard(
       onTap: () => _DetalleChofer.abrir(context, dni),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 24,
-            backgroundColor: Colors.white12,
-            backgroundImage: tieneFoto ? NetworkImage(urlPerfil) : null,
-            child: !tieneFoto
-                ? const Icon(Icons.person, color: Colors.white54)
-                : null,
-          ),
+          FotoPerfilAvatar(url: urlPerfil, radius: 24),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -597,20 +588,15 @@ class _HeaderDetalle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final urlPerfil = data['ARCHIVO_PERFIL']?.toString();
-    final tieneFoto =
-        urlPerfil != null && urlPerfil.isNotEmpty && urlPerfil != '-';
 
     return Column(
       children: [
         Stack(
           children: [
-            CircleAvatar(
+            FotoPerfilAvatar(
+              url: urlPerfil,
               radius: 50,
-              backgroundColor: Colors.white12,
-              backgroundImage: tieneFoto ? NetworkImage(urlPerfil) : null,
-              child: !tieneFoto
-                  ? const Icon(Icons.person, size: 50, color: Colors.white24)
-                  : null,
+              iconColor: Colors.white24,
             ),
             Positioned(
               bottom: 0,

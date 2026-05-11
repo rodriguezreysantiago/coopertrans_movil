@@ -12,6 +12,7 @@ import '../../../shared/utils/digit_only_formatter.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/utils/phone_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../../../shared/widgets/foto_perfil_avatar.dart';
 
 import '../services/empleado_actions.dart';
 import 'admin_personal_form_screen.dart';

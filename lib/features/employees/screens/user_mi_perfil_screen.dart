@@ -13,6 +13,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/utils/password_hasher.dart';
 import '../../../shared/utils/phone_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../../../shared/widgets/foto_perfil_avatar.dart';
 
 /// Perfil del chofer (vista del usuario, no admin).
 ///
@@ -362,20 +363,16 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fotoUrl = data['ARCHIVO_PERFIL'] as String?;
-    final tieneFoto = fotoUrl != null && fotoUrl.isNotEmpty;
 
     return Column(
       children: [
         Stack(
           children: [
-            CircleAvatar(
+            FotoPerfilAvatar(
+              url: fotoUrl,
               radius: 65,
-              backgroundColor: Colors.white10,
-              backgroundImage: tieneFoto ? NetworkImage(fotoUrl) : null,
-              child: !tieneFoto
-                  ? const Icon(Icons.person,
-                      size: 70, color: Colors.white24)
-                  : null,
+              fondo: Colors.white10,
+              iconColor: Colors.white24,
             ),
             Positioned(
               bottom: 0,
