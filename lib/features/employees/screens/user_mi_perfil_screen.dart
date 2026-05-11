@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/prefs_service.dart';
 import '../../../core/services/storage_service.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
@@ -28,6 +29,14 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
   final StorageService _storageService = StorageService();
   late final Stream<DocumentSnapshot> _perfilStream;
 
+  /// Pasa a `true` si pasan más de 10s sin que llegue el primer
+  /// snapshot del stream. Se usa para mostrar UI degradada con datos
+  /// cacheados de Prefs + banner "Conexión lenta", en lugar del
+  /// "Perfil no encontrado" que asusta al chofer cuando su red está
+  /// lenta (caso reportado con chofer 16969961 desde Android lento).
+  bool _conexionLenta = false;
+  Timer? _slowConnTimer;
+
   @override
   void initState() {
     super.initState();
@@ -35,6 +44,15 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
         .collection(AppCollections.empleados)
         .doc(widget.dni)
         .snapshots();
+    _slowConnTimer = Timer(const Duration(seconds: 10), () {
+      if (mounted) setState(() => _conexionLenta = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _slowConnTimer?.cancel();
+    super.dispose();
   }
 
   // ---------------------------------------------------------------------------
@@ -253,13 +271,30 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
               subtitle: snapshot.error.toString(),
             );
           }
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          // Sin data todavía: si pasaron <10s, spinner. Si pasaron >10s
+          // sin que Firestore responda, mostramos UI degradada con los
+          // datos básicos cacheados de Prefs (nombre, apodo, rol) y un
+          // banner avisando que la conexión es lenta. Ayuda muchísimo
+          // a choferes con celus viejos o red mala — antes veían
+          // "Perfil no encontrado" después del timeout y pensaban que
+          // estaban mal dados de alta.
+          if (snapshot.connectionState == ConnectionState.waiting ||
+              !snapshot.hasData) {
+            if (_conexionLenta) {
+              return _PerfilOfflineFallback(dni: widget.dni);
+            }
             return const AppLoadingState();
           }
-          if (!snapshot.hasData || !snapshot.data!.exists) {
-            return const AppErrorState(
-              title: 'Perfil no encontrado',
-              subtitle: 'No se pudieron cargar tus datos.',
+          if (!snapshot.data!.exists) {
+            // Si el doc realmente no existe (Firestore respondió,
+            // doc=null), mostramos también el fallback con datos de
+            // Prefs en lugar del "Perfil no encontrado" alarmante.
+            // Este caso es excepcional: solo pasa si admin borró el
+            // legajo entre login y abrir Mi Perfil.
+            return _PerfilOfflineFallback(
+              dni: widget.dni,
+              motivo: 'Tu legajo no está disponible en este momento. '
+                  'Contactá a administración.',
             );
           }
 
@@ -590,6 +625,192 @@ class _SeparadorTile extends StatelessWidget {
       color: Colors.white10,
       indent: 60,
       height: 1,
+    );
+  }
+}
+
+/// UI degradada que se muestra cuando Firestore no responde en 10s o
+/// el doc no existe. En lugar de "Perfil no encontrado" (alarmante),
+/// mostramos lo que sabemos del chofer cacheado en Prefs (nombre,
+/// apodo, rol) + un banner de conexión lenta + indicador de carga.
+///
+/// El stream sigue activo en background: si en algún momento Firestore
+/// responde, el StreamBuilder padre re-renderiza con los datos
+/// completos y este widget desaparece solo.
+class _PerfilOfflineFallback extends StatelessWidget {
+  final String dni;
+  final String? motivo;
+
+  const _PerfilOfflineFallback({required this.dni, this.motivo});
+
+  @override
+  Widget build(BuildContext context) {
+    final nombre = PrefsService.nombre.trim();
+    final apodo = PrefsService.apodo.trim();
+    final rol = PrefsService.rol.trim();
+    final dniFmt = AppFormatters.formatearDNI(dni);
+
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        // Banner naranja avisando que estamos en modo limitado.
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.accentOrange.withAlpha(40),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.accentOrange.withAlpha(120)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.signal_wifi_bad_outlined,
+                  color: AppColors.accentOrange),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      motivo == null
+                          ? 'Conexión lenta'
+                          : 'Datos incompletos',
+                      style: const TextStyle(
+                        color: AppColors.accentOrange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      motivo ??
+                          'Estamos mostrando los datos básicos mientras '
+                              'cargan los detalles. Si tarda mucho, probá '
+                              'cambiar de red (WiFi / datos móviles).',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Header básico con avatar + nombre. Sin foto (no la tenemos
+        // del Prefs, solo del legajo Firestore).
+        Center(
+          child: Column(
+            children: [
+              CircleAvatar(
+                radius: 50,
+                backgroundColor: Colors.white.withAlpha(20),
+                child: Text(
+                  (apodo.isNotEmpty ? apodo : nombre)
+                      .characters
+                      .firstOrNull
+                      ?.toUpperCase() ??
+                      '?',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 36,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                apodo.isNotEmpty ? apodo : nombre,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              if (apodo.isNotEmpty && nombre.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  nombre,
+                  style: const TextStyle(
+                      color: Colors.white60, fontSize: 14),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 30),
+
+        // Datos básicos disponibles sin Firestore.
+        _FallbackTile(label: 'DNI', valor: dniFmt),
+        if (rol.isNotEmpty) _FallbackTile(label: 'Rol', valor: rol),
+
+        const SizedBox(height: 30),
+
+        // Si solo es conexión lenta, mostramos indicador de carga
+        // discreto al pie — el stream sigue intentando.
+        if (motivo == null)
+          const Center(
+            child: Column(
+              children: [
+                SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.accentBlue,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Cargando datos completos…',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _FallbackTile extends StatelessWidget {
+  final String label;
+  final String valor;
+
+  const _FallbackTile({required this.label, required this.valor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.white60, fontSize: 13),
+            ),
+          ),
+          Expanded(
+            flex: 3,
+            child: Text(
+              valor,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

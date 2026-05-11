@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/services/prefs_service.dart';
 
 class LoginResult {
@@ -182,6 +184,20 @@ class AuthService {
         rol: rol,
       );
 
+      // 5) Pre-warm del cache de Firestore: leemos el legajo del chofer
+      //    una vez después del login para que el cache offline quede
+      //    poblado. Las pantallas "Mi Perfil" / "Mi Unidad" usan
+      //    `snapshots()` — con el cache caliente, esos streams emiten
+      //    el primer snapshot al instante (cached) en lugar de esperar
+      //    el round-trip al server. Crítico en celus con red lenta
+      //    (caso reportado por chofer 16969961 en Android lento donde
+      //    todo demora 3-4 min).
+      //
+      //    Timeout corto (5s) — si la red está MUY lenta, no bloqueamos
+      //    el login completo por esto. El cliente igual entra; la
+      //    siguiente pantalla hará get on-demand cuando pueda.
+      _prewarmCacheLegajo(cleanDni);
+
       return LoginResult.ok(dni: cleanDni, nombre: nombre, rol: rol);
     } on FirebaseAuthException catch (e) {
       debugPrint('🚨 signInWithCustomToken → ${e.code}: ${e.message}');
@@ -232,6 +248,26 @@ class AuthService {
       debugPrint(stack.toString());
       return LoginResult.error('Error interno al iniciar sesión.');
     }
+  }
+
+  /// Hace una lectura fire-and-forget del legajo del chofer en
+  /// Firestore para precargar el cache offline. Si falla o tarda, lo
+  /// ignoramos — el login ya terminó OK y las pantallas que necesitan
+  /// el legajo lo van a leer por su cuenta (con el cache de Firestore
+  /// trabajando a favor cuando llegue la respuesta).
+  ///
+  /// No await: devolvemos al toque para no bloquear el login del user.
+  void _prewarmCacheLegajo(String dni) {
+    FirebaseFirestore.instance
+        .collection(AppCollections.empleados)
+        .doc(dni)
+        .get()
+        .timeout(const Duration(seconds: 5))
+        .then((_) {
+      debugPrint('✅ pre-warm cache legajo OK ($dni)');
+    }).catchError((e) {
+      debugPrint('⚠️ pre-warm cache legajo falló (no crítico): $e');
+    });
   }
 
   /// Cierra la sesión: Firebase Auth + SharedPreferences locales.

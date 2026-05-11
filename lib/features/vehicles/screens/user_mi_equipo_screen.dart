@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/vencimientos_config.dart';
+import '../../../core/services/prefs_service.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
@@ -31,6 +34,12 @@ class _UserMiEquipoScreenState extends State<UserMiEquipoScreen> {
   late final Stream<DocumentSnapshot> _empleadoStream;
   late final Stream<QuerySnapshot> _solicitudesStream;
 
+  /// Pasa a `true` si pasan más de 10s sin que Firestore responda.
+  /// Mostramos UI degradada en lugar de "Error al cargar perfil"
+  /// (caso celus lentos — ver mi_perfil_screen para más contexto).
+  bool _conexionLenta = false;
+  Timer? _slowConnTimer;
+
   @override
   void initState() {
     super.initState();
@@ -43,6 +52,15 @@ class _UserMiEquipoScreenState extends State<UserMiEquipoScreen> {
         .where('dni', isEqualTo: widget.dniUser)
         .where('tipo_solicitud', isEqualTo: 'CAMBIO_EQUIPO')
         .snapshots();
+    _slowConnTimer = Timer(const Duration(seconds: 10), () {
+      if (mounted) setState(() => _conexionLenta = true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _slowConnTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -58,13 +76,19 @@ class _UserMiEquipoScreenState extends State<UserMiEquipoScreen> {
               subtitle: empSnap.error.toString(),
             );
           }
-          if (empSnap.connectionState == ConnectionState.waiting) {
+          // Sin data todavía: si pasaron >10s sin respuesta, fallback
+          // con datos básicos cacheados + banner de conexión lenta.
+          if (empSnap.connectionState == ConnectionState.waiting ||
+              !empSnap.hasData) {
+            if (_conexionLenta) {
+              return const _EquipoOfflineFallback();
+            }
             return const AppLoadingState();
           }
-          if (!empSnap.hasData || !empSnap.data!.exists) {
-            return const AppErrorState(
-              title: 'Error al cargar perfil',
-              subtitle: 'No se encontraron tus datos.',
+          if (!empSnap.data!.exists) {
+            return const _EquipoOfflineFallback(
+              motivo: 'Tu legajo no está disponible en este momento. '
+                  'Contactá a administración.',
             );
           }
 
@@ -112,3 +136,100 @@ class _UserMiEquipoScreenState extends State<UserMiEquipoScreen> {
   }
 }
 
+/// UI degradada para conexión lenta o doc no disponible. Muestra el
+/// nombre cacheado del chofer + banner naranja + indicador de carga.
+/// El stream sigue activo en background; cuando llegue, este widget
+/// se reemplaza solo con la vista completa.
+class _EquipoOfflineFallback extends StatelessWidget {
+  final String? motivo;
+
+  const _EquipoOfflineFallback({this.motivo});
+
+  @override
+  Widget build(BuildContext context) {
+    final nombre = PrefsService.apodo.trim().isNotEmpty
+        ? PrefsService.apodo.trim()
+        : PrefsService.nombre.trim();
+
+    return ListView(
+      padding: const EdgeInsets.all(20),
+      children: [
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.accentOrange.withAlpha(40),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.accentOrange.withAlpha(120)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.signal_wifi_bad_outlined,
+                  color: AppColors.accentOrange),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      motivo == null ? 'Conexión lenta' : 'Datos incompletos',
+                      style: const TextStyle(
+                        color: AppColors.accentOrange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      motivo ??
+                          'No pudimos cargar los datos de tu unidad. '
+                              'Probá cambiar de red (WiFi / datos móviles) '
+                              'o reintentar en unos minutos.',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 30),
+        if (nombre.isNotEmpty)
+          Text(
+            'Hola, $nombre',
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        const SizedBox(height: 30),
+        if (motivo == null)
+          const Center(
+            child: Column(
+              children: [
+                SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.accentBlue,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Cargando datos de tu unidad…',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
