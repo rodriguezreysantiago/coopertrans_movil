@@ -172,6 +172,14 @@
         { "fieldPath": "activo", "order": "ASCENDING" },
         { "fieldPath": "creado_en", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "VIAJES_LOGISTICA",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "activo", "order": "ASCENDING" },
+        { "fieldPath": "fecha_carga", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
