@@ -366,15 +366,26 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
             _SeccionChofer(
               dni: _choferDni,
               nombre: _choferNombre,
-              onChanged: (dni, nombre) => setState(() {
+              onChanged: (dni, nombre, vehiculo, enganche) => setState(() {
                 _choferDni = dni;
                 _choferNombre = nombre;
+                // Auto-llenar las patentes con las que tiene asignadas
+                // el chofer en EMPLEADOS/{dni}.VEHICULO/.ENGANCHE.
+                // Caso típico: el viaje sale con la unidad habitual del
+                // chofer. Si va con otra, el operador la cambia desde
+                // los selectores de la sección 3 (que filtran solo
+                // patentes activas). Pisamos los TextField cualquiera
+                // sea el contenido previo: cambiar de chofer casi
+                // siempre implica cambio de unidad.
+                _vehiculoCtrl.text = vehiculo ?? '';
+                _engancheCtrl.text = enganche ?? '';
               }),
             ),
             const SizedBox(height: 12),
             _SeccionUnidad(
               vehiculoCtrl: _vehiculoCtrl,
               engancheCtrl: _engancheCtrl,
+              onChanged: () => setState(() {}),
             ),
             const SizedBox(height: 12),
             _SeccionCarga(
@@ -531,7 +542,21 @@ class _ResumenTarifa extends StatelessWidget {
 class _SeccionChofer extends StatelessWidget {
   final String? dni;
   final String? nombre;
-  final void Function(String dni, String? nombre) onChanged;
+
+  /// Callback al cambiar la selección de chofer. Pasa DNI + nombre del
+  /// empleado + las patentes (vehículo + enganche) que tiene asignadas
+  /// en su legajo `EMPLEADOS/{dni}`. Las patentes se usan para
+  /// auto-llenar la sección "3. UNIDAD" — el operador puede después
+  /// cambiarlas si el viaje va con otra unidad. Decisión Vecchi
+  /// 2026-05-11: el caso típico es que el chofer va con su unidad
+  /// asignada; el override es excepcional pero tiene que estar
+  /// disponible.
+  final void Function(
+    String dni,
+    String? nombre,
+    String? vehiculoAsignado,
+    String? engancheAsignado,
+  ) onChanged;
   const _SeccionChofer({
     required this.dni,
     required this.nombre,
@@ -579,7 +604,17 @@ class _SeccionChofer extends StatelessWidget {
               onChanged: (sel) {
                 if (sel == null) return;
                 final doc = activos.firstWhere((d) => d.id == sel);
-                onChanged(doc.id, doc.data()['NOMBRE']?.toString());
+                final data = doc.data();
+                final vehiculo =
+                    (data['VEHICULO'] ?? '').toString().trim().toUpperCase();
+                final enganche =
+                    (data['ENGANCHE'] ?? '').toString().trim().toUpperCase();
+                onChanged(
+                  doc.id,
+                  data['NOMBRE']?.toString(),
+                  vehiculo.isEmpty ? null : vehiculo,
+                  enganche.isEmpty ? null : enganche,
+                );
               },
             );
           },
@@ -592,9 +627,11 @@ class _SeccionChofer extends StatelessWidget {
 class _SeccionUnidad extends StatelessWidget {
   final TextEditingController vehiculoCtrl;
   final TextEditingController engancheCtrl;
+  final VoidCallback onChanged;
   const _SeccionUnidad({
     required this.vehiculoCtrl,
     required this.engancheCtrl,
+    required this.onChanged,
   });
 
   @override
@@ -603,32 +640,133 @@ class _SeccionUnidad extends StatelessWidget {
       titulo: '3. UNIDAD (opcional)',
       icono: Icons.local_shipping_outlined,
       children: [
-        TextField(
+        // Auto-fill al seleccionar chofer + dropdown con autocomplete
+        // para cambiarla. La idea: el caso típico es viajar con la
+        // unidad asignada del chofer (que ya viene pre-llenada desde
+        // _SeccionChofer.onChanged). Para los casos excepcionales
+        // donde se manda con OTRA unidad, el operador escribe las
+        // primeras letras de la patente y el autocomplete sugiere
+        // solo unidades activas del tipo correspondiente. Antes era
+        // TextField libre — fácil tipear patentes que no existen o
+        // están dadas de baja, sin guidance.
+        _PatenteSelector(
           controller: vehiculoCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Patente tractor (ej: ABC123)',
-            border: OutlineInputBorder(),
-          ),
-          textCapitalization: TextCapitalization.characters,
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
-            LengthLimitingTextInputFormatter(8),
-          ],
+          label: 'Patente tractor (ej: ABC123)',
+          tipoFiltro: _TipoPatente.tractor,
+          onChanged: onChanged,
         ),
         const SizedBox(height: 8),
-        TextField(
+        _PatenteSelector(
           controller: engancheCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Patente enganche (opcional)',
-            border: OutlineInputBorder(),
-          ),
-          textCapitalization: TextCapitalization.characters,
-          inputFormatters: [
-            FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
-            LengthLimitingTextInputFormatter(8),
-          ],
+          label: 'Patente enganche (opcional)',
+          tipoFiltro: _TipoPatente.enganche,
+          onChanged: onChanged,
         ),
       ],
+    );
+  }
+}
+
+enum _TipoPatente { tractor, enganche }
+
+/// Autocomplete de patentes que filtra solo unidades activas del tipo
+/// correspondiente (tractor o enganche). Si el operador tipea algo que
+/// NO está en la lista, igual lo acepta (caso raro: unidad recién
+/// cargada en otro proceso, patente de unidad ajena, etc.) — el
+/// autocomplete es asistencia, no validación bloqueante.
+class _PatenteSelector extends StatefulWidget {
+  final TextEditingController controller;
+  final String label;
+  final _TipoPatente tipoFiltro;
+  final VoidCallback onChanged;
+
+  const _PatenteSelector({
+    required this.controller,
+    required this.label,
+    required this.tipoFiltro,
+    required this.onChanged,
+  });
+
+  @override
+  State<_PatenteSelector> createState() => _PatenteSelectorState();
+}
+
+class _PatenteSelectorState extends State<_PatenteSelector> {
+  /// Cache local de patentes activas del tipo correspondiente. Se
+  /// rellena via StreamBuilder y se usa como fuente del Autocomplete.
+  /// Mantener esto separado del builder permite que el Autocomplete
+  /// no se reconstruya en cada keystroke (lo cual lo hace lento).
+  List<String> _patentesDisponibles = const [];
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection(AppCollections.vehiculos)
+          .snapshots(),
+      builder: (ctx, snap) {
+        final docs = snap.data?.docs ?? const [];
+        // Filtros en cliente (defensivo + evita índices compuestos):
+        //   1. ACTIVO != false (soft-delete)
+        //   2. TIPO según selector (tractor solo, o cualquier enganche)
+        final filtrados = docs.where((d) {
+          final data = d.data();
+          if (data['ACTIVO'] == false) return false;
+          final tipo = (data['TIPO'] ?? '').toString().toUpperCase();
+          if (widget.tipoFiltro == _TipoPatente.tractor) {
+            return tipo == AppTiposVehiculo.tractor;
+          }
+          return AppTiposVehiculo.enganches.contains(tipo);
+        }).toList()
+          ..sort((a, b) => a.id.compareTo(b.id));
+        _patentesDisponibles = filtrados.map((d) => d.id).toList();
+
+        return Autocomplete<String>(
+          // Evita el wrapper Material default; usamos nuestro TextField.
+          fieldViewBuilder: (context, fieldCtrl, fieldFocus, onSubmit) {
+            // Sincronizar el controller del padre con el del Autocomplete:
+            // si el padre cambia el text (auto-fill por chofer), reflejarlo.
+            if (fieldCtrl.text != widget.controller.text) {
+              fieldCtrl.text = widget.controller.text;
+              fieldCtrl.selection = TextSelection.collapsed(
+                offset: fieldCtrl.text.length,
+              );
+            }
+            return TextField(
+              controller: fieldCtrl,
+              focusNode: fieldFocus,
+              decoration: InputDecoration(
+                labelText: widget.label,
+                border: const OutlineInputBorder(),
+                suffixIcon: const Icon(Icons.arrow_drop_down),
+              ),
+              textCapitalization: TextCapitalization.characters,
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+                LengthLimitingTextInputFormatter(8),
+              ],
+              onChanged: (val) {
+                widget.controller.text = val.toUpperCase();
+                widget.onChanged();
+              },
+            );
+          },
+          optionsBuilder: (textEditingValue) {
+            final query = textEditingValue.text.trim().toUpperCase();
+            if (query.isEmpty) return _patentesDisponibles;
+            return _patentesDisponibles.where(
+              (p) => p.toUpperCase().contains(query),
+            );
+          },
+          onSelected: (selected) {
+            widget.controller.text = selected;
+            widget.onChanged();
+          },
+          // Display que se ve mientras se tipea: mostrar la patente como
+          // "ABC123" sin texto extra, para que la pantalla quede limpia.
+          displayStringForOption: (p) => p,
+        );
+      },
     );
   }
 }
