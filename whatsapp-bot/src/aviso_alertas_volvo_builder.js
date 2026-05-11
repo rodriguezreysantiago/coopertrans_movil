@@ -77,8 +77,34 @@ const ETIQUETAS_TIPO = {
  * @returns {string|null} Mensaje listo para encolar, o null si no hay
  *   eventos (caller decide no encolar).
  */
+// Lista negra de alertTypes que NO se incluyen en el resumen HIGH
+// del Jefe de Seg e Higiene. Decisión Ale 2026-05-11:
+// "Conducción sin chofer identificado" aparece en casi todos los
+// choferes de la flota (cuando arrancan el día antes de pasar el
+// iButton) y ensucia el reporte sin aportar valor real para Seg e
+// Higiene — para ese tema ya hay throttle de "pasá el iButton" en
+// el bot. La alerta sigue persistiéndose en VOLVO_ALERTAS y se ve
+// en el tablero admin, solo se filtra del resumen WhatsApp.
+//
+// Si en el futuro hay que sumar más tipos a filtrar, agregar acá +
+// documentar el motivo.
+const TIPOS_EXCLUIDOS_DEL_RESUMEN = new Set([
+  'DRIVING_WITHOUT_BEING_LOGGED_IN',
+]);
+
+/**
+ * Devuelve el "tipo efectivo" del evento para agrupar/filtrar.
+ * Si tipo == GENERIC y hay subTipo (ej. SEATBELT, TELL_TALE), usa
+ * el subTipo; sino usa el tipo crudo. Mismo criterio que el `porTipo`
+ * de abajo.
+ */
+function _tipoEfectivo(ev) {
+  return (ev.tipo === 'GENERIC' && ev.subTipo) ? ev.subTipo : ev.tipo;
+}
+
 function buildResumenDiario({ destinatarioNombre, eventos }) {
-  const eventosArr = Array.isArray(eventos) ? eventos : [];
+  const eventosArr = (Array.isArray(eventos) ? eventos : [])
+    .filter((ev) => !TIPOS_EXCLUIDOS_DEL_RESUMEN.has(_tipoEfectivo(ev)));
   const nombre = destinatarioNombre
     ? String(destinatarioNombre).replace(/\s+/g, ' ').trim().slice(0, 40)
     : null;

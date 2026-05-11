@@ -670,10 +670,18 @@ async function pollearCola(db) {
     _ultimoEstadoHorario = enHorario;
     if (!enHorario) return;
 
+    // FIFO por encolado_en. Sin orderBy explicito Firestore devuelve
+    // orden no deterministico — cuando el bot procesa cola acumulada
+    // (ej. lunes 8:30 con resumenes de viernes + sabado + domingo
+    // pendientes), salian en orden aleatorio y el destinatario veia
+    // los resumenes desordenados. Bug reportado 2026-05-11 por Ale.
+    // Requiere indice compuesto (estado ASC, encolado_en ASC) en
+    // firestore.indexes.json.
     const qs = await _withTimeout(
       db
         .collection(fs.COLECCION)
         .where('estado', '==', fs.ESTADO.pendiente)
+        .orderBy('encolado_en', 'asc')
         .get(),
       POLL_TIMEOUT_MS,
       'pollearCola query'

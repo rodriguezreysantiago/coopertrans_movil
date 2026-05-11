@@ -43,6 +43,14 @@
       ]
     },
     {
+      "collectionGroup": "COLA_WHATSAPP",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "encolado_en", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "CUBIERTAS_INSTALADAS",
       "queryScope": "COLLECTION",
       "fields": [

@@ -4683,11 +4683,16 @@ export const resumenExcesosJornadaDiario = onSchedule(
       const nombreFull = (empData.NOMBRE ?? "").toString().trim();
       const saludoNombre = apodo || _primerNombre(nombreFull) || "";
       const saludoOk = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
+      // No usar "ayer" en el texto: si el bot estuvo apagado fin de
+      // semana, los mensajes acumulados se entregan días después y
+      // "ayer" resulta confuso (ej. mensaje sale el lunes diciendo
+      // "ayer" pero la jornada es del viernes). La fecha explícita
+      // en el título ya identifica el día sin ambigüedad.
       const mensajeOk =
         `${saludoOk},\n\n` +
         `📋 *Resumen excesos de jornada — ${fmtFechaOk}*\n\n` +
         "✅ Sin excesos: ningún chofer cruzó las 4 h continuas " +
-        "ni las 12 h diarias ayer.\n\n" +
+        "ni las 12 h diarias ese día.\n\n" +
         BANNER_TESTING +
         "_Coopertrans Móvil — Aviso automático._";
       await db.collection("COLA_WHATSAPP").add({
