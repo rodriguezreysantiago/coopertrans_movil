@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/cuit_formatter.dart';
+import '../../../shared/utils/digit_only_formatter.dart';
 import '../../../shared/utils/phone_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../../shared/widgets/dato_editable.dart';
@@ -198,8 +199,9 @@ class _CardEmpresa extends StatelessWidget {
               runSpacing: 4,
               children: [
                 if (empresa.cuit != null) _Chip('CUIT ${empresa.cuit}'),
-                if (empresa.contacto != null)
-                  _Chip(_telefonoParaMostrar(empresa.contacto)),
+                if (empresa.contacto != null &&
+                    empresa.contacto!.trim().isNotEmpty)
+                  _Chip(PhoneFormatter.paraMostrar(empresa.contacto)),
               ],
             ),
           ],
@@ -382,20 +384,23 @@ class _EditarEmpresaSheet extends StatelessWidget {
                 ),
                 DatoEditableTexto(
                   etiqueta: 'Teléfono (opcional)',
-                  // Mostramos el número en formato local (sin el
-                  // prefijo +549 que vive solo en Firestore). Si el
-                  // campo tiene algo no-telefónico (ej. email viejo
-                  // del campo "contacto" legacy), se muestra tal
-                  // cual — paraMostrar es defensivo.
-                  valor: _telefonoParaMostrar(empresa.contacto),
+                  // Patrón idéntico al de EMPLEADOS.TELEFONO:
+                  //   - paraMostrar() saca el prefijo 549 para
+                  //     mostrar solo el código de área + abonado.
+                  //   - paraGuardar() agrega el prefijo 549 antes de
+                  //     persistir (formato que el bot WhatsApp
+                  //     consume con `<numero>@c.us`).
+                  //   - DigitOnlyFormatter para garantizar que el
+                  //     campo NUNCA tenga chars no-numéricos —
+                  //     evita que se cuele un email/texto que
+                  //     después rompería el bot.
+                  valor: PhoneFormatter.paraMostrar(empresa.contacto),
+                  inputFormatters: [DigitOnlyFormatter()],
+                  keyboardType: TextInputType.phone,
                   aplicarMayusculas: false,
-                  // Al guardar, le agregamos el prefijo +549 si es un
-                  // número argentino válido. Si no parece teléfono
-                  // (ej. email), guardamos el valor crudo tal cual
-                  // para no perder data legacy.
                   onSave: (v) => setCampo(
                     'contacto',
-                    _telefonoParaGuardar(v),
+                    PhoneFormatter.paraGuardar(v),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -784,10 +789,12 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
             TextField(
               controller: _contactoCtrl,
               keyboardType: TextInputType.phone,
+              inputFormatters: [DigitOnlyFormatter()],
               decoration: const InputDecoration(
                 labelText: 'Teléfono (opcional)',
                 hintText: '2914567890',
-                helperText: 'Lo guardamos con +549 automáticamente',
+                helperText:
+                    'Se guarda con prefijo 549 (formato WhatsApp).',
                 helperMaxLines: 2,
               ),
             ),
@@ -842,11 +849,14 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
         tipo: widget.tipo,
         apodo: _apodoCtrl.text.trim().isEmpty ? null : _apodoCtrl.text.trim(),
         cuit: cuitRaw.isEmpty ? null : CuitInputFormatter.formatear(cuitRaw),
-        // Teléfono: aplicamos prefijo +549 antes de persistir. El
-        // helper devuelve el número crudo si no parece teléfono AR
-        // (ej. operador metió otra cosa) — en ese caso lo guardamos
-        // tal cual para no perder data.
-        contacto: _telefonoParaGuardar(_contactoCtrl.text),
+        // Teléfono: el TextField ya tiene DigitOnlyFormatter, así
+        // que el texto viene como puros dígitos. paraGuardar agrega
+        // el prefijo 549 (formato canónico WhatsApp, mismo que
+        // EMPLEADOS.TELEFONO). Vacío → null para no guardar campo
+        // basura.
+        contacto: _contactoCtrl.text.trim().isEmpty
+            ? null
+            : PhoneFormatter.paraGuardar(_contactoCtrl.text),
       );
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -1030,32 +1040,3 @@ class _BloqueProductos extends StatelessWidget {
   }
 }
 
-// =============================================================================
-// HELPERS DE TELÉFONO (compartidos entre alta y edición de empresa)
-// =============================================================================
-
-/// Convierte el valor que el operador tipea al formato canónico
-/// (con prefijo `549`) para guardar en Firestore. Si el input no
-/// parece un teléfono argentino (ej. email viejo del campo legacy
-/// "contacto"), devuelve el string crudo trim para no perder data.
-/// String vacío → null (no guardamos).
-String? _telefonoParaGuardar(String? raw) {
-  final input = (raw ?? '').trim();
-  if (input.isEmpty) return null;
-  final canonico = PhoneFormatter.paraGuardar(input);
-  // Si el formatter devuelve vacío, el input no era un teléfono AR
-  // válido. Lo persistimos como string crudo para no perder lo que
-  // el operador tipeó (capaz tiene un email del campo legacy).
-  if (canonico.isEmpty) return input;
-  return canonico;
-}
-
-/// Convierte el valor guardado en Firestore al formato local para
-/// mostrar al operador (sin el prefijo +549). Si el valor no tiene
-/// prefijo (ej. email legacy), se devuelve tal cual. Vacío/null →
-/// vacío para que el campo se vea limpio.
-String _telefonoParaMostrar(String? guardado) {
-  final input = (guardado ?? '').trim();
-  if (input.isEmpty || input == '-') return '';
-  return PhoneFormatter.paraMostrar(input);
-}
