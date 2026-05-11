@@ -1,5 +1,8 @@
+import 'dart:io' show File, Platform, Process;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:printing/printing.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -875,18 +878,24 @@ class _BotonImprimirComprobanteState extends State<_BotonImprimirComprobante> {
         numeroRecibo: numero,
         esReimpresion: esReimpresion,
       );
-      // 3. Abrir dialog nativo de impresión. El package `printing`
-      // resuelve la diferencia entre plataformas: Windows muestra
-      // selector de impresora estándar, mobile ofrece AirPrint /
-      // Google Print / Share-to-PDF según OS.
-      await Printing.layoutPdf(
-        onLayout: (_) async => pdfBytes,
-        name:
-            'Adelanto-${numero.toString().padLeft(6, '0')}-${widget.viaje.id}',
+      // 3. Guardar a archivo temp + abrir con app default del sistema
+      // (Edge / Adobe Reader en Windows, Files / Vista en mobile).
+      // El usuario imprime desde el viewer con Ctrl+P.
+      //
+      // Antes usábamos Printing.layoutPdf del package `printing` —
+      // crasheaba en Windows con código 0xe06d7363 (excepción C++
+      // del binding nativo) cuando el subsystem de impresión no
+      // estaba bien inicializado. Ese código nativo es incatchable
+      // desde Dart. El approach actual NO depende de printing.
+      await _abrirPdfConViewerSistema(
+        pdfBytes,
+        nombreArchivo:
+            'Comprobante-Adelanto-Nro-${numero.toString().padLeft(6, '0')}.pdf',
       );
       if (mounted) {
         AppFeedback.successOn(messenger,
-            'Comprobante N° ${numero.toString().padLeft(6, '0')} listo.');
+            'Comprobante Nro. ${numero.toString().padLeft(6, '0')} abierto. '
+            'Imprimí desde el visor (Ctrl+P).');
       }
     } catch (e) {
       if (mounted) {
@@ -894,6 +903,38 @@ class _BotonImprimirComprobanteState extends State<_BotonImprimirComprobante> {
       }
     } finally {
       if (mounted) setState(() => _generando = false);
+    }
+  }
+
+  /// Guarda el PDF a un archivo temp y lo abre con el viewer default
+  /// del sistema operativo. Cross-platform sin dependencias de
+  /// plugins de impresión nativos:
+  ///   - **Windows**: `cmd /c start "" <ruta>` → abre con Edge / Adobe.
+  ///   - **macOS / Linux**: `launchUrl(file://)` → abre con Preview / xdg-open.
+  ///   - **Android / iOS**: `launchUrl(file://)` con `mode: externalApplication`.
+  Future<void> _abrirPdfConViewerSistema(
+    List<int> bytes, {
+    required String nombreArchivo,
+  }) async {
+    final tempDir = await getTemporaryDirectory();
+    final file = File('${tempDir.path}/$nombreArchivo');
+    await file.writeAsBytes(bytes, flush: true);
+    if (!kIsWeb && Platform.isWindows) {
+      // En Windows el `start` builtin de cmd abre con la app default
+      // sin esperar — el control vuelve enseguida al usuario.
+      // Notar las comillas vacías "" — son el "title" del comando
+      // start, sin esto trataría el primer arg como title y no
+      // como ruta.
+      await Process.start(
+        'cmd',
+        ['/c', 'start', '', file.path],
+        runInShell: true,
+      );
+    } else {
+      await launchUrl(
+        Uri.file(file.path),
+        mode: LaunchMode.externalApplication,
+      );
     }
   }
 }
