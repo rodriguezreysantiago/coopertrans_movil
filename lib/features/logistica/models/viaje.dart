@@ -210,6 +210,16 @@ class Viaje {
   final double? adelantoMonto;
   final DateTime? adelantoFecha;
   final String? adelantoObservacion;
+  /// Número correlativo del comprobante impreso. Se asigna en la
+  /// PRIMERA impresión del comprobante (RecibosAdelantoService),
+  /// no al crear el viaje — para no quemar correlativos en viajes
+  /// borrados sin imprimir. Si es `null`, todavía no se imprimió.
+  /// Reimpresiones usan el mismo número (NO se re-incrementa el
+  /// counter).
+  final int? numeroReciboAdelanto;
+  /// Timestamp de la primera impresión del comprobante. Útil para
+  /// auditoría — si reimprimís, queda este original.
+  final DateTime? reciboImpresoEn;
 
   // ─── Gastos extraordinarios (a favor del chofer) ───
   final List<GastoViaje> gastos;
@@ -265,6 +275,8 @@ class Viaje {
     this.adelantoMonto,
     this.adelantoFecha,
     this.adelantoObservacion,
+    this.numeroReciboAdelanto,
+    this.reciboImpresoEn,
     this.gastos = const [],
     required this.montoVecchi,
     required this.montoChofer,
@@ -312,6 +324,8 @@ class Viaje {
       adelantoMonto: (d['adelanto_monto'] as num?)?.toDouble(),
       adelantoFecha: (d['adelanto_fecha'] as Timestamp?)?.toDate(),
       adelantoObservacion: d['adelanto_observacion']?.toString(),
+      numeroReciboAdelanto: (d['numero_recibo_adelanto'] as num?)?.toInt(),
+      reciboImpresoEn: (d['recibo_impreso_en'] as Timestamp?)?.toDate(),
       gastos: gastosRaw == null
           ? const []
           : gastosRaw

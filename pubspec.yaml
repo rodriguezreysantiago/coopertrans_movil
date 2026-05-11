@@ -83,6 +83,16 @@ dependencies:
   # `flutter_pdfview` se removió (2026-04-28): la previsualización
   # de PDFs se hace con pdfrx (preview_screen.dart).
   pdfrx: ^1.0.10
+  # `pdf` (alias dart_pdf) para GENERAR PDFs (no leer — eso lo hace
+  # pdfrx). Se usa en el comprobante de adelanto del viaje (layout
+  # A4 duplicado: el operador imprime, corta al medio, una mitad
+  # queda en oficina y la otra se la lleva el chofer firmada).
+  pdf: ^3.10.7
+  # `printing` abre el diálogo nativo de impresión cross-platform
+  # (Windows: Print-to-PDF / impresora; Android: cualquier impresora
+  # vía Google Cloud Print o compartir; iOS: AirPrint). Mismo autor
+  # que `pdf`, batería incluida.
+  printing: ^5.12.0
 
   # ================= SEGURIDAD =================
   crypto: ^3.0.3      # SHA-256 (legacy, mantener para verificar contraseñas viejas)

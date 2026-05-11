@@ -283,6 +283,18 @@ class AppCollections {
   /// liquidaciones).
   static const String viajesLogistica = 'VIAJES_LOGISTICA';
 
+  /// Contadores atómicos para correlativos que requieren orden estricto
+  /// (sin gaps, sin duplicados). Cada doc representa un correlativo
+  /// independiente — `COUNTERS/recibos_adelanto.next` para el número
+  /// del comprobante de adelanto que se imprime al chofer.
+  ///
+  /// Se incrementa en transacción Firestore (lectura + escritura
+  /// atómica) — garantiza que dos impresiones simultáneas no obtengan
+  /// el mismo número. El número se asigna al momento del PRIMER
+  /// imprimir, no al crear el viaje, para no quemar correlativos en
+  /// viajes que se borran sin imprimir comprobante.
+  static const String counters = 'COUNTERS';
+
   // ─── Empresas empleadoras (2026-05-08) ───
   /// Empresas que figuran como empleador del personal (Vecchi Ariel y
   /// Vecchi Graciela S.R.L. + Sucesión de Vecchi Carlos Luis). Doc id:

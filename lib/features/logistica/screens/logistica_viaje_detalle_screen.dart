@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -8,6 +9,7 @@ import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../models/viaje.dart';
+import '../services/recibos_adelanto_service.dart';
 import '../services/viajes_service.dart';
 
 /// Detalle read-only de un viaje. Vista resumida para consulta rápida
@@ -343,6 +345,13 @@ class _SeccionAdelantoYGastos extends StatelessWidget {
           if (v.adelantoObservacion != null &&
               v.adelantoObservacion!.isNotEmpty)
             _Linea(label: 'Observación', valor: v.adelantoObservacion!),
+          if (v.numeroReciboAdelanto != null)
+            _Linea(
+              label: 'N° comprobante',
+              valor: v.numeroReciboAdelanto.toString().padLeft(6, '0'),
+            ),
+          const SizedBox(height: 10),
+          _BotonImprimirComprobante(viaje: v),
         ],
         if (v.gastos.isNotEmpty) ...[
           if (v.adelantoMonto != null && v.adelantoMonto! > 0)
@@ -792,5 +801,99 @@ class _Chip extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ============================================================================
+// BOTÓN IMPRIMIR COMPROBANTE DE ADELANTO
+// ============================================================================
+
+/// Botón que dispara el flujo de impresión del comprobante de adelanto:
+///   1. Asigna número correlativo en Firestore (transacción atómica
+///      — no se pisan dos impresiones simultáneas, no hay gaps).
+///   2. Genera el PDF (A4 duplicado: 2 mitades idénticas).
+///   3. Abre el dialog nativo de impresión via `printing` package
+///      (Windows: print-to-PDF / impresora; mobile: AirPrint /
+///      Google Print / share).
+///
+/// Si el viaje YA tiene número asignado (reimpresión), reusa el mismo
+/// número y marca el PDF como "REIMPRESIÓN" para distinguirlo.
+class _BotonImprimirComprobante extends StatefulWidget {
+  final Viaje viaje;
+  const _BotonImprimirComprobante({required this.viaje});
+
+  @override
+  State<_BotonImprimirComprobante> createState() =>
+      _BotonImprimirComprobanteState();
+}
+
+class _BotonImprimirComprobanteState extends State<_BotonImprimirComprobante> {
+  bool _generando = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final esReimpresion = widget.viaje.numeroReciboAdelanto != null;
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: _generando ? null : _imprimir,
+        icon: _generando
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: AppColors.accentGreen),
+              )
+            : Icon(esReimpresion ? Icons.refresh : Icons.print_outlined,
+                size: 18),
+        label: Text(esReimpresion
+            ? 'REIMPRIMIR COMPROBANTE'
+            : 'IMPRIMIR COMPROBANTE DE ADELANTO'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.accentGreen,
+          side: const BorderSide(color: AppColors.accentGreen),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          textStyle:
+              const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _imprimir() async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _generando = true);
+    try {
+      // 1. Asignar / reusar número correlativo (transacción atómica).
+      final numero = await RecibosAdelantoService.asignarNumeroSiFalta(
+        viajeId: widget.viaje.id,
+      );
+      // 2. Generar PDF en memoria (Uint8List).
+      final esReimpresion = widget.viaje.numeroReciboAdelanto != null;
+      final pdfBytes = await RecibosAdelantoService.generarPdf(
+        viaje: widget.viaje,
+        numeroRecibo: numero,
+        esReimpresion: esReimpresion,
+      );
+      // 3. Abrir dialog nativo de impresión. El package `printing`
+      // resuelve la diferencia entre plataformas: Windows muestra
+      // selector de impresora estándar, mobile ofrece AirPrint /
+      // Google Print / Share-to-PDF según OS.
+      await Printing.layoutPdf(
+        onLayout: (_) async => pdfBytes,
+        name:
+            'Adelanto-${numero.toString().padLeft(6, '0')}-${widget.viaje.id}',
+      );
+      if (mounted) {
+        AppFeedback.successOn(messenger,
+            'Comprobante N° ${numero.toString().padLeft(6, '0')} listo.');
+      }
+    } catch (e) {
+      if (mounted) {
+        AppFeedback.errorOn(messenger, 'Error al generar comprobante: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _generando = false);
+    }
   }
 }

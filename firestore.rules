@@ -204,6 +204,22 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // COUNTERS — correlativos atómicos para impresos
+    // ========================================================================
+    //
+    // `COUNTERS/recibos_adelanto.next` es el siguiente número de
+    // comprobante de adelanto a imprimir. Se incrementa con
+    // `runTransaction` desde el cliente (RecibosAdelantoService) en el
+    // momento de la primera impresión de cada viaje.
+    //
+    // Solo admin/supervisor puede leer y escribir — son los únicos que
+    // imprimen comprobantes desde el detalle del viaje. Si alguien con
+    // otro rol intenta llamarla, Firestore tira `permission-denied`.
+    match /COUNTERS/{doc} {
+      allow read, write: if isAdminOrSupervisor();
+    }
+
+    // ========================================================================
     // AVISOS_AUTOMATICOS_HISTORICO — idempotencia del cron del bot
     // ========================================================================
 
