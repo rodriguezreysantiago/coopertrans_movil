@@ -6,7 +6,6 @@ import 'package:firebase_storage/firebase_storage.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/app_logger.dart';
-import '../models/tarifa_logistica.dart';
 import '../models/viaje.dart';
 import '../utils/calculos_viaje.dart';
 
@@ -96,28 +95,25 @@ class ViajesService {
   // ALTA / EDICIÓN
   // ===========================================================================
 
-  /// Crea un viaje nuevo. La tarifa se persiste como snapshot —
-  /// cambios futuros en `TARIFAS_LOGISTICA` no afectan este viaje.
+  /// Crea un viaje nuevo multi-tramo. La tarifa de cada tramo se
+  /// persiste como snapshot — cambios futuros en `TARIFAS_LOGISTICA`
+  /// no afectan este viaje.
   ///
-  /// Recomputa todos los montos via `CalculosViaje.calcularTodo`. El
-  /// caller no debe pasar montos calculados; se ignoran si los pasa.
+  /// Recomputa todos los montos via `CalculosViaje.calcularTodoMultiTramo`.
+  /// Suma sobre todos los tramos.
   ///
-  /// Estado inicial: `PROGRAMADO` (se transiciona manualmente desde
-  /// el form a EN_CURSO / COMPLETADO según corresponda).
+  /// Estado inicial por default: `PLANEADO`.
+  ///
+  /// Para preservar queries existentes que filtran por `fecha_carga`,
+  /// `chofer_dni`, `monto_*`, etc., **denormalizamos al nivel del doc**
+  /// los campos del primer tramo + agregados. Los `tramos: [...]`
+  /// quedan también en el doc como fuente de verdad para multi-tramo.
   static Future<String> crearViaje({
-    required TarifaLogistica tarifa,
+    required List<TramoViaje> tramos,
     required String choferDni,
     String? choferNombre,
     String? vehiculoId,
     String? engancheId,
-    String? cargaTransportada,
-    DateTime? fechaCarga,
-    double? kgCargados,
-    DateTime? fechaDescarga,
-    double? kgDescargados,
-    String? remitoNumero,
-    String? remitoUrl,
-    String? remitoPathStorage,
     double? adelantoMonto,
     DateTime? adelantoFecha,
     String? adelantoObservacion,
@@ -129,21 +125,44 @@ class ViajesService {
     required String creadoPorDni,
     String? creadoPorNombre,
   }) async {
-    final montos = CalculosViaje.calcularTodo(
-      unidadTarifa: tarifa.unidadTarifa,
-      tarifaReal: tarifa.tarifaReal,
-      tarifaChofer: tarifa.tarifaChofer,
-      kgCargados: kgCargados,
-      kgDescargados: kgDescargados,
+    if (tramos.isEmpty) {
+      throw ArgumentError('El viaje debe tener al menos 1 tramo.');
+    }
+    final montos = CalculosViaje.calcularTodoMultiTramo(
+      tramos: tramos,
       adelanto: adelantoMonto ?? 0,
       gastos: gastos,
       comisionPct: comisionPct,
     );
+    final primero = tramos.first;
+    final ultimo = tramos.last;
 
     final docRef = _col.doc();
     final data = <String, dynamic>{
-      'tarifa_id': tarifa.id,
-      'tarifa_snapshot': TarifaSnapshot.fromTarifa(tarifa).toMap(),
+      // ─── Multi-tramo (fuente de verdad) ───
+      'tramos': tramos.map((t) => t.toMap()).toList(),
+
+      // ─── Denormalización del primer tramo (compat queries) ───
+      'tarifa_id': primero.tarifaId,
+      'tarifa_snapshot': primero.tarifaSnapshot.toMap(),
+      if (primero.fechaCarga != null)
+        'fecha_carga': Timestamp.fromDate(primero.fechaCarga!),
+      if (primero.kgCargados != null) 'kg_cargados': primero.kgCargados,
+      if (primero.descripcionCarga != null)
+        'carga_transportada': primero.descripcionCarga
+      else if (primero.producto != null)
+        'carga_transportada': primero.producto,
+      // ─── Denormalización del último tramo (compat queries) ───
+      if (ultimo.fechaDescarga != null)
+        'fecha_descarga': Timestamp.fromDate(ultimo.fechaDescarga!),
+      if (ultimo.kgDescargados != null)
+        'kg_descargados': ultimo.kgDescargados,
+      if (ultimo.remitoNumero != null) 'remito_numero': ultimo.remitoNumero,
+      if (ultimo.remitoUrl != null) 'remito_url': ultimo.remitoUrl,
+      if (ultimo.remitoPathStorage != null)
+        'remito_path_storage': ultimo.remitoPathStorage,
+
+      // ─── Datos compartidos del viaje ───
       'chofer_dni': choferDni,
       if (choferNombre != null) 'chofer_nombre': choferNombre,
       if (vehiculoId != null) 'vehiculo_id': vehiculoId,
@@ -152,27 +171,22 @@ class ViajesService {
       if (motivoCancelacion != null) 'motivo_cancelacion': motivoCancelacion,
       if (fechaPostergadoA != null)
         'fecha_postergado_a': Timestamp.fromDate(fechaPostergadoA),
-      if (fechaCarga != null) 'fecha_carga': Timestamp.fromDate(fechaCarga),
-      if (kgCargados != null) 'kg_cargados': kgCargados,
-      if (fechaDescarga != null)
-        'fecha_descarga': Timestamp.fromDate(fechaDescarga),
-      if (kgDescargados != null) 'kg_descargados': kgDescargados,
-      if (remitoNumero != null) 'remito_numero': remitoNumero,
-      if (remitoUrl != null) 'remito_url': remitoUrl,
-      if (remitoPathStorage != null) 'remito_path_storage': remitoPathStorage,
-      if (cargaTransportada != null) 'carga_transportada': cargaTransportada,
       if (adelantoMonto != null) 'adelanto_monto': adelantoMonto,
       if (adelantoFecha != null)
         'adelanto_fecha': Timestamp.fromDate(adelantoFecha),
       if (adelantoObservacion != null)
         'adelanto_observacion': adelantoObservacion,
       'gastos': gastos.map((g) => g.toMap()).toList(),
+
+      // ─── Agregados (sumas sobre tramos) ───
       'monto_vecchi': montos.montoVecchi,
       'monto_chofer': montos.montoChofer,
       'monto_chofer_redondeado': montos.montoChoferRedondeado,
       'comision_chofer_pct': montos.comisionChoferPct,
       'gastos_total': montos.gastosTotal,
       'liquidacion_chofer': montos.liquidacionChofer,
+
+      // ─── Auditoría ───
       'liquidado': false,
       'creado_en': FieldValue.serverTimestamp(),
       'creado_por_dni': creadoPorDni,
@@ -183,32 +197,23 @@ class ViajesService {
     };
 
     await docRef.set(data);
-    AppLogger.log('Viaje creado: ${docRef.id} chofer=$choferDni');
+    AppLogger.log(
+      'Viaje creado: ${docRef.id} chofer=$choferDni tramos=${tramos.length}',
+    );
     return docRef.id;
   }
 
-  /// Actualiza campos del viaje. Recomputa montos siempre — si el
-  /// caller cambió la tarifa, los kgs, adelanto o gastos, todos los
-  /// montos se recalculan en sincronía.
-  ///
-  /// Si el caller quiere actualizar SOLO ciertos campos sin tocar
-  /// otros, debe pasar los originales explícitamente. Para edición
-  /// pequeña (ej. solo el remito_numero), usar `actualizarCampos`.
+  /// Actualiza un viaje multi-tramo. Recomputa montos sumando todos
+  /// los tramos. Reescribe el array completo de tramos (sin merge —
+  /// el caller pasa la lista actualizada con tramos agregados,
+  /// eliminados o editados).
   static Future<void> actualizarViaje({
     required String viajeId,
-    required TarifaLogistica tarifa,
+    required List<TramoViaje> tramos,
     required String choferDni,
     String? choferNombre,
     String? vehiculoId,
     String? engancheId,
-    String? cargaTransportada,
-    DateTime? fechaCarga,
-    double? kgCargados,
-    DateTime? fechaDescarga,
-    double? kgDescargados,
-    String? remitoNumero,
-    String? remitoUrl,
-    String? remitoPathStorage,
     double? adelantoMonto,
     DateTime? adelantoFecha,
     String? adelantoObservacion,
@@ -219,20 +224,39 @@ class ViajesService {
     double? comisionPct,
     required String actualizadoPorDni,
   }) async {
-    final montos = CalculosViaje.calcularTodo(
-      unidadTarifa: tarifa.unidadTarifa,
-      tarifaReal: tarifa.tarifaReal,
-      tarifaChofer: tarifa.tarifaChofer,
-      kgCargados: kgCargados,
-      kgDescargados: kgDescargados,
+    if (tramos.isEmpty) {
+      throw ArgumentError('El viaje debe tener al menos 1 tramo.');
+    }
+    final montos = CalculosViaje.calcularTodoMultiTramo(
+      tramos: tramos,
       adelanto: adelantoMonto ?? 0,
       gastos: gastos,
       comisionPct: comisionPct,
     );
+    final primero = tramos.first;
+    final ultimo = tramos.last;
 
     final data = <String, dynamic>{
-      'tarifa_id': tarifa.id,
-      'tarifa_snapshot': TarifaSnapshot.fromTarifa(tarifa).toMap(),
+      'tramos': tramos.map((t) => t.toMap()).toList(),
+
+      // Denormalización (sobreescribir aún si null para que queries
+      // que filtran por estos campos vean el estado actual).
+      'tarifa_id': primero.tarifaId,
+      'tarifa_snapshot': primero.tarifaSnapshot.toMap(),
+      'fecha_carga': primero.fechaCarga == null
+          ? null
+          : Timestamp.fromDate(primero.fechaCarga!),
+      'kg_cargados': primero.kgCargados,
+      'carga_transportada':
+          primero.descripcionCarga ?? primero.producto,
+      'fecha_descarga': ultimo.fechaDescarga == null
+          ? null
+          : Timestamp.fromDate(ultimo.fechaDescarga!),
+      'kg_descargados': ultimo.kgDescargados,
+      'remito_numero': ultimo.remitoNumero,
+      'remito_url': ultimo.remitoUrl,
+      'remito_path_storage': ultimo.remitoPathStorage,
+
       'chofer_dni': choferDni,
       'chofer_nombre': choferNombre,
       'vehiculo_id': vehiculoId,
@@ -241,21 +265,12 @@ class ViajesService {
       'motivo_cancelacion': motivoCancelacion,
       'fecha_postergado_a':
           fechaPostergadoA == null ? null : Timestamp.fromDate(fechaPostergadoA),
-      'fecha_carga':
-          fechaCarga == null ? null : Timestamp.fromDate(fechaCarga),
-      'kg_cargados': kgCargados,
-      'fecha_descarga':
-          fechaDescarga == null ? null : Timestamp.fromDate(fechaDescarga),
-      'kg_descargados': kgDescargados,
-      'remito_numero': remitoNumero,
-      'remito_url': remitoUrl,
-      'remito_path_storage': remitoPathStorage,
-      'carga_transportada': cargaTransportada,
       'adelanto_monto': adelantoMonto,
       'adelanto_fecha':
           adelantoFecha == null ? null : Timestamp.fromDate(adelantoFecha),
       'adelanto_observacion': adelantoObservacion,
       'gastos': gastos.map((g) => g.toMap()).toList(),
+
       'monto_vecchi': montos.montoVecchi,
       'monto_chofer': montos.montoChofer,
       'monto_chofer_redondeado': montos.montoChoferRedondeado,
@@ -267,7 +282,7 @@ class ViajesService {
     };
 
     await _col.doc(viajeId).update(data);
-    AppLogger.log('Viaje actualizado: $viajeId');
+    AppLogger.log('Viaje actualizado: $viajeId tramos=${tramos.length}');
   }
 
   /// Marca el viaje como liquidado. Sin tocar montos — la liquidación

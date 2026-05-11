@@ -38,6 +38,18 @@ class LogisticaService {
         );
   }
 
+  /// One-shot get de una empresa por ID. Devuelve null si no existe.
+  /// Pensado para poblar el dropdown de productos en el form de viaje
+  /// (cada tramo lee la empresa origen de su tarifa para mostrar la
+  /// lista de productos catalogados — campo `productos: List<String>`).
+  static Future<EmpresaLogistica?> empresaPorId(String id) async {
+    if (id.isEmpty) return null;
+    final snap = await empresasCol.doc(id).get();
+    final data = snap.data();
+    if (!snap.exists || data == null) return null;
+    return EmpresaLogistica.fromMap(snap.id, data);
+  }
+
   /// Crea una empresa. Tira [StateError] si ya existe otra con el mismo
   /// nombre (case-insensitive) para evitar duplicados por typo.
   static Future<DocumentReference<Map<String, dynamic>>> crearEmpresa({

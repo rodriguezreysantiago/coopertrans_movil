@@ -66,11 +66,9 @@ class LogisticaViajeDetalleScreen extends StatelessWidget {
               children: [
                 _Cabecera(v: v),
                 const SizedBox(height: 12),
-                _SeccionRuta(v: v),
-                const SizedBox(height: 12),
                 _SeccionAsignacion(v: v),
                 const SizedBox(height: 12),
-                _SeccionCargaDescarga(v: v),
+                _SeccionTramos(v: v),
                 const SizedBox(height: 12),
                 _SeccionMontos(v: v),
                 const SizedBox(height: 12),
@@ -157,38 +155,131 @@ class _Cabecera extends StatelessWidget {
   }
 }
 
-class _SeccionRuta extends StatelessWidget {
+/// Sección que muestra los tramos del viaje en formato lista. Si el
+/// viaje es single-tramo, muestra 1 tramo (igual de claro que antes).
+/// Si es multi-tramo, lista cada uno con su tarifa, fechas, kg y
+/// remito propios.
+class _SeccionTramos extends StatelessWidget {
   final Viaje v;
-  const _SeccionRuta({required this.v});
+  const _SeccionTramos({required this.v});
 
   @override
   Widget build(BuildContext context) {
-    final ts = v.tarifaSnapshot;
     return _Seccion(
-      titulo: 'RUTA Y TARIFA',
+      titulo: v.esMultiTramo
+          ? 'TRAMOS (${v.cantidadTramos})'
+          : 'RUTA Y CARGA',
       icono: Icons.alt_route,
       children: [
-        _Linea(label: 'Origen',
-            valor: '${ts.origenEtiqueta} (${ts.empresaOrigenNombre})'),
-        _Linea(label: 'Destino',
-            valor: '${ts.destinoEtiqueta} (${ts.empresaDestinoNombre})'),
-        if (ts.producto != null && ts.producto!.isNotEmpty)
-          _Linea(label: 'Producto', valor: ts.producto!),
-        _Linea(
-          label: 'Modalidad',
-          valor: '${ts.unidadTarifa.etiqueta} · '
-              '\$${AppFormatters.formatearMonto(ts.tarifaReal)}'
-              '${ts.unidadTarifa.sufijoMonto} (Vecchi) · '
-              '\$${AppFormatters.formatearMonto(ts.tarifaChofer)}'
-              '${ts.unidadTarifa.sufijoMonto} (chofer)',
-        ),
-        if (ts.dadorNombre != null)
-          _Linea(
-            label: 'Dador',
-            valor: '${ts.dadorNombre} '
-                '${ts.porcentajeComisionDador != null ? "(${ts.porcentajeComisionDador!.toStringAsFixed(1)}%)" : ""}',
-          ),
+        ...v.tramos.asMap().entries.map((entry) {
+          final i = entry.key;
+          final t = entry.value;
+          return Padding(
+            padding: EdgeInsets.only(
+              top: i == 0 ? 0 : 12,
+              bottom: i == v.tramos.length - 1 ? 0 : 0,
+            ),
+            child: _DetalleTramo(
+              numero: v.esMultiTramo ? i + 1 : null,
+              tramo: t,
+            ),
+          );
+        }),
       ],
+    );
+  }
+}
+
+class _DetalleTramo extends StatelessWidget {
+  final int? numero;
+  final TramoViaje tramo;
+  const _DetalleTramo({required this.numero, required this.tramo});
+
+  @override
+  Widget build(BuildContext context) {
+    final ts = tramo.tarifaSnapshot;
+    return Container(
+      decoration: numero == null
+          ? null
+          : BoxDecoration(
+              border: Border.all(color: Colors.white12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+      padding: numero == null ? EdgeInsets.zero : const EdgeInsets.all(10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (numero != null) ...[
+            Text(
+              'TRAMO $numero',
+              style: const TextStyle(
+                color: AppColors.accentBlue,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+                letterSpacing: 1.2,
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
+          _Linea(
+            label: 'Origen',
+            valor: '${ts.origenEtiqueta} (${ts.empresaOrigenNombre})',
+          ),
+          _Linea(
+            label: 'Destino',
+            valor: '${ts.destinoEtiqueta} (${ts.empresaDestinoNombre})',
+          ),
+          if (tramo.producto != null && tramo.producto!.isNotEmpty)
+            _Linea(label: 'Producto', valor: tramo.producto!)
+          else if (ts.producto != null && ts.producto!.isNotEmpty)
+            _Linea(label: 'Producto', valor: ts.producto!),
+          if (tramo.descripcionCarga != null &&
+              tramo.descripcionCarga!.isNotEmpty)
+            _Linea(label: 'Observación', valor: tramo.descripcionCarga!),
+          _Linea(
+            label: 'Modalidad',
+            valor: '${ts.unidadTarifa.etiqueta} · '
+                '\$${AppFormatters.formatearMonto(ts.tarifaReal)}'
+                '${ts.unidadTarifa.sufijoMonto} (Vecchi) · '
+                '\$${AppFormatters.formatearMonto(ts.tarifaChofer)}'
+                '${ts.unidadTarifa.sufijoMonto} (chofer)',
+          ),
+          _Linea(
+            label: 'Fecha carga',
+            valor: tramo.fechaCarga == null
+                ? '—'
+                : AppFormatters.formatearFechaHoraSinSegundos(
+                    tramo.fechaCarga),
+          ),
+          if (tramo.kgCargados != null)
+            _Linea(
+              label: 'Kg cargados',
+              valor:
+                  '${AppFormatters.formatearMiles(tramo.kgCargados!.toInt())} kg',
+            ),
+          _Linea(
+            label: 'Fecha descarga',
+            valor: tramo.fechaDescarga == null
+                ? '—'
+                : AppFormatters.formatearFechaHoraSinSegundos(
+                    tramo.fechaDescarga),
+          ),
+          if (tramo.kgDescargados != null)
+            _Linea(
+              label: 'Kg descargados',
+              valor:
+                  '${AppFormatters.formatearMiles(tramo.kgDescargados!.toInt())} kg',
+            ),
+          if (tramo.remitoNumero != null && tramo.remitoNumero!.isNotEmpty)
+            _Linea(label: 'Remito Nº', valor: tramo.remitoNumero!),
+          if (tramo.remitoUrl != null && tramo.remitoUrl!.isNotEmpty)
+            _LineaLink(
+              label: 'Comprobante',
+              url: tramo.remitoUrl!,
+              etiqueta: 'Abrir comprobante',
+            ),
+        ],
+      ),
     );
   }
 }
@@ -213,51 +304,6 @@ class _SeccionAsignacion extends StatelessWidget {
           _Linea(label: 'Tractor', valor: v.vehiculoId!),
         if (v.engancheId != null && v.engancheId!.isNotEmpty)
           _Linea(label: 'Enganche', valor: v.engancheId!),
-      ],
-    );
-  }
-}
-
-class _SeccionCargaDescarga extends StatelessWidget {
-  final Viaje v;
-  const _SeccionCargaDescarga({required this.v});
-
-  @override
-  Widget build(BuildContext context) {
-    return _Seccion(
-      titulo: 'CARGA Y DESCARGA',
-      icono: Icons.inventory_2_outlined,
-      children: [
-        _Linea(
-          label: 'Fecha carga',
-          valor: v.fechaCarga == null
-              ? '—'
-              : AppFormatters.formatearFechaHoraSinSegundos(v.fechaCarga),
-        ),
-        if (v.kgCargados != null)
-          _Linea(
-            label: 'Kg cargados',
-            valor: '${AppFormatters.formatearMiles(v.kgCargados!.toInt())} kg',
-          ),
-        _Linea(
-          label: 'Fecha descarga',
-          valor: v.fechaDescarga == null
-              ? '—'
-              : AppFormatters.formatearFechaHoraSinSegundos(v.fechaDescarga),
-        ),
-        if (v.kgDescargados != null)
-          _Linea(
-            label: 'Kg descargados',
-            valor: '${AppFormatters.formatearMiles(v.kgDescargados!.toInt())} kg',
-          ),
-        if (v.remitoNumero != null && v.remitoNumero!.isNotEmpty)
-          _Linea(label: 'Remito Nº', valor: v.remitoNumero!),
-        if (v.remitoUrl != null && v.remitoUrl!.isNotEmpty)
-          _LineaLink(
-            label: 'Comprobante',
-            url: v.remitoUrl!,
-            etiqueta: 'Abrir comprobante',
-          ),
       ],
     );
   }

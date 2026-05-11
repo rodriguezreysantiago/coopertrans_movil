@@ -217,8 +217,7 @@ class _ViajeTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ts = viaje.tarifaSnapshot;
-    final fechaRef = viaje.fechaCarga ?? viaje.creadoEn;
+    final fechaRef = viaje.fechaReferencia;
     final color = _colorEstado(viaje.estado);
 
     return AppCard(
@@ -267,7 +266,7 @@ class _ViajeTile extends StatelessWidget {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(
-                  '${ts.origenEtiqueta} → ${ts.destinoEtiqueta}',
+                  viaje.rutaEtiqueta,
                   style: const TextStyle(color: Colors.white60, fontSize: 12),
                   overflow: TextOverflow.ellipsis,
                 ),

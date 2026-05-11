@@ -778,64 +778,195 @@ class _ListaViajes extends StatelessWidget {
             ),
           ),
         ),
-        ...viajes.map((v) {
-          final fecha = v.fechaCarga != null
-              ? AppFormatters.formatearFecha(v.fechaCarga!)
-              : '—';
-          final ruta =
-              '${v.tarifaSnapshot.origenEtiqueta} → ${v.tarifaSnapshot.destinoEtiqueta}';
-          return AppCard(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            margin: const EdgeInsets.only(bottom: 8),
-            onTap: () => Navigator.pushNamed(
-              context,
-              AppRoutes.adminLogisticaViajeDetalle,
-              arguments: {'viajeId': v.id},
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '$fecha · $ruta',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                    if (v.liquidado)
-                      const Icon(Icons.check_circle,
-                          size: 14, color: AppColors.accentGreen)
-                    else
-                      const Icon(Icons.schedule,
-                          size: 14, color: AppColors.accentOrange),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                _MiniCelda(label: 'Facturado', valor: v.montoVecchi),
-                _MiniCelda(
-                    label: 'Ganancia chofer', valor: v.montoChoferRedondeado),
-                if ((v.adelantoMonto ?? 0) > 0)
-                  _MiniCelda(label: 'Adelanto', valor: -(v.adelantoMonto ?? 0)),
-                if (v.gastosTotal > 0)
-                  _MiniCelda(label: 'Gastos', valor: v.gastosTotal),
-                const Divider(color: Colors.white12, height: 12),
-                _MiniCelda(
-                  label: 'Neto',
-                  valor: v.liquidacionChofer,
-                  destacado: true,
-                ),
-              ],
-            ),
-          );
-        }),
+        ...viajes.map((v) => _ViajeCardLiquidacion(v: v)),
       ],
     );
   }
 }
+
+/// Card de viaje en la pantalla LIQUIDACIÓN. Si el viaje es
+/// multi-tramo, despliega un panel expandible con el detalle de cada
+/// tramo (fecha carga, fecha descarga, kg cargados/descargados,
+/// origen → destino). Si es single-tramo, se ve igual que antes.
+class _ViajeCardLiquidacion extends StatefulWidget {
+  final Viaje v;
+  const _ViajeCardLiquidacion({required this.v});
+
+  @override
+  State<_ViajeCardLiquidacion> createState() =>
+      _ViajeCardLiquidacionState();
+}
+
+class _ViajeCardLiquidacionState extends State<_ViajeCardLiquidacion> {
+  bool _expandido = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = widget.v;
+    final fecha = v.fechaReferencia != null
+        ? AppFormatters.formatearFecha(v.fechaReferencia!)
+        : '—';
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      margin: const EdgeInsets.only(bottom: 8),
+      onTap: () => Navigator.pushNamed(
+        context,
+        AppRoutes.adminLogisticaViajeDetalle,
+        arguments: {'viajeId': v.id},
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$fecha · ${v.rutaEtiqueta}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              if (v.liquidado)
+                const Icon(Icons.check_circle,
+                    size: 14, color: AppColors.accentGreen)
+              else
+                const Icon(Icons.schedule,
+                    size: 14, color: AppColors.accentOrange),
+            ],
+          ),
+          const SizedBox(height: 4),
+          _MiniCelda(label: 'Facturado', valor: v.montoVecchi),
+          _MiniCelda(
+              label: 'Ganancia chofer', valor: v.montoChoferRedondeado),
+          if ((v.adelantoMonto ?? 0) > 0)
+            _MiniCelda(label: 'Adelanto', valor: -(v.adelantoMonto ?? 0)),
+          if (v.gastosTotal > 0)
+            _MiniCelda(label: 'Gastos', valor: v.gastosTotal),
+          const Divider(color: Colors.white12, height: 12),
+          _MiniCelda(
+            label: 'Neto',
+            valor: v.liquidacionChofer,
+            destacado: true,
+          ),
+          // Toggle desplegable solo si tiene más de 1 tramo.
+          if (v.esMultiTramo) ...[
+            const SizedBox(height: 6),
+            InkWell(
+              onTap: () => setState(() => _expandido = !_expandido),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    _expandido
+                        ? Icons.keyboard_arrow_up
+                        : Icons.keyboard_arrow_down,
+                    size: 16,
+                    color: Colors.white54,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _expandido
+                        ? 'Ocultar tramos'
+                        : 'Ver detalle de ${v.cantidadTramos} tramos',
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (_expandido) ...[
+              const SizedBox(height: 6),
+              ...v.tramos.asMap().entries.map((entry) {
+                final i = entry.key;
+                final t = entry.value;
+                return _DetalleTramoLiquidacion(numero: i + 1, tramo: t);
+              }),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Fila compacta con datos de un tramo dentro del desplegable de
+/// LIQUIDACIÓN. Solo muestra lo esencial para entender el detalle
+/// (fechas, kg, ruta) — el monto del tramo NO se expone porque la
+/// liquidación es por viaje completo, no por tramo.
+class _DetalleTramoLiquidacion extends StatelessWidget {
+  final int numero;
+  final TramoViaje tramo;
+
+  const _DetalleTramoLiquidacion({
+    required this.numero,
+    required this.tramo,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ts = tramo.tarifaSnapshot;
+    final fc = tramo.fechaCarga != null
+        ? AppFormatters.formatearFecha(tramo.fechaCarga!)
+        : '—';
+    final fd = tramo.fechaDescarga != null
+        ? AppFormatters.formatearFecha(tramo.fechaDescarga!)
+        : '—';
+    final kgC = tramo.kgCargados != null
+        ? '${AppFormatters.formatearMiles(tramo.kgCargados!.toInt())} kg'
+        : null;
+    final kgD = tramo.kgDescargados != null
+        ? '${AppFormatters.formatearMiles(tramo.kgDescargados!.toInt())} kg'
+        : null;
+    return Container(
+      margin: const EdgeInsets.only(top: 4),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(8),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: Colors.white12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'TRAMO $numero · ${ts.origenEtiqueta} → ${ts.destinoEtiqueta}',
+            style: const TextStyle(
+              color: AppColors.accentBlue,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.8,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 3),
+          if (tramo.producto != null && tramo.producto!.isNotEmpty)
+            Text(
+              tramo.producto!,
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+          Text(
+            'Carga: $fc${kgC != null ? "  ·  $kgC" : ""}',
+            style: const TextStyle(color: Colors.white60, fontSize: 11),
+          ),
+          Text(
+            'Descarga: $fd${kgD != null ? "  ·  $kgD" : ""}',
+            style: const TextStyle(color: Colors.white60, fontSize: 11),
+          ),
+          if (tramo.remitoNumero != null && tramo.remitoNumero!.isNotEmpty)
+            Text(
+              'Remito Nº ${tramo.remitoNumero}',
+              style: const TextStyle(color: Colors.white54, fontSize: 10),
+            ),
+        ],
+      ),
+    );
+  }
+}
+

@@ -9,20 +9,26 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../models/empresa_logistica.dart';
 import '../models/tarifa_logistica.dart';
 import '../models/viaje.dart';
 import '../services/logistica_service.dart';
 import '../services/viajes_service.dart';
 import '../utils/calculos_viaje.dart';
 
-/// Form full-screen para alta y edición de viajes. 8 secciones
-/// agrupadas vertical-arriba-abajo, validación en línea, recompute
-/// de montos en vivo al cambiar inputs.
+/// Form full-screen para alta y edición de viajes **multi-tramo**.
 ///
-/// Si recibe `arguments={'viajeId': '...'}` carga el viaje para
-/// editar; si no, es alta. El estado por default al crear es
-/// PLANEADO (decisión Santiago 2026-05-09 — el viaje todavía no
-/// arrancó y puede no realizarse).
+/// Layout (decisión Santiago 2026-05-11):
+///   1. **Resumen** arriba (totales en vivo).
+///   2. **Estado** del viaje.
+///   3. **Chofer + Unidad** (chofer auto-llena unidad asignada).
+///   4. **Adelanto** al chofer.
+///   5. **Gastos extraordinarios**.
+///   6. **Tramos** — uno o varios, con botón "+ AGREGAR TRAMO".
+///
+/// Cada tramo tiene su propia tarifa, fechas, kgs, producto y remito.
+/// Caso típico: un viaje físico con varias cargas/descargas
+/// intermedias (B.Blanca → Olavarría → Tres Arroyos → …).
 class LogisticaViajeFormScreen extends StatefulWidget {
   /// Si null, modo "alta". Si trae id, carga el viaje para editar.
   final String? viajeId;
@@ -35,26 +41,11 @@ class LogisticaViajeFormScreen extends StatefulWidget {
 }
 
 class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
-  // ─── Estado del form ───
-  TarifaLogistica? _tarifa;
+  // ─── Datos compartidos del viaje ───
   String? _choferDni;
   String? _choferNombre;
   final _vehiculoCtrl = TextEditingController();
   final _engancheCtrl = TextEditingController();
-  final _cargaTransportadaCtrl = TextEditingController();
-
-  DateTime? _fechaCarga;
-  final _kgCargadosCtrl = TextEditingController();
-
-  DateTime? _fechaDescarga;
-  final _remitoNumeroCtrl = TextEditingController();
-  String? _remitoUrl;
-  String? _remitoPathStorage;
-  String? _remitoNombreLocal; // para mostrar el nombre del archivo recién pickeado
-  Uint8List? _remitoBytesPendientes;
-  String? _remitoExtPendiente;
-  String? _remitoMimePendiente;
-  final _kgDescargadosCtrl = TextEditingController();
 
   final _adelantoMontoCtrl = TextEditingController();
   DateTime? _adelantoFecha;
@@ -65,6 +56,9 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
   EstadoViaje _estado = EstadoViaje.planeado;
   final _motivoCancelacionCtrl = TextEditingController();
   DateTime? _fechaPostergadoA;
+
+  // ─── Tramos (1 o más) ───
+  final List<_TramoEditState> _tramos = [];
 
   // ─── Lifecycle ───
   bool _cargando = true;
@@ -83,18 +77,19 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
   void dispose() {
     _vehiculoCtrl.dispose();
     _engancheCtrl.dispose();
-    _cargaTransportadaCtrl.dispose();
-    _kgCargadosCtrl.dispose();
-    _remitoNumeroCtrl.dispose();
-    _kgDescargadosCtrl.dispose();
     _adelantoMontoCtrl.dispose();
     _adelantoObsCtrl.dispose();
     _motivoCancelacionCtrl.dispose();
+    for (final t in _tramos) {
+      t.dispose();
+    }
     super.dispose();
   }
 
   Future<void> _cargarSiEdicion() async {
     if (!_esEdicion) {
+      // Alta: arrancamos con un tramo vacío.
+      _tramos.add(_TramoEditState.vacio());
       setState(() => _cargando = false);
       return;
     }
@@ -112,30 +107,10 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
       }
       final v = Viaje.fromMap(snap.id, snap.data()!);
 
-      // Cargar la tarifa referenciada para tener todos sus datos.
-      final tSnap = await LogisticaService.tarifasCol.doc(v.tarifaId).get();
-      if (tSnap.exists) {
-        _tarifa = TarifaLogistica.fromMap(tSnap.id, tSnap.data()!);
-      }
-
       _choferDni = v.choferDni;
       _choferNombre = v.choferNombre;
       _vehiculoCtrl.text = v.vehiculoId ?? '';
       _engancheCtrl.text = v.engancheId ?? '';
-      _cargaTransportadaCtrl.text = v.cargaTransportada ?? '';
-      _fechaCarga = v.fechaCarga;
-      if (v.kgCargados != null) {
-        _kgCargadosCtrl.text =
-            AppFormatters.formatearMiles(v.kgCargados!.toInt());
-      }
-      _fechaDescarga = v.fechaDescarga;
-      _remitoNumeroCtrl.text = v.remitoNumero ?? '';
-      _remitoUrl = v.remitoUrl;
-      _remitoPathStorage = v.remitoPathStorage;
-      if (v.kgDescargados != null) {
-        _kgDescargadosCtrl.text =
-            AppFormatters.formatearMiles(v.kgDescargados!.toInt());
-      }
       if (v.adelantoMonto != null) {
         _adelantoMontoCtrl.text =
             AppFormatters.formatearMiles(v.adelantoMonto!.toInt());
@@ -147,6 +122,30 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
       _motivoCancelacionCtrl.text = v.motivoCancelacion ?? '';
       _fechaPostergadoA = v.fechaPostergadoA;
 
+      // Hidratar tramos. Para cada uno necesitamos resolver la tarifa
+      // (para reusar el dropdown del catálogo). Si la tarifa ya no
+      // existe en el catálogo (fue borrada), reconstruimos una tarifa
+      // dummy a partir del snapshot que tiene el tramo persistido.
+      for (final t in v.tramos) {
+        TarifaLogistica? tarifa;
+        try {
+          final tSnap = await LogisticaService.tarifasCol.doc(t.tarifaId).get();
+          if (tSnap.exists) {
+            tarifa = TarifaLogistica.fromMap(tSnap.id, tSnap.data()!);
+          }
+        } catch (_) {
+          // ignoramos errores de red por tarifa — la usamos del snapshot
+        }
+        _tramos.add(_TramoEditState.fromTramoViaje(t, tarifa));
+      }
+
+      // Si por alguna razón el viaje viejo no tenía tramos (corrupción
+      // o doc vacío), agregamos uno vacío para que el operador pueda
+      // editar al menos.
+      if (_tramos.isEmpty) {
+        _tramos.add(_TramoEditState.vacio());
+      }
+
       setState(() => _cargando = false);
     } catch (e) {
       setState(() {
@@ -156,100 +155,85 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
     }
   }
 
-  // ─── Cálculos en vivo ───
+  /// Cálculos del resumen — suma los montos de todos los tramos con
+  /// tarifa elegida + descuenta adelanto + suma gastos. Si ningún
+  /// tramo tiene tarifa, devuelve null y el resumen muestra "—".
   MontosViaje? get _montosCalc {
-    if (_tarifa == null) return null;
-    final kgC = AppFormatters.parsearMiles(_kgCargadosCtrl.text);
-    final kgD = AppFormatters.parsearMiles(_kgDescargadosCtrl.text);
-    final ade = AppFormatters.parsearMiles(_adelantoMontoCtrl.text) ?? 0;
-    return CalculosViaje.calcularTodo(
-      unidadTarifa: _tarifa!.unidadTarifa,
-      tarifaReal: _tarifa!.tarifaReal,
-      tarifaChofer: _tarifa!.tarifaChofer,
-      kgCargados: kgC?.toDouble(),
-      kgDescargados: kgD?.toDouble(),
-      adelanto: ade.toDouble(),
+    final tramosConTarifa = _tramos
+        .where((t) => t.tarifa != null)
+        .map((t) => t.toTramoViaje())
+        .toList();
+    if (tramosConTarifa.isEmpty) return null;
+    final ade =
+        AppFormatters.parsearMiles(_adelantoMontoCtrl.text)?.toDouble() ?? 0;
+    return CalculosViaje.calcularTodoMultiTramo(
+      tramos: tramosConTarifa,
+      adelanto: ade,
       gastos: _gastos,
     );
   }
 
-  /// Cuando el operador selecciona un chofer en el form (CREACIÓN
-  /// nueva, no edición), busca el último viaje activo de ese chofer
-  /// y, si tenía adelanto > 0, lo sugiere como monto + observación.
-  ///
-  /// **Por qué**: en la práctica los choferes son consistentes con
-  /// sus adelantos — Ackermann siempre lleva $100k, Hidalgo nunca
-  /// lleva, etc. Sin esta sugerencia el operador tiene que
-  /// recordar o buscar viajes pasados.
-  ///
-  /// **No pisa si el último no tenía adelanto** — si el último
-  /// viaje del chofer fue sin adelanto, dejamos los campos vacíos
-  /// (es la "tendencia" del chofer).
-  ///
-  /// **Best-effort**: si el lookup falla por red, no muestra error
-  /// — el operador puede tipear el monto manualmente igual.
   Future<void> _sugerirAdelantoUltimoViaje(String dni) async {
     try {
       final ultimo = await ViajesService.ultimoViajeDeChofer(dni);
       if (!mounted) return;
-      // Solo sugerir si el último tenía adelanto > 0. Si no tenía,
-      // dejamos los campos en blanco (probablemente el chofer nunca
-      // lleva adelanto).
       final monto = ultimo?.adelantoMonto ?? 0;
       if (monto <= 0) return;
       setState(() {
-        // Usamos parsearMiles/formatearMiles para que el campo
-        // muestre "100.000" en lugar de "100000.0" — coincide con
-        // lo que ve el operador en el resto de los campos $ del form.
         _adelantoMontoCtrl.text = AppFormatters.formatearMiles(monto.toInt());
-        // Sugerir también la observación del último adelanto
-        // (suele ser igual: "combustible", "gastos varios", etc.).
         final obs = ultimo?.adelantoObservacion?.trim();
         if (obs != null && obs.isNotEmpty && _adelantoObsCtrl.text.isEmpty) {
           _adelantoObsCtrl.text = obs;
         }
       });
-    } catch (_) {
-      // Best-effort: si falla la query (red caída, viaje borrado,
-      // etc.), no avisamos — el operador puede cargar manualmente.
-    }
+    } catch (_) {/* best-effort */}
+  }
+
+  void _agregarTramo() {
+    setState(() => _tramos.add(_TramoEditState.vacio()));
+  }
+
+  void _eliminarTramo(int index) {
+    if (_tramos.length <= 1) return;
+    final t = _tramos.removeAt(index);
+    t.dispose();
+    setState(() {});
   }
 
   // ─── Guardar ───
   Future<void> _guardar() async {
     final messenger = ScaffoldMessenger.of(context);
-    if (_tarifa == null) {
-      AppFeedback.warningOn(messenger, 'Seleccioná una tarifa.');
-      return;
-    }
     if (_choferDni == null || _choferDni!.isEmpty) {
       AppFeedback.warningOn(messenger, 'Asigná un chofer.');
+      return;
+    }
+    if (_tramos.isEmpty) {
+      AppFeedback.warningOn(messenger, 'El viaje debe tener al menos 1 tramo.');
+      return;
+    }
+    final sinTarifa = _tramos.any((t) => t.tarifa == null);
+    if (sinTarifa) {
+      AppFeedback.warningOn(
+        messenger,
+        'Todos los tramos deben tener tarifa seleccionada.',
+      );
       return;
     }
 
     setState(() => _guardando = true);
     try {
       final dniActual = PrefsService.dni;
-      final kgC = AppFormatters.parsearMiles(_kgCargadosCtrl.text)?.toDouble();
-      final kgD =
-          AppFormatters.parsearMiles(_kgDescargadosCtrl.text)?.toDouble();
-      final ade = AppFormatters.parsearMiles(_adelantoMontoCtrl.text)?.toDouble();
+      final ade =
+          AppFormatters.parsearMiles(_adelantoMontoCtrl.text)?.toDouble();
 
-      // Subir comprobante si quedó pendiente (recién pickeado).
-      String? remitoUrlFinal = _remitoUrl;
-      String? remitoPathFinal = _remitoPathStorage;
-      if (_remitoBytesPendientes != null && _remitoExtPendiente != null) {
-        // Si era alta, todavía no tenemos viajeId — hacemos un upload
-        // con un id temporal que después renombramos. Más simple:
-        // creamos primero el viaje sin remito, después subimos y
-        // updateamos. Así el path lleva el id real.
-      }
+      // Construir lista de tramos para persistir.
+      final tramosViaje = _tramos.map((t) => t.toTramoViaje()).toList();
 
       String viajeId;
       if (_esEdicion) {
         await ViajesService.actualizarViaje(
           viajeId: widget.viajeId!,
-          tarifa: _tarifa!,
+          tramos: tramosViaje,
           choferDni: _choferDni!,
           choferNombre: _choferNombre,
           vehiculoId: _vehiculoCtrl.text.trim().isEmpty
@@ -258,18 +242,6 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
           engancheId: _engancheCtrl.text.trim().isEmpty
               ? null
               : _engancheCtrl.text.trim().toUpperCase(),
-          cargaTransportada: _cargaTransportadaCtrl.text.trim().isEmpty
-              ? null
-              : _cargaTransportadaCtrl.text.trim(),
-          fechaCarga: _fechaCarga,
-          kgCargados: kgC,
-          fechaDescarga: _fechaDescarga,
-          kgDescargados: kgD,
-          remitoNumero: _remitoNumeroCtrl.text.trim().isEmpty
-              ? null
-              : _remitoNumeroCtrl.text.trim(),
-          remitoUrl: remitoUrlFinal,
-          remitoPathStorage: remitoPathFinal,
           adelantoMonto: ade,
           adelantoFecha: _adelantoFecha,
           adelantoObservacion: _adelantoObsCtrl.text.trim().isEmpty
@@ -286,7 +258,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
         viajeId = widget.viajeId!;
       } else {
         viajeId = await ViajesService.crearViaje(
-          tarifa: _tarifa!,
+          tramos: tramosViaje,
           choferDni: _choferDni!,
           choferNombre: _choferNombre,
           vehiculoId: _vehiculoCtrl.text.trim().isEmpty
@@ -295,16 +267,6 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
           engancheId: _engancheCtrl.text.trim().isEmpty
               ? null
               : _engancheCtrl.text.trim().toUpperCase(),
-          cargaTransportada: _cargaTransportadaCtrl.text.trim().isEmpty
-              ? null
-              : _cargaTransportadaCtrl.text.trim(),
-          fechaCarga: _fechaCarga,
-          kgCargados: kgC,
-          fechaDescarga: _fechaDescarga,
-          kgDescargados: kgD,
-          remitoNumero: _remitoNumeroCtrl.text.trim().isEmpty
-              ? null
-              : _remitoNumeroCtrl.text.trim(),
           adelantoMonto: ade,
           adelantoFecha: _adelantoFecha,
           adelantoObservacion: _adelantoObsCtrl.text.trim().isEmpty
@@ -320,27 +282,46 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
         );
       }
 
-      // Subir comprobante si lo hay (después de tener el viajeId real).
-      if (_remitoBytesPendientes != null && _remitoExtPendiente != null) {
-        final res = await ViajesService.subirRemito(
-          viajeId: viajeId,
-          bytes: _remitoBytesPendientes!,
-          extension: _remitoExtPendiente!,
-          contentType: _remitoMimePendiente,
-        );
-        // Actualizar el doc con la url + path (update separado).
+      // Subir remitos pendientes de los tramos (los que el operador
+      // pickeó pero todavía no se subieron porque no había viajeId).
+      var requiereUpdateRemitos = false;
+      final List<TramoViaje> tramosFinal = List.of(tramosViaje);
+      for (var i = 0; i < _tramos.length; i++) {
+        final edit = _tramos[i];
+        if (edit.remitoBytesPendientes != null &&
+            edit.remitoExtPendiente != null) {
+          final res = await ViajesService.subirRemito(
+            viajeId: viajeId,
+            bytes: edit.remitoBytesPendientes!,
+            extension: edit.remitoExtPendiente!,
+            contentType: edit.remitoMimePendiente,
+          );
+          tramosFinal[i] = tramosFinal[i].copyWith(
+            remitoUrl: res.url,
+            remitoPathStorage: res.path,
+          );
+          requiereUpdateRemitos = true;
+        }
+      }
+      if (requiereUpdateRemitos) {
+        // Re-escribimos los tramos con las URLs reales. NO recalculamos
+        // montos — el contenido del remito no afecta los montos.
         await FirebaseFirestore.instance
             .collection(AppCollections.viajesLogistica)
             .doc(viajeId)
             .update({
-          'remito_url': res.url,
-          'remito_path_storage': res.path,
+          'tramos': tramosFinal.map((t) => t.toMap()).toList(),
+          // Denormalizar último tramo también.
+          'remito_url': tramosFinal.last.remitoUrl,
+          'remito_path_storage': tramosFinal.last.remitoPathStorage,
         });
       }
 
       if (!mounted) return;
-      AppFeedback.successOn(messenger,
-          _esEdicion ? 'Viaje actualizado.' : 'Viaje creado.');
+      AppFeedback.successOn(
+        messenger,
+        _esEdicion ? 'Viaje actualizado.' : 'Viaje creado.',
+      );
       Navigator.of(context).pop();
     } catch (e) {
       if (mounted) {
@@ -348,25 +329,6 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
         AppFeedback.errorOn(messenger, 'Error al guardar: $e');
       }
     }
-  }
-
-  Future<void> _pickRemito() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
-      withData: true,
-    );
-    if (result == null || result.files.isEmpty) return;
-    final f = result.files.first;
-    if (f.bytes == null) return;
-    final ext = (f.extension ?? 'pdf').toLowerCase();
-    final mime = ext == 'pdf' ? 'application/pdf' : 'image/$ext';
-    setState(() {
-      _remitoBytesPendientes = f.bytes;
-      _remitoExtPendiente = ext;
-      _remitoMimePendiente = mime;
-      _remitoNombreLocal = f.name;
-    });
   }
 
   // ─── Build ───
@@ -400,11 +362,21 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _SeccionTarifa(
-              tarifa: _tarifa,
-              onChanged: (t) => setState(() => _tarifa = t),
+            // 1. RESUMEN (arriba — totales en vivo).
+            _SeccionResumen(montos: _montosCalc),
+            const SizedBox(height: 12),
+
+            // 2. ESTADO.
+            _SeccionEstado(
+              estado: _estado,
+              motivoCtrl: _motivoCancelacionCtrl,
+              fechaPostergadoA: _fechaPostergadoA,
+              onEstadoChanged: (e) => setState(() => _estado = e),
+              onFechaChanged: (d) => setState(() => _fechaPostergadoA = d),
             ),
             const SizedBox(height: 12),
+
+            // 3. CHOFER + UNIDAD.
             _SeccionChofer(
               dni: _choferDni,
               nombre: _choferNombre,
@@ -412,22 +384,9 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
                 setState(() {
                   _choferDni = dni;
                   _choferNombre = nombre;
-                  // Auto-llenar las patentes con las que tiene asignadas
-                  // el chofer en EMPLEADOS/{dni}.VEHICULO/.ENGANCHE.
-                  // Caso típico: el viaje sale con la unidad habitual del
-                  // chofer. Si va con otra, el operador la cambia desde
-                  // los selectores de la sección 3 (que filtran solo
-                  // patentes activas). Pisamos los TextField cualquiera
-                  // sea el contenido previo: cambiar de chofer casi
-                  // siempre implica cambio de unidad.
                   _vehiculoCtrl.text = vehiculo ?? '';
                   _engancheCtrl.text = enganche ?? '';
                 });
-                // Sugerir el adelanto del último viaje del chofer
-                // (algunos siempre llevan el mismo monto, otros nunca
-                // llevan). Async — no bloquea el setState de arriba.
-                // Solo aplica en CREACIÓN: en edición no pisamos lo
-                // que ya estaba guardado.
                 if (!_esEdicion) {
                   _sugerirAdelantoUltimoViaje(dni);
                 }
@@ -440,27 +399,8 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
               onChanged: () => setState(() {}),
             ),
             const SizedBox(height: 12),
-            _SeccionCarga(
-              fecha: _fechaCarga,
-              kgCargadosCtrl: _kgCargadosCtrl,
-              cargaTransportadaCtrl: _cargaTransportadaCtrl,
-              tarifa: _tarifa,
-              onFechaChanged: (d) => setState(() => _fechaCarga = d),
-              onKgChanged: () => setState(() {}),
-            ),
-            const SizedBox(height: 12),
-            _SeccionDescarga(
-              fecha: _fechaDescarga,
-              remitoNumeroCtrl: _remitoNumeroCtrl,
-              kgDescargadosCtrl: _kgDescargadosCtrl,
-              tarifa: _tarifa,
-              remitoUrl: _remitoUrl,
-              remitoNombreLocal: _remitoNombreLocal,
-              onFechaChanged: (d) => setState(() => _fechaDescarga = d),
-              onKgChanged: () => setState(() {}),
-              onPickRemito: _pickRemito,
-            ),
-            const SizedBox(height: 12),
+
+            // 4. ADELANTO.
             _SeccionAdelanto(
               montoCtrl: _adelantoMontoCtrl,
               fecha: _adelantoFecha,
@@ -469,21 +409,33 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
               onFechaChanged: (d) => setState(() => _adelantoFecha = d),
             ),
             const SizedBox(height: 12),
+
+            // 5. GASTOS EXTRAORDINARIOS.
             _SeccionGastos(
               gastos: _gastos,
               onChanged: (l) => setState(() => _gastos = l),
             ),
             const SizedBox(height: 12),
-            _SeccionEstado(
-              estado: _estado,
-              motivoCtrl: _motivoCancelacionCtrl,
-              fechaPostergadoA: _fechaPostergadoA,
-              onEstadoChanged: (e) => setState(() => _estado = e),
-              onFechaChanged: (d) => setState(() => _fechaPostergadoA = d),
-            ),
-            const SizedBox(height: 12),
-            _SeccionResumen(montos: _montosCalc),
+
+            // 6. TRAMOS (uno o varios).
+            ..._tramos.asMap().entries.map((entry) {
+              final index = entry.key;
+              final tramo = entry.value;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _TramoCard(
+                  key: ValueKey(tramo.id),
+                  numero: index + 1,
+                  state: tramo,
+                  puedeEliminar: _tramos.length > 1,
+                  onEliminar: () => _eliminarTramo(index),
+                  onCambio: () => setState(() {}),
+                ),
+              );
+            }),
+            _BotonAgregarTramo(onPressed: _agregarTramo),
             const SizedBox(height: 24),
+
             _BotonesGuardar(
               guardando: _guardando,
               onGuardar: _guardar,
@@ -497,20 +449,163 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
 }
 
 // =============================================================================
-// SECCIONES (cada una un AppCard con título)
+// _TramoEditState — encapsula los controllers y el state de un tramo
 // =============================================================================
 
-class _SeccionTarifa extends StatelessWidget {
-  final TarifaLogistica? tarifa;
-  final ValueChanged<TarifaLogistica?> onChanged;
-  const _SeccionTarifa({required this.tarifa, required this.onChanged});
+class _TramoEditState {
+  /// Identificador local estable (para el ValueKey de Flutter).
+  final String id;
+
+  TarifaLogistica? tarifa;
+  String? producto;
+  final TextEditingController descripcionCargaCtrl;
+  DateTime? fechaCarga;
+  final TextEditingController kgCargadosCtrl;
+
+  DateTime? fechaDescarga;
+  final TextEditingController remitoNumeroCtrl;
+  final TextEditingController kgDescargadosCtrl;
+  String? remitoUrl;
+  String? remitoPathStorage;
+  String? remitoNombreLocal;
+  Uint8List? remitoBytesPendientes;
+  String? remitoExtPendiente;
+  String? remitoMimePendiente;
+
+  _TramoEditState._({
+    required this.id,
+    this.tarifa,
+    this.producto,
+    String? descripcionCarga,
+    this.fechaCarga,
+    String? kgCargados,
+    this.fechaDescarga,
+    String? remitoNumero,
+    String? kgDescargados,
+    this.remitoUrl,
+    this.remitoPathStorage,
+  })  : descripcionCargaCtrl =
+            TextEditingController(text: descripcionCarga ?? ''),
+        kgCargadosCtrl = TextEditingController(text: kgCargados ?? ''),
+        remitoNumeroCtrl = TextEditingController(text: remitoNumero ?? ''),
+        kgDescargadosCtrl = TextEditingController(text: kgDescargados ?? '');
+
+  factory _TramoEditState.vacio() {
+    return _TramoEditState._(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+    );
+  }
+
+  factory _TramoEditState.fromTramoViaje(
+    TramoViaje t,
+    TarifaLogistica? tarifaResuelta,
+  ) {
+    return _TramoEditState._(
+      id: t.id,
+      tarifa: tarifaResuelta,
+      producto: t.producto,
+      descripcionCarga: t.descripcionCarga,
+      fechaCarga: t.fechaCarga,
+      kgCargados: t.kgCargados == null
+          ? null
+          : AppFormatters.formatearMiles(t.kgCargados!.toInt()),
+      fechaDescarga: t.fechaDescarga,
+      remitoNumero: t.remitoNumero,
+      kgDescargados: t.kgDescargados == null
+          ? null
+          : AppFormatters.formatearMiles(t.kgDescargados!.toInt()),
+      remitoUrl: t.remitoUrl,
+      remitoPathStorage: t.remitoPathStorage,
+    );
+  }
+
+  void dispose() {
+    descripcionCargaCtrl.dispose();
+    kgCargadosCtrl.dispose();
+    remitoNumeroCtrl.dispose();
+    kgDescargadosCtrl.dispose();
+  }
+
+  TramoViaje toTramoViaje() {
+    final kgC = AppFormatters.parsearMiles(kgCargadosCtrl.text)?.toDouble();
+    final kgD = AppFormatters.parsearMiles(kgDescargadosCtrl.text)?.toDouble();
+    return TramoViaje(
+      id: id,
+      tarifaId: tarifa!.id,
+      tarifaSnapshot: TarifaSnapshot.fromTarifa(tarifa!),
+      producto: producto?.trim().isEmpty ?? true ? null : producto!.trim(),
+      descripcionCarga: descripcionCargaCtrl.text.trim().isEmpty
+          ? null
+          : descripcionCargaCtrl.text.trim(),
+      fechaCarga: fechaCarga,
+      kgCargados: kgC,
+      fechaDescarga: fechaDescarga,
+      remitoNumero: remitoNumeroCtrl.text.trim().isEmpty
+          ? null
+          : remitoNumeroCtrl.text.trim(),
+      remitoUrl: remitoUrl,
+      remitoPathStorage: remitoPathStorage,
+      kgDescargados: kgD,
+    );
+  }
+}
+
+// =============================================================================
+// _TramoCard — un tramo en el form (card con todos sus campos)
+// =============================================================================
+
+class _TramoCard extends StatelessWidget {
+  final int numero;
+  final _TramoEditState state;
+  final bool puedeEliminar;
+  final VoidCallback onEliminar;
+  final VoidCallback onCambio;
+
+  const _TramoCard({
+    super.key,
+    required this.numero,
+    required this.state,
+    required this.puedeEliminar,
+    required this.onEliminar,
+    required this.onCambio,
+  });
+
+  Future<void> _pickRemito(BuildContext context) async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final f = result.files.first;
+    if (f.bytes == null) return;
+    final ext = (f.extension ?? 'pdf').toLowerCase();
+    final mime = ext == 'pdf' ? 'application/pdf' : 'image/$ext';
+    state.remitoBytesPendientes = f.bytes;
+    state.remitoExtPendiente = ext;
+    state.remitoMimePendiente = mime;
+    state.remitoNombreLocal = f.name;
+    onCambio();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final esTn = state.tarifa?.unidadTarifa == UnidadTarifa.porTonelada;
+    final tarifa = state.tarifa;
     return _SeccionCard(
-      titulo: '1. TARIFA',
-      icono: Icons.price_change_outlined,
+      titulo: 'TRAMO $numero',
+      icono: Icons.alt_route_outlined,
+      trailing: puedeEliminar
+          ? IconButton(
+              icon: const Icon(Icons.delete_outline,
+                  color: AppColors.accentRed),
+              onPressed: onEliminar,
+              tooltip: 'Eliminar tramo',
+              visualDensity: VisualDensity.compact,
+            )
+          : null,
       children: [
+        // Tarifa.
         StreamBuilder<List<TarifaLogistica>>(
           stream: LogisticaService.streamTarifas(soloActivas: true),
           builder: (ctx, snap) {
@@ -518,7 +613,7 @@ class _SeccionTarifa extends StatelessWidget {
             return DropdownButtonFormField<String>(
               initialValue: tarifa?.id,
               decoration: const InputDecoration(
-                labelText: 'Seleccioná una tarifa activa',
+                labelText: 'Tarifa',
                 border: OutlineInputBorder(),
               ),
               isExpanded: true,
@@ -539,16 +634,807 @@ class _SeccionTarifa extends StatelessWidget {
                   (x) => x.id == id,
                   orElse: () => lista.first,
                 );
-                onChanged(t);
+                state.tarifa = t;
+                // Si cambió la tarifa, reseteamos el producto (porque
+                // viene de empresa origen distinta).
+                state.producto = null;
+                onCambio();
               },
             );
           },
         ),
         if (tarifa != null) ...[
           const SizedBox(height: 8),
-          _ResumenTarifa(t: tarifa!),
+          _ResumenTarifa(t: tarifa),
+        ],
+        const SizedBox(height: 12),
+
+        // CARGA — fecha + kg + producto + descripción libre.
+        const _SubseccionTitulo('CARGA'),
+        const SizedBox(height: 8),
+        _BotonFecha(
+          label: 'Fecha de carga',
+          fecha: state.fechaCarga,
+          onChanged: (d) {
+            state.fechaCarga = d;
+            onCambio();
+          },
+        ),
+        if (esTn) ...[
+          const SizedBox(height: 8),
+          TextField(
+            controller: state.kgCargadosCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Kg cargados',
+              suffixText: 'kg',
+              border: OutlineInputBorder(),
+            ),
+            keyboardType: TextInputType.number,
+            inputFormatters: [AppFormatters.inputMiles],
+            onChanged: (_) => onCambio(),
+          ),
+        ],
+        const SizedBox(height: 8),
+        // Producto — dropdown poblado con productos de la empresa
+        // origen de la tarifa. Si no hay tarifa, queda deshabilitado.
+        _DropdownProducto(
+          empresaOrigenId: tarifa?.empresaOrigenId,
+          valor: state.producto,
+          onChanged: (p) {
+            state.producto = p;
+            onCambio();
+          },
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: state.descripcionCargaCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Descripción / observación (opcional)',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 2,
+        ),
+        const SizedBox(height: 16),
+
+        // DESCARGA — fecha + remito + comprobante + kg descargados.
+        const _SubseccionTitulo('DESCARGA'),
+        const SizedBox(height: 8),
+        _BotonFecha(
+          label: 'Fecha de descarga',
+          fecha: state.fechaDescarga,
+          onChanged: (d) {
+            state.fechaDescarga = d;
+            onCambio();
+          },
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: state.remitoNumeroCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Número de remito',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => _pickRemito(context),
+          icon: const Icon(Icons.attach_file, size: 18),
+          label: Text(
+            state.remitoNombreLocal ??
+                (state.remitoUrl != null
+                    ? 'Reemplazar comprobante'
+                    : 'Subir comprobante firmado (PDF / foto)'),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (state.remitoUrl != null && state.remitoNombreLocal == null) ...[
+          const SizedBox(height: 4),
+          const Text(
+            '✓ Comprobante ya cargado.',
+            style: TextStyle(color: AppColors.accentGreen, fontSize: 11),
+          ),
+        ],
+        if (esTn) ...[
+          const SizedBox(height: 8),
+          TextField(
+            controller: state.kgDescargadosCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Kg descargados (cifra final para liquidar)',
+              suffixText: 'kg',
+              border: OutlineInputBorder(),
+              helperText:
+                  'Si está vacío, se calcula con kg cargados (estimado).',
+            ),
+            keyboardType: TextInputType.number,
+            inputFormatters: [AppFormatters.inputMiles],
+            onChanged: (_) => onCambio(),
+          ),
         ],
       ],
+    );
+  }
+}
+
+class _BotonAgregarTramo extends StatelessWidget {
+  final VoidCallback onPressed;
+  const _BotonAgregarTramo({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.add),
+      label: const Text('AGREGAR TRAMO'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: AppColors.accentBlue,
+        side: const BorderSide(color: AppColors.accentBlue),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        textStyle: const TextStyle(
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1,
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// _DropdownProducto — productos de la empresa origen de la tarifa
+// =============================================================================
+
+class _DropdownProducto extends StatelessWidget {
+  final String? empresaOrigenId;
+  final String? valor;
+  final ValueChanged<String?> onChanged;
+
+  const _DropdownProducto({
+    required this.empresaOrigenId,
+    required this.valor,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (empresaOrigenId == null || empresaOrigenId!.isEmpty) {
+      return const TextField(
+        enabled: false,
+        decoration: InputDecoration(
+          labelText: 'Producto (elegí primero una tarifa)',
+          border: OutlineInputBorder(),
+        ),
+      );
+    }
+    return FutureBuilder<EmpresaLogistica?>(
+      future: LogisticaService.empresaPorId(empresaOrigenId!),
+      builder: (ctx, snap) {
+        final productos = snap.data?.productos ?? const <String>[];
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const InputDecorator(
+            decoration: InputDecoration(
+              labelText: 'Producto',
+              border: OutlineInputBorder(),
+            ),
+            child: SizedBox(
+              height: 20,
+              child: LinearProgressIndicator(),
+            ),
+          );
+        }
+        if (productos.isEmpty) {
+          // Empresa sin productos catalogados — caer a texto libre
+          // para no bloquear al operador.
+          return TextField(
+            decoration: const InputDecoration(
+              labelText: 'Producto (libre — la empresa no tiene catálogo)',
+              border: OutlineInputBorder(),
+            ),
+            controller: TextEditingController(text: valor ?? ''),
+            onChanged: onChanged,
+          );
+        }
+        // Si el valor actual no está en la lista (ej. se cargó un
+        // producto libre y después se catalogaron otros), lo agregamos
+        // a la lista para que no se pierda.
+        final items = List<String>.from(productos);
+        if (valor != null && valor!.isNotEmpty && !items.contains(valor)) {
+          items.add(valor!);
+        }
+        return DropdownButtonFormField<String>(
+          initialValue: items.contains(valor) ? valor : null,
+          decoration: const InputDecoration(
+            labelText: 'Producto',
+            border: OutlineInputBorder(),
+          ),
+          isExpanded: true,
+          items: items
+              .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+              .toList(),
+          onChanged: onChanged,
+        );
+      },
+    );
+  }
+}
+
+// =============================================================================
+// SECCIONES COMPARTIDAS (sin cambios significativos del form viejo)
+// =============================================================================
+
+class _SeccionResumen extends StatelessWidget {
+  final MontosViaje? montos;
+  const _SeccionResumen({required this.montos});
+
+  @override
+  Widget build(BuildContext context) {
+    return _SeccionCard(
+      titulo: 'RESUMEN',
+      icono: Icons.summarize_outlined,
+      children: [
+        if (montos == null)
+          const Text(
+            'Agregá al menos 1 tramo con tarifa para ver el cálculo.',
+            style: TextStyle(color: Colors.white60, fontSize: 12),
+          )
+        else ...[
+          _LineaResumen(
+            label: 'Facturado a Vecchi',
+            valor: '\$${AppFormatters.formatearMonto(montos!.montoVecchi)}',
+          ),
+          _LineaResumen(
+            label: 'Tarifa chofer (bruto)',
+            valor: '\$${AppFormatters.formatearMonto(montos!.montoChofer)}',
+          ),
+          _LineaResumen(
+            label: 'Tarifa chofer (redondeada)',
+            valor:
+                '\$${AppFormatters.formatearMonto(montos!.montoChoferRedondeado)}',
+            destacado: true,
+          ),
+          _LineaResumen(
+            label: 'Gastos extras',
+            valor: '+ \$${AppFormatters.formatearMonto(montos!.gastosTotal)}',
+          ),
+          const Divider(color: Colors.white24, height: 16),
+          _LineaResumen(
+            label: 'Liquidación final al chofer',
+            valor:
+                '\$${AppFormatters.formatearMonto(montos!.liquidacionChofer)}',
+            destacado: true,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _LineaResumen extends StatelessWidget {
+  final String label;
+  final String valor;
+  final bool destacado;
+  const _LineaResumen({
+    required this.label,
+    required this.valor,
+    this.destacado = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: destacado ? Colors.white : Colors.white70,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          Text(
+            valor,
+            style: TextStyle(
+              color: destacado ? AppColors.accentGreen : Colors.white,
+              fontSize: destacado ? 16 : 14,
+              fontWeight: destacado ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SeccionEstado extends StatelessWidget {
+  final EstadoViaje estado;
+  final TextEditingController motivoCtrl;
+  final DateTime? fechaPostergadoA;
+  final ValueChanged<EstadoViaje> onEstadoChanged;
+  final ValueChanged<DateTime?> onFechaChanged;
+
+  const _SeccionEstado({
+    required this.estado,
+    required this.motivoCtrl,
+    required this.fechaPostergadoA,
+    required this.onEstadoChanged,
+    required this.onFechaChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _SeccionCard(
+      titulo: 'ESTADO',
+      icono: Icons.flag_outlined,
+      children: [
+        DropdownButtonFormField<EstadoViaje>(
+          initialValue: estado,
+          decoration: const InputDecoration(
+            labelText: 'Estado',
+            border: OutlineInputBorder(),
+          ),
+          items: EstadoViaje.values
+              .map(
+                (e) => DropdownMenuItem(
+                  value: e,
+                  child: Text(e.etiqueta),
+                ),
+              )
+              .toList(),
+          onChanged: (e) {
+            if (e != null) onEstadoChanged(e);
+          },
+        ),
+        if (estado == EstadoViaje.cancelado) ...[
+          const SizedBox(height: 8),
+          TextField(
+            controller: motivoCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Motivo de cancelación',
+              border: OutlineInputBorder(),
+            ),
+            maxLines: 2,
+          ),
+        ],
+        if (estado == EstadoViaje.postergado) ...[
+          const SizedBox(height: 8),
+          _BotonFecha(
+            label: 'Postergado al',
+            fecha: fechaPostergadoA,
+            onChanged: onFechaChanged,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _SeccionChofer extends StatelessWidget {
+  final String? dni;
+  final String? nombre;
+  final void Function(String dni, String nombre, String? vehiculo,
+      String? enganche) onChanged;
+
+  const _SeccionChofer({
+    required this.dni,
+    required this.nombre,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _SeccionCard(
+      titulo: 'CHOFER',
+      icono: Icons.person_outline,
+      children: [
+        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection(AppCollections.empleados)
+              .where('ROL', isEqualTo: 'CHOFER')
+              .snapshots(),
+          builder: (ctx, snap) {
+            final docs = snap.data?.docs ?? const [];
+            final items = docs.map((d) {
+              final data = d.data();
+              final dn = (data['DNI'] ?? d.id).toString();
+              final nom = (data['NOMBRE'] ?? dn).toString();
+              return DropdownMenuItem(
+                value: dn,
+                child: Text(nom, overflow: TextOverflow.ellipsis),
+              );
+            }).toList();
+            return DropdownButtonFormField<String>(
+              initialValue: dni,
+              decoration: const InputDecoration(
+                labelText: 'Chofer',
+                border: OutlineInputBorder(),
+              ),
+              isExpanded: true,
+              items: items,
+              onChanged: (val) {
+                if (val == null) return;
+                final doc = docs.firstWhere(
+                  (d) => (d.data()['DNI'] ?? d.id).toString() == val,
+                );
+                final data = doc.data();
+                onChanged(
+                  val,
+                  (data['NOMBRE'] ?? val).toString(),
+                  data['VEHICULO']?.toString(),
+                  data['ENGANCHE']?.toString(),
+                );
+              },
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _SeccionUnidad extends StatelessWidget {
+  final TextEditingController vehiculoCtrl;
+  final TextEditingController engancheCtrl;
+  final VoidCallback onChanged;
+
+  const _SeccionUnidad({
+    required this.vehiculoCtrl,
+    required this.engancheCtrl,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _SeccionCard(
+      titulo: 'UNIDAD',
+      icono: Icons.local_shipping_outlined,
+      children: [
+        TextField(
+          controller: vehiculoCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Patente tractor',
+            border: OutlineInputBorder(),
+          ),
+          textCapitalization: TextCapitalization.characters,
+          onChanged: (_) => onChanged(),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: engancheCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Patente enganche',
+            border: OutlineInputBorder(),
+          ),
+          textCapitalization: TextCapitalization.characters,
+          onChanged: (_) => onChanged(),
+        ),
+      ],
+    );
+  }
+}
+
+class _SeccionAdelanto extends StatelessWidget {
+  final TextEditingController montoCtrl;
+  final DateTime? fecha;
+  final TextEditingController obsCtrl;
+  final VoidCallback onMontoChanged;
+  final ValueChanged<DateTime?> onFechaChanged;
+
+  const _SeccionAdelanto({
+    required this.montoCtrl,
+    required this.fecha,
+    required this.obsCtrl,
+    required this.onMontoChanged,
+    required this.onFechaChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _SeccionCard(
+      titulo: 'ADELANTO AL CHOFER',
+      icono: Icons.payments_outlined,
+      children: [
+        TextField(
+          controller: montoCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Monto adelanto',
+            prefixText: '\$ ',
+            border: OutlineInputBorder(),
+          ),
+          keyboardType: TextInputType.number,
+          inputFormatters: [AppFormatters.inputMiles],
+          onChanged: (_) => onMontoChanged(),
+        ),
+        const SizedBox(height: 8),
+        _BotonFecha(
+          label: 'Fecha del adelanto',
+          fecha: fecha,
+          onChanged: onFechaChanged,
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: obsCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Observación / concepto',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 2,
+        ),
+      ],
+    );
+  }
+}
+
+class _SeccionGastos extends StatelessWidget {
+  final List<GastoViaje> gastos;
+  final ValueChanged<List<GastoViaje>> onChanged;
+
+  const _SeccionGastos({required this.gastos, required this.onChanged});
+
+  Future<void> _agregar(BuildContext context) async {
+    final montoCtrl = TextEditingController();
+    final detalleCtrl = TextEditingController();
+    DateTime fecha = DateTime.now();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) {
+        return StatefulBuilder(builder: (sCtx, setStateDialog) {
+          return AlertDialog(
+            backgroundColor: Theme.of(dCtx).colorScheme.surface,
+            title: const Text('Agregar gasto'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: montoCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Monto',
+                    prefixText: '\$ ',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [AppFormatters.inputMiles],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: detalleCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Detalle (peaje, combustible, etc.)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                _BotonFecha(
+                  label: 'Fecha del gasto',
+                  fecha: fecha,
+                  onChanged: (d) => setStateDialog(() {
+                    if (d != null) fecha = d;
+                  }),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dCtx).pop(false),
+                child: const Text('Cancelar'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dCtx).pop(true),
+                child: const Text('Agregar'),
+              ),
+            ],
+          );
+        });
+      },
+    );
+    if (ok == true) {
+      final monto = AppFormatters.parsearMiles(montoCtrl.text)?.toDouble() ?? 0;
+      if (monto <= 0) return;
+      final nuevo = GastoViaje(
+        monto: monto,
+        detalle: detalleCtrl.text.trim().isEmpty
+            ? null
+            : detalleCtrl.text.trim(),
+        fecha: fecha,
+      );
+      onChanged([...gastos, nuevo]);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = gastos.fold<double>(0, (a, g) => a + g.monto);
+    return _SeccionCard(
+      titulo: 'GASTOS EXTRAORDINARIOS',
+      icono: Icons.receipt_long_outlined,
+      children: [
+        if (gastos.isEmpty)
+          const Text(
+            'Sin gastos cargados.',
+            style: TextStyle(color: Colors.white60, fontSize: 12),
+          )
+        else
+          ...gastos.asMap().entries.map((entry) {
+            final i = entry.key;
+            final g = entry.value;
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  const Icon(Icons.add_circle_outline,
+                      size: 16, color: AppColors.accentGreen),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '${g.detalle ?? 'Gasto'} '
+                      '(${AppFormatters.formatearFecha(g.fecha)})',
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Text(
+                    '\$${AppFormatters.formatearMonto(g.monto)}',
+                    style: const TextStyle(
+                      color: AppColors.accentGreen,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline,
+                        size: 18, color: Colors.white54),
+                    onPressed: () {
+                      final nueva = List<GastoViaje>.from(gastos)..removeAt(i);
+                      onChanged(nueva);
+                    },
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ),
+            );
+          }),
+        if (gastos.isNotEmpty) ...[
+          const Divider(color: Colors.white24, height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Total gastos',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              Text(
+                '\$${AppFormatters.formatearMonto(total)}',
+                style: const TextStyle(
+                  color: AppColors.accentGreen,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => _agregar(context),
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('AGREGAR GASTO'),
+        ),
+      ],
+    );
+  }
+}
+
+// =============================================================================
+// WIDGETS COMUNES (Card, fecha, etc.)
+// =============================================================================
+
+class _SeccionCard extends StatelessWidget {
+  final String titulo;
+  final IconData icono;
+  final List<Widget> children;
+  final Widget? trailing;
+
+  const _SeccionCard({
+    required this.titulo,
+    required this.icono,
+    required this.children,
+    this.trailing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withAlpha(20)),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(icono, color: AppColors.accentBlue, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  titulo,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _SubseccionTitulo extends StatelessWidget {
+  final String texto;
+  const _SubseccionTitulo(this.texto);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      texto,
+      style: const TextStyle(
+        color: Colors.white60,
+        fontSize: 11,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 1.2,
+      ),
+    );
+  }
+}
+
+class _BotonFecha extends StatelessWidget {
+  final String label;
+  final DateTime? fecha;
+  final ValueChanged<DateTime?> onChanged;
+
+  const _BotonFecha({
+    required this.label,
+    required this.fecha,
+    required this.onChanged,
+  });
+
+  Future<void> _pick(BuildContext context) async {
+    final hoy = DateTime.now();
+    final d = await showDatePicker(
+      context: context,
+      initialDate: fecha ?? hoy,
+      firstDate: DateTime(hoy.year - 2),
+      lastDate: DateTime(hoy.year + 2),
+    );
+    if (d != null) onChanged(d);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => _pick(context),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+        ),
+        child: Text(
+          fecha == null ? 'Sin asignar' : AppFormatters.formatearFecha(fecha!),
+          style: const TextStyle(color: Colors.white),
+        ),
+      ),
     );
   }
 }
@@ -591,787 +1477,6 @@ class _ResumenTarifa extends StatelessWidget {
   }
 }
 
-class _SeccionChofer extends StatelessWidget {
-  final String? dni;
-  final String? nombre;
-
-  /// Callback al cambiar la selección de chofer. Pasa DNI + nombre del
-  /// empleado + las patentes (vehículo + enganche) que tiene asignadas
-  /// en su legajo `EMPLEADOS/{dni}`. Las patentes se usan para
-  /// auto-llenar la sección "3. UNIDAD" — el operador puede después
-  /// cambiarlas si el viaje va con otra unidad. Decisión Vecchi
-  /// 2026-05-11: el caso típico es que el chofer va con su unidad
-  /// asignada; el override es excepcional pero tiene que estar
-  /// disponible.
-  final void Function(
-    String dni,
-    String? nombre,
-    String? vehiculoAsignado,
-    String? engancheAsignado,
-  ) onChanged;
-  const _SeccionChofer({
-    required this.dni,
-    required this.nombre,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _SeccionCard(
-      titulo: '2. CHOFER',
-      icono: Icons.person_outline,
-      children: [
-        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection(AppCollections.empleados)
-              .where('ROL', isEqualTo: 'CHOFER')
-              .snapshots(),
-          builder: (ctx, snap) {
-            final docs = snap.data?.docs ?? const [];
-            // Filtrar activos en cliente para no requerir índice.
-            final activos = docs
-                .where((d) => d.data()['ACTIVO'] != false)
-                .toList()
-              ..sort((a, b) => (a.data()['NOMBRE'] ?? '')
-                  .toString()
-                  .compareTo((b.data()['NOMBRE'] ?? '').toString()));
-            return DropdownButtonFormField<String>(
-              initialValue: dni,
-              isExpanded: true,
-              decoration: const InputDecoration(
-                labelText: 'Chofer',
-                border: OutlineInputBorder(),
-              ),
-              items: activos
-                  .map(
-                    (d) => DropdownMenuItem(
-                      value: d.id,
-                      child: Text(
-                        '${d.data()['NOMBRE'] ?? d.id} (DNI ${d.id})',
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (sel) {
-                if (sel == null) return;
-                final doc = activos.firstWhere((d) => d.id == sel);
-                final data = doc.data();
-                final vehiculo =
-                    (data['VEHICULO'] ?? '').toString().trim().toUpperCase();
-                final enganche =
-                    (data['ENGANCHE'] ?? '').toString().trim().toUpperCase();
-                onChanged(
-                  doc.id,
-                  data['NOMBRE']?.toString(),
-                  vehiculo.isEmpty ? null : vehiculo,
-                  enganche.isEmpty ? null : enganche,
-                );
-              },
-            );
-          },
-        ),
-      ],
-    );
-  }
-}
-
-class _SeccionUnidad extends StatelessWidget {
-  final TextEditingController vehiculoCtrl;
-  final TextEditingController engancheCtrl;
-  final VoidCallback onChanged;
-  const _SeccionUnidad({
-    required this.vehiculoCtrl,
-    required this.engancheCtrl,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _SeccionCard(
-      titulo: '3. UNIDAD (opcional)',
-      icono: Icons.local_shipping_outlined,
-      children: [
-        // Auto-fill al seleccionar chofer + dropdown con autocomplete
-        // para cambiarla. La idea: el caso típico es viajar con la
-        // unidad asignada del chofer (que ya viene pre-llenada desde
-        // _SeccionChofer.onChanged). Para los casos excepcionales
-        // donde se manda con OTRA unidad, el operador escribe las
-        // primeras letras de la patente y el autocomplete sugiere
-        // solo unidades activas del tipo correspondiente. Antes era
-        // TextField libre — fácil tipear patentes que no existen o
-        // están dadas de baja, sin guidance.
-        _PatenteSelector(
-          controller: vehiculoCtrl,
-          label: 'Patente tractor (ej: ABC123)',
-          tipoFiltro: _TipoPatente.tractor,
-          onChanged: onChanged,
-        ),
-        const SizedBox(height: 8),
-        _PatenteSelector(
-          controller: engancheCtrl,
-          label: 'Patente enganche (opcional)',
-          tipoFiltro: _TipoPatente.enganche,
-          onChanged: onChanged,
-        ),
-      ],
-    );
-  }
-}
-
-enum _TipoPatente { tractor, enganche }
-
-/// Autocomplete de patentes que filtra solo unidades activas del tipo
-/// correspondiente (tractor o enganche). Si el operador tipea algo que
-/// NO está en la lista, igual lo acepta (caso raro: unidad recién
-/// cargada en otro proceso, patente de unidad ajena, etc.) — el
-/// autocomplete es asistencia, no validación bloqueante.
-class _PatenteSelector extends StatefulWidget {
-  final TextEditingController controller;
-  final String label;
-  final _TipoPatente tipoFiltro;
-  final VoidCallback onChanged;
-
-  const _PatenteSelector({
-    required this.controller,
-    required this.label,
-    required this.tipoFiltro,
-    required this.onChanged,
-  });
-
-  @override
-  State<_PatenteSelector> createState() => _PatenteSelectorState();
-}
-
-class _PatenteSelectorState extends State<_PatenteSelector> {
-  /// Cache local de patentes activas del tipo correspondiente. Se
-  /// rellena via StreamBuilder y se usa como fuente del Autocomplete.
-  /// Mantener esto separado del builder permite que el Autocomplete
-  /// no se reconstruya en cada keystroke (lo cual lo hace lento).
-  List<String> _patentesDisponibles = const [];
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection(AppCollections.vehiculos)
-          .snapshots(),
-      builder: (ctx, snap) {
-        final docs = snap.data?.docs ?? const [];
-        // Filtros en cliente (defensivo + evita índices compuestos):
-        //   1. ACTIVO != false (soft-delete)
-        //   2. TIPO según selector (tractor solo, o cualquier enganche)
-        final filtrados = docs.where((d) {
-          final data = d.data();
-          if (data['ACTIVO'] == false) return false;
-          final tipo = (data['TIPO'] ?? '').toString().toUpperCase();
-          if (widget.tipoFiltro == _TipoPatente.tractor) {
-            return tipo == AppTiposVehiculo.tractor;
-          }
-          return AppTiposVehiculo.enganches.contains(tipo);
-        }).toList()
-          ..sort((a, b) => a.id.compareTo(b.id));
-        _patentesDisponibles = filtrados.map((d) => d.id).toList();
-
-        return Autocomplete<String>(
-          // Evita el wrapper Material default; usamos nuestro TextField.
-          fieldViewBuilder: (context, fieldCtrl, fieldFocus, onSubmit) {
-            // Sincronizar el controller del padre con el del Autocomplete:
-            // si el padre cambia el text (auto-fill por chofer), reflejarlo.
-            if (fieldCtrl.text != widget.controller.text) {
-              fieldCtrl.text = widget.controller.text;
-              fieldCtrl.selection = TextSelection.collapsed(
-                offset: fieldCtrl.text.length,
-              );
-            }
-            return TextField(
-              controller: fieldCtrl,
-              focusNode: fieldFocus,
-              decoration: InputDecoration(
-                labelText: widget.label,
-                border: const OutlineInputBorder(),
-                suffixIcon: const Icon(Icons.arrow_drop_down),
-              ),
-              textCapitalization: TextCapitalization.characters,
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
-                LengthLimitingTextInputFormatter(8),
-              ],
-              onChanged: (val) {
-                widget.controller.text = val.toUpperCase();
-                widget.onChanged();
-              },
-            );
-          },
-          optionsBuilder: (textEditingValue) {
-            final query = textEditingValue.text.trim().toUpperCase();
-            if (query.isEmpty) return _patentesDisponibles;
-            return _patentesDisponibles.where(
-              (p) => p.toUpperCase().contains(query),
-            );
-          },
-          onSelected: (selected) {
-            widget.controller.text = selected;
-            widget.onChanged();
-          },
-          // Display que se ve mientras se tipea: mostrar la patente como
-          // "ABC123" sin texto extra, para que la pantalla quede limpia.
-          displayStringForOption: (p) => p,
-        );
-      },
-    );
-  }
-}
-
-class _SeccionCarga extends StatelessWidget {
-  final DateTime? fecha;
-  final TextEditingController kgCargadosCtrl;
-  final TextEditingController cargaTransportadaCtrl;
-  final TarifaLogistica? tarifa;
-  final ValueChanged<DateTime?> onFechaChanged;
-  final VoidCallback onKgChanged;
-
-  const _SeccionCarga({
-    required this.fecha,
-    required this.kgCargadosCtrl,
-    required this.cargaTransportadaCtrl,
-    required this.tarifa,
-    required this.onFechaChanged,
-    required this.onKgChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final esTn = tarifa?.unidadTarifa == UnidadTarifa.porTonelada;
-    return _SeccionCard(
-      titulo: '4. CARGA',
-      icono: Icons.upload_outlined,
-      children: [
-        _BotonFecha(
-          label: 'Fecha de carga',
-          fecha: fecha,
-          onChanged: onFechaChanged,
-        ),
-        const SizedBox(height: 8),
-        if (esTn) ...[
-          TextField(
-            controller: kgCargadosCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Kg cargados',
-              suffixText: 'kg',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [AppFormatters.inputMiles],
-            onChanged: (_) => onKgChanged(),
-          ),
-          const SizedBox(height: 8),
-        ],
-        TextField(
-          controller: cargaTransportadaCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Descripción de la carga (qué se transporta)',
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 2,
-        ),
-      ],
-    );
-  }
-}
-
-class _SeccionDescarga extends StatelessWidget {
-  final DateTime? fecha;
-  final TextEditingController remitoNumeroCtrl;
-  final TextEditingController kgDescargadosCtrl;
-  final TarifaLogistica? tarifa;
-  final String? remitoUrl;
-  final String? remitoNombreLocal;
-  final ValueChanged<DateTime?> onFechaChanged;
-  final VoidCallback onKgChanged;
-  final VoidCallback onPickRemito;
-
-  const _SeccionDescarga({
-    required this.fecha,
-    required this.remitoNumeroCtrl,
-    required this.kgDescargadosCtrl,
-    required this.tarifa,
-    required this.remitoUrl,
-    required this.remitoNombreLocal,
-    required this.onFechaChanged,
-    required this.onKgChanged,
-    required this.onPickRemito,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final esTn = tarifa?.unidadTarifa == UnidadTarifa.porTonelada;
-    return _SeccionCard(
-      titulo: '5. DESCARGA',
-      icono: Icons.download_outlined,
-      children: [
-        _BotonFecha(
-          label: 'Fecha de descarga',
-          fecha: fecha,
-          onChanged: onFechaChanged,
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: remitoNumeroCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Número de remito',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: onPickRemito,
-          icon: const Icon(Icons.attach_file, size: 18),
-          label: Text(
-            remitoNombreLocal ??
-                (remitoUrl != null ? 'Reemplazar comprobante' : 'Subir comprobante firmado (PDF / foto)'),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        if (remitoUrl != null && remitoNombreLocal == null) ...[
-          const SizedBox(height: 4),
-          const Text(
-            '✓ Comprobante ya cargado.',
-            style: TextStyle(color: AppColors.accentGreen, fontSize: 11),
-          ),
-        ],
-        if (esTn) ...[
-          const SizedBox(height: 8),
-          TextField(
-            controller: kgDescargadosCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Kg descargados (cifra final para liquidar)',
-              suffixText: 'kg',
-              border: OutlineInputBorder(),
-              helperText:
-                  'Si está vacío, se calcula con kg cargados (estimado).',
-            ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [AppFormatters.inputMiles],
-            onChanged: (_) => onKgChanged(),
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _SeccionAdelanto extends StatelessWidget {
-  final TextEditingController montoCtrl;
-  final DateTime? fecha;
-  final TextEditingController obsCtrl;
-  final VoidCallback onMontoChanged;
-  final ValueChanged<DateTime?> onFechaChanged;
-
-  const _SeccionAdelanto({
-    required this.montoCtrl,
-    required this.fecha,
-    required this.obsCtrl,
-    required this.onMontoChanged,
-    required this.onFechaChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _SeccionCard(
-      titulo: '6. ADELANTO AL CHOFER',
-      icono: Icons.payments_outlined,
-      children: [
-        TextField(
-          controller: montoCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Monto del adelanto',
-            prefixText: '\$ ',
-            border: OutlineInputBorder(),
-          ),
-          keyboardType: TextInputType.number,
-          inputFormatters: [AppFormatters.inputMiles],
-          onChanged: (_) => onMontoChanged(),
-        ),
-        const SizedBox(height: 8),
-        _BotonFecha(
-          label: 'Fecha del adelanto',
-          fecha: fecha,
-          onChanged: onFechaChanged,
-        ),
-        const SizedBox(height: 8),
-        TextField(
-          controller: obsCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Observación (opcional)',
-            border: OutlineInputBorder(),
-          ),
-          maxLines: 2,
-        ),
-      ],
-    );
-  }
-}
-
-class _SeccionGastos extends StatelessWidget {
-  final List<GastoViaje> gastos;
-  final ValueChanged<List<GastoViaje>> onChanged;
-
-  const _SeccionGastos({required this.gastos, required this.onChanged});
-
-  Future<void> _agregar(BuildContext ctx) async {
-    final res = await showModalBottomSheet<GastoViaje>(
-      context: ctx,
-      isScrollControlled: true,
-      builder: (_) => const _BottomSheetGasto(),
-    );
-    if (res == null) return;
-    onChanged([...gastos, res]);
-  }
-
-  void _eliminar(int idx) {
-    final l = List.of(gastos);
-    l.removeAt(idx);
-    onChanged(l);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final total = gastos.fold<double>(0, (a, g) => a + g.monto);
-    return _SeccionCard(
-      titulo: '7. GASTOS EXTRAORDINARIOS',
-      icono: Icons.receipt_long_outlined,
-      children: [
-        if (gastos.isEmpty)
-          const Text(
-            'Sin gastos cargados.',
-            style: TextStyle(color: Colors.white54, fontSize: 12),
-          ),
-        for (var i = 0; i < gastos.length; i++)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Row(
-              children: [
-                const Icon(Icons.add_circle_outline,
-                    size: 14, color: AppColors.accentTeal),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    gastos[i].detalle?.isNotEmpty == true
-                        ? '${gastos[i].detalle} (${AppFormatters.formatearFecha(gastos[i].fecha)})'
-                        : 'Gasto del ${AppFormatters.formatearFecha(gastos[i].fecha)}',
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ),
-                Text(
-                  '\$ ${AppFormatters.formatearMonto(gastos[i].monto)}',
-                  style: const TextStyle(
-                    color: AppColors.accentTeal,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 16),
-                  onPressed: () => _eliminar(i),
-                  tooltip: 'Eliminar',
-                ),
-              ],
-            ),
-          ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            OutlinedButton.icon(
-              onPressed: () => _agregar(context),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('AGREGAR GASTO'),
-            ),
-            const Spacer(),
-            if (gastos.isNotEmpty)
-              Text(
-                'Total: \$ ${AppFormatters.formatearMonto(total)}',
-                style: const TextStyle(
-                  color: AppColors.accentTeal,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _BottomSheetGasto extends StatefulWidget {
-  const _BottomSheetGasto();
-
-  @override
-  State<_BottomSheetGasto> createState() => _BottomSheetGastoState();
-}
-
-class _BottomSheetGastoState extends State<_BottomSheetGasto> {
-  final _montoCtrl = TextEditingController();
-  final _detalleCtrl = TextEditingController();
-  DateTime _fecha = DateTime.now();
-
-  @override
-  void dispose() {
-    _montoCtrl.dispose();
-    _detalleCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final viewInsets = MediaQuery.of(context).viewInsets.bottom;
-    return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + viewInsets),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'Nuevo gasto',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _montoCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Monto',
-              prefixText: '\$ ',
-              border: OutlineInputBorder(),
-            ),
-            keyboardType: TextInputType.number,
-            inputFormatters: [AppFormatters.inputMiles],
-            autofocus: true,
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _detalleCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Detalle (opcional, ej: peaje, combustible)',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 2,
-          ),
-          const SizedBox(height: 8),
-          _BotonFecha(
-            label: 'Fecha',
-            fecha: _fecha,
-            onChanged: (d) => setState(() => _fecha = d ?? DateTime.now()),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('CANCELAR'),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    final monto = AppFormatters.parsearMiles(_montoCtrl.text);
-                    if (monto == null || monto <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Ingresá un monto válido.')),
-                      );
-                      return;
-                    }
-                    Navigator.pop(
-                      context,
-                      GastoViaje(
-                        monto: monto.toDouble(),
-                        detalle: _detalleCtrl.text.trim().isEmpty
-                            ? null
-                            : _detalleCtrl.text.trim(),
-                        fecha: _fecha,
-                      ),
-                    );
-                  },
-                  child: const Text('AGREGAR'),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SeccionEstado extends StatelessWidget {
-  final EstadoViaje estado;
-  final TextEditingController motivoCtrl;
-  final DateTime? fechaPostergadoA;
-  final ValueChanged<EstadoViaje> onEstadoChanged;
-  final ValueChanged<DateTime?> onFechaChanged;
-
-  const _SeccionEstado({
-    required this.estado,
-    required this.motivoCtrl,
-    required this.fechaPostergadoA,
-    required this.onEstadoChanged,
-    required this.onFechaChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final esCancelado = estado == EstadoViaje.cancelado;
-    final esPostergado = estado == EstadoViaje.postergado;
-    return _SeccionCard(
-      titulo: '8. ESTADO',
-      icono: Icons.flag_outlined,
-      children: [
-        DropdownButtonFormField<EstadoViaje>(
-          initialValue: estado,
-          decoration: const InputDecoration(
-            labelText: 'Estado del viaje',
-            border: OutlineInputBorder(),
-          ),
-          items: EstadoViaje.values
-              .map(
-                (e) => DropdownMenuItem(
-                  value: e,
-                  child: Text(e.etiqueta),
-                ),
-              )
-              .toList(),
-          onChanged: (v) {
-            if (v != null) onEstadoChanged(v);
-          },
-        ),
-        if (esCancelado || esPostergado) ...[
-          const SizedBox(height: 8),
-          TextField(
-            controller: motivoCtrl,
-            decoration: InputDecoration(
-              labelText: esCancelado
-                  ? 'Motivo de cancelación'
-                  : 'Motivo de postergación',
-              border: const OutlineInputBorder(),
-              helperText: 'Ej: lluvia, problema mecánico, reprogramación cliente.',
-            ),
-            maxLines: 2,
-          ),
-        ],
-        if (esPostergado) ...[
-          const SizedBox(height: 8),
-          _BotonFecha(
-            label: 'Reprogramado a',
-            fecha: fechaPostergadoA,
-            onChanged: onFechaChanged,
-          ),
-        ],
-      ],
-    );
-  }
-}
-
-class _SeccionResumen extends StatelessWidget {
-  final MontosViaje? montos;
-  const _SeccionResumen({required this.montos});
-
-  @override
-  Widget build(BuildContext context) {
-    final m = montos;
-    return _SeccionCard(
-      titulo: 'RESUMEN (calculado en vivo)',
-      icono: Icons.calculate_outlined,
-      iconColor: AppColors.accentGreen,
-      children: [
-        if (m == null)
-          const Text(
-            'Seleccioná una tarifa para ver el cálculo.',
-            style: TextStyle(color: Colors.white54, fontSize: 12),
-          )
-        else ...[
-          _LineaResumen(
-              label: 'Monto Vecchi',
-              valor: '\$ ${AppFormatters.formatearMonto(m.montoVecchi)}'),
-          _LineaResumen(
-              label: 'Monto chofer (sin redondear)',
-              valor: '\$ ${AppFormatters.formatearMonto(m.montoChofer)}'),
-          _LineaResumen(
-            label: 'Monto chofer redondeado',
-            valor: '\$ ${AppFormatters.formatearMonto(m.montoChoferRedondeado)}',
-            highlight: true,
-          ),
-          const Divider(height: 16),
-          _LineaResumen(
-              label: 'Adelanto',
-              valor: '−\$ ${AppFormatters.formatearMonto(_adelantoFromUI())}'),
-          _LineaResumen(
-              label: 'Gastos',
-              valor: '+\$ ${AppFormatters.formatearMonto(m.gastosTotal)}'),
-          const Divider(height: 16),
-          _LineaResumen(
-            label: 'LIQUIDACIÓN AL CHOFER',
-            valor: '\$ ${AppFormatters.formatearMonto(m.liquidacionChofer)}',
-            highlight: true,
-          ),
-        ],
-      ],
-    );
-  }
-
-  // Helper: el monto del adelanto se infiere del cálculo (ya entra
-  // al liquidacionChofer pero no se expone aparte). Como precaución
-  // visual, sumamos al label "Adelanto" el monto deducido.
-  double _adelantoFromUI() {
-    if (montos == null) return 0;
-    return (montos!.montoChoferRedondeado + montos!.gastosTotal -
-            montos!.liquidacionChofer)
-        .clamp(0, double.infinity);
-  }
-}
-
-class _LineaResumen extends StatelessWidget {
-  final String label;
-  final String valor;
-  final bool highlight;
-  const _LineaResumen({
-    required this.label,
-    required this.valor,
-    this.highlight = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 5,
-            child: Text(
-              label,
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
-            ),
-          ),
-          Expanded(
-            flex: 5,
-            child: Text(
-              valor,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                color: highlight ? AppColors.accentGreen : Colors.white,
-                fontSize: highlight ? 14 : 12,
-                fontWeight: highlight ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _BotonesGuardar extends StatelessWidget {
   final bool guardando;
   final VoidCallback onGuardar;
@@ -1393,119 +1498,21 @@ class _BotonesGuardar extends StatelessWidget {
             child: const Text('CANCELAR'),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 12),
         Expanded(
-          flex: 2,
-          child: ElevatedButton.icon(
+          child: FilledButton(
             onPressed: guardando ? null : onGuardar,
-            icon: guardando
+            child: guardando
                 ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    width: 18,
+                    height: 18,
+                    child:
+                        CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Icon(Icons.save),
-            label: Text(guardando ? 'GUARDANDO...' : 'GUARDAR'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentGreen,
-              foregroundColor: Colors.white,
-            ),
+                : const Text('GUARDAR'),
           ),
         ),
       ],
-    );
-  }
-}
-
-// =============================================================================
-// PRIMITIVAS
-// =============================================================================
-
-class _SeccionCard extends StatelessWidget {
-  final String titulo;
-  final IconData icono;
-  final Color? iconColor;
-  final List<Widget> children;
-
-  const _SeccionCard({
-    required this.titulo,
-    required this.icono,
-    this.iconColor,
-    required this.children,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icono, size: 18, color: iconColor ?? Colors.white60),
-              const SizedBox(width: 6),
-              Text(
-                titulo,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          ...children,
-        ],
-      ),
-    );
-  }
-}
-
-class _BotonFecha extends StatelessWidget {
-  final String label;
-  final DateTime? fecha;
-  final ValueChanged<DateTime?> onChanged;
-
-  const _BotonFecha({
-    required this.label,
-    required this.fecha,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () async {
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: fecha ?? DateTime.now(),
-          firstDate: DateTime(DateTime.now().year - 2),
-          lastDate: DateTime(DateTime.now().year + 1),
-          locale: const Locale('es', 'AR'),
-        );
-        if (picked != null) onChanged(picked);
-      },
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          suffixIcon: fecha == null
-              ? const Icon(Icons.calendar_today, size: 18)
-              : IconButton(
-                  icon: const Icon(Icons.close, size: 16),
-                  onPressed: () => onChanged(null),
-                ),
-        ),
-        child: Text(
-          fecha == null ? 'Sin fecha' : AppFormatters.formatearFecha(fecha),
-          style: TextStyle(
-            color: fecha == null ? Colors.white54 : Colors.white,
-          ),
-        ),
-      ),
     );
   }
 }

@@ -104,13 +104,11 @@ class CalculosViaje {
     return total;
   }
 
-  /// Calcula TODOS los montos de un viaje en una sola pasada.
-  /// Conveniente para el form (recomputar al cambiar cualquier input)
-  /// y para el service (persistir todos coherentes en un mismo write).
+  /// Calcula TODOS los montos de un viaje **single-tramo** en una sola
+  /// pasada. Conveniente para el form viejo / tests legacy. Para
+  /// viajes multi-tramo, usar [calcularTodoMultiTramo].
   ///
   /// `comisionPct` queda como 18 si pasás `null` (default operativo).
-  /// Cambiar este parámetro permite tests que usen otros porcentajes
-  /// sin tocar la default.
   static MontosViaje calcularTodo({
     required UnidadTarifa unidadTarifa,
     required double tarifaReal,
@@ -139,6 +137,56 @@ class CalculosViaje {
     return MontosViaje(
       montoVecchi: brutos.montoVecchi,
       montoChofer: brutos.montoChofer,
+      montoChoferRedondeado: redondeado,
+      comisionChoferPct: pct,
+      gastosTotal: gastosTot,
+      liquidacionChofer: liquidacion,
+    );
+  }
+
+  /// Calcula TODOS los montos de un viaje **multi-tramo**.
+  ///
+  /// Estrategia:
+  ///   1. Calcula brutos POR TRAMO usando la tarifa y kgs propios de
+  ///      cada tramo.
+  ///   2. Suma los brutos de todos los tramos → totales del viaje.
+  ///   3. Aplica redondeo a múltiplo de 5 DESCENDENTE sobre la suma
+  ///      (el redondeo es sobre el total que se le paga al chofer,
+  ///      no por tramo — sino se acumularía error de redondeo).
+  ///   4. Resta adelanto + suma gastos para la liquidación final.
+  ///
+  /// Si `tramos` es vacío (no debería pasar, el modelo garantiza ≥1),
+  /// devuelve montos en cero.
+  static MontosViaje calcularTodoMultiTramo({
+    required List<TramoViaje> tramos,
+    double adelanto = 0,
+    Iterable<GastoViaje>? gastos,
+    double? comisionPct,
+  }) {
+    final pct = comisionPct ?? comisionChoferDefaultPct;
+    var totalVecchi = 0.0;
+    var totalChofer = 0.0;
+    for (final t in tramos) {
+      final brutos = calcularMontosBrutos(
+        unidadTarifa: t.tarifaSnapshot.unidadTarifa,
+        tarifaReal: t.tarifaSnapshot.tarifaReal,
+        tarifaChofer: t.tarifaSnapshot.tarifaChofer,
+        kgCargados: t.kgCargados,
+        kgDescargados: t.kgDescargados,
+      );
+      totalVecchi += brutos.montoVecchi;
+      totalChofer += brutos.montoChofer;
+    }
+    final redondeado = redondearMultiploDe5Descendente(totalChofer);
+    final gastosTot = sumarGastos(gastos);
+    final liquidacion = calcularLiquidacion(
+      montoChoferRedondeado: redondeado,
+      adelanto: adelanto,
+      gastosTotal: gastosTot,
+    );
+    return MontosViaje(
+      montoVecchi: totalVecchi,
+      montoChofer: totalChofer,
       montoChoferRedondeado: redondeado,
       comisionChoferPct: pct,
       gastosTotal: gastosTot,
