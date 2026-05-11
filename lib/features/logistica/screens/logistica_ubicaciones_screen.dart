@@ -9,6 +9,7 @@ import '../../../shared/widgets/dato_editable.dart';
 import '../models/empresa_logistica.dart';
 import '../models/ubicacion_logistica.dart';
 import '../services/logistica_service.dart';
+import '../utils/google_maps_url.dart';
 import '../widgets/acciones_navegacion_sheet.dart';
 import '../widgets/mini_mapa_thumbnail.dart';
 import '../widgets/ubicacion_map_picker.dart';
@@ -593,8 +594,101 @@ class _FilaCoords extends StatelessWidget {
               side: const BorderSide(color: AppColors.accentTeal),
             ),
           ),
+          // Alternativa rápida: pegar el link de Google Maps. Lo
+          // parseamos al toque y aplicamos las coords. Atajo útil
+          // cuando el operador ya buscó el lugar en Google Maps
+          // (más rápido que volver a buscarlo en el picker).
+          if (onLatManual != null && onLngManual != null) ...[
+            const SizedBox(height: 6),
+            OutlinedButton.icon(
+              onPressed: () => _pegarLinkGoogleMaps(context),
+              icon: const Icon(Icons.link, size: 18),
+              label: const Text('PEGAR LINK DE GOOGLE MAPS'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white70,
+                side: const BorderSide(color: Colors.white30),
+              ),
+            ),
+          ],
         ],
       ),
+    );
+  }
+
+  /// Diálogo que pide pegar un link / coords de Google Maps y, si
+  /// puede parsear lat/lng, los aplica. Soporta varios formatos —
+  /// ver `GoogleMapsUrlParser` para el detalle.
+  Future<void> _pegarLinkGoogleMaps(BuildContext context) async {
+    final ctrl = TextEditingController();
+    final messenger = ScaffoldMessenger.of(context);
+    final result = await showDialog<({double lat, double lng})?>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        backgroundColor: Theme.of(dCtx).colorScheme.surface,
+        title: const Text('Pegar link de Google Maps'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Pegá el link completo de Google Maps o las coordenadas:',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Ej. "https://www.google.com/maps/place/.../@-38.71,-62.27,15z" '
+              'o "-38.71, -62.27".',
+              style: TextStyle(color: Colors.white38, fontSize: 11),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: ctrl,
+              autofocus: true,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                isDense: true,
+                hintText: 'Pegá acá…',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dCtx).pop(null),
+            child: const Text('CANCELAR'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final input = ctrl.text;
+              if (GoogleMapsUrlParser.esShortUrl(input)) {
+                // Las short URLs requerirían un HTTP request para
+                // expandirlas — no vale la pena el flow, mejor que el
+                // operador la abra en el browser primero.
+                Navigator.of(dCtx).pop(null);
+                AppFeedback.warningOn(
+                  messenger,
+                  'Es un link acortado (goo.gl). Abrilo en el browser '
+                  'para que se expanda, después copiá el link largo de '
+                  'la barra de direcciones y pegalo acá.',
+                );
+                return;
+              }
+              final coords = GoogleMapsUrlParser.extraer(input);
+              Navigator.of(dCtx).pop(coords);
+            },
+            child: const Text('APLICAR'),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    onLatManual?.call(result.lat);
+    onLngManual?.call(result.lng);
+    AppFeedback.successOn(
+      messenger,
+      'Coordenadas aplicadas: ${result.lat.toStringAsFixed(5)}, '
+      '${result.lng.toStringAsFixed(5)}.',
     );
   }
 }
