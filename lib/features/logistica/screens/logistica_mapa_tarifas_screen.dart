@@ -6,6 +6,9 @@
 // las dos puntas (origen Y destino con lat/lng). El operador puede
 // ver de un vistazo qué porción del catálogo todavía falta georreferenciar.
 
+import 'dart:io' show Platform;
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
@@ -43,6 +46,12 @@ class _LogisticaMapaTarifasScreenState
   /// del cache global de `LogisticaGeoUtils` para tener visibilidad
   /// local del estado de carga sin hits en el cache externo.
   final Set<String> _yaSolicitadas = {};
+
+  /// Id de la tarifa actualmente resaltada en el mapa (tap en su tile
+  /// de la franja inferior). Su polyline se dibuja más gruesa + color
+  /// distinto, y el mapa hace zoom a sus bounds. null = sin resaltar
+  /// (vista panorámica de todo el catálogo).
+  String? _tarifaResaltadaId;
 
   @override
   void dispose() {
@@ -233,19 +242,46 @@ class _LogisticaMapaTarifasScreenState
               // Líneas de tarifas (debajo de los pins). Si ya tenemos
               // la ruta OSRM (siguen las carreteras) la usamos; sino
               // fallback a línea recta entre origen y destino.
+              //
+              // La tarifa resaltada (la que el operador eligió tocando
+              // su tile en la franja inferior) se dibuja **encima**
+              // del resto y con stroke más grueso + color naranja para
+              // destacarla. Las demás quedan en verde tenue como
+              // contexto.
               PolylineLayer(
-                polylines: tarifasConCoords.map((t) {
-                  final inactiva = !t.tarifa.activa;
-                  final rutaReal = _rutasPorTarifa[t.tarifa.id];
-                  final puntos = rutaReal?.puntos ?? [t.origen, t.destino];
-                  return Polyline(
-                    points: puntos,
-                    strokeWidth: 3,
-                    color: inactiva
-                        ? Colors.white24
-                        : AppColors.accentGreen.withValues(alpha: 0.7),
-                  );
-                }).toList(),
+                polylines: () {
+                  final polylines = <Polyline>[];
+                  Polyline? resaltada;
+                  for (final t in tarifasConCoords) {
+                    final inactiva = !t.tarifa.activa;
+                    final rutaReal = _rutasPorTarifa[t.tarifa.id];
+                    final puntos = rutaReal?.puntos ?? [t.origen, t.destino];
+                    final esResaltada =
+                        _tarifaResaltadaId == t.tarifa.id;
+                    final color = esResaltada
+                        ? AppColors.accentOrange
+                        : (inactiva
+                            ? Colors.white24
+                            : AppColors.accentGreen.withValues(
+                                alpha: _tarifaResaltadaId == null
+                                    ? 0.7
+                                    : 0.25,
+                              ));
+                    final polyline = Polyline(
+                      points: puntos,
+                      strokeWidth: esResaltada ? 6 : 3,
+                      color: color,
+                    );
+                    if (esResaltada) {
+                      resaltada = polyline;
+                    } else {
+                      polylines.add(polyline);
+                    }
+                  }
+                  // La resaltada al final → se dibuja arriba del resto.
+                  if (resaltada != null) polylines.add(resaltada);
+                  return polylines;
+                }(),
               ),
               // Pins en cada extremo (deduplicados por coord +
               // agrupados con cluster cuando se solapan a bajo
@@ -318,6 +354,43 @@ class _LogisticaMapaTarifasScreenState
                     ),
                   ),
                 ),
+              // Botón "VER TODAS" — visible solo si hay una tarifa
+              // resaltada. Limpia el resaltado y vuelve al bounding
+              // box del catálogo completo.
+              if (_tarifaResaltadaId != null)
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Material(
+                    color: AppColors.accentOrange.withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(8),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () => _verPanoramica(tarifasConCoords, bbox),
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.zoom_out_map,
+                                color: Colors.white, size: 18),
+                            SizedBox(width: 6),
+                            Text(
+                              'VER TODAS',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -373,7 +446,32 @@ class _LogisticaMapaTarifasScreenState
     mapa[punto] = nombre;
   }
 
+  /// Tap en una tile de tarifa: (1) resaltar visualmente la ruta en
+  /// el mapa, (2) zoomear/centrar el mapa a los bounds de origen +
+  /// destino con padding, y (3) abrir el sheet de detalle (que NO
+  /// muestra los botones IR AL ORIGEN/DESTINO en Windows desktop —
+  /// el operador está en oficina, no manejando).
+  ///
+  /// Para volver a la vista panorámica de todo el catálogo, el
+  /// operador cierra el sheet y toca cualquier zona vacía / o toca
+  /// otra tile.
   void _mostrarDetalleTarifa(BuildContext context, _TarifaConRuta t) {
+    // Resaltar la tarifa en el mapa.
+    setState(() => _tarifaResaltadaId = t.tarifa.id);
+
+    // Centrar el mapa en el bounding box de la tarifa. Si tenemos
+    // ruta real, usamos sus puntos (más preciso); sino origen+destino.
+    final puntos = _rutasPorTarifa[t.tarifa.id]?.puntos ?? [t.origen, t.destino];
+    if (puntos.isNotEmpty) {
+      final bbox = LatLngBounds.fromPoints(puntos);
+      _mapCtl.fitCamera(
+        CameraFit.bounds(
+          bounds: bbox,
+          padding: const EdgeInsets.all(60),
+        ),
+      );
+    }
+
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.background,
@@ -381,7 +479,25 @@ class _LogisticaMapaTarifasScreenState
         tarifaConRuta: t,
         rutaReal: _rutasPorTarifa[t.tarifa.id],
       ),
-    );
+    ).whenComplete(() {
+      // Al cerrar el sheet, dejamos la tarifa todavía resaltada — el
+      // operador ya está mirando la ruta. Para volver a la vista
+      // panorámica puede tocar el botón "Ver todas" (arriba).
+    });
+  }
+
+  /// Vuelve a la vista panorámica con todas las tarifas y limpia el
+  /// resaltado. Llamado por el botón "VER TODAS" arriba del mapa.
+  void _verPanoramica(List<_TarifaConRuta> tarifas, LatLngBounds? bbox) {
+    setState(() => _tarifaResaltadaId = null);
+    if (bbox != null) {
+      _mapCtl.fitCamera(
+        CameraFit.bounds(
+          bounds: bbox,
+          padding: const EdgeInsets.all(40),
+        ),
+      );
+    }
   }
 }
 
@@ -502,6 +618,15 @@ class _DetalleTarifaSheet extends StatelessWidget {
     this.rutaReal,
   });
 
+  /// `true` solo en Android / iOS. En Windows desktop, web, macOS y
+  /// Linux los botones "IR AL ORIGEN/DESTINO" no tienen sentido (el
+  /// operador está en la oficina, no manejando) — se reemplazan por
+  /// una guía textual.
+  bool get _esMobile {
+    if (kIsWeb) return false;
+    return Platform.isAndroid || Platform.isIOS;
+  }
+
   @override
   Widget build(BuildContext context) {
     final t = tarifaConRuta.tarifa;
@@ -585,47 +710,72 @@ class _DetalleTarifaSheet extends StatelessWidget {
                   '${t.porcentajeComisionDador != null ? " (${t.porcentajeComisionDador!.toStringAsFixed(1)}%)" : ""}',
             ),
           const Divider(color: Colors.white12, height: 24),
-          // Acciones de navegación: abrir origen o destino en
-          // Maps/Waze para llegar al lugar real.
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => AccionesNavegacionSheet.abrir(
-                    context,
-                    lat: tarifaConRuta.origen.latitude,
-                    lng: tarifaConRuta.origen.longitude,
-                    label: tarifaConRuta.nombreOrigen,
-                  ),
-                  icon: const Icon(Icons.navigation_outlined, size: 16),
-                  label: const Text('IR AL ORIGEN'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accentBlue,
-                    side: const BorderSide(color: AppColors.accentBlue),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => AccionesNavegacionSheet.abrir(
-                    context,
-                    lat: tarifaConRuta.destino.latitude,
-                    lng: tarifaConRuta.destino.longitude,
-                    label: tarifaConRuta.nombreDestino,
-                  ),
-                  icon: const Icon(Icons.navigation_outlined, size: 16),
-                  label: const Text('IR AL DESTINO'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accentTeal,
-                    side: const BorderSide(color: AppColors.accentTeal),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+          // En **mobile** (chofer/supervisor manejando) los botones
+          // "IR AL ORIGEN/DESTINO" tienen sentido: abren Google Maps
+          // o Waze con el destino fijado para llegar manejando.
+          //
+          // En **Windows desktop** el operador está en la oficina
+          // mirando el catálogo de tarifas — esos botones no sirven
+          // para nada. En su lugar mostramos un texto guía
+          // explicando que la ruta ya quedó resaltada en el mapa.
+          if (_esMobile)
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => AccionesNavegacionSheet.abrir(
+                      context,
+                      lat: tarifaConRuta.origen.latitude,
+                      lng: tarifaConRuta.origen.longitude,
+                      label: tarifaConRuta.nombreOrigen,
+                    ),
+                    icon: const Icon(Icons.navigation_outlined, size: 16),
+                    label: const Text('IR AL ORIGEN'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.accentBlue,
+                      side: const BorderSide(color: AppColors.accentBlue),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => AccionesNavegacionSheet.abrir(
+                      context,
+                      lat: tarifaConRuta.destino.latitude,
+                      lng: tarifaConRuta.destino.longitude,
+                      label: tarifaConRuta.nombreDestino,
+                    ),
+                    icon: const Icon(Icons.navigation_outlined, size: 16),
+                    label: const Text('IR AL DESTINO'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.accentTeal,
+                      side: const BorderSide(color: AppColors.accentTeal),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          else
+            Row(
+              children: [
+                const Icon(Icons.alt_route,
+                    color: AppColors.accentOrange, size: 18),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Recorrido marcado en el mapa.',
+                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('CERRAR'),
+                ),
+              ],
+            ),
         ],
       ),
     );
