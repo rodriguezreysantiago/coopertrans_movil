@@ -192,16 +192,23 @@ class _CardEmpresa extends StatelessWidget {
               ),
             ],
           ),
-          if (empresa.cuit != null || empresa.contacto != null) ...[
+          if (empresa.cuit != null ||
+              empresa.contacto != null ||
+              empresa.nombreContacto != null) ...[
             const SizedBox(height: 6),
             Wrap(
               spacing: 12,
               runSpacing: 4,
               children: [
                 if (empresa.cuit != null) _Chip('CUIT ${empresa.cuit}'),
+                // Si tiene tel + nombre, los unimos en un solo chip
+                // "Juan Pérez · 2914567890" para verlos al toque.
                 if (empresa.contacto != null &&
                     empresa.contacto!.trim().isNotEmpty)
-                  _Chip(PhoneFormatter.paraMostrar(empresa.contacto)),
+                  _Chip(_chipContacto(empresa))
+                else if (empresa.nombreContacto != null &&
+                    empresa.nombreContacto!.trim().isNotEmpty)
+                  _Chip(empresa.nombreContacto!),
               ],
             ),
           ],
@@ -217,6 +224,17 @@ class _CardEmpresa extends StatelessWidget {
       isScrollControlled: true,
       builder: (_) => _EditarEmpresaSheet(empresa: empresa),
     );
+  }
+
+  /// Compone el texto del chip de contacto. Si la empresa tiene
+  /// nombre + tel → "Juan Pérez · 2914567890". Si solo tel → el tel.
+  /// Si solo nombre → solo nombre (manejado afuera, este helper
+  /// asume que hay tel).
+  String _chipContacto(EmpresaLogistica e) {
+    final tel = PhoneFormatter.paraMostrar(e.contacto);
+    final nombre = e.nombreContacto?.trim() ?? '';
+    if (nombre.isNotEmpty) return '$nombre · $tel';
+    return tel;
   }
 
   /// Confirma + elimina la empresa. El service chequea referencias
@@ -383,7 +401,16 @@ class _EditarEmpresaSheet extends StatelessWidget {
                   ),
                 ),
                 DatoEditableTexto(
-                  etiqueta: 'Teléfono (opcional)',
+                  etiqueta: 'Nombre del contacto (opcional)',
+                  valor: empresa.nombreContacto ?? '',
+                  aplicarMayusculas: false,
+                  onSave: (v) => setCampo(
+                    'nombre_contacto',
+                    v.trim().isEmpty ? null : v.trim(),
+                  ),
+                ),
+                DatoEditableTexto(
+                  etiqueta: 'Teléfono del contacto (opcional)',
                   // Patrón idéntico al de EMPLEADOS.TELEFONO:
                   //   - paraMostrar() saca el prefijo 549 para
                   //     mostrar solo el código de área + abonado.
@@ -730,6 +757,7 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
   final _nombreCtrl = TextEditingController();
   final _apodoCtrl = TextEditingController();
   final _cuitCtrl = TextEditingController();
+  final _nombreContactoCtrl = TextEditingController();
   final _contactoCtrl = TextEditingController();
   bool _guardando = false;
   String? _error;
@@ -739,6 +767,7 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
     _nombreCtrl.dispose();
     _apodoCtrl.dispose();
     _cuitCtrl.dispose();
+    _nombreContactoCtrl.dispose();
     _contactoCtrl.dispose();
     super.dispose();
   }
@@ -787,11 +816,19 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
             ),
             const SizedBox(height: 8),
             TextField(
+              controller: _nombreContactoCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Nombre del contacto (opcional)',
+                hintText: 'Ej. Juan Pérez',
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
               controller: _contactoCtrl,
               keyboardType: TextInputType.phone,
               inputFormatters: [DigitOnlyFormatter()],
               decoration: const InputDecoration(
-                labelText: 'Teléfono (opcional)',
+                labelText: 'Teléfono del contacto (opcional)',
                 hintText: '2914567890',
                 helperText:
                     'Se guarda con prefijo 549 (formato WhatsApp).',
@@ -857,6 +894,9 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
         contacto: _contactoCtrl.text.trim().isEmpty
             ? null
             : PhoneFormatter.paraGuardar(_contactoCtrl.text),
+        nombreContacto: _nombreContactoCtrl.text.trim().isEmpty
+            ? null
+            : _nombreContactoCtrl.text.trim(),
       );
       if (mounted) Navigator.pop(context);
     } catch (e) {

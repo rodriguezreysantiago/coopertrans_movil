@@ -36,7 +36,15 @@ class EmpresaLogistica {
   final String? apodo;
   final TipoEmpresaLogistica tipo;
   final String? cuit;
+  /// Teléfono de contacto (canónico `549...` para WhatsApp, mismo
+  /// formato que EMPLEADOS.TELEFONO). Históricamente el campo se
+  /// llamaba "contacto" — el nombre del field en Firestore se
+  /// mantiene por compat, pero conceptualmente ya es solo teléfono.
   final String? contacto;
+  /// Nombre de la persona a contactar — útil para saber "el
+  /// teléfono X de Cargill es de Juan Pérez, no el operativo
+  /// general". Texto libre.
+  final String? nombreContacto;
   /// Productos que la empresa carga / despacha. Strings libres
   /// porque cada empresa los nombra a su manera ("Urea granulada",
   /// "Soja", "Aceite crudo"). Tarifas opcionalmente apuntan a un
@@ -54,6 +62,7 @@ class EmpresaLogistica {
     required this.tipo,
     this.cuit,
     this.contacto,
+    this.nombreContacto,
     this.productos = const [],
     this.activa = true,
     this.creadoEn,
@@ -87,6 +96,9 @@ class EmpresaLogistica {
       contacto: (d['contacto'] as String?)?.trim().isEmpty ?? true
           ? null
           : (d['contacto'] as String).trim(),
+      nombreContacto: (d['nombre_contacto'] as String?)?.trim().isEmpty ?? true
+          ? null
+          : (d['nombre_contacto'] as String).trim(),
       productos: (d['productos'] is List)
           ? (d['productos'] as List)
               .map((p) => p?.toString().trim() ?? '')
@@ -114,6 +126,7 @@ class EmpresaLogistica {
       'tipo': tipo.codigo,
       if (cuit != null) 'cuit': cuit,
       if (contacto != null) 'contacto': contacto,
+      if (nombreContacto != null) 'nombre_contacto': nombreContacto,
       if (productos.isNotEmpty) 'productos': productos,
       'activa': activa,
       if (creadoPor != null) 'creado_por': creadoPor,

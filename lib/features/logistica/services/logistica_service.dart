@@ -58,6 +58,7 @@ class LogisticaService {
     String? apodo,
     String? cuit,
     String? contacto,
+    String? nombreContacto,
   }) async {
     final nombreNorm = nombre.trim().toUpperCase();
     if (nombreNorm.isEmpty) {
@@ -74,6 +75,7 @@ class LogisticaService {
       }
     }
     final apodoTrim = apodo?.trim() ?? '';
+    final nombreContactoTrim = nombreContacto?.trim() ?? '';
     return empresasCol.add({
       'nombre': nombreNorm,
       if (apodoTrim.isNotEmpty) 'apodo': apodoTrim,
@@ -81,6 +83,7 @@ class LogisticaService {
       if (cuit != null && cuit.trim().isNotEmpty) 'cuit': cuit.trim(),
       if (contacto != null && contacto.trim().isNotEmpty)
         'contacto': contacto.trim(),
+      if (nombreContactoTrim.isNotEmpty) 'nombre_contacto': nombreContactoTrim,
       'activa': true,
       'creado_en': FieldValue.serverTimestamp(),
       'creado_por': PrefsService.dni,
