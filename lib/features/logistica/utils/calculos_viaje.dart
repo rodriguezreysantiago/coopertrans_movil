@@ -184,7 +184,11 @@ class CalculosViaje {
   ///      con comisión aplicada (el redondeo es sobre el total que
   ///      se le paga al chofer, no por tramo — sino se acumularía
   ///      error de redondeo).
-  ///   5. Resta adelanto + suma gastos para la liquidación final.
+  ///   5. Suma los gastos de TODOS los tramos (cada tramo tiene su
+  ///      propia lista de gastos desde 2026-05-13). Si el caller
+  ///      pasa `gastos` explícito, lo respeta (usado por tests y
+  ///      flujos legacy single-tramo).
+  ///   6. Resta adelanto + suma gastos para la liquidación final.
   ///
   /// Si `tramos` es vacío (no debería pasar, el modelo garantiza ≥1),
   /// devuelve montos en cero.
@@ -213,7 +217,14 @@ class CalculosViaje {
     // operaciones de coma flotante.
     final montoChofer = baseBrutaChofer * (pct / 100.0);
     final redondeado = redondearMultiploDe5Descendente(montoChofer);
-    final gastosTot = sumarGastos(gastos);
+    // Gastos: si el caller los pasa explícito (legacy / tests), se
+    // respetan. Sino se suman de cada tramo. Esto resuelve el caso
+    // 2026-05-13 donde los gastos pasaron de nivel viaje a nivel
+    // tramo y el form de viaje los pasa directamente desde los tramos
+    // sin un parámetro separado.
+    final gastosTot = gastos != null
+        ? sumarGastos(gastos)
+        : tramos.fold<double>(0, (acc, t) => acc + t.gastosTotal);
     final liquidacion = calcularLiquidacion(
       montoChoferRedondeado: redondeado,
       adelanto: adelanto,

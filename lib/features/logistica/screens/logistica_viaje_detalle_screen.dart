@@ -69,8 +69,11 @@ class LogisticaViajeDetalleScreen extends StatelessWidget {
                 _SeccionTramos(v: v),
                 const SizedBox(height: 12),
                 _SeccionMontos(v: v),
-                const SizedBox(height: 12),
-                _SeccionGastos(v: v),
+                // Sección "GASTOS EXTRAORDINARIOS" viaje-level
+                // eliminada el 2026-05-13. Los gastos ahora se muestran
+                // DENTRO de cada tramo (en `_DetalleTramo`) con su
+                // propio total. El gran total sigue apareciendo en
+                // `_SeccionMontos` (línea "Gastos extraordinarios").
                 if (v.motivoCancelacion != null ||
                     v.fechaPostergadoA != null) ...[
                   const SizedBox(height: 12),
@@ -297,6 +300,57 @@ class _DetalleTramo extends StatelessWidget {
               url: tramo.remitoUrl!,
               etiqueta: 'Abrir comprobante',
             ),
+          // Gastos extraordinarios del tramo + total del tramo
+          // (refactor 2026-05-13 — antes vivían al nivel viaje).
+          if (tramo.gastos.isNotEmpty) ...[
+            const Divider(color: Colors.white12, height: 16),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 4),
+              child: Text(
+                'GASTOS EXTRAORDINARIOS',
+                style: TextStyle(
+                  color: Colors.white60,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+            for (final g in tramo.gastos)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Row(
+                  children: [
+                    const Icon(Icons.add_circle_outline,
+                        size: 14, color: AppColors.accentTeal),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        g.detalle?.isNotEmpty == true
+                            ? '${g.detalle} (${AppFormatters.formatearFecha(g.fecha)})'
+                            : 'Gasto del ${AppFormatters.formatearFecha(g.fecha)}',
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 12),
+                      ),
+                    ),
+                    Text(
+                      '\$ ${AppFormatters.formatearMonto(g.monto)}',
+                      style: const TextStyle(
+                        color: AppColors.accentTeal,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 2),
+            _Linea(
+              label: 'Total gastos del tramo',
+              valor: '\$ ${AppFormatters.formatearMonto(tramo.gastosTotal)}',
+              highlight: true,
+            ),
+          ],
           // Montos calculados del tramo. Solo aparecen si hay base —
           // tramo sin kg ni en POR_VIAJE definido devuelve 0 y no
           // tiene sentido mostrar líneas de $ 0.
@@ -449,56 +503,11 @@ class _SeccionMontos extends StatelessWidget {
   }
 }
 
-/// Sección de gastos extraordinarios del viaje (peajes, lavado,
-/// reparaciones menores, etc.). Hasta 2026-05-13 esto se mostraba
-/// junto con el adelanto, pero los adelantos pasaron a ser una
-/// entidad propia (`ADELANTOS_CHOFER`). Ahora la sección solo
-/// muestra los gastos.
-class _SeccionGastos extends StatelessWidget {
-  final Viaje v;
-  const _SeccionGastos({required this.v});
-
-  @override
-  Widget build(BuildContext context) {
-    if (v.gastos.isEmpty) {
-      return const SizedBox.shrink();
-    }
-    return _Seccion(
-      titulo: 'GASTOS EXTRAORDINARIOS',
-      icono: Icons.receipt_long_outlined,
-      children: [
-        for (final g in v.gastos)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 4),
-            child: Row(
-              children: [
-                const Icon(Icons.add_circle_outline,
-                    size: 14, color: AppColors.accentTeal),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    g.detalle?.isNotEmpty == true
-                        ? '${g.detalle} (${AppFormatters.formatearFecha(g.fecha)})'
-                        : 'Gasto del ${AppFormatters.formatearFecha(g.fecha)}',
-                    style: const TextStyle(
-                        color: Colors.white70, fontSize: 12),
-                  ),
-                ),
-                Text(
-                  '\$ ${AppFormatters.formatearMonto(g.monto)}',
-                  style: const TextStyle(
-                    color: AppColors.accentTeal,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
+// `_SeccionGastos` viaje-level removida el 2026-05-13 — los gastos
+// se muestran por tramo dentro de `_DetalleTramo`. Mantener el gran
+// total en `_SeccionMontos` (línea "Gastos extraordinarios"). Si
+// algún flow futuro quiere una vista consolidada, podemos reagregar
+// la sección leyendo `v.gastos` (que ahora es la concat de tramos).
 
 class _SeccionMotivo extends StatelessWidget {
   final Viaje v;

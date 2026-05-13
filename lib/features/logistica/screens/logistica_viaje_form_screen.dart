@@ -59,7 +59,8 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
   String? _adelantoAsociadoId;
   String? _adelantoAsociadoIdInicial;
 
-  List<GastoViaje> _gastos = [];
+  // Gastos: desde 2026-05-13 viven en cada `_TramoEditState`, no más
+  // a nivel viaje. Cada `_TramoCard` tiene su propio `_SeccionGastos`.
 
   EstadoViaje _estado = EstadoViaje.planeado;
   final _motivoCancelacionCtrl = TextEditingController();
@@ -121,7 +122,10 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
       // Ahora viven en ADELANTOS_CHOFER. Los campos del viaje siguen
       // accesibles vía getters de compat pero NO se editan más desde
       // este form — la pantalla LogisticaAdelantosScreen los gestiona.
-      _gastos = List.of(v.gastos);
+      // Gastos: cada tramo los carga en su `_TramoEditState.gastos`
+      // (refactor 2026-05-13). Aviaje viejo con gastos al nivel raíz
+      // los heredó el primer tramo vía `Viaje.fromMap`, así que acá
+      // no hay que hacer nada extra.
       _estado = v.estado;
       _motivoCancelacionCtrl.text = v.motivoCancelacion ?? '';
       _fechaPostergadoA = v.fechaPostergadoA;
@@ -186,10 +190,11 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
         .map((t) => t.toTramoViaje())
         .toList();
     if (tramosConTarifa.isEmpty) return null;
+    // Gastos van adentro de cada tramo desde 2026-05-13 — el helper
+    // los suma solo si no pasamos `gastos` explícito.
     return CalculosViaje.calcularTodoMultiTramo(
       tramos: tramosConTarifa,
       adelanto: 0,
-      gastos: _gastos,
     );
   }
 
@@ -308,7 +313,6 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
           adelantoMonto: null,
           adelantoFecha: null,
           adelantoObservacion: null,
-          gastos: _gastos,
           estado: _estado,
           motivoCancelacion: _motivoCancelacionCtrl.text.trim().isEmpty
               ? null
@@ -334,7 +338,6 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
           adelantoMonto: null,
           adelantoFecha: null,
           adelantoObservacion: null,
-          gastos: _gastos,
           estado: _estado,
           motivoCancelacion: _motivoCancelacionCtrl.text.trim().isEmpty
               ? null
@@ -522,21 +525,13 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
             ),
             const SizedBox(height: 12),
 
-            // 5. GASTOS EXTRAORDINARIOS. (La sección de Adelanto INLINE
-            // se removió del form de viaje el 2026-05-13 — los
-            // adelantos viven en su propia pantalla
-            // `LogisticaAdelantosScreen` porque también se entregan
-            // adelantos de sueldo sin viaje asociado. Para crear un
-            // adelanto: hub Logística → ADELANTOS → "NUEVO ADELANTO".
-            // El dropdown de "ADELANTO ASOCIADO" de arriba solo elige
-            // entre los ya existentes.)
-            _SeccionGastos(
-              gastos: _gastos,
-              onChanged: (l) => setState(() => _gastos = l),
-            ),
-            const SizedBox(height: 12),
+            // GASTOS EXTRAORDINARIOS: removidos del nivel viaje el
+            // 2026-05-13. Cada tramo ahora carga sus propios gastos
+            // (peajes, lavado, etc.) en su propia `_SeccionGastos`
+            // dentro de la card del tramo. La sección viaje-level
+            // que estaba acá se eliminó.
 
-            // 6. TRAMOS (uno o varios).
+            // 5. TRAMOS (uno o varios — cada uno con sus gastos).
             ..._tramos.asMap().entries.expand((entry) {
               final index = entry.key;
               final tramo = entry.value;
@@ -615,6 +610,10 @@ class _TramoEditState {
   String? remitoExtPendiente;
   String? remitoMimePendiente;
 
+  /// Gastos extraordinarios del tramo (peajes, lavado, viáticos, etc.)
+  /// — desde 2026-05-13 viven por tramo, no por viaje.
+  List<GastoViaje> gastos;
+
   _TramoEditState._({
     required this.id,
     this.tarifa,
@@ -627,12 +626,14 @@ class _TramoEditState {
     String? kgDescargados,
     this.remitoUrl,
     this.remitoPathStorage,
+    List<GastoViaje>? gastos,
   })  : productoLibreCtrl = TextEditingController(text: producto ?? ''),
         descripcionCargaCtrl =
             TextEditingController(text: descripcionCarga ?? ''),
         kgCargadosCtrl = TextEditingController(text: kgCargados ?? ''),
         remitoNumeroCtrl = TextEditingController(text: remitoNumero ?? ''),
-        kgDescargadosCtrl = TextEditingController(text: kgDescargados ?? '');
+        kgDescargadosCtrl = TextEditingController(text: kgDescargados ?? ''),
+        gastos = gastos ?? [];
 
   factory _TramoEditState.vacio() {
     return _TramoEditState._(
@@ -679,6 +680,7 @@ class _TramoEditState {
           : AppFormatters.formatearMiles(t.kgDescargados!.toInt()),
       remitoUrl: t.remitoUrl,
       remitoPathStorage: t.remitoPathStorage,
+      gastos: List.of(t.gastos),
     );
   }
 
@@ -710,6 +712,7 @@ class _TramoEditState {
       remitoUrl: remitoUrl,
       remitoPathStorage: remitoPathStorage,
       kgDescargados: kgD,
+      gastos: List.of(gastos),
     );
   }
 }
@@ -966,6 +969,20 @@ class _TramoCard extends StatelessWidget {
             onChanged: (_) => onCambio(),
           ),
         ],
+
+        // ─── Gastos extraordinarios DEL TRAMO ─────────────────────
+        // Cada tramo tiene sus propios gastos (refactor 2026-05-13).
+        // Antes vivían a nivel viaje pero un viaje multi-tramo tiene
+        // peajes / lavados distintos por tramo, así que se separan.
+        const SizedBox(height: 16),
+        _SeccionGastos(
+          gastos: state.gastos,
+          onChanged: (l) {
+            state.gastos = l;
+            onCambio();
+          },
+          enmarcadoComoSubseccion: true,
+        ),
       ],
     );
   }
@@ -1520,8 +1537,18 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
 class _SeccionGastos extends StatelessWidget {
   final List<GastoViaje> gastos;
   final ValueChanged<List<GastoViaje>> onChanged;
+  /// Si verdadero, el widget se renderea como sub-bloque inline (sin
+  /// el chrome de `_SeccionCard` con título + ícono propios). Usado
+  /// cuando la sección va ADENTRO de la card de un tramo — no
+  /// queremos un card-dentro-de-card. Default `false` (compat con
+  /// otros sitios que pudieran usar `_SeccionGastos` aislado).
+  final bool enmarcadoComoSubseccion;
 
-  const _SeccionGastos({required this.gastos, required this.onChanged});
+  const _SeccionGastos({
+    required this.gastos,
+    required this.onChanged,
+    this.enmarcadoComoSubseccion = false,
+  });
 
   Future<void> _agregar(BuildContext context) async {
     final montoCtrl = TextEditingController();
@@ -1596,82 +1623,96 @@ class _SeccionGastos extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = gastos.fold<double>(0, (a, g) => a + g.monto);
+    final children = <Widget>[
+      if (gastos.isEmpty)
+        const Text(
+          'Sin gastos cargados.',
+          style: TextStyle(color: Colors.white60, fontSize: 12),
+        )
+      else
+        ...gastos.asMap().entries.map((entry) {
+          final i = entry.key;
+          final g = entry.value;
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                const Icon(Icons.add_circle_outline,
+                    size: 16, color: AppColors.accentGreen),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    '${g.detalle ?? 'Gasto'} '
+                    '(${AppFormatters.formatearFecha(g.fecha)})',
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Text(
+                  '\$${AppFormatters.formatearMonto(g.monto)}',
+                  style: const TextStyle(
+                    color: AppColors.accentGreen,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline,
+                      size: 18, color: Colors.white54),
+                  onPressed: () {
+                    final nueva = List<GastoViaje>.from(gastos)..removeAt(i);
+                    onChanged(nueva);
+                  },
+                  visualDensity: VisualDensity.compact,
+                ),
+              ],
+            ),
+          );
+        }),
+      if (gastos.isNotEmpty) ...[
+        const Divider(color: Colors.white24, height: 16),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Total gastos del tramo',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            Text(
+              '\$${AppFormatters.formatearMonto(total)}',
+              style: const TextStyle(
+                color: AppColors.accentGreen,
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ],
+      const SizedBox(height: 8),
+      OutlinedButton.icon(
+        onPressed: () => _agregar(context),
+        icon: const Icon(Icons.add, size: 18),
+        label: const Text('AGREGAR GASTO'),
+      ),
+    ];
+    if (enmarcadoComoSubseccion) {
+      // Inline dentro de la card del tramo: solo título chico +
+      // contenido. Sin card propia para no anidar.
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SubseccionTitulo('GASTOS EXTRAORDINARIOS'),
+          const SizedBox(height: 8),
+          ...children,
+        ],
+      );
+    }
+    // Compat — si en algún lugar se usa standalone, queda como antes.
     return _SeccionCard(
       titulo: 'GASTOS EXTRAORDINARIOS',
       icono: Icons.receipt_long_outlined,
-      children: [
-        if (gastos.isEmpty)
-          const Text(
-            'Sin gastos cargados.',
-            style: TextStyle(color: Colors.white60, fontSize: 12),
-          )
-        else
-          ...gastos.asMap().entries.map((entry) {
-            final i = entry.key;
-            final g = entry.value;
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                children: [
-                  const Icon(Icons.add_circle_outline,
-                      size: 16, color: AppColors.accentGreen),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      '${g.detalle ?? 'Gasto'} '
-                      '(${AppFormatters.formatearFecha(g.fecha)})',
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Text(
-                    '\$${AppFormatters.formatearMonto(g.monto)}',
-                    style: const TextStyle(
-                      color: AppColors.accentGreen,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                        size: 18, color: Colors.white54),
-                    onPressed: () {
-                      final nueva = List<GastoViaje>.from(gastos)..removeAt(i);
-                      onChanged(nueva);
-                    },
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ],
-              ),
-            );
-          }),
-        if (gastos.isNotEmpty) ...[
-          const Divider(color: Colors.white24, height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Total gastos',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
-              ),
-              Text(
-                '\$${AppFormatters.formatearMonto(total)}',
-                style: const TextStyle(
-                  color: AppColors.accentGreen,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ],
-        const SizedBox(height: 8),
-        OutlinedButton.icon(
-          onPressed: () => _agregar(context),
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('AGREGAR GASTO'),
-        ),
-      ],
+      children: children,
     );
   }
 }

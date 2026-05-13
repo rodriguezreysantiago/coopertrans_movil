@@ -325,6 +325,7 @@ void main() {
       required double tarifaChofer,
       double? kgCargados,
       double? kgDescargados,
+      List<GastoViaje> gastos = const [],
     }) {
       return TramoViaje(
         id: 't',
@@ -340,6 +341,7 @@ void main() {
         ),
         kgCargados: kgCargados,
         kgDescargados: kgDescargados,
+        gastos: gastos,
       );
     }
 
@@ -487,6 +489,61 @@ void main() {
       expect(m.montoChoferRedondeado, 21600);
       expect(m.gastosTotal, 1000);
       expect(m.liquidacionChofer, 17600);
+    });
+
+    test('gastos por tramo se suman automáticamente al total', () {
+      // Refactor 2026-05-13: gastos viven en cada tramo. El helper
+      // los suma al `gastosTotal` y a la `liquidacionChofer` sin que
+      // el caller los pase aparte. Si pasa `gastos:` explícito, se
+      // respeta (compat single-tramo / tests legacy).
+      final m = CalculosViaje.calcularTodoMultiTramo(tramos: [
+        tramo(
+          unidad: UnidadTarifa.porViaje,
+          tarifaReal: 100000,
+          tarifaChofer: 50000,
+          gastos: [
+            GastoViaje(monto: 3000, fecha: DateTime(2026, 5, 13)),
+            GastoViaje(monto: 2000, fecha: DateTime(2026, 5, 13)),
+          ],
+        ),
+        tramo(
+          unidad: UnidadTarifa.porViaje,
+          tarifaReal: 100000,
+          tarifaChofer: 50000,
+          gastos: [
+            GastoViaje(monto: 4000, fecha: DateTime(2026, 5, 13)),
+          ],
+        ),
+      ]);
+      // base bruta chofer = 50000 + 50000 = 100000.
+      // 18% × 100000 = 18000 → ya múltiplo de 5 → redondeado 18000.
+      // gastos totales = 3000 + 2000 + 4000 = 9000.
+      // liquidación = 18000 - 0 + 9000 = 27000.
+      expect(m.montoChoferRedondeado, 18000);
+      expect(m.gastosTotal, 9000);
+      expect(m.liquidacionChofer, 27000);
+    });
+
+    test('gastos explícitos sobrescriben los de tramos (compat legacy)', () {
+      // Si el caller pasa `gastos:` no nulo, gana (caso single-tramo
+      // que aún no usa el nuevo modelo de gastos por tramo).
+      final m = CalculosViaje.calcularTodoMultiTramo(
+        tramos: [
+          tramo(
+            unidad: UnidadTarifa.porViaje,
+            tarifaReal: 100000,
+            tarifaChofer: 50000,
+            gastos: [
+              GastoViaje(monto: 999, fecha: DateTime(2026, 5, 13)),
+            ],
+          ),
+        ],
+        gastos: [
+          GastoViaje(monto: 5000, fecha: DateTime(2026, 5, 13)),
+        ],
+      );
+      // `gastos:` explícito gana → 5000 (no 999 de los tramos).
+      expect(m.gastosTotal, 5000);
     });
 
     test('tramo sin kg cargados ni descargados aporta 0', () {

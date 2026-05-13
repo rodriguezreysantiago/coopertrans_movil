@@ -246,6 +246,15 @@ class TramoViaje {
   final String? remitoPathStorage;
   final double? kgDescargados;
 
+  // ─── Gastos extraordinarios del tramo ───
+  /// Lista de gastos (peajes, lavado, reparaciones menores, etc.)
+  /// pagados por el chofer en ESTE tramo. Antes vivían al nivel
+  /// viaje pero Santiago pidió 2026-05-13 que sean por tramo para
+  /// trazabilidad (cada tramo tiene su ruta y sus gastos típicos).
+  /// `viaje.gastos` ahora es un getter que devuelve la concatenación
+  /// de gastos de todos los tramos (compat retro).
+  final List<GastoViaje> gastos;
+
   const TramoViaje({
     required this.id,
     required this.tarifaId,
@@ -259,7 +268,17 @@ class TramoViaje {
     this.remitoUrl,
     this.remitoPathStorage,
     this.kgDescargados,
+    this.gastos = const [],
   });
+
+  /// Suma de gastos del tramo (incluye gastos en 0 / vacíos como 0).
+  double get gastosTotal {
+    var total = 0.0;
+    for (final g in gastos) {
+      total += g.monto;
+    }
+    return total;
+  }
 
   /// Genera un tramo nuevo vacío con id local generado. Para la UI
   /// cuando el operador toca "+ AGREGAR TRAMO".
@@ -275,6 +294,12 @@ class TramoViaje {
   }
 
   factory TramoViaje.fromMap(Map<String, dynamic> d) {
+    final gastosRaw = d['gastos'] as List?;
+    final gastos = gastosRaw == null
+        ? const <GastoViaje>[]
+        : gastosRaw
+            .map((g) => GastoViaje.fromMap(Map<String, dynamic>.from(g as Map)))
+            .toList();
     return TramoViaje(
       id: (d['id'] ?? DateTime.now().microsecondsSinceEpoch.toString())
           .toString(),
@@ -291,6 +316,7 @@ class TramoViaje {
       remitoUrl: d['remito_url']?.toString(),
       remitoPathStorage: d['remito_path_storage']?.toString(),
       kgDescargados: (d['kg_descargados'] as num?)?.toDouble(),
+      gastos: gastos,
     );
   }
 
@@ -310,6 +336,8 @@ class TramoViaje {
       if (remitoPathStorage != null)
         'remito_path_storage': remitoPathStorage,
       if (kgDescargados != null) 'kg_descargados': kgDescargados,
+      if (gastos.isNotEmpty)
+        'gastos': gastos.map((g) => g.toMap()).toList(),
     };
   }
 
@@ -325,6 +353,7 @@ class TramoViaje {
     String? remitoUrl,
     String? remitoPathStorage,
     double? kgDescargados,
+    List<GastoViaje>? gastos,
     bool clearProducto = false,
     bool clearDescripcionCarga = false,
     bool clearFechaCarga = false,
@@ -360,6 +389,7 @@ class TramoViaje {
       kgDescargados: clearKgDescargados
           ? null
           : (kgDescargados ?? this.kgDescargados),
+      gastos: gastos ?? this.gastos,
     );
   }
 }
@@ -424,7 +454,12 @@ class Viaje {
   final DateTime? reciboImpresoEn;
 
   // ─── Gastos extraordinarios (a favor del chofer) ───
-  final List<GastoViaje> gastos;
+  // Desde 2026-05-13 los gastos viven en CADA TRAMO. El getter `gastos`
+  // del viaje devuelve la concatenación de gastos de todos los tramos.
+  // Mantenemos `gastosTotal` como snapshot persistido (lo usa
+  // LIQUIDACIÓN y el detalle sin recalcular en cada read).
+  List<GastoViaje> get gastos =>
+      tramos.expand((t) => t.gastos).toList(growable: false);
 
   // ─── Cálculos finales (snapshot — recomputados por el service al
   // crear/editar). Persistirlos evita recalcular en cada read y
@@ -472,7 +507,6 @@ class Viaje {
     this.adelantoObservacion,
     this.numeroReciboAdelanto,
     this.reciboImpresoEn,
-    this.gastos = const [],
     required this.montoVecchi,
     required this.montoChofer,
     required this.montoChoferRedondeado,
@@ -577,6 +611,21 @@ class Viaje {
       ];
     }
 
+    // ─── Hidratación legacy de gastos ───
+    // Hasta el refactor 2026-05-13, los gastos vivían al nivel viaje
+    // (`d['gastos']`). Si encontramos gastos al raíz Y los tramos
+    // NO tienen, los movemos al PRIMER tramo para que el getter
+    // `viaje.gastos` siga devolviéndolos correctamente sin romper
+    // viajes ya creados.
+    if (gastosRaw != null &&
+        gastosRaw.isNotEmpty &&
+        tramos.every((t) => t.gastos.isEmpty)) {
+      final gastosLegacy = gastosRaw
+          .map((g) => GastoViaje.fromMap(Map<String, dynamic>.from(g as Map)))
+          .toList();
+      tramos[0] = tramos[0].copyWith(gastos: gastosLegacy);
+    }
+
     return Viaje(
       id: id,
       tramos: tramos,
@@ -592,12 +641,6 @@ class Viaje {
       adelantoObservacion: d['adelanto_observacion']?.toString(),
       numeroReciboAdelanto: (d['numero_recibo_adelanto'] as num?)?.toInt(),
       reciboImpresoEn: (d['recibo_impreso_en'] as Timestamp?)?.toDate(),
-      gastos: gastosRaw == null
-          ? const []
-          : gastosRaw
-              .map((g) =>
-                  GastoViaje.fromMap(Map<String, dynamic>.from(g as Map)))
-              .toList(),
       montoVecchi: (d['monto_vecchi'] as num?)?.toDouble() ?? 0,
       montoChofer: (d['monto_chofer'] as num?)?.toDouble() ?? 0,
       montoChoferRedondeado:

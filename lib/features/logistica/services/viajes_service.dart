@@ -117,7 +117,6 @@ class ViajesService {
     double? adelantoMonto,
     DateTime? adelantoFecha,
     String? adelantoObservacion,
-    List<GastoViaje> gastos = const [],
     EstadoViaje estado = EstadoViaje.planeado,
     String? motivoCancelacion,
     DateTime? fechaPostergadoA,
@@ -128,10 +127,11 @@ class ViajesService {
     if (tramos.isEmpty) {
       throw ArgumentError('El viaje debe tener al menos 1 tramo.');
     }
+    // Los gastos viven adentro de cada tramo desde 2026-05-13 — el
+    // helper los suma solo si no le pasamos `gastos` explícito.
     final montos = CalculosViaje.calcularTodoMultiTramo(
       tramos: tramos,
       adelanto: adelantoMonto ?? 0,
-      gastos: gastos,
       comisionPct: comisionPct,
     );
     final primero = tramos.first;
@@ -176,7 +176,9 @@ class ViajesService {
         'adelanto_fecha': Timestamp.fromDate(adelantoFecha),
       if (adelantoObservacion != null)
         'adelanto_observacion': adelantoObservacion,
-      'gastos': gastos.map((g) => g.toMap()).toList(),
+      // Gastos ya van adentro de `tramos[i].gastos` — no se persisten
+      // al nivel viaje. El `gastos_total` snapshot SÍ se persiste
+      // para que LIQUIDACIÓN sume sin recalcular.
 
       // ─── Agregados (sumas sobre tramos) ───
       'monto_vecchi': montos.montoVecchi,
@@ -217,7 +219,6 @@ class ViajesService {
     double? adelantoMonto,
     DateTime? adelantoFecha,
     String? adelantoObservacion,
-    List<GastoViaje> gastos = const [],
     EstadoViaje estado = EstadoViaje.planeado,
     String? motivoCancelacion,
     DateTime? fechaPostergadoA,
@@ -227,10 +228,10 @@ class ViajesService {
     if (tramos.isEmpty) {
       throw ArgumentError('El viaje debe tener al menos 1 tramo.');
     }
+    // Gastos viven adentro de cada tramo (refactor 2026-05-13).
     final montos = CalculosViaje.calcularTodoMultiTramo(
       tramos: tramos,
       adelanto: adelantoMonto ?? 0,
-      gastos: gastos,
       comisionPct: comisionPct,
     );
     final primero = tramos.first;
@@ -269,7 +270,8 @@ class ViajesService {
       'adelanto_fecha':
           adelantoFecha == null ? null : Timestamp.fromDate(adelantoFecha),
       'adelanto_observacion': adelantoObservacion,
-      'gastos': gastos.map((g) => g.toMap()).toList(),
+      // Gastos van adentro de cada `tramos[i].gastos`. Sin
+      // duplicación al nivel raíz.
 
       'monto_vecchi': montos.montoVecchi,
       'monto_chofer': montos.montoChofer,
