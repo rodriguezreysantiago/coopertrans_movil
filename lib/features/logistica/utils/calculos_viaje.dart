@@ -5,18 +5,28 @@ import '../models/viaje.dart';
 /// comisión, liquidación. Centralizados acá para que el formulario,
 /// el service y los reportes usen la MISMA fórmula.
 ///
-/// Decisiones operativas (Santiago 2026-05-09):
-///   1. Comisión del chofer: 18% sobre la TARIFA DEL CHOFER (no sobre
-///      el precio Vecchi). Hardcoded — si en el futuro debe variar
-///      por chofer, se promueve a config en EMPLEADOS.
-///   2. Redondeo: solo al monto del CHOFER (lo que se le paga en
-///      mano). Vecchi factura el monto exacto al cliente.
-///   3. Para tarifas POR_TONELADA: el monto se calcula sobre los
+/// Decisiones operativas (Santiago 2026-05-09 + corrección 2026-05-13):
+///   1. **Tarifa real vs tarifa chofer**: cada tarifa tiene 2 montos.
+///      `tarifaReal` es lo que se le factura al cliente. `tarifaChofer`
+///      suele ser igual o un poco MÁS BAJA — es la base con la que
+///      calculamos lo que cobra el chofer. Ejemplo típico: tarifa
+///      real $70.000/TN, tarifa chofer $68.000/TN. Vecchi factura
+///      con $70.000 pero al chofer le calcula el 18% sobre $68.000.
+///   2. **Comisión del chofer: 18% sobre la BASE de tarifa chofer**
+///      (Santiago 2026-05-13). La fórmula es:
+///        `montoChofer = (tarifaChofer × TN) × 0.18`
+///      Hardcoded — si en el futuro debe variar por chofer, se
+///      promueve a config en EMPLEADOS.
+///   3. **Redondeo: a múltiplo de 5 DESCENDENTE** sobre el monto
+///      chofer ya con la comisión aplicada. Vecchi factura el monto
+///      exacto al cliente; al chofer se le redondea por practicidad
+///      de pago en efectivo / transferencias redondas.
+///   4. Para tarifas POR_TONELADA: el monto se calcula sobre los
 ///      kg DESCARGADOS (lo efectivamente entregado al cliente).
 ///      Mientras el viaje está en curso (sin descargar), el cálculo
 ///      cae a kg CARGADOS como ESTIMADO. Cuando el operador carga
 ///      kg descargados, los montos se recalculan con esos.
-///   4. Liquidación al chofer = monto_chofer_redondeado − adelanto
+///   5. Liquidación al chofer = monto_chofer_redondeado − adelanto
 ///      + gastos_total. Los gastos extraordinarios (peajes,
 ///      combustible, comida) los paga el chofer y Vecchi se los
 ///      reembolsa.
@@ -45,7 +55,13 @@ class CalculosViaje {
   }
 
   /// Calcula los montos brutos sin aplicar comisión ni redondeo.
-  /// Devuelve (montoVecchi, montoChofer) según el tipo de tarifa.
+  /// Devuelve `(montoVecchi, baseChoferBruta)` según el tipo de tarifa.
+  ///
+  /// ⚠️ `baseChoferBruta` NO es lo que se le paga al chofer — es la
+  /// base de cálculo. Para obtener el monto del chofer hay que
+  /// multiplicar por `comisionPct / 100` (típicamente 0.18). Los
+  /// métodos públicos [calcularTodo] y [calcularTodoMultiTramo] ya
+  /// hacen esa aplicación; usá esos en lugar de llamar a este crudo.
   ///
   /// - POR_VIAJE: devuelve la tarifa fija tal cual.
   /// - POR_TONELADA: usa los kg DESCARGADOS si están (lo efectivamente
@@ -109,6 +125,11 @@ class CalculosViaje {
   /// viajes multi-tramo, usar [calcularTodoMultiTramo].
   ///
   /// `comisionPct` queda como 18 si pasás `null` (default operativo).
+  ///
+  /// Fórmula (Santiago 2026-05-13):
+  ///   baseBrutaChofer = tarifaChofer × TN
+  ///   montoChofer     = baseBrutaChofer × (comisionPct / 100)
+  ///   redondeado      = floor5(montoChofer)
   static MontosViaje calcularTodo({
     required UnidadTarifa unidadTarifa,
     required double tarifaReal,
@@ -127,7 +148,11 @@ class CalculosViaje {
       kgCargados: kgCargados,
       kgDescargados: kgDescargados,
     );
-    final redondeado = redondearMultiploDe5Descendente(brutos.montoChofer);
+    // El monto del chofer ES el porcentaje sobre la base bruta; lo que
+    // antes se llamaba "monto chofer" era en realidad la base bruta y
+    // se le pagaba el total — bug de cálculo corregido 2026-05-13.
+    final montoChofer = brutos.montoChofer * (pct / 100.0);
+    final redondeado = redondearMultiploDe5Descendente(montoChofer);
     final gastosTot = sumarGastos(gastos);
     final liquidacion = calcularLiquidacion(
       montoChoferRedondeado: redondeado,
@@ -136,7 +161,7 @@ class CalculosViaje {
     );
     return MontosViaje(
       montoVecchi: brutos.montoVecchi,
-      montoChofer: brutos.montoChofer,
+      montoChofer: montoChofer,
       montoChoferRedondeado: redondeado,
       comisionChoferPct: pct,
       gastosTotal: gastosTot,
@@ -149,11 +174,17 @@ class CalculosViaje {
   /// Estrategia:
   ///   1. Calcula brutos POR TRAMO usando la tarifa y kgs propios de
   ///      cada tramo.
-  ///   2. Suma los brutos de todos los tramos → totales del viaje.
-  ///   3. Aplica redondeo a múltiplo de 5 DESCENDENTE sobre la suma
-  ///      (el redondeo es sobre el total que se le paga al chofer,
-  ///      no por tramo — sino se acumularía error de redondeo).
-  ///   4. Resta adelanto + suma gastos para la liquidación final.
+  ///   2. Suma los brutos de todos los tramos → totales del viaje
+  ///      (base bruta chofer = suma de tarifaChofer × TN).
+  ///   3. Aplica el porcentaje de comisión sobre la base bruta total
+  ///      (Santiago 2026-05-13: corregido — antes se le pagaba al
+  ///      chofer la base bruta entera, ahora es el `comisionPct`% de
+  ///      esa base).
+  ///   4. Aplica redondeo a múltiplo de 5 DESCENDENTE sobre el monto
+  ///      con comisión aplicada (el redondeo es sobre el total que
+  ///      se le paga al chofer, no por tramo — sino se acumularía
+  ///      error de redondeo).
+  ///   5. Resta adelanto + suma gastos para la liquidación final.
   ///
   /// Si `tramos` es vacío (no debería pasar, el modelo garantiza ≥1),
   /// devuelve montos en cero.
@@ -165,7 +196,7 @@ class CalculosViaje {
   }) {
     final pct = comisionPct ?? comisionChoferDefaultPct;
     var totalVecchi = 0.0;
-    var totalChofer = 0.0;
+    var baseBrutaChofer = 0.0;
     for (final t in tramos) {
       final brutos = calcularMontosBrutos(
         unidadTarifa: t.tarifaSnapshot.unidadTarifa,
@@ -175,9 +206,13 @@ class CalculosViaje {
         kgDescargados: t.kgDescargados,
       );
       totalVecchi += brutos.montoVecchi;
-      totalChofer += brutos.montoChofer;
+      baseBrutaChofer += brutos.montoChofer;
     }
-    final redondeado = redondearMultiploDe5Descendente(totalChofer);
+    // Aplicamos la comisión sobre la suma total (no por tramo) para
+    // evitar amplificación de pequeños errores de redondeo en
+    // operaciones de coma flotante.
+    final montoChofer = baseBrutaChofer * (pct / 100.0);
+    final redondeado = redondearMultiploDe5Descendente(montoChofer);
     final gastosTot = sumarGastos(gastos);
     final liquidacion = calcularLiquidacion(
       montoChoferRedondeado: redondeado,
@@ -186,7 +221,7 @@ class CalculosViaje {
     );
     return MontosViaje(
       montoVecchi: totalVecchi,
-      montoChofer: totalChofer,
+      montoChofer: montoChofer,
       montoChoferRedondeado: redondeado,
       comisionChoferPct: pct,
       gastosTotal: gastosTot,

@@ -961,15 +961,16 @@ class _SeccionResumen extends StatelessWidget {
           )
         else ...[
           _LineaResumen(
-            label: 'Facturado a Vecchi',
+            label: 'Facturado a empresa',
             valor: '\$${AppFormatters.formatearMonto(montos!.montoVecchi)}',
           ),
           _LineaResumen(
-            label: 'Tarifa chofer (bruto)',
+            label:
+                'Comisión chofer (${montos!.comisionChoferPct.toStringAsFixed(0)}%)',
             valor: '\$${AppFormatters.formatearMonto(montos!.montoChofer)}',
           ),
           _LineaResumen(
-            label: 'Tarifa chofer (redondeada)',
+            label: 'Comisión chofer (redondeada)',
             valor:
                 '\$${AppFormatters.formatearMonto(montos!.montoChoferRedondeado)}',
             destacado: true,

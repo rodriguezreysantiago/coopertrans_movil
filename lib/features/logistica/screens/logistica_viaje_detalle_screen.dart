@@ -357,11 +357,12 @@ class _SeccionMontos extends StatelessWidget {
           valor: '\$ ${AppFormatters.formatearMonto(v.montoVecchi)}',
         ),
         _Linea(
-          label: 'Monto chofer (sin redondear)',
+          label:
+              'Comisión chofer (${v.comisionChoferPct.toStringAsFixed(0)}% s/ tarifa chofer)',
           valor: '\$ ${AppFormatters.formatearMonto(v.montoChofer)}',
         ),
         _Linea(
-          label: 'Monto chofer redondeado',
+          label: 'Comisión chofer redondeada',
           valor: '\$ ${AppFormatters.formatearMonto(v.montoChoferRedondeado)}',
           highlight: true,
         ),
@@ -371,11 +372,6 @@ class _SeccionMontos extends StatelessWidget {
             valor: '−\$ ${AppFormatters.formatearMonto(diferenciaRedondeo)}',
             sub: true,
           ),
-        _Linea(
-          label: 'Comisión chofer',
-          valor: '${v.comisionChoferPct.toStringAsFixed(0)}% sobre tarifa',
-          sub: true,
-        ),
         const Divider(height: 16),
         _Linea(
           label: 'Gastos extraordinarios',

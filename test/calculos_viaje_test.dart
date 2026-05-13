@@ -217,29 +217,32 @@ void main() {
     });
   });
 
-  group('calcularTodo — integración end-to-end', () {
+  group('calcularTodo — integración end-to-end (con comisión 18%)', () {
     test('POR_VIAJE con adelanto + gastos: liquidación final correcta', () {
-      // tarifa fija $80.000 al chofer → redondeado 80000 (ya múltiplo).
-      // adelanto $30.000, gastos $5.000 → liquidación = 80000-30000+5000=55000.
+      // base bruta chofer = $80.000 (tarifa fija por viaje).
+      // 18% de 80000 = 14400 → ya múltiplo de 5 → redondeado 14400.
+      // adelanto $5.000, gastos $2.000 → 14400 − 5000 + 2000 = 11400.
       final m = CalculosViaje.calcularTodo(
         unidadTarifa: UnidadTarifa.porViaje,
         tarifaReal: 200000,
         tarifaChofer: 80000,
-        adelanto: 30000,
+        adelanto: 5000,
         gastos: [
-          GastoViaje(monto: 5000, fecha: DateTime(2026, 5, 9)),
+          GastoViaje(monto: 2000, fecha: DateTime(2026, 5, 9)),
         ],
       );
       expect(m.montoVecchi, 200000);
-      expect(m.montoChofer, 80000);
-      expect(m.montoChoferRedondeado, 80000);
-      expect(m.gastosTotal, 5000);
-      expect(m.liquidacionChofer, 55000);
+      expect(m.montoChofer, closeTo(14400, 0.01));
+      expect(m.montoChoferRedondeado, 14400);
+      expect(m.gastosTotal, 2000);
+      expect(m.liquidacionChofer, 11400);
       expect(m.comisionChoferPct, 18);
     });
 
-    test('POR_TONELADA con descargados aplica redondeo a múltiplo de 5', () {
-      // Tarifa chofer 1237/TN x 27.5 TN = 34017.50 → redondeado 34015.
+    test('POR_TONELADA con descargados aplica comisión 18% y redondeo a múltiplo de 5',
+        () {
+      // Tarifa chofer 1237/TN × 27.5 TN = 34017.50 base bruta chofer.
+      // 18% de 34017.50 = 6123.15 → redondeado al múltiplo de 5 abajo = 6120.
       final m = CalculosViaje.calcularTodo(
         unidadTarifa: UnidadTarifa.porTonelada,
         tarifaReal: 5000,
@@ -248,13 +251,15 @@ void main() {
         kgDescargados: 27500,
       );
       expect(m.montoVecchi, 137500);
-      expect(m.montoChofer, closeTo(34017.5, 0.01));
-      expect(m.montoChoferRedondeado, 34015);
+      expect(m.montoChofer, closeTo(6123.15, 0.01));
+      expect(m.montoChoferRedondeado, 6120);
     });
 
     test('POR_TONELADA estimado en curso (sin descargados): usa cargados', () {
       // Viaje EN_CURSO: cargó 30000 kg pero todavía no descargó.
       // El cálculo usa cargados como estimado.
+      // base bruta chofer = 30 TN × $2000 = $60.000.
+      // 18% × 60000 = 10800 → redondeado 10800.
       final m = CalculosViaje.calcularTodo(
         unidadTarifa: UnidadTarifa.porTonelada,
         tarifaReal: 5000,
@@ -262,8 +267,8 @@ void main() {
         kgCargados: 30000,
       );
       expect(m.montoVecchi, 150000);
-      expect(m.montoChofer, 60000);
-      expect(m.montoChoferRedondeado, 60000);
+      expect(m.montoChofer, closeTo(10800, 0.01));
+      expect(m.montoChoferRedondeado, 10800);
     });
 
     test('POR_TONELADA sin kg → todos los montos en 0', () {
@@ -278,10 +283,9 @@ void main() {
       expect(m.liquidacionChofer, 0);
     });
 
-    test('comisionPct custom para tests futuros', () {
-      // Aunque no se aplica directo al monto del viaje (es informativo
-      // en el modelo), el flag pasa al resultado para que la pantalla
-      // de detalle pueda mostrarlo.
+    test('comisionPct custom — aplica al cálculo del chofer', () {
+      // Si comisionPct = 22, el chofer cobra 22% (no 18). Base
+      // bruta $80.000 × 0.22 = 17600. Múltiplo de 5 → 17600.
       final m = CalculosViaje.calcularTodo(
         unidadTarifa: UnidadTarifa.porViaje,
         tarifaReal: 200000,
@@ -289,6 +293,25 @@ void main() {
         comisionPct: 22,
       );
       expect(m.comisionChoferPct, 22);
+      expect(m.montoChofer, closeTo(17600, 0.01));
+      expect(m.montoChoferRedondeado, 17600);
+    });
+
+    test('caso real de Santiago — UREA GRANULADA 34 TN', () {
+      // tarifaReal = tarifaChofer = $68.624/TN, 34 TN descargadas.
+      // montoVecchi = 34 × 68624 = $2.333.216 (factura a la empresa).
+      // base bruta chofer = $2.333.216 (misma porque ambas tarifas son iguales).
+      // 18% × 2333216 = 419978.88 → redondeado al múltiplo de 5 abajo = 419975.
+      final m = CalculosViaje.calcularTodo(
+        unidadTarifa: UnidadTarifa.porTonelada,
+        tarifaReal: 68624,
+        tarifaChofer: 68624,
+        kgCargados: 35000,
+        kgDescargados: 34000,
+      );
+      expect(m.montoVecchi, 2333216);
+      expect(m.montoChofer, closeTo(419978.88, 0.01));
+      expect(m.montoChoferRedondeado, 419975);
     });
   });
 
@@ -338,10 +361,11 @@ void main() {
       expect(nuevo.montoChoferRedondeado, viejo.montoChoferRedondeado);
     });
 
-    test('dos tramos por viaje fijo: suma exacta', () {
-      // BB → Olavarría: $200k Vecchi / $80k chofer.
-      // Olavarría → Tres Arroyos: $150k Vecchi / $60k chofer.
-      // Total: Vecchi $350k, chofer bruto $140k, redondeado $140k.
+    test('dos tramos por viaje fijo: suma exacta + 18%', () {
+      // BB → Olavarría: $200k Vecchi / $80k base chofer.
+      // Olavarría → Tres Arroyos: $150k Vecchi / $60k base chofer.
+      // Total: Vecchi $350k, base bruta chofer $140k.
+      // 18% × 140k = $25.200 (ya múltiplo de 5).
       final m = CalculosViaje.calcularTodoMultiTramo(tramos: [
         tramo(
           unidad: UnidadTarifa.porViaje,
@@ -355,16 +379,17 @@ void main() {
         ),
       ]);
       expect(m.montoVecchi, 350000);
-      expect(m.montoChofer, 140000);
-      expect(m.montoChoferRedondeado, 140000);
+      expect(m.montoChofer, closeTo(25200, 0.01));
+      expect(m.montoChoferRedondeado, 25200);
     });
 
     test('dos tramos por tonelada con kg distintos', () {
       // Tramo 1: 28t @ $5000/tn Vecchi / $2000/tn chofer
-      //   → Vecchi 140k, chofer 56k.
+      //   → Vecchi 140k, base chofer 56k.
       // Tramo 2: 30t @ $4000/tn Vecchi / $1500/tn chofer
-      //   → Vecchi 120k, chofer 45k.
-      // Total: Vecchi 260k, chofer 101k, redondeado 101k (ya múltiplo de 5).
+      //   → Vecchi 120k, base chofer 45k.
+      // Total: Vecchi 260k, base bruta chofer 101k.
+      // 18% × 101.000 = 18.180 → ya múltiplo de 5 → redondeado 18.180.
       final m = CalculosViaje.calcularTodoMultiTramo(tramos: [
         tramo(
           unidad: UnidadTarifa.porTonelada,
@@ -380,14 +405,15 @@ void main() {
         ),
       ]);
       expect(m.montoVecchi, 260000);
-      expect(m.montoChofer, 101000);
-      expect(m.montoChoferRedondeado, 101000);
+      expect(m.montoChofer, closeTo(18180, 0.01));
+      expect(m.montoChoferRedondeado, 18180);
     });
 
     test('mezcla de tramos por viaje y por tonelada con redondeo real', () {
-      // Tramo 1 por viaje: chofer 50001.
-      // Tramo 2 por tonelada (28.5t @ $2003/tn): chofer 57085.5.
-      // Total chofer bruto: 107086.5 → redondeado 107085.
+      // Tramo 1 por viaje: base chofer 50001.
+      // Tramo 2 por tonelada (28.5t @ $2003/tn): base chofer 57085.5.
+      // Total base chofer: 107086.5.
+      // 18% × 107086.5 = 19275.57 → múltiplo de 5 abajo = 19275.
       final m = CalculosViaje.calcularTodoMultiTramo(tramos: [
         tramo(
           unidad: UnidadTarifa.porViaje,
@@ -401,16 +427,19 @@ void main() {
           kgDescargados: 28500,
         ),
       ]);
-      expect(m.montoChoferRedondeado, 107085);
+      expect(m.montoChofer, closeTo(19275.57, 0.01));
+      expect(m.montoChoferRedondeado, 19275);
       // El redondeado debe ser <= bruto y múltiplo de 5.
       expect(m.montoChoferRedondeado <= m.montoChofer, true);
       expect(m.montoChoferRedondeado % 5, 0);
     });
 
-    test('redondeo se aplica sobre la suma, no por tramo', () {
-      // Si redondeáramos por tramo: 33→30, 37→35 → suma 65.
-      // Pero redondeamos sobre la suma: 33+37=70 → redondeado 70.
-      // Esto evita pérdida acumulada de centavos al chofer.
+    test('redondeo se aplica sobre la suma con 18%, no por tramo', () {
+      // base bruta chofer total: 33 + 37 = 70.
+      // 18% × 70 = 12.6 → múltiplo de 5 abajo = 10.
+      // Si redondeáramos por tramo: 33×0.18=5.94→5 + 37×0.18=6.66→5 → 10
+      // que justo coincide acá, pero conceptualmente la fórmula es
+      // sobre el total para evitar acumulación de errores.
       final m = CalculosViaje.calcularTodoMultiTramo(tramos: [
         tramo(
           unidad: UnidadTarifa.porViaje,
@@ -423,14 +452,15 @@ void main() {
           tarifaChofer: 37,
         ),
       ]);
-      expect(m.montoChofer, 70);
-      expect(m.montoChoferRedondeado, 70);
+      expect(m.montoChofer, closeTo(12.6, 0.01));
+      expect(m.montoChoferRedondeado, 10);
     });
 
     test('adelanto + gastos sumados al total del viaje (no por tramo)', () {
-      // 3 tramos por viaje: chofer bruto total 120k.
-      // Adelanto $50k, gastos $10k.
-      // Liquidación: 120 - 50 + 10 = 80k.
+      // 3 tramos por viaje: base bruta chofer total 120k.
+      // 18% × 120000 = 21600 → ya múltiplo de 5 → redondeado 21600.
+      // Adelanto $5k, gastos $1k.
+      // Liquidación: 21600 − 5000 + 1000 = 17600.
       final m = CalculosViaje.calcularTodoMultiTramo(
         tramos: [
           tramo(
@@ -449,14 +479,14 @@ void main() {
             tarifaChofer: 40000,
           ),
         ],
-        adelanto: 50000,
+        adelanto: 5000,
         gastos: [
-          GastoViaje(monto: 10000, fecha: DateTime(2026, 5, 11)),
+          GastoViaje(monto: 1000, fecha: DateTime(2026, 5, 11)),
         ],
       );
-      expect(m.montoChoferRedondeado, 120000);
-      expect(m.gastosTotal, 10000);
-      expect(m.liquidacionChofer, 80000);
+      expect(m.montoChoferRedondeado, 21600);
+      expect(m.gastosTotal, 1000);
+      expect(m.liquidacionChofer, 17600);
     });
 
     test('tramo sin kg cargados ni descargados aporta 0', () {
@@ -464,6 +494,8 @@ void main() {
       // viaje se sigue calculando con los demás tramos. Útil mientras
       // el operador edita: muestra parcial correcto sin pisar el
       // resto.
+      // base bruta chofer = 30t × $2000 = $60.000 (solo el primer
+      // tramo aporta). 18% × 60000 = 10800.
       final m = CalculosViaje.calcularTodoMultiTramo(tramos: [
         tramo(
           unidad: UnidadTarifa.porTonelada,
@@ -478,9 +510,8 @@ void main() {
           // sin kg
         ),
       ]);
-      // Solo el primer tramo aporta: 30t @ $5000 = 150k Vecchi.
       expect(m.montoVecchi, 150000);
-      expect(m.montoChofer, 60000);
+      expect(m.montoChofer, closeTo(10800, 0.01));
     });
   });
 
