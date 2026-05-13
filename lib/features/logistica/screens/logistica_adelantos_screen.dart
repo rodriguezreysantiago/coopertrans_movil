@@ -521,7 +521,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                     ],
                   ],
                 )
-              : Text(_esEdicion ? 'GUARDAR' : 'CREAR E IMPRIMIR'),
+              : Text(_esEdicion ? 'GUARDAR' : 'CREAR'),
         ),
       ],
     );
