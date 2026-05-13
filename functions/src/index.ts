@@ -2902,6 +2902,12 @@ const VIGILADOR_DIARIO_LIMITE_SEGUNDOS = 12 * 3600;
 // que cruza medianoche se ve como "2 jornadas separadas" — antes del
 // fix 2026-05-13 perdíamos las jornadas nocturnas en el resumen.
 const VIGILADOR_DESCANSO_JORNADA_SEGUNDOS = 8 * 3600;
+// Pausa mínima para considerar que fue "descanso entre jornadas" (vs
+// pausa intra-jornada tipo almuerzo o espera de carga). Por debajo
+// de 4h asumimos que es pausa operativa normal y NO avisamos por
+// descanso corto. Entre 4h y 8h: descanso entre jornadas insuficiente
+// → avisar al chofer y sumarlo al resumen de Molina.
+const VIGILADOR_PAUSA_MIN_PARA_DESCANSO_SEGUNDOS = 4 * 3600;
 // Cap para evitar deltas locos si el cron estuvo caído mucho tiempo.
 // 10 min = 2 ciclos completos del cron de 5 min.
 const VIGILADOR_DELTA_MAX_SEGUNDOS = 600;
@@ -2930,6 +2936,7 @@ const AVISO_NO_ID_THROTTLE_SEGUNDOS = 30 * 60;
 const TTL_PAUSA_CONTINUA_MIN = 60; // 3h45 chofer
 const TTL_LIMITE_DIARIO_MIN = 120; // 11h30 chofer
 const TTL_JORNADA_EXCEDIDA_MIN = 60; // 12h chofer (excedió límite legal)
+const TTL_DESCANSO_CORTO_MIN = 60; // arrancó con < 8h descanso entre jornadas
 const TTL_FIN_NOCTURNO_MIN = 60; // 23:30 chofer (cuando se active)
 const TTL_VOLVO_MANEJO_MIN = 120; // OVERSPEED, IDLING, HARSH, PTO
 const TTL_PASA_IBUTTON_MIN = 30; // CHOFER_NO_IDENTIFICADO Sitrack
@@ -4258,11 +4265,14 @@ export const vigiladorJornadaChofer = onSchedule(
           let alerta345Enviada = false;
           let alerta1130Enviada = false;
           let alerta1200Enviada = false;
+          let avisoDescansoCortoEnviada = false;
+          let descansoCortoSegundos = 0;
           let pausaObligatoriaExcedida = false;
           let jornadaDiariaExcedida = false;
           let alerta345At: Timestamp | null = null;
           let alerta1130At: Timestamp | null = null;
           let alerta1200At: Timestamp | null = null;
+          let avisoDescansoCortoAt: Timestamp | null = null;
 
           if (!snapJ.exists) {
             // Primer poll del día para este chofer. Mirar el doc del
@@ -4285,6 +4295,10 @@ export const vigiladorJornadaChofer = onSchedule(
                 (dA.alerta_11_30_diaria_enviada as boolean) ?? false;
               alerta1200Enviada =
                 (dA.alerta_12_00_diaria_enviada as boolean) ?? false;
+              avisoDescansoCortoEnviada =
+                (dA.aviso_descanso_corto_enviada as boolean) ?? false;
+              descansoCortoSegundos =
+                (dA.descanso_corto_segundos as number) ?? 0;
               pausaObligatoriaExcedida =
                 (dA.pausa_obligatoria_excedida as boolean) ?? false;
               jornadaDiariaExcedida =
@@ -4302,9 +4316,12 @@ export const vigiladorJornadaChofer = onSchedule(
               alerta_3_45_continua_enviada: alerta345Enviada,
               alerta_11_30_diaria_enviada: alerta1130Enviada,
               alerta_12_00_diaria_enviada: alerta1200Enviada,
+              aviso_descanso_corto_enviada: avisoDescansoCortoEnviada,
+              descanso_corto_segundos: descansoCortoSegundos,
               alerta_3_45_continua_at: null,
               alerta_11_30_diaria_at: null,
               alerta_12_00_diaria_at: null,
+              aviso_descanso_corto_at: null,
               pausa_obligatoria_excedida: pausaObligatoriaExcedida,
               jornada_diaria_excedida: jornadaDiariaExcedida,
               creado_en: ahora,
@@ -4314,6 +4331,8 @@ export const vigiladorJornadaChofer = onSchedule(
               alertContinuo: false,
               alertDiario: false,
               alertDiarioLimite: false,
+              alertDescansoCorto: false,
+              descansoCortoSegundos: 0,
             };
           }
 
@@ -4342,6 +4361,10 @@ export const vigiladorJornadaChofer = onSchedule(
             (docJ.alerta_11_30_diaria_enviada as boolean) ?? false;
           alerta1200Enviada =
             (docJ.alerta_12_00_diaria_enviada as boolean) ?? false;
+          avisoDescansoCortoEnviada =
+            (docJ.aviso_descanso_corto_enviada as boolean) ?? false;
+          descansoCortoSegundos =
+            (docJ.descanso_corto_segundos as number) ?? 0;
           pausaObligatoriaExcedida =
             (docJ.pausa_obligatoria_excedida as boolean) ?? false;
           jornadaDiariaExcedida =
@@ -4352,9 +4375,35 @@ export const vigiladorJornadaChofer = onSchedule(
             (docJ.alerta_11_30_diaria_at as Timestamp | null) ?? null;
           alerta1200At =
             (docJ.alerta_12_00_diaria_at as Timestamp | null) ?? null;
+          avisoDescansoCortoAt =
+            (docJ.aviso_descanso_corto_at as Timestamp | null) ?? null;
 
+          // Bandera local: este poll dispara el aviso de descanso
+          // corto (chofer arrancó tras < 8 h de pausa, ≥ 4 h).
+          let alertDescansoCorto = false;
           if (speedEfectivo > VIGILADOR_UMBRAL_MOVIMIENTO_KMH) {
             // Manejando ahora.
+
+            // Detección descanso corto (< 8 h legal Argentina): si
+            // veníamos de una pausa larga (≥ 4 h, lo suficiente como
+            // para ser "descanso entre jornadas" y no almuerzo) pero
+            // menor al mínimo legal, avisar al chofer + sumar al
+            // resumen de Molina. Solo una vez por jornada (flag
+            // `aviso_descanso_corto_enviada`).
+            //
+            // ⚠️ Importante: chequear ANTES de los resets que ponen
+            // `segundosPausaActual = 0`.
+            if (
+              segundosPausaActual >=
+                VIGILADOR_PAUSA_MIN_PARA_DESCANSO_SEGUNDOS &&
+              segundosPausaActual < VIGILADOR_DESCANSO_JORNADA_SEGUNDOS &&
+              !avisoDescansoCortoEnviada
+            ) {
+              alertDescansoCorto = true;
+              avisoDescansoCortoEnviada = true;
+              descansoCortoSegundos = Math.floor(segundosPausaActual);
+            }
+
             // Reset del CONTINUO: pausa de 10 min sin movimiento.
             if (segundosPausaActual >= VIGILADOR_PAUSA_RESET_SEGUNDOS) {
               segundosContinuoActual = 0;
@@ -4363,11 +4412,14 @@ export const vigiladorJornadaChofer = onSchedule(
             // Reset de la JORNADA: pausa de 8h (descanso entre
             // jornadas, mínimo Argentina). Resetea jornada_actual y
             // todas las flags de alerta diaria + el flag de exceso
-            // continuo (la jornada nueva arranca con todo limpio).
+            // continuo + flag/segundos de descanso corto (la jornada
+            // nueva arranca con todo limpio).
             if (segundosPausaActual >= VIGILADOR_DESCANSO_JORNADA_SEGUNDOS) {
               segundosJornadaActual = 0;
               alerta1130Enviada = false;
               alerta1200Enviada = false;
+              avisoDescansoCortoEnviada = false;
+              descansoCortoSegundos = 0;
               jornadaDiariaExcedida = false;
               pausaObligatoriaExcedida = false;
             }
@@ -4381,7 +4433,8 @@ export const vigiladorJornadaChofer = onSchedule(
             // continuo, jornada y total NO se mueven.
           }
 
-          // Chequear umbrales de alerta.
+          // Chequear umbrales de alerta. `alertDescansoCorto` ya
+          // viene seteado del bloque speed>umbral.
           let alertContinuo = false;
           let alertDiario = false;
           let alertDiarioLimite = false;
@@ -4430,14 +4483,25 @@ export const vigiladorJornadaChofer = onSchedule(
             alerta_3_45_continua_enviada: alerta345Enviada,
             alerta_11_30_diaria_enviada: alerta1130Enviada,
             alerta_12_00_diaria_enviada: alerta1200Enviada,
+            aviso_descanso_corto_enviada: avisoDescansoCortoEnviada,
+            descanso_corto_segundos: descansoCortoSegundos,
             alerta_3_45_continua_at: alertContinuo ? ahora : alerta345At,
             alerta_11_30_diaria_at: alertDiario ? ahora : alerta1130At,
             alerta_12_00_diaria_at: alertDiarioLimite ? ahora : alerta1200At,
+            aviso_descanso_corto_at: alertDescansoCorto ?
+              ahora :
+              avisoDescansoCortoAt,
             pausa_obligatoria_excedida: pausaObligatoriaExcedida,
             jornada_diaria_excedida: jornadaDiariaExcedida,
           });
 
-          return { alertContinuo, alertDiario, alertDiarioLimite };
+          return {
+            alertContinuo,
+            alertDiario,
+            alertDiarioLimite,
+            alertDescansoCorto,
+            descansoCortoSegundos,
+          };
         });
 
         if (result.alertContinuo) {
@@ -4450,6 +4514,14 @@ export const vigiladorJornadaChofer = onSchedule(
         }
         if (result.alertDiarioLimite) {
           await _encolarAvisoJornadaExcedida(driverDni, patente);
+          alertasDiarioEnviadas++;
+        }
+        if (result.alertDescansoCorto) {
+          await _encolarAvisoDescansoCorto(
+            driverDni,
+            patente,
+            result.descansoCortoSegundos
+          );
           alertasDiarioEnviadas++;
         }
       } catch (e) {
@@ -4729,6 +4801,104 @@ async function _encolarAvisoJornadaExcedida(
 }
 
 /**
+ * Encola el aviso "arrancaste con menos de 8 h de descanso entre
+ * jornadas" — se dispara la primera vez que el chofer maneja tras
+ * una pausa de [4 h, 8 h). El mínimo legal Argentina (Ley 24653
+ * art. 53) son 8 h; si Sebas terminó ayer a las 23:00 y arrancó hoy
+ * a las 04:00 (5 h de descanso) cae en ese rango.
+ *
+ * Pausas más cortas que 4 h se consideran intra-jornada (almuerzo
+ * largo, espera de carga) y no disparan este aviso. Pausas mayores
+ * a 8 h ya son descanso válido entre jornadas.
+ */
+async function _encolarAvisoDescansoCorto(
+  choferDni: string,
+  patente: string,
+  descansoSegundos: number
+): Promise<void> {
+  const empSnap = await db.collection("EMPLEADOS").doc(choferDni).get();
+  if (!empSnap.exists) return;
+  const empData = empSnap.data() ?? {};
+  if (empData.ACTIVO === false) return;
+  const tel = (empData.TELEFONO ?? "").toString().trim();
+  if (!tel || tel === "-") return;
+
+  const apodo = (empData.APODO ?? "").toString().trim();
+  const nombreFull = (empData.NOMBRE ?? "").toString().trim();
+  const saludoNombre = apodo || _primerNombre(nombreFull) || "";
+  const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
+
+  const horas = Math.floor(descansoSegundos / 3600);
+  const minutos = Math.floor((descansoSegundos % 3600) / 60);
+  const descansoStr = `${horas}h ${minutos.toString().padStart(2, "0")}m`;
+
+  // 6 variantes anti-baneo igual que los otros avisos al chofer.
+  const variantes = [
+    `${saludo},\n\n` +
+      `Arrancaste la jornada con ${descansoStr} de descanso desde la ` +
+      "última vez que manejaste. El mínimo legal son 8 horas.\n\n" +
+      "Tenelo en cuenta para hoy — si te sentís cansado, parar a " +
+      "descansar.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}.\n\n` +
+      `Aviso: tu descanso entre jornadas fue de ${descansoStr}. La ` +
+      "norma legal pide 8 h mínimo.\n\n" +
+      `Manejá con precaución el ${patente}, sobre todo en las ` +
+      "primeras horas.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}, atención.\n\n` +
+      `Estás arrancando la jornada con ${descansoStr} desde la ` +
+      "anterior — menos de 8 horas. Por norma, el descanso " +
+      "obligatorio entre jornadas es 8 horas como mínimo.\n\n" +
+      "Si te sentís cansado, frená a descansar.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}.\n\n` +
+      `Tu descanso entre jornadas fue de ${descansoStr}. El mínimo ` +
+      "legal son 8 h — estás por debajo.\n\n" +
+      `Manejá con precaución el ${patente}. Si necesitás parar, ` +
+      "buscá un lugar seguro y descansá.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}, recordatorio.\n\n` +
+      `Arrancaste la jornada con ${descansoStr} de descanso. La ley ` +
+      "pide 8 h entre jornadas — quedaste corto.\n\n" +
+      `Tomalo en cuenta hoy con el ${patente}. Si te sentís cansado, ` +
+      "parar.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}.\n\n` +
+      "Por norma de manejo, entre jornadas hay que descansar 8 horas " +
+      `mínimo. Vos descansaste ${descansoStr}.\n\n` +
+      `Cuidado con el ${patente} hoy — si te sentís cansado, frená.\n\n` +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+  ];
+  const mensaje = variantes[_rrPick(variantes.length)];
+
+  await db.collection("COLA_WHATSAPP").add({
+    telefono: tel,
+    mensaje,
+    estado: "PENDIENTE",
+    encolado_en: FieldValue.serverTimestamp(),
+    expira_en: _expiraEnMinutos(TTL_DESCANSO_CORTO_MIN),
+    enviado_en: null,
+    error: null,
+    intentos: 0,
+    origen: "jornada_descanso_corto",
+    destinatario_coleccion: "EMPLEADOS",
+    destinatario_id: choferDni,
+    campo_base: "JORNADA",
+    admin_dni: "BOT",
+    admin_nombre: "Bot vigilador jornada",
+    alert_patente: patente,
+    descanso_segundos: descansoSegundos,
+  });
+}
+
+/**
  * Devuelve la fecha ART del día anterior a la fecha dada
  * (formato YYYY-MM-DD). Usada para hidratar el doc nuevo de
  * `JORNADAS_CHOFER` desde el doc del día anterior cuando una
@@ -4873,6 +5043,7 @@ export const resumenExcesosJornadaDiario = onSchedule(
       segundosContinuoMax: number;
       excedio4hContinua: boolean;
       excedio12hDiaria: boolean;
+      descansoCortoSegundos: number;
     }
 
     const excesos: ExcesoChofer[] = [];
@@ -4880,7 +5051,13 @@ export const resumenExcesosJornadaDiario = onSchedule(
       const data = d.data();
       const excedio4h = data.pausa_obligatoria_excedida === true;
       const excedio12h = data.jornada_diaria_excedida === true;
-      if (!excedio4h && !excedio12h) continue;
+      const descansoCorto =
+        (data.descanso_corto_segundos as number) ?? 0;
+      // Incluir choferes que excedieron continuo/diario O que
+      // arrancaron con descanso < 8h. El descanso corto es un tipo
+      // de "exceso de jornada" aunque no haya pasado los umbrales
+      // de continuo/diario en ese día.
+      if (!excedio4h && !excedio12h && descansoCorto <= 0) continue;
       excesos.push({
         choferDni: (data.chofer_dni ?? "").toString(),
         patente: (data.ultima_patente ?? "").toString(),
@@ -4897,6 +5074,7 @@ export const resumenExcesosJornadaDiario = onSchedule(
           (data.segundos_continuo_actual as number) ?? 0,
         excedio4hContinua: excedio4h,
         excedio12hDiaria: excedio12h,
+        descansoCortoSegundos: descansoCorto,
       });
     }
 
@@ -4939,8 +5117,9 @@ export const resumenExcesosJornadaDiario = onSchedule(
       const mensajeOk =
         `${saludoOk},\n\n` +
         `📋 *Resumen excesos de jornada — ${fmtFechaOk}*\n\n` +
-        "✅ Sin excesos: ningún chofer cruzó las 4 h continuas " +
-        "ni las 12 h diarias ese día.\n\n" +
+        "✅ Sin incidencias: ningún chofer cruzó las 4 h continuas, " +
+        "las 12 h diarias ni arrancó con menos de 8 h de descanso " +
+        "ese día.\n\n" +
         BANNER_TESTING +
         "_Coopertrans Móvil — Aviso automático._";
       await db.collection("COLA_WHATSAPP").add({
@@ -4991,6 +5170,11 @@ export const resumenExcesosJornadaDiario = onSchedule(
       const flags: string[] = [];
       if (x.excedio4hContinua) flags.push("4h continuas");
       if (x.excedio12hDiaria) flags.push("12h diarias");
+      if (x.descansoCortoSegundos > 0) {
+        flags.push(
+          `descanso corto (${fmtHm(x.descansoCortoSegundos)} entre jornadas)`
+        );
+      }
       // Si la jornada (que puede cruzar medianoche) es mayor que el
       // total del día calendario, mostramos AMBOS para que Molina vea
       // que la jornada empezó el día anterior. Sin esto el resumen
@@ -5005,7 +5189,7 @@ export const resumenExcesosJornadaDiario = onSchedule(
         `   Total día calendario: ${fmtHm(x.segundosTotal)} hs\n` +
         lineaJornada +
         `   Continuo máx: ${fmtHm(x.segundosContinuoMax)} hs\n` +
-        `   ⚠️ Excedió: ${flags.join(", ")}`
+        `   ⚠️ ${flags.join(", ")}`
       );
     });
 
@@ -5018,10 +5202,11 @@ export const resumenExcesosJornadaDiario = onSchedule(
       `${saludo},\n\n` +
       `📋 *Resumen excesos de jornada — ${fmtFecha}*\n\n` +
       `${excesos.length} chofer${excesos.length === 1 ? "" : "es"} ` +
-      "excedió límites de manejo:\n\n" +
+      "con incidencias de jornada:\n\n" +
       `${lineas.join("\n\n")}\n\n` +
       "_Datos calculados por el vigilador (Sitrack speed > 15 km/h, " +
-      "pausa válida 10 min, jornada nueva tras 8 h de descanso)._\n\n" +
+      "pausa válida 10 min, jornada nueva tras 8 h de descanso, " +
+      "descanso entre jornadas mínimo legal 8 h)._\n\n" +
       BANNER_TESTING +
       "_Coopertrans Móvil — Aviso automático._";
 
