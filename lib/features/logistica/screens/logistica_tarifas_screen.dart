@@ -6,6 +6,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../../../shared/widgets/keyboard_shortcuts.dart';
 import '../models/tarifa_logistica.dart';
 import '../models/ubicacion_logistica.dart';
 import '../services/logistica_geo_utils.dart';
@@ -24,27 +25,37 @@ class LogisticaTarifasScreen extends StatefulWidget {
 class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
   String _filtro = '';
   bool _soloActivas = true;
+  final FocusNode _buscarFocus = FocusNode();
+
+  @override
+  void dispose() {
+    _buscarFocus.dispose();
+    super.dispose();
+  }
+
+  void _abrirNueva() {
+    Navigator.pushNamed(context, AppRoutes.adminLogisticaTarifaForm);
+  }
 
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Tarifas',
-      floatingActionButton: Builder(
-        builder: (ctx) => FloatingActionButton.extended(
-          backgroundColor: AppColors.accentGreen,
-          onPressed: () => Navigator.pushNamed(
-            ctx,
-            AppRoutes.adminLogisticaTarifaForm,
-          ),
-          icon: const Icon(Icons.add),
-          label: const Text('NUEVA TARIFA'),
-        ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: AppColors.accentGreen,
+        onPressed: _abrirNueva,
+        icon: const Icon(Icons.add),
+        label: const Text('NUEVA TARIFA'),
       ),
-      body: Column(
+      body: KeyboardShortcutsScope(
+        onNuevo: _abrirNueva,
+        buscarFocusNode: _buscarFocus,
+        child: Column(
         children: [
           _BarraFiltros(
             filtroInicial: _filtro,
             soloActivas: _soloActivas,
+            buscarFocus: _buscarFocus,
             onCambioFiltro: (v) => setState(() => _filtro = v),
             onCambioActivas: (v) => setState(() => _soloActivas = v),
           ),
@@ -105,6 +116,7 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -140,6 +152,7 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
 class _BarraFiltros extends StatelessWidget {
   final String filtroInicial;
   final bool soloActivas;
+  final FocusNode? buscarFocus;
   final ValueChanged<String> onCambioFiltro;
   final ValueChanged<bool> onCambioActivas;
 
@@ -148,6 +161,7 @@ class _BarraFiltros extends StatelessWidget {
     required this.soloActivas,
     required this.onCambioFiltro,
     required this.onCambioActivas,
+    this.buscarFocus,
   });
 
   @override
@@ -158,6 +172,7 @@ class _BarraFiltros extends StatelessWidget {
         children: [
           Expanded(
             child: TextField(
+              focusNode: buscarFocus,
               onChanged: onCambioFiltro,
               decoration: const InputDecoration(
                 hintText: 'Buscar por empresa, ubicación, dador o producto…',

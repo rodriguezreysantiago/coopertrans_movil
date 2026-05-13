@@ -8,6 +8,7 @@ import '../../../shared/utils/digit_only_formatter.dart';
 import '../../../shared/utils/phone_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../../shared/widgets/dato_editable.dart';
+import '../../../shared/widgets/keyboard_shortcuts.dart';
 import '../models/empresa_logistica.dart';
 import '../models/ubicacion_logistica.dart';
 import '../services/logistica_service.dart';
@@ -53,6 +54,13 @@ class _ListaEmpresas extends StatefulWidget {
 
 class _ListaEmpresasState extends State<_ListaEmpresas> {
   String _filtro = '';
+  final FocusNode _buscarFocus = FocusNode();
+
+  @override
+  void dispose() {
+    _buscarFocus.dispose();
+    super.dispose();
+  }
 
   /// Tokeniza el filtro y exige que TODOS los tokens estén presentes
   /// en algún campo de la empresa. Permite buscar "vecchi 2914" y
@@ -80,13 +88,17 @@ class _ListaEmpresasState extends State<_ListaEmpresas> {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
+    return KeyboardShortcutsScope(
+      onNuevo: _abrirAlta,
+      buscarFocusNode: _buscarFocus,
+      child: Stack(
       children: [
         Column(
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
               child: TextField(
+                focusNode: _buscarFocus,
                 decoration: InputDecoration(
                   prefixIcon: const Icon(Icons.search, size: 20),
                   hintText: widget.tipo == TipoEmpresaLogistica.cliente
@@ -170,6 +182,7 @@ class _ListaEmpresasState extends State<_ListaEmpresas> {
           ),
         ),
       ],
+      ),
     );
   }
 

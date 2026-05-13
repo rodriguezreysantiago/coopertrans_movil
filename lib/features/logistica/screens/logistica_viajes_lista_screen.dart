@@ -6,6 +6,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../../../shared/widgets/keyboard_shortcuts.dart';
 import '../models/viaje.dart';
 import '../services/viajes_service.dart';
 
@@ -29,60 +30,67 @@ class _LogisticaViajesListaScreenState
   bool? _filtroLiquidado; // null = todos, true = solo liquidados, false = solo no
   bool _verBorrados = false;
 
+  void _abrirNuevoViaje() {
+    Navigator.pushNamed(context, AppRoutes.adminLogisticaViajeForm);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Viajes',
-      body: Column(
-        children: [
-          _BarraFiltros(
-            estado: _filtroEstado,
-            liquidado: _filtroLiquidado,
-            verBorrados: _verBorrados,
-            onEstadoChanged: (v) => setState(() => _filtroEstado = v),
-            onLiquidadoChanged: (v) => setState(() => _filtroLiquidado = v),
-            onVerBorradosChanged: (v) => setState(() => _verBorrados = v),
-          ),
-          Expanded(
-            child: StreamBuilder<List<Viaje>>(
-              stream: ViajesService.streamViajes(
-                incluirInactivos: _verBorrados,
-              ),
-              builder: (ctx, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Error: ${snap.error}',
-                        style: const TextStyle(color: AppColors.accentRed),
-                      ),
-                    ),
-                  );
-                }
-                final todos = snap.data ?? const <Viaje>[];
-                final filtrados = _aplicarFiltros(todos);
-                if (filtrados.isEmpty) {
-                  return _EstadoVacio(haDatos: todos.isNotEmpty);
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-                  itemCount: filtrados.length,
-                  itemBuilder: (_, i) => _ViajeTile(viaje: filtrados[i]),
-                );
-              },
+      // Ctrl+N → nuevo viaje (operador desktop tipea mucho —
+      // Santiago 2026-05-13). Sin search field acá, así que no
+      // mapeamos Ctrl+F.
+      body: KeyboardShortcutsScope(
+        onNuevo: _abrirNuevoViaje,
+        child: Column(
+          children: [
+            _BarraFiltros(
+              estado: _filtroEstado,
+              liquidado: _filtroLiquidado,
+              verBorrados: _verBorrados,
+              onEstadoChanged: (v) => setState(() => _filtroEstado = v),
+              onLiquidadoChanged: (v) => setState(() => _filtroLiquidado = v),
+              onVerBorradosChanged: (v) => setState(() => _verBorrados = v),
             ),
-          ),
-        ],
+            Expanded(
+              child: StreamBuilder<List<Viaje>>(
+                stream: ViajesService.streamViajes(
+                  incluirInactivos: _verBorrados,
+                ),
+                builder: (ctx, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snap.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'Error: ${snap.error}',
+                          style: const TextStyle(color: AppColors.accentRed),
+                        ),
+                      ),
+                    );
+                  }
+                  final todos = snap.data ?? const <Viaje>[];
+                  final filtrados = _aplicarFiltros(todos);
+                  if (filtrados.isEmpty) {
+                    return _EstadoVacio(haDatos: todos.isNotEmpty);
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                    itemCount: filtrados.length,
+                    itemBuilder: (_, i) => _ViajeTile(viaje: filtrados[i]),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.pushNamed(
-          context,
-          AppRoutes.adminLogisticaViajeForm,
-        ),
+        onPressed: _abrirNuevoViaje,
         backgroundColor: AppColors.accentOrange,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),

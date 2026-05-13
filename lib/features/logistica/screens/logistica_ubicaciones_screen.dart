@@ -6,6 +6,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../../shared/widgets/dato_editable.dart';
+import '../../../shared/widgets/keyboard_shortcuts.dart';
 import '../models/empresa_logistica.dart';
 import '../models/ubicacion_logistica.dart';
 import '../services/logistica_service.dart';
@@ -33,6 +34,13 @@ class _LogisticaUbicacionesScreenState
   /// instantáneo. Match por nombre, localidad, provincia y dirección
   /// (todo case-insensitive).
   String _filtro = '';
+  final FocusNode _buscarFocus = FocusNode();
+
+  @override
+  void dispose() {
+    _buscarFocus.dispose();
+    super.dispose();
+  }
 
   /// Filtra la lista por el texto tipeado. Tokeniza por espacios y
   /// exige que TODOS los tokens estén presentes en algún campo de la
@@ -69,11 +77,15 @@ class _LogisticaUbicacionesScreenState
           label: const Text('NUEVA UBICACIÓN'),
         ),
       ),
-      body: Column(
+      body: KeyboardShortcutsScope(
+        onNuevo: () => _abrirAlta(context),
+        buscarFocusNode: _buscarFocus,
+        child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: TextField(
+              focusNode: _buscarFocus,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search, size: 20),
                 hintText: 'Buscar por nombre, localidad, empresa…',
@@ -136,6 +148,7 @@ class _LogisticaUbicacionesScreenState
             ),
           ),
         ],
+      ),
       ),
     );
   }

@@ -14,6 +14,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../../../shared/widgets/keyboard_shortcuts.dart';
 import '../models/adelanto_chofer.dart';
 import '../services/adelantos_service.dart';
 import '../services/recibos_adelanto_service.dart';
@@ -39,11 +40,20 @@ class LogisticaAdelantosScreen extends StatefulWidget {
 class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
   String _filtro = '';
 
+  /// FocusNode del campo de búsqueda — Ctrl+F lo enfoca.
+  final FocusNode _buscarFocus = FocusNode();
+
   /// Filtros de fecha (desde/hasta, inclusive). Si null, no aplica.
   /// El operador suele querer "los adelantos de este mes" o "del último
   /// pago de sueldo hasta hoy" — el rango lo arma con 2 date pickers.
   DateTime? _fechaDesde;
   DateTime? _fechaHasta;
+
+  @override
+  void dispose() {
+    _buscarFocus.dispose();
+    super.dispose();
+  }
 
   /// IDs de adelantos PENDIENTES deseleccionados para el resumen.
   /// Default: todos los pendientes visibles están seleccionados (set
@@ -97,11 +107,19 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
           label: const Text('NUEVO ADELANTO'),
         ),
       ),
-      body: Column(
+      // Atajos desktop (Santiago 2026-05-13): Ctrl+N nuevo adelanto,
+      // Ctrl+F enfoca el buscador. Wrappeamos el body completo así
+      // los atajos disparan aún si el operador está scroleando o el
+      // foco está en una card.
+      body: KeyboardShortcutsScope(
+        onNuevo: () => _abrirAlta(context),
+        buscarFocusNode: _buscarFocus,
+        child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
             child: TextField(
+              focusNode: _buscarFocus,
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.search, size: 20),
                 hintText: 'Buscar por chofer, observación…',
@@ -228,6 +246,7 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
             ),
           ),
         ],
+      ),
       ),
     );
   }
