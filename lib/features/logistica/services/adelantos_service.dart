@@ -135,6 +135,11 @@ class AdelantosService {
         'observacion': observacion.trim(),
       'medio_pago': medioPago.codigo,
       if (viajeId != null && viajeId.trim().isNotEmpty) 'viaje_id': viajeId,
+      // Estado de pago: los adelantos nuevos arrancan en pendiente.
+      // El resumen PDF de "pendientes" los va a listar hasta que el
+      // operador los marque pagados (en bulk al imprimir o uno a
+      // uno desde la card).
+      'pagado': false,
       'creado_en': FieldValue.serverTimestamp(),
       'creado_por_dni': creadoPorDni,
       if (creadoPorNombre != null) 'creado_por_nombre': creadoPorNombre,
@@ -232,6 +237,67 @@ class AdelantosService {
         .get();
     if (snap.docs.isEmpty) return null;
     return AdelantoChofer.fromDoc(snap.docs.first);
+  }
+
+  /// Toggle del estado `pagado` de un adelanto. Si `pagado == true`,
+  /// registra `pagado_en` con server timestamp y `pagado_por_dni`.
+  /// Si pasamos `pagado == false`, limpia ambos.
+  ///
+  /// Idempotente: llamar 2 veces con el mismo valor no rompe nada
+  /// (solo actualiza `actualizado_en`).
+  static Future<void> setPagado({
+    required String adelantoId,
+    required bool pagado,
+    required String marcadoPorDni,
+  }) async {
+    if (adelantoId.isEmpty) {
+      throw ArgumentError('adelantoId vacío.');
+    }
+    final data = <String, dynamic>{
+      'pagado': pagado,
+      if (pagado)
+        'pagado_en': FieldValue.serverTimestamp()
+      else
+        'pagado_en': FieldValue.delete(),
+      if (pagado)
+        'pagado_por_dni': marcadoPorDni
+      else
+        'pagado_por_dni': FieldValue.delete(),
+      'actualizado_en': FieldValue.serverTimestamp(),
+      'actualizado_por_dni': marcadoPorDni,
+    };
+    await _col.doc(adelantoId).update(data);
+    AppLogger.log(
+      'Adelanto $adelantoId → pagado=$pagado por $marcadoPorDni',
+    );
+  }
+
+  /// Marca varios adelantos como pagados en una sola operación (batch).
+  /// Usado por el flujo "imprimí el resumen → marcame todos como
+  /// pagados". Tira si la lista está vacía.
+  static Future<void> marcarPagadosBulk({
+    required List<String> adelantoIds,
+    required String marcadoPorDni,
+  }) async {
+    if (adelantoIds.isEmpty) return;
+    // Firestore acepta 500 ops por batch; las listas reales son chicas
+    // (< 30 adelantos típicamente) así que 1 batch alcanza. Si en algún
+    // momento se vuelve > 500, partir en chunks.
+    final batch = _db.batch();
+    for (final id in adelantoIds) {
+      batch.update(_col.doc(id), {
+        'pagado': true,
+        'pagado_en': FieldValue.serverTimestamp(),
+        'pagado_por_dni': marcadoPorDni,
+        'actualizado_en': FieldValue.serverTimestamp(),
+        'actualizado_por_dni': marcadoPorDni,
+      });
+    }
+    await batch.commit();
+    AppLogger.log(
+      'Adelantos marcados como pagados: ${adelantoIds.length} '
+      '(por $marcadoPorDni)',
+    );
   }
 
   /// Hard-delete del adelanto. Idempotente (si no existe, no hace nada).

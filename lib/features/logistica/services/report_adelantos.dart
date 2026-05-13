@@ -67,10 +67,10 @@ class ReportAdelantosService {
 
       final pdfBytes = await _generarPdf(ordenados);
 
-      // Nombre tipo "Resumen-Adelantos-2026-05-13_HHmmss.pdf".
+      // Nombre tipo "Adelantos-Pendientes-2026-05-13_HHmmss.pdf".
       final ts = DateTime.now();
       final nombreArchivo =
-          'Resumen-Adelantos-${_slugFecha(ts)}_${_hhmmss(ts)}.pdf';
+          'Adelantos-Pendientes-${_slugFecha(ts)}_${_hhmmss(ts)}.pdf';
 
       final impresoOk = await _imprimirDirecto(pdfBytes, nombreArchivo);
       if (impresoOk) {
@@ -178,7 +178,7 @@ class ReportAdelantosService {
                     ),
                     pw.SizedBox(height: 2),
                     pw.Text(
-                      'Resumen de adelantos',
+                      'Adelantos pendientes de pago',
                       style: const pw.TextStyle(
                         fontSize: 11,
                         color: PdfColors.grey700,

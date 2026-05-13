@@ -45,22 +45,44 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
   DateTime? _fechaDesde;
   DateTime? _fechaHasta;
 
-  /// IDs de adelantos DESELECCIONADOS para el export Excel. Default:
-  /// todos los visibles están seleccionados (set vacío). El operador
-  /// destildea los que NO quiere incluir en el resumen — más común
-  /// que tildar uno por uno cuando son muchos.
+  /// IDs de adelantos PENDIENTES deseleccionados para el resumen.
+  /// Default: todos los pendientes visibles están seleccionados (set
+  /// vacío). El operador destildea los que NO quiere incluir.
+  /// **Los adelantos PAGADOS NUNCA son seleccionables** — ya están
+  /// liquidados, no tiene sentido reimprimirlos en el resumen de
+  /// pendientes. El operador puede toggle pagado/pendiente por card.
   final Set<String> _deseleccionados = {};
 
-  bool _seleccionado(String id) => !_deseleccionados.contains(id);
+  bool _seleccionable(AdelantoChofer a) => !a.pagado;
+  bool _seleccionado(AdelantoChofer a) =>
+      _seleccionable(a) && !_deseleccionados.contains(a.id);
 
-  void _toggleSeleccion(String id) {
+  void _toggleSeleccion(AdelantoChofer a) {
+    if (!_seleccionable(a)) return;
     setState(() {
-      if (_deseleccionados.contains(id)) {
-        _deseleccionados.remove(id);
+      if (_deseleccionados.contains(a.id)) {
+        _deseleccionados.remove(a.id);
       } else {
-        _deseleccionados.add(id);
+        _deseleccionados.add(a.id);
       }
     });
+  }
+
+  Future<void> _togglePagado(AdelantoChofer a) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await AdelantosService.setPagado(
+        adelantoId: a.id,
+        pagado: !a.pagado,
+        marcadoPorDni: PrefsService.dni,
+      );
+      AppFeedback.successOn(
+        messenger,
+        a.pagado ? 'Adelanto marcado como pendiente.' : 'Adelanto marcado como pagado.',
+      );
+    } catch (e) {
+      AppFeedback.errorOn(messenger, 'Error: $e');
+    }
   }
 
   @override
@@ -160,23 +182,25 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                         'Probá cambiar el rango de fechas o el texto.',
                   );
                 }
-                // Barra de selección + export. Solo aparece cuando hay
-                // al menos un adelanto en la lista filtrada (sino el
-                // botón "EXPORTAR" no tiene nada que mandar).
-                final seleccionados = filtrados
-                    .where((a) => _seleccionado(a.id))
+                // Barra de selección + imprimir. La lista muestra
+                // todos los adelantos (pagados + pendientes). Solo
+                // los PENDIENTES son seleccionables para el resumen.
+                final pendientes =
+                    filtrados.where(_seleccionable).toList();
+                final seleccionados = pendientes
+                    .where(_seleccionado)
                     .toList();
                 return Column(
                   children: [
                     _BarraSeleccion(
-                      totalVisibles: filtrados.length,
+                      totalPendientes: pendientes.length,
                       totalSeleccionados: seleccionados.length,
                       onSeleccionarTodos: () =>
                           setState(() => _deseleccionados.clear()),
                       onDeseleccionarTodos: () => setState(() =>
                           _deseleccionados.addAll(
-                              filtrados.map((a) => a.id))),
-                      onExportar: seleccionados.isEmpty
+                              pendientes.map((a) => a.id))),
+                      onImprimir: seleccionados.isEmpty
                           ? null
                           : () => _imprimirResumen(seleccionados),
                     ),
@@ -191,8 +215,9 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                           final a = filtrados[i];
                           return _CardAdelanto(
                             adelanto: a,
-                            seleccionado: _seleccionado(a.id),
-                            onToggleSeleccion: () => _toggleSeleccion(a.id),
+                            seleccionado: _seleccionado(a),
+                            onToggleSeleccion: () => _toggleSeleccion(a),
+                            onTogglePagado: () => _togglePagado(a),
                           );
                         },
                       ),
@@ -259,6 +284,53 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
       fechaDesde: _fechaDesde,
       fechaHasta: _fechaHasta,
     );
+    // Después de imprimir, ofrecer marcar como pagados en bulk. El
+    // flow operativo es: "imprimo el resumen para que la oficina
+    // pague → cuando ya pagaron, marco todos como pagados". Si el
+    // operador decide hacerlo después manualmente, también puede.
+    if (!mounted) return;
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        backgroundColor: Theme.of(dCtx).colorScheme.surface,
+        title: const Text('¿Marcar estos adelantos como pagados?'),
+        content: Text(
+          'Acabás de imprimir el resumen de ${seleccionados.length} '
+          'adelanto(s). Si ya se pagaron, podés marcarlos ahora — '
+          'dejarán de aparecer en el próximo resumen de pendientes.\n\n'
+          'Si todavía falta efectivamente pagarlos, dale "Más tarde" '
+          'y los marcás cuando corresponda.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx, false),
+            child: const Text('MÁS TARDE'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.accentGreen,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () => Navigator.pop(dCtx, true),
+            child: const Text('MARCAR PAGADOS'),
+          ),
+        ],
+      ),
+    );
+    if (confirmar != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await AdelantosService.marcarPagadosBulk(
+        adelantoIds: seleccionados.map((a) => a.id).toList(),
+        marcadoPorDni: PrefsService.dni,
+      );
+      AppFeedback.successOn(
+        messenger,
+        '${seleccionados.length} adelanto(s) marcado(s) como pagado(s).',
+      );
+    } catch (e) {
+      AppFeedback.errorOn(messenger, 'Error al marcar pagados: $e');
+    }
   }
 }
 
@@ -353,18 +425,20 @@ class _BotonRangoFechas extends StatelessWidget {
 /// botones para seleccionar/deseleccionar todos + botón EXPORTAR.
 /// Aparece arriba de la lista cuando hay al menos 1 adelanto visible.
 class _BarraSeleccion extends StatelessWidget {
-  final int totalVisibles;
+  /// Total de adelantos PENDIENTES en la lista filtrada (los pagados
+  /// no cuentan — no son seleccionables).
+  final int totalPendientes;
   final int totalSeleccionados;
   final VoidCallback onSeleccionarTodos;
   final VoidCallback onDeseleccionarTodos;
-  final VoidCallback? onExportar;
+  final VoidCallback? onImprimir;
 
   const _BarraSeleccion({
-    required this.totalVisibles,
+    required this.totalPendientes,
     required this.totalSeleccionados,
     required this.onSeleccionarTodos,
     required this.onDeseleccionarTodos,
-    required this.onExportar,
+    required this.onImprimir,
   });
 
   @override
@@ -374,12 +448,14 @@ class _BarraSeleccion extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            '$totalSeleccionados / $totalVisibles seleccionado(s)',
+            totalPendientes == 0
+                ? 'Sin pendientes'
+                : '$totalSeleccionados / $totalPendientes pendiente(s)',
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
           const Spacer(),
           TextButton(
-            onPressed: totalSeleccionados == totalVisibles
+            onPressed: totalSeleccionados == totalPendientes
                 ? null
                 : onSeleccionarTodos,
             style: TextButton.styleFrom(
@@ -401,10 +477,10 @@ class _BarraSeleccion extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           ElevatedButton.icon(
-            onPressed: onExportar,
+            onPressed: onImprimir,
             icon: const Icon(Icons.print_outlined, size: 16),
             label: Text(
-              'IMPRIMIR ($totalSeleccionados)',
+              'IMPRIMIR PENDIENTES ($totalSeleccionados)',
               style: const TextStyle(fontSize: 11),
             ),
             style: ElevatedButton.styleFrom(
@@ -428,16 +504,18 @@ class _BarraSeleccion extends StatelessWidget {
 
 class _CardAdelanto extends StatelessWidget {
   final AdelantoChofer adelanto;
-  /// Si está deseleccionado, la card se ve atenuada y el checkbox
-  /// vacío. Indica al operador que este adelanto NO va a entrar en
-  /// el export Excel.
+  /// `true` si va a entrar en el resumen al imprimir. Los adelantos
+  /// ya pagados NUNCA están seleccionados — se ven más atenuados
+  /// con un chip "PAGADO".
   final bool seleccionado;
   final VoidCallback onToggleSeleccion;
+  final VoidCallback onTogglePagado;
 
   const _CardAdelanto({
     required this.adelanto,
     required this.seleccionado,
     required this.onToggleSeleccion,
+    required this.onTogglePagado,
   });
 
   @override
@@ -448,9 +526,18 @@ class _CardAdelanto extends StatelessWidget {
         ? adelanto.choferNombre!.trim()
         : 'DNI ${adelanto.choferDni}';
     final yaImpreso = adelanto.numeroRecibo != null;
+    final pagado = adelanto.pagado;
+
+    // Opacidad: pagados se ven más apagados que pendientes
+    // deseleccionados. Distingue 3 estados visuales:
+    //   pendiente seleccionado    → 1.00 (normal)
+    //   pendiente deseleccionado  → 0.55 (atenuado)
+    //   pagado                     → 0.40 (más atenuado, fuera de juego)
+    final double opacidad =
+        pagado ? 0.40 : (seleccionado ? 1.0 : 0.55);
 
     return Opacity(
-      opacity: seleccionado ? 1.0 : 0.55,
+      opacity: opacidad,
       child: AppCard(
         onTap: () => showDialog(
           context: context,
@@ -462,19 +549,27 @@ class _CardAdelanto extends StatelessWidget {
           children: [
             Row(
               children: [
-                // Checkbox para incluir/excluir del export. Compacto
-                // y separado del onTap general de la card (que abre
-                // edición) usando GestureDetector explícito.
-                SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: Checkbox(
-                    value: seleccionado,
-                    onChanged: (_) => onToggleSeleccion(),
-                    visualDensity: VisualDensity.compact,
-                    activeColor: AppColors.accentBlue,
+                // Checkbox solo para PENDIENTES. Los pagados muestran
+                // un ícono de candado fijo en su lugar — no
+                // seleccionables.
+                if (pagado)
+                  const SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: Icon(Icons.check_circle,
+                        color: AppColors.accentGreen, size: 20),
+                  )
+                else
+                  SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: Checkbox(
+                      value: seleccionado,
+                      onChanged: (_) => onToggleSeleccion(),
+                      visualDensity: VisualDensity.compact,
+                      activeColor: AppColors.accentBlue,
+                    ),
                   ),
-                ),
                 const SizedBox(width: 4),
                 const Icon(Icons.payments_outlined,
                     size: 20, color: AppColors.accentGreen),
@@ -531,6 +626,16 @@ class _CardAdelanto extends StatelessWidget {
               // (porque suele requerir más seguimiento — comprobante
               // bancario, etc.), teal para efectivo (entrega directa).
               _ChipMedioPago(medio: adelanto.medioPago),
+              // Chip tappeable de estado de pago. PENDIENTE = naranja,
+              // PAGADO = verde con fecha. Tap → toggle (con feedback
+              // del service).
+              InkWell(
+                onTap: onTogglePagado,
+                child: _ChipEstadoPago(
+                  pagado: pagado,
+                  pagadoEn: adelanto.pagadoEn,
+                ),
+              ),
               if (yaImpreso)
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1128,6 +1233,54 @@ class _ChipMedioPago extends StatelessWidget {
           const SizedBox(width: 4),
           Text(
             medio.etiqueta.toUpperCase(),
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Chip que muestra el estado de pago al chofer: PENDIENTE (naranja)
+/// o PAGADO (verde con fecha). El operador hace tap → toggle. Pagado
+/// excluye al adelanto del próximo resumen de pendientes.
+class _ChipEstadoPago extends StatelessWidget {
+  final bool pagado;
+  final DateTime? pagadoEn;
+
+  const _ChipEstadoPago({
+    required this.pagado,
+    required this.pagadoEn,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = pagado ? AppColors.accentGreen : AppColors.accentOrange;
+    final icono = pagado ? Icons.check_circle : Icons.schedule;
+    final texto = pagado && pagadoEn != null
+        ? 'PAGADO ${AppFormatters.formatearFecha(pagadoEn!)}'
+        : pagado
+            ? 'PAGADO'
+            : 'PENDIENTE';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.6)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icono, size: 11, color: color),
+          const SizedBox(width: 4),
+          Text(
+            texto,
             style: TextStyle(
               color: color,
               fontSize: 10,

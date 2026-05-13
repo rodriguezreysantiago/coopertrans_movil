@@ -85,6 +85,17 @@ class AdelantoChofer {
   /// Timestamp de la primera impresión. null si nunca se imprimió.
   final DateTime? impresoEn;
 
+  // ─── Estado de pago al chofer ────────────────────────────────────
+  /// `true` cuando ya se le descontó al chofer en una liquidación
+  /// efectiva (o el operador lo marcó explícito). Por default los
+  /// adelantos nuevos arrancan en `false` ("pendiente"). El resumen
+  /// PDF que se imprime para mandar a pagar lista solo los pendientes
+  /// (Santiago 2026-05-13: el caso operativo es "imprimo lo que falta
+  /// pagar", no "lo que tildé").
+  final bool pagado;
+  final DateTime? pagadoEn;
+  final String? pagadoPorDni;
+
   // ─── Auditoría ───────────────────────────────────────────────────
   final DateTime? creadoEn;
   final String? creadoPorDni;
@@ -103,6 +114,9 @@ class AdelantoChofer {
     this.viajeId,
     this.numeroRecibo,
     this.impresoEn,
+    this.pagado = false,
+    this.pagadoEn,
+    this.pagadoPorDni,
     this.creadoEn,
     this.creadoPorDni,
     this.creadoPorNombre,
@@ -122,6 +136,9 @@ class AdelantoChofer {
       viajeId: d['viaje_id']?.toString(),
       numeroRecibo: (d['numero_recibo'] as num?)?.toInt(),
       impresoEn: (d['impreso_en'] as Timestamp?)?.toDate(),
+      pagado: d['pagado'] == true,
+      pagadoEn: (d['pagado_en'] as Timestamp?)?.toDate(),
+      pagadoPorDni: d['pagado_por_dni']?.toString(),
       creadoEn: (d['creado_en'] as Timestamp?)?.toDate(),
       creadoPorDni: d['creado_por_dni']?.toString(),
       creadoPorNombre: d['creado_por_nombre']?.toString(),
