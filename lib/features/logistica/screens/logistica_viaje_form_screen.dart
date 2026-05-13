@@ -204,6 +204,62 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
     setState(() {});
   }
 
+  /// Sube un tramo una posición (swap con el anterior). Se llama
+  /// desde el botón "↑" del header del tramo, deshabilitado si es
+  /// el primero.
+  void _moverTramoArriba(int index) {
+    if (index <= 0 || index >= _tramos.length) return;
+    setState(() {
+      final t = _tramos.removeAt(index);
+      _tramos.insert(index - 1, t);
+    });
+  }
+
+  /// Baja un tramo una posición (swap con el siguiente).
+  void _moverTramoAbajo(int index) {
+    if (index < 0 || index >= _tramos.length - 1) return;
+    setState(() {
+      final t = _tramos.removeAt(index);
+      _tramos.insert(index + 1, t);
+    });
+  }
+
+  /// Inserta una copia del tramo justo después del original (no al
+  /// final de la lista — más intuitivo para multi-tramo donde el
+  /// orden importa). Hereda tarifa + producto + descripción; el
+  /// resto queda vacío para que el operador complete fechas/kg del
+  /// nuevo tramo.
+  void _duplicarTramo(int index) {
+    if (index < 0 || index >= _tramos.length) return;
+    setState(() {
+      final clone = _TramoEditState.cloneFrom(_tramos[index]);
+      _tramos.insert(index + 1, clone);
+    });
+  }
+
+  /// Devuelve un mensaje de warning si el origen del tramo `actual`
+  /// no encadena con el destino del tramo `anterior`. Devuelve null
+  /// si encadenan bien o si no se puede determinar (algún tramo sin
+  /// tarifa). Es un WARNING, NO un error — hay casos legítimos donde
+  /// el tractor pasa por la base entre tramos, así que no bloquea
+  /// el guardado.
+  ///
+  /// Criterio: comparamos por `ubicacion*Id`, no por empresa,
+  /// porque dentro de una empresa puede haber varias plantas y la
+  /// "ruta lógica" del viaje cambia entre ellas.
+  String? _validarEncadenamiento(
+    _TramoEditState anterior,
+    _TramoEditState actual,
+  ) {
+    final tarA = anterior.tarifa;
+    final tarB = actual.tarifa;
+    if (tarA == null || tarB == null) return null;
+    if (tarA.ubicacionDestinoId == tarB.ubicacionOrigenId) return null;
+    return 'El origen no coincide con el destino del tramo anterior '
+        '(${tarA.ubicacionDestinoEtiqueta} → ${tarB.ubicacionOrigenEtiqueta}). '
+        'Revisá si está bien.';
+  }
+
   // ─── Guardar ───
   Future<void> _guardar() async {
     final messenger = ScaffoldMessenger.of(context);
@@ -481,20 +537,39 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
             const SizedBox(height: 12),
 
             // 6. TRAMOS (uno o varios).
-            ..._tramos.asMap().entries.map((entry) {
+            ..._tramos.asMap().entries.expand((entry) {
               final index = entry.key;
               final tramo = entry.value;
-              return Padding(
+              // Warning de encadenamiento: si el origen del tramo
+              // actual NO coincide con el destino del tramo anterior,
+              // mostramos un banner amarillo entre cards. Es un
+              // warning, NO bloqueante — el operador puede ignorarlo
+              // (caso "el tractor pasó por la base entre tramos").
+              final widgets = <Widget>[];
+              if (index > 0) {
+                final prev = _tramos[index - 1];
+                final advertencia = _validarEncadenamiento(prev, tramo);
+                if (advertencia != null) {
+                  widgets.add(_BannerEncadenamiento(mensaje: advertencia));
+                }
+              }
+              widgets.add(Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: _TramoCard(
                   key: ValueKey(tramo.id),
                   numero: index + 1,
                   state: tramo,
                   puedeEliminar: _tramos.length > 1,
+                  puedeSubir: index > 0,
+                  puedeBajar: index < _tramos.length - 1,
                   onEliminar: () => _eliminarTramo(index),
+                  onSubir: () => _moverTramoArriba(index),
+                  onBajar: () => _moverTramoAbajo(index),
+                  onDuplicar: () => _duplicarTramo(index),
                   onCambio: () => setState(() {}),
                 ),
-              );
+              ));
+              return widgets;
             }),
             _BotonAgregarTramo(onPressed: _agregarTramo),
             const SizedBox(height: 24),
@@ -565,6 +640,25 @@ class _TramoEditState {
     );
   }
 
+  /// Clona un tramo existente para usarse como base de uno nuevo
+  /// (botón "duplicar tramo" del form). Se reusan los datos
+  /// **estructurales** que el operador no quiere volver a tipear:
+  /// tarifa, producto y descripción de carga. NO se copian: fechas
+  /// (cada tramo tiene las suyas), kg cargados/descargados, número
+  /// de remito ni archivo de remito — esos son específicos del
+  /// tramo nuevo y vienen vacíos.
+  ///
+  /// El nuevo state recibe `id` único distinto para no romper los
+  /// ValueKey del builder.
+  factory _TramoEditState.cloneFrom(_TramoEditState src) {
+    return _TramoEditState._(
+      id: DateTime.now().microsecondsSinceEpoch.toString(),
+      tarifa: src.tarifa,
+      producto: src.producto,
+      descripcionCarga: src.descripcionCargaCtrl.text,
+    );
+  }
+
   factory _TramoEditState.fromTramoViaje(
     TramoViaje t,
     TarifaLogistica? tarifaResuelta,
@@ -628,7 +722,12 @@ class _TramoCard extends StatelessWidget {
   final int numero;
   final _TramoEditState state;
   final bool puedeEliminar;
+  final bool puedeSubir;
+  final bool puedeBajar;
   final VoidCallback onEliminar;
+  final VoidCallback onSubir;
+  final VoidCallback onBajar;
+  final VoidCallback onDuplicar;
   final VoidCallback onCambio;
 
   const _TramoCard({
@@ -636,7 +735,12 @@ class _TramoCard extends StatelessWidget {
     required this.numero,
     required this.state,
     required this.puedeEliminar,
+    required this.puedeSubir,
+    required this.puedeBajar,
     required this.onEliminar,
+    required this.onSubir,
+    required this.onBajar,
+    required this.onDuplicar,
     required this.onCambio,
   });
 
@@ -665,15 +769,50 @@ class _TramoCard extends StatelessWidget {
     return _SeccionCard(
       titulo: 'TRAMO $numero',
       icono: Icons.alt_route_outlined,
-      trailing: puedeEliminar
-          ? IconButton(
+      // Row con todas las acciones del tramo. Compactas (visualDensity
+      // compact + sin padding) para que entren las 4 en mobile.
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.arrow_upward,
+                color: Colors.white70, size: 18),
+            onPressed: puedeSubir ? onSubir : null,
+            tooltip: 'Mover tramo arriba',
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(6),
+          ),
+          IconButton(
+            icon: const Icon(Icons.arrow_downward,
+                color: Colors.white70, size: 18),
+            onPressed: puedeBajar ? onBajar : null,
+            tooltip: 'Mover tramo abajo',
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(6),
+          ),
+          IconButton(
+            icon: const Icon(Icons.content_copy_outlined,
+                color: AppColors.accentBlue, size: 18),
+            onPressed: onDuplicar,
+            tooltip: 'Duplicar tramo (copia tarifa y producto)',
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints(),
+            padding: const EdgeInsets.all(6),
+          ),
+          if (puedeEliminar)
+            IconButton(
               icon: const Icon(Icons.delete_outline,
-                  color: AppColors.accentRed),
+                  color: AppColors.accentRed, size: 18),
               onPressed: onEliminar,
               tooltip: 'Eliminar tramo',
               visualDensity: VisualDensity.compact,
-            )
-          : null,
+              constraints: const BoxConstraints(),
+              padding: const EdgeInsets.all(6),
+            ),
+        ],
+      ),
       children: [
         // Tarifa. Antes era un DropdownButtonFormField simple — con el
         // catálogo creciendo se volvió impráctico (Santiago 2026-05-13:
@@ -850,6 +989,46 @@ class _BotonAgregarTramo extends StatelessWidget {
           fontWeight: FontWeight.bold,
           letterSpacing: 1,
         ),
+      ),
+    );
+  }
+}
+
+/// Banner amarillo que avisa cuando el origen de un tramo no encadena
+/// con el destino del anterior. NO bloquea — es un warning informativo
+/// (hay casos legítimos: el tractor pasa por la base entre tramos).
+/// Visualmente se inserta ENTRE dos cards de tramo.
+class _BannerEncadenamiento extends StatelessWidget {
+  final String mensaje;
+  const _BannerEncadenamiento({required this.mensaje});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.accentAmber.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+            color: AppColors.accentAmber.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_amber_outlined,
+              size: 18, color: AppColors.accentAmber),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              mensaje,
+              style: const TextStyle(
+                color: AppColors.accentAmber,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
