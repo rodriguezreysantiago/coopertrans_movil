@@ -339,16 +339,6 @@ class _SeccionMontos extends StatelessWidget {
           sub: true,
         ),
         const Divider(height: 16),
-        // Los adelantos ya NO viven en el viaje (refactor 2026-05-13).
-        // Los viajes legacy creados antes pueden tener `adelantoMonto`
-        // todavía cargado — en ese caso lo mostramos para no romper
-        // la trazabilidad de viajes ya impresos. Los nuevos viajes
-        // siempre tendrán adelantoMonto == null.
-        if (v.adelantoMonto != null && v.adelantoMonto! > 0)
-          _Linea(
-            label: 'Adelanto al chofer (legacy)',
-            valor: '−\$ ${AppFormatters.formatearMonto(v.adelantoMonto!)}',
-          ),
         _Linea(
           label: 'Gastos extraordinarios',
           valor: v.gastosTotal == 0
@@ -357,22 +347,19 @@ class _SeccionMontos extends StatelessWidget {
         ),
         const Divider(height: 16),
         _Linea(
-          label: v.adelantoMonto != null && v.adelantoMonto! > 0
-              ? 'LIQUIDACIÓN AL CHOFER (con adelanto legacy)'
-              : 'SUBTOTAL CHOFER (sin adelantos)',
+          label: 'SUBTOTAL CHOFER (sin adelantos)',
           valor: '\$ ${AppFormatters.formatearMonto(v.liquidacionChofer)}',
           highlight: true,
         ),
-        if (v.adelantoMonto == null || v.adelantoMonto == 0)
-          const Padding(
-            padding: EdgeInsets.only(top: 6),
-            child: Text(
-              'Los adelantos se restan en LIQUIDACIÓN sumando los '
-              'del chofer en el rango. Acá solo se muestra lo que '
-              'genera el viaje en sí.',
-              style: TextStyle(color: Colors.white38, fontSize: 11),
-            ),
+        const Padding(
+          padding: EdgeInsets.only(top: 6),
+          child: Text(
+            'Los adelantos se restan en LIQUIDACIÓN sumando los '
+            'del chofer en el rango. Acá solo se muestra lo que '
+            'genera el viaje en sí.',
+            style: TextStyle(color: Colors.white38, fontSize: 11),
           ),
+        ),
       ],
     );
   }

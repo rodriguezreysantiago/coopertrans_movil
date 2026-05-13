@@ -439,8 +439,8 @@ class _Contenido extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // El empty-state mira AMBAS fuentes: si no hay viajes pero sí hay
-    // adelantos (caso "adelanto de sueldo sin viaje"), tampoco
-    // queremos esconder la información.
+    // adelantos (caso "adelanto de sueldo sin viaje"), igual mostramos
+    // la información.
     if (viajes.isEmpty && adelantos.isEmpty) {
       return const AppEmptyState(
         icon: Icons.inbox_outlined,
@@ -453,17 +453,12 @@ class _Contenido extends StatelessWidget {
         viajes.fold<double>(0, (acc, v) => acc + v.montoVecchi);
     final totalChofer =
         viajes.fold<double>(0, (acc, v) => acc + v.montoChoferRedondeado);
-    // Adelantos: sumamos los de la nueva colección ADELANTOS_CHOFER
-    // (refactor 2026-05-13) MÁS los legacy embedidos en el viaje, PERO
-    // excluyendo los viajes con `adelantoMigradoAId` seteado — esos
-    // ya tienen su adelanto duplicado en la colección nueva por el
-    // script de migración, sumarlos también produciría doble conteo.
-    final totalAdelantosNuevos =
+    // Adelantos: solo los de la nueva colección ADELANTOS_CHOFER
+    // (refactor 2026-05-13). Los adelantos legacy embedidos en el
+    // viaje pre-refactor son data de testeo y NO se contabilizan
+    // — Santiago decidió no migrarlos (etapa de testing).
+    final totalAdelantos =
         adelantos.fold<double>(0, (acc, a) => acc + a.monto);
-    final totalAdelantosLegacy = viajes
-        .where((v) => v.adelantoMigradoAId == null)
-        .fold<double>(0, (acc, v) => acc + (v.adelantoMonto ?? 0));
-    final totalAdelantos = totalAdelantosNuevos + totalAdelantosLegacy;
     final totalGastos =
         viajes.fold<double>(0, (acc, v) => acc + v.gastosTotal);
     // Neto a pagar al chofer = ganancia chofer - adelantos + gastos.
@@ -705,14 +700,10 @@ class _TablaPorChofer extends StatelessWidget {
           final facturado = vs.fold<double>(0, (a, v) => a + v.montoVecchi);
           final chofer =
               vs.fold<double>(0, (a, v) => a + v.montoChoferRedondeado);
-          // Sumamos adelantos NUEVOS (colección) + LEGACY (campo en
-          // viaje) excluyendo viajes ya migrados (adelantoMigradoAId
-          // != null) para evitar doble conteo.
-          final adelantosNuevos = ads.fold<double>(0, (a, ad) => a + ad.monto);
-          final adelantosLegacy = vs
-              .where((v) => v.adelantoMigradoAId == null)
-              .fold<double>(0, (a, v) => a + (v.adelantoMonto ?? 0));
-          final adelantosTotal = adelantosNuevos + adelantosLegacy;
+          // Solo adelantos NUEVOS (colección) — los legacy del viaje
+          // son data de testeo y no se contabilizan (Santiago decidió
+          // no migrar 2026-05-13).
+          final adelantosTotal = ads.fold<double>(0, (a, ad) => a + ad.monto);
           final gastos = vs.fold<double>(0, (a, v) => a + v.gastosTotal);
           final neto = chofer - adelantosTotal + gastos;
           final pendientes = vs.where((v) => !v.liquidado).length;

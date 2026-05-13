@@ -393,13 +393,6 @@ class Viaje {
   /// auditoría — si reimprimís, queda este original.
   final DateTime? reciboImpresoEn;
 
-  /// Si != null, este viaje legacy ya tuvo su adelanto migrado a un
-  /// doc en `ADELANTOS_CHOFER` (refactor 2026-05-13 + script de
-  /// migración). LIQUIDACIÓN usa este flag para NO doble-contar el
-  /// `adelantoMonto` legacy: si está migrado, el monto ya está
-  /// sumado por el lado de la colección nueva.
-  final String? adelantoMigradoAId;
-
   // ─── Gastos extraordinarios (a favor del chofer) ───
   final List<GastoViaje> gastos;
 
@@ -449,7 +442,6 @@ class Viaje {
     this.adelantoObservacion,
     this.numeroReciboAdelanto,
     this.reciboImpresoEn,
-    this.adelantoMigradoAId,
     this.gastos = const [],
     required this.montoVecchi,
     required this.montoChofer,
@@ -570,10 +562,6 @@ class Viaje {
       adelantoObservacion: d['adelanto_observacion']?.toString(),
       numeroReciboAdelanto: (d['numero_recibo_adelanto'] as num?)?.toInt(),
       reciboImpresoEn: (d['recibo_impreso_en'] as Timestamp?)?.toDate(),
-      // El script `migrar_adelantos_de_viajes.js` setea este campo en
-      // el viaje cuando duplica el adelanto a `ADELANTOS_CHOFER`.
-      // LIQUIDACIÓN lo lee para no doble-contar el monto legacy.
-      adelantoMigradoAId: d['adelanto_migrado_a_id']?.toString(),
       gastos: gastosRaw == null
           ? const []
           : gastosRaw
