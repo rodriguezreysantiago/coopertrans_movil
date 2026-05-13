@@ -2891,10 +2891,25 @@ const VIGILADOR_POLL_STALE_SEGUNDOS = 10 * 60;
 // min ya cuenta. Sigue siendo más estricto que la norma Mercosur
 // (30 min cada 4h 30m).
 const VIGILADOR_PAUSA_RESET_SEGUNDOS = 10 * 60;
-const VIGILADOR_CONTINUO_ALERTA_SEGUNDOS = 3 * 3600 + 45 * 60;
+// Aviso preventivo continuo: 30 min antes del límite de 4h. Antes era
+// 3:45 (15 min antes) — bumpeado a 3:30 (30 min antes) el 2026-05-13
+// a pedido de Santiago: "le quedan 30 min para buscar lugar seguro".
+const VIGILADOR_CONTINUO_ALERTA_SEGUNDOS = 3 * 3600 + 30 * 60;
+// Límite duro de manejo continuo. A los 4h se manda un aviso fuerte
+// "penalizado por falta de descanso obligatorio" — la flag
+// `pausa_obligatoria_excedida` ya hace que aparezca en el resumen
+// diario de Seg e Higiene (Molina) sin necesidad de WhatsApp directo.
 const VIGILADOR_CONTINUO_LIMITE_SEGUNDOS = 4 * 3600;
 const VIGILADOR_DIARIO_ALERTA_SEGUNDOS = 11 * 3600 + 30 * 60;
 const VIGILADOR_DIARIO_LIMITE_SEGUNDOS = 12 * 3600;
+// Hora mínima fija desde la que se permite arrancar después de cumplir
+// 12h diarias. La regla operativa de Vecchi (Santiago 2026-05-13):
+// "no se maneja después de las 00:00 y no se arranca antes de las 6
+// AM ART, mínimo 8h de descanso ya garantizado por la noche". La
+// fórmula final es `max(6 AM ART próximo, fin_jornada + 8h)` — lo
+// segundo cubre el caso borde donde fin_jornada cae de madrugada y
+// 6 AM no alcanzaría a cubrir las 8h legales.
+const VIGILADOR_HORA_MIN_ARRANQUE_HORA_ART = 6;
 // Pausa larga que cierra una jornada y abre una nueva (descanso entre
 // jornadas). Resetea `segundos_jornada_actual` y los flags de alerta
 // diaria. 8h = mínimo Argentina (Ley 24653 art. 53). Mercosur pide 11h
@@ -4269,16 +4284,28 @@ export const vigiladorJornadaChofer = onSchedule(
           let segundosJornadaActual = 0;
           let segundosContinuoActual = 0;
           let segundosPausaActual = 0;
-          let alerta345Enviada = false;
+          let alerta330Enviada = false;
+          let alerta400Enviada = false;
           let alerta1130Enviada = false;
           let alerta1200Enviada = false;
           let avisoDescansoCortoEnviada = false;
           let descansoCortoSegundos = 0;
           let pausaObligatoriaExcedida = false;
           let jornadaDiariaExcedida = false;
-          let alerta345At: Timestamp | null = null;
+          // Nuevo 2026-05-13: cuando se alcanza 12h diarias, registramos
+          // el timestamp + la hora mínima de arranque calculada
+          // (max(6 AM ART, fin+8h)). Usados para detectar "arranque
+          // temprano" en polls posteriores y para el wording del aviso
+          // de 11:30 que dice al chofer hasta qué hora frenar.
+          let finJornadaAt: Timestamp | null = null;
+          let horaMinArranqueAt: Timestamp | null = null;
+          let alertaArranqueTempranoEnviada = false;
+          let arranqueTempranoExcedido = false;
+          let alerta330At: Timestamp | null = null;
+          let alerta400At: Timestamp | null = null;
           let alerta1130At: Timestamp | null = null;
           let alerta1200At: Timestamp | null = null;
+          let alertaArranqueTempranoAt: Timestamp | null = null;
           let avisoDescansoCortoAt: Timestamp | null = null;
 
           if (!snapJ.exists) {
@@ -4296,8 +4323,16 @@ export const vigiladorJornadaChofer = onSchedule(
                 (dA.segundos_continuo_actual as number) ?? 0;
               segundosPausaActual =
                 (dA.segundos_pausa_actual as number) ?? 0;
-              alerta345Enviada =
+              // Compat: el campo viejo era `alerta_3_45_continua_enviada`
+              // (umbral 3:45). Desde 2026-05-13 el nuevo umbral es 3:30
+              // y se llama `alerta_3_30_continua_enviada`. Hidratamos
+              // del nuevo si existe, sino caemos al viejo (jornadas en
+              // curso al hacer el deploy no pierden el flag).
+              alerta330Enviada =
+                (dA.alerta_3_30_continua_enviada as boolean) ??
                 (dA.alerta_3_45_continua_enviada as boolean) ?? false;
+              alerta400Enviada =
+                (dA.alerta_4_00_continua_enviada as boolean) ?? false;
               alerta1130Enviada =
                 (dA.alerta_11_30_diaria_enviada as boolean) ?? false;
               alerta1200Enviada =
@@ -4310,6 +4345,14 @@ export const vigiladorJornadaChofer = onSchedule(
                 (dA.pausa_obligatoria_excedida as boolean) ?? false;
               jornadaDiariaExcedida =
                 (dA.jornada_diaria_excedida as boolean) ?? false;
+              finJornadaAt =
+                (dA.fin_jornada_at as Timestamp | null) ?? null;
+              horaMinArranqueAt =
+                (dA.hora_min_arranque_at as Timestamp | null) ?? null;
+              alertaArranqueTempranoEnviada =
+                (dA.alerta_arranque_temprano_enviada as boolean) ?? false;
+              arranqueTempranoExcedido =
+                (dA.arranque_temprano_excedido as boolean) ?? false;
             }
             tx.set(refJornada, {
               chofer_dni: driverDni,
@@ -4320,15 +4363,22 @@ export const vigiladorJornadaChofer = onSchedule(
               segundos_pausa_actual: segundosPausaActual,
               ultima_actualizacion_at: ahora,
               ultima_patente: patente,
-              alerta_3_45_continua_enviada: alerta345Enviada,
+              alerta_3_30_continua_enviada: alerta330Enviada,
+              alerta_4_00_continua_enviada: alerta400Enviada,
               alerta_11_30_diaria_enviada: alerta1130Enviada,
               alerta_12_00_diaria_enviada: alerta1200Enviada,
               aviso_descanso_corto_enviada: avisoDescansoCortoEnviada,
               descanso_corto_segundos: descansoCortoSegundos,
-              alerta_3_45_continua_at: null,
+              alerta_3_30_continua_at: null,
+              alerta_4_00_continua_at: null,
               alerta_11_30_diaria_at: null,
               alerta_12_00_diaria_at: null,
               aviso_descanso_corto_at: null,
+              alerta_arranque_temprano_at: null,
+              alerta_arranque_temprano_enviada: alertaArranqueTempranoEnviada,
+              arranque_temprano_excedido: arranqueTempranoExcedido,
+              fin_jornada_at: finJornadaAt,
+              hora_min_arranque_at: horaMinArranqueAt,
               pausa_obligatoria_excedida: pausaObligatoriaExcedida,
               jornada_diaria_excedida: jornadaDiariaExcedida,
               creado_en: ahora,
@@ -4336,10 +4386,13 @@ export const vigiladorJornadaChofer = onSchedule(
             // No acumulamos en este poll (no hay delta), próximo sí.
             return {
               alertContinuo: false,
+              alertContinuoLimite: false,
               alertDiario: false,
               alertDiarioLimite: false,
               alertDescansoCorto: false,
+              alertArranqueTemprano: false,
               descansoCortoSegundos: 0,
+              horaMinArranqueAt: null as Timestamp | null,
             };
           }
 
@@ -4362,8 +4415,14 @@ export const vigiladorJornadaChofer = onSchedule(
             (docJ.segundos_continuo_actual as number) ?? 0;
           segundosPausaActual =
             (docJ.segundos_pausa_actual as number) ?? 0;
-          alerta345Enviada =
+          // Compat: leer nuevo campo `alerta_3_30_continua_enviada`
+          // (umbral 3:30) o caer al viejo `alerta_3_45_continua_enviada`
+          // si la jornada estaba en curso al hacer deploy.
+          alerta330Enviada =
+            (docJ.alerta_3_30_continua_enviada as boolean) ??
             (docJ.alerta_3_45_continua_enviada as boolean) ?? false;
+          alerta400Enviada =
+            (docJ.alerta_4_00_continua_enviada as boolean) ?? false;
           alerta1130Enviada =
             (docJ.alerta_11_30_diaria_enviada as boolean) ?? false;
           alerta1200Enviada =
@@ -4376,18 +4435,35 @@ export const vigiladorJornadaChofer = onSchedule(
             (docJ.pausa_obligatoria_excedida as boolean) ?? false;
           jornadaDiariaExcedida =
             (docJ.jornada_diaria_excedida as boolean) ?? false;
-          alerta345At =
+          finJornadaAt =
+            (docJ.fin_jornada_at as Timestamp | null) ?? null;
+          horaMinArranqueAt =
+            (docJ.hora_min_arranque_at as Timestamp | null) ?? null;
+          alertaArranqueTempranoEnviada =
+            (docJ.alerta_arranque_temprano_enviada as boolean) ?? false;
+          arranqueTempranoExcedido =
+            (docJ.arranque_temprano_excedido as boolean) ?? false;
+          alerta330At =
+            (docJ.alerta_3_30_continua_at as Timestamp | null) ??
             (docJ.alerta_3_45_continua_at as Timestamp | null) ?? null;
+          alerta400At =
+            (docJ.alerta_4_00_continua_at as Timestamp | null) ?? null;
           alerta1130At =
             (docJ.alerta_11_30_diaria_at as Timestamp | null) ?? null;
           alerta1200At =
             (docJ.alerta_12_00_diaria_at as Timestamp | null) ?? null;
+          alertaArranqueTempranoAt =
+            (docJ.alerta_arranque_temprano_at as Timestamp | null) ?? null;
           avisoDescansoCortoAt =
             (docJ.aviso_descanso_corto_at as Timestamp | null) ?? null;
 
           // Bandera local: este poll dispara el aviso de descanso
           // corto (chofer arrancó tras < 8 h de pausa, ≥ 4 h).
           let alertDescansoCorto = false;
+          // Bandera local: chofer arrancó antes de la hora_min_arranque
+          // calculada al cumplir 12h (regla "descansar hasta máx(6 AM,
+          // fin+8h)" — Santiago 2026-05-13).
+          let alertArranqueTemprano = false;
           if (speedEfectivo > VIGILADOR_UMBRAL_MOVIMIENTO_KMH) {
             // Manejando ahora.
 
@@ -4411,16 +4487,40 @@ export const vigiladorJornadaChofer = onSchedule(
               descansoCortoSegundos = Math.floor(segundosPausaActual);
             }
 
+            // Detección arranque temprano (post 12h): si la jornada
+            // anterior llegó al límite de 12h y el chofer arranca
+            // antes de la hora mínima calculada (max 6 AM ART /
+            // fin+8h), aviso al chofer "descanso insuficiente" + sumar
+            // a Molina vía flag `arranque_temprano_excedido`. Solo
+            // una vez por evento (flag) — sino cada poll cada 5 min
+            // sería spam.
+            //
+            // Ojo: chequear ANTES del reset por 8h, sino cuando el
+            // chofer recién arranca tras 7h59min de descanso, el
+            // segundosPausaActual viene con valor real y queremos
+            // detectarlo. (Si ya cumplió 8h, el reset abajo limpia
+            // horaMinArranqueAt y este chequeo no aplica.)
+            if (
+              horaMinArranqueAt != null &&
+              !alertaArranqueTempranoEnviada &&
+              ahora.toMillis() < horaMinArranqueAt.toMillis()
+            ) {
+              alertArranqueTemprano = true;
+              alertaArranqueTempranoEnviada = true;
+              arranqueTempranoExcedido = true;
+            }
+
             // Reset del CONTINUO: pausa de 10 min sin movimiento.
             if (segundosPausaActual >= VIGILADOR_PAUSA_RESET_SEGUNDOS) {
               segundosContinuoActual = 0;
-              alerta345Enviada = false;
+              alerta330Enviada = false;
+              alerta400Enviada = false;
             }
             // Reset de la JORNADA: pausa de 8h (descanso entre
             // jornadas, mínimo Argentina). Resetea jornada_actual y
             // todas las flags de alerta diaria + el flag de exceso
-            // continuo + flag/segundos de descanso corto (la jornada
-            // nueva arranca con todo limpio).
+            // continuo + flag/segundos de descanso corto + datos de
+            // post-jornada (la jornada nueva arranca con todo limpio).
             if (segundosPausaActual >= VIGILADOR_DESCANSO_JORNADA_SEGUNDOS) {
               segundosJornadaActual = 0;
               alerta1130Enviada = false;
@@ -4429,6 +4529,10 @@ export const vigiladorJornadaChofer = onSchedule(
               descansoCortoSegundos = 0;
               jornadaDiariaExcedida = false;
               pausaObligatoriaExcedida = false;
+              finJornadaAt = null;
+              horaMinArranqueAt = null;
+              alertaArranqueTempranoEnviada = false;
+              arranqueTempranoExcedido = false;
             }
             segundosPausaActual = 0;
             segundosContinuoActual += deltaSegundos;
@@ -4440,18 +4544,32 @@ export const vigiladorJornadaChofer = onSchedule(
             // continuo, jornada y total NO se mueven.
           }
 
-          // Chequear umbrales de alerta. `alertDescansoCorto` ya
-          // viene seteado del bloque speed>umbral.
+          // Chequear umbrales de alerta. `alertDescansoCorto` y
+          // `alertArranqueTemprano` ya vienen seteados del bloque
+          // speed>umbral.
           let alertContinuo = false;
+          let alertContinuoLimite = false;
           let alertDiario = false;
           let alertDiarioLimite = false;
 
+          // Aviso preventivo a 3:30h (faltan 30 min para el límite 4h).
           if (
             segundosContinuoActual >= VIGILADOR_CONTINUO_ALERTA_SEGUNDOS &&
-            !alerta345Enviada
+            !alerta330Enviada
           ) {
             alertContinuo = true;
-            alerta345Enviada = true;
+            alerta330Enviada = true;
+          }
+          // Aviso fuerte a 4h continuas (límite legal alcanzado, debió
+          // haber parado). Va al chofer + flag `pausa_obligatoria_excedida`
+          // que ya levanta el resumen de Molina sin necesidad de WhatsApp
+          // directo (Santiago 2026-05-13).
+          if (
+            segundosContinuoActual >= VIGILADOR_CONTINUO_LIMITE_SEGUNDOS &&
+            !alerta400Enviada
+          ) {
+            alertContinuoLimite = true;
+            alerta400Enviada = true;
           }
           if (segundosContinuoActual >= VIGILADOR_CONTINUO_LIMITE_SEGUNDOS) {
             pausaObligatoriaExcedida = true;
@@ -4478,6 +4596,18 @@ export const vigiladorJornadaChofer = onSchedule(
           }
           if (segundosJornadaActual >= VIGILADOR_DIARIO_LIMITE_SEGUNDOS) {
             jornadaDiariaExcedida = true;
+            // Primer poll que detecta las 12h: registramos el fin de
+            // jornada y la hora mínima de arranque (max 6 AM ART /
+            // fin+8h). Estos campos los usa el aviso 11:30 (en realidad
+            // recalculamos ahí con la fecha actual + 30 min) y la
+            // detección de arranque temprano del próximo poll.
+            if (finJornadaAt == null) {
+              finJornadaAt = ahora;
+              const horaMinArranque = _calcularHoraMinArranque(
+                ahora.toDate()
+              );
+              horaMinArranqueAt = Timestamp.fromDate(horaMinArranque);
+            }
           }
 
           tx.update(refJornada, {
@@ -4487,27 +4617,39 @@ export const vigiladorJornadaChofer = onSchedule(
             segundos_pausa_actual: segundosPausaActual,
             ultima_actualizacion_at: ahora,
             ultima_patente: patente,
-            alerta_3_45_continua_enviada: alerta345Enviada,
+            alerta_3_30_continua_enviada: alerta330Enviada,
+            alerta_4_00_continua_enviada: alerta400Enviada,
             alerta_11_30_diaria_enviada: alerta1130Enviada,
             alerta_12_00_diaria_enviada: alerta1200Enviada,
             aviso_descanso_corto_enviada: avisoDescansoCortoEnviada,
+            alerta_arranque_temprano_enviada: alertaArranqueTempranoEnviada,
+            arranque_temprano_excedido: arranqueTempranoExcedido,
             descanso_corto_segundos: descansoCortoSegundos,
-            alerta_3_45_continua_at: alertContinuo ? ahora : alerta345At,
+            alerta_3_30_continua_at: alertContinuo ? ahora : alerta330At,
+            alerta_4_00_continua_at: alertContinuoLimite ? ahora : alerta400At,
             alerta_11_30_diaria_at: alertDiario ? ahora : alerta1130At,
             alerta_12_00_diaria_at: alertDiarioLimite ? ahora : alerta1200At,
             aviso_descanso_corto_at: alertDescansoCorto ?
               ahora :
               avisoDescansoCortoAt,
+            alerta_arranque_temprano_at: alertArranqueTemprano ?
+              ahora :
+              alertaArranqueTempranoAt,
+            fin_jornada_at: finJornadaAt,
+            hora_min_arranque_at: horaMinArranqueAt,
             pausa_obligatoria_excedida: pausaObligatoriaExcedida,
             jornada_diaria_excedida: jornadaDiariaExcedida,
           });
 
           return {
             alertContinuo,
+            alertContinuoLimite,
             alertDiario,
             alertDiarioLimite,
             alertDescansoCorto,
+            alertArranqueTemprano,
             descansoCortoSegundos,
+            horaMinArranqueAt,
           };
         });
 
@@ -4519,18 +4661,22 @@ export const vigiladorJornadaChofer = onSchedule(
         // levanta el silencio antes del descanso de 8h igual le
         // llega cuando vuelva a cruzar el umbral en otro poll.
         const estaSilenciado = silenciadosSet.has(driverDni);
-        if (estaSilenciado &&
-            (result.alertContinuo || result.alertDiario ||
-             result.alertDiarioLimite || result.alertDescansoCorto)) {
+        const hayAlgunaAlerta = result.alertContinuo ||
+          result.alertContinuoLimite || result.alertDiario ||
+          result.alertDiarioLimite || result.alertDescansoCorto ||
+          result.alertArranqueTemprano;
+        if (estaSilenciado && hayAlgunaAlerta) {
           alertasSilenciadas++;
           logger.info("[vigiladorJornadaChofer] aviso silenciado", {
             driverDni,
             patente,
             tipos: [
-              result.alertContinuo ? "continuo" : null,
+              result.alertContinuo ? "continuo330" : null,
+              result.alertContinuoLimite ? "continuo400" : null,
               result.alertDiario ? "diario1130" : null,
               result.alertDiarioLimite ? "diario1200" : null,
               result.alertDescansoCorto ? "descansoCorto" : null,
+              result.alertArranqueTemprano ? "arranqueTemprano" : null,
             ].filter(Boolean),
           });
         } else {
@@ -4538,8 +4684,14 @@ export const vigiladorJornadaChofer = onSchedule(
             await _encolarAvisoPausaContinua(driverDni, patente);
             alertasContinuoEnviadas++;
           }
+          if (result.alertContinuoLimite) {
+            await _encolarAvisoLimiteContinuo(driverDni, patente);
+            alertasContinuoEnviadas++;
+          }
           if (result.alertDiario) {
-            await _encolarAvisoLimiteDiario(driverDni, patente);
+            await _encolarAvisoLimiteDiario(
+              driverDni, patente, result.horaMinArranqueAt
+            );
             alertasDiarioEnviadas++;
           }
           if (result.alertDiarioLimite) {
@@ -4551,6 +4703,12 @@ export const vigiladorJornadaChofer = onSchedule(
               driverDni,
               patente,
               result.descansoCortoSegundos
+            );
+            alertasDiarioEnviadas++;
+          }
+          if (result.alertArranqueTemprano) {
+            await _encolarAvisoArranqueTemprano(
+              driverDni, patente, result.horaMinArranqueAt
             );
             alertasDiarioEnviadas++;
           }
@@ -4728,7 +4886,11 @@ async function _encolarAvisoSilencioReanudado(
   });
 }
 
-// Encola aviso al chofer cuando lleva 3:45h continuas de manejo.
+// Encola aviso preventivo al chofer cuando lleva 3:30h continuas de
+// manejo (faltan 30 min para el límite de 4h). Antes era a las 3:45h
+// con 15 min de margen — Santiago bumpeó el aviso a 3:30 (30 min de
+// margen) el 2026-05-13 para que el chofer tenga tiempo real de
+// buscar un lugar seguro donde parar.
 async function _encolarAvisoPausaContinua(
   choferDni: string,
   patente: string
@@ -4748,45 +4910,43 @@ async function _encolarAvisoPausaContinua(
   // Mínimo 6 variantes anti-baneo (decisión 2026-05-09).
   const variantes = [
     `${saludo},\n\n` +
-      "Llevás 3 horas y 45 minutos manejando. En máximo 15 min " +
-      "tenés que tomarte una pausa.\n\n" +
-      `Buscá un lugar seguro para parar el ${patente}. Después de ` +
-      "descansar, podés continuar.\n\n" +
+      "Llevás 3 horas y 30 minutos manejando. Tenés 30 min para " +
+      "buscar un lugar seguro y descansar al menos 15 min.\n\n" +
+      `Buscá dónde parar el ${patente} y tomate la pausa antes de ` +
+      "que se cumplan las 4 h continuas.\n\n" +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
     `${saludo}.\n\n` +
-      "Aviso: estás cerca de las 4 horas de manejo continuo. " +
-      "Tenés 15 minutos para parar.\n\n" +
-      `Buscá un lugar seguro y tomate una pausa con el ${patente} ` +
-      "antes de seguir.\n\n" +
+      "Aviso: a 3:30h de manejo continuo. En 30 min llega el límite " +
+      "de 4 h — tenés tiempo para buscar dónde parar.\n\n" +
+      `Frená el ${patente} en un lugar seguro y descansá mínimo ` +
+      "15 min antes de seguir.\n\n" +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
     `${saludo}, atención.\n\n` +
-      "Tu manejo continuo llegó a 3:45. En 15 minutos se cumple el " +
-      "límite de 4 horas — tenés que parar.\n\n" +
-      `Estacioná el ${patente} en un lugar seguro y descansá un rato ` +
-      "antes de retomar.\n\n" +
+      "Tu manejo continuo llegó a 3:30. Te quedan 30 min para " +
+      "buscar un lugar seguro donde parar al menos 15 min.\n\n" +
+      `Estacioná el ${patente} y descansá antes de retomar.\n\n` +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
     `${saludo}.\n\n` +
-      "Te paso un aviso desde la oficina: quedan 15 min antes de " +
-      "cumplir 4 horas continuas al volante. Es momento de parar.\n\n" +
-      `Buscá dónde estacionar el ${patente} y tomate la pausa ` +
-      "obligatoria.\n\n" +
+      "Te paso un aviso desde la oficina: tenés 30 min antes de " +
+      "cumplir las 4 horas continuas. Buscá un lugar seguro para parar.\n\n" +
+      `Frená el ${patente} y descansá mínimo 15 min — después podés ` +
+      "seguir.\n\n" +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
     `${saludo}, te aviso.\n\n` +
-      "Estás muy cerca del límite de 4 horas continuas. Quedan 15 " +
-      "minutos para hacer una pausa.\n\n" +
-      `Frená el ${patente} en un lugar seguro y descansá antes de ` +
-      "seguir el camino.\n\n" +
+      "Estás a 3:30 de manejo continuo. En media hora se cumple el " +
+      "tope de 4 h.\n\n" +
+      `Buscá dónde estacionar el ${patente} y descansá al menos ` +
+      "15 min.\n\n" +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
     `${saludo}.\n\n` +
-      "Por seguridad y por norma, después de 4 horas continuas hay " +
-      "que parar. Llevás 3:45 — quedan 15 min.\n\n" +
-      `Buscá un lugar seguro para frenar el ${patente} y reseteá ` +
-      "el contador con un descanso.\n\n" +
+      "Por norma, cada 4 h continuas hay que parar. Llevás 3:30 — " +
+      "tenés 30 min para buscar un lugar seguro.\n\n" +
+      `Frená el ${patente} mínimo 15 min antes de retomar.\n\n` +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
   ];
@@ -4811,8 +4971,10 @@ async function _encolarAvisoPausaContinua(
   });
 }
 
-// Encola aviso al chofer cuando llega a 11:30h totales del día.
-async function _encolarAvisoLimiteDiario(
+// Encola aviso fuerte al chofer cuando alcanzó las 4h continuas sin
+// pausa — ya está incumpliendo, lo penaliza el resumen de Molina vía
+// flag `pausa_obligatoria_excedida`. Pedido Santiago 2026-05-13.
+async function _encolarAvisoLimiteContinuo(
   choferDni: string,
   patente: string
 ): Promise<void> {
@@ -4828,47 +4990,128 @@ async function _encolarAvisoLimiteDiario(
   const saludoNombre = apodo || _primerNombre(nombreFull) || "";
   const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
 
+  const variantes = [
+    `${saludo},\n\n` +
+      "Cumpliste las *4 horas de manejo continuo* sin pausa.\n\n" +
+      "*Penalizado por falta de descanso obligatorio.*\n\n" +
+      `Frená el ${patente} ahora en un lugar seguro y descansá mínimo ` +
+      "15 min antes de seguir — el incumplimiento queda registrado.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}.\n\n` +
+      "Atención: superaste las 4 h continuas al volante sin parar.\n\n" +
+      "*Quedó registrado como falta de descanso obligatorio.*\n\n" +
+      `Estacioná el ${patente} ahora y descansá al menos 15 min ` +
+      "antes de retomar el viaje.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}, importante.\n\n` +
+      "Llegaste a las 4 h continuas de manejo. Por norma debés parar.\n\n" +
+      "*Penalizado por incumplimiento del descanso obligatorio.*\n\n" +
+      `Frená el ${patente} en un lugar seguro y tomate la pausa.\n\n` +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+  ];
+  const mensaje = variantes[_rrPick(variantes.length)];
+
+  await db.collection("COLA_WHATSAPP").add({
+    telefono: tel,
+    mensaje,
+    estado: "PENDIENTE",
+    encolado_en: FieldValue.serverTimestamp(),
+    expira_en: _expiraEnMinutos(TTL_PAUSA_CONTINUA_MIN),
+    enviado_en: null,
+    error: null,
+    intentos: 0,
+    origen: "jornada_limite_continuo",
+    destinatario_coleccion: "EMPLEADOS",
+    destinatario_id: choferDni,
+    campo_base: "JORNADA",
+    admin_dni: "BOT",
+    admin_nombre: "Bot vigilador jornada",
+    alert_patente: patente,
+  });
+}
+
+// Encola aviso al chofer cuando llega a 11:30h de manejo en la
+// jornada actual. Calcula dinámicamente hasta qué hora tiene que
+// frenar — `max(6 AM ART próximo, fin_jornada + 8h)`. La hora se
+// inserta en el mensaje para que el chofer sepa cuándo puede arrancar
+// de nuevo (Santiago 2026-05-13). El parámetro horaMinArranqueAt
+// puede ser null si la transacción no lo precalculó (caso borde:
+// llegó a 11:30 pero todavía no a 12h, así que no tenemos fin_jornada
+// real); en ese caso lo calculamos asumiendo que cumple las 12h en 30
+// min (fin = ahora + 30 min).
+async function _encolarAvisoLimiteDiario(
+  choferDni: string,
+  patente: string,
+  horaMinArranqueAt: Timestamp | null
+): Promise<void> {
+  const empSnap = await db.collection("EMPLEADOS").doc(choferDni).get();
+  if (!empSnap.exists) return;
+  const empData = empSnap.data() ?? {};
+  if (empData.ACTIVO === false) return;
+  const tel = (empData.TELEFONO ?? "").toString().trim();
+  if (!tel || tel === "-") return;
+
+  const apodo = (empData.APODO ?? "").toString().trim();
+  const nombreFull = (empData.NOMBRE ?? "").toString().trim();
+  const saludoNombre = apodo || _primerNombre(nombreFull) || "";
+  const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
+
+  // Si la transacción no nos pasó horaMinArranque (todavía no llegó
+  // a 12h, pero estamos en 11:30), proyectamos el fin como ahora+30min
+  // y calculamos. Así el chofer ya sabe cuál sería su hora de arranque
+  // si sigue manejando hasta el límite.
+  const finProyectado = horaMinArranqueAt != null ?
+    null :
+    new Date(Date.now() + 30 * 60 * 1000);
+  const horaMinArranque = horaMinArranqueAt != null ?
+    horaMinArranqueAt.toDate() :
+    _calcularHoraMinArranque(finProyectado!);
+  const horaFmt = _fmtHoraArt(horaMinArranque);
+
   // Mínimo 6 variantes anti-baneo (decisión 2026-05-09).
   const variantes = [
     `${saludo},\n\n` +
-      "Llevás 11 horas y 30 minutos de manejo en el día. En 30 min " +
-      "más vas a llegar al límite legal de 12 horas.\n\n" +
-      `Buscá un lugar seguro para parar el ${patente} y continuá ` +
-      "después de descansar.\n\n" +
+      "Llevás 11 h y 30 min de manejo en la jornada. En 30 min llegás " +
+      "al límite de 12 h.\n\n" +
+      `Buscá un lugar seguro para parar el ${patente}. ` +
+      `*Tenés que descansar hasta las ${horaFmt} ART como mínimo.*\n\n` +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
     `${saludo}.\n\n` +
-      "Aviso: estás cerca del límite diario de 12 horas de manejo. " +
-      "Te quedan 30 minutos.\n\n" +
-      `Frená el ${patente} en un lugar seguro y descansá. ` +
-      "Mañana seguís.\n\n" +
+      "Aviso: estás cerca del límite diario de 12 h de manejo. Te " +
+      "quedan 30 min.\n\n" +
+      `Frená el ${patente} en un lugar seguro y descansá hasta las ` +
+      `*${horaFmt} ART* mínimo (8 h o hasta la mañana, lo que sea más).\n\n` +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
     `${saludo}, atención.\n\n` +
-      "Tu jornada de hoy ya cubre 11:30 al volante. En 30 min llegás " +
-      "al tope diario de 12 horas.\n\n" +
-      `Estacioná el ${patente} en un lugar seguro — la jornada ` +
-      "termina acá. Mañana retomás.\n\n" +
+      "Tu jornada llegó a 11:30 al volante. En 30 min cumplís el tope " +
+      "de 12 h.\n\n" +
+      `Estacioná el ${patente} en un lugar seguro — descansá hasta ` +
+      `las *${horaFmt} ART* y retomás después.\n\n` +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
     `${saludo}.\n\n` +
-      "Te paso un aviso de jornada: estás muy cerca del máximo " +
-      "diario de 12 horas. En media hora se cumple.\n\n" +
-      `Buscá dónde parar el ${patente} y descansá hasta mañana.\n\n` +
+      "Aviso de jornada: 30 min para llegar al máximo diario de 12 h.\n\n" +
+      `Buscá dónde parar el ${patente} y descansá hasta las ` +
+      `*${horaFmt} ART* mínimo.\n\n` +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
     `${saludo}, recordatorio.\n\n` +
-      "Llevás 11h30 hoy. En 30 minutos llegás al máximo permitido " +
-      "por jornada.\n\n" +
-      `Frená el ${patente} en un lugar seguro y cortá la jornada — ` +
-      "mañana seguís el viaje.\n\n" +
+      "Llevás 11h30 hoy. En 30 min llegás al máximo permitido por " +
+      "jornada.\n\n" +
+      `Frená el ${patente} en un lugar seguro. *No podés volver a ` +
+      `arrancar antes de las ${horaFmt} ART.*\n\n` +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
     `${saludo}.\n\n` +
-      "Por norma de manejo, después de 12 horas en el día hay que " +
-      "parar. Llevás 11:30 — quedan 30 min.\n\n" +
-      `Buscá un lugar seguro para el ${patente} y descansá. ` +
-      "La jornada termina hoy acá.\n\n" +
+      "Por norma, después de 12 h en la jornada hay que parar. Te " +
+      "quedan 30 min.\n\n" +
+      `Buscá un lugar seguro para el ${patente}. *Hora mínima de ` +
+      `arranque: ${horaFmt} ART.*\n\n` +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
   ];
@@ -4890,6 +5133,7 @@ async function _encolarAvisoLimiteDiario(
     admin_dni: "BOT",
     admin_nombre: "Bot vigilador jornada",
     alert_patente: patente,
+    hora_min_arranque_at: Timestamp.fromDate(horaMinArranque),
   });
 }
 
@@ -4925,44 +5169,34 @@ async function _encolarAvisoJornadaExcedida(
   const saludoNombre = apodo || _primerNombre(nombreFull) || "";
   const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
 
+  // Wording reforzado el 2026-05-13: "superadas las 12h de conducción
+  // diaria por favor detenerse para evitar penalizaciones más graves"
+  // (pedido textual de Santiago).
   const variantes = [
     `${saludo},\n\n` +
-      "Ya cumpliste las 12 horas de manejo permitidas por jornada. " +
-      "Tenés que parar.\n\n" +
-      `Buscá un lugar seguro para el ${patente} y descansá hasta ` +
-      "mañana — la jornada ya terminó.\n\n" +
+      "*Superadas las 12 h de conducción diaria.* Por favor detené el " +
+      `${patente} en un lugar seguro para evitar penalizaciones más ` +
+      "graves.\n\n" +
+      "La jornada ya terminó — tenés que descansar hasta cumplir el " +
+      "mínimo legal antes de retomar.\n\n" +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
     `${saludo}.\n\n` +
-      "Aviso urgente: superaste las 12 horas diarias al volante. " +
-      "Hay que parar ya.\n\n" +
-      `Estacioná el ${patente} en un lugar seguro y cortá la jornada.\n\n` +
+      "Aviso urgente: *superaste las 12 h diarias al volante*. Detené " +
+      `el ${patente} ya en un lugar seguro para evitar penalizaciones ` +
+      "más graves.\n\n" +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
     `${saludo}, atención.\n\n` +
-      "Llegaste al máximo diario de 12 horas de manejo. Es momento " +
-      "de cerrar la jornada.\n\n" +
-      `Frená el ${patente} en un lugar seguro. Mañana retomás.\n\n` +
+      "*Llegaste al máximo diario de 12 h de conducción.* Estacioná el " +
+      `${patente} en un lugar seguro — cualquier kilómetro de más ` +
+      "queda registrado como falta.\n\n" +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
     `${saludo}.\n\n` +
-      "Excediste las 12 horas diarias permitidas. Es obligatorio " +
-      "parar y descansar.\n\n" +
-      `Buscá dónde estacionar el ${patente} y cerrá la jornada de hoy.\n\n` +
-      BANNER_TESTING +
-      "_Coopertrans Móvil — Mensaje automático._",
-    `${saludo}, recordatorio importante.\n\n` +
-      "Pasaste el tope diario de 12 horas al volante. La jornada se " +
-      "tiene que cerrar.\n\n" +
-      `Frená el ${patente} en un lugar seguro y descansá. Seguís ` +
-      "mañana después del descanso obligatorio.\n\n" +
-      BANNER_TESTING +
-      "_Coopertrans Móvil — Mensaje automático._",
-    `${saludo}.\n\n` +
-      "Por norma de manejo, cumpliste 12 horas y tenés que parar. " +
-      "No podés seguir hoy.\n\n" +
-      `Buscá un lugar seguro para el ${patente} y descansá hasta ` +
-      "mañana.\n\n" +
+      "*Excediste las 12 h diarias permitidas.* Es obligatorio parar y " +
+      "descansar para evitar penalizaciones más graves.\n\n" +
+      `Buscá dónde estacionar el ${patente} y cerrá la jornada.\n\n` +
       BANNER_TESTING +
       "_Coopertrans Móvil — Mensaje automático._",
   ];
@@ -4985,6 +5219,153 @@ async function _encolarAvisoJornadaExcedida(
     admin_nombre: "Bot vigilador jornada",
     alert_patente: patente,
   });
+}
+
+/**
+ * Encola aviso "descanso insuficiente — arrancaste antes de la hora
+ * mínima permitida". Se dispara cuando el chofer cumplió 12h en la
+ * jornada anterior y vuelve a manejar antes de `hora_min_arranque`
+ * (= max(6 AM ART próximo, fin_jornada + 8h)). Pedido Santiago
+ * 2026-05-13: la regla operativa de Vecchi es que si cerrás 12h, no
+ * podés arrancar antes de las 6 AM (o más tarde si las 6 AM no
+ * cubren las 8h legales).
+ *
+ * El flag `arranque_temprano_excedido` que setea la transacción es
+ * leído por `resumenExcesosJornadaDiario` y aparece en el reporte de
+ * Molina al día siguiente.
+ */
+async function _encolarAvisoArranqueTemprano(
+  choferDni: string,
+  patente: string,
+  horaMinArranqueAt: Timestamp | null
+): Promise<void> {
+  const empSnap = await db.collection("EMPLEADOS").doc(choferDni).get();
+  if (!empSnap.exists) return;
+  const empData = empSnap.data() ?? {};
+  if (empData.ACTIVO === false) return;
+  const tel = (empData.TELEFONO ?? "").toString().trim();
+  if (!tel || tel === "-") return;
+
+  const apodo = (empData.APODO ?? "").toString().trim();
+  const nombreFull = (empData.NOMBRE ?? "").toString().trim();
+  const saludoNombre = apodo || _primerNombre(nombreFull) || "";
+  const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
+
+  const horaFmt = horaMinArranqueAt != null ?
+    _fmtHoraArt(horaMinArranqueAt.toDate()) :
+    "(sin calcular)";
+
+  const variantes = [
+    `${saludo},\n\n` +
+      "*Descanso insuficiente.* Cerraste tu jornada de 12 h y arrancaste " +
+      `antes de la hora mínima permitida.\n\n` +
+      `Hora mínima de arranque: *${horaFmt} ART*. Frená el ${patente} ` +
+      "y descansá hasta esa hora.\n\n" +
+      "El incumplimiento queda registrado en el resumen diario.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}.\n\n` +
+      "*Aviso: estás manejando sin haber completado el descanso " +
+      "obligatorio.*\n\n" +
+      `No podías volver a arrancar hasta las *${horaFmt} ART*.\n\n` +
+      `Detené el ${patente} cuanto antes en un lugar seguro — el ` +
+      "incumplimiento ya está registrado.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+    `${saludo}, atención.\n\n` +
+      "Arrancaste antes de cumplir el descanso mínimo después de las " +
+      "12 h de la jornada anterior.\n\n" +
+      `Hora mínima: *${horaFmt} ART*. Frená el ${patente} y descansá ` +
+      "hasta esa hora — la falta queda registrada para Seg e Higiene.\n\n" +
+      BANNER_TESTING +
+      "_Coopertrans Móvil — Mensaje automático._",
+  ];
+  const mensaje = variantes[_rrPick(variantes.length)];
+
+  await db.collection("COLA_WHATSAPP").add({
+    telefono: tel,
+    mensaje,
+    estado: "PENDIENTE",
+    encolado_en: FieldValue.serverTimestamp(),
+    expira_en: _expiraEnMinutos(60),
+    enviado_en: null,
+    error: null,
+    intentos: 0,
+    origen: "jornada_arranque_temprano",
+    destinatario_coleccion: "EMPLEADOS",
+    destinatario_id: choferDni,
+    campo_base: "JORNADA",
+    admin_dni: "BOT",
+    admin_nombre: "Bot vigilador jornada",
+    alert_patente: patente,
+    hora_min_arranque_at: horaMinArranqueAt,
+  });
+}
+
+/**
+ * Calcula la hora mínima de arranque después de cumplir 12h diarias.
+ * Regla operativa Vecchi (Santiago 2026-05-13):
+ *   `max(próximo 6 AM ART, fin_jornada + 8 h legales)`
+ *
+ * Casos:
+ *   - Fin a las 20:00 ART → 6 AM del día siguiente (10h descansando ≥ 8h).
+ *   - Fin a las 02:00 ART → 10:00 ART del mismo día (8h después; no
+ *     alcanzan las 6 AM porque solo serían 4h de descanso).
+ *
+ * ART es UTC-3 fijo (sin DST en Argentina desde 2009), así que no
+ * hace falta una librería de TZ — basta con offset estático.
+ */
+function _calcularHoraMinArranque(finJornadaAt: Date): Date {
+  const ART_OFFSET_MS = 3 * 3600 * 1000; // ART = UTC-3
+  // Día calendario ART de fin_jornada (representado como UTC).
+  const finArt = new Date(finJornadaAt.getTime() - ART_OFFSET_MS);
+  // {VIGILADOR_HORA_MIN_ARRANQUE_HORA_ART}:00 ART de ese día calendario
+  // (default 06:00).
+  const seisAmArtMs = Date.UTC(
+    finArt.getUTCFullYear(),
+    finArt.getUTCMonth(),
+    finArt.getUTCDate(),
+    VIGILADOR_HORA_MIN_ARRANQUE_HORA_ART, 0, 0, 0
+  );
+  // Convertir 6 AM ART a UTC real (sumar offset).
+  let proximo6AmUtc = seisAmArtMs + ART_OFFSET_MS;
+  // Si ya pasaron las 6 AM ART de ese día, saltar al día siguiente.
+  if (proximo6AmUtc <= finJornadaAt.getTime()) {
+    proximo6AmUtc += 24 * 3600 * 1000;
+  }
+  const finMas8h = finJornadaAt.getTime() + 8 * 3600 * 1000;
+  return new Date(Math.max(proximo6AmUtc, finMas8h));
+}
+
+/**
+ * Formatea HH:MM ART de un Date UTC. Usado en los avisos al chofer
+ * para mostrar la hora límite de arranque calculada por
+ * `_calcularHoraMinArranque`. Si la hora cae mañana, agregamos
+ * sufijo " (mañana)" para evitar confusión cuando el chofer recibe
+ * el mensaje a las 23:50 y la hora es 06:00.
+ */
+function _fmtHoraArt(d: Date): string {
+  const fmt = new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const horaStr = fmt.format(d);
+  // ¿Es de mañana relativo a "ahora"? Si la diferencia es > 12h o
+  // la fecha calendario ART es distinta a la de hoy, agregamos "(mañana)".
+  const diaArtTarget = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(d);
+  const diaArtHoy = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date());
+  if (diaArtTarget !== diaArtHoy) {
+    return `${horaStr} (${diaArtTarget})`;
+  }
+  return horaStr;
 }
 
 /**
@@ -5231,6 +5612,10 @@ export const resumenExcesosJornadaDiario = onSchedule(
       excedio4hContinua: boolean;
       excedio12hDiaria: boolean;
       descansoCortoSegundos: number;
+      // Arranque temprano post-12h: agregado 2026-05-13. True si el
+      // chofer cerró 12h y volvió a manejar antes de hora_min_arranque
+      // (max 6 AM ART / fin+8h).
+      arranqueTempranoExcedido: boolean;
     }
 
     const excesos: ExcesoChofer[] = [];
@@ -5240,11 +5625,12 @@ export const resumenExcesosJornadaDiario = onSchedule(
       const excedio12h = data.jornada_diaria_excedida === true;
       const descansoCorto =
         (data.descanso_corto_segundos as number) ?? 0;
+      const arranqueTemprano = data.arranque_temprano_excedido === true;
       // Incluir choferes que excedieron continuo/diario O que
-      // arrancaron con descanso < 8h. El descanso corto es un tipo
-      // de "exceso de jornada" aunque no haya pasado los umbrales
-      // de continuo/diario en ese día.
-      if (!excedio4h && !excedio12h && descansoCorto <= 0) continue;
+      // arrancaron con descanso < 8h O que arrancaron antes de la
+      // hora mínima post-12h. Cualquiera de los 4 califica.
+      if (!excedio4h && !excedio12h && descansoCorto <= 0 &&
+          !arranqueTemprano) continue;
       excesos.push({
         choferDni: (data.chofer_dni ?? "").toString(),
         patente: (data.ultima_patente ?? "").toString(),
@@ -5262,6 +5648,7 @@ export const resumenExcesosJornadaDiario = onSchedule(
         excedio4hContinua: excedio4h,
         excedio12hDiaria: excedio12h,
         descansoCortoSegundos: descansoCorto,
+        arranqueTempranoExcedido: arranqueTemprano,
       });
     }
 
@@ -5305,8 +5692,8 @@ export const resumenExcesosJornadaDiario = onSchedule(
         `${saludoOk},\n\n` +
         `📋 *Resumen excesos de jornada — ${fmtFechaOk}*\n\n` +
         "✅ Sin incidencias: ningún chofer cruzó las 4 h continuas, " +
-        "las 12 h diarias ni arrancó con menos de 8 h de descanso " +
-        "ese día.\n\n" +
+        "las 12 h diarias, arrancó con menos de 8 h de descanso ni " +
+        "arrancó temprano después de cumplir 12 h ese día.\n\n" +
         BANNER_TESTING +
         "_Coopertrans Móvil — Aviso automático._";
       await db.collection("COLA_WHATSAPP").add({
@@ -5361,6 +5748,9 @@ export const resumenExcesosJornadaDiario = onSchedule(
         flags.push(
           `descanso corto (${fmtHm(x.descansoCortoSegundos)} entre jornadas)`
         );
+      }
+      if (x.arranqueTempranoExcedido) {
+        flags.push("arranque temprano post-12h");
       }
       // Si la jornada (que puede cruzar medianoche) es mayor que el
       // total del día calendario, mostramos AMBOS para que Molina vea

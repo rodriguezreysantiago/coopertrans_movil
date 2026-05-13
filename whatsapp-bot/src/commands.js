@@ -492,21 +492,40 @@ async function _comandoJornada(msg, { db }, args) {
   }
 
   // Flags de alertas — compactas, una sola línea con las que se
-  // dispararon.
+  // dispararon. Compat: el campo viejo `alerta_3_45_continua_enviada`
+  // (umbral 3:45h) fue reemplazado por `alerta_3_30_continua_enviada`
+  // el 2026-05-13. Mostramos cualquiera que esté seteado para que
+  // jornadas en curso al deploy se vean correctas.
   const flags = [];
-  if (j.alerta_3_45_continua_enviada) flags.push('3:45');
+  if (j.alerta_3_30_continua_enviada || j.alerta_3_45_continua_enviada) {
+    flags.push('3:30');
+  }
+  if (j.alerta_4_00_continua_enviada) flags.push('4h-penalizado');
   if (j.alerta_11_30_diaria_enviada) flags.push('11:30');
-  if (j.alerta_12_00_diaria_enviada) flags.push('12:00');
+  if (j.alerta_12_00_diaria_enviada) flags.push('12h-superado');
   if (j.aviso_descanso_corto_enviada) {
     const desc = j.descanso_corto_segundos
       ? ` (descanso ${_fmtSegCompacto(j.descanso_corto_segundos)})`
       : '';
     flags.push(`descanso-corto${desc}`);
   }
+  if (j.alerta_arranque_temprano_enviada) {
+    flags.push('arranque-temprano');
+  }
   if (flags.length > 0) {
     lineas.push(`🚨 Avisos enviados: ${flags.join(', ')}`);
   } else {
     lineas.push('✓ Sin alertas hoy.');
+  }
+
+  // Si llegó a 12h, mostrar la hora mínima de arranque calculada —
+  // así el operador puede chequear cuándo el chofer puede volver a
+  // manejar.
+  if (j.hora_min_arranque_at) {
+    lineas.push(
+      `🌅 Hora mín. arranque: ` +
+      `${_fmtFechaHoraCompacto(j.hora_min_arranque_at)} ART`
+    );
   }
 
   if (j.ultima_actualizacion_at) {
