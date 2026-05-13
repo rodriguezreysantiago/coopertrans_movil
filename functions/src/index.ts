@@ -5076,8 +5076,16 @@ export const recomputeDashboardStats = onSchedule(
 // ============================================================================
 // asignarNumeroReciboAdelanto
 // ============================================================================
-// Asigna número correlativo al recibo de adelanto de un viaje. Atómico
-// server-side, idempotente.
+// Asigna número correlativo al recibo de adelanto. Atómico server-side,
+// idempotente.
+//
+// **Refactor 2026-05-13**: ahora trabaja sobre `ADELANTOS_CHOFER` (la
+// nueva colección de adelantos independientes de viajes — Santiago
+// quería poder dar adelantos de sueldo sin crear un viaje vacío). El
+// counter sigue siendo el MISMO `COUNTERS/recibos_adelanto.next` para
+// no reiniciar la serie física de recibos. Compat retro: si el caller
+// pasa `viajeId` (esquema viejo donde el adelanto vivía en el viaje),
+// lo seguimos soportando para no romper apps cliente desactualizadas.
 //
 // **Por qué server-side**: el cliente Windows desktop tiene un bug
 // conocido en `cloud_firestore` (plugin) que crashea con `abort()` C++
@@ -5088,20 +5096,19 @@ export const recomputeDashboardStats = onSchedule(
 // **Diseño**:
 //   - Counter en `COUNTERS/recibos_adelanto.next` (arranca en 1 si no
 //     existe).
-//   - Si el viaje ya tiene `numero_recibo_adelanto`, devolvemos el mismo
+//   - Si el adelanto ya tiene `numero_recibo`, devolvemos el mismo
 //     número sin incrementar (idempotente: reimprimir no quema un
 //     correlativo nuevo).
-//   - Si no tiene, leemos+incrementamos el counter y lo asignamos al
-//     viaje dentro de la misma transaction. Si dos operadores imprimen
-//     a la vez, Firestore reintenta y cada uno recibe un número
-//     distinto sin gaps.
-//   - Requiere ADMIN o SUPERVISOR (mismo scope que ver/editar viajes
-//     de logística).
+//   - Si no tiene, leemos+incrementamos el counter y lo asignamos
+//     dentro de la misma transaction.
+//   - Requiere ADMIN o SUPERVISOR.
 //
-// Input: `{ viajeId: string }`
+// Input (cualquiera de los 2): `{ adelantoId: string }` (nuevo) o
+//   `{ viajeId: string }` (legacy compat).
 // Output: `{ numero: number, esReimpresion: boolean }`
 
 interface AsignarReciboInput {
+  adelantoId?: unknown;
   viajeId?: unknown;
 }
 
@@ -5130,47 +5137,68 @@ export const asignarNumeroReciboAdelanto = onCall(
 
     // ─── Validación de input ───────────────────────────────────────
     const data = (request.data ?? {}) as AsignarReciboInput;
-    const viajeId = (data.viajeId ?? "").toString().trim();
-    if (!viajeId) {
-      throw new HttpsError("invalid-argument", "viajeId requerido.");
+    const adelantoId = (data.adelantoId ?? "").toString().trim();
+    const viajeIdLegacy = (data.viajeId ?? "").toString().trim();
+
+    if (!adelantoId && !viajeIdLegacy) {
+      throw new HttpsError(
+        "invalid-argument",
+        "adelantoId requerido."
+      );
     }
-    if (viajeId.length > 200) {
-      throw new HttpsError("invalid-argument", "viajeId inválido.");
+    if (adelantoId.length > 200 || viajeIdLegacy.length > 200) {
+      throw new HttpsError("invalid-argument", "id inválido.");
     }
 
-    const viajeRef = db.collection("VIAJES_LOGISTICA").doc(viajeId);
+    // Modo NUEVO: adelantoId apunta a ADELANTOS_CHOFER.
+    // Modo LEGACY: viajeId apunta a VIAJES_LOGISTICA (apps cliente
+    // viejas que todavía leen el adelanto del viaje).
+    const usaLegacy = !adelantoId && viajeIdLegacy !== "";
+    const docRef = usaLegacy ?
+      db.collection("VIAJES_LOGISTICA").doc(viajeIdLegacy) :
+      db.collection("ADELANTOS_CHOFER").doc(adelantoId);
     const counterRef = db.collection("COUNTERS").doc("recibos_adelanto");
+    const idLog = usaLegacy ? `viajeId=${viajeIdLegacy}` : `adelantoId=${adelantoId}`;
+
+    // Nombres de campos según modo.
+    const FIELD_MONTO = usaLegacy ? "adelanto_monto" : "monto";
+    const FIELD_NUMERO = usaLegacy ? "numero_recibo_adelanto" : "numero_recibo";
+    const FIELD_IMPRESO_EN = usaLegacy ? "recibo_impreso_en" : "impreso_en";
 
     try {
       const resultado = await db.runTransaction(async (tx) => {
-        const viajeSnap = await tx.get(viajeRef);
-        if (!viajeSnap.exists) {
+        const docSnap = await tx.get(docRef);
+        if (!docSnap.exists) {
           throw new HttpsError(
             "not-found",
-            `El viaje ${viajeId} no existe.`
+            `El ${usaLegacy ? "viaje" : "adelanto"} no existe.`
           );
         }
-        const viajeData = viajeSnap.data() ?? {};
-        const monto = typeof viajeData.adelanto_monto === "number" ?
-          viajeData.adelanto_monto :
+        const docData = docSnap.data() ?? {};
+        const monto = typeof docData[FIELD_MONTO] === "number" ?
+          docData[FIELD_MONTO] :
           0;
         if (monto <= 0) {
           throw new HttpsError(
             "failed-precondition",
-            "El viaje no tiene adelanto cargado."
+            usaLegacy ?
+              "El viaje no tiene adelanto cargado." :
+              "El adelanto no tiene monto válido."
           );
         }
 
-        const yaTiene = typeof viajeData.numero_recibo_adelanto === "number" ?
-          Math.trunc(viajeData.numero_recibo_adelanto) :
+        const yaTiene = typeof docData[FIELD_NUMERO] === "number" ?
+          Math.trunc(docData[FIELD_NUMERO]) :
           null;
         if (yaTiene !== null && yaTiene > 0) {
           // Reimpresión: mismo número, no tocar el counter ni el
-          // timestamp `recibo_impreso_en` original.
+          // timestamp original de impresión.
           return { numero: yaTiene, esReimpresion: true };
         }
 
-        // Primera impresión: leer+incrementar counter.
+        // Primera impresión: leer+incrementar counter compartido
+        // `recibos_adelanto.next` (misma serie física para legacy y
+        // nuevo — los recibos se imprimen en numeración continua).
         const counterSnap = await tx.get(counterRef);
         const next = typeof counterSnap.data()?.next === "number" ?
           Math.trunc(counterSnap.data()!.next as number) :
@@ -5181,9 +5209,9 @@ export const asignarNumeroReciboAdelanto = onCall(
           { next: next + 1, actualizado_en: FieldValue.serverTimestamp() },
           { merge: true }
         );
-        tx.update(viajeRef, {
-          numero_recibo_adelanto: next,
-          recibo_impreso_en: FieldValue.serverTimestamp(),
+        tx.update(docRef, {
+          [FIELD_NUMERO]: next,
+          [FIELD_IMPRESO_EN]: FieldValue.serverTimestamp(),
           actualizado_en: FieldValue.serverTimestamp(),
         });
 
@@ -5191,7 +5219,8 @@ export const asignarNumeroReciboAdelanto = onCall(
       });
 
       logger.info("[asignarReciboAdelanto] OK", {
-        viajeId,
+        idLog,
+        modo: usaLegacy ? "legacy" : "nuevo",
         numero: resultado.numero,
         esReimpresion: resultado.esReimpresion,
         uid: request.auth.uid,
@@ -5203,7 +5232,7 @@ export const asignarNumeroReciboAdelanto = onCall(
       }
       const err = e as Error;
       logger.error("[asignarReciboAdelanto] error", {
-        viajeId,
+        idLog,
         message: err.message,
         stack: err.stack,
       });
