@@ -95,24 +95,25 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
               onChanged: (v) => setState(() => _filtro = v),
             ),
           ),
-          // ─── Filtros de fecha (desde / hasta) ────────────────────
+          // ─── Filtro de rango de fechas (1 calendario, 2 puntas) ─
+          // Antes había 2 botones separados (DESDE / HASTA) que
+          // abrían pickers de fecha individuales. Santiago pidió un
+          // solo botón que abra `showDateRangePicker` — el operador
+          // marca inicio y fin en el mismo calendario, más natural.
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
             child: Row(
               children: [
                 Expanded(
-                  child: _BotonFechaFiltro(
-                    label: 'DESDE',
-                    fecha: _fechaDesde,
-                    onChanged: (d) => setState(() => _fechaDesde = d),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _BotonFechaFiltro(
-                    label: 'HASTA',
-                    fecha: _fechaHasta,
-                    onChanged: (d) => setState(() => _fechaHasta = d),
+                  child: _BotonRangoFechas(
+                    desde: _fechaDesde,
+                    hasta: _fechaHasta,
+                    onChanged: (desde, hasta) {
+                      setState(() {
+                        _fechaDesde = desde;
+                        _fechaHasta = hasta;
+                      });
+                    },
                   ),
                 ),
                 if (_fechaDesde != null || _fechaHasta != null)
@@ -265,51 +266,86 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
 // FILTROS / BARRA DE SELECCIÓN
 // =============================================================================
 
-/// Botón compacto que muestra una fecha o "DESDE/HASTA" si está vacía.
-/// Al tocarlo abre `showDatePicker`. Long-press limpia. Usado en la
-/// barra de filtros de fecha de adelantos.
-class _BotonFechaFiltro extends StatelessWidget {
-  final String label;
-  final DateTime? fecha;
-  final ValueChanged<DateTime?> onChanged;
+/// Botón único que abre un selector de RANGO de fechas
+/// (`showDateRangePicker` de Material — un solo calendario donde el
+/// operador marca punta de inicio y punta de fin). Reemplaza la
+/// versión de 2 botones separados (DESDE / HASTA) por pedido de
+/// Santiago 2026-05-13: más natural ver el rango de un vistazo en el
+/// mismo calendario.
+///
+/// El label cambia según el estado:
+///   - Sin rango   → "RANGO DE FECHAS"
+///   - Solo desde  → "13-05-2026 → ?"      (caso intermedio, raro)
+///   - Solo hasta  → "? → 15-05-2026"
+///   - Ambos       → "13-05-2026 → 15-05-2026"
+///   - Mismo día   → "13-05-2026"
+class _BotonRangoFechas extends StatelessWidget {
+  final DateTime? desde;
+  final DateTime? hasta;
+  final void Function(DateTime? desde, DateTime? hasta) onChanged;
 
-  const _BotonFechaFiltro({
-    required this.label,
-    required this.fecha,
+  const _BotonRangoFechas({
+    required this.desde,
+    required this.hasta,
     required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    final fechaStr =
-        fecha == null ? label : AppFormatters.formatearFecha(fecha!);
+    final hayRango = desde != null || hasta != null;
+    final label = _renderLabel();
     return OutlinedButton.icon(
       onPressed: () async {
         final ahora = DateTime.now();
-        final d = await showDatePicker(
+        final inicial = desde != null && hasta != null
+            ? DateTimeRange(start: desde!, end: hasta!)
+            : DateTimeRange(start: ahora, end: ahora);
+        final rango = await showDateRangePicker(
           context: context,
-          initialDate: fecha ?? ahora,
+          initialDateRange: inicial,
           firstDate: DateTime(ahora.year - 2),
           lastDate: DateTime(ahora.year + 1),
+          // En Windows desktop el picker se ve mejor como dialog (más
+          // chico, sin ocupar toda la pantalla). En mobile queda
+          // full-screen por default, que también está OK.
+          initialEntryMode: DatePickerEntryMode.calendar,
+          helpText: 'Elegí el rango de fechas',
+          saveText: 'APLICAR',
+          cancelText: 'CANCELAR',
         );
-        if (d != null) onChanged(d);
+        if (rango != null) onChanged(rango.start, rango.end);
       },
-      onLongPress: fecha == null ? null : () => onChanged(null),
-      icon: const Icon(Icons.calendar_today_outlined, size: 14),
+      onLongPress: hayRango ? () => onChanged(null, null) : null,
+      icon: const Icon(Icons.date_range_outlined, size: 16),
       label: Text(
-        fechaStr,
+        label,
         style: const TextStyle(fontSize: 12),
         overflow: TextOverflow.ellipsis,
       ),
       style: OutlinedButton.styleFrom(
-        foregroundColor: fecha == null ? Colors.white60 : Colors.white,
+        foregroundColor: hayRango ? Colors.white : Colors.white60,
         side: BorderSide(
-          color: fecha == null ? Colors.white24 : AppColors.accentGreen,
+          color: hayRango ? AppColors.accentGreen : Colors.white24,
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         visualDensity: VisualDensity.compact,
       ),
     );
+  }
+
+  String _renderLabel() {
+    final d = desde;
+    final h = hasta;
+    if (d == null && h == null) return 'RANGO DE FECHAS';
+    const fmt = AppFormatters.formatearFecha;
+    if (d != null && h != null) {
+      // Si ambas puntas son el mismo día, mostramos una sola fecha
+      // (el operador querría ver "solo 13-05", no "13-05 → 13-05").
+      final mismoDia = d.year == h.year && d.month == h.month && d.day == h.day;
+      return mismoDia ? fmt(d) : '${fmt(d)} → ${fmt(h)}';
+    }
+    if (d != null) return '${fmt(d)} → ?';
+    return '? → ${fmt(h!)}';
   }
 }
 
