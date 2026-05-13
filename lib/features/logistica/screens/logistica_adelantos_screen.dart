@@ -177,7 +177,7 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                               filtrados.map((a) => a.id))),
                       onExportar: seleccionados.isEmpty
                           ? null
-                          : () => _exportarExcel(seleccionados),
+                          : () => _imprimirResumen(seleccionados),
                     ),
                     Expanded(
                       child: ListView.separated(
@@ -251,7 +251,7 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
     );
   }
 
-  Future<void> _exportarExcel(List<AdelantoChofer> seleccionados) async {
+  Future<void> _imprimirResumen(List<AdelantoChofer> seleccionados) async {
     await ReportAdelantosService.generar(
       context: context,
       adelantos: seleccionados,
@@ -366,9 +366,9 @@ class _BarraSeleccion extends StatelessWidget {
           const SizedBox(width: 4),
           ElevatedButton.icon(
             onPressed: onExportar,
-            icon: const Icon(Icons.file_download_outlined, size: 16),
+            icon: const Icon(Icons.print_outlined, size: 16),
             label: Text(
-              'EXCEL ($totalSeleccionados)',
+              'IMPRIMIR ($totalSeleccionados)',
               style: const TextStyle(fontSize: 11),
             ),
             style: ElevatedButton.styleFrom(

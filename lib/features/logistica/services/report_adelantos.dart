@@ -1,46 +1,43 @@
-import 'package:excel/excel.dart' as ex;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show File, Platform, Process;
+import 'dart:typed_data' show Uint8List;
+
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
+import 'package:path_provider/path_provider.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
-import '../../reports/services/excel_utils.dart' as xu;
-import '../../reports/services/report_save_helper.dart';
 import '../models/adelanto_chofer.dart';
 
-/// Reporte Excel de adelantos. Lo dispara `LogisticaAdelantosScreen`
-/// con los adelantos que el operador **seleccionó** en la lista
-/// (checkbox por adelanto).
+/// Resumen de adelantos en PDF — pensado para imprimir, NO para
+/// enviar al contador en Excel. Pedido por Santiago 2026-05-13: el
+/// flujo físico es el mismo que el recibo individual (oficina entrega
+/// la planilla a la persona que distribuye los adelantos), entonces
+/// el resumen tiene que mantener el mismo look + flow de impresión
+/// directa que el comprobante de adelanto individual.
 ///
-/// Diseño basado en la planilla que Santiago compartió 2026-05-13
-/// (`2026-05-13 - VIAJES DARIOS.xlsx`). Estructura:
+/// Estructura (mimica el `recibos_adelanto_service.dart` pero
+/// adaptada a una tabla):
+///   - Logo VAVG arriba a la izquierda + "TRANSPORTE SERVI-TOLVA" +
+///     subtítulo "Resumen de adelantos" en el header.
+///   - Caja con FECHA: dd-mm-aaaa (o FECHAS si son varios días).
+///   - Tabla con: # | CHOFER | DETALLE | ADELANTO $ | N° RECIBO.
+///   - Footer chico con timestamp de impresión.
 ///
-///   ┌────────────────────────────────────────────────────────┐
-///   │  TRANSPORTE SERVI-TOLVA                                │   ← banner
-///   │  Resumen de adelantos                                  │
-///   │  FECHA: 13-05-2026             (o FECHAS si > 1 día)   │
-///   ├────────────────────────────────────────────────────────┤
-///   │  # │ CHOFER │ DETALLE │ ADELANTO $ │ N° RECIBO          │
-///   │  1 │ ...    │ ...     │      ...   │ ...                │
-///   │  ...                                                    │
-///   │            │         │      TOTAL │ $ XXX.XXX           │
-///   └────────────────────────────────────────────────────────┘
-///
-/// Cambios vs versión anterior pedidos por Santiago:
-///   - Columna FECHA del cuerpo → SACADA (ahora está en el encabezado).
-///   - Columna OBSERVACIÓN → renombrada a DETALLE.
-///   - Sin columna firma (era columna nominal en la planilla de
-///     referencia, pero acá la firma física vive en el recibo
-///     impreso de cada adelanto).
-///   - Encabezado dinámico: muestra "FECHA: dd-mm-aaaa" si todos los
-///     adelantos son del mismo día; sino "FECHAS: dd-mm · dd-mm · …".
+/// Imprime directo a la impresora default del sistema con
+/// `Printing.directPrintPdf` y fallback al viewer del SO si falla.
+/// Mismo patrón que `_ComprobantePrinter` de la pantalla de adelantos.
 class ReportAdelantosService {
   ReportAdelantosService._();
 
-  /// Número de columnas de la tabla — usado para mergear el banner
-  /// superior. Si cambian las columnas, ajustar acá.
-  static const int _cols = 5;
-
+  /// Punto de entrada desde la pantalla. Genera el PDF y lo manda a
+  /// imprimir. Errores se reportan con SnackBar — el caller no
+  /// necesita catchear.
   static Future<void> generar({
     required BuildContext context,
     required List<AdelantoChofer> adelantos,
@@ -51,184 +48,305 @@ class ReportAdelantosService {
 
     if (kIsWeb) {
       AppFeedback.warningOn(messenger,
-          'Los reportes Excel solo están disponibles en Windows, Android e iOS.');
+          'La impresión solo está disponible en Windows, Android e iOS.');
       return;
     }
     if (adelantos.isEmpty) {
       AppFeedback.warningOn(
-          messenger, 'No hay adelantos seleccionados para exportar.');
+          messenger, 'No hay adelantos seleccionados para imprimir.');
       return;
     }
 
     _notificarProgreso(messenger);
     try {
-      final excel = ex.Excel.createExcel();
-      excel.rename('Sheet1', 'ADELANTOS');
-      final hoja = excel['ADELANTOS'];
-
       // Orden cronológico ASC para que el correlativo del reporte
       // (columna #) tenga sentido (más antiguos arriba). El stream de
       // la pantalla viene desc.
       final ordenados = [...adelantos]
         ..sort((a, b) => a.fecha.compareTo(b.fecha));
 
-      // ─── ENCABEZADO ──────────────────────────────────────────────
-      // Fila 0: razón social en bold grande.
-      _setMergedHeader(
-        hoja,
-        row: 0,
-        text: 'TRANSPORTE SERVI-TOLVA',
-        backgroundHex: '#1B5E20',
-        fontHex: '#FFFFFF',
-        fontSize: 16,
-        bold: true,
-        align: ex.HorizontalAlign.Center,
-      );
-      // Fila 1: subtítulo.
-      _setMergedHeader(
-        hoja,
-        row: 1,
-        text: 'Resumen de adelantos',
-        backgroundHex: '#2E7D32',
-        fontHex: '#FFFFFF',
-        fontSize: 11,
-        bold: true,
-        align: ex.HorizontalAlign.Center,
-      );
-      // Fila 2: FECHA o FECHAS según cuántos días distintos.
-      _setMergedHeader(
-        hoja,
-        row: 2,
-        text: _renderEtiquetaFechas(ordenados),
-        backgroundHex: '#E8F5E9',
-        fontHex: '#1B5E20',
-        fontSize: 11,
-        bold: true,
-        align: ex.HorizontalAlign.Center,
-      );
-      // Fila 3: separador en blanco.
+      final pdfBytes = await _generarPdf(ordenados);
 
-      // ─── HEADERS DE TABLA (fila 4) ───────────────────────────────
-      const headerRow = 4;
-      final headers = [
-        '#',
-        'CHOFER',
-        'DETALLE',
-        'ADELANTO \$',
-        'N° RECIBO',
-      ];
-      for (var i = 0; i < headers.length; i++) {
-        final cell = hoja.cell(
-            ex.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: headerRow));
-        cell.value = ex.TextCellValue(headers[i]);
-        cell.cellStyle = ex.CellStyle(
-          bold: true,
-          backgroundColorHex: ex.ExcelColor.fromHexString('#2E7D32'),
-          fontColorHex: ex.ExcelColor.fromHexString('#FFFFFF'),
-          horizontalAlign: ex.HorizontalAlign.Center,
-          verticalAlign: ex.VerticalAlign.Center,
-        );
+      // Nombre tipo "Resumen-Adelantos-2026-05-13_HHmmss.pdf".
+      final ts = DateTime.now();
+      final nombreArchivo =
+          'Resumen-Adelantos-${_slugFecha(ts)}_${_hhmmss(ts)}.pdf';
+
+      final impresoOk = await _imprimirDirecto(pdfBytes, nombreArchivo);
+      if (impresoOk) {
+        AppFeedback.successOn(messenger,
+            'Resumen de ${ordenados.length} adelanto(s) enviado a la impresora.');
+      } else {
+        AppFeedback.successOn(messenger,
+            'Resumen abierto en el visor. Imprimí desde ahí (Ctrl+P).');
       }
-      // Header un poco más alto que las filas de datos.
-      hoja.setRowHeight(headerRow, 24);
-
-      // ─── FILAS DE DATOS + FILAS VACÍAS NUMERADAS ─────────────────
-      // Replicamos el formato de la planilla manual de Santiago: 20
-      // filas (o más, si los seleccionados ya las superan) pre-
-      // numeradas, con las primeras N llenas y el resto en blanco
-      // para que pueda escribir a mano más adelantos si los carga
-      // físicamente y los entra después al sistema.
-      const filasMin = 20;
-      final totalFilas =
-          ordenados.length > filasMin ? ordenados.length : filasMin;
-      for (var i = 0; i < totalFilas; i++) {
-        final row = headerRow + 1 + i;
-
-        // Numeración (siempre, esté la fila llena o vacía).
-        _setInt(hoja, 0, row, i + 1);
-
-        if (i < ordenados.length) {
-          final a = ordenados[i];
-          final nombre = a.choferNombre?.trim().isNotEmpty == true
-              ? a.choferNombre!.trim()
-              : 'DNI ${a.choferDni}';
-          final detalle = a.observacion?.trim().isNotEmpty == true
-              ? a.observacion!.trim()
-              : '';
-          final recibo = a.numeroRecibo == null
-              ? ''
-              : a.numeroRecibo.toString().padLeft(6, '0');
-          _setText(hoja, 1, row, nombre);
-          _setText(hoja, 2, row, detalle);
-          _setMonto(hoja, 3, row, a.monto);
-          _setText(hoja, 4, row, recibo);
-        }
-
-        // Altura cómoda en TODAS las filas (llenas y vacías) para
-        // que el reporte luzca espacioso, no comprimido. Es lo que
-        // pidió Santiago al pasar el ejemplo de planilla manual.
-        hoja.setRowHeight(row, 22);
-      }
-
-      final ultimaRow = headerRow + totalFilas;
-      xu.autoFitColumnas(hoja, _cols, ultimaRow + 1);
-      // Forzar ancho mínimo de la columna "DETALLE" para que las
-      // observaciones largas no se compriman demasiado al exportar.
-      // `getColumnWidth` no expone API confiable en excel ^4.0.6, así
-      // que aplicamos un ancho fijo cómodo (28) que cubre la mayoría
-      // de observaciones; si el autoFit calculó más, queda el mayor.
-      hoja.setColumnWidth(2, 28);
-      // Columnas Chofer y Recibo un toque más anchas también.
-      hoja.setColumnWidth(1, 22);
-      hoja.setColumnWidth(3, 16);
-      hoja.setColumnWidth(4, 14);
-
-      final bytesRaw = excel.save();
-      if (bytesRaw == null || bytesRaw.isEmpty) {
-        throw StateError('El archivo Excel se generó vacío.');
-      }
-      // No aplicamos AutoFilter al xlsx porque el encabezado merged
-      // de filas 0-2 confunde al filtro (lo coloca sobre el banner en
-      // lugar de la tabla). El operador puede activarlo manual con
-      // Ctrl+Shift+L si lo necesita.
-      final bytes = bytesRaw;
-
-      // Nombre: si hay rango activo en la UI, lo metemos para que
-      // dos exports del mismo período no se pisen.
-      String? sufijo;
-      if (fechaDesde != null && fechaHasta != null) {
-        sufijo =
-            '${_slugFecha(fechaDesde)}_al_${_slugFecha(fechaHasta)}';
-      } else if (fechaDesde != null) {
-        sufijo = 'desde_${_slugFecha(fechaDesde)}';
-      } else if (fechaHasta != null) {
-        sufijo = 'hasta_${_slugFecha(fechaHasta)}';
-      }
-      final nombreArchivo = ReportSaveHelper.nombreUnico(
-        'Adelantos',
-        sufijoExtra: sufijo,
-      );
-
-      await ReportSaveHelper.guardarYAbrir(
-        bytes: bytes,
-        nombreDefault: nombreArchivo,
-        messenger: messenger,
-        textoCompartir:
-            'Adelantos a choferes — Coopertrans Móvil (${ordenados.length} items)',
-      );
     } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error generando reporte: $e');
+      AppFeedback.errorOn(messenger, 'Error generando resumen: $e');
     }
   }
 
-  /// Devuelve "FECHA: dd-mm-aaaa" si todos los adelantos son del mismo
-  /// día, o "FECHAS: dd-mm · dd-mm · ..." si son varios. Las fechas se
-  /// listan ordenadas ascendente. Si hay más de 5 fechas distintas
-  /// muestra el rango "FECHAS: dd-mm-aaaa AL dd-mm-aaaa" para no
-  /// inflar el encabezado.
-  static String _renderEtiquetaFechas(List<AdelantoChofer> adelantos) {
-    // Set para deduplicar por día (ignoramos hora — todos los
-    // adelantos suelen estar a las 00:00 pero por las dudas).
+  // ===========================================================================
+  // PDF
+  // ===========================================================================
+
+  static Future<Uint8List> _generarPdf(List<AdelantoChofer> adelantos) async {
+    // Roboto regular + bold — necesarias para acentos españoles, °, —, etc.
+    // Mismo motivo que `recibos_adelanto_service`: Helvetica embedded
+    // del package `pdf` no garantiza esos glifos.
+    final robotoRegular = pw.Font.ttf(
+      await rootBundle.load('assets/fonts/Roboto-Regular.ttf'),
+    );
+    final robotoBold = pw.Font.ttf(
+      await rootBundle.load('assets/fonts/Roboto-Bold.ttf'),
+    );
+    final doc = pw.Document(
+      theme: pw.ThemeData.withFont(base: robotoRegular, bold: robotoBold),
+    );
+
+    // Logo VAVG opcional. Si falla la carga del asset, seguimos sin
+    // logo en lugar de romper el PDF — auditoría igual sirve.
+    pw.MemoryImage? logo;
+    try {
+      final bytes = await rootBundle.load('assets/brand/vavg_logo.png');
+      logo = pw.MemoryImage(bytes.buffer.asUint8List());
+    } catch (_) {
+      logo = null;
+    }
+
+    final fechaImpresion = DateTime.now();
+    final etiquetaFechas = _etiquetaFechas(adelantos);
+
+    // MultiPage para soportar listas largas que no entran en 1 hoja.
+    // El `header` se repite en cada página; el footer también.
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.fromLTRB(24, 20, 24, 20),
+        header: (ctx) => _headerBuilder(
+          logo: logo,
+          etiquetaFechas: etiquetaFechas,
+          numeroPagina: ctx.pageNumber,
+          totalPaginas: ctx.pagesCount,
+        ),
+        footer: (ctx) => _footerBuilder(
+          fechaImpresion: fechaImpresion,
+          numeroPagina: ctx.pageNumber,
+          totalPaginas: ctx.pagesCount,
+        ),
+        build: (ctx) => [
+          _tablaAdelantos(adelantos),
+        ],
+      ),
+    );
+
+    final bytes = await doc.save();
+    return bytes;
+  }
+
+  static pw.Widget _headerBuilder({
+    required pw.MemoryImage? logo,
+    required String etiquetaFechas,
+    required int numeroPagina,
+    required int totalPaginas,
+  }) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 12),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              if (logo != null) ...[
+                pw.SizedBox(
+                  width: 60,
+                  height: 36,
+                  child: pw.Image(logo, fit: pw.BoxFit.contain),
+                ),
+                pw.SizedBox(width: 12),
+              ],
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'TRANSPORTE SERVI-TOLVA',
+                      style: pw.TextStyle(
+                        fontSize: 16,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'Resumen de adelantos',
+                      style: const pw.TextStyle(
+                        fontSize: 11,
+                        color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (totalPaginas > 1)
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 3),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey400),
+                  ),
+                  child: pw.Text(
+                    'Hoja $numeroPagina/$totalPaginas',
+                    style: const pw.TextStyle(
+                      fontSize: 9,
+                      color: PdfColors.grey700,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          pw.SizedBox(height: 8),
+          pw.Container(
+            padding:
+                const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey200,
+              border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+            ),
+            child: pw.Text(
+              etiquetaFechas,
+              style: pw.TextStyle(
+                fontSize: 11,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+          ),
+          pw.SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _footerBuilder({
+    required DateTime fechaImpresion,
+    required int numeroPagina,
+    required int totalPaginas,
+  }) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 8),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            'Impreso ${AppFormatters.formatearFechaHoraSinSegundos(fechaImpresion)}',
+            style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+          ),
+          if (totalPaginas > 1)
+            pw.Text(
+              '$numeroPagina / $totalPaginas',
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+            ),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _tablaAdelantos(List<AdelantoChofer> adelantos) {
+    // Anchos relativos de las 5 columnas. Ajustados a ojo en una
+    // página A4 con margen 24 + headers de columna razonables:
+    //   #          ~5%   centrado
+    //   CHOFER     ~30%
+    //   DETALLE    ~38%
+    //   ADELANTO   ~15%  derecha
+    //   N° RECIBO  ~12%  centrado
+    final colWidths = <int, pw.TableColumnWidth>{
+      0: const pw.FlexColumnWidth(1),
+      1: const pw.FlexColumnWidth(6),
+      2: const pw.FlexColumnWidth(7.5),
+      3: const pw.FlexColumnWidth(3),
+      4: const pw.FlexColumnWidth(2.5),
+    };
+
+    return pw.Table(
+      columnWidths: colWidths,
+      border: pw.TableBorder.all(color: PdfColors.grey400, width: 0.5),
+      children: [
+        // ─── Header ─────────────────────────────────────────────────
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.green800),
+          children: [
+            _celdaHeader('#', align: pw.TextAlign.center),
+            _celdaHeader('CHOFER'),
+            _celdaHeader('DETALLE'),
+            _celdaHeader('ADELANTO \$', align: pw.TextAlign.right),
+            _celdaHeader('N° RECIBO', align: pw.TextAlign.center),
+          ],
+        ),
+        // ─── Filas ──────────────────────────────────────────────────
+        for (var i = 0; i < adelantos.length; i++)
+          _filaAdelanto(i + 1, adelantos[i]),
+      ],
+    );
+  }
+
+  static pw.TableRow _filaAdelanto(int numero, AdelantoChofer a) {
+    final nombre = a.choferNombre?.trim().isNotEmpty == true
+        ? a.choferNombre!.trim()
+        : 'DNI ${a.choferDni}';
+    final detalle = a.observacion?.trim().isNotEmpty == true
+        ? a.observacion!.trim()
+        : '';
+    final recibo = a.numeroRecibo == null
+        ? ''
+        : a.numeroRecibo.toString().padLeft(6, '0');
+    final monto = AppFormatters.formatearMonto(a.monto);
+
+    return pw.TableRow(
+      verticalAlignment: pw.TableCellVerticalAlignment.middle,
+      children: [
+        _celdaDato(numero.toString(), align: pw.TextAlign.center),
+        _celdaDato(nombre),
+        _celdaDato(detalle),
+        _celdaDato('\$ $monto', align: pw.TextAlign.right, bold: true),
+        _celdaDato(recibo, align: pw.TextAlign.center),
+      ],
+    );
+  }
+
+  static pw.Widget _celdaHeader(String text,
+      {pw.TextAlign align = pw.TextAlign.left}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      child: pw.Text(
+        text,
+        textAlign: align,
+        style: pw.TextStyle(
+          fontSize: 10,
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.white,
+        ),
+      ),
+    );
+  }
+
+  static pw.Widget _celdaDato(String text,
+      {pw.TextAlign align = pw.TextAlign.left, bool bold = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+      child: pw.Text(
+        text,
+        textAlign: align,
+        style: pw.TextStyle(
+          fontSize: 10,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+      ),
+    );
+  }
+
+  /// Decide entre "FECHA: dd-mm-aaaa" (todos del mismo día), "FECHAS:
+  /// a · b · c" (hasta 5 días distintos) o "FECHAS: primer AL último"
+  /// (más de 5).
+  static String _etiquetaFechas(List<AdelantoChofer> adelantos) {
     final dias = <DateTime>{};
     for (final a in adelantos) {
       dias.add(DateTime(a.fecha.year, a.fecha.month, a.fecha.day));
@@ -245,89 +363,79 @@ class ReportAdelantosService {
   }
 
   // ===========================================================================
-  // HELPERS DE CELDA
+  // IMPRESIÓN (mismo flow que _ComprobantePrinter del recibo individual)
   // ===========================================================================
 
-  /// Crea una fila "banner" merged a través de todas las columnas de
-  /// la tabla, con el estilo dado. La lib `excel` no acepta merge
-  /// vacío — escribimos el texto en la primera celda y mergeamos.
-  static void _setMergedHeader(
-    ex.Sheet hoja, {
-    required int row,
-    required String text,
-    required String backgroundHex,
-    required String fontHex,
-    required double fontSize,
-    bool bold = false,
-    required ex.HorizontalAlign align,
-  }) {
-    final first = ex.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row);
-    final last =
-        ex.CellIndex.indexByColumnRow(columnIndex: _cols - 1, rowIndex: row);
-    final cell = hoja.cell(first);
-    cell.value = ex.TextCellValue(text);
-    cell.cellStyle = ex.CellStyle(
-      bold: bold,
-      fontSize: fontSize.toInt(),
-      backgroundColorHex: ex.ExcelColor.fromHexString(backgroundHex),
-      fontColorHex: ex.ExcelColor.fromHexString(fontHex),
-      horizontalAlign: align,
-      verticalAlign: ex.VerticalAlign.Center,
-    );
-    // Aplicar el mismo background a las celdas mergeadas para que
-    // visualmente quede uniforme — sin esto, el resto de la fila
-    // queda blanca y se ve el corte.
-    for (var c = 1; c < _cols; c++) {
-      hoja
-          .cell(
-              ex.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: row))
-          .cellStyle = ex.CellStyle(
-        backgroundColorHex: ex.ExcelColor.fromHexString(backgroundHex),
+  /// Manda el PDF a la impresora default del sistema. Devuelve `true`
+  /// si pudo mandar a imprimir, `false` si terminó abriendo el viewer
+  /// (sin impresora / falla del subsystem).
+  static Future<bool> _imprimirDirecto(
+      Uint8List bytes, String nombreArchivo) async {
+    try {
+      final printers = await Printing.listPrinters();
+      if (printers.isEmpty) {
+        await _abrirPdfConViewerSistema(bytes, nombreArchivo: nombreArchivo);
+        return false;
+      }
+      final printer = printers.firstWhere(
+        (p) => p.isDefault,
+        orElse: () => printers.first,
+      );
+      final ok = await Printing.directPrintPdf(
+        printer: printer,
+        onLayout: (_) async => bytes,
+        name: nombreArchivo,
+      );
+      if (!ok) {
+        await _abrirPdfConViewerSistema(bytes, nombreArchivo: nombreArchivo);
+        return false;
+      }
+      return true;
+    } catch (e, stack) {
+      debugPrint('⚠️ Printing.directPrintPdf falló: $e');
+      debugPrint(stack.toString());
+      await _abrirPdfConViewerSistema(bytes, nombreArchivo: nombreArchivo);
+      return false;
+    }
+  }
+
+  static Future<void> _abrirPdfConViewerSistema(
+    Uint8List bytes, {
+    required String nombreArchivo,
+  }) async {
+    final tempDir = await getTemporaryDirectory();
+    final file = File('${tempDir.path}/$nombreArchivo');
+    await file.writeAsBytes(bytes, flush: true);
+    if (!kIsWeb && Platform.isWindows) {
+      await Process.start(
+        'cmd',
+        ['/c', 'start', '', file.path],
+        runInShell: true,
+      );
+    } else {
+      await launchUrl(
+        Uri.file(file.path),
+        mode: LaunchMode.externalApplication,
       );
     }
-    hoja.merge(first, last);
-    hoja.setRowHeight(row, fontSize + 12);
   }
 
-  static void _setText(ex.Sheet hoja, int col, int row, String v) {
-    hoja
-            .cell(ex.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row))
-            .value =
-        ex.TextCellValue(v);
-  }
-
-  static void _setInt(ex.Sheet hoja, int col, int row, int v) {
-    final cell = hoja.cell(
-        ex.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));
-    cell.value = ex.IntCellValue(v);
-    cell.cellStyle = ex.CellStyle(
-      numberFormat: xu.formatoARSinDecimales,
-      horizontalAlign: ex.HorizontalAlign.Center,
-    );
-  }
-
-  static void _setMonto(
-    ex.Sheet hoja,
-    int col,
-    int row,
-    double v, {
-    bool bold = false,
-  }) {
-    final cell = hoja.cell(
-        ex.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));
-    cell.value = ex.DoubleCellValue(v);
-    cell.cellStyle = ex.CellStyle(
-      numberFormat: xu.formatoAR,
-      bold: bold,
-      horizontalAlign: ex.HorizontalAlign.Right,
-    );
-  }
+  // ===========================================================================
+  // HELPERS
+  // ===========================================================================
 
   static String _slugFecha(DateTime d) {
     final dd = d.day.toString().padLeft(2, '0');
     final mm = d.month.toString().padLeft(2, '0');
     final yyyy = d.year.toString();
-    return '$dd-$mm-$yyyy';
+    return '$yyyy-$mm-$dd';
+  }
+
+  static String _hhmmss(DateTime d) {
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mm = d.minute.toString().padLeft(2, '0');
+    final ss = d.second.toString().padLeft(2, '0');
+    return '$hh$mm$ss';
   }
 
   static void _notificarProgreso(ScaffoldMessengerState messenger) {
@@ -342,7 +450,7 @@ class ReportAdelantosService {
                   color: Colors.white, strokeWidth: 2),
             ),
             SizedBox(width: 15),
-            Text('Generando resumen de adelantos...'),
+            Text('Generando resumen para imprimir...'),
           ],
         ),
         backgroundColor: Colors.blueGrey,
@@ -350,3 +458,4 @@ class ReportAdelantosService {
     );
   }
 }
+
