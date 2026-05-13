@@ -2866,7 +2866,9 @@ const SEG_HIGIENE_DESTINATARIO_DNI = "34730329";
 //     erróneo. 15 km/h descarta el drift sin perder casos reales —
 //     un camión en ruta nunca va a < 20 km/h salvo en peajes y
 //     entradas a acopios (que se cuentan como pausa, no como manejo).
-//   - 15 min sin movimiento resetean el "continuo" (pausa válida).
+//   - 10 min sin movimiento resetean el "continuo" (pausa válida
+//     INTERNA — al chofer se le piden 15 min en los avisos, los 5
+//     extra son margen para el delay GPS).
 //   - Aviso a las 3:45h continuas (faltan 15 min para el límite 4h).
 //   - Aviso a las 11:30h totales del día (faltan 30 min para 12h).
 const VIGILADOR_UMBRAL_MOVIMIENTO_KMH = 15;
@@ -2877,7 +2879,18 @@ const VIGILADOR_UMBRAL_MOVIMIENTO_KMH = 15;
 // sigue acumulando "horas manejando" hasta que vuelve a haber
 // señal. Decisión 2026-05-08.
 const VIGILADOR_POLL_STALE_SEGUNDOS = 10 * 60;
-const VIGILADOR_PAUSA_RESET_SEGUNDOS = 15 * 60;
+// Pausa válida para resetear el continuo. Ajustado de 15 a 10 min
+// el 2026-05-13 a pedido de Santiago tras un caso real: Sebas Chavez
+// (DNI 24861891) paró 12:05-12:20 (15 min cronómetro en mano) pero
+// el sistema le mandó la alerta de 3:45 igual porque vio solo
+// ~10-12 min de pausa.
+// Diagnóstico: el GPS de Sitrack tiene un delay de 1-3 min entre que
+// el chofer físicamente se detiene/arranca y el sample lo refleja;
+// ese delay se come una buena parte del umbral de 15 min cuando la
+// pausa es justo de ese largo. Con 10 min, una pausa real de 12-13
+// min ya cuenta. Sigue siendo más estricto que la norma Mercosur
+// (30 min cada 4h 30m).
+const VIGILADOR_PAUSA_RESET_SEGUNDOS = 10 * 60;
 const VIGILADOR_CONTINUO_ALERTA_SEGUNDOS = 3 * 3600 + 45 * 60;
 const VIGILADOR_CONTINUO_LIMITE_SEGUNDOS = 4 * 3600;
 const VIGILADOR_DIARIO_ALERTA_SEGUNDOS = 11 * 3600 + 30 * 60;
@@ -4126,17 +4139,26 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
 // diarias).
 //
 // Fuente de datos: SITRACK_POSICIONES, último snapshot por patente.
-// "Manejando" se define como `speed > 10 km/h` — el motor encendido en
-// pausa NO cuenta (caso real Vecchi: choferes paran a descansar pero
-// dejan el motor prendido para A/C). Una pausa de 15 min sin
-// movimiento resetea el "continuo actual" (alineado con norma de
-// tacógrafo más laxa que la Mercosur de 30 min — decisión Vecchi).
+// "Manejando" se define como `speed > 15 km/h` — el motor encendido
+// en pausa NO cuenta (caso real Vecchi: choferes paran a descansar
+// pero dejan el motor prendido para A/C).
+//
+// Lógica del reset por pausa:
+//   - Internamente el sistema considera "pausa válida" a 10 min de
+//     speed ≤ 15 sin movimiento (ver VIGILADOR_PAUSA_RESET_SEGUNDOS).
+//   - Al chofer le PEDIMOS 15 min de pausa en los avisos (las 6
+//     variantes del aviso lo dicen explícito). El margen entre los
+//     10 min internos y los 15 min pedidos al chofer compensa el
+//     delay GPS típico de Sitrack (1-3 min al frenar + 1-3 min al
+//     arrancar). Sin ese margen, un chofer que para exactos 15 min
+//     puede no llegar al umbral interno (caso real reportado por
+//     Sebas Chavez 2026-05-13).
 //
 // Estado por chofer en JORNADAS_CHOFER/{dni}_{YYYY-MM-DD}:
 //   - segundos_total_dia       (acumulado del día, suma de todos los
-//                                tramos > 10 km/h).
+//                                tramos > 15 km/h).
 //   - segundos_continuo_actual (acumulado desde el último reset por
-//                                pausa válida ≥ 15 min).
+//                                pausa válida ≥ 10 min).
 //   - segundos_pausa_actual    (tiempo seguido con speed ≤ 10 km/h).
 //   - flags de alerta enviada (para no repetir en el mismo ciclo).
 //   - flags de exceso (para el resumen diario al jefe de Seg).
