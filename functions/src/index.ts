@@ -4187,8 +4187,18 @@ export const vigiladorJornadaChofer = onSchedule(
       // ese caso como "no manejando" — no sumamos delta. Sin esto un
       // chofer que paró con speed=80 en su último poll seguía
       // sumando horas falsas hasta que vuelva a haber señal.
+      //
+      // Bug fixeado 2026-05-13: este check antes leía `data.polled_en`
+      // pero el `sitrackPosicionPoller` escribe el campo como
+      // `consultado_en` (línea ~3745). El mismatch hacía que el
+      // timestamp leído fuera SIEMPRE undefined → polledHaceSegundos
+      // = Infinity → pollStale = true para TODOS los snapshots →
+      // speedEfectivo = 0 para TODOS los choferes → nadie acumulaba
+      // jornada. Resultado: el resumen diario decía "0 excesos" hace
+      // ~5 días (desde el commit `8dbb675` 2026-05-08 que introdujo
+      // este check). Reportado por Santiago 2026-05-13.
       const polledEnMs =
-        (data.polled_en as Timestamp | undefined)?.toMillis() ?? 0;
+        (data.consultado_en as Timestamp | undefined)?.toMillis() ?? 0;
       const polledHaceSegundos =
         polledEnMs > 0 ? (Date.now() - polledEnMs) / 1000 : Infinity;
       const pollStale = polledHaceSegundos > VIGILADOR_POLL_STALE_SEGUNDOS;
