@@ -204,28 +204,44 @@ class _CardAdelanto extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          Row(
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              const Icon(Icons.calendar_today_outlined,
-                  size: 12, color: Colors.white54),
-              const SizedBox(width: 4),
-              Text(
-                fechaFmt,
-                style: const TextStyle(color: Colors.white60, fontSize: 12),
-              ),
-              if (yaImpreso) ...[
-                const SizedBox(width: 12),
-                const Icon(Icons.receipt_long_outlined,
-                    size: 12, color: AppColors.accentBlue),
-                const SizedBox(width: 4),
-                Text(
-                  'Recibo N° ${adelanto.numeroRecibo!.toString().padLeft(6, '0')}',
-                  style: const TextStyle(
-                    color: AppColors.accentBlue,
-                    fontSize: 12,
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.calendar_today_outlined,
+                      size: 12, color: Colors.white54),
+                  const SizedBox(width: 4),
+                  Text(
+                    fechaFmt,
+                    style:
+                        const TextStyle(color: Colors.white60, fontSize: 12),
                   ),
+                ],
+              ),
+              // Chip de medio de pago. Color: amber para transferencia
+              // (porque suele requerir más seguimiento — comprobante
+              // bancario, etc.), teal para efectivo (entrega directa).
+              _ChipMedioPago(medio: adelanto.medioPago),
+              if (yaImpreso)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.receipt_long_outlined,
+                        size: 12, color: AppColors.accentBlue),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Recibo N° ${adelanto.numeroRecibo!.toString().padLeft(6, '0')}',
+                      style: const TextStyle(
+                        color: AppColors.accentBlue,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
-              ],
             ],
           ),
           if (adelanto.observacion != null &&
@@ -307,6 +323,9 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
   String? _choferDni;
   String? _choferNombre;
   DateTime _fecha = DateTime.now();
+  // Default = efectivo (Santiago 2026-05-13). La mayoría de los
+  // adelantos se entregan en mano.
+  MedioPagoAdelanto _medioPago = MedioPagoAdelanto.efectivo;
   bool _guardando = false;
   String? _error;
 
@@ -322,6 +341,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
       _fecha = a.fecha;
       _montoCtrl.text = AppFormatters.formatearMiles(a.monto.toInt());
       _obsCtrl.text = a.observacion ?? '';
+      _medioPago = a.medioPago;
     }
   }
 
@@ -420,6 +440,38 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                 inputFormatters: [AppFormatters.inputMiles],
               ),
               const SizedBox(height: 12),
+              // ─── Medio de pago ───
+              // Toggle entre efectivo (default) y transferencia. Aparece
+              // en el comprobante impreso, donde el chofer firma.
+              const Padding(
+                padding: EdgeInsets.only(left: 4, bottom: 4),
+                child: Text(
+                  'Medio de pago',
+                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                ),
+              ),
+              SegmentedButton<MedioPagoAdelanto>(
+                segments: const [
+                  ButtonSegment(
+                    value: MedioPagoAdelanto.efectivo,
+                    label: Text('EFECTIVO'),
+                    icon: Icon(Icons.payments_outlined, size: 16),
+                  ),
+                  ButtonSegment(
+                    value: MedioPagoAdelanto.transferencia,
+                    label: Text('TRANSFERENCIA'),
+                    icon: Icon(Icons.account_balance_outlined, size: 16),
+                  ),
+                ],
+                selected: {_medioPago},
+                onSelectionChanged: (sel) =>
+                    setState(() => _medioPago = sel.first),
+                showSelectedIcon: false,
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              const SizedBox(height: 12),
               // ─── Observación ───
               TextField(
                 controller: _obsCtrl,
@@ -497,6 +549,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
           fecha: _fecha,
           monto: monto,
           observacion: obs,
+          medioPago: _medioPago,
           viajeId: widget.adelanto!.viajeId,
           actualizadoPorDni: dniActual,
         );
@@ -507,6 +560,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
           fecha: _fecha,
           monto: monto,
           observacion: obs,
+          medioPago: _medioPago,
           creadoPorDni: dniActual,
           creadoPorNombre: PrefsService.nombre,
         );
@@ -658,5 +712,46 @@ class _BotonImprimirComprobanteState
         mode: LaunchMode.externalApplication,
       );
     }
+  }
+}
+
+/// Chip compacto para mostrar el medio de pago del adelanto en la
+/// card de la lista. Efectivo → teal (entrega directa); transferencia
+/// → amber (suele requerir comprobante bancario adjunto).
+class _ChipMedioPago extends StatelessWidget {
+  final MedioPagoAdelanto medio;
+  const _ChipMedioPago({required this.medio});
+
+  @override
+  Widget build(BuildContext context) {
+    final esEfectivo = medio == MedioPagoAdelanto.efectivo;
+    final color = esEfectivo ? AppColors.accentTeal : AppColors.accentAmber;
+    final icono = esEfectivo
+        ? Icons.payments_outlined
+        : Icons.account_balance_outlined;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icono, size: 11, color: color),
+          const SizedBox(width: 4),
+          Text(
+            medio.etiqueta.toUpperCase(),
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.6,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

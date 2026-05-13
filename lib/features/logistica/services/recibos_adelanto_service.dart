@@ -393,6 +393,16 @@ class _Mitad {
             destacado: true,
             grande: true,
           ),
+          // ─── Medio de pago ─── (efectivo / transferencia)
+          // Crítico para auditoría: el chofer firma el recibo donde
+          // queda claro CÓMO recibió la plata. Si fue transferencia,
+          // el comprobante bancario respalda; si fue efectivo, la
+          // firma es la única evidencia.
+          _Linea(
+            label: 'Medio de pago',
+            valor: adelanto.medioPago.etiqueta.toUpperCase(),
+            destacado: true,
+          ),
           pw.SizedBox(height: 8),
           // ─── Observación ───
           pw.Text(

@@ -1,5 +1,30 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+/// Medio por el cual se le entregó el adelanto al chofer. Importante
+/// para la auditoría del comprobante — el chofer firma el recibo
+/// donde dice cómo recibió la plata. Default = efectivo (la mayoría
+/// de los adelantos se dan en mano, decisión Santiago 2026-05-13).
+enum MedioPagoAdelanto {
+  efectivo('EFECTIVO', 'Efectivo'),
+  transferencia('TRANSFERENCIA', 'Transferencia');
+
+  final String codigo;
+  final String etiqueta;
+  const MedioPagoAdelanto(this.codigo, this.etiqueta);
+
+  /// Parser tolerante para leer de Firestore. Default a `efectivo` si
+  /// el campo no existe (adelantos pre-feature) o trae un código que
+  /// no reconocemos.
+  static MedioPagoAdelanto fromCodigo(String? raw) {
+    if (raw == null) return MedioPagoAdelanto.efectivo;
+    final t = raw.trim().toUpperCase();
+    for (final m in MedioPagoAdelanto.values) {
+      if (m.codigo == t) return m;
+    }
+    return MedioPagoAdelanto.efectivo;
+  }
+}
+
 /// Un adelanto entregado a un chofer. Puede ser:
 ///   - Por un viaje específico (campo `viajeId` poblado).
 ///   - Adelanto de sueldo, sin viaje asociado (`viajeId == null`).
@@ -42,6 +67,10 @@ class AdelantoChofer {
   /// Bahía-Olavarría", "adelanto sueldo julio", "viáticos".
   final String? observacion;
 
+  /// Cómo se le entregó al chofer (efectivo / transferencia). Aparece
+  /// en el comprobante impreso. Default = efectivo.
+  final MedioPagoAdelanto medioPago;
+
   /// Si el adelanto fue por un viaje específico, este campo apunta a
   /// `VIAJES_LOGISTICA/{viajeId}`. Si es de sueldo o sin viaje
   /// concreto, queda null. Opcional — el operador puede asociarlo o
@@ -70,6 +99,7 @@ class AdelantoChofer {
     required this.fecha,
     required this.monto,
     this.observacion,
+    this.medioPago = MedioPagoAdelanto.efectivo,
     this.viajeId,
     this.numeroRecibo,
     this.impresoEn,
@@ -88,6 +118,7 @@ class AdelantoChofer {
       fecha: (d['fecha'] as Timestamp?)?.toDate() ?? DateTime.now(),
       monto: (d['monto'] as num?)?.toDouble() ?? 0,
       observacion: d['observacion']?.toString(),
+      medioPago: MedioPagoAdelanto.fromCodigo(d['medio_pago']?.toString()),
       viajeId: d['viaje_id']?.toString(),
       numeroRecibo: (d['numero_recibo'] as num?)?.toInt(),
       impresoEn: (d['impreso_en'] as Timestamp?)?.toDate(),

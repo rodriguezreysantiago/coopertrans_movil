@@ -113,6 +113,7 @@ class AdelantosService {
     required DateTime fecha,
     required double monto,
     String? observacion,
+    MedioPagoAdelanto medioPago = MedioPagoAdelanto.efectivo,
     String? viajeId,
     required String creadoPorDni,
     String? creadoPorNombre,
@@ -132,6 +133,7 @@ class AdelantosService {
       'monto': monto,
       if (observacion != null && observacion.trim().isNotEmpty)
         'observacion': observacion.trim(),
+      'medio_pago': medioPago.codigo,
       if (viajeId != null && viajeId.trim().isNotEmpty) 'viaje_id': viajeId,
       'creado_en': FieldValue.serverTimestamp(),
       'creado_por_dni': creadoPorDni,
@@ -141,7 +143,10 @@ class AdelantosService {
     };
 
     await docRef.set(data);
-    AppLogger.log('Adelanto creado: ${docRef.id} chofer=$choferDni monto=$monto');
+    AppLogger.log(
+      'Adelanto creado: ${docRef.id} chofer=$choferDni monto=$monto '
+      'medio=${medioPago.codigo}',
+    );
     return docRef.id;
   }
 
@@ -154,6 +159,7 @@ class AdelantosService {
     required DateTime fecha,
     required double monto,
     String? observacion,
+    MedioPagoAdelanto medioPago = MedioPagoAdelanto.efectivo,
     String? viajeId,
     required String actualizadoPorDni,
   }) async {
@@ -169,6 +175,7 @@ class AdelantosService {
       'observacion': observacion?.trim().isEmpty ?? true
           ? null
           : observacion!.trim(),
+      'medio_pago': medioPago.codigo,
       'viaje_id': viajeId?.trim().isEmpty ?? true ? null : viajeId!.trim(),
       'actualizado_en': FieldValue.serverTimestamp(),
       'actualizado_por_dni': actualizadoPorDni,
