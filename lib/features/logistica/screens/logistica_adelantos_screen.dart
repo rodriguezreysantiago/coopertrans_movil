@@ -327,6 +327,11 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
   // adelantos se entregan en mano.
   MedioPagoAdelanto _medioPago = MedioPagoAdelanto.efectivo;
   bool _guardando = false;
+  // Si verdadero, ya guardamos el adelanto y estamos esperando que la
+  // impresión salga (Cloud Function + PDF + envío a impresora). Lo
+  // mostramos como "Imprimiendo…" para que el operador entienda por
+  // qué el dialog no se cierra de inmediato.
+  bool _imprimiendo = false;
   String? _error;
 
   bool get _esEdicion => widget.adelanto != null;
@@ -501,13 +506,22 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
         FilledButton(
           onPressed: _guardando ? null : _guardar,
           child: _guardando
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
+              ? Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    ),
+                    if (_imprimiendo) ...[
+                      const SizedBox(width: 8),
+                      const Text('IMPRIMIENDO…'),
+                    ],
+                  ],
                 )
-              : Text(_esEdicion ? 'GUARDAR' : 'CREAR'),
+              : Text(_esEdicion ? 'GUARDAR' : 'CREAR E IMPRIMIR'),
         ),
       ],
     );
@@ -542,6 +556,10 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
       final dniActual = PrefsService.dni;
       final obs = _obsCtrl.text.trim().isEmpty ? null : _obsCtrl.text.trim();
       if (_esEdicion) {
+        // Edición: NO re-imprime — si el operador necesita un nuevo
+        // comprobante usa "REIMPRIMIR" en la card. Editar suele ser
+        // para corregir un dato menor (observación, fecha, medio de
+        // pago) y reimprimir con el mismo correlativo no aporta.
         await AdelantosService.actualizarAdelanto(
           adelantoId: widget.adelanto!.id,
           choferDni: _choferDni!,
@@ -553,22 +571,49 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
           viajeId: widget.adelanto!.viajeId,
           actualizadoPorDni: dniActual,
         );
-      } else {
-        await AdelantosService.crearAdelanto(
-          choferDni: _choferDni!,
-          choferNombre: _choferNombre,
-          fecha: _fecha,
-          monto: monto,
-          observacion: obs,
-          medioPago: _medioPago,
-          creadoPorDni: dniActual,
-          creadoPorNombre: PrefsService.nombre,
-        );
+        if (mounted) Navigator.pop(context);
+        return;
       }
+
+      // ─── Modo alta ──────────────────────────────────────────────
+      final adelantoId = await AdelantosService.crearAdelanto(
+        choferDni: _choferDni!,
+        choferNombre: _choferNombre,
+        fecha: _fecha,
+        monto: monto,
+        observacion: obs,
+        medioPago: _medioPago,
+        creadoPorDni: dniActual,
+        creadoPorNombre: PrefsService.nombre,
+      );
+
+      // Auto-imprimir el comprobante recién creado (Santiago
+      // 2026-05-13: el flow físico es entregar la plata, firmar el
+      // recibo, así que el operador siempre va a imprimir después de
+      // crear — auto-hacerlo ahorra un click). Si la impresión falla
+      // (Cloud Function caída, sin impresora, etc.), el adelanto ya
+      // está en la base — el operador puede usar "REIMPRIMIR" desde
+      // la lista.
+      if (!mounted) return;
+      setState(() => _imprimiendo = true);
+      final adelantoLocal = AdelantoChofer(
+        id: adelantoId,
+        choferDni: _choferDni!,
+        choferNombre: _choferNombre,
+        fecha: _fecha,
+        monto: monto,
+        observacion: obs,
+        medioPago: _medioPago,
+      );
+      await _ComprobantePrinter.imprimir(
+        context: context,
+        adelanto: adelantoLocal,
+      );
       if (mounted) Navigator.pop(context);
     } catch (e) {
       setState(() {
         _guardando = false;
+        _imprimiendo = false;
         _error = e.toString().replaceFirst(RegExp(r'^[A-Z][a-z]+: '), '');
       });
     }
@@ -626,17 +671,54 @@ class _BotonImprimirComprobanteState
   }
 
   Future<void> _imprimir() async {
-    final messenger = ScaffoldMessenger.of(context);
     setState(() => _generando = true);
+    try {
+      await _ComprobantePrinter.imprimir(
+        context: context,
+        adelanto: widget.adelanto,
+      );
+    } finally {
+      if (mounted) setState(() => _generando = false);
+    }
+  }
+}
+
+// =============================================================================
+// HELPER DE IMPRESIÓN (compartido entre botón manual + auto-imprimir al crear)
+// =============================================================================
+
+/// Encapsula el flow completo de imprimir un comprobante de adelanto:
+///   1. Pedir / reusar correlativo via Cloud Function (idempotente).
+///   2. Generar el PDF (A4 dos mitades).
+///   3. Mandar a impresora default; si falla, fallback al viewer del SO.
+///   4. Mostrar feedback al usuario via ScaffoldMessenger.
+///
+/// Se usa desde 2 lugares:
+///   - Botón "IMPRIMIR / REIMPRIMIR COMPROBANTE" en la card (manual).
+///   - Form de alta `_AdelantoFormDialog._guardar()` (automático al crear).
+///
+/// Los errores se reportan via SnackBar y NO se re-tiran al caller — para
+/// que el form pueda cerrar el dialog igual aunque la impresión haya
+/// fallado (el adelanto ya está creado, el operador puede reimprimir
+/// manual desde la card). Devuelve `true` si pudo mandar a impresora,
+/// `false` si terminó en el viewer o si falló.
+class _ComprobantePrinter {
+  static Future<bool> imprimir({
+    required BuildContext context,
+    required AdelantoChofer adelanto,
+  }) async {
+    // Capturamos el messenger ANTES del await para evitar usar el
+    // BuildContext después de un async gap (lint rule).
+    final messenger = ScaffoldMessenger.of(context);
     try {
       // 1. Asignar / reusar número correlativo (Cloud Function).
       final resultado = await RecibosAdelantoService.asignarNumeroSiFalta(
-        adelantoId: widget.adelanto.id,
+        adelantoId: adelanto.id,
       );
       final numero = resultado.numero;
-      // 2. Generar PDF en memoria (Uint8List).
+      // 2. Generar PDF en memoria.
       final Uint8List pdfBytes = await RecibosAdelantoService.generarPdf(
-        adelanto: widget.adelanto,
+        adelanto: adelanto,
         numeroRecibo: numero,
         esReimpresion: resultado.esReimpresion,
       );
@@ -644,27 +726,24 @@ class _BotonImprimirComprobanteState
       final nombreArchivo =
           'Comprobante-Adelanto-Nro-${numero.toString().padLeft(6, '0')}.pdf';
       final impresoOk = await _imprimirDirecto(pdfBytes, nombreArchivo);
-      if (mounted) {
-        if (impresoOk) {
-          AppFeedback.successOn(messenger,
-              'Comprobante Nro. ${numero.toString().padLeft(6, '0')} '
-              'enviado a la impresora.');
-        } else {
-          AppFeedback.successOn(messenger,
-              'Comprobante Nro. ${numero.toString().padLeft(6, '0')} abierto. '
-              'Imprimí desde el visor (Ctrl+P).');
-        }
+      if (impresoOk) {
+        AppFeedback.successOn(messenger,
+            'Comprobante Nro. ${numero.toString().padLeft(6, '0')} '
+            'enviado a la impresora.');
+      } else {
+        AppFeedback.successOn(messenger,
+            'Comprobante Nro. ${numero.toString().padLeft(6, '0')} abierto. '
+            'Imprimí desde el visor (Ctrl+P).');
       }
+      return impresoOk;
     } catch (e) {
-      if (mounted) {
-        AppFeedback.errorOn(messenger, 'Error al generar comprobante: $e');
-      }
-    } finally {
-      if (mounted) setState(() => _generando = false);
+      AppFeedback.errorOn(messenger, 'Error al generar comprobante: $e');
+      return false;
     }
   }
 
-  Future<bool> _imprimirDirecto(Uint8List bytes, String nombreArchivo) async {
+  static Future<bool> _imprimirDirecto(
+      Uint8List bytes, String nombreArchivo) async {
     try {
       final printers = await Printing.listPrinters();
       if (printers.isEmpty) {
@@ -693,7 +772,7 @@ class _BotonImprimirComprobanteState
     }
   }
 
-  Future<void> _abrirPdfConViewerSistema(
+  static Future<void> _abrirPdfConViewerSistema(
     List<int> bytes, {
     required String nombreArchivo,
   }) async {
