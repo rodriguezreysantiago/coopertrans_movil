@@ -4603,6 +4603,131 @@ async function _cargarSilenciadosVigilador(): Promise<Set<string>> {
   }
 }
 
+/**
+ * Cron que detecta silencios EXPIRADOS y notifica al chofer que sus
+ * notificaciones se reanudan + borra el doc de
+ * `BOT_SILENCIADOS_CHOFER`.
+ *
+ * Pedido Santiago 2026-05-13: cuando el silencio se cumple, el
+ * chofer tiene que recibir un mensaje de "notificaciones reanudadas".
+ * Si no, el chofer no se entera de cuándo vuelven los avisos.
+ *
+ * Por qué no en el vigilador: el vigilador corre cada 5 min y es
+ * tiempo-crítico (alertas de jornada). Esto puede esperar hasta 10
+ * min sin problema y mantenemos las funciones desacopladas.
+ *
+ * Path "manual desilenciar": si el admin corre `/desilenciar DNI`
+ * antes de que expire, el bot mismo encola la reanudación y borra
+ * el doc — este cron nunca lo ve. Eso es OK: ambos paths terminan en
+ * el mismo estado (mensaje encolado + doc borrado).
+ */
+export const procesarSilenciadosExpirados = onSchedule(
+  {
+    schedule: "every 10 minutes",
+    timeZone: "America/Argentina/Buenos_Aires",
+    timeoutSeconds: 60,
+    memory: "256MiB",
+  },
+  async () => {
+    const ahora = Timestamp.now();
+    let snap;
+    try {
+      snap = await db
+        .collection("BOT_SILENCIADOS_CHOFER")
+        .where("silenciado_hasta", "<=", ahora)
+        .limit(100)
+        .get();
+    } catch (e) {
+      logger.warn("[procesarSilenciadosExpirados] query falló", {
+        error: (e as Error).message,
+      });
+      return;
+    }
+    if (snap.empty) {
+      logger.debug("[procesarSilenciadosExpirados] sin expirados");
+      return;
+    }
+    let notificados = 0;
+    let saltados = 0;
+    for (const d of snap.docs) {
+      const data = d.data();
+      const dni = (data.chofer_dni || d.id).toString();
+      try {
+        await _encolarAvisoSilencioReanudado(dni);
+        notificados++;
+      } catch (e) {
+        logger.warn("[procesarSilenciadosExpirados] no encolé reanudación", {
+          dni,
+          error: (e as Error).message,
+        });
+        saltados++;
+        // Igual borramos el doc — sino el cron lo ve infinitas veces.
+        // Si el chofer no tiene teléfono o está inactivo, el aviso no
+        // tiene a dónde ir y reintentar no ayuda.
+      }
+      try {
+        await d.ref.delete();
+      } catch (e) {
+        logger.warn("[procesarSilenciadosExpirados] no borré doc", {
+          dni,
+          error: (e as Error).message,
+        });
+      }
+    }
+    logger.info("[procesarSilenciadosExpirados] OK", {
+      notificados,
+      saltados,
+      total: snap.size,
+    });
+  }
+);
+
+async function _encolarAvisoSilencioReanudado(
+  choferDni: string
+): Promise<void> {
+  const empSnap = await db.collection("EMPLEADOS").doc(choferDni).get();
+  if (!empSnap.exists) {
+    throw new Error(`EMPLEADOS/${choferDni} no existe`);
+  }
+  const empData = empSnap.data() ?? {};
+  if (empData.ACTIVO === false) {
+    throw new Error("empleado inactivo");
+  }
+  const tel = (empData.TELEFONO ?? "").toString().trim();
+  if (!tel || tel === "-") {
+    throw new Error("sin TELEFONO");
+  }
+  const apodo = (empData.APODO ?? "").toString().trim();
+  const nombreFull = (empData.NOMBRE ?? "").toString().trim();
+  const saludoNombre = apodo || _primerNombre(nombreFull) || "";
+  const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
+
+  const mensaje =
+    `${saludo},\n\n` +
+    "Se cumplió el plazo de silencio.\n\n" +
+    "*Las notificaciones automáticas del bot vuelven a estar activas* " +
+    "(avisos de jornada, descansos, etc.).\n\n" +
+    BANNER_TESTING +
+    "_Coopertrans Móvil — Mensaje automático._";
+
+  await db.collection("COLA_WHATSAPP").add({
+    telefono: tel,
+    mensaje,
+    estado: "PENDIENTE",
+    encolado_en: FieldValue.serverTimestamp(),
+    expira_en: _expiraEnMinutos(60),
+    enviado_en: null,
+    error: null,
+    intentos: 0,
+    origen: "silencio_reanudado",
+    destinatario_coleccion: "EMPLEADOS",
+    destinatario_id: choferDni,
+    campo_base: "BOT_SILENCIADO",
+    admin_dni: "BOT",
+    admin_nombre: "Bot silenciador (cron)",
+  });
+}
+
 // Encola aviso al chofer cuando lleva 3:45h continuas de manejo.
 async function _encolarAvisoPausaContinua(
   choferDni: string,

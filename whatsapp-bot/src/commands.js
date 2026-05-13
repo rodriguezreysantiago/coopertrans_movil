@@ -533,7 +533,7 @@ async function _comandoJornada(msg, { db }, args) {
  *
  * Reusa `_parsearDuracion` (Ns/Nm/Nh/Nd, cap 30 días).
  */
-async function _comandoSilenciar(msg, { db }, args) {
+async function _comandoSilenciar(msg, { db, fs }, args) {
   if (args.length < 2) {
     await msg.reply(
       'Uso: /silenciar <DNI> <duración> [motivo]\n' +
@@ -565,7 +565,8 @@ async function _comandoSilenciar(msg, { db }, args) {
     await msg.reply(`No encontré un empleado con DNI ${dni} en EMPLEADOS.`);
     return;
   }
-  const nombre = ((empSnap.data() || {}).NOMBRE || dni).toString();
+  const empData = empSnap.data() || {};
+  const nombre = (empData.NOMBRE || dni).toString();
 
   const admin = require('firebase-admin');
   await db.collection('BOT_SILENCIADOS_CHOFER').doc(dni).set({
@@ -577,10 +578,39 @@ async function _comandoSilenciar(msg, { db }, args) {
     silenciado_por_canal: 'WHATSAPP_COMMAND',
     duracion_raw: args[1],
   });
+
+  // Avisarle al chofer que sus notificaciones del bot quedaron
+  // silenciadas (pedido Santiago 2026-05-13). Útil para que el
+  // chofer sepa que el vigilador no lo va a molestar mientras está
+  // en taller / problema conocido.
+  let avisoChoferRes = '';
+  try {
+    const enviado = await _encolarMensajeChofer(db, fs, {
+      empData,
+      dni,
+      mensaje:
+        `Hola ${_primerNombreDe(empData) || nombre},\n\n` +
+        `Las notificaciones automáticas del bot de Coopertrans Móvil ` +
+        `quedaron *silenciadas por ${args[1]}* ` +
+        `(hasta ${_fmtFechaHoraCompacto(hasta)} ART).\n\n` +
+        `Motivo: ${motivo}\n\n` +
+        `Cuando se cumpla el plazo te aviso que se reanudan.\n\n` +
+        `_Mensaje automático._`,
+      origen: 'silenciado_aviso',
+      campoBase: 'BOT_SILENCIADO',
+    });
+    avisoChoferRes = enviado
+      ? '\n📨 Aviso al chofer encolado.'
+      : '\n⚠ No se pudo avisar al chofer (sin teléfono).';
+  } catch (e) {
+    avisoChoferRes = `\n⚠ Falló encolar aviso al chofer: ${e.message}`;
+  }
+
   await msg.reply(
     `🔕 ${nombre} (DNI ${dni}) silenciado hasta ` +
     `${_fmtFechaHoraCompacto(hasta)} ART.\n` +
-    `Motivo: ${motivo}\n\n` +
+    `Motivo: ${motivo}` +
+    avisoChoferRes + '\n\n' +
     'El vigilador no le manda avisos hasta esa hora. ' +
     'Para revertir antes: /desilenciar ' + dni
   );
@@ -590,18 +620,110 @@ async function _comandoSilenciar(msg, { db }, args) {
  * `/desilenciar <DNI>` → revierte un /silenciar previo. Borra el doc
  * de BOT_SILENCIADOS_CHOFER. Idempotente — si no estaba silenciado,
  * igual responde OK.
+ *
+ * Si el silencio estaba activo (no expirado), avisa al chofer que se
+ * reanudaron las notificaciones — sino el chofer no se entera del
+ * cambio. Si ya estaba expirado (o nunca existió), saltea el aviso
+ * (la cron `procesarSilenciadosExpirados` ya lo notificó al expirar).
  */
-async function _comandoDesilenciar(msg, { db }, args) {
+async function _comandoDesilenciar(msg, { db, fs }, args) {
   const dni = (args[0] || '').replace(/\D+/g, '');
   if (!dni) {
     await msg.reply('Uso: /desilenciar <DNI>\nEj: /desilenciar 12345678');
     return;
   }
-  await db.collection('BOT_SILENCIADOS_CHOFER').doc(dni).delete();
+  const ref = db.collection('BOT_SILENCIADOS_CHOFER').doc(dni);
+  const snap = await ref.get();
+  let avisoChoferRes = '';
+
+  if (snap.exists) {
+    const s = snap.data() || {};
+    const hastaMs = (s.silenciado_hasta && s.silenciado_hasta.toMillis)
+      ? s.silenciado_hasta.toMillis()
+      : 0;
+    const estabaActivo = hastaMs > Date.now();
+    if (estabaActivo) {
+      try {
+        const empSnap = await db.collection('EMPLEADOS').doc(dni).get();
+        const empData = empSnap.exists ? (empSnap.data() || {}) : null;
+        if (empData) {
+          const enviado = await _encolarMensajeChofer(db, fs, {
+            empData,
+            dni,
+            mensaje:
+              `Hola ${_primerNombreDe(empData) || dni},\n\n` +
+              `Se levantó el silencio de las notificaciones del bot ` +
+              `antes del plazo previsto.\n\n` +
+              `*Las notificaciones automáticas vuelven a estar activas.*\n\n` +
+              `_Mensaje automático._`,
+            origen: 'desilenciado_aviso',
+            campoBase: 'BOT_DESILENCIADO',
+          });
+          avisoChoferRes = enviado
+            ? '\n📨 Aviso de reanudación encolado.'
+            : '\n⚠ No se pudo avisar al chofer (sin teléfono).';
+        } else {
+          avisoChoferRes = '\n⚠ No encuentro EMPLEADOS/' + dni +
+            ' — sin aviso.';
+        }
+      } catch (e) {
+        avisoChoferRes = `\n⚠ Falló encolar aviso al chofer: ${e.message}`;
+      }
+    }
+  }
+
+  await ref.delete();
   await msg.reply(
     `✓ Silencio levantado para DNI ${dni}. ` +
-    'El vigilador vuelve a operar normal con este chofer.'
+    'El vigilador vuelve a operar normal con este chofer.' +
+    avisoChoferRes
   );
+}
+
+/**
+ * Encola un mensaje al teléfono del chofer dado en COLA_WHATSAPP.
+ * Devuelve `true` si quedó encolado, `false` si el chofer está
+ * inactivo o no tiene teléfono. Lanza error en fallos de Firestore.
+ *
+ * Centraliza el formato del doc para que `_comandoSilenciar` y
+ * `_comandoDesilenciar` no dupliquen el shape.
+ */
+async function _encolarMensajeChofer(
+  db, fs, { empData, dni, mensaje, origen, campoBase }
+) {
+  if (empData.ACTIVO === false) return false;
+  const tel = String(empData.TELEFONO || '').trim();
+  if (!tel || tel === '-') return false;
+
+  const admin = require('firebase-admin');
+  await db.collection(fs.COLECCION).add({
+    telefono: tel,
+    mensaje,
+    estado: fs.ESTADO.pendiente,
+    encolado_en: admin.firestore.FieldValue.serverTimestamp(),
+    enviado_en: null,
+    error: null,
+    intentos: 0,
+    origen,
+    destinatario_coleccion: 'EMPLEADOS',
+    destinatario_id: dni,
+    campo_base: campoBase,
+    admin_dni: 'BOT',
+    admin_nombre: 'Bot silenciador',
+  });
+  return true;
+}
+
+/**
+ * Devuelve el primer nombre o apodo del empleado para saludarlo —
+ * matching del patrón usado por los avisos del vigilador.
+ */
+function _primerNombreDe(empData) {
+  const apodo = String(empData.APODO || '').trim();
+  if (apodo) return apodo;
+  const nom = String(empData.NOMBRE || '').trim();
+  if (!nom) return '';
+  return nom.split(/\s+/)[0] || '';
 }
 
 module.exports = {
