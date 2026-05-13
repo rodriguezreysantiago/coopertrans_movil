@@ -3018,12 +3018,16 @@ export const onAlertaVolvoMantenimientoCreated = onDocumentCreated(
     // todos los eventos de mantenimiento de las últimas 24h
     // (cron_mantenimiento_diario en whatsapp-bot/src/cron.js).
     // Enviar uno por evento generaba N mensajes separados al admin.
-    logger.info("[onAlertaVolvoMantenimientoCreated] evento registrado en VOLVO_ALERTAS — cron diario lo incluirá en resumen", {
-      alertId: event.params.alertId,
-      patente,
-      tipo,
-      etiqueta,
-    });
+    logger.info(
+      "[onAlertaVolvoMantenimientoCreated] evento registrado en " +
+      "VOLVO_ALERTAS — cron diario lo incluirá en resumen",
+      {
+        alertId: event.params.alertId,
+        patente,
+        tipo,
+        etiqueta,
+      }
+    );
   }
 );
 
@@ -5258,7 +5262,7 @@ async function _encolarAvisoArranqueTemprano(
   const variantes = [
     `${saludo},\n\n` +
       "*Descanso insuficiente.* Cerraste tu jornada de 12 h y arrancaste " +
-      `antes de la hora mínima permitida.\n\n` +
+      "antes de la hora mínima permitida.\n\n" +
       `Hora mínima de arranque: *${horaFmt} ART*. Frená el ${patente} ` +
       "y descansá hasta esa hora.\n\n" +
       "El incumplimiento queda registrado en el resumen diario.\n\n" +
