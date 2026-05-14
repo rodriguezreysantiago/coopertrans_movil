@@ -4824,10 +4824,21 @@ export const vigiladorJornadaChofer = onSchedule(
             // segundosPausaActual viene con valor real y queremos
             // detectarlo. (Si ya cumplió 8h, el reset abajo limpia
             // horaMinArranqueAt y este chequeo no aplica.)
+            //
+            // **Importante** (fix 2026-05-14, caso Miguel CORREA AC383ND):
+            // requerir `segundosPausaActual >= 10 min` ANTES de disparar
+            // — sino la alerta se disparaba al primer poll en movimiento
+            // post-12h aunque el chofer NUNCA hubiera parado (siguió
+            // manejando ignorando el aviso de 12h). La intención
+            // original es detectar "arrancó después de un descanso
+            // insuficiente"; sin la pausa, no es un arranque sino la
+            // misma jornada continuándose, y la alerta de 12h ya cubrió
+            // ese caso.
             if (
               horaMinArranqueAt != null &&
               !alertaArranqueTempranoEnviada &&
-              ahora.toMillis() < horaMinArranqueAt.toMillis()
+              ahora.toMillis() < horaMinArranqueAt.toMillis() &&
+              segundosPausaActual >= VIGILADOR_PAUSA_RESET_SEGUNDOS
             ) {
               alertArranqueTemprano = true;
               alertaArranqueTempranoEnviada = true;
