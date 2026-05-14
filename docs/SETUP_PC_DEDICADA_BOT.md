@@ -297,22 +297,89 @@ Si pasa:
 
 ---
 
-## Monitoreo / detectar caídas
+## Revisar el bot remoto (sin entrar a la PC dedicada)
 
-El bot escribe en `whatsapp-bot\logs\bot.out.log` cada vez que
-procesa un mensaje. Si dejás de ver actividad por horas y hay
-mensajes pendientes en la cola, algo se cayó.
+Hay 4 formas, de más rápida a más detallada:
 
-**Heartbeat sugerido (no implementado todavía)**: agregar al bot un
-write a `META/bot_heartbeat` cada 5 min con timestamp + versión, y
-un cron de Cloud Functions que avise por WhatsApp al admin si no
-hubo heartbeat en > 30 min. Es un trabajo de 1 hora — pendiente para
-la próxima iteración.
+### 1. Script CLI `bot_estado_remoto.js` (desde cualquier PC con el repo)
 
-Mientras tanto, alertas indirectas:
-- Si llegan los avisos automáticos de jornada / vencimientos →
-  bot funciona.
-- Si pasan 24h sin avisos cuando deberían haberse enviado → bot caído.
+```powershell
+cd C:\coopertrans_movil
+node scripts\bot_estado_remoto.js
+```
+
+Muestra todo en una sola pantalla con colores:
+- Estado: 🟢 vivo / 🟡 stale / 🔴 caído (basado en `ultimoHeartbeat`).
+- PC donde corre + estado del cliente WA (LISTO/AUTH_FALLO/etc).
+- Versión del bot + uptime + PID.
+- Cola WhatsApp (pendientes / procesando / error).
+- Mensajes enviados hoy + cuándo fue el último.
+- Errores recientes (ring buffer de los últimos 10).
+- Próximo ciclo del cron y stats del último.
+- Eventos del watchdog (caídas/recuperaciones — últimas 20 por
+  default, `--eventos 50` para más).
+- Diagnóstico automático al final.
+
+Flags:
+- `--json` → output crudo del doc `BOT_HEALTH/main`, útil para
+  pipelines o jq.
+- `--eventos N` → cantidad de eventos del watchdog a mostrar.
+
+### 2. Pantalla "Estado del Bot" en la app admin Flutter
+
+La app móvil tiene una pantalla dedicada que lee el mismo
+`BOT_HEALTH/main` y lo muestra visual. Lo más cómodo desde el celular.
+
+### 3. WhatsApp directo al bot — comandos admin
+
+Desde tu WhatsApp (admin):
+- `/estado` → resumen corto de la cola y estado del bot.
+- `/ayuda` → lista completa de comandos.
+
+### 4. RDP / TeamViewer / AnyDesk (acceso visual completo)
+
+Para casos que requieren ver los logs en vivo o tocar algo del SO
+(reescaneo de QR, restart manual, mirar `bot.err.log`):
+
+```powershell
+# Ya conectado por escritorio remoto a la PC dedicada:
+Get-Content C:\coopertrans_movil\whatsapp-bot\logs\bot.out.log -Tail 50 -Wait
+Get-Content C:\coopertrans_movil\whatsapp-bot\logs\bot.err.log -Tail 50 -Wait
+Restart-Service CoopertransMovilBot   # como admin
+```
+
+---
+
+## Alertas automáticas
+
+No es necesario que vos chequees activamente — el sistema te avisa
+solo cuando algo se rompe:
+
+### Watchdog de caídas (`botHealthWatchdog`, Cloud Function)
+
+Corre cada 15 min y compara `BOT_HEALTH/main.ultimoHeartbeat` con
+ahora. Si pasaron > 10 min sin heartbeat, registra un evento `caida`
+en `BOT_EVENTOS`. Cuando el bot vuelve, registra `recuperado` con
+la duración total.
+
+**Cambio 2026-05-08**: las caídas/recuperaciones ya NO mandan WhatsApp
+inmediato (quedaba viejo rápido — ej. caída a las 15:38, aviso a
+las 18:10 cuando ya recuperó hace rato). Se acumulan y van en el
+resumen diario.
+
+### Resumen diario del bot (`resumenBotDiario`, Cloud Function)
+
+Te llega WhatsApp a las 8 AM con las caídas/recuperaciones del día
+anterior si las hubo. Si el bot estuvo 100% del tiempo arriba, no
+se envía nada (silencio = todo bien).
+
+### Alerta de cola creciente (desde el mismo bot, `health.js`)
+
+Si la cola pendiente queda arriba de **50 mensajes por > 30 min
+seguidos**, el bot encola una alerta WhatsApp al admin
+(`COLA_CRECIENTE_ALERT_DNI` en `.env` del bot). Esto detecta el
+caso "bot vivo pero procesando muy lento" — que el watchdog basado
+en heartbeat no captura.
 
 ---
 
