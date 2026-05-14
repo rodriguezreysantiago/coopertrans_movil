@@ -75,12 +75,17 @@ async function main() {
   // 1) Empleado
   const empSnap = await db.collection('EMPLEADOS').doc(dni).get();
   let patente = patenteArg;
+  let nombreEmpleado = '';
+  let ibuttonEmpleado = '';
   if (empSnap.exists) {
     const e = empSnap.data();
+    nombreEmpleado = (e.NOMBRE ?? '').toString().trim();
+    ibuttonEmpleado = (e.IBUTTON ?? '').toString().trim();
     console.log('👤 EMPLEADO');
     console.log(`  Nombre   : ${e.NOMBRE ?? '(sin nombre)'}`);
     console.log(`  Vehículo : ${e.VEHICULO ?? '(sin asignar)'}`);
     console.log(`  ROL      : ${e.ROL ?? '(sin rol)'}`);
+    console.log(`  IBUTTON  : ${ibuttonEmpleado || '(no cargado)'}`);
     if (!patente && e.VEHICULO && e.VEHICULO !== '-') {
       patente = String(e.VEHICULO).trim().toUpperCase();
     }
@@ -91,7 +96,37 @@ async function main() {
     process.exit(1);
   }
 
-  // 2) Sitrack posición actual de la patente
+  // 2) ASIGNACIONES_VEHICULO activa para esa patente (la fuente de
+  //    verdad que usa el cron para decidir a quién avisar).
+  console.log(`🔗 ASIGNACIONES_VEHICULO (hasta=null) para ${patente}`);
+  let asignacionDniCanon = '';
+  let asignacionNombreCanon = '';
+  try {
+    const asignSnap = await db
+      .collection('ASIGNACIONES_VEHICULO')
+      .where('vehiculo_id', '==', patente)
+      .where('hasta', '==', null)
+      .limit(5)
+      .get();
+    if (asignSnap.empty) {
+      console.log(`  (no hay asignación activa para ${patente})`);
+    } else {
+      for (const d of asignSnap.docs) {
+        const data = d.data();
+        asignacionDniCanon = (data.chofer_dni ?? '').toString().trim();
+        asignacionNombreCanon = (data.chofer_nombre ?? '').toString().trim();
+        console.log(`  doc ${d.id}`);
+        console.log(`    chofer_dni     : ${asignacionDniCanon}`);
+        console.log(`    chofer_nombre  : ${asignacionNombreCanon}`);
+        console.log(`    desde          : ${fmtFecha(data.desde)}`);
+      }
+    }
+  } catch (e) {
+    console.log(`  (error consultando: ${e.message})`);
+  }
+  console.log('');
+
+  // 3) Sitrack posición actual de la patente
   const sSnap = await db.collection('SITRACK_POSICIONES').doc(patente).get();
   if (!sSnap.exists) {
     console.log(`📍 SITRACK_POSICIONES/${patente} — NO existe`);
@@ -99,32 +134,90 @@ async function main() {
     const s = sSnap.data();
     const driverDni = (s.driver_dni ?? '').toString().trim();
     const driverNombre = (s.driver_nombre ?? '').toString().trim();
+    const driverApellido = (s.driver_apellido ?? '').toString().trim();
     const speed = s.speed ?? 0;
+    const ignition = s.ignition === true;
+    const driftTipo = s.drift_tipo ?? null;
+    const asignDni = (s.asignacion_dni ?? '').toString().trim();
+    const asignNombre = (s.asignacion_nombre ?? '').toString().trim();
     const consultadoMs = s.consultado_en?.toMillis?.() ?? 0;
     const haceSeg =
       consultadoMs > 0 ? (Date.now() - consultadoMs) / 1000 : Infinity;
+    const reportMs = s.report_date?.toMillis?.() ?? 0;
+    const haceReportSeg =
+      reportMs > 0 ? (Date.now() - reportMs) / 1000 : Infinity;
 
     console.log(`📍 SITRACK_POSICIONES/${patente}`);
     console.log(`  driver_dni       : ${driverDni || '(VACÍO ← sin loguear)'}`);
     console.log(`  driver_nombre    : ${driverNombre || '(vacío)'}`);
+    console.log(`  driver_apellido  : ${driverApellido || '(vacío)'}`);
+    console.log(`  ignition         : ${ignition ? 'ON' : 'OFF'}`);
     console.log(`  speed            : ${speed} km/h`);
-    console.log(`  consultado_en    : ${fmtFecha(s.consultado_en)}`);
-    console.log(`  hace             : ${fmtMin(haceSeg)}`);
+    console.log(`  drift_tipo       : ${driftTipo || '(null)'}`);
+    console.log(`  asignacion_dni   : ${asignDni || '(vacío)'}`);
+    console.log(`  asignacion_nombre: ${asignNombre || '(vacío)'}`);
+    console.log(`  report_date      : ${fmtFecha(s.report_date)}  (hace ${fmtMin(haceReportSeg)})`);
+    console.log(`  consultado_en    : ${fmtFecha(s.consultado_en)}  (hace ${fmtMin(haceSeg)})`);
     console.log('');
 
     // Diagnóstico automático del estado
     console.log('───────────── ESTADO ─────────────');
-    if (!driverDni) {
-      console.log(`  ⚠ Sitrack dice driver_dni = "" → SIN LOGUEAR`);
-      console.log(`     El aviso "pasá el iButton" SÍ corresponde.`);
-    } else if (driverDni === dni) {
-      console.log(`  ✓ Sitrack dice driver_dni = ${driverDni} → ESTÁ LOGUEADO CON ESTE DNI`);
-      console.log(`     Los avisos serían FALSOS POSITIVOS — algo más está mal.`);
-    } else {
-      console.log(`  ⚠ Sitrack dice driver_dni = ${driverDni}`);
-      console.log(`     PERO el VEHICULO de ese DNI (en EMPLEADOS) puede ser otro.`);
-      console.log(`     El bot puede estar avisando al chofer ASIGNADO (${dni})`);
-      console.log(`     cuando en realidad maneja OTRO chofer logueado.`);
+    if (!driverDni && !driverNombre && !driverApellido) {
+      console.log('  ⚠ Sitrack no envía driver_* → SIN LOGUEAR (o sesión perdida).');
+      if (!ignition) {
+        console.log('     ignition=OFF → tractor parado, drift NO debería disparar.');
+      } else {
+        console.log('     ignition=ON → el aviso "pasá el iButton" SÍ corresponde.');
+      }
+    } else if (driverDni && driverDni === dni) {
+      console.log(`  ✓ driver_dni = ${driverDni} = DNI consultado → LOGUEADO con este DNI.`);
+      console.log('     Los avisos son FALSOS POSITIVOS. Pero como driverDni viene en');
+      console.log('     SITRACK_POSICIONES, drift_tipo no debería ser CHOFER_NO_IDENTIFICADO.');
+      console.log('     Si sigue avisando → ver `report_date` (Sitrack manda data stale).');
+    } else if (driverDni && driverDni !== dni) {
+      console.log(`  ⚠ driver_dni = ${driverDni} (otro chofer logueado en este tractor).`);
+      console.log('     El cron está avisando al chofer ASIGNADO en el sistema');
+      console.log(`     (${dni}) pero quien físicamente maneja es ${driverDni}.`);
+      console.log('     Solución: actualizar la asignación en el sistema.');
+    } else if (!driverDni && (driverNombre || driverApellido)) {
+      // Caso clave: sin DNI pero con nombre. Replicamos la lógica del cron.
+      const tokens = `${driverNombre} ${driverApellido}`
+        .toUpperCase()
+        .split(/\s+/)
+        .filter((t) => t.length > 1);
+      const nombreAsig = (asignNombre || asignacionNombreCanon).toUpperCase();
+      const matchPorNombre =
+        tokens.length > 0 && tokens.every((t) => nombreAsig.includes(t));
+      console.log('  ⚠ driver_dni vacío PERO nombre/apellido SÍ vienen.');
+      console.log(`     Tokens Sitrack       : [${tokens.join(', ')}]`);
+      console.log(`     Nombre asignación    : "${nombreAsig}"`);
+      console.log(`     ¿matchPorNombre?     : ${matchPorNombre ? '✓ SÍ → no debería avisar' : '✗ NO → cron sigue avisando'}`);
+      // Dump exacto de cada string con JSON.stringify (que escapa chars
+      // invisibles como ​,  , \t, etc.) y char-codes. Si los
+      // strings tienen basura no-imprimible, el match falla aunque
+      // visualmente parezca correcto.
+      console.log('');
+      console.log('     ── DUMP EXACTO (chars + códigos) ──');
+      const dump = (label, s) => {
+        const codes = [...s].map((c) => c.charCodeAt(0).toString(16).padStart(2, '0')).join(' ');
+        console.log(`     ${label.padEnd(20)}: ${JSON.stringify(s)}  [len=${s.length}]`);
+        console.log(`     ${' '.repeat(20)}  hex: ${codes}`);
+      };
+      dump('driver_nombre', driverNombre);
+      dump('driver_apellido', driverApellido);
+      dump('asignacion_nombre', asignNombre);
+      tokens.forEach((t, i) => dump(`token[${i}]`, t));
+      console.log('');
+      if (!matchPorNombre) {
+        console.log('     Causa típica: token cortado / diferencia de tildes / orden invertido.');
+        console.log('     Solución: revisar campo NOMBRE en EMPLEADOS o cómo cargaron al chofer en Sitrack.');
+      } else {
+        console.log('     ⚠ matchPorNombre dice SÍ pero drift_tipo persistido es CHOFER_NO_IDENTIFICADO.');
+        console.log('     Eso indica un BUG: la lógica del cron evaluó distinto. Posibles causas:');
+        console.log('       - Sitrack mandó otros valores en este último ciclo (race condition).');
+        console.log('       - Hay un report extra para esta patente con driver_* vacío que pisa.');
+        console.log('       - El código deployado en GCP está desactualizado vs functions/src/.');
+      }
     }
     console.log('');
   }

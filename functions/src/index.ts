@@ -4166,6 +4166,34 @@ async function _encolarAvisoChoferNoIdentificado(
   patente: string,
   choferDni: string
 ): Promise<boolean> {
+  // Silencio manual via comando `/silenciar` del bot. La colección
+  // BOT_SILENCIADOS_CHOFER se usaba sólo en el vigilador de jornada,
+  // pero el chofer silenciado debería estarlo para TODOS los avisos
+  // automáticos — sino el comando es engañoso. Bug detectado el
+  // 2026-05-14 con Horacio (AC383OM): se le aplicó /silenciar y
+  // siguió recibiendo el aviso del iButton porque este path no lo
+  // chequeaba.
+  try {
+    const silSnap = await db
+      .collection("BOT_SILENCIADOS_CHOFER")
+      .doc(choferDni)
+      .get();
+    if (silSnap.exists) {
+      const hasta = silSnap.data()?.silenciado_hasta;
+      if (hasta && typeof hasta.toMillis === "function" &&
+          hasta.toMillis() > Date.now()) {
+        return false;
+      }
+    }
+  } catch (e) {
+    // Si falla el read no bloqueamos — peor caso le llega un aviso
+    // que el admin pidió silenciar.
+    logger.warn("[noIdentificado] no pude leer BOT_SILENCIADOS_CHOFER", {
+      choferDni,
+      error: (e as Error).message,
+    });
+  }
+
   // Throttle: ¿se le envió uno hace menos de 30 min?
   const throttleRef = db.collection("META_AVISOS_NO_ID").doc(choferDni);
   const throttleSnap = await throttleRef.get();
