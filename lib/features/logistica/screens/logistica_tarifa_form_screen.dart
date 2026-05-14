@@ -279,13 +279,51 @@ class _LogisticaTarifaFormScreenState
             padding: const EdgeInsets.all(12),
             child: Column(
               children: [
-                _filaSelector<FleteLogistica>(
-                  etiqueta: 'Flete pagadero',
-                  opciones: FleteLogistica.values,
-                  valor: _flete,
-                  etiquetaFn: (f) => f.etiqueta,
-                  onChange: (f) => setState(() => _flete = f),
-                ),
+                // Si origen y destino son la MISMA empresa (ej. de un
+                // depósito de Profertil a otro depósito de Profertil),
+                // no tiene sentido elegir si paga el origen o el destino
+                // — siempre lo paga esa empresa. Mostramos un info chip
+                // en lugar del selector. (Santiago 2026-05-14.)
+                if (_empOrigen != null &&
+                    _empDestino != null &&
+                    _empOrigen!.id == _empDestino!.id)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color:
+                          AppColors.accentBlue.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                          color: AppColors.accentBlue
+                              .withValues(alpha: 0.4)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline,
+                            size: 18, color: AppColors.accentBlue),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Flete a cargo de ${_empOrigen!.nombre} '
+                            '(origen y destino son la misma empresa).',
+                            style: const TextStyle(
+                              color: AppColors.accentBlue,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  _filaSelector<FleteLogistica>(
+                    etiqueta: 'Flete pagadero',
+                    opciones: FleteLogistica.values,
+                    valor: _flete,
+                    etiquetaFn: (f) => f.etiqueta,
+                    onChange: (f) => setState(() => _flete = f),
+                  ),
                 const SizedBox(height: 8),
                 _filaSelector<UnidadTarifa>(
                   etiqueta: 'Unidad de tarifa',
@@ -495,6 +533,15 @@ class _LogisticaTarifaFormScreenState
       setState(() => _error =
           'La tarifa del chofer no puede superar la tarifa real.');
       return;
+    }
+
+    // Si origen y destino son la misma empresa, el campo `_flete` no
+    // se le pide al operador. Normalizamos a `origen` para tener data
+    // consistente — semánticamente da igual (mismo empresa paga).
+    if (_empOrigen != null &&
+        _empDestino != null &&
+        _empOrigen!.id == _empDestino!.id) {
+      _flete = FleteLogistica.origen;
     }
     double? comision;
     if (_tipoCarga == TipoCargaLogistica.terceros &&
