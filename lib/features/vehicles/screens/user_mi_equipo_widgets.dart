@@ -65,6 +65,11 @@ class _SeccionUnidad extends StatelessWidget {
                 ),
               ),
               if (!estaVacia && !tienePendiente)
+                // Wording cambiado 2026-05-14 (Santiago): el botón decía
+                // "SOLICITAR CAMBIO" pero los choferes interpretaban que
+                // podían elegir libremente la unidad. La intención real
+                // es que reporten un ERROR de asignación a la oficina.
+                // "ESTA NO ES MI UNIDAD" deja claro el caso de uso.
                 TextButton.icon(
                   onPressed: () => _SelectorCambio.abrir(
                     context,
@@ -73,10 +78,10 @@ class _SeccionUnidad extends StatelessWidget {
                     nombreChofer: nombreChofer,
                     dni: dni,
                   ),
-                  icon: const Icon(Icons.swap_horiz,
+                  icon: const Icon(Icons.report_problem_outlined,
                       size: 16, color: AppColors.accentOrange),
                   label: const Text(
-                    'SOLICITAR CAMBIO',
+                    'ESTA NO ES MI UNIDAD',
                     style: TextStyle(
                       color: AppColors.accentOrange,
                       fontSize: 11,
@@ -510,12 +515,15 @@ class _BloqueTelemetria extends StatelessWidget {
         children: [
           Row(
             children: [
+              // Números con separador de miles AR (1.205.073 km) — sin
+              // formato eran ilegibles a partir de 6 dígitos. Pedido
+              // Santiago 2026-05-14.
               if (mostrarKm)
                 Expanded(
                   child: _DatoTelemetria(
                     icono: Icons.speed,
                     color: Colors.white70,
-                    valor: '${km.toStringAsFixed(0)} km',
+                    valor: '${AppFormatters.formatearMiles(km.toInt())} km',
                     etiqueta: 'ODÓMETRO',
                   ),
                 ),
@@ -528,7 +536,7 @@ class _BloqueTelemetria extends StatelessWidget {
                   child: _DatoTelemetria(
                     icono: Icons.route,
                     color: AppColors.accentCyan,
-                    valor: '${auton.toStringAsFixed(0)} km',
+                    valor: '${AppFormatters.formatearMiles(auton.toInt())} km',
                     etiqueta: 'AUTONOMÍA',
                   ),
                 ),
