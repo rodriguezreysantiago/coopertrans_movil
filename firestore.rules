@@ -367,6 +367,26 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // SITRACK_EVENTOS — stream de eventos discretos del API Sitrack
+    // ========================================================================
+    // 1 doc por evento (docId = reportId UUID de Sitrack). Lo escribe
+    // el cron `sitrackEventosPoller` cada 5 min consumiendo /files/reports.
+    // Append-only — los eventos son inmutables.
+    //
+    // Volumen estimado: ~50-200 eventos por ciclo en régimen normal,
+    // ~1-5 MB por hora. La primera invocación tras la activación bajó
+    // ~1MB de buffer acumulado.
+    //
+    // Lectura: roles que ven Volvo (admin/supervisor/SEG_HIGIENE) — los
+    // mismos que ven JORNADAS_CHOFER y los tableros de telemetría.
+    // Escritura: solo Cloud Function (Admin SDK).
+
+    match /SITRACK_EVENTOS/{doc} {
+      allow read: if puedeVerVolvoTableros();
+      allow create, update, delete: if false;
+    }
+
+    // ========================================================================
     // BOT_SILENCIADOS_CHOFER — choferes silenciados (server + bot only)
     // ========================================================================
     // Doc id: DNI del chofer. Lo escribe el bot vía comando WhatsApp

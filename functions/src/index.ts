@@ -3859,6 +3859,296 @@ export const sitrackPosicionPoller = onSchedule(
   }
 );
 
+// ============================================================================
+// sitrackEventosPoller — consume `/files/reports` (eventos acumulados)
+// ============================================================================
+//
+// Sitrack tiene 1400+ tipos de evento que sus equipos generan
+// (jornada, conducción peligrosa, mantenimiento, viajes, etc. — ver
+// docs/SITRACK-Tipos de evento_reporte). El endpoint /files/reports
+// los acumula en un buffer del lado Sitrack y los entrega en cada
+// llamada (drainable). Sin consumirlos regularmente:
+//   - el buffer crece y la próxima llamada baja a tasa reducida.
+//   - si pasan 30 días sin consumirse, Sitrack purga el buffer.
+//
+// Diferencia con `sitrackPosicionPoller`:
+//   - posicionPoller usa /v2/report = snapshot del último estado de
+//     CADA unidad (1 doc por patente, sobrescribe).
+//   - eventosPoller usa /files/reports = stream de eventos discretos
+//     (1 doc por evento, append-only, persiste todo el detalle).
+//
+// La lógica que CONSUME estos eventos (vigilador de jornada nuevo,
+// auto-poblar viajes, alertas de descarga combustible, etc.) vive en
+// otras funciones que leen `SITRACK_EVENTOS`. Este poller solo
+// persiste — separación de concerns.
+//
+// Frecuencia: cada 5 min (Sitrack permite 1 invocación/min como max).
+// Si en producción vemos backpressure (eventos acumulados > X), bajar
+// el intervalo a 1-2 min.
+
+interface SitrackEventoItem extends SitrackReportItem {
+  sequentialId?: string;
+  cartographyLimitSpeed?: number;
+  gpsSpeed?: number;
+  backupBatteryChargePercentage?: number;
+}
+
+export const sitrackEventosPoller = onSchedule(
+  {
+    schedule: "every 5 minutes",
+    timeZone: "America/Argentina/Buenos_Aires",
+    secrets: [sitrackUsername, sitrackPassword],
+    timeoutSeconds: 240,
+    memory: "512MiB",
+  },
+  async () => {
+    logger.info("[sitrackEventosPoller] iniciando ciclo");
+
+    const authHeader = "Basic " + Buffer.from(
+      `${sitrackUsername.value()}:${sitrackPassword.value()}`
+    ).toString("base64");
+
+    const url = `${SITRACK_BASE_AR}/files/reports`;
+    let res: Response;
+    let bodyText = "";
+    try {
+      res = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: authHeader,
+          Accept: "application/json",
+        },
+      });
+      // /files/reports devuelve text/plain (probablemente NDJSON o
+      // array JSON). Leer todo el body antes de cerrar la conexión —
+      // la doc Sitrack es explícita: si cerramos antes de leer todos
+      // los bytes, en la próxima llamada se reenvía el bloque entero.
+      bodyText = await res.text();
+    } catch (e) {
+      logger.error("[sitrackEventosPoller] fetch falló", {
+        error: (e as Error).message,
+      });
+      return;
+    }
+
+    // 400 errorCode 120: otra invocación en progreso. Lo loguamos y
+    // salimos — el próximo ciclo lo intenta de nuevo.
+    if (res.status === 400 && bodyText.includes("\"errorCode\":120")) {
+      logger.warn("[sitrackEventosPoller] otra invocación en progreso", {
+        body: bodyText.slice(0, 200),
+      });
+      return;
+    }
+    if (!res.ok) {
+      logger.warn("[sitrackEventosPoller] HTTP error", {
+        statusCode: res.status,
+        bodyHead: bodyText.slice(0, 500),
+      });
+      return;
+    }
+
+    const bodyBytes = Buffer.byteLength(bodyText, "utf8");
+    if (bodyBytes === 0) {
+      // Buffer vacío — caso normal cuando no hubo eventos nuevos.
+      // Ojo: NO indica desactivación (ver script
+      // sitrack_probar_files_reports.js para el matiz).
+      logger.info("[sitrackEventosPoller] sin eventos nuevos");
+      await db.collection("META").doc("sitrack_eventos_cursor").set({
+        ultimo_exito_at: FieldValue.serverTimestamp(),
+        ultimo_recibidos: 0,
+        ultimo_escritos: 0,
+        ultimo_descartados: 0,
+        ultimo_bytes: 0,
+      }, { merge: true });
+      return;
+    }
+
+    // Parseo defensivo. El sample observado en pruebas mostró:
+    //   {"reportId":"..."},\n{"reportId":"..."},\n...
+    // No vimos `[` al inicio — por las dudas probamos 3 estrategias:
+    //   1. JSON.parse del body completo (caso array JSON estándar).
+    //   2. Envolver con [...] por si vienen items separados por coma.
+    //   3. NDJSON: split por newline + parse cada línea.
+    let eventos: SitrackEventoItem[] = [];
+    let parseStrategy = "";
+    try {
+      const parsed = JSON.parse(bodyText);
+      if (Array.isArray(parsed)) {
+        eventos = parsed as SitrackEventoItem[];
+        parseStrategy = "json-array";
+      } else if (parsed && Array.isArray(parsed.reports)) {
+        eventos = parsed.reports as SitrackEventoItem[];
+        parseStrategy = "json-object-reports";
+      } else if (parsed && typeof parsed === "object") {
+        // Single object → array de 1.
+        eventos = [parsed as SitrackEventoItem];
+        parseStrategy = "json-single";
+      }
+    } catch {
+      // Estrategia 2: envolver en array.
+      try {
+        const wrapped = `[${bodyText.replace(/,\s*$/, "")}]`;
+        const parsed = JSON.parse(wrapped);
+        if (Array.isArray(parsed)) {
+          eventos = parsed as SitrackEventoItem[];
+          parseStrategy = "comma-wrapped";
+        }
+      } catch {
+        // Estrategia 3: NDJSON.
+        const lineas = bodyText.split(/\r?\n/);
+        for (const linea of lineas) {
+          const t = linea.trim().replace(/,$/, "");
+          if (!t) continue;
+          try {
+            eventos.push(JSON.parse(t) as SitrackEventoItem);
+          } catch {
+            // saltamos línea malformada
+          }
+        }
+        parseStrategy = "ndjson-line-by-line";
+      }
+    }
+
+    if (eventos.length === 0) {
+      logger.warn("[sitrackEventosPoller] no se pudo parsear ningún evento", {
+        bytes: bodyBytes,
+        bodyHead: bodyText.slice(0, 500),
+        parseStrategy,
+      });
+      return;
+    }
+
+    logger.info("[sitrackEventosPoller] eventos parseados", {
+      cantidad: eventos.length,
+      bytes: bodyBytes,
+      parseStrategy,
+    });
+
+    // ─── Persistir en SITRACK_EVENTOS ─────────────────────────────
+    // docId = reportId (UUID único por evento del lado Sitrack).
+    // Idempotente: si por algún motivo el mismo reportId llega 2 veces,
+    // sobrescribe sin duplicar (set sin merge — el evento es
+    // inmutable, no hay update).
+    //
+    // Batches de 500 ops (límite Firestore). Si llegan > 500, hacemos
+    // múltiples commits.
+    const BATCH_SIZE = 500;
+    let escritos = 0;
+    let descartados = 0;
+    let batch = db.batch();
+    let opsEnBatch = 0;
+
+    const parseTs = (s: string | undefined): Timestamp | null => {
+      if (!s) return null;
+      const d = new Date(s);
+      return Number.isFinite(d.getTime()) ? Timestamp.fromDate(d) : null;
+    };
+
+    for (const e of eventos) {
+      const reportId = (e.reportId ?? "").toString().trim();
+      if (!reportId) {
+        descartados++;
+        continue;
+      }
+
+      const doc: Record<string, unknown> = {
+        // Identificación
+        report_id: reportId,
+        sequential_id: (e.sequentialId ?? "").toString(),
+        // Tiempo
+        report_date: parseTs(e.reportDate),
+        input_date: parseTs(e.inputDate),
+        recibido_en: FieldValue.serverTimestamp(),
+        // Activo
+        asset_id: (e.assetId ?? "").toString(),
+        asset_name: (e.assetName ?? "").toString(),
+        device_id: (e.deviceId ?? "").toString(),
+        holder_id: (e.holderId ?? "").toString(),
+        // Evento
+        event_id: typeof e.eventId === "number" ? e.eventId : null,
+        event_name: (e.eventName ?? "").toString(),
+        // Posición
+        latitude: typeof e.latitude === "number" ? e.latitude : null,
+        longitude: typeof e.longitude === "number" ? e.longitude : null,
+        location: (e.location ?? "").toString(),
+        area_type: (e.areaType ?? "").toString(),
+        heading: typeof e.heading === "number" ? e.heading : null,
+        speed: typeof e.speed === "number" ? e.speed : null,
+        gps_speed: typeof e.gpsSpeed === "number" ? e.gpsSpeed : null,
+        cartography_limit_speed:
+          typeof e.cartographyLimitSpeed === "number" ?
+            e.cartographyLimitSpeed :
+            null,
+        // Equipo
+        ignition: e.ignition === 1 || e.ignition === 0 ? e.ignition : null,
+        ignition_date: parseTs(e.ignitionDate),
+        odometer: typeof e.odometer === "number" ? e.odometer : null,
+        gps_odometer: typeof e.gpsOdometer === "number" ? e.gpsOdometer : null,
+        hourmeter: typeof e.hourmeter === "number" ? e.hourmeter : null,
+        device_hourmeter:
+          typeof e.deviceHourmeter === "number" ? e.deviceHourmeter : null,
+        // Chofer
+        driver_dni: (e.driverDocumentNumber ?? "").toString(),
+        driver_name: (e.driverName ?? "").toString(),
+        driver_last_name: (e.driverLastName ?? "").toString(),
+        // Calidad GPS
+        gps_validity: typeof e.gpsValidity === "number" ? e.gpsValidity : null,
+        gps_satellites:
+          typeof e.gpsSatellites === "number" ? e.gpsSatellites : null,
+        // Hardware
+        battery_voltage:
+          typeof e.batteryVoltage === "number" ? e.batteryVoltage : null,
+        backup_battery_voltage:
+          typeof e.backupBatteryVoltage === "number" ?
+            e.backupBatteryVoltage :
+            null,
+        backup_battery_charge_percentage:
+          typeof e.backupBatteryChargePercentage === "number" ?
+            e.backupBatteryChargePercentage :
+            null,
+        // Trailer (en Vecchi hoy no instalado, lo dejamos por compat)
+        trailer_id: (e.trailerId ?? "").toString(),
+        trailer_name: (e.trailerName ?? "").toString(),
+      };
+
+      batch.set(
+        db.collection("SITRACK_EVENTOS").doc(reportId),
+        doc,
+        { merge: false }
+      );
+      opsEnBatch++;
+      escritos++;
+
+      if (opsEnBatch >= BATCH_SIZE) {
+        await batch.commit();
+        batch = db.batch();
+        opsEnBatch = 0;
+      }
+    }
+    if (opsEnBatch > 0) {
+      await batch.commit();
+    }
+
+    // ─── Health cursor ───────────────────────────────────────────
+    await db.collection("META").doc("sitrack_eventos_cursor").set({
+      ultimo_exito_at: FieldValue.serverTimestamp(),
+      ultimo_recibidos: eventos.length,
+      ultimo_escritos: escritos,
+      ultimo_descartados: descartados,
+      ultimo_bytes: bodyBytes,
+      ultimo_parse_strategy: parseStrategy,
+    }, { merge: true });
+
+    logger.info("[sitrackEventosPoller] OK", {
+      recibidos: eventos.length,
+      escritos,
+      descartados,
+      bytes: bodyBytes,
+      parseStrategy,
+    });
+  }
+);
+
 // Encola un aviso al chofer pidiéndole que pase el iButton de Sitrack
 // para identificarse. Devuelve `true` si efectivamente encoló;
 // `false` si no pudo (chofer no existe, sin teléfono, throttled, etc).
