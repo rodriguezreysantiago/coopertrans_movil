@@ -1,11 +1,20 @@
-# Instala el bot como servicio Windows con NSSM, configurado para:
+# Instala el bot como servicio Windows con NSSM. Soporta dos modos:
 #
-#   - Modo MANUAL (vos lo arrancas con start_bot.ps1, no en el boot).
-#     Esto es ideal cuando trabajas en 2 PCs distintas (casa + oficina)
+#   - MANUAL (default): vos lo arrancas con start_bot.ps1, no en el
+#     boot. Ideal cuando trabajas en 2 PCs distintas (casa + oficina)
 #     y queres evitar que se ejecuten 2 bots en simultaneo procesando
-#     la misma cola de Firestore. Si en el futuro queres que arranque
-#     solo, cambiar SERVICE_DEMAND_START por SERVICE_AUTO_START mas
-#     abajo.
+#     la misma cola de Firestore.
+#
+#   - AUTO-START 24/7 (flag `-Auto`): arranca solo al boot, ideal
+#     para una PC dedicada al bot 24/7. En este modo:
+#       * Service Start = AUTOMATIC (delayed)
+#       * Servicio prendido al final de la instalacion
+#       * Aviso para correr setup_pc_24x7.ps1 (power settings, etc.)
+#     Si vas a usar este modo, ASEGURATE de que NINGUNA otra PC
+#     tenga el bot corriendo — sino se duplican mensajes y WhatsApp
+#     banea el numero.
+#
+# Otras props comunes a ambos modos:
 #
 #   - Auto-restart con backoff si el proceso muere (mientras este
 #     arrancado).
@@ -27,15 +36,23 @@
 #   1. Click derecho en PowerShell -> "Ejecutar como administrador".
 #   2. Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 #   3. cd <ruta-al-repo>\whatsapp-bot
-#   4. .\scripts\instalar_servicio.ps1
+#   4. .\scripts\instalar_servicio.ps1            # modo MANUAL (multi-PC)
+#      .\scripts\instalar_servicio.ps1 -Auto      # modo AUTO 24/7
 #
-# Para arrancar/detener despues de instalado:
+# Para arrancar/detener despues de instalado (modo MANUAL):
 #   .\scripts\start_bot.ps1
 #   .\scripts\stop_bot.ps1
 #
 # Para desinstalar:
 #   nssm stop CoopertransMovilBot
 #   nssm remove CoopertransMovilBot confirm
+
+[CmdletBinding()]
+param(
+    # Si se pasa, instala el servicio en modo AUTOMATIC delayed-start
+    # y lo arranca al final. Pensado para PC dedicada al bot 24/7.
+    [switch]$Auto
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -149,9 +166,22 @@ Write-Host "[PKG] Creando servicio Windows '$serviceName'..." -ForegroundColor C
 & $nssmExe set $serviceName AppRestartDelay 10000 | Out-Null
 & $nssmExe set $serviceName AppThrottle 60000 | Out-Null
 
-# Modo de inicio: MANUAL. El servicio NO arranca al boot - vos lo
-# encendes con start_bot.ps1 cuando empezas a trabajar.
-& $nssmExe set $serviceName Start SERVICE_DEMAND_START | Out-Null
+# Modo de inicio: depende del flag.
+#   - Sin -Auto (default): MANUAL. El servicio NO arranca al boot;
+#     vos lo encendes con start_bot.ps1 cuando empezas a trabajar.
+#     Pensado para multi-PC (casa + oficina).
+#   - Con -Auto: AUTOMATIC delayed-start. El servicio arranca solo
+#     ~2 min despues del boot (delay para que red y cache puppeteer
+#     esten listos). Pensado para PC dedicada al bot 24/7.
+if ($Auto) {
+    & $nssmExe set $serviceName Start SERVICE_AUTO_START | Out-Null
+    # Delayed-auto-start: NSSM expone esto via la propiedad nativa
+    # "DelayedAutoStart" del Service Control Manager.
+    & $nssmExe set $serviceName DelayedAutoStart 1 | Out-Null
+    Write-Host "OK Servicio en modo AUTOMATIC (delayed) — arranca al boot." -ForegroundColor Green
+} else {
+    & $nssmExe set $serviceName Start SERVICE_DEMAND_START | Out-Null
+}
 
 # Variables de entorno para el bot. PUPPETEER_CACHE_DIR es CRITICO:
 # cuando el servicio corre como LocalSystem, su HOME es
@@ -186,24 +216,34 @@ if (Test-Path $puppeteerCache) {
     Write-Host "  SKIP $puppeteerCache (todavia no existe; correr node src/index.js una vez)" -ForegroundColor Yellow
 }
 
-# --- 10. Resumen ---------------------------------------------------
+# --- 10. Si modo AUTO, arrancar el servicio ya ---------------------
+if ($Auto) {
+    Write-Host "[BOOT] Arrancando servicio (modo AUTO)..." -ForegroundColor Cyan
+    try {
+        Start-Service -Name $serviceName -ErrorAction Stop
+        Start-Sleep -Seconds 3
+    } catch {
+        Write-Host "WARN: no pude arrancar el servicio. Probablemente puppeteer todavia no bajo Chrome o falta el QR." -ForegroundColor Yellow
+        Write-Host "       Revisa los logs: Get-Content $logsDir\bot.err.log -Tail 50" -ForegroundColor Yellow
+    }
+}
+
+# --- 11. Resumen ---------------------------------------------------
 $svc = Get-Service -Name $serviceName
+$modoStr = if ($Auto) { 'AUTOMATIC (delayed) — 24/7' } else { 'MANUAL — multi-PC' }
 
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "INSTALACION COMPLETA" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Servicio:           $serviceName (modo MANUAL)"
-Write-Host "Estado:             $($svc.Status)  <- detenido, no se ejecuta hasta que lo prendas"
+Write-Host "Servicio:           $serviceName"
+Write-Host "Modo:               $modoStr"
+Write-Host "Estado:             $($svc.Status)"
 Write-Host "Cuenta:             LocalSystem"
 Write-Host "Ejecutable:         $nodeExe src\index.js"
 Write-Host "Working dir:        $botRoot"
 Write-Host "Logs:               $logsDir"
 Write-Host "PUPPETEER_CACHE_DIR: $puppeteerCache"
-Write-Host ""
-Write-Host "Para empezar a usar el bot:" -ForegroundColor Yellow
-Write-Host "  cd $botRoot"
-Write-Host "  .\scripts\start_bot.ps1"
 Write-Host ""
 Write-Host "Comandos NSSM utiles:" -ForegroundColor Yellow
 Write-Host "  Ver estado:           Get-Service $serviceName"
@@ -215,7 +255,23 @@ Write-Host "  Ver log en vivo:      Get-Content $logsDir\bot.out.log -Tail 50 -W
 Write-Host "  Ver errores:          Get-Content $logsDir\bot.err.log -Tail 50 -Wait"
 Write-Host "  Desinstalar:          & '$nssmExe' remove $serviceName confirm"
 Write-Host ""
-Write-Host "IMPORTANTE: el servicio quedo en MODO MANUAL." -ForegroundColor Cyan
-Write-Host "  - NO arranca solo al prender la PC." -ForegroundColor Cyan
-Write-Host "  - Tenes que prenderlo vos con start_bot.ps1 cuando empieces a trabajar." -ForegroundColor Cyan
-Write-Host "  - Esto evita que arranquen 2 bots a la vez si tenes el repo en varias PCs." -ForegroundColor Cyan
+if ($Auto) {
+    Write-Host "MODO 24/7 ACTIVO." -ForegroundColor Green
+    Write-Host "  - El servicio arranca SOLO al prender la PC." -ForegroundColor Green
+    Write-Host "  - ASEGURATE de NO tener el bot corriendo en NINGUNA otra PC" -ForegroundColor Yellow
+    Write-Host "    (si hay 2 instancias, se duplican mensajes y WhatsApp banea)." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Pasos siguientes para PC dedicada:" -ForegroundColor Cyan
+    Write-Host "  1. Configurar Windows para no suspender (power settings):" -ForegroundColor Cyan
+    Write-Host "       .\scripts\setup_pc_24x7.ps1" -ForegroundColor White
+    Write-Host "  2. Leer la guia completa: docs\SETUP_PC_DEDICADA_BOT.md" -ForegroundColor Cyan
+} else {
+    Write-Host "IMPORTANTE: el servicio quedo en MODO MANUAL." -ForegroundColor Cyan
+    Write-Host "  - NO arranca solo al prender la PC." -ForegroundColor Cyan
+    Write-Host "  - Tenes que prenderlo vos con start_bot.ps1 cuando empieces a trabajar." -ForegroundColor Cyan
+    Write-Host "  - Esto evita que arranquen 2 bots a la vez si tenes el repo en varias PCs." -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Para empezar a usar el bot:" -ForegroundColor Yellow
+    Write-Host "  cd $botRoot"
+    Write-Host "  .\scripts\start_bot.ps1"
+}
