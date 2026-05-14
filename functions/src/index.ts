@@ -4493,9 +4493,14 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
 // diarias).
 //
 // Fuente de datos: SITRACK_POSICIONES, último snapshot por patente.
-// "Manejando" se define como `speed > 15 km/h` — el motor encendido
-// en pausa NO cuenta (caso real Vecchi: choferes paran a descansar
-// pero dejan el motor prendido para A/C).
+// "Manejando" se define como `speed > 15 km/h` Y `ignition === true`
+// (motor encendido). Casos cubiertos:
+//   - motor encendido en pausa con A/C (speed=0): NO cuenta como manejo
+//     (real Vecchi: choferes paran a descansar pero dejan motor prendido).
+//   - motor APAGADO con speed espurio reportado por Sitrack (~70 km/h
+//     por GPS drift / lectura cacheada): NO cuenta — fix 2026-05-14
+//     después del caso Carlos DIETRICH (acumuló 5h continuas estando
+//     detenido hace 1h 40m).
 //
 // Lógica del reset por pausa:
 //   - Internamente el sistema considera "pausa válida" a 10 min de
@@ -4585,7 +4590,31 @@ export const vigiladorJornadaChofer = onSchedule(
       const polledHaceSegundos =
         polledEnMs > 0 ? (Date.now() - polledEnMs) / 1000 : Infinity;
       const pollStale = polledHaceSegundos > VIGILADOR_POLL_STALE_SEGUNDOS;
-      const speedEfectivo = pollStale ? 0 : speed;
+
+      // Bug fix 2026-05-14 (caso Carlos DIETRICH AC383OM/AH628EI):
+      // Sitrack a veces persiste un `speed` espurio (~70 km/h) cuando
+      // el motor ya está APAGADO — GPS drift, lectura cacheada del
+      // último ciclo con motor encendido, o report con event_id=2
+      // (Reporte por tiempo) que reusa la última velocidad medida.
+      // Resultado real: Carlos paró a las 13:50 (ignition_date=13:50)
+      // pero el cron siguió acumulando continuo porque speed=77 — a
+      // las 14:20 le mandó el aviso "4h continuas penalizado" estando
+      // detenido hace 30 min.
+      //
+      // Fix: requerir ignition=true ADEMÁS de speed > umbral para
+      // contar como movimiento. Si el motor está apagado, speed se
+      // ignora aunque venga distinto de 0 — no hay forma de manejar
+      // con motor OFF.
+      //
+      // Defensivo: si el campo `ignition` no viene en el doc por
+      // alguna razón, asumimos `true` (mantiene comportamiento
+      // anterior — solo bloqueamos cuando explícitamente sabemos que
+      // está OFF). El poller setea `ignition: r.ignition === 1` en
+      // cada escritura, así que siempre debería ser boolean.
+      const ignitionEnDoc = data.ignition;
+      const ignitionOn =
+        typeof ignitionEnDoc === "boolean" ? ignitionEnDoc : true;
+      const speedEfectivo = pollStale || !ignitionOn ? 0 : speed;
 
       choferesEvaluados++;
 
