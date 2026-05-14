@@ -146,12 +146,19 @@ class _BarraFiltros extends StatelessWidget {
             seleccionado: liquidado != null,
             onSelected: () => _abrirLiquidadoMenu(context),
           ),
+          // Filtro "Mostrar eliminados". Default OFF — los borrados
+          // viven solo para auditoría. Mismo patrón visual que el
+          // chip de adelantos (Santiago 2026-05-14).
           FilterChip(
-            label: const Text('Ver borrados'),
+            label: const Text('Mostrar eliminados'),
             selected: verBorrados,
             onSelected: onVerBorradosChanged,
-            selectedColor: AppColors.accentRed.withValues(alpha: 0.2),
-            checkmarkColor: AppColors.accentRed,
+            selectedColor: AppColors.accentRed.withValues(alpha: 0.4),
+            avatar: Icon(
+              verBorrados ? Icons.visibility : Icons.visibility_off,
+              size: 16,
+              color: Colors.white70,
+            ),
           ),
         ],
       ),
@@ -383,10 +390,6 @@ class _ViajeTile extends StatelessWidget {
         return AppColors.accentAmber;
       case EstadoViaje.concluido:
         return AppColors.accentGreen;
-      case EstadoViaje.cancelado:
-        return AppColors.accentRed;
-      case EstadoViaje.postergado:
-        return Colors.purple;
     }
   }
 }

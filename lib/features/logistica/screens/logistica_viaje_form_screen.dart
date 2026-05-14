@@ -1717,26 +1717,10 @@ class _SeccionEstado extends StatelessWidget {
             if (e != null) onEstadoChanged(e);
           },
         ),
-        if (estado == EstadoViaje.cancelado) ...[
-          const SizedBox(height: 8),
-          TextField(
-            controller: motivoCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Motivo de cancelación',
-              border: OutlineInputBorder(),
-            ),
-            maxLines: 2,
-            onChanged: (_) => onCambio(),
-          ),
-        ],
-        if (estado == EstadoViaje.postergado) ...[
-          const SizedBox(height: 8),
-          _BotonFecha(
-            label: 'Postergado al',
-            fecha: fechaPostergadoA,
-            onChanged: onFechaChanged,
-          ),
-        ],
+        // Estados removidos 2026-05-14 (Santiago): "cancelado" y
+        // "postergado". Si querés cancelar un viaje, ahora lo borrás
+        // (soft-delete con motivo). Postergar = se queda en planeado
+        // hasta que se haga.
       ],
     );
   }

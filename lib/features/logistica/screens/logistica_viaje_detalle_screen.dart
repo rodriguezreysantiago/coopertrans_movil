@@ -61,6 +61,13 @@ class LogisticaViajeDetalleScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _Cabecera(v: v),
+                const SizedBox(height: 8),
+                // Botonera ARRIBA — Santiago 2026-05-14: que las
+                // acciones EDITAR/BORRAR estén accesibles sin scroll.
+                // Antes vivían al final de la columna, después de
+                // tramos+gastos+montos = el operador tenía que bajar
+                // toda la pantalla para borrar/editar.
+                _BotoneraAcciones(v: v),
                 const SizedBox(height: 12),
                 _SeccionAsignacion(v: v),
                 const SizedBox(height: 12),
@@ -83,8 +90,6 @@ class LogisticaViajeDetalleScreen extends StatelessWidget {
                   const SizedBox(height: 12),
                   _SeccionBorrado(v: v),
                 ],
-                const SizedBox(height: 24),
-                _BotoneraAcciones(v: v),
               ],
             ),
           );
@@ -515,10 +520,13 @@ class _SeccionMotivo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Compat retro 2026-05-14: los estados CANCELADO y POSTERGADO se
+    // removieron del enum, pero un viaje viejo puede tener motivo o
+    // fecha de postergación persistidos. Si están, los mostramos
+    // bajo "DATOS DE ESTADOS LEGACY" (no inferimos del estado actual,
+    // que ahora siempre es planeado/enCurso/concluido).
     return _Seccion(
-      titulo: v.estado == EstadoViaje.cancelado
-          ? 'MOTIVO DE CANCELACIÓN'
-          : 'POSTERGACIÓN',
+      titulo: 'DATOS LEGACY',
       icono: Icons.warning_amber_outlined,
       iconColor: AppColors.accentAmber,
       children: [
@@ -971,8 +979,6 @@ class _ChipEstado extends StatelessWidget {
       EstadoViaje.planeado => AppColors.accentBlue,
       EstadoViaje.enCurso => AppColors.accentAmber,
       EstadoViaje.concluido => AppColors.accentGreen,
-      EstadoViaje.cancelado => AppColors.accentRed,
-      EstadoViaje.postergado => Colors.purple,
     };
     return _Chip(label: estado.etiqueta.toUpperCase(), color: color);
   }

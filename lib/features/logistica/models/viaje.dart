@@ -24,9 +24,7 @@ enum EstadoViaje {
   // del viaje (pagar al chofer + cobrar a la empresa) se maneja en
   // la pantalla LIQUIDACION via el flag `liquidado`, NO desde acá.
   // Etiqueta visible "Concluido" — más natural en español operativo.
-  concluido('CONCLUIDO', 'Concluido'),
-  cancelado('CANCELADO', 'Cancelado'),
-  postergado('POSTERGADO', 'Postergado');
+  concluido('CONCLUIDO', 'Concluido');
 
   final String codigo;
   final String etiqueta;
@@ -36,8 +34,16 @@ enum EstadoViaje {
     // Compat retro:
     //   'PROGRAMADO' antiguo se mapea a planeado (rename 2026-05-09).
     //   'COMPLETADO' antiguo se mapea a concluido (rename 2026-05-11).
+    //   'CANCELADO' (estado removido 2026-05-14) → si quedó algún viaje
+    //     viejo en este estado, lo soft-deleteás manualmente desde la
+    //     UI (botón borrar). Acá lo mapeamos a `planeado` como fallback
+    //     visible para que aparezca en la lista y el operador decida.
+    //   'POSTERGADO' (estado removido 2026-05-14) → mismo tratamiento.
     if (codigo == 'PROGRAMADO') return EstadoViaje.planeado;
     if (codigo == 'COMPLETADO') return EstadoViaje.concluido;
+    if (codigo == 'CANCELADO' || codigo == 'POSTERGADO') {
+      return EstadoViaje.planeado;
+    }
     return EstadoViaje.values.firstWhere(
       (e) => e.codigo == codigo,
       orElse: () => EstadoViaje.planeado,
