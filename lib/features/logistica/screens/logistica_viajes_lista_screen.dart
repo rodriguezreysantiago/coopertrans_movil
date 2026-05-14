@@ -100,12 +100,26 @@ class _LogisticaViajesListaScreenState
   }
 
   List<Viaje> _aplicarFiltros(List<Viaje> docs) {
-    return docs.where((v) {
+    final filtrados = docs.where((v) {
       if (_filtroEstado != null && v.estado != _filtroEstado) return false;
       if (_filtroLiquidado == true && !v.liquidado) return false;
       if (_filtroLiquidado == false && v.liquidado) return false;
       return true;
     }).toList();
+    // Orden: más viejo arriba (ascendente por fecha de referencia,
+    // que es la fecha de carga del primer tramo o el creado_en si
+    // no hay carga). Pedido Santiago 2026-05-14: facilita ver primero
+    // los viajes pendientes más antiguos. El service entrega
+    // descendente; lo invertimos solo en esta pantalla.
+    filtrados.sort((a, b) {
+      final fa = a.fechaReferencia;
+      final fb = b.fechaReferencia;
+      if (fa == null && fb == null) return 0;
+      if (fa == null) return 1; // sin fecha al final
+      if (fb == null) return -1;
+      return fa.compareTo(fb);
+    });
+    return filtrados;
   }
 }
 
