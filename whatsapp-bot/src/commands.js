@@ -79,24 +79,42 @@ function _esAdmin(fromNumber) {
 const COMANDOS_PERMITIDOS_CHOFER = new Set(['/jornada', '/ayuda', '/help']);
 
 /**
- * Resuelve el chofer (DNI + datos) que envía un mensaje, buscándolo
- * por su teléfono en `EMPLEADOS`. Devuelve null si:
- *   - El teléfono no matchea ningún empleado.
- *   - El empleado no es CHOFER (admins/planta/etc no se resuelven acá).
- *   - El empleado está marcado ACTIVO=false.
+ * Resuelve el chofer (DNI + datos) que envía un mensaje. Intenta dos
+ * estrategias en orden:
  *
- * Match: igualdad estricta en la representación normalizada (solo
- * dígitos), o sufijo de >= MIN_DIGITOS_PARA_MATCH dígitos. Mismo
- * patrón que `_esAdmin` para tolerar `549...` vs `+549...`.
+ *   1. **Match por teléfono** (preferido): igualdad estricta en la
+ *      representación normalizada (solo dígitos) o sufijo de
+ *      >= MIN_DIGITOS_PARA_MATCH dígitos. Funciona cuando el msg viene
+ *      de `@c.us` (chats con contactos guardados) o de un `@lid` en
+ *      el que `getContact()` resuelve el número canónico.
+ *
+ *   2. **Match por pushname** (fallback): si el chofer manda desde un
+ *      `@lid` y el bot no resolvió el teléfono, intentamos identificar
+ *      por el nombre que el chofer puso en su perfil de WhatsApp. Esto
+ *      pasó el 2026-05-14: choferes mandando `/jornada` desde números
+ *      no agendados en el bot — el LID no matchea ningún teléfono y
+ *      el bot quedaba en silencio. Match conservador para evitar
+ *      falsos positivos:
+ *        - si el `pushname` matchea EXACTO el APODO de un chofer (case-
+ *          insensitive); o
+ *        - si el `pushname` tiene 2+ tokens y TODOS están contenidos
+ *          en el NOMBRE de UN solo chofer (apellido + nombre, ej.
+ *          "Bastias Horacio" matchea "BASTIAS HORACIO RENE").
+ *      Si más de 1 chofer matchea, devolvemos null (ambiguo).
+ *
+ * Devuelve null si:
+ *   - Ningún empleado matchea por teléfono ni pushname.
+ *   - El empleado matcheado no es CHOFER (admins/planta no se resuelven acá).
+ *   - El empleado está marcado ACTIVO=false.
  *
  * Implementación: lee TODOS los empleados con ROL=CHOFER y filtra en
  * memoria. Para Vecchi son ~50 chofers — query baratísimo (1 read por
  * comando del chofer, no por chofer). Si la flota crece a > 500, se
  * puede pasar a un índice por sufijo de teléfono.
  */
-async function _resolverChoferPorTelefono(db, fromNumber) {
+async function _resolverChoferPorTelefono(db, fromNumber, opts = {}) {
+  const pushname = (opts.pushname || '').toString().trim();
   const fromDigits = String(fromNumber).replace(/\D+/g, '');
-  if (fromDigits.length < MIN_DIGITOS_PARA_MATCH) return null;
 
   let snap;
   try {
@@ -109,25 +127,68 @@ async function _resolverChoferPorTelefono(db, fromNumber) {
     return null;
   }
 
-  for (const d of snap.docs) {
-    const data = d.data() || {};
-    if (data.ACTIVO === false) continue;
-    const telDigits = String(data.TELEFONO || '').replace(/\D+/g, '');
-    if (telDigits.length < MIN_DIGITOS_PARA_MATCH) continue;
-    if (telDigits === fromDigits) return _mapChofer(d.id, data);
-    const longer = telDigits.length >= fromDigits.length ?
-      telDigits :
-      fromDigits;
-    const shorter = telDigits.length < fromDigits.length ?
-      telDigits :
-      fromDigits;
-    if (
-      shorter.length >= MIN_DIGITOS_PARA_MATCH &&
-      longer.endsWith(shorter)
-    ) {
-      return _mapChofer(d.id, data);
+  // ─── 1. Match por teléfono ───
+  if (fromDigits.length >= MIN_DIGITOS_PARA_MATCH) {
+    for (const d of snap.docs) {
+      const data = d.data() || {};
+      if (data.ACTIVO === false) continue;
+      const telDigits = String(data.TELEFONO || '').replace(/\D+/g, '');
+      if (telDigits.length < MIN_DIGITOS_PARA_MATCH) continue;
+      if (telDigits === fromDigits) return _mapChofer(d.id, data);
+      const longer = telDigits.length >= fromDigits.length ?
+        telDigits :
+        fromDigits;
+      const shorter = telDigits.length < fromDigits.length ?
+        telDigits :
+        fromDigits;
+      if (
+        shorter.length >= MIN_DIGITOS_PARA_MATCH &&
+        longer.endsWith(shorter)
+      ) {
+        return _mapChofer(d.id, data);
+      }
     }
   }
+
+  // ─── 2. Match por pushname (fallback para @lid sin teléfono real) ───
+  if (pushname.length >= 3) {
+    const pushUp = pushname.toUpperCase();
+    const pushTokens = pushUp.split(/\s+/).filter((t) => t.length >= 3);
+    const matches = [];
+    for (const d of snap.docs) {
+      const data = d.data() || {};
+      if (data.ACTIVO === false) continue;
+      const nombre = String(data.NOMBRE || '').toUpperCase();
+      const apodo = String(data.APODO || '').toUpperCase();
+      // Match exacto por apodo (caso "Pipi" === "PIPI").
+      if (apodo && apodo === pushUp) {
+        matches.push(_mapChofer(d.id, data));
+        continue;
+      }
+      // Match por NOMBRE conteniendo TODOS los tokens del pushname.
+      // Requiere 2+ tokens para evitar falsos positivos
+      // (ej. pushname="Juan" matchearía con varios JUAN ...).
+      if (
+        nombre &&
+        pushTokens.length >= 2 &&
+        pushTokens.every((t) => nombre.includes(t))
+      ) {
+        matches.push(_mapChofer(d.id, data));
+      }
+    }
+    if (matches.length === 1) {
+      log.info(
+        `Chofer resuelto por pushname "${pushname}" → DNI ${matches[0].dni}`
+      );
+      return matches[0];
+    }
+    if (matches.length > 1) {
+      log.warn(
+        `Pushname "${pushname}" matchea ${matches.length} choferes — ambiguo, no resuelvo.`
+      );
+    }
+  }
+
   return null;
 }
 
@@ -162,11 +223,18 @@ async function manejarSiEsComando(msg, contextos) {
   //  - Si termina en @lid (chats con números no agendados en WhatsApp
   //    moderno) → llamamos a msg.getContact() para obtener el número
   //    canónico (msg.from acá es un linked-id interno, no un teléfono).
+  //
+  // También capturamos el `pushname` (nombre que el usuario puso en su
+  // perfil de WhatsApp) para usarlo como fallback del resolver cuando
+  // el LID no se pueda mapear a un teléfono real (caso típico de
+  // choferes no agendados en el WhatsApp del bot).
   let fromNumber = '';
+  let pushname = '';
   try {
     const contacto = await msg.getContact();
     if (contacto) {
       fromNumber = contacto.number || (contacto.id && contacto.id.user) || '';
+      pushname = (contacto.pushname || contacto.name || '').toString();
     }
   } catch (_) {
     // ignoramos — fallback al parseo del from
@@ -180,15 +248,26 @@ async function manejarSiEsComando(msg, contextos) {
   const args = partes.slice(1);
 
   // Roles del remitente. Primero admin (whitelist hardcoded en .env)
-  // y, si no es admin, intentamos resolverlo como CHOFER.
+  // y, si no es admin, intentamos resolverlo como CHOFER (con
+  // fallback por pushname si el teléfono no matchea — típico @lid).
   const esAdmin = _esAdmin(fromNumber);
   let chofer = null;
   if (!esAdmin) {
-    chofer = await _resolverChoferPorTelefono(contextos.db, fromNumber);
+    chofer = await _resolverChoferPorTelefono(
+      contextos.db,
+      fromNumber,
+      { pushname }
+    );
   }
 
   if (!esAdmin && !chofer) {
-    log.warn(`Comando recibido de no-admin ni chofer ${fromNumber}: ${texto.slice(0, 40)}`);
+    // Loggeamos pushname para que si no resolvió por dígitos veamos
+    // por qué tampoco matcheó por nombre (apodo/nombre incompletos en
+    // EMPLEADOS, ambiguo, o el chofer no puso su nombre real).
+    log.warn(
+      `Comando recibido de no-admin ni chofer ${fromNumber} ` +
+      `(pushname="${pushname}"): ${texto.slice(0, 40)}`
+    );
     // No respondemos para no exponer la existencia del comando.
     return true;
   }
