@@ -17,8 +17,11 @@ mantenga corriendo 24 horas, 7 días, sin intervención manual.
 - **20 GB libres** en disco (puppeteer baja Chrome ~150 MB + logs +
   margen para Windows Updates).
 - **Ethernet** preferido sobre Wi-Fi (estabilidad).
-- **UPS** muy recomendado: si la PC se apaga por corte de luz, perdés
-  la sesión de WhatsApp Web y hay que reescanear QR desde el celular.
+- **UPS** recomendado: la sesión de WhatsApp Web tolera bien un
+  corte (cuando vuelve la luz, el bot arranca solo y sigue con la
+  sesión guardada en `.wwebjs_auth/`). El UPS es más por estabilidad
+  general (evitar corrupción del disco / Windows) que por la sesión
+  WA en sí. Si tenés cortes frecuentes, sí vale la pena.
 
 ---
 
@@ -59,7 +62,20 @@ Igual que el service account, no está en git. Copiarlo a
 `C:\coopertrans_movil\whatsapp-bot\.env`. Si arrancás de cero, partir
 de `.env.example` y completar.
 
-### 5. Primer arranque — escanear QR de WhatsApp
+### 5. Primer arranque — escanear QR de WhatsApp (UNA SOLA VEZ)
+
+> El QR se escanea **una sola vez**, igual que en tu PC actual donde
+> escaneaste hace meses y nunca más. La sesión queda guardada y dura
+> indefinidamente — el bot la reusa en cada arranque. Solo hay que
+> reescanear si se rompe la PC, formateás el disco, o WhatsApp
+> invalida la sesión (rarísimo).
+>
+> **Atajo recomendado**: en vez de reescanear desde cero, copiá la
+> carpeta `.wwebjs_auth/` que ya tenés en tu PC actual a la PC
+> dedicada. Eso evita el QR completamente. Ver "Migrar la sesión
+> existente" más abajo.
+
+Si arrancás de cero (sin sesión existente):
 
 ```powershell
 cd C:\coopertrans_movil\whatsapp-bot
@@ -72,9 +88,26 @@ de la oficina** (no tu celular personal), abrí WhatsApp →
 escaneá el QR. Cuando veas en consola algo como `WhatsApp listo para
 enviar`, hacé `Ctrl+C` para detener.
 
-A partir de acá la sesión queda cacheada en `.wwebjs_auth/` y NO
-hace falta volver a escanear (salvo que el celular te desvincule el
-dispositivo o pasen ~30 días sin actividad).
+A partir de acá la sesión queda cacheada en `.wwebjs_auth/` y el bot
+la reusa en cada arranque (no hay que volver a escanear).
+
+#### Migrar la sesión existente (recomendado si ya tenés bot corriendo)
+
+En tu PC actual:
+
+```powershell
+Stop-Service CoopertransMovilBot   # importante: detener antes de copiar
+```
+
+Copiar la carpeta entera `whatsapp-bot\.wwebjs_auth\` de tu PC actual
+a la PC dedicada (mismo path: `C:\coopertrans_movil\whatsapp-bot\.wwebjs_auth\`).
+Podés usar pendrive, escritorio remoto, OneDrive, lo que sea más cómodo.
+
+> **Importante**: una vez que arrancás el bot en la PC dedicada con esa
+> sesión copiada, **NO** la vuelvas a arrancar en la PC vieja. Si dos
+> PCs usan la misma sesión simultáneamente, WhatsApp Web detecta el
+> conflicto y banea el dispositivo (= reescaneo + posible baneo del
+> número).
 
 ### 6. Instalar como servicio Windows en modo 24/7
 
@@ -149,8 +182,9 @@ remotamente sin tener que ingresar password):
 #### c. UPS (si tenés)
 
 Configurar el software del UPS para que apague la PC con shutdown
-controlado cuando la batería baje del 20%. Si la PC se apaga sin
-shutdown, podés perder la sesión de WhatsApp.
+controlado cuando la batería baje del 20%. Esto es por sanidad
+general del SO/disco; la sesión de WhatsApp en sí tolera bien
+apagones — el bot vuelve a arrancar y reusa la sesión guardada.
 
 #### d. Acceso remoto
 
@@ -162,10 +196,15 @@ Si la PC va a estar en otro lugar, instalá:
 Necesario para mirar logs, reiniciar el bot, reescanear QR si la
 sesión se cae.
 
-### 9. Backup automático de la sesión WhatsApp
+### 9. Backup automático de la sesión WhatsApp (defensa-en-profundidad)
 
-Si la PC se rompe, la sesión `.wwebjs_auth/` se va con ella y hay
-que reescanear QR. Backup semanal a tu Drive:
+La sesión vive en `.wwebjs_auth/` y dura indefinidamente — no es algo
+que se "caiga" en el día a día. **Pero** si en algún momento la PC se
+rompe físicamente (disco quemado, robo, etc.) o formateás Windows,
+perdés la carpeta y hay que reescanear desde el celular descartable.
+
+El backup semanal a otra ubicación (Drive, NAS, otra PC) es
+defensa-en-profundidad para ese caso:
 
 PowerShell normal:
 
@@ -232,7 +271,21 @@ Para que NO arranque al próximo boot:
 Set-Service CoopertransMovilBot -StartupType Manual
 ```
 
-### Reescanear QR (si se cayó la sesión)
+### Reescanear QR (caso EXCEPCIONAL — si se cayó la sesión)
+
+Esto **no pasa en el día a día**. La sesión dura indefinidamente
+mientras el celular descartable mantenga el dispositivo vinculado y
+la PC no se rompa. Solo hace falta reescanear cuando:
+
+- Alguien desvincula manualmente el dispositivo desde el celular
+  (Ajustes → Dispositivos vinculados → cerrar sesión).
+- WhatsApp Web invalida la sesión por inactividad muy larga del
+  celular principal (~14 días sin abrir WA en el cel).
+- Se borró/corrompió la carpeta `.wwebjs_auth/` o se cambió de PC
+  sin migrar la sesión.
+- Update de WhatsApp/whatsapp-web.js incompatible (raro).
+
+Si pasa:
 
 1. `Stop-Service CoopertransMovilBot`
 2. Borrar la carpeta `whatsapp-bot\.wwebjs_auth\` (perdés la sesión vieja).
@@ -274,9 +327,12 @@ Get-Content C:\coopertrans_movil\whatsapp-bot\logs\bot.err.log -Tail 80
 ```
 
 Causas comunes:
-- **Sesión WhatsApp expiró**: reescanear QR (paso de arriba).
 - **Chromium no encontrado**: borrar `.wwebjs_cache\` y reinstalar
   con `npm install` (descarga Chrome de nuevo).
+- **Sesión WhatsApp invalidada** (raro): reescanear QR (paso de
+  arriba). Si pasa repetidamente, revisar si hay otro dispositivo
+  usando la misma cuenta o si el celular descartable está apagado
+  hace mucho.
 - **Sin internet al arrancar**: el delayed start (2 min post-boot)
   ayuda, pero si tu red tarda más, considerá agregar un sleep al
   arranque.
