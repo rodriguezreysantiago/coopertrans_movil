@@ -2272,12 +2272,19 @@ class _ResumenTarifa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Si la tarifa todavía no tiene monto cargado (caso típico:
+    // operador armó la tarifa con $0 porque no se sabía y la va a
+    // editar después), avisamos en ámbar — el viaje se puede crear
+    // igual, los cálculos van a dar 0 y se actualizan cuando se
+    // edite la tarifa + se vuelva a guardar el viaje.
+    final sinMonto = t.tarifaReal == 0 || t.tarifaChofer == 0;
+    final color = sinMonto ? AppColors.accentAmber : AppColors.accentGreen;
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: AppColors.accentGreen.withValues(alpha: 0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2292,12 +2299,32 @@ class _ResumenTarifa extends StatelessWidget {
             '${t.unidadTarifa.sufijoMonto}  ·  '
             'Chofer: \$${AppFormatters.formatearMonto(t.tarifaChofer)}'
             '${t.unidadTarifa.sufijoMonto}',
-            style: const TextStyle(
-              color: AppColors.accentGreen,
+            style: TextStyle(
+              color: color,
               fontSize: 12,
               fontWeight: FontWeight.bold,
             ),
           ),
+          if (sinMonto) ...[
+            const SizedBox(height: 4),
+            const Row(
+              children: [
+                Icon(Icons.warning_amber_outlined,
+                    size: 14, color: AppColors.accentAmber),
+                SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'Tarifa pendiente de definir — actualizá la tarifa '
+                    'y volvé a guardar el viaje cuando sepas el monto.',
+                    style: TextStyle(
+                      color: AppColors.accentAmber,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

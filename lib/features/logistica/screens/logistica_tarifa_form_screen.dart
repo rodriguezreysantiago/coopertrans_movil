@@ -471,20 +471,27 @@ class _LogisticaTarifaFormScreenState
       setState(() => _error = 'Si la carga es de terceros, elegí el dador.');
       return;
     }
+    // Tarifas con monto = 0 ahora son válidas (Santiago 2026-05-14):
+    // muchas veces no se sabe el monto hasta que el viaje termina, y
+    // necesitamos poder armar el viaje con la tarifa "preliminar".
+    // Cuando se actualice la tarifa con el monto real, basta con
+    // editar el viaje y guardar — el snapshot se refresca solo
+    // (ver `TarifaSnapshot.fromTarifa` en el form de viaje).
+    //
+    // El parser devuelve null si está vacío o no parsea — lo
+    // tratamos como 0 (tarifa por definir).
     final tarifaReal =
-        AppFormatters.parsearMiles(_tarifaRealCtrl.text)?.toDouble();
+        AppFormatters.parsearMiles(_tarifaRealCtrl.text)?.toDouble() ?? 0;
     final tarifaChofer =
-        AppFormatters.parsearMiles(_tarifaChoferCtrl.text)?.toDouble();
-    if (tarifaReal == null || tarifaReal <= 0) {
-      setState(() => _error = 'Ingresá una tarifa real válida (mayor a 0).');
+        AppFormatters.parsearMiles(_tarifaChoferCtrl.text)?.toDouble() ?? 0;
+    if (tarifaReal < 0 || tarifaChofer < 0) {
+      setState(() => _error = 'Las tarifas no pueden ser negativas.');
       return;
     }
-    if (tarifaChofer == null || tarifaChofer <= 0) {
-      setState(
-          () => _error = 'Ingresá una tarifa de chofer válida (mayor a 0).');
-      return;
-    }
-    if (tarifaChofer > tarifaReal) {
+    // La validación "chofer no puede superar real" sigue valiendo —
+    // pero solo cuando AMBOS están definidos (ambos > 0). Si alguno
+    // es 0 (por definir), no hay nada que comparar.
+    if (tarifaReal > 0 && tarifaChofer > 0 && tarifaChofer > tarifaReal) {
       setState(() => _error =
           'La tarifa del chofer no puede superar la tarifa real.');
       return;
