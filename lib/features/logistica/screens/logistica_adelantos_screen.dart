@@ -323,7 +323,13 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
         return true;
       });
     }
-    return it.toList();
+    // Orden: más viejo primero (ascendente por fecha). Pedido
+    // Santiago 2026-05-14: facilita ver primero los pendientes
+    // antiguos que esperan pago. El service entrega descendente
+    // por convención general; lo invertimos solo para esta pantalla.
+    final list = it.toList();
+    list.sort((a, b) => a.fecha.compareTo(b.fecha));
+    return list;
   }
 
   Future<void> _abrirAlta(BuildContext context) async {
