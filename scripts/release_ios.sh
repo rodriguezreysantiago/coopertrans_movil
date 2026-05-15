@@ -95,7 +95,7 @@ mkdir -p "$SYMBOLS_DIR"
 if [ "$DRY_RUN" = true ]; then
     echo -e "${YELLOW}  [DRY-RUN] flutter build ipa --release --obfuscate --split-debug-info=$SYMBOLS_DIR${NC}"
 else
-    flutter build ipa --release --obfuscate --split-debug-info="$SYMBOLS_DIR"
+    flutter build ipa --release --export-method app-store --obfuscate --split-debug-info="$SYMBOLS_DIR"
     if [ $? -ne 0 ]; then
         echo -e "${RED}flutter build ipa falló${NC}"
         exit 1
