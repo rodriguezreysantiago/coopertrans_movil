@@ -38,6 +38,17 @@ ln -sf "$HOME/flutter/bin/dart" /usr/local/bin/dart
 which flutter
 flutter --version
 
+# 2b. Instalar flutterfire CLI (lo necesita el Build Phase
+# "FlutterFire: flutterfire upload-crashlytics-symbols" del pbxproj
+# para subir los dSYMs a Firebase Crashlytics. Sin esto, el archive
+# falla con "flutterfire: command not found".)
+echo "==> Instalando flutterfire CLI..."
+dart pub global activate flutterfire_cli
+export PATH="$HOME/.pub-cache/bin:$PATH"
+ln -sf "$HOME/.pub-cache/bin/flutterfire" /usr/local/bin/flutterfire
+which flutterfire
+flutterfire --version
+
 # 3. Subir a la raiz del repo (Xcode Cloud nos deja en ios/)
 echo "==> Yendo a la raiz del repo..."
 cd "$CI_PRIMARY_REPOSITORY_PATH"
