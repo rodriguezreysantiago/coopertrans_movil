@@ -6241,6 +6241,357 @@ export const resumenExcesosJornadaDiario = onSchedule(
 );
 
 // ============================================================================
+// resumenConductaManejoDiario — Conducta de manejo al jefe Seg e Higiene
+// ============================================================================
+//
+// Cron diario 8 AM ART. Combina eventos peligrosos del día anterior
+// desde SITRACK (fuente primaria — lo que YPF audita en su tablero ICM)
+// + VOLVO (solo AEBS y ESP, que Sitrack no cubre por hardware). Agrupa
+// por par chofer+unidad para que Molina pueda dialogar con el responsable.
+//
+// REEMPLAZA al "Resumen Alertas Volvo HIGH" que vivía en whatsapp-bot/src/cron.js
+// — se eliminó el 2026-05-15 porque mandaba duplicado lo que ya llegaba vía
+// Sitrack (UNSAFE_LANE_CHANGE, LKS, LCS, DISTANCE_ALERT). La info Volvo
+// queda restringida a los eventos únicos del sistema Volvo (AEBS = frenado
+// automático de emergencia, ESP = control de estabilidad).
+//
+// Si no hubo eventos: igual manda "Sin eventos" — con 60 camiones 0 eventos
+// es raro, el silencio sería ambiguo, y el mensaje confirma que el cron corrió.
+//
+// Resolución de chofer (cuando Sitrack no trae driver_dni porque el chofer
+// no se logueó):
+//   1. Si el evento trae driver_dni → ese.
+//   2. Si no → buscar en ASIGNACIONES_VEHICULO la asignación vigente para
+//      esa patente en el timestamp del evento. Si existe, atribuir al chofer
+//      asignado y marcar el bloque con asterisco (*) en el mensaje.
+//   3. Si no hay asignación cubriendo el momento → "CHOFER NO IDENTIFICADO"
+//      con la patente solamente.
+
+// Tipos peligrosos en SITRACK_EVENTOS.event_id que entran al resumen.
+// Catálogo Sitrack:
+//   8/9    Inicio/fin de sobrevelocidad
+//   66     Aceleración brusca
+//   67     Frenada brusca
+//   267    Chofer sin identificar (auditable por YPF)
+//   326    Advertencia colisión obstáculos
+//   383    Giro brusco
+//   444    Distancia frenado insuficiente
+//   1006   Advertencia de salida de carril (LDWS/cámara)
+//   1007   Detección de colisión
+const TIPOS_PELIGROSOS_SITRACK = new Set<number>([
+  8, 9, 66, 67, 267, 326, 383, 444, 1006, 1007,
+]);
+
+// Tipos VOLVO_ALERTAS conservados en el resumen a Molina.
+// El resto ya está cubierto por Sitrack (salida carril, distancia, etc).
+// AEBS y ESP son sistemas internos de Volvo que Sitrack no ve.
+const TIPOS_VOLVO_CONSERVADOS_SEG_HIGIENE = new Set<string>(["AEBS", "ESP"]);
+
+export const resumenConductaManejoDiario = onSchedule(
+  {
+    schedule: "0 8 * * *",
+    timeZone: "America/Argentina/Buenos_Aires",
+    timeoutSeconds: 120,
+    memory: "256MiB",
+  },
+  async () => {
+    logger.info("[resumenConductaManejoDiario] iniciando");
+
+    // ─── Rango: día calendario AYER en ART ────────────────────────
+    const ahora = new Date();
+    const fechaArtAyer = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(ahora.getTime() - 24 * 60 * 60 * 1000));
+    const fechaArtHoy = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(ahora);
+    // ART = UTC-3 todo el año (no tiene DST). Construimos el offset
+    // explícito para que el rango sea independiente del TZ del runtime.
+    const desdeMs = Date.parse(`${fechaArtAyer}T00:00:00-03:00`);
+    const hastaMs = Date.parse(`${fechaArtHoy}T00:00:00-03:00`);
+
+    interface EventoConducta {
+      patente: string;
+      driverDni: string;
+      tsMs: number;
+      tipoLabel: string;
+      origen: "sitrack" | "volvo";
+    }
+    const eventos: EventoConducta[] = [];
+
+    // ─── SITRACK_EVENTOS del día anterior ─────────────────────────
+    const sitrackSnap = await db
+      .collection("SITRACK_EVENTOS")
+      .where("report_date", ">=", Timestamp.fromMillis(desdeMs))
+      .where("report_date", "<", Timestamp.fromMillis(hastaMs))
+      .get();
+    for (const doc of sitrackSnap.docs) {
+      const d = doc.data();
+      const eventId = d.event_id;
+      if (
+        typeof eventId !== "number" ||
+        !TIPOS_PELIGROSOS_SITRACK.has(eventId)
+      ) {
+        continue;
+      }
+      const patente = (d.asset_id ?? "").toString().trim().toUpperCase();
+      const ts = d.report_date as Timestamp | undefined;
+      const tsMs = ts?.toMillis?.() ?? 0;
+      eventos.push({
+        patente,
+        driverDni: (d.driver_dni ?? "").toString().trim(),
+        tsMs,
+        tipoLabel: (d.event_name ?? `Evento ${eventId}`).toString(),
+        origen: "sitrack",
+      });
+    }
+
+    // ─── VOLVO_ALERTAS del día anterior (solo AEBS / ESP) ─────────
+    const volvoSnap = await db
+      .collection("VOLVO_ALERTAS")
+      .where("creado_en", ">=", Timestamp.fromMillis(desdeMs))
+      .where("creado_en", "<", Timestamp.fromMillis(hastaMs))
+      .get();
+    for (const doc of volvoSnap.docs) {
+      const d = doc.data();
+      const tipo = (d.tipo ?? "").toString().toUpperCase();
+      // Volvo a veces envuelve sub-eventos en `tipo=GENERIC` con
+      // detalle_generic.triggerType o .type. Chequeamos ambos.
+      const detalleGeneric = (d.detalle_generic ?? {}) as Record<string, unknown>;
+      const subTipo = (
+        detalleGeneric.triggerType ?? detalleGeneric.type ?? ""
+      ).toString().toUpperCase();
+      const tipoUsado = TIPOS_VOLVO_CONSERVADOS_SEG_HIGIENE.has(tipo) ?
+        tipo :
+        TIPOS_VOLVO_CONSERVADOS_SEG_HIGIENE.has(subTipo) ?
+          subTipo :
+          null;
+      if (!tipoUsado) continue;
+      const patente = (d.patente ?? "").toString().trim().toUpperCase();
+      const ts = d.creado_en as Timestamp | undefined;
+      const tsMs = ts?.toMillis?.() ?? 0;
+      eventos.push({
+        patente,
+        driverDni: (d.chofer_dni ?? "").toString().trim(),
+        tsMs,
+        tipoLabel: tipoUsado,
+        origen: "volvo",
+      });
+    }
+
+    // ─── Bulk load asignaciones para resolver choferes ─────────────
+    const patentesSet = new Set<string>();
+    for (const e of eventos) if (e.patente) patentesSet.add(e.patente);
+    const asignaciones = await cargarAsignacionesPorPatentes([...patentesSet]);
+
+    // ─── Resolver chofer + agrupar por (DNI, patente) ─────────────
+    interface Grupo {
+      keyChoferDni: string;
+      patente: string;
+      atribuido: boolean;
+      sitrack: Map<string, number>;
+      volvo: Map<string, number>;
+    }
+    const grupos = new Map<string, Grupo>();
+    for (const e of eventos) {
+      let dni = e.driverDni;
+      let atribuidoPorAsig = false;
+      if (!dni && e.patente && e.tsMs) {
+        const a = buscarAsignacionEnFecha(
+          asignaciones.get(e.patente),
+          e.tsMs
+        );
+        if (a?.chofer_dni) {
+          dni = a.chofer_dni;
+          atribuidoPorAsig = true;
+        }
+      }
+      const keyDni = dni || "NO_ID";
+      const key = `${keyDni}|${e.patente || "—"}`;
+      let g = grupos.get(key);
+      if (!g) {
+        g = {
+          keyChoferDni: keyDni,
+          patente: e.patente || "—",
+          atribuido: atribuidoPorAsig,
+          sitrack: new Map(),
+          volvo: new Map(),
+        };
+        grupos.set(key, g);
+      } else if (!atribuidoPorAsig && keyDni !== "NO_ID") {
+        // Si llega aunque sea 1 evento con login directo en este par
+        // chofer+patente, el bloque deja de ser "atribuido".
+        g.atribuido = false;
+      }
+      if (e.origen === "sitrack") {
+        g.sitrack.set(e.tipoLabel, (g.sitrack.get(e.tipoLabel) ?? 0) + 1);
+      } else {
+        g.volvo.set(e.tipoLabel, (g.volvo.get(e.tipoLabel) ?? 0) + 1);
+      }
+    }
+
+    // ─── Lookup destinatario (Molina) ──────────────────────────────
+    const empSnap = await db
+      .collection("EMPLEADOS")
+      .doc(SEG_HIGIENE_DESTINATARIO_DNI)
+      .get();
+    if (!empSnap.exists) {
+      logger.error(
+        "[resumenConductaManejoDiario] destinatario no existe",
+        { dni: SEG_HIGIENE_DESTINATARIO_DNI }
+      );
+      return;
+    }
+    const empData = empSnap.data() ?? {};
+    const tel = (empData.TELEFONO ?? "").toString().trim();
+    if (!tel || tel === "-") {
+      logger.error(
+        "[resumenConductaManejoDiario] destinatario sin TELEFONO",
+        { dni: SEG_HIGIENE_DESTINATARIO_DNI }
+      );
+      return;
+    }
+    const apodo = (empData.APODO ?? "").toString().trim();
+    const nombreFull = (empData.NOMBRE ?? "").toString().trim();
+    const saludoNombre = apodo || _primerNombre(nombreFull) || "";
+    const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
+    const fmtFecha = fechaArtAyer.split("-").reverse().join("/");
+
+    // ─── Caso "sin eventos" ────────────────────────────────────────
+    if (grupos.size === 0) {
+      const mensaje =
+        `${saludo},\n\n` +
+        `🚧 *Conducta de manejo — ${fmtFecha}*\n\n` +
+        "✅ Sin eventos: ningún tractor registró eventos de conducta " +
+        "peligrosa ayer (Sitrack + Volvo AEBS/ESP).\n\n" +
+        BANNER_TESTING +
+        "_Coopertrans Móvil — Aviso automático._";
+      await db.collection("COLA_WHATSAPP").add({
+        telefono: tel,
+        mensaje,
+        estado: "PENDIENTE",
+        encolado_en: FieldValue.serverTimestamp(),
+        enviado_en: null,
+        error: null,
+        intentos: 0,
+        origen: "resumen_conducta_manejo_diario",
+        destinatario_coleccion: "EMPLEADOS",
+        destinatario_id: SEG_HIGIENE_DESTINATARIO_DNI,
+        campo_base: "CONDUCTA_MANEJO_DIARIO",
+        admin_dni: "BOT",
+        admin_nombre: "Bot resumen conducta",
+      });
+      logger.info("[resumenConductaManejoDiario] OK (sin eventos)");
+      return;
+    }
+
+    // ─── Lookup nombres de choferes identificados ──────────────────
+    const dnis = new Set<string>();
+    for (const g of grupos.values()) {
+      if (g.keyChoferDni !== "NO_ID") dnis.add(g.keyChoferDni);
+    }
+    const nombrePorDni = new Map<string, string>();
+    for (const dni of dnis) {
+      try {
+        const s = await db.collection("EMPLEADOS").doc(dni).get();
+        const n = s.exists ?
+          (s.data()?.NOMBRE ?? "").toString().trim() :
+          "";
+        nombrePorDni.set(dni, n);
+      } catch {
+        nombrePorDni.set(dni, "");
+      }
+    }
+
+    // ─── Ordenar: identificados (alfabético) → no identificados ────
+    const gruposOrdenados = [...grupos.values()].sort((a, b) => {
+      const aIsId = a.keyChoferDni !== "NO_ID";
+      const bIsId = b.keyChoferDni !== "NO_ID";
+      if (aIsId && !bIsId) return -1;
+      if (!aIsId && bIsId) return 1;
+      if (!aIsId && !bIsId) return a.patente.localeCompare(b.patente);
+      const an = (nombrePorDni.get(a.keyChoferDni) || "").toUpperCase();
+      const bn = (nombrePorDni.get(b.keyChoferDni) || "").toUpperCase();
+      return an.localeCompare(bn);
+    });
+
+    // ─── Construir bloques ─────────────────────────────────────────
+    let huboAtribuidos = false;
+    const bloques = gruposOrdenados.map((g) => {
+      const lineas: string[] = [];
+      let titulo: string;
+      if (g.keyChoferDni === "NO_ID") {
+        titulo = `*CHOFER NO IDENTIFICADO* · ${g.patente}`;
+      } else {
+        const nombre = nombrePorDni.get(g.keyChoferDni) ||
+          `DNI ${g.keyChoferDni}`;
+        const marca = g.atribuido ? " *" : "";
+        titulo = `*${nombre}*${marca} · ${g.patente}`;
+        if (g.atribuido) huboAtribuidos = true;
+      }
+      lineas.push(titulo);
+      if (g.sitrack.size > 0) {
+        lineas.push("  Sitrack:");
+        const ordTipos = [...g.sitrack.entries()].sort((x, y) => y[1] - x[1]);
+        for (const [t, c] of ordTipos) {
+          lineas.push(`    • ${t}: ${c}`);
+        }
+      }
+      if (g.volvo.size > 0) {
+        const partes = [...g.volvo.entries()]
+          .sort((x, y) => y[1] - x[1])
+          .map(([t, c]) => `${t}: ${c}`);
+        lineas.push(`  Volvo: ${partes.join(" · ")}`);
+      }
+      return lineas.join("\n");
+    });
+
+    const cantGrupos = grupos.size;
+    let mensaje =
+      `${saludo},\n\n` +
+      `🚧 *Conducta de manejo — ${fmtFecha}*\n\n` +
+      `${cantGrupos} chofer${cantGrupos === 1 ? "" : "es"}/` +
+      `unidad${cantGrupos === 1 ? "" : "es"} con eventos:\n\n` +
+      bloques.join("\n\n") +
+      "\n\n";
+    if (huboAtribuidos) {
+      mensaje +=
+        "_* atribuido por asignación: el evento no traía login activo, " +
+        "se asignó al chofer que tenía la unidad en ese momento._\n\n";
+    }
+    mensaje += BANNER_TESTING + "_Coopertrans Móvil — Aviso automático._";
+
+    await db.collection("COLA_WHATSAPP").add({
+      telefono: tel,
+      mensaje,
+      estado: "PENDIENTE",
+      encolado_en: FieldValue.serverTimestamp(),
+      enviado_en: null,
+      error: null,
+      intentos: 0,
+      origen: "resumen_conducta_manejo_diario",
+      destinatario_coleccion: "EMPLEADOS",
+      destinatario_id: SEG_HIGIENE_DESTINATARIO_DNI,
+      campo_base: "CONDUCTA_MANEJO_DIARIO",
+      admin_dni: "BOT",
+      admin_nombre: "Bot resumen conducta",
+    });
+
+    logger.info("[resumenConductaManejoDiario] OK", {
+      grupos: grupos.size,
+      eventos: eventos.length,
+      destinatario: SEG_HIGIENE_DESTINATARIO_DNI,
+    });
+  }
+);
+
+// ============================================================================
 // DASHBOARD STATS — agregaciones server-side para admin_panel
 // ============================================================================
 //
