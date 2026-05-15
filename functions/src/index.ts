@@ -3484,6 +3484,19 @@ interface SitrackReportItem {
   gpsSatellites?: number;
   gpsDop?: number;
   areaType?: string;
+  // Cartografía / zonas (doc Sitrack pág 4-5):
+  // - cartographyLimitSpeed: límite de velocidad de la zona (60/40 km/h
+  //   en yacimientos YPF — depende del polígono cargado en Sitrack).
+  // - gpsSpeed: velocidad medida por GPS (vs `speed` que puede venir de ECU).
+  // - zoneId/Name/Condition: solo presentes si Sitrack tiene las capas
+  //   configuradas en la cuenta. Si la cuenta tiene las capas YPF
+  //   (Vaca Muerta, Loma Campana, etc), estos campos llegan en cada
+  //   reporte cuando el tractor entra/sale o está dentro de una zona.
+  cartographyLimitSpeed?: number;
+  gpsSpeed?: number;
+  zoneId?: string;
+  zoneName?: string;
+  zoneCondition?: string; // "input" | "output" | "inside" | "outside"
   batteryVoltage?: number;
   backupBatteryVoltage?: number;
   trailerId?: string;
@@ -3740,6 +3753,24 @@ export const sitrackPosicionPoller = onSchedule(
         // Calidad GPS
         gps_validity: typeof r.gpsValidity === "number" ? r.gpsValidity : null,
         gps_satellites: typeof r.gpsSatellites === "number" ? r.gpsSatellites : null,
+        // Cartografía / zonas YPF (agregado 2026-05-15)
+        // YPF audita conducta usando estos mismos campos del feed Sitrack.
+        // - area_type: "urban" | "rural" | "unknown" (Sitrack lo deriva).
+        // - cartography_limit_speed: limite de velocidad de la zona donde
+        //   esta el camion (60/40 km/h en zonas YPF, depende del lugar).
+        // - zone_id/name/condition: presentes solo si Sitrack tiene
+        //   las capas de geocercas configuradas en la cuenta `ws41629VecchiSRL`.
+        //   YPF tiene los mismos IMEIs en su gateway, asi que las capas
+        //   deberian estar habilitadas — verificar con scripts/inspeccionar_payload_sitrack.js.
+        area_type: (r.areaType ?? "").toString(),
+        cartography_limit_speed:
+          typeof r.cartographyLimitSpeed === "number" ?
+            r.cartographyLimitSpeed :
+            null,
+        gps_speed: typeof r.gpsSpeed === "number" ? r.gpsSpeed : null,
+        zone_id: (r.zoneId ?? "").toString(),
+        zone_name: (r.zoneName ?? "").toString(),
+        zone_condition: (r.zoneCondition ?? "").toString(),
         // Trailer (sensor de enganche, hoy no instalado en ningún tractor
         // — lo guardamos por si en el futuro se instala)
         trailer_id: r.trailerId ?? "",
@@ -4036,6 +4067,13 @@ export const sitrackEventosPoller = onSchedule(
           typeof e.cartographyLimitSpeed === "number" ?
             e.cartographyLimitSpeed :
             null,
+        // Zonas / geocercas (agregado 2026-05-15)
+        // Si la cuenta Sitrack tiene cargadas las capas de YPF (Vaca
+        // Muerta, Loma Campana, etc), estos 3 campos llegan en eventos
+        // de entrada/salida de zona. YPF audita exactamente esto.
+        zone_id: (e.zoneId ?? "").toString(),
+        zone_name: (e.zoneName ?? "").toString(),
+        zone_condition: (e.zoneCondition ?? "").toString(),
         // Equipo
         ignition: e.ignition === 1 || e.ignition === 0 ? e.ignition : null,
         ignition_date: parseTs(e.ignitionDate),
