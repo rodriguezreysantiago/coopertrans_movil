@@ -979,11 +979,18 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ─── Chofer ───
+              // ─── Empleado ───
+              // Antes filtrabamos por ROL=CHOFER, pero los adelantos de
+              // sueldo aplican a todo el personal (planta, gomeria, seg
+              // e higiene, etc), no solo choferes. Ahora el dropdown
+              // muestra todos los empleados ordenados alfabeticamente.
+              // La liquidacion de viajes sigue siendo solo de choferes
+              // (ver liquidacion_service.dart), entonces los adelantos
+              // de empleados no-CHOFER no se asocian a viajes — son
+              // adelantos de sueldo puros.
               StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                 stream: FirebaseFirestore.instance
                     .collection(AppCollections.empleados)
-                    .where('ROL', isEqualTo: 'CHOFER')
                     .snapshots(),
                 builder: (ctx, snap) {
                   final docs = List<
@@ -999,7 +1006,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                   return DropdownButtonFormField<String>(
                     initialValue: _choferDni,
                     decoration: const InputDecoration(
-                      labelText: 'Chofer *',
+                      labelText: 'Empleado *',
                       border: OutlineInputBorder(),
                     ),
                     isExpanded: true,

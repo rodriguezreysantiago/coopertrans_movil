@@ -313,7 +313,7 @@ class _Mitad {
                     ),
                     pw.SizedBox(height: 2),
                     pw.Text(
-                      'Comprobante de adelanto a chofer',
+                      'Comprobante de adelanto',
                       style: const pw.TextStyle(
                         fontSize: 9,
                         color: PdfColors.grey700,
@@ -383,7 +383,7 @@ class _Mitad {
             valor: AppFormatters.formatearFecha(fechaAdelanto),
           ),
           _Linea(
-            label: 'Chofer',
+            label: 'Empleado',
             valor: '$choferNombre  ·  DNI $dniFmt',
             destacado: true,
           ),
@@ -439,7 +439,7 @@ class _Mitad {
                   ),
                   pw.SizedBox(height: 3),
                   pw.Text(
-                    'Firma del chofer',
+                    'Firma del empleado',
                     style: const pw.TextStyle(
                       fontSize: 8,
                       color: PdfColors.grey700,

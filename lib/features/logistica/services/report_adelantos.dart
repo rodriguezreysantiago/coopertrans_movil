@@ -275,7 +275,7 @@ class ReportAdelantosService {
           decoration: const pw.BoxDecoration(color: PdfColors.green800),
           children: [
             _celdaHeader('#', align: pw.TextAlign.center),
-            _celdaHeader('CHOFER'),
+            _celdaHeader('EMPLEADO'),
             _celdaHeader('DETALLE'),
             _celdaHeader('ADELANTO \$', align: pw.TextAlign.right),
             _celdaHeader('N° RECIBO', align: pw.TextAlign.center),
