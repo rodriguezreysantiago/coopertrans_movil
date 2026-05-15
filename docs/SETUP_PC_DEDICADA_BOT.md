@@ -253,6 +253,10 @@ npm install --silent
 Restart-Service CoopertransMovilBot   # requiere admin
 ```
 
+**O, si tenés instalado el auto-update** (ver sección más abajo), no
+hace falta hacer nada — la PC dedicada hace pull + restart sola cada
+5 min cuando detecta cambios en `whatsapp-bot/**`.
+
 ### Ver logs en vivo
 
 ```powershell
@@ -382,6 +386,123 @@ caso "bot vivo pero procesando muy lento" — que el watchdog basado
 en heartbeat no captura.
 
 ---
+
+## Auto-update del bot desde git (opcional pero recomendado)
+
+Modo "deploy continuo": la PC dedicada hace `git fetch` cada 5 min, y
+si hay commits nuevos que tocan `whatsapp-bot/**`, automáticamente:
+
+1. `git pull --ff-only`
+2. `npm install --silent` (solo si `package.json` o `package-lock.json` cambió)
+3. `Restart-Service CoopertransMovilBot`
+4. Espera 90 s y corre un **smoke test** (chequea via `bot_estado_remoto.js`
+   que el bot esté `LISTO` y heartbeateando < 2 min).
+5. Log detallado a `whatsapp-bot/logs/auto_update.log`.
+
+Si los cambios NO tocan `whatsapp-bot/**` (ej. solo Cloud Functions o
+docs), hace fast-forward sin restart — útil para que el repo de la PC
+dedicada quede al día siempre.
+
+> **Por qué es útil**: no tenés que ir físicamente a la PC dedicada
+> (ni por RDP/TeamViewer) cada vez que se commitea un fix del bot.
+> Pusheás desde tu PC de trabajo y en 5 min está deployado.
+
+### Instalación (one-time, requiere admin)
+
+PowerShell **como Administrador**:
+
+```powershell
+cd C:\coopertrans_movil\whatsapp-bot\scripts
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\instalar_auto_update.ps1
+```
+
+Eso crea una Scheduled Task `CoopertransMovilBotAutoUpdate` que corre
+cada 5 min como usuario SYSTEM con privilegios elevados.
+
+Para cambiar la frecuencia (ej. 10 min):
+
+```powershell
+.\instalar_auto_update.ps1 -IntervalMinutes 10
+```
+
+Para desinstalar:
+
+```powershell
+.\instalar_auto_update.ps1 -Remove
+```
+
+### Operación
+
+```powershell
+# Ver el log en vivo
+Get-Content C:\coopertrans_movil\whatsapp-bot\logs\auto_update.log -Tail 30 -Wait
+
+# Forzar una corrida manual (sin esperar al próximo polling)
+Start-ScheduledTask -TaskName CoopertransMovilBotAutoUpdate
+
+# Ver historial de runs
+Get-ScheduledTaskInfo -TaskName CoopertransMovilBotAutoUpdate
+
+# Pausar (sin desinstalar)
+Disable-ScheduledTask -TaskName CoopertransMovilBotAutoUpdate
+
+# Reactivar
+Enable-ScheduledTask -TaskName CoopertransMovilBotAutoUpdate
+```
+
+### Qué hace SIN supervisión y qué NO
+
+**Sí hace solo**:
+- `git pull` cuando hay commits nuevos.
+- `npm install` cuando cambió `package.json`.
+- `Restart-Service` del bot cuando los cambios tocan `whatsapp-bot/**`.
+- Smoke test post-restart vía `bot_estado_remoto.js`.
+
+**NO hace solo (a propósito)**:
+- **Rollback automático si el smoke test falla**. Si el bot queda raro
+  post-deploy, loguea WARNING y sigue. Vos tenés que ir a mirar el
+  log + decidir si hacer `git reset --hard HEAD~1` manual + restart.
+  Razón: el rollback automático asume que el commit malo es siempre
+  el último, lo cual no es cierto si hay varios commits sin reverter,
+  y un rollback agresivo puede destruir más de lo que arregla.
+- **Deploy de Cloud Functions** (`firebase deploy`). Esas se siguen
+  deployando manual desde la PC de trabajo. La PC dedicada solo
+  actualiza el bot.
+- **Bumps de versión / releases Windows-Android**. Esos van por los
+  scripts `release_*.ps1` desde la PC de trabajo, no por acá.
+
+### Guard rails
+
+- **Lockfile** (`whatsapp-bot/logs/auto_update.lock`): si un deploy
+  está corriendo, los siguientes pollings se saltan. Si el lock
+  queda colgado > 30 min, el próximo polling lo limpia y sigue.
+- **`--ff-only`** en el git pull: si por algún motivo hay divergencia
+  local, el pull falla y loguea ERROR en vez de inventar un merge raro.
+- **Smoke test no es bloqueante** del deploy (porque el restart ya
+  pasó), pero queda registrado el WARNING en el log para investigar.
+
+### Troubleshooting auto-update
+
+```powershell
+# El log dice WARNING/ERROR?
+Get-Content C:\coopertrans_movil\whatsapp-bot\logs\auto_update.log -Tail 50
+
+# La task corre pero el log esta vacio?
+# Probable: ningun polling encontro cambios todavia, no hay nada que loguear.
+# Forzar corrida manual:
+Start-ScheduledTask -TaskName CoopertransMovilBotAutoUpdate
+Start-Sleep 5
+Get-Content C:\coopertrans_movil\whatsapp-bot\logs\auto_update.log -Tail 20
+
+# git pull fallo con "non-fast-forward"?
+# Alguien commiteo directo en la PC dedicada (NO deberia pasar).
+# Revisar:
+cd C:\coopertrans_movil
+git status
+git log --oneline -5
+# Si hay commits locales no pusheados, decidir: pushearlos o hacer reset.
+```
 
 ## Troubleshooting
 
