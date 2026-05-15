@@ -7,11 +7,38 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
-## 📅 Post 2026-05-15 — Cerrar pipeline iOS via Xcode Cloud (desde Windows)
+## 📅 Post 2026-05-15 — Validar build #7 Xcode Cloud (Plan A Manual Signing en marcha)
 
-**Contexto** (2026-05-15): Apple desde 2026 exige iOS SDK 26 obligatorio
-para uploads a App Store / TestFlight. El MacBook Air 2020 Intel de
-Santiago **no soporta** Xcode 26 (requiere macOS 26 Tahoe, solo Apple
+**Estado al cierre 2026-05-15 ~13:50 ART**: Plan A 100% configurado y
+build #7 disparado. Esperando resultado (~30 min).
+
+Setup completo:
+- Cert Apple Distribution exportado del Keychain → `coopertrans_dist.p12`
+  en `G:\ClaudeCodeSync\secrets-ios\` (password `coopertrans2026`).
+- `.mobileprovision` "Coopertrans Movil App Store" descargado via
+  App Store Connect API (script reusable en
+  `scripts/download_provisioning_profile.py`).
+- 3 secret env vars seteadas en el workflow Xcode Cloud:
+  `IOS_DIST_CERT_P12_BASE64`, `IOS_DIST_CERT_P12_PASSWORD`,
+  `IOS_DIST_PROFILE_BASE64`.
+- Build #7 disparado manualmente desde App Store Connect web.
+
+**Si build #7 OK** ✅: te llega mail "Build available in TestFlight" a
+`santiagocoopertrans@gmail.com`. Bajá la app **TestFlight** del App Store
+en tu iPhone, login con esa cuenta (o la otra si aceptaste la invitación
+para testers internos), tap "Instalar" en Coopertrans Móvil. Pipeline
+iOS queda operable desde Windows para siempre — sólo hace falta volver
+a la Mac cuando vence el cert (1 año).
+
+**Si build #7 falla** ❌: bajar logs (en App Store Connect → Xcode Cloud
+→ workflow → click sobre el build → "Download Logs"). Si el error sigue
+siendo "Communication with Apple failed", esperar 48-72h post-aprobación
+de la cuenta (2026-05-14) — la causa más probable es propagación lenta
+del backend Apple para cuentas nuevas.
+
+**Contexto del día** (2026-05-15): Apple desde 2026 exige iOS SDK 26 obli-
+gatorio para uploads a App Store / TestFlight. El MacBook Air 2020 Intel
+de Santiago **no soporta** Xcode 26 (requiere macOS 26 Tahoe, solo Apple
 Silicon). Decisión: descartar build local en Mac, migrar a **Xcode
 Cloud** (CI/CD de Apple, incluido en el Apple Developer Program).
 
