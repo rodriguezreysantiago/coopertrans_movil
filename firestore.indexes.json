@@ -221,6 +221,14 @@
         { "fieldPath": "chofer_dni", "order": "ASCENDING" },
         { "fieldPath": "jornada_fin_ts", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "SITRACK_EVENTOS",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "driver_dni", "order": "ASCENDING" },
+        { "fieldPath": "report_date", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
