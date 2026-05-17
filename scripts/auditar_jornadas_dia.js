@@ -1,3 +1,20 @@
+// =====================================================================
+// DEPRECATED 2026-05-16 — apunta a JORNADAS_CHOFER (colección legacy).
+// =====================================================================
+// La colección `JORNADAS_CHOFER` fue migrada a `JORNADAS` (modelo v2
+// con bloques 3x4h) el 2026-05-15. Este script ya NO sirve: o no
+// encuentra docs (porque la colección vieja está vacía) o reporta
+// "todo OK" mientras el v2 sí tiene problemas, llevando a
+// conclusiones erróneas.
+//
+// Para auditar el modelo nuevo, hay que armar un script que lea de
+// JORNADAS con el shape v2 (bloques + km + descanso).
+console.error(
+  "ERROR: este script apunta a JORNADAS_CHOFER (legacy). " +
+    "Borrado del flujo operativo. Ver comentario al principio del archivo."
+);
+process.exit(1);
+
 // Audita todas las JORNADAS_CHOFER de un día (default: hoy en TZ
 // Argentina) y muestra cuáles parecen sospechosas — total_dia
 // desproporcionado para la hora actual.

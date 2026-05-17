@@ -1,3 +1,26 @@
+// =====================================================================
+// DEPRECATED 2026-05-16 — apunta a JORNADAS_CHOFER (colección legacy).
+// =====================================================================
+// La colección `JORNADAS_CHOFER` fue migrada a `JORNADAS` (modelo v2
+// con bloques 3x4h) el 2026-05-15. Este script ya NO sirve: o no
+// encuentra docs (porque la colección vieja está vacía / limpiada
+// con limpiar_jornadas_chofer_legacy.js) o borra docs equivocados.
+//
+// El modelo nuevo NO se "resetea" — cada jornada es un doc inmutable
+// `{dni}_{ts_inicio_ms}` que el vigilador abre/cierra automáticamente
+// según ignición + descanso 8h en misma posición. Si hay un bug del
+// vigilador, el fix correcto es en functions/src/jornadas_v2.ts, no
+// borrar docs JORNADAS desde acá.
+//
+// Si necesitás algo equivalente para JORNADAS, hay que armar uno
+// nuevo. Mientras tanto este script abortará al principio para evitar
+// que alguien lo corra sin querer.
+console.error(
+  "ERROR: este script apunta a JORNADAS_CHOFER (legacy). " +
+    "Borrado del flujo operativo. Ver comentario al principio del archivo."
+);
+process.exit(1);
+
 // Resetea el doc JORNADAS_CHOFER de un chofer del día actual.
 //
 // Caso de uso: el vigilador acumuló segundos erróneos (bug de

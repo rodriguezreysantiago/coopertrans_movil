@@ -1,3 +1,21 @@
+// =====================================================================
+// DEPRECATED 2026-05-16 — apunta a JORNADAS_CHOFER (colección legacy).
+// =====================================================================
+// La colección `JORNADAS_CHOFER` fue migrada a `JORNADAS` (modelo v2
+// con bloques 3x4h) el 2026-05-15. Este script ya NO sirve: lee
+// docs de una colección vacía y concluye que "el vigilador está roto"
+// cuando en realidad el v2 está corriendo bien sobre otra colección.
+//
+// Para diagnosticar el vigilador v2 hay que leer:
+//   - JORNADAS where chofer_dni = $dni order by ts_inicio_ms desc limit 5
+//   - SITRACK_POSICIONES/{patente}
+//   - functions/src/jornadas_v2.ts para entender el shape de bloques.
+console.error(
+  "ERROR: este script apunta a JORNADAS_CHOFER (legacy). " +
+    "Borrado del flujo operativo. Ver comentario al principio del archivo."
+);
+process.exit(1);
+
 // Diagnóstico del vigilador de jornada para un chofer puntual.
 //
 // Lee:

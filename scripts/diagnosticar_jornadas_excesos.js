@@ -1,3 +1,19 @@
+// =====================================================================
+// DEPRECATED 2026-05-16 — apunta a JORNADAS_CHOFER (colección legacy).
+// =====================================================================
+// La colección `JORNADAS_CHOFER` fue migrada a `JORNADAS` (modelo v2
+// con bloques 3x4h) el 2026-05-15. Este script ya NO sirve.
+//
+// Para diagnosticar excesos del vigilador v2 hay que leer JORNADAS
+// con el shape nuevo (bloques 3x4h, descanso 8h en misma posición).
+// La función resumenExcesosJornadaDiario en functions/src/index.ts
+// es la fuente de verdad operativa.
+console.error(
+  "ERROR: este script apunta a JORNADAS_CHOFER (legacy). " +
+    "Borrado del flujo operativo. Ver comentario al principio del archivo."
+);
+process.exit(1);
+
 // Diagnóstico del resumen diario de excesos de jornada que llega a
 // Alejandra Molina por WhatsApp. Reportado 2026-05-12: hace 3 días
 // que el bot dice "ningún chofer excedió 4h continuas ni 12h diarias".

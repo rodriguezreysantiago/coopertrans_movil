@@ -77,34 +77,24 @@ try {
         exit 1
     }
 
-    # Export. Toma todas las colecciones que el bot/app usan
-    # explicitamente. Si en el futuro se suman colecciones, hay que
-    # actualizarlas aca o sacar el flag para exportar todo.
+    # Export. Mantener una lista hardcoded de colecciones es una bomba
+    # de tiempo — cada vez que aparece un modulo nuevo (Logistica, ICM,
+    # Gomeria, EMPRESAS_EMPLEADORAS, vigilador v2, etc.) el backup
+    # queda incompleto silenciosamente y la proxima recovery descubre
+    # que faltan datos. Auditoria 2026-05-16 detecto 14+ colecciones
+    # no incluidas (VIAJES_LOGISTICA, ADELANTOS_CHOFER, JORNADAS,
+    # EMPRESAS_LOGISTICA, UBICACIONES_LOGISTICA, TARIFAS_LOGISTICA,
+    # ASIGNACIONES_ENGANCHE, CUBIERTAS*, EMPRESAS_EMPLEADORAS,
+    # SITRACK_EVENTOS, ICM_SEMANAL, VOLVO_SCORES_DIARIOS, etc).
     #
-    # ASIGNACIONES_VEHICULO, VOLVO_ALERTAS y META se sumaron el 2026-05-02
-    # (sistema histórico chofer↔vehículo + Volvo Alerts API).
-    $colecciones = @(
-        'EMPLEADOS',
-        'VEHICULOS',
-        'REVISIONES',
-        'CHECKLISTS',
-        'COLA_WHATSAPP',
-        'AVISOS_AUTOMATICOS_HISTORICO',
-        'RESPUESTAS_BOT_AMBIGUAS',
-        'AUDITORIA_ACCIONES',
-        'TELEMETRIA_HISTORICO',
-        'MANTENIMIENTOS_AVISADOS',
-        'BOT_HEALTH',
-        'BOT_CONTROL',
-        'LOGIN_ATTEMPTS',
-        'ASIGNACIONES_VEHICULO',
-        'VOLVO_ALERTAS',
-        'META'
-    ) -join ','
+    # Sacamos el filtro: ahora exporta TODAS las colecciones del proyecto.
+    # Pesa un poco mas (incluye colecciones efimeras como LOGIN_ATTEMPTS,
+    # AVISOS_AUTOMATICOS_HISTORICO, MANTENIMIENTOS_AVISADOS) pero el
+    # ahorro es despreciable frente al riesgo de no tener disaster
+    # recovery completo.
 
     & gcloud firestore export $prefix `
-        --project=$projectId `
-        --collection-ids=$colecciones
+        --project=$projectId
 
     if ($LASTEXITCODE -ne 0) {
         Write-Log "ERROR: gcloud firestore export fallo (exit $LASTEXITCODE)"
