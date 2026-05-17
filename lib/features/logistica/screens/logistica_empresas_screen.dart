@@ -110,6 +110,7 @@ class _ListaEmpresasState extends State<_ListaEmpresas> {
                       ? null
                       : IconButton(
                           icon: const Icon(Icons.clear, size: 18),
+                          tooltip: 'Limpiar búsqueda',
                           onPressed: () => setState(() => _filtro = ''),
                         ),
                 ),
@@ -353,8 +354,13 @@ class _CardEmpresa extends StatelessWidget {
       AppFeedback.successOn(messenger, 'Empresa eliminada.');
     } on StateError catch (e) {
       AppFeedback.errorOn(messenger, e.message);
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al eliminar: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo eliminar la empresa. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 }

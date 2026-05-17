@@ -172,8 +172,13 @@ class EmpleadoActions {
           ? 'Rol actualizado a ${nuevoRol.toLowerCase()}'
           : 'Área actualizada';
       AppFeedback.successOn(messenger, mensaje);
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al actualizar rol: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo actualizar el rol. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 
@@ -931,9 +936,15 @@ class EmpleadoActions {
                       ? 'Se desvinculó el $etiquetaUnidad de este chofer.'
                       : 'Se asignó el $etiquetaUnidad $nueva.';
                   AppFeedback.successOn(messenger, mensaje);
-                } catch (e) {
+                } catch (e, s) {
                   if (ctx.mounted) Navigator.of(ctx).pop();
-                  AppFeedback.errorOn(messenger, 'No se pudo guardar el cambio: $e');
+                  AppFeedback.errorTecnicoOn(
+                    messenger,
+                    usuario:
+                        'No se pudo guardar la asignación. Probá de nuevo.',
+                    tecnico: e,
+                    stack: s,
+                  );
                 }
               }
 
@@ -1130,8 +1141,13 @@ class EmpleadoActions {
       ));
 
       AppFeedback.successOn(messenger, 'Empleado dado de baja.');
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al dar de baja: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo dar de baja al empleado. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 
@@ -1167,8 +1183,13 @@ class EmpleadoActions {
       ));
       AppFeedback.successOn(
           messenger, 'Empleado reactivado. Cargá los vencimientos.');
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al reactivar: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo reactivar al empleado. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 

@@ -107,8 +107,13 @@ class ReportSaveHelper {
         ),
       );
       return true;
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al guardar reporte: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo guardar el reporte. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
       return false;
     }
   }

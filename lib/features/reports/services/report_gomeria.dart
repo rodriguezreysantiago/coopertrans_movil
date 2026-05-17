@@ -107,8 +107,13 @@ class ReportGomeriaService {
         case _ReporteGomeria.costoPorKm:
           await _generarCostoPorKm(messenger);
       }
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al generar el reporte: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo generar el reporte de gomería. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 

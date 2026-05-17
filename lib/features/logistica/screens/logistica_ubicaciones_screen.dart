@@ -97,6 +97,7 @@ class _LogisticaUbicacionesScreenState
                     ? null
                     : IconButton(
                         icon: const Icon(Icons.clear, size: 18),
+                        tooltip: 'Limpiar búsqueda',
                         onPressed: () => setState(() => _filtro = ''),
                       ),
               ),
@@ -337,8 +338,13 @@ class _CardUbicacion extends StatelessWidget {
       AppFeedback.successOn(messenger, 'Ubicación eliminada.');
     } on StateError catch (e) {
       AppFeedback.errorOn(messenger, e.message);
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al eliminar: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo eliminar la ubicación. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 }
@@ -600,9 +606,14 @@ class _EditarUbicacionSheetState extends State<_EditarUbicacionSheet> {
     } on StateError catch (e) {
       if (!mounted) return;
       AppFeedback.errorOn(messenger, e.message);
-    } catch (e) {
+    } catch (e, s) {
       if (!mounted) return;
-      AppFeedback.errorOn(messenger, 'Error al eliminar: $e');
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo eliminar la ubicación. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 }

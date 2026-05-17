@@ -413,6 +413,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                     : (_busquedaCtl.text.isNotEmpty
                         ? IconButton(
                             icon: const Icon(Icons.close, color: Colors.white54),
+                            tooltip: 'Limpiar búsqueda',
                             onPressed: () {
                               _busquedaCtl.clear();
                               setState(() => _resultados = const []);

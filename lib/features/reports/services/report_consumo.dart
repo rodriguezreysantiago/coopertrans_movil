@@ -417,9 +417,13 @@ class ReportConsumoService {
               '${AppFormatters.formatearFecha(desde)} a ${AppFormatters.formatearFecha(hasta)}',
         );
       }
-    } catch (e) {
-      debugPrint('❌ Error reporte consumo: $e');
-      AppFeedback.errorOn(messenger, 'Error al generar reporte: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo generar el reporte de consumo. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 

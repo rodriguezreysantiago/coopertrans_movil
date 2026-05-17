@@ -189,6 +189,7 @@ class _BarraBusqueda extends StatelessWidget {
               : IconButton(
                   icon: const Icon(Icons.clear,
                       color: Colors.white60, size: 18),
+                  tooltip: 'Limpiar búsqueda',
                   onPressed: () {
                     controller.clear();
                     onChanged('');
@@ -686,10 +687,12 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
           // Si fallamos a mitad de un lote, indicamos cuántas alcanzaron.
           if (_total > 1 && _creadas > 0) {
             _error =
-                'Error tras crear $_creadas de $_total: $e\nReintentá con la cantidad restante.';
+                'Se crearon $_creadas de $_total y despues fallo. '
+                'Reintentá con la cantidad restante.';
           } else {
-            _error = 'Error al guardar: $e';
+            _error = 'No se pudo guardar. Probá de nuevo.';
           }
+          debugPrint('gomeria_stock guardar error: $e');
         });
       }
     }

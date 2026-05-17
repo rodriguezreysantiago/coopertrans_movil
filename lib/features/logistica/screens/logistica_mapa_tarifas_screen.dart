@@ -838,6 +838,7 @@ class _PanelLateralTarifasState extends State<_PanelLateralTarifas> {
                     : IconButton(
                         icon: const Icon(Icons.clear, size: 16),
                         visualDensity: VisualDensity.compact,
+                        tooltip: 'Limpiar búsqueda',
                         onPressed: () {
                           _filtroCtrl.clear();
                           setState(() => _filtro = '');

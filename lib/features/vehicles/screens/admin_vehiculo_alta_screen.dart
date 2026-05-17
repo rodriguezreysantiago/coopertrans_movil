@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/vencimientos_config.dart';
@@ -143,7 +144,16 @@ class _AdminVehiculoAltaScreenState
       onTap: () => FocusScope.of(context).unfocus(),
       child: AppScaffold(
         title: 'Alta de Nueva Unidad',
-        body: SingleChildScrollView(
+        // Ctrl+S guarda (Windows-friendly).
+        body: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.keyS, control: true): () {
+              if (!_guardando) _guardar();
+            },
+          },
+          child: Focus(
+            autofocus: true,
+            child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Form(
             key: _formKey,
@@ -233,6 +243,8 @@ class _AdminVehiculoAltaScreenState
                 ),
               ],
             ),
+          ),
+        ),
           ),
         ),
       ),

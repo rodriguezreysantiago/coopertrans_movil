@@ -493,6 +493,7 @@ class _DetalleColaSheet extends StatelessWidget {
                 ),
                 IconButton(
                   icon: const Icon(Icons.close, color: Colors.white54),
+                  tooltip: 'Cerrar',
                   onPressed: () => Navigator.of(ctx).pop(),
                 ),
               ],

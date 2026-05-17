@@ -850,7 +850,18 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
 
     return AppScaffold(
       title: _esEdicion ? 'Editar viaje' : 'Nuevo viaje',
-      body: SingleChildScrollView(
+      // Atajo Ctrl+S para guardar (auditoria 2026-05-17, util en Windows
+      // desktop donde el operador trabaja teclado-only). Si ya esta
+      // guardando no hace nada — evita doble submit.
+      body: CallbackShortcuts(
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.keyS, control: true): () {
+            if (!_guardando) _guardar();
+          },
+        },
+        child: Focus(
+          autofocus: true,
+          child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -986,6 +997,8 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
               onCancelar: () => Navigator.of(context).pop(),
             ),
           ],
+        ),
+      ),
         ),
       ),
     );
@@ -2232,7 +2245,24 @@ class _SeccionGastos extends StatelessWidget {
                 IconButton(
                   icon: const Icon(Icons.delete_outline,
                       size: 18, color: Colors.white54),
-                  onPressed: () {
+                  tooltip: 'Eliminar gasto',
+                  onPressed: () async {
+                    // Confirm (auditoria 2026-05-17): antes el delete era
+                    // instantáneo y el operador perdia el gasto sin chance
+                    // de deshacer. Importante porque los gastos cargan
+                    // monto + fecha + detalle, no es trivial re-cargar.
+                    final ok = await AppConfirmDialog.show(
+                      context,
+                      title: '¿Eliminar gasto?',
+                      message:
+                          '${g.detalle ?? 'Gasto'} de '
+                          '\$${AppFormatters.formatearMonto(g.monto)} '
+                          '(${AppFormatters.formatearFecha(g.fecha)}).',
+                      confirmLabel: 'ELIMINAR',
+                      destructive: true,
+                      icon: Icons.delete_outline,
+                    );
+                    if (ok != true) return;
                     final nueva = List<GastoViaje>.from(gastos)..removeAt(i);
                     onChanged(nueva);
                   },
@@ -2629,6 +2659,7 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
                       ? null
                       : IconButton(
                           icon: const Icon(Icons.close, size: 18),
+                          tooltip: 'Limpiar búsqueda',
                           onPressed: () {
                             _ctrl.clear();
                             setState(() => _filtro = '');

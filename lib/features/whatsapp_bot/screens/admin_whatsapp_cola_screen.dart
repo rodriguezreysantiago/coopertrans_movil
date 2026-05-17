@@ -60,8 +60,13 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
     try {
       await _service.reintentar(id);
       AppFeedback.successOn(messenger, 'Marcado para reintento.');
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'No se pudo reintentar: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo reintentar el mensaje. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 
@@ -80,8 +85,13 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
     try {
       await _service.eliminar(id);
       AppFeedback.successOn(messenger, 'Mensaje eliminado.');
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'No se pudo eliminar: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo eliminar el mensaje. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 

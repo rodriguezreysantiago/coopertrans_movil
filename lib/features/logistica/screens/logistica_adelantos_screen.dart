@@ -140,6 +140,7 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                     ? null
                     : IconButton(
                         icon: const Icon(Icons.clear, size: 18),
+                        tooltip: 'Limpiar búsqueda',
                         onPressed: () => setState(() => _filtro = ''),
                       ),
               ),
@@ -395,8 +396,13 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
         messenger,
         '${seleccionados.length} adelanto(s) marcado(s) como pagado(s).',
       );
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al marcar pagados: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudieron marcar todos los adelantos como pagados. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 }
@@ -904,8 +910,13 @@ class _CardAdelanto extends StatelessWidget {
         motivo: motivoTxt.isEmpty ? null : motivoTxt,
       );
       AppFeedback.successOn(messenger, 'Adelanto eliminado.');
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al eliminar: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo eliminar el adelanto. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 
@@ -917,8 +928,13 @@ class _CardAdelanto extends StatelessWidget {
     try {
       await AdelantosService.restaurarAdelanto(adelanto.id);
       AppFeedback.successOn(messenger, 'Adelanto restaurado.');
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al restaurar: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo restaurar el adelanto. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 }
@@ -1395,8 +1411,13 @@ class _ComprobantePrinter {
             'Imprimí desde el visor (Ctrl+P).');
       }
       return impresoOk;
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al generar comprobante: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo generar el comprobante. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
       return false;
     }
   }

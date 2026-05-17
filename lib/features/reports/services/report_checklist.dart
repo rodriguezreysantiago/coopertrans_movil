@@ -204,9 +204,13 @@ class ReportChecklistService {
               'Generado el ${AppFormatters.formatearFechaHoraCorta(DateTime.now())}',
         );
       }
-    } catch (e) {
-      debugPrint('❌ Error reporte checklist: $e');
-      AppFeedback.errorOn(messenger, 'Error al generar reporte: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo generar el reporte de checklists. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 

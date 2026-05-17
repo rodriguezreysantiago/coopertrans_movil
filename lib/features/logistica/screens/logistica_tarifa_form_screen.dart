@@ -132,9 +132,10 @@ class _LogisticaTarifaFormScreenState
       }
       setState(() => _cargando = false);
     } catch (e) {
+      debugPrint('logistica_tarifa_form cargar error: $e');
       setState(() {
         _cargando = false;
-        _error = 'Error al cargar: $e';
+        _error = 'No se pudo cargar la tarifa. Probá de nuevo.';
       });
     }
   }

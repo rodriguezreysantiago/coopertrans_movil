@@ -496,8 +496,13 @@ class VehiculoActions {
       ));
 
       AppFeedback.successOn(messenger, 'Vehículo dado de baja.');
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al dar de baja: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo dar de baja el vehículo. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 
@@ -532,8 +537,13 @@ class VehiculoActions {
       ));
       AppFeedback.successOn(
           messenger, 'Vehículo reactivado. Cargá los vencimientos.');
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al reactivar: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo reactivar el vehículo. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 

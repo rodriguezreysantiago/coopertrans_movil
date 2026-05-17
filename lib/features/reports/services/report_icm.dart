@@ -191,9 +191,14 @@ class ReportIcmService {
         nombreDefault: nombre,
         messenger: messenger,
       );
-    } catch (e) {
+    } catch (e, s) {
       messenger.hideCurrentSnackBar();
-      AppFeedback.errorOn(messenger, 'Error generando reporte: $e');
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo generar el reporte de ICM. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 

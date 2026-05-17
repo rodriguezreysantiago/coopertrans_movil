@@ -1033,8 +1033,13 @@ class _ToggleKillSwitch extends StatelessWidget {
         messenger,
         nuevoValor ? 'Bot pausado.' : 'Bot reanudado.',
       );
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al actualizar control: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo actualizar el control del bot. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 }

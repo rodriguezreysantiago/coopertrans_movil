@@ -29,6 +29,23 @@ class _LogisticaViajesListaScreenState
   EstadoViaje? _filtroEstado;
   bool? _filtroLiquidado; // null = todos, true = solo liquidados, false = solo no
   bool _verBorrados = false;
+  // Texto de búsqueda libre (auditoria 2026-05-17). Matcha chofer,
+  // patente, empresa origen/destino, ubicación origen/destino, producto.
+  // Lo dispara el TextField de la barra superior — siempre lowercase.
+  String _busqueda = '';
+  late final TextEditingController _busquedaCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _busquedaCtrl = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _busquedaCtrl.dispose();
+    super.dispose();
+  }
 
   void _abrirNuevoViaje() {
     Navigator.pushNamed(context, AppRoutes.adminLogisticaViajeForm);
@@ -45,6 +62,43 @@ class _LogisticaViajesListaScreenState
         onNuevo: _abrirNuevoViaje,
         child: Column(
           children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: TextField(
+                controller: _busquedaCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Buscar por chofer, patente, empresa, producto…',
+                  hintStyle: const TextStyle(color: Colors.white38),
+                  prefixIcon:
+                      const Icon(Icons.search, color: Colors.white54),
+                  suffixIcon: _busqueda.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.clear,
+                              color: Colors.white54),
+                          tooltip: 'Limpiar búsqueda',
+                          onPressed: () {
+                            _busquedaCtrl.clear();
+                            setState(() => _busqueda = '');
+                          },
+                        ),
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide:
+                        const BorderSide(color: Colors.white24),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide:
+                        const BorderSide(color: Colors.white24),
+                  ),
+                ),
+                onChanged: (v) =>
+                    setState(() => _busqueda = v.trim().toLowerCase()),
+              ),
+            ),
             _BarraFiltros(
               estado: _filtroEstado,
               liquidado: _filtroLiquidado,
@@ -100,10 +154,31 @@ class _LogisticaViajesListaScreenState
   }
 
   List<Viaje> _aplicarFiltros(List<Viaje> docs) {
+    final q = _busqueda;
     final filtrados = docs.where((v) {
       if (_filtroEstado != null && v.estado != _filtroEstado) return false;
       if (_filtroLiquidado == true && !v.liquidado) return false;
       if (_filtroLiquidado == false && v.liquidado) return false;
+      // Búsqueda libre: matchea chofer (DNI+nombre), patente del
+      // vehículo/enganche, y por cada tramo: empresa origen/destino,
+      // ubicación origen/destino y producto. Si el query es vacio,
+      // pasa todo.
+      if (q.isNotEmpty) {
+        final hayMatch = (v.choferNombre?.toLowerCase() ?? '').contains(q) ||
+            v.choferDni.toLowerCase().contains(q) ||
+            (v.vehiculoId?.toLowerCase() ?? '').contains(q) ||
+            (v.engancheId?.toLowerCase() ?? '').contains(q) ||
+            v.tramos.any((t) {
+              final s = t.tarifaSnapshot;
+              return s.empresaOrigenNombre.toLowerCase().contains(q) ||
+                  s.empresaDestinoNombre.toLowerCase().contains(q) ||
+                  s.origenEtiqueta.toLowerCase().contains(q) ||
+                  s.destinoEtiqueta.toLowerCase().contains(q) ||
+                  (t.producto?.toLowerCase() ?? '').contains(q) ||
+                  (s.producto?.toLowerCase() ?? '').contains(q);
+            });
+        if (!hayMatch) return false;
+      }
       return true;
     }).toList();
     // Orden: más viejo arriba (ascendente por fecha de referencia,
@@ -405,8 +480,13 @@ class _ViajeTile extends StatelessWidget {
         reactivadoPorDni: PrefsService.dni,
       );
       AppFeedback.successOn(messenger, 'Viaje reactivado.');
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al reactivar: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo reactivar el viaje. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 

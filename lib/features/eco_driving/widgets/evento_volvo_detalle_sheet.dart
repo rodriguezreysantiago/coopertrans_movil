@@ -191,8 +191,13 @@ class EventoVolvoDetalleSheet extends StatelessWidget {
       ));
       if (context.mounted) Navigator.of(context).pop();
       AppFeedback.successOn(messenger, 'Alerta marcada como atendida.');
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al marcar atendida: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo marcar la alerta como atendida. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 }

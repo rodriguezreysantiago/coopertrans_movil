@@ -398,8 +398,13 @@ class _TractorCard extends StatelessWidget {
         messenger,
         'Service registrado para $patente. Próximo a ${(kmActual + intervaloKm).round()} km.',
       );
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'No se pudo guardar: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo registrar el service. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 

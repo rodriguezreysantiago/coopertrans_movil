@@ -285,9 +285,13 @@ class ReportFlotaService {
           textoCompartir: '🚛 Reporte de Flota — Coopertrans Móvil',
         );
       }
-    } catch (e) {
-      debugPrint('❌ Error reporte flota: $e');
-      AppFeedback.errorOn(messenger, 'Error al generar reporte: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo generar el reporte de flota. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 

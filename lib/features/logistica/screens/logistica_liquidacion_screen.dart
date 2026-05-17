@@ -236,8 +236,13 @@ class _LogisticaLiquidacionScreenState
         liquidadoPorDni: dni,
       );
       AppFeedback.successOn(messenger, '$n viaje(s) marcado(s) como liquidado(s).');
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al liquidar: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudieron liquidar todos los viajes. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 }

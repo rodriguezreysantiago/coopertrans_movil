@@ -95,6 +95,7 @@ class _AppListPageState extends State<AppListPage> {
                     ? IconButton(
                         icon: const Icon(Icons.clear,
                             color: Colors.white54, size: 18),
+                        tooltip: 'Limpiar búsqueda',
                         onPressed: () => _searchCtl.clear(),
                       )
                     : null,

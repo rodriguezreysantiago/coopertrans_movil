@@ -364,8 +364,13 @@ class _CardTarifa extends StatelessWidget {
       AppFeedback.successOn(messenger, 'Tarifa eliminada.');
     } on StateError catch (e) {
       AppFeedback.errorOn(messenger, e.message);
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al eliminar: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo eliminar la tarifa. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 }

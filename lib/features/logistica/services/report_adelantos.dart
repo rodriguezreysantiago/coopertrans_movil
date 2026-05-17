@@ -80,8 +80,13 @@ class ReportAdelantosService {
         AppFeedback.successOn(messenger,
             'Resumen abierto en el visor. Imprimí desde ahí (Ctrl+P).');
       }
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error generando resumen: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo generar el resumen de adelantos. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 

@@ -359,8 +359,14 @@ class _AccionesVehiculoMenu extends StatelessWidget {
         AppFeedback.warningOn(
             messenger, 'Unidad en reposo o no encontrada.');
       }
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error de conexión Volvo: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario:
+            'No se pudo conectar con Volvo. Verificá tu conexión y probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 
@@ -1608,10 +1614,15 @@ class _EditarServiceDialogState extends State<_EditarServiceDialog> {
         Navigator.pop(context);
         AppFeedback.successOn(messenger, 'Service actualizado.');
       }
-    } catch (e) {
+    } catch (e, s) {
       if (mounted) {
         setState(() => _guardando = false);
-        AppFeedback.errorOn(messenger, 'Error al guardar: $e');
+        AppFeedback.errorTecnicoOn(
+          messenger,
+          usuario: 'No se pudo guardar el service. Probá de nuevo.',
+          tecnico: e,
+          stack: s,
+        );
       }
     }
   }

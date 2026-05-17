@@ -41,8 +41,13 @@ class AdminBotBandejaScreen extends StatelessWidget {
           .doc(docId)
           .delete();
       AppFeedback.successOn(messenger, 'Mensaje descartado.');
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'No se pudo descartar: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo descartar el mensaje. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 
@@ -148,9 +153,14 @@ class AdminBotBandejaScreen extends StatelessWidget {
       if (!context.mounted) return;
       AppFeedback.successOn(messenger,
           'Convertido en revisión. Ya aparece en "Revisiones Pendientes".');
-    } catch (e) {
+    } catch (e, s) {
       if (!context.mounted) return;
-      AppFeedback.errorOn(messenger, 'No se pudo convertir: $e');
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo convertir en revisión. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 

@@ -103,8 +103,13 @@ class ReportLiquidacionService {
         textoCompartir:
             'Liquidación ${AppFormatters.formatearMes(mes)} — Coopertrans Móvil',
       );
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error generando reporte: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo generar el reporte de liquidación. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 

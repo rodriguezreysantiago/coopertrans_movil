@@ -1,8 +1,7 @@
-import 'dart:typed_data';
-
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -235,9 +234,15 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
       if (!mounted) return;
       setState(() => _urlFoto = url);
       AppFeedback.successOn(messenger, 'Foto de la unidad actualizada');
-    } catch (e) {
+    } catch (e, s) {
       if (mounted) {
-        AppFeedback.errorOn(messenger, 'No se pudo subir la foto: $e');
+        AppFeedback.errorTecnicoOn(
+          messenger,
+          usuario:
+              'No se pudo subir la foto. Verificá tu conexión y probá de nuevo.',
+          tecnico: e,
+          stack: s,
+        );
       }
     } finally {
       if (mounted) setState(() => _subiendoFoto = false);
@@ -399,10 +404,15 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
       } else {
         AppFeedback.warningOn(messenger, 'Unidad en reposo o no encontrada en Volvo.');
       }
-    } catch (e) {
-      debugPrint('Error sincro: $e');
+    } catch (e, s) {
       if (mounted) {
-        AppFeedback.errorOn(messenger, 'Error de conexión con Volvo: $e');
+        AppFeedback.errorTecnicoOn(
+          messenger,
+          usuario:
+              'No se pudo conectar con Volvo. Verificá tu conexión y probá de nuevo.',
+          tecnico: e,
+          stack: s,
+        );
       }
     } finally {
       if (mounted) setState(() => _isSyncing = false);
@@ -661,7 +671,16 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
               },
             ),
         ],
-        body: Form(
+        // Ctrl+S guarda (Windows-friendly).
+        body: CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.keyS, control: true): () {
+              if (!_isSaving) _guardar();
+            },
+          },
+          child: Focus(
+            autofocus: true,
+            child: Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.all(20),
@@ -765,6 +784,8 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
               ),
               const SizedBox(height: 20),
             ],
+          ),
+        ),
           ),
         ),
       ),

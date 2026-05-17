@@ -323,6 +323,7 @@ class _PassField extends StatelessWidget {
             obscure ? Icons.visibility_off : Icons.visibility,
             color: Colors.white38,
           ),
+          tooltip: obscure ? 'Mostrar contraseña' : 'Ocultar contraseña',
           onPressed: onToggleVisibility,
         ),
       ),

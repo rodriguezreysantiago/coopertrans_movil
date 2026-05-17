@@ -185,6 +185,7 @@ class _AdminVolvoAlertasScreenState extends State<AdminVolvoAlertasScreen> {
                           ? null
                           : IconButton(
                               icon: const Icon(Icons.clear, size: 18),
+                              tooltip: 'Limpiar búsqueda',
                               onPressed: () => _searchCtl.clear(),
                             ),
                       border: OutlineInputBorder(
@@ -635,8 +636,13 @@ class _AlertaCard extends StatelessWidget {
         },
       ));
       AppFeedback.successOn(messenger, 'Alerta marcada como atendida.');
-    } catch (e) {
-      AppFeedback.errorOn(messenger, 'Error al marcar atendida: $e');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo marcar la alerta como atendida. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
     }
   }
 }
