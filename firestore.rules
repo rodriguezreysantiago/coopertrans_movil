@@ -79,13 +79,30 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == dni;
     }
 
+    /// True si la patente es la unidad asignada al chofer logueado.
+    /// Hace un lookup adicional a EMPLEADOS/{uid} — costo de 1 read extra
+    /// por cada lectura de VEHICULOS por parte de un chofer (el costo es
+    /// aceptable porque la pantalla "Mi equipo" del chofer hace 1-2 lecturas
+    /// por sesión, no es hot path).
+    /// Cubre tanto el campo VEHICULO (tractor) como ENGANCHE.
+    function isMyAssignedVehiculo(patente) {
+      return isSignedIn()
+        && (
+          get(/databases/$(database)/documents/EMPLEADOS/$(request.auth.uid)).data.VEHICULO == patente
+          || get(/databases/$(database)/documents/EMPLEADOS/$(request.auth.uid)).data.ENGANCHE == patente
+        );
+    }
+
     // ========================================================================
     // EMPLEADOS — cada chofer ve su propio legajo; el admin ve todos
     // ========================================================================
 
     match /EMPLEADOS/{dni} {
       // Lectura: el dueño puede ver su legajo, admin/supervisor todos.
-      allow read: if isAdminOrSupervisor() || isSelf(dni);
+      // SEG_HIGIENE también — necesita resolver DNI → nombre en el módulo
+      // ICM (icm_ranking_screen, icm_detalle_chofer_screen) y en el mapa
+      // Volvo para mostrar quien manejaba cuando ocurrio un evento.
+      allow read: if isAdminOrSupervisor() || isSegHigiene() || isSelf(dni);
       // Crear y borrar: solo admin/supervisor (alta y baja).
       allow create, delete: if isAdminOrSupervisor();
       // Update: admin/supervisor sin restricción.
@@ -93,12 +110,16 @@ service cloud.firestore {
       // self-service de "Mi Perfil":
       //   - ARCHIVO_PERFIL: foto de perfil (sube nueva foto y actualiza URL).
       //   - CONTRASEÑA: hash bcrypt nuevo cuando cambia su clave.
+      //   - TELEFONO / MAIL: datos personales que el chofer puede actualizar
+      //     desde la pantalla "Datos personales" de Mi Perfil. Si los omitimos
+      //     acá, la edicion tira permission-denied silencioso y rompe la UX.
       // Cualquier otro campo (DNI, rol, vencimientos, vehículo asignado,
       // etc.) está reservado a admin/supervisor.
       allow update: if isAdminOrSupervisor()
         || (isSelf(dni)
             && request.resource.data.diff(resource.data)
-                 .affectedKeys().hasOnly(['ARCHIVO_PERFIL', 'CONTRASEÑA']));
+                 .affectedKeys().hasOnly(['ARCHIVO_PERFIL', 'CONTRASEÑA',
+                                          'TELEFONO', 'MAIL']));
     }
 
     // ========================================================================
@@ -106,9 +127,16 @@ service cloud.firestore {
     // ========================================================================
 
     match /VEHICULOS/{patente} {
-      // El chofer necesita leer su unidad asignada y los papeles del
-      // vehículo (RTO, Seguro). Acepta cualquier signedIn.
-      allow read: if isSignedIn();
+      // Lectura general: admin/supervisor + roles operativos que necesitan
+      // el catálogo completo (SEG_HIGIENE para vincular eventos Volvo a
+      // patente, GOMERIA para mostrar en qué tractor está cada cubierta).
+      // El chofer solo puede leer SU patente asignada (tractor o enganche)
+      // — antes leía toda la flota, ahora restringido para no exponer
+      // KMs/combustible/autonomía de unidades ajenas (info comercial).
+      allow read: if isAdminOrSupervisor()
+        || isSegHigiene()
+        || isGomeria()
+        || isMyAssignedVehiculo(patente);
       // Alta, edición, sincronización Volvo (KM/combustible/autonomía):
       // admin o supervisor. El bot bypasea con Admin SDK.
       allow write: if isAdminOrSupervisor();
@@ -120,9 +148,17 @@ service cloud.firestore {
 
     match /REVISIONES/{doc} {
       allow read: if isSignedIn();
-      // Chofer crea su propia solicitud al renovar un papel.
+      // Chofer crea su propia solicitud al renovar un papel. Validamos
+      // que el campo `dni` del doc coincida con el UID del JWT — sin esto
+      // un chofer hostil puede falsificar revisiones a nombre de otro
+      // chofer o ensuciar la bandeja del supervisor con docs vacios.
+      // (campo real en revision_service.dart linea 241: `'dni': dni.trim()`).
+      allow create: if isSignedIn()
+        && request.resource.data.dni == request.auth.uid
+        && request.resource.data.keys().hasAll(['dni', 'campo',
+                                                  'coleccion_destino',
+                                                  'url_archivo', 'estado']);
       // Admin/supervisor aprueban o rechazan.
-      allow create: if isSignedIn();
       allow update, delete: if isAdminOrSupervisor();
     }
 
@@ -132,10 +168,20 @@ service cloud.firestore {
 
     match /CHECKLISTS/{doc} {
       allow read: if isSignedIn();
-      // El chofer crea su checklist mensual. NO debería poder editar
-      // checklists pasados (auditoría inmutable).
-      allow create: if isSignedIn();
-      allow update, delete: if isAdminOrSupervisor();
+      // El chofer crea su checklist mensual. Validamos que el campo `DNI`
+      // del payload coincida con el UID — sin esto un chofer puede subir
+      // checklists falsos en nombre de otro (campo real en
+      // user_checklist_form_screen.dart linea 136: `'DNI': PrefsService.dni`).
+      // Tambien exigimos los campos minimos para no aceptar payloads vacios.
+      allow create: if isSignedIn()
+        && request.resource.data.DNI == request.auth.uid
+        && request.resource.data.keys().hasAll(['DNI', 'DOMINIO', 'TIPO',
+                                                  'FECHA']);
+      // Auditoria inmutable: NADIE edita ni borra checklists pasados.
+      // YPF / Seg e Higiene los miran como evidencia legal del estado del
+      // vehiculo al momento del checklist. Si el admin necesita anotar algo,
+      // hay que pedir un cambio que vaya por callable (no rule).
+      allow update, delete: if false;
     }
 
     // ========================================================================
@@ -337,9 +383,14 @@ service cloud.firestore {
       // Lectura y "marcar atendida" disponible para admin, supervisor
       // y el rol SEG_HIGIENE (Seguridad e Higiene).
       allow read: if puedeVerVolvoTableros();
-      // Update: marcar como atendida desde el tablero. AUDITORIA_ACCIONES
-      // guarda quién marcó qué.
-      allow update: if puedeVerVolvoTableros();
+      // Update: marcar como atendida desde el tablero. Restringimos los
+      // campos editables — solo `atendida*` puede cambiar. Sin esta
+      // whitelist el rol puede falsificar tipo/severidad/chofer del
+      // evento ya registrado (con el JWT puede modificar todo el doc).
+      allow update: if puedeVerVolvoTableros()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['atendida', 'atendida_por', 'atendida_por_nombre',
+                      'atendida_en', 'atendida_motivo']);
       allow create, delete: if false;
     }
 
@@ -377,6 +428,22 @@ service cloud.firestore {
     // tableros Volvo (admin/supervisor/SEG_HIGIENE).
 
     match /JORNADAS_CHOFER/{doc} {
+      // LEGACY: la coleccion vieja fue migrada a JORNADAS (modelo v2 con
+      // bloques 3x4h) el 2026-05-15. Mantenemos esta rule porque puede
+      // haber docs residuales hasta que corra el cleanup definitivo.
+      allow read: if puedeVerVolvoTableros();
+      allow create, update, delete: if false;
+    }
+
+    // ========================================================================
+    // JORNADAS — vigilador v2 (modelo bloques 3x4h + descanso 8h)
+    // ========================================================================
+    // Reemplaza a JORNADAS_CHOFER desde 2026-05-15. Doc id:
+    // `{dni}_{ts_inicio_ms}`. Lo escribe el cron `tickVigiladorJornada`
+    // cada 5 min via Admin SDK. Cliente solo lee — el dashboard del
+    // tablero de Seg e Higiene muestra horas/dia por chofer.
+
+    match /JORNADAS/{doc} {
       allow read: if puedeVerVolvoTableros();
       allow create, update, delete: if false;
     }

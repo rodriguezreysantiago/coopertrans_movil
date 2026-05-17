@@ -128,12 +128,17 @@ service firebase.storage {
     // REVISIONES — el chofer sube comprobante al renovar un papel
     // ========================================================================
 
-    match /REVISIONES/{archivo=**} {
+    match /REVISIONES/{archivo} {
       allow read: if isSignedIn();
       // Cualquier signedIn (chofer) puede subir su comprobante.
       // El admin lo aprueba/rechaza desde la app.
       //
       // Validaciones del upload:
+      //  - PREFIJO DEL ARCHIVO: tiene que empezar con `{uid}_` para que
+      //    un chofer NO pueda sobrescribir comprobantes de otros choferes
+      //    (el path real que arma revision_service es
+      //    `REVISIONES/{dni}_{campo}_{ts}.{ext}` — cumple la regex).
+      //    Admin/supervisor pueden subir con cualquier prefijo.
       //  - contentType: solo imagenes (image/*) o PDF. Antes admitia
       //    cualquier mimetype, lo que dejaba subir .exe enmascarados
       //    como .pdf u otros archivos raros que confunden al admin
@@ -141,6 +146,7 @@ service firebase.storage {
       //  - tamano <= 10 MB. Suficiente para PDFs y fotos HD; por
       //    encima de eso es ruido (videos, scanners no comprimidos).
       allow write: if isSignedIn()
+        && (isAdminOrSupervisor() || archivo.matches(request.auth.uid + '_.*'))
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*|application/pdf');
     }
