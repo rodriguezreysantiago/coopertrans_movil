@@ -190,8 +190,18 @@ class IcmCalculator {
       ));
     }
 
-    // Ordenar: peor ICM primero (queremos que Molina vea los problemáticos arriba)
-    result.sort((a, b) => a.icm.compareTo(b.icm));
+    // Ordenar: peor ICM primero (queremos que Molina vea los problemáticos
+    // arriba). CRITICO (auditoria 2026-05-17): SIN_DATOS al FINAL para no
+    // confundir a Molina — antes los choferes sin km suficientes (icm=0)
+    // ocupaban las posiciones #1-22 del ranking "peor", enmascarando a
+    // los choferes realmente problematicos.
+    result.sort((a, b) {
+      final aSinDatos = a.categoria == CategoriaIcm.sinDatos;
+      final bSinDatos = b.categoria == CategoriaIcm.sinDatos;
+      if (aSinDatos && !bSinDatos) return 1; // a al final
+      if (!aSinDatos && bSinDatos) return -1; // b al final
+      return a.icm.compareTo(b.icm);
+    });
     return result;
   }
 

@@ -244,13 +244,23 @@ class IcmHistoricoService {
       hastaMs: semana.finMs,
       nombrePorDni: nombrePorDni,
     );
+    // CRITICO (auditoria 2026-05-17): excluir SIN_DATOS de promedio y
+    // top5. Antes pisaba el KPI promedio (mostraba 60 cuando real 90)
+    // y aparecian SIN_DATOS en top5 peores (todos en posicion 1 — ranking
+    // sin valor).
+    final conDatos =
+        ranking.where((c) => c.categoria != CategoriaIcm.sinDatos).toList();
     var totalEventos = 0;
     var verdes = 0;
     var amarillos = 0;
     var rojos = 0;
     var sumIcm = 0.0;
+    // Total eventos cuenta TODOS (incluyendo SIN_DATOS) — son infracciones
+    // reales aunque no haya km suficientes para calcular ICM.
     for (final c in ranking) {
       totalEventos += c.totalEventos;
+    }
+    for (final c in conDatos) {
       sumIcm += c.icm;
       switch (c.categoria) {
         case CategoriaIcm.bajo:
@@ -266,14 +276,17 @@ class IcmHistoricoService {
           break;
       }
     }
-    final icmProm = ranking.isNotEmpty ? sumIcm / ranking.length : 0.0;
-    final peores = ranking.take(5).toList();
-    final mejores = ranking.reversed.take(5).toList();
+    final icmProm = conDatos.isNotEmpty ? sumIcm / conDatos.length : 0.0;
+    // Ranking del IcmCalculator ya viene ordenado peor->mejor (con SIN_DATOS
+    // al final tras el fix abajo). Top peores = primeros con datos, top
+    // mejores = ultimos.
+    final peores = conDatos.take(5).toList();
+    final mejores = conDatos.reversed.take(5).toList();
     return IcmSemanaFlota(
       semanaInicio: semana.inicio,
       labelSemana: semana.label,
       totalEventos: totalEventos,
-      choferesActivos: ranking.length,
+      choferesActivos: conDatos.length,
       icmPromedio: icmProm,
       choferesVerdes: verdes,
       choferesAmarillos: amarillos,

@@ -5739,17 +5739,23 @@ export const recomputeIcmSemanalScheduled = onSchedule(
     }
 
     // ─── 5. Agregados flota ───────────────────────────────────────
+    // CRITICO (auditoria 2026-05-17): excluir choferes SIN_DATOS de
+    // promedio y top5. Antes los SIN_DATOS (icm=0 por km insuficientes)
+    // pisaban el promedio (KPI Vista Ejecutiva mostraba 60 cuando real
+    // era 90) y aparecian en top5 peores (ranking sin valor para Molina).
+    const choferesConDatos = choferes.filter((c) => c.categoria !== "SIN_DATOS");
     const totalEventos = choferes.reduce((acc, c) => acc + c.total_eventos, 0);
-    const sumIcm = choferes.reduce((acc, c) => acc + c.icm, 0);
-    const icmPromedio = choferes.length > 0 ?
-      Number((sumIcm / choferes.length).toFixed(2)) :
+    const sumIcm = choferesConDatos.reduce((acc, c) => acc + c.icm, 0);
+    const icmPromedio = choferesConDatos.length > 0 ?
+      Number((sumIcm / choferesConDatos.length).toFixed(2)) :
       0;
-    const verdes = choferes.filter((c) => c.categoria === "BAJO").length;
-    const amarillos = choferes.filter((c) => c.categoria === "MEDIO").length;
-    const rojos = choferes.filter((c) => c.categoria === "ALTO").length;
+    const verdes = choferesConDatos.filter((c) => c.categoria === "BAJO").length;
+    const amarillos = choferesConDatos.filter((c) => c.categoria === "MEDIO").length;
+    const rojos = choferesConDatos.filter((c) => c.categoria === "ALTO").length;
+    const sinDatos = choferes.filter((c) => c.categoria === "SIN_DATOS").length;
 
-    // Sort para top mejores/peores
-    const sortedAsc = [...choferes].sort((a, b) => a.icm - b.icm);
+    // Sort para top mejores/peores — solo entre los que tienen datos.
+    const sortedAsc = [...choferesConDatos].sort((a, b) => a.icm - b.icm);
     const top5Peores = sortedAsc.slice(0, 5).map((c) => ({
       dni: c.dni, nombre: c.nombre, icm: c.icm,
     }));
@@ -5765,7 +5771,11 @@ export const recomputeIcmSemanalScheduled = onSchedule(
       semana_label: semanaLabel,
       icm_promedio: icmPromedio,
       total_eventos: totalEventos,
-      choferes_activos: choferes.length,
+      // `choferes_activos` = solo con datos, para que coincida con el
+      // denominador del promedio. `choferes_sin_datos` separado para
+      // que la UI lo muestre distinto (ej. "8 con poca actividad").
+      choferes_activos: choferesConDatos.length,
+      choferes_sin_datos: sinDatos,
       choferes_verdes: verdes,
       choferes_amarillos: amarillos,
       choferes_rojos: rojos,
@@ -5779,7 +5789,8 @@ export const recomputeIcmSemanalScheduled = onSchedule(
       semanaId,
       icmPromedio,
       totalEventos,
-      choferesActivos: choferes.length,
+      choferesConDatos: choferesConDatos.length,
+      sinDatos,
       verdes, amarillos, rojos,
     });
   }
