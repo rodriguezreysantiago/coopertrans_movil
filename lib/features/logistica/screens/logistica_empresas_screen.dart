@@ -993,7 +993,24 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
       // CuitInputFormatter), así que `_cuitCtrl.text` viene formateado.
       // Persistimos tal cual para que el doc en Firestore quede
       // consistente con lo que ve el operador.
+      //
+      // CRITICO (auditoria 2026-05-17): antes aceptaba CUIT incompleto
+      // (3, 7 digitos, lo que sea) — el formatter formateaba "1234567"
+      // como "12-34567" y quedaba en Firestore. Rompia busquedas, AFIP,
+      // posibilidad de duplicados con CUITs distintos para misma empresa.
+      // Ahora validamos: si el operador puso ALGO en el campo, debe
+      // tener 11 digitos. Si lo dejo vacio, OK (campo opcional).
       final cuitRaw = _cuitCtrl.text.trim();
+      if (cuitRaw.isNotEmpty) {
+        final cuitDigitos = cuitRaw.replaceAll(RegExp(r'\D'), '');
+        if (cuitDigitos.length != 11) {
+          setState(() {
+            _guardando = false;
+            _error = 'CUIT debe tener 11 dígitos (formato XX-XXXXXXXX-X).';
+          });
+          return;
+        }
+      }
       await LogisticaService.crearEmpresa(
         nombre: nombre,
         tipo: widget.tipo,

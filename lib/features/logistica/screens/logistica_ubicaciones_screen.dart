@@ -1028,6 +1028,17 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
             'Latitud entre -90 y 90, longitud entre -180 y 180.');
         return;
       }
+      // CRITICO (auditoria 2026-05-17): lat=0, lng=0 cae en el oceano
+      // Atlantico (Golfo de Guinea). Default cuando el operador entra
+      // al picker pero no mueve el pin, o tipea "0" como placeholder.
+      // Si no tenes coordenadas, dejar AMBOS campos vacios (ya esta
+      // soportado arriba con `coordsVacias`).
+      if (lat == 0 && lng == 0) {
+        setState(() => _error =
+            'Coordenadas 0,0 invalidas (cae en oceano). '
+            'Si no tenes coordenadas, deja ambos campos vacios.');
+        return;
+      }
     }
     setState(() {
       _guardando = true;

@@ -1165,6 +1165,38 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
       setState(() => _error = 'El monto debe ser mayor a 0.');
       return;
     }
+    // Cap superior defensivo (auditoria 2026-05-17): sin esto un cero
+    // de mas accidental (tipico con inputMiles cuando "1.000.000" vs
+    // "10.000.000" se confunden) se persistia silenciosamente. Cap a
+    // $5M cubre 99.9% de los casos reales de Vecchi.
+    const capMaximo = 5000000;
+    if (monto > capMaximo) {
+      setState(() => _error = 'Monto excesivo (max ${AppFormatters.formatearMonto(capMaximo)}). '
+          'Si es correcto, contactá a admin.');
+      return;
+    }
+    // Confirmacion humana para adelantos > $500K (probable typo).
+    if (monto > 500000) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Confirmar adelanto grande'),
+          content: Text('Vas a registrar un adelanto de '
+              '${AppFormatters.formatearMonto(monto)}. ¿Es correcto?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Sí, confirmar'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
     setState(() {
       _guardando = true;
       _error = null;

@@ -58,6 +58,11 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
   late final TextEditingController _vinCtrl;
   late final TextEditingController _kmCtrl;
 
+  /// KM_ACTUAL guardado en Firestore al cargar el form. Sirve para
+  /// detectar si el operador esta REDUCIENDO el odometro (probable
+  /// typo) y pedir confirmacion antes de guardar (auditoria 2026-05-17).
+  double? _kmActualDb;
+
   // ─── Mantenimiento preventivo (campos manuales) ───────────────────
   // Histórico del último service: lo carga el admin a mano cuando el
   // taller termina la visita. Se muestra en la pantalla de
@@ -98,6 +103,9 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
     _vinCtrl = TextEditingController(text: d['VIN']?.toString() ?? '');
     _kmCtrl =
         TextEditingController(text: d['KM_ACTUAL']?.toString() ?? '0');
+    // Snapshot del km al cargar para detectar regresion en _guardar.
+    final kmRaw = d['KM_ACTUAL'];
+    _kmActualDb = kmRaw is num ? kmRaw.toDouble() : null;
 
     // Campos manuales del último service. Pueden venir vacíos si nunca
     // se cargaron (tractor recién dado de alta).
@@ -450,6 +458,60 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
 
     final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
+
+    // Validaciones defensivas del form de EDIT (auditoria 2026-05-17):
+    // el alta tiene validators robustos, el edit no — antes aceptaba
+    // ANIO=0, ANIO=20025, KM negativo, KM=0, VIN de 5 chars, etc.
+    final anioNuevo = int.tryParse(_anioCtrl.text.trim()) ?? 0;
+    final anioActual = DateTime.now().year;
+    if (anioNuevo < 1990 || anioNuevo > anioActual + 1) {
+      AppFeedback.errorOn(messenger,
+          'Año inválido: debe estar entre 1990 y ${anioActual + 1}.');
+      return;
+    }
+
+    final kmNuevo = double.tryParse(_kmCtrl.text) ?? -1;
+    if (kmNuevo < 0 || kmNuevo > 5000000) {
+      AppFeedback.errorOn(messenger,
+          'KM inválido: debe ser entre 0 y 5.000.000.');
+      return;
+    }
+    // Aviso si el km nuevo es MENOR que el km guardado actualmente:
+    // probable typo del operador. Pedir confirmacion antes de regresar
+    // el odometro (rompe calculos de gomeria + alertas mantenimiento).
+    if (_kmActualDb != null && kmNuevo < _kmActualDb! - 100) {
+      final confirmado = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Reducir kilometraje'),
+          content: Text(
+            'Estás bajando el odómetro de '
+            '${_kmActualDb!.toInt()} a ${kmNuevo.toInt()} km. '
+            '¿Es correcto? (esto rompe cálculos históricos)',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Sí, reducir'),
+            ),
+          ],
+        ),
+      );
+      if (confirmado != true) return;
+    }
+
+    final vinNuevo = _vinCtrl.text.trim().toUpperCase();
+    if (vinNuevo.isNotEmpty && vinNuevo.length != 17) {
+      AppFeedback.errorOn(messenger,
+          'VIN inválido: debe tener exactamente 17 caracteres '
+          '(o estar vacío). Recibí ${vinNuevo.length}.');
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     bool guardadoOk = false;
@@ -458,10 +520,10 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
       final updates = <String, dynamic>{
         'MARCA': _marcaCtrl.text.trim().toUpperCase(),
         'MODELO': _modeloCtrl.text.trim().toUpperCase(),
-        'ANIO': int.tryParse(_anioCtrl.text.trim()) ?? 0,
+        'ANIO': anioNuevo,
         'EMPRESA': _empresaCtrl.text.trim().toUpperCase(),
-        'VIN': _vinCtrl.text.trim().toUpperCase(),
-        'KM_ACTUAL': double.tryParse(_kmCtrl.text) ?? 0.0,
+        'VIN': vinNuevo,
+        'KM_ACTUAL': kmNuevo,
         'fecha_ultima_actualizacion': FieldValue.serverTimestamp(),
       };
       // Mantenimiento preventivo: campos manuales que el admin carga

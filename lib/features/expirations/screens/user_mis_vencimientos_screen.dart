@@ -204,10 +204,32 @@ class _UserMisVencimientosScreenState
                 ),
                 maxLength: 10,
                 inputFormatters: [FechaInputFormatter()],
-                validator: (value) =>
-                    (value == null || value.length < 10)
-                        ? 'Fecha incompleta'
-                        : null,
+                validator: (value) {
+                  if (value == null || value.length < 10) {
+                    return 'Fecha incompleta';
+                  }
+                  // CRITICO (auditoria 2026-05-17): antes aceptaba
+                  // fechas en el pasado — el chofer renovaba y por
+                  // typo (2024 en lugar de 2026) la nueva fecha
+                  // quedaba vencida, dando falsa sensacion de
+                  // renovacion. El admin no se daba cuenta.
+                  final fecha = AppFormatters.tryParseFecha(value);
+                  if (fecha == null) {
+                    return 'Fecha invalida (formato DD/MM/AAAA)';
+                  }
+                  final hoy = DateTime.now();
+                  final hoyMidnight = DateTime(hoy.year, hoy.month, hoy.day);
+                  if (fecha.isBefore(hoyMidnight)) {
+                    return 'La fecha no puede estar en el pasado';
+                  }
+                  // Limite razonable: no mas de 10 años en el futuro
+                  // (vencimientos tipicos son 1-5 años, mas allá es typo).
+                  final futureLimit = DateTime(hoy.year + 10, hoy.month, hoy.day);
+                  if (fecha.isAfter(futureLimit)) {
+                    return 'Fecha demasiado lejana (max 10 años)';
+                  }
+                  return null;
+                },
               ),
               // Botón "Detectar fecha desde foto" — solo aparece en
               // mobile (Android/iOS), donde ML Kit funciona. El OCR es

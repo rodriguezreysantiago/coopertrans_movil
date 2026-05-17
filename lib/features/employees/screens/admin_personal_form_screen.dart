@@ -229,6 +229,7 @@ class _AdminPersonalFormScreenState
                   controller: _passCtrl,
                   icon: Icons.lock_outline,
                   textInputAction: TextInputAction.done,
+                  isPassword: true,
                 ),
                 const SizedBox(height: 10),
                 const _CampoLabel('Empresa asignada'),
@@ -314,6 +315,10 @@ class _FormInput extends StatelessWidget {
   /// Default false: campo obligatorio. Usar para campos como APODO o
   /// teléfono opcional.
   final bool isOptional;
+  /// Si es true, valida longitud mínima de 6 caracteres (auditoria
+  /// 2026-05-17 — antes admin podia crear chofer con clave "1" y la
+  /// mayoria de choferes nunca cambia la pass inicial).
+  final bool isPassword;
   final TextInputAction textInputAction;
 
   const _FormInput({
@@ -326,6 +331,7 @@ class _FormInput extends StatelessWidget {
     this.isMail = false,
     this.toUpperCase = true,
     this.isOptional = false,
+    this.isPassword = false,
     this.textInputAction = TextInputAction.next,
   });
 
@@ -380,6 +386,9 @@ class _FormInput extends StatelessWidget {
           }
           if (isCuil && v.length != 11) {
             return 'El CUIL debe tener 11 dígitos';
+          }
+          if (isPassword && v.length < 6) {
+            return 'La contraseña debe tener al menos 6 caracteres';
           }
           return null;
         },

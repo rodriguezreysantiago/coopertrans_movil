@@ -1862,6 +1862,14 @@ class _SeccionUnidad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Formatter que solo permite letras+digitos, hace UPPER y quita
+    // espacios/guiones — para que la patente quede normalizada al
+    // formato canonico (UPPERCASE sin separadores) que matchea las
+    // queries a SITRACK_POSICIONES / VOLVO_ALERTAS / VEHICULOS.
+    // (auditoria 2026-05-17: antes aceptaba "ab-123-cd" → no matcheaba.)
+    final patenteFormatter = FilteringTextInputFormatter.allow(
+      RegExp(r'[A-Za-z0-9]'),
+    );
     return _SeccionCard(
       titulo: 'UNIDAD',
       icono: Icons.local_shipping_outlined,
@@ -1871,8 +1879,11 @@ class _SeccionUnidad extends StatelessWidget {
           decoration: const InputDecoration(
             labelText: 'Patente tractor',
             border: OutlineInputBorder(),
+            hintText: 'AB123CD o ABC123',
           ),
           textCapitalization: TextCapitalization.characters,
+          inputFormatters: [patenteFormatter, _UpperCaseFormatter()],
+          maxLength: 7,
           onChanged: (_) => onChanged(),
         ),
         const SizedBox(height: 8),
@@ -1881,11 +1892,30 @@ class _SeccionUnidad extends StatelessWidget {
           decoration: const InputDecoration(
             labelText: 'Patente enganche',
             border: OutlineInputBorder(),
+            hintText: 'AB123CD o ABC123',
           ),
           textCapitalization: TextCapitalization.characters,
+          inputFormatters: [patenteFormatter, _UpperCaseFormatter()],
+          maxLength: 7,
           onChanged: (_) => onChanged(),
         ),
       ],
+    );
+  }
+}
+
+/// Formatter que fuerza UPPERCASE en cada keystroke. Necesario porque
+/// `textCapitalization: TextCapitalization.characters` solo aplica al
+/// teclado mobile — en desktop / paste no convierte.
+class _UpperCaseFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    return TextEditingValue(
+      text: newValue.text.toUpperCase(),
+      selection: newValue.selection,
     );
   }
 }
@@ -2094,6 +2124,20 @@ class _SeccionGastos extends StatelessWidget {
     if (ok == true) {
       final monto = AppFormatters.parsearMiles(montoCtrl.text)?.toDouble() ?? 0;
       if (monto <= 0) return;
+      // Cap defensivo (auditoria 2026-05-17): peaje "$1500" se tipea
+      // "$15000" o "$1500000" sin notar — antes se persistia, inflaba
+      // liquidacionChofer y descalzaba la liquidacion. $1M es techo
+      // razonable para un gasto reembolsable (combustible / peajes /
+      // comidas de un viaje de varios dias).
+      const capGasto = 1000000;
+      if (monto > capGasto) {
+        if (!context.mounted) return;
+        AppFeedback.errorOn(
+          ScaffoldMessenger.of(context),
+          'Gasto excesivo (max ${AppFormatters.formatearMonto(capGasto)}).',
+        );
+        return;
+      }
       final nuevo = GastoViaje(
         monto: monto,
         detalle: detalleCtrl.text.trim().isEmpty

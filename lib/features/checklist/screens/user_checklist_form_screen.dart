@@ -71,9 +71,14 @@ class _UserChecklistFormScreenState
                           setState(() {
                         _respuestas[item] = estado;
                         _preguntasConError.remove(item);
-                        if (estado == 'BUE') {
-                          _observaciones.remove(item);
-                        }
+                        // CRITICO (auditoria 2026-05-17): antes
+                        // borrabamos la observacion al volver a BUE,
+                        // pero eso perdia silenciosamente el texto que
+                        // el chofer habia escrito si solo tocaba BUE
+                        // por error y volvia a REG/MAL. Ahora la
+                        // mantenemos siempre — si el estado final es
+                        // BUE, el _validarYEnviar la ignora; si REG/MAL,
+                        // queda lo que el chofer ya habia tipeado.
                       }),
                       onObservacion: (item, obs) {
                         _observaciones[item] = obs;
