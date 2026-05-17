@@ -300,13 +300,23 @@ class ViajesService {
       'vehiculo_id': vehiculoId,
       'enganche_id': engancheId,
       'estado': estado.codigo,
-      'motivo_cancelacion': motivoCancelacion,
-      'fecha_postergado_a':
-          fechaPostergadoA == null ? null : Timestamp.fromDate(fechaPostergadoA),
-      'adelanto_monto': adelantoMonto,
-      'adelanto_fecha':
-          adelantoFecha == null ? null : Timestamp.fromDate(adelantoFecha),
-      'adelanto_observacion': adelantoObservacion,
+      // Solo seteamos motivo/postergado si el caller pasa valor — antes
+      // se sobrescribían siempre con null, borrando el motivo/postergado
+      // existente sin warning.
+      if (motivoCancelacion != null) 'motivo_cancelacion': motivoCancelacion,
+      if (fechaPostergadoA != null)
+        'fecha_postergado_a': Timestamp.fromDate(fechaPostergadoA),
+      // Adelanto legacy embebido en el viaje (campos `adelanto_*`).
+      // Desde 2026-05-13 los adelantos viven en ADELANTOS_CHOFER pero
+      // hay viajes legacy con adelanto_monto persistido. Si el caller
+      // pasa null (caso normal en el form nuevo) NO los pisamos —
+      // antes se sobrescribían con null y se perdía el snapshot
+      // histórico del adelanto, descuadrando la liquidación impresa.
+      if (adelantoMonto != null) 'adelanto_monto': adelantoMonto,
+      if (adelantoFecha != null)
+        'adelanto_fecha': Timestamp.fromDate(adelantoFecha),
+      if (adelantoObservacion != null)
+        'adelanto_observacion': adelantoObservacion,
       // Gastos van adentro de cada `tramos[i].gastos`. Sin
       // duplicación al nivel raíz.
 

@@ -305,9 +305,15 @@ class _DetalleChofer extends StatelessWidget {
         _DatoEditableEnum(
           etiqueta: 'ROL',
           valorActual: AppRoles.normalizar(data['ROL']?.toString()),
+          // 6 roles del sistema (ver AppRoles.todos). Antes faltaban
+          // GOMERIA y SEG_HIGIENE — si editabas a un empleado con esos
+          // roles, al guardar cualquier otra opción se perdía el rol
+          // original sin warning (el dropdown solo mostraba 4 opciones).
           opciones: {
             AppRoles.chofer: 'Chofer (con vehículo)',
             AppRoles.planta: 'Planta (sin vehículo)',
+            AppRoles.gomeria: 'Gomería (solo cubiertas)',
+            AppRoles.segHigiene: 'Seg. e Higiene (ICM + Volvo)',
             AppRoles.supervisor: 'Supervisor (gestión)',
             if (Capabilities.can(
                 PrefsService.rol, Capability.asignarRolAdmin))
