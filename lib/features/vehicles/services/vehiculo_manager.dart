@@ -47,7 +47,12 @@ class VehiculoManager {
     // este método se ejecutaba sin gating de rol. La precarga es
     // útil solo para el panel admin (metadata de unidades para sync);
     // los demás roles ya leen del cache de Firestore.
-    if (PrefsService.rol != 'ADMIN') {
+    // Usar AppRoles.normalizar() para cubrir rol legacy 'USUARIO' que
+    // se mapea a CHOFER. Antes el literal 'ADMIN' funcionaba por
+    // casualidad — si el case cambiara (cualquier dato corrupto en
+    // lowercase) el guard fallaba y los choferes disparaban
+    // [VOLVO FLOTA] HTTP 401.
+    if (AppRoles.normalizar(PrefsService.rol) != AppRoles.admin) {
       cacheVolvo = [];
       return;
     }

@@ -115,6 +115,14 @@ class _AdminPersonalFormScreenState
         'VEHICULO': '-',
         'ENGANCHE': '-',
         'ARCHIVO_PERFIL': '-',
+        // Soft-delete oficial vive en AppActivo.campo ('ACTIVO': bool).
+        // Antes solo escribiamos 'estado_cuenta': 'ACTIVO' (string) que
+        // no es lo que mira el resto del codebase. Funcionaba "por
+        // accidente" porque AppActivo.esActivo devuelve true cuando
+        // ACTIVO es null o ausente. Para evitar drift si alguien setea
+        // ACTIVO=false dejando estado_cuenta='ACTIVO', ahora seteamos
+        // ambos explicito (bool es la fuente de verdad).
+        AppActivo.campo: true,
         'estado_cuenta': 'ACTIVO',
         'fecha_creacion': FieldValue.serverTimestamp(),
         'ultima_modificacion': FieldValue.serverTimestamp(),

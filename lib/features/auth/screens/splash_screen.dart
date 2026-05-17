@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -23,17 +24,41 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
-  static const _duracionSplash = Duration(milliseconds: 1500);
+  /// Tiempo MINIMO que se muestra el splash para que el branding
+  /// quede visible aunque la sesion ya este caliente (caso reapertura).
+  static const _duracionMinima = Duration(milliseconds: 1500);
+
+  /// Tiempo MAXIMO antes de salir aunque Firebase Auth no haya
+  /// terminado de restaurar (caso cold start con red lenta — antes
+  /// el splash salia a los 1.5s, AuthGuard arrancaba con user=null y
+  /// si justo el authStateChanges tardaba >1.5s mandaba a login y el
+  /// usuario veia el ciclo "splash → home → login → home".
+  static const _duracionMaxima = Duration(seconds: 5);
 
   @override
   void initState() {
     super.initState();
-    // Programamos la salida después del primer frame para no perdernos
-    // el efecto si la app arranca con el frame ya pintado pero el timer
-    // empezando antes de tiempo.
+    // Esperamos en paralelo:
+    //  a) que pase la duracion minima (efecto visual de marca)
+    //  b) que Firebase Auth resuelva el primer authStateChanges (user
+    //     o null definitivo). Con timeout duro de _duracionMaxima por
+    //     si la red se cuelga.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      Timer(_duracionSplash, _salir);
+      _esperarYSalir();
     });
+  }
+
+  Future<void> _esperarYSalir() async {
+    final futureMin = Future.delayed(_duracionMinima);
+    final futureAuth = FirebaseAuth.instance
+        .authStateChanges()
+        .first
+        .timeout(_duracionMaxima, onTimeout: () => null);
+    // Esperamos a ambos (el mas lento determina cuando salimos), pero
+    // capeamos a _duracionMaxima por las dudas.
+    await Future.wait([futureMin, futureAuth])
+        .timeout(_duracionMaxima, onTimeout: () => const []);
+    _salir();
   }
 
   void _salir() {

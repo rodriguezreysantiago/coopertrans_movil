@@ -123,6 +123,11 @@ class _LogisticaViajesListaScreenState
   }
 }
 
+// Sentinel para el menú "Todos" — permite distinguir "el user eligio
+// limpiar el filtro" de "el user dismisseo el menu sin elegir" (showMenu
+// devuelve null en ambos por default).
+const Object _kTodos = Object();
+
 class _BarraFiltros extends StatelessWidget {
   final EstadoViaje? estado;
   final bool? liquidado;
@@ -180,19 +185,28 @@ class _BarraFiltros extends StatelessWidget {
   }
 
   Future<void> _abrirEstadoMenu(BuildContext ctx) async {
-    final res = await showMenu<EstadoViaje?>(
+    // Usamos `Object` con sentinel `_kTodos` para distinguir "el user
+    // eligio Todos (limpiar filtro)" vs "el user dismisseo con back/tap
+    // afuera (mantener filtro)". showMenu devuelve null para dismiss —
+    // si tambien usamos null para "Todos", no podemos diferenciar.
+    // El comentario anterior decia "dismiss = mantiene filtro" pero la
+    // logica `res != null || (res == null && ctx.mounted)` SIEMPRE era
+    // true cuando el widget esta montado → el filtro se reseteaba al
+    // cerrar el menu con back (auditoria 2026-05-16).
+    final res = await showMenu<Object>(
       context: ctx,
       position: const RelativeRect.fromLTRB(40, 120, 40, 0),
       items: [
-        const PopupMenuItem(value: null, child: Text('Todos')),
+        const PopupMenuItem(value: _kTodos, child: Text('Todos')),
         ...EstadoViaje.values.map(
-          (e) => PopupMenuItem(value: e, child: Text(e.etiqueta)),
+          (e) => PopupMenuItem<Object>(value: e, child: Text(e.etiqueta)),
         ),
       ],
     );
-    // Hack para distinguir "no eligió nada" (dismiss) vs "eligió Todos" (null).
-    // showMenu devuelve null en ambos. Lo aceptamos: dismiss = mantiene filtro.
-    if (res != null || (res == null && ctx.mounted)) {
+    if (res == null) return; // dismiss → no toca el filtro actual
+    if (res == _kTodos) {
+      onEstadoChanged(null);
+    } else if (res is EstadoViaje) {
       onEstadoChanged(res);
     }
   }
