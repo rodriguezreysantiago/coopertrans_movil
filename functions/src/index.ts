@@ -2631,7 +2631,7 @@ async function fetchWithTimeout(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(url, {...init, signal: controller.signal});
+    return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }
@@ -5677,7 +5677,7 @@ export const recomputeIcmSemanalScheduled = onSchedule(
       if (patente && odometer !== null && odometer > 0) {
         let t = agg.odometroPorPatente.get(patente);
         if (!t) {
-          t = {min: odometer, max: odometer};
+          t = { min: odometer, max: odometer };
           agg.odometroPorPatente.set(patente, t);
         } else {
           if (odometer < t.min) t.min = odometer;

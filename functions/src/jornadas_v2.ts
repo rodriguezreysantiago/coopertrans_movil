@@ -454,7 +454,7 @@ export async function tickVigiladorJornada(): Promise<void> {
       (data.consultado_en as FsTimestamp | undefined)?.toMillis() ?? 0;
     const previo = choferesProcesados.get(dni);
     if (!previo || polledMs > previo.polledMs) {
-      choferesProcesados.set(dni, {docPos, polledMs});
+      choferesProcesados.set(dni, { docPos, polledMs });
     }
   }
 
