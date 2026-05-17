@@ -436,6 +436,29 @@ export const actualizarRolEmpleado = onCall(
         area: areaFinal,
         nombre,
       });
+      // FIX seguridad (auditoria 2026-05-16): sin esto, el cliente
+      // afectado seguia usando su JWT viejo (con el rol anterior) hasta
+      // la rotacion natural (~1 hora) o hasta que se relogueara. Si el
+      // admin BAJO de rol a alguien (ej. SUPERVISOR -> CHOFER), durante
+      // esa ventana el usuario seguia accediendo a rutas admin via las
+      // rules que validan el JWT.
+      // revokeRefreshTokens invalida los refresh tokens del usuario —
+      // el cliente recibe error en el siguiente getIdToken() y tiene
+      // que re-loguear (donde recibe el JWT nuevo con el claim correcto).
+      // Disruptivo (corta sesion activa) pero correcto: el cambio de
+      // rol debe propagarse inmediato, no dejar que el usuario siga con
+      // privilegios obsoletos.
+      try {
+        await auth.revokeRefreshTokens(dni);
+        logger.info("[actualizarRolEmpleado] tokens revocados, usuario debera re-loguear", {
+          dniHash: hashId(dni),
+        });
+      } catch (e) {
+        logger.warn("[actualizarRolEmpleado] no se pudo revocar tokens", {
+          dniHash: hashId(dni),
+          error: (e as Error).message,
+        });
+      }
       logger.info("[actualizarRolEmpleado] claim actualizado", {
         dniHash: hashId(dni),
         rolNuevo: rolFinal,

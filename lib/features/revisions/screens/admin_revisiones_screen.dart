@@ -9,6 +9,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../services/revision_service.dart';
 
 /// Pantalla de Revisiones Pendientes (Admin).
 ///
@@ -404,51 +405,27 @@ class _DetalleRevision extends StatelessWidget {
   }
 
   Future<void> _aprobarCambioEquipo() async {
-    final db = FirebaseFirestore.instance;
-    final dni = (data['dni'] ?? '').toString().trim();
-    final nueva = (data['patente'] ?? '').toString().trim();
-    final actual = (data['unidad_actual'] ?? '').toString().trim();
-    final esTractor = data['campo'] == 'SOLICITUD_VEHICULO';
-
-    // Validación defensiva: si la solicitud no tiene los IDs mínimos no
-    // podemos hacer el update sin crashear con "document path must be a
-    // non-empty string". Borramos la solicitud rota y avisamos al admin.
-    if (dni.isEmpty || nueva.isEmpty || idDoc.isEmpty) {
-      await db.collection(AppCollections.revisiones).doc(idDoc).delete();
-      throw StateError(
-        'La solicitud no tiene chofer (dni) o unidad (patente) válidos. '
-        'Se eliminó del listado.',
-      );
-    }
-
-    final batch = db.batch();
-
-    // 1) Actualizar empleado con la nueva unidad
-    batch.update(db.collection(AppCollections.empleados).doc(dni), {
-      esTractor ? 'VEHICULO' : 'ENGANCHE': nueva,
-      'ultima_actualizacion': FieldValue.serverTimestamp(),
-    });
-
-    // 2) Liberar la unidad anterior si existía y es válida
-    if (actual.isNotEmpty &&
-        actual != '-' &&
-        actual.toUpperCase() != 'SIN ASIGNAR') {
-      batch.update(
-        db.collection(AppCollections.vehiculos).doc(actual),
-        {'ESTADO': 'LIBRE'},
-      );
-    }
-
-    // 3) Marcar la unidad nueva como ocupada (ya validamos que no es vacía)
-    batch.update(
-      db.collection(AppCollections.vehiculos).doc(nueva),
-      {'ESTADO': 'OCUPADO'},
+    // Delegamos al RevisionService que YA pasa por AsignacionVehiculoService
+    // / AsignacionEngancheService — esos services crean el doc en
+    // ASIGNACIONES_VEHICULO/ASIGNACIONES_ENGANCHE (log temporal
+    // inmutable + cierre del anterior + odometer snapshot al cierre),
+    // ademas de actualizar EMPLEADOS.VEHICULO/ENGANCHE y
+    // VEHICULOS.ESTADO.
+    //
+    // ANTES: este método hacia batch.update() directo SIN crear el doc
+    // en ASIGNACIONES_VEHICULO. Resultado: el histórico inmutable
+    // que usan multas tardías, atribución de eventos Volvo y reportes
+    // de km por chofer/unidad quedaba vacio para esos cambios — bug
+    // critico detectado en auditoria 2026-05-16.
+    //
+    // RevisionService.finalizarRevision tiene su propia validacion
+    // defensiva (StateError si la solicitud no tiene IDs minimos +
+    // borra la solicitud rota), asi que no necesitamos duplicarla aca.
+    await RevisionService().finalizarRevision(
+      idSolicitud: idDoc,
+      aprobado: true,
+      datos: data,
     );
-
-    // 4) Borrar la solicitud
-    batch.delete(db.collection(AppCollections.revisiones).doc(idDoc));
-
-    await batch.commit();
   }
 
   Future<void> _aprobarDocumento() async {
