@@ -293,8 +293,15 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                     ),
-                    onPressed: _guardar,
-                    child: const Text('GUARDAR CAMBIOS'),
+                    // Disabled mientras sube — antes el doble tap rapido
+                    // disparaba 2 uploads paralelos (auditoria 2026-05-17).
+                    onPressed: _subiendo ? null : _guardar,
+                    child: _subiendo
+                        ? const SizedBox(
+                            width: 18, height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white))
+                        : const Text('GUARDAR CAMBIOS'),
                   ),
                 ),
               ],

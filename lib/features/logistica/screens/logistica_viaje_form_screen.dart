@@ -307,16 +307,22 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
     _fechaPostergadoA = b.fechaPostergadoA;
     _adelantoAsociadoId = b.adelantoAsociadoId;
 
-    for (final t in b.tramos) {
-      TarifaLogistica? tarifa;
+    // Performance: paralelizar lookups de tarifa al restaurar borrador
+    // (auditoria 2026-05-17 — antes secuencial). Mismo patron que el
+    // load del viaje en linea ~378.
+    final tarifaSnaps = await Future.wait(b.tramos.map((t) async {
       try {
-        final tSnap = await LogisticaService.tarifasCol.doc(t.tarifaId).get();
-        if (tSnap.exists) {
-          tarifa = TarifaLogistica.fromMap(tSnap.id, tSnap.data()!);
-        }
+        return await LogisticaService.tarifasCol.doc(t.tarifaId).get();
       } catch (_) {
-        // Tarifa borrada del catálogo — el `_TramoEditState.fromTramoViaje`
-        // acepta null y igual conserva el snapshot persistido.
+        return null;
+      }
+    }));
+    for (var i = 0; i < b.tramos.length; i++) {
+      final t = b.tramos[i];
+      final tSnap = tarifaSnaps[i];
+      TarifaLogistica? tarifa;
+      if (tSnap != null && tSnap.exists) {
+        tarifa = TarifaLogistica.fromMap(tSnap.id, tSnap.data()!);
       }
       _tramos.add(_TramoEditState.fromTramoViaje(t, tarifa));
     }
@@ -375,15 +381,25 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
       // (para reusar el dropdown del catálogo). Si la tarifa ya no
       // existe en el catálogo (fue borrada), reconstruimos una tarifa
       // dummy a partir del snapshot que tiene el tramo persistido.
-      for (final t in v.tramos) {
-        TarifaLogistica? tarifa;
+      //
+      // Performance (auditoria 2026-05-17): antes hacia N round-trips
+      // secuenciales (1 por tramo). Para viaje multi-tramo con 5
+      // tramos, 5 lecturas Firestore en serie ≈ 1-2s de espera. Ahora
+      // disparamos en paralelo con Future.wait — 1 round-trip de
+      // latencia para los N tarifas.
+      final tarifaSnaps = await Future.wait(v.tramos.map((t) async {
         try {
-          final tSnap = await LogisticaService.tarifasCol.doc(t.tarifaId).get();
-          if (tSnap.exists) {
-            tarifa = TarifaLogistica.fromMap(tSnap.id, tSnap.data()!);
-          }
+          return await LogisticaService.tarifasCol.doc(t.tarifaId).get();
         } catch (_) {
-          // ignoramos errores de red por tarifa — la usamos del snapshot
+          return null;
+        }
+      }));
+      for (var i = 0; i < v.tramos.length; i++) {
+        final t = v.tramos[i];
+        final tSnap = tarifaSnaps[i];
+        TarifaLogistica? tarifa;
+        if (tSnap != null && tSnap.exists) {
+          tarifa = TarifaLogistica.fromMap(tSnap.id, tSnap.data()!);
         }
         _tramos.add(_TramoEditState.fromTramoViaje(t, tarifa));
       }
@@ -2069,66 +2085,26 @@ class _SeccionGastos extends StatelessWidget {
     final montoCtrl = TextEditingController();
     final detalleCtrl = TextEditingController();
     DateTime fecha = DateTime.now();
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (dCtx) {
-        return StatefulBuilder(builder: (sCtx, setStateDialog) {
-          return AlertDialog(
-            backgroundColor: Theme.of(dCtx).colorScheme.surface,
-            title: const Text('Agregar gasto'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: montoCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Monto',
-                    prefixText: '\$ ',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [AppFormatters.inputMiles],
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: detalleCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Detalle (peaje, combustible, etc.)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _BotonFecha(
-                  label: 'Fecha del gasto',
-                  fecha: fecha,
-                  onChanged: (d) => setStateDialog(() {
-                    if (d != null) fecha = d;
-                  }),
-                ),
-              ],
+    bool ok = false;
+    try {
+      ok = (await showDialog<bool>(
+            context: context,
+            builder: (dCtx) => _buildAgregarGastoDialog(
+              dCtx, montoCtrl, detalleCtrl, fecha, (d) => fecha = d,
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dCtx).pop(false),
-                child: const Text('Cancelar'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(dCtx).pop(true),
-                child: const Text('Agregar'),
-              ),
-            ],
-          );
-        });
-      },
-    );
-    if (ok == true) {
+          )) ??
+          false;
+    } finally {
+      // Dispose controllers SIEMPRE — auditoria 2026-05-17, antes leaks
+      // de 2 controllers por dialog cancelado.
+      montoCtrl.dispose();
+      detalleCtrl.dispose();
+    }
+    if (ok) {
       final monto = AppFormatters.parsearMiles(montoCtrl.text)?.toDouble() ?? 0;
+      // NOTA: montoCtrl ya fue disposed arriba pero su .text es String
+      // (no requiere el ctrl vivo). Lo mismo detalleCtrl.text abajo.
       if (monto <= 0) return;
-      // Cap defensivo (auditoria 2026-05-17): peaje "$1500" se tipea
-      // "$15000" o "$1500000" sin notar — antes se persistia, inflaba
-      // liquidacionChofer y descalzaba la liquidacion. $1M es techo
-      // razonable para un gasto reembolsable (combustible / peajes /
-      // comidas de un viaje de varios dias).
       const capGasto = 1000000;
       if (monto > capGasto) {
         if (!context.mounted) return;
@@ -2148,6 +2124,69 @@ class _SeccionGastos extends StatelessWidget {
       onChanged([...gastos, nuevo]);
     }
   }
+
+  Widget _buildAgregarGastoDialog(
+    BuildContext dCtx,
+    TextEditingController montoCtrl,
+    TextEditingController detalleCtrl,
+    DateTime fecha,
+    void Function(DateTime) onFechaChange,
+  ) {
+    return StatefulBuilder(builder: (sCtx, setStateDialog) {
+      return AlertDialog(
+        backgroundColor: Theme.of(dCtx).colorScheme.surface,
+        title: const Text('Agregar gasto'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: montoCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Monto',
+                prefixText: '\$ ',
+                border: OutlineInputBorder(),
+              ),
+              keyboardType: TextInputType.number,
+              inputFormatters: [AppFormatters.inputMiles],
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: detalleCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Detalle (peaje, combustible, etc.)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            _BotonFecha(
+              label: 'Fecha del gasto',
+              fecha: fecha,
+              onChanged: (d) {
+                if (d != null) {
+                  setStateDialog(() {
+                    onFechaChange(d);
+                  });
+                }
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dCtx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dCtx).pop(true),
+            child: const Text('Agregar'),
+          ),
+        ],
+      );
+    });
+  }
+
+  // (Implementacion legacy de _agregar con leak de controllers
+  // eliminada 2026-05-17 — ver `_agregar` arriba con dispose correcto.)
 
   @override
   Widget build(BuildContext context) {
