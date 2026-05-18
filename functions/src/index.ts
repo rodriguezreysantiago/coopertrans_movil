@@ -2838,6 +2838,81 @@ export const onAlertaVolvoCreated = onDocumentCreated(
     ];
     const mensaje = variantes[_rrPick(variantes.length)];
 
+    // ─── Silencio del chofer (chequeo PRE-claim) ───────────────────
+    // BOT_SILENCIADOS_CHOFER debe valer para TODOS los avisos
+    // automáticos — si /silenciar fue aplicado, el chofer NO recibe
+    // alertas Volvo HIGH. Bug-tipo "Horacio 2026-05-14" (ver
+    // _encolarAvisoChoferNoIdentificado): se silencia pero seguía
+    // recibiendo. Fix 2026-05-18 (Fase auditoría 24/7) — agregado
+    // chequeo acá. No tomamos el claim si está silenciado: el evento
+    // ya ocurrió, si el silencio se levanta más tarde no vale enviar
+    // el aviso tarde.
+    try {
+      const silSnap = await db
+        .collection("BOT_SILENCIADOS_CHOFER")
+        .doc(choferDoc.id)
+        .get();
+      if (silSnap.exists) {
+        const hasta = silSnap.data()?.silenciado_hasta;
+        if (hasta && typeof hasta.toMillis === "function" &&
+            hasta.toMillis() > Date.now()) {
+          logger.info(
+            "[onAlertaVolvoCreated] chofer silenciado, skip aviso",
+            { choferDni: choferDoc.id, alertId: event.params.alertId, patente }
+          );
+          return;
+        }
+      }
+    } catch (e) {
+      // Si falla el read NO bloqueamos — peor caso le llega un aviso
+      // que el admin pidió silenciar (UX degradada vs no avisar nada).
+      logger.warn(
+        "[onAlertaVolvoCreated] no pude leer BOT_SILENCIADOS_CHOFER, sigo",
+        { choferDni: choferDoc.id, error: (e as Error).message }
+      );
+    }
+
+    // ─── Backstop anti-rafaga (server-side) ────────────────────────
+    // Si el agrupador del bot falla, este chequeo evita que un chofer
+    // reciba >10 alertas Volvo HIGH por hora. Cuenta los docs
+    // PENDIENTE/ENVIADO con origen=volvo_alert_high para este chofer
+    // en la ultima hora. Si supera el umbral, NO encola y NO toma
+    // claim (el evento queda visible en VOLVO_ALERTAS y en el
+    // tablero admin, solo no se manda al chofer por WhatsApp).
+    try {
+      const cutoff = Timestamp.fromMillis(
+        Date.now() - VOLVO_HIGH_THROTTLE_VENTANA_SEG * 1000
+      );
+      const recientesSnap = await db.collection("COLA_WHATSAPP")
+        .where("origen", "==", "volvo_alert_high")
+        .where("destinatario_id", "==", choferDoc.id)
+        .where("encolado_en", ">=", cutoff)
+        .count()
+        .get();
+      const recientes = recientesSnap.data().count;
+      if (recientes >= VOLVO_HIGH_THROTTLE_HORA_MAX) {
+        logger.warn(
+          "[onAlertaVolvoCreated] throttle 1h alcanzado, skip aviso",
+          {
+            choferDni: choferDoc.id,
+            alertId: event.params.alertId,
+            patente,
+            recientes,
+            limite: VOLVO_HIGH_THROTTLE_HORA_MAX,
+          }
+        );
+        return;
+      }
+    } catch (e) {
+      // Si la query del throttle falla (sin indice, Firestore down),
+      // NO bloqueamos. Defensa en profundidad — el agrupador del bot
+      // sigue siendo defensor principal.
+      logger.warn(
+        "[onAlertaVolvoCreated] throttle check fallo, sigo",
+        { choferDni: choferDoc.id, error: (e as Error).message }
+      );
+    }
+
     // ─── Idempotencia atómica ──────────────────────────────────────
     // Claim por alertId: si ya hay un doc con este ID, es un retry
     // de Cloud Functions sobre el mismo evento — salimos antes de
@@ -3480,6 +3555,17 @@ const TTL_PASA_IBUTTON_MIN = 30; // CHOFER_NO_IDENTIFICADO Sitrack
 const TTL_RESUMEN_DIARIO_MIN = 24 * 60; // resumenes diarios — vence en 24h
 // Note: TTL_SILENCIO_REANUDADO esta inline en _expiraEnMinutos(60)
 // en el aviso `silencio_reanudado` (~linea 5370).
+
+// Backstop anti-rafaga Volvo HIGH (Fase auditoria 24/7 2026-05-18):
+// el agrupador del bot consumer-side es el defensor principal contra
+// "chofer recibe 8 mensajes Volvo seguidos". Pero si el agrupador
+// tiene un bug, falla, o cambia su logica, este backstop server-side
+// evita que se encolen mas de N alertas Volvo HIGH por chofer/hora.
+// Limite generoso (10/hora) — solo bloquea el escenario patologico,
+// no afecta operacion normal (un chofer agresivo dispara 2-3 eventos
+// HIGH/hora maximo).
+const VOLVO_HIGH_THROTTLE_HORA_MAX = 10;
+const VOLVO_HIGH_THROTTLE_VENTANA_SEG = 60 * 60; // 1h rolling
 
 function _expiraEnMinutos(minutos: number): Timestamp {
   return Timestamp.fromMillis(Date.now() + minutos * 60 * 1000);

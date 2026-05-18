@@ -404,6 +404,51 @@ async function procesarSiguiente() {
       return;
     }
 
+    // Silencio del chofer (chequeo PRE-lock, post-encolado): cubre el
+    // caso donde el mensaje se encolo SIN silencio activo, pero el
+    // admin aplico /silenciar despues. El cron diario ya respetaba
+    // silenciamiento al encolar, pero los avisos individuales encolados
+    // por Cloud Functions (volvo_alert_high, sitrack_chofer_no_id,
+    // jornada_v2_*) podian quedar pendientes minutos a horas, ventana
+    // donde el silencio pudo haberse activado.
+    //
+    // Solo aplica si el destinatario es CHOFER (los resumenes a
+    // admin/supervisor/seg_higiene NO se silencian — son operativos).
+    // Decision Vecchi 2026-05-18 (auditoria 24/7): silenciamiento debe
+    // valer en TODOS los paths, incluido consumer-side.
+    if (data.destinatario_coleccion === 'EMPLEADOS' && data.destinatario_id) {
+      try {
+        const silSnap = await db
+          .collection('BOT_SILENCIADOS_CHOFER')
+          .doc(String(data.destinatario_id))
+          .get();
+        if (silSnap.exists) {
+          const hasta = silSnap.data() && silSnap.data().silenciado_hasta;
+          if (hasta && typeof hasta.toMillis === 'function' &&
+              hasta.toMillis() > Date.now()) {
+            log.info(
+              `${docId}: destinatario ${data.destinatario_id} silenciado, ` +
+              `skip envio (origen=${data.origen}).`
+            );
+            // Marcamos el doc como ENVIADO con flag silenciado_skipped
+            // para auditoria — NO se manda al chofer, pero queda traza
+            // de que se descarto por silencio (no por error). Mantiene
+            // consistencia con dedup_skipped (mismo patron).
+            await docRef.update({
+              estado: fs.ESTADO.enviado,
+              enviado_en: admin.firestore.FieldValue.serverTimestamp(),
+              silenciado_skipped: true,
+            });
+            return;
+          }
+        }
+      } catch (e) {
+        // Si falla el read NO bloqueamos — peor caso le llega un aviso
+        // que el admin pidio silenciar.
+        log.warn(`${docId}: no pude leer BOT_SILENCIADOS_CHOFER, sigo: ${e.message}`);
+      }
+    }
+
     // Delay anti-bot ANTES del lock (auditoria 2026-05-17): si el bot
     // crashea / es reiniciado durante este sleep (hasta 60s), el doc
     // sigue PENDIENTE y el proximo poll lo agarra inmediato. Antes

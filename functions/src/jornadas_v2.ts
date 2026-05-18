@@ -55,7 +55,12 @@ export const BLOQUES_POR_JORNADA = 3;
 // desactualizado / confuso para el chofer). Ver
 // whatsapp-bot/src/index.js linea ~318 (chequeo expira_en).
 const TTL_JORNADA_BLOQUE_MIN = 30;       // 3h30, 3h45, cuota cumplida
-const TTL_JORNADA_VEDA_MIN = 60;         // veda nocturna (dura horas)
+const TTL_JORNADA_VEDA_MIN = 180;        // veda nocturna (00:00-08:00 ART
+                                          // dura ~8h; subido de 60 a 180 min
+                                          // en auditoria 24/7 2026-05-18 —
+                                          // info de seguridad critica que
+                                          // vale la pena entregar tarde si
+                                          // bot estuvo caido en la madrugada)
 const TTL_RESUMEN_DIARIO_MIN = 24 * 60;  // resumen diario vale el dia
 
 function _expiraEnMin(min: number): FsTimestamp {
