@@ -356,6 +356,14 @@ class _LogisticaAppState extends State<LogisticaApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       navigatorKey: navigatorKey,
+      // SentryNavigatorObserver graba cada push/pop de ruta como
+      // breadcrumb. Crítico para diagnosticar errores: sin esto, los
+      // events de Sentry no dicen en qué pantalla estaba el usuario
+      // (auditoría 2026-05-18: 86 events del FAB hit-test sin saber
+      // qué pantalla los disparó). No crea transactions automáticas
+      // (las controla tracesSampleRate). Seguro pasarlo aunque Sentry
+      // esté deshabilitado — si no hay client, no manda nada.
+      navigatorObservers: [SentryNavigatorObserver()],
       title: AppTexts.appName,
       debugShowCheckedModeBanner: false,
 
