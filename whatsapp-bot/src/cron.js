@@ -123,6 +123,26 @@ function calcularDiasRestantes(fechaIso) {
 }
 
 /**
+ * YYYY-MM-DD de hoy en timezone Argentina (ART). Usado para construir
+ * IDs deterministicos de docs diarios en COLA_WHATSAPP, garantizando
+ * que el "dia operativo" coincide con la jornada laboral local del
+ * destinatario - independiente del timezone del proceso (la PC dedicada
+ * esta en Argentina pero esto previene bugs si se moviera a un server
+ * UTC en el futuro).
+ *
+ * 'en-CA' locale devuelve format YYYY-MM-DD nativo de Intl.
+ */
+function _fechaArtIso() {
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return fmt.format(new Date());
+}
+
+/**
  * Busca al destinatario de un resumen consolidado (Emmanuel para
  * service, Santiago para alertas Volvo). Como el cron solo carga
  * empleados con ROL=CHOFER en `empleadosByDni` (regla "solo CHOFER
@@ -549,47 +569,85 @@ async function _runOnce(fs) {
     }
 
     // ─── Service diario consolidado (1 msj/dia al encargado) ─────
+    //
+    // REFACTOR 2026-05-18 — datos siempre frescos al momento de envio:
+    //
+    // Bug detectado: el patron anterior encolaba el mensaje en
+    // COLA_WHATSAPP con doc auto-id Y marcaba idempotencia ("ya envie
+    // hoy") en el MISMO batch atomico. Si entre encolar y entregar
+    // pasaban horas (bot caido, backlog, anti-baneo), el mensaje
+    // quedaba "frozen" con datos del cron run viejo. Emma recibia datos
+    // desactualizados.
+    //
+    // Caso real 2026-05-18: encolado 08:23 ART, entregado 13:14 ART
+    // (lag 4h51m durante la migracion a PC dedicada). Mensaje a Emma
+    // con km desactualizados respecto a lo que admin habia cargado.
+    //
+    // Fix: doc ID DETERMINISTICO `service_diario_YYYY-MM-DD_<dni>` en
+    // COLA_WHATSAPP. La idempotencia ahora vive en el ESTADO del doc:
+    //   - No existe                          -> encolar fresco
+    //   - Existe + estado=PENDIENTE          -> SOBREESCRIBIR con datos
+    //                                           frescos (no fue entregado
+    //                                           todavia)
+    //   - Existe + estado=ENVIADO            -> SKIP (Emma ya recibio)
+    //   - Existe + estado=ERROR              -> SOBREESCRIBIR + reintenta
+    //
+    // Si el bot cae entre encolar y enviar, el proximo ciclo del cron
+    // regenera el mensaje con datos del momento. Garantiza que Emma
+    // recibe la version mas fresca disponible al momento real del envio.
+    //
+    // hist.yaSeEnvioServiceDiario / hist.prepararRegistroServiceDiario
+    // quedan obsoletos para este flujo (siguen exportados por compat,
+    // pueden borrarse en cleanup futuro).
     const dniDestinatarioService = process.env.SERVICE_DESTINATARIO_DNI;
     if (dniDestinatarioService) {
-      const yaEnviado = await hist.yaSeEnvioServiceDiario(db, dniDestinatarioService);
-      if (yaEnviado) {
-        log.debug(`Service diario ya enviado hoy a ${dniDestinatarioService}, skip.`);
-      } else {
-        // Lookup con fallback a Firestore: el destinatario suele ser
-        // SUPERVISOR/ADMIN y NO está en `empleadosByDni` (que tiene
-        // solo CHOFERES desde el refactor del 2026-05-02).
-        const empDest = await _obtenerDestinatarioConsolidado(
-          db,
-          dniDestinatarioService,
-          empleadosByDni
+      // Lookup con fallback a Firestore: el destinatario suele ser
+      // SUPERVISOR/ADMIN y NO está en `empleadosByDni` (que tiene
+      // solo CHOFERES desde el refactor del 2026-05-02).
+      const empDest = await _obtenerDestinatarioConsolidado(
+        db,
+        dniDestinatarioService,
+        empleadosByDni
+      );
+      if (!empDest) {
+        log.warn(
+          `SERVICE_DESTINATARIO_DNI=${dniDestinatarioService} no existe en EMPLEADOS ` +
+          `(ni en cache ni en Firestore). Service diario no se envia hoy.`
         );
-        if (!empDest) {
+      } else {
+        const telefonoDestRaw = empDest.data.TELEFONO;
+        const telefonoDest = normalizarTelefonoAWid(telefonoDestRaw)
+          ? String(telefonoDestRaw).trim()
+          : null;
+        if (!telefonoDest) {
           log.warn(
-            `SERVICE_DESTINATARIO_DNI=${dniDestinatarioService} no existe en EMPLEADOS ` +
-            `(ni en cache ni en Firestore). Service diario no se envia hoy.`
+            `Destinatario service ${dniDestinatarioService} sin TELEFONO ` +
+            `válido (raw: ${telefonoDestRaw ?? 'null'}). ` +
+            `Service diario no se envia hoy.`
           );
         } else {
-          const telefonoDestRaw = empDest.data.TELEFONO;
-          const telefonoDest = normalizarTelefonoAWid(telefonoDestRaw)
-            ? String(telefonoDestRaw).trim()
-            : null;
-          if (!telefonoDest) {
-            log.warn(
-              `Destinatario service ${dniDestinatarioService} sin TELEFONO ` +
-              `válido (raw: ${telefonoDestRaw ?? 'null'}). ` +
-              `Service diario no se envia hoy.`
-            );
-          } else {
-            const apodoDest = aviso.resolverNombreSaludo(empDest.data);
-            const mensajeService = avisoService.buildResumenDiario({
-              destinatarioNombre: apodoDest,
-              tractores: tractoresConUrgencia,
-            });
-            try {
-              // Atómico: encolar + idempotencia en un mismo batch.
-              const colaRef = db.collection(fs.COLECCION).doc();
-              const batch = db.batch();
-              batch.set(colaRef, {
+          // Calcular ID deterministico con fecha ART (no UTC).
+          const hoyArtIso = _fechaArtIso();
+          const idCola = `service_diario_${hoyArtIso}_${dniDestinatarioService}`;
+          const colaRef = db.collection(fs.COLECCION).doc(idCola);
+
+          try {
+            // Chequear estado actual antes de decidir.
+            const existing = await colaRef.get();
+            if (existing.exists && existing.data().estado === fs.ESTADO.enviado) {
+              log.debug(
+                `Service diario ya ENTREGADO hoy a ${dniDestinatarioService}, skip.`
+              );
+            } else {
+              // No existe, o PENDIENTE, o ERROR. En cualquier caso
+              // sobreescribimos con datos frescos del cron actual.
+              const apodoDest = aviso.resolverNombreSaludo(empDest.data);
+              const mensajeService = avisoService.buildResumenDiario({
+                destinatarioNombre: apodoDest,
+                tractores: tractoresConUrgencia,
+              });
+              const accion = existing.exists ? 'REGENERADO' : 'ENCOLADO';
+              await colaRef.set({
                 telefono: telefonoDest,
                 mensaje: mensajeService,
                 estado: fs.ESTADO.pendiente,
@@ -618,22 +676,15 @@ async function _runOnce(fs) {
                     }))
                   : null,
               });
-              const regS = hist.prepararRegistroServiceDiario(
-                db, dniDestinatarioService, {
-                  cantidadTractores: tractoresConUrgencia.length,
-                  colaDocId: colaRef.id,
-                });
-              batch.set(regS.ref, regS.data);
-              await batch.commit();
               stats.encolados++;
               log.info(
-                `+ Encolado SERVICE DIARIO: ${dniDestinatarioService} ` +
-                `(${tractoresConUrgencia.length} tractores) -> ${colaRef.id}`
+                `+ ${accion} SERVICE DIARIO: ${dniDestinatarioService} ` +
+                `(${tractoresConUrgencia.length} tractores) -> ${idCola}`
               );
-            } catch (e) {
-              stats.errores++;
-              log.error(`No se pudo encolar service diario: ${e.message}`);
             }
+          } catch (e) {
+            stats.errores++;
+            log.error(`No se pudo encolar service diario: ${e.message}`);
           }
         }
       }
