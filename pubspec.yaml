@@ -159,12 +159,12 @@ dev_dependencies:
 flutter_launcher_icons:
   android: "ic_launcher"
   ios: true
-  image_path: "assets/playstore/icon-VVG-tight-1024.png"
+  image_path: "assets/playstore/icon-VAVG-1024.png"
   min_sdk_android: 24
   remove_alpha_ios: true
   background_color_ios: "#E8EAED"
   adaptive_icon_background: "#E8EAED"
-  adaptive_icon_foreground: "assets/playstore/icon-VVG-tight-1024.png"
+  adaptive_icon_foreground: "assets/playstore/icon-VAVG-1024.png"
 
 flutter:
   uses-material-design: true
