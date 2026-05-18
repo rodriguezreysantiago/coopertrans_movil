@@ -760,17 +760,29 @@ class AppMantenimiento {
   /// ese campo, así que dependemos del dato manual + KM en vivo.
   ///
   /// Devuelve null si falta alguno de los inputs **o si los datos son
-  /// inconsistentes** (ULTIMO_SERVICE_KM > KM_ACTUAL: el admin cargó
-  /// algo mal, ej. invirtió dígitos). Puede ser **negativo** si el
-  /// tractor ya pasó el momento del próximo service (vencido).
+  /// inconsistentes** (ULTIMO_SERVICE_KM > KM_ACTUAL + tolerancia: el
+  /// admin cargó algo claramente mal, ej. invirtió dígitos). Puede ser
+  /// **negativo** si el tractor ya pasó el momento del próximo service
+  /// (vencido).
+  ///
+  /// **Tolerancia 1 km**: el operador suele cargar el ULTIMO_SERVICE_KM
+  /// redondeando hacia arriba (ej. cargá "1.012.375" cuando el odómetro
+  /// real Volvo es "1.012.374,89"). Si no toleráramos ese redondeo, el
+  /// helper retorna null y la card de mantenimiento aparece como
+  /// "SIN DATOS" — caso real AD614JS auditoria 2026-05-18.
   static double? serviceDistanceDesdeManual({
     required double? ultimoServiceKm,
     required double? kmActual,
   }) {
     if (ultimoServiceKm == null || kmActual == null) return null;
     // Defensa contra typo del admin: el último service no puede haber
-    // sido a más kilómetros de los que tiene el tractor ahora.
-    if (ultimoServiceKm > kmActual) return null;
+    // sido a más kilómetros de los que tiene el tractor ahora. Tolerancia
+    // de 1 km para absorber el redondeo natural del operador.
+    if (ultimoServiceKm > kmActual + 1.0) return null;
+    // Si el last_service está hasta 1 km por encima (redondeo), tratarlo
+    // como "service recién hecho" → faltan exactamente intervaloServiceKm.
+    // Sin esto, el delta daría negativo y la card cambiaría a "VENCIDO".
+    if (ultimoServiceKm > kmActual) return intervaloServiceKm.toDouble();
     return (ultimoServiceKm + intervaloServiceKm) - kmActual;
   }
 }
