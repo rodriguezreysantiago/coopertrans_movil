@@ -84,15 +84,30 @@ function buildResumenVencimientosProximos({
     return (
       `${saludo}.\n\n` +
       `📋 Resumen vencimientos próximos (${fecha})\n\n` +
-      `✅ Sin vencimientos en los próximos 7 días.\n\n` +
+      `✅ Sin vencimientos próximos:\n` +
+      `   • Personal y vehículos en los próximos 15 días.\n` +
+      `   • Empresas y seguros en los próximos 30 días.\n\n` +
       `${FIRMA}`
     );
   }
   const total = personal.length + vehiculos.length + empresas.length;
-  const tituloTotal =
-    total === 1
-      ? '1 vencimiento en los próximos 7 días:'
-      : `${total} vencimientos en los próximos 7 días:`;
+  // Las ventanas son distintas por tipo (15d personal/veh + 30d empresas):
+  // si hay items SOLO de un universo, mostramos esa ventana; si hay mix,
+  // mostramos las dos por claridad.
+  const tituloTotal = (() => {
+    const esSingular = total === 1;
+    const sust = esSingular ? 'vencimiento' : 'vencimientos';
+    const adj = esSingular ? 'próximo' : 'próximos';
+    const hayPersonalVeh = personal.length > 0 || vehiculos.length > 0;
+    const hayEmpresas = empresas.length > 0;
+    if (hayPersonalVeh && hayEmpresas) {
+      return `${total} ${sust} ${adj} (personal/vehículos ≤15 días, empresas ≤30 días):`;
+    }
+    if (hayEmpresas) {
+      return `${total} ${sust} ${adj} en empresas y seguros (≤30 días):`;
+    }
+    return `${total} ${sust} ${adj} en personal y vehículos (≤15 días):`;
+  })();
 
   const bloques = [];
 

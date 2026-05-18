@@ -15,6 +15,10 @@ const {
 // Decisión Santiago 2026-05-09: el contrato cambió de "devolver null
 // cuando no hay items" a "siempre devolver mensaje 'sin novedades'".
 // El silencio era ambiguo — confirmar con un mensaje elimina la duda.
+//
+// Update 2026-05-18: el mensaje ahora muestra DOS ventanas distintas:
+// personal/vehiculos ≤15 dias, empresas ≤30 dias. El builder elige el
+// titulo segun los items presentes.
 test('sin items en ningún universo → mensaje "sin novedades"', () => {
   const m = buildResumenVencimientosProximos({
     destinatarioNombre: 'Guillermo',
@@ -22,7 +26,9 @@ test('sin items en ningún universo → mensaje "sin novedades"', () => {
     itemsVehiculos: [],
     itemsEmpresas: [],
   });
-  assert.match(m, /Sin vencimientos en los próximos 7 días/);
+  assert.match(m, /Sin vencimientos próximos/);
+  assert.match(m, /Personal y vehículos en los próximos 15 días/);
+  assert.match(m, /Empresas y seguros en los próximos 30 días/);
   assert.match(m, /Hola Guillermo/);
 });
 
@@ -33,7 +39,7 @@ test('soporta arrays nulos/undefined sin romperse', () => {
     itemsVehiculos: null,
     itemsEmpresas: undefined,
   });
-  assert.match(m, /Sin vencimientos en los próximos 7 días/);
+  assert.match(m, /Sin vencimientos próximos/);
   assert.match(m, /^Hola\./m);
 });
 
@@ -48,7 +54,8 @@ test('mensaje incluye saludo, fecha del día y total cuando hay items', () => {
   });
   assert.ok(m.startsWith('Hola Guillermo.'));
   assert.match(m, /Resumen de vencimientos —/);
-  assert.match(m, /1 vencimiento en los próximos 7 días/);
+  // Solo personal/vehiculos -> titulo con "≤15 días"
+  assert.match(m, /1 vencimiento próximo en personal y vehículos \(≤15 días\)/);
 });
 
 test('plural cuando hay >1 item en total', () => {
@@ -61,7 +68,33 @@ test('plural cuando hay >1 item en total', () => {
     itemsVehiculos: [],
     itemsEmpresas: [],
   });
-  assert.match(m, /2 vencimientos en los próximos 7 días/);
+  assert.match(m, /2 vencimientos próximos en personal y vehículos/);
+});
+
+test('mix personal/vehiculos + empresas muestra las 2 ventanas en el titulo', () => {
+  const m = buildResumenVencimientosProximos({
+    destinatarioNombre: 'Gui',
+    itemsPersonal: [
+      { chofer: 'A', etiqueta: 'Licencia', fecha: '2026-05-10', dias: 2 },
+    ],
+    itemsVehiculos: [],
+    itemsEmpresas: [
+      { empresa: 'Vecchi', etiqueta: 'Póliza ART', fecha: '2026-05-25', dias: 17 },
+    ],
+  });
+  assert.match(m, /personal\/vehículos ≤15 días, empresas ≤30 días/);
+});
+
+test('solo empresas muestra titulo con "≤30 días"', () => {
+  const m = buildResumenVencimientosProximos({
+    destinatarioNombre: null,
+    itemsPersonal: [],
+    itemsVehiculos: [],
+    itemsEmpresas: [
+      { empresa: 'Vecchi', etiqueta: 'Póliza ART', fecha: '2026-05-25', dias: 17 },
+    ],
+  });
+  assert.match(m, /1 vencimiento próximo en empresas y seguros \(≤30 días\)/);
 });
 
 test('etiquetas de días: hoy / mañana / en N días', () => {
