@@ -307,6 +307,61 @@ async function encolarAviso3h30(
 // seguir mostrando "🔴 alcanzaste el limite del bloque" si quiere.
 // Si en el futuro se quiere reactivar, ver git log de este archivo.
 
+/**
+ * Aviso al chofer cuando CRUZA las 4 horas de manejo continuo sin
+ * pausar. Es una infraccion real (queda registrada en el flag
+ * `bloque_excedido` que alimenta el resumen a Molina). Al chofer le
+ * mandamos un mensaje firme para que sepa que esta en infraccion en
+ * tiempo real y pare cuanto antes.
+ *
+ * Decision Santiago 2026-05-18 (auditoria vigilador): aunque ya le
+ * avisamos a 3h30, si llego a 4h es porque ignoro. Mandar un aviso
+ * firme refuerza el mensaje "esto es serio, queda anotado". 1 vez por
+ * bloque (idempotencia via flag `bloque_excedido` que ya se usa).
+ */
+async function encolarAvisoBloqueExcedido(
+  dni: string, patente: string
+): Promise<void> {
+  const emp = await obtenerEmpleadoLite(dni);
+  if (!emp) return;
+  const variantes = [
+    `${emp.saludo}.\n\n` +
+      "*Pasaste las 4 horas de manejo continuo sin pausar.* Esto " +
+      "*queda registrado como infracción.*\n\n" +
+      `Frená el ${patente} en un lugar seguro AHORA y descansá los ` +
+      "20 minutos reglamentarios antes de seguir.\n\n" +
+      BANNER_TESTING + "_Coopertrans Móvil — Mensaje automático._",
+    `${emp.saludo}, atención.\n\n` +
+      "*Cumpliste 4 horas sin tomar pausa.* Esto es *infracción " +
+      "registrada* — el supervisor lo va a ver mañana.\n\n" +
+      `Detené el ${patente} ya y descansá 20 min antes de continuar.\n\n` +
+      BANNER_TESTING + "_Coopertrans Móvil — Mensaje automático._",
+    `${emp.saludo}, urgente.\n\n` +
+      "*Manejo continuo > 4 horas detectado.* Esto figura como " +
+      "*falta* en el reporte diario al supervisor.\n\n" +
+      `Frená el ${patente} ahora mismo y descansá los 20 minutos ` +
+      "reglamentarios.\n\n" +
+      BANNER_TESTING + "_Coopertrans Móvil — Mensaje automático._",
+  ];
+  await db().collection("COLA_WHATSAPP").add({
+    telefono: emp.tel,
+    mensaje: variantes[rrPick(variantes.length)],
+    estado: "PENDIENTE",
+    encolado_en: FieldValue.serverTimestamp(),
+    enviado_en: null,
+    error: null,
+    intentos: 0,
+    origen: "jornada_v2_bloque_excedido",
+    expira_en: _expiraEnMin(TTL_JORNADA_BLOQUE_MIN),
+    destinatario_coleccion: "EMPLEADOS",
+    destinatario_id: dni,
+    campo_base: "JORNADA",
+    admin_dni: "BOT",
+    admin_nombre: "Bot vigilador jornada v2",
+    alert_patente: patente,
+  });
+}
+
 async function encolarAvisoCuotaCumplida(
   dni: string, patente: string
 ): Promise<void> {
@@ -547,7 +602,7 @@ export async function tickVigiladorJornada(): Promise<void> {
       // Solo se mandaba el ultimo, los anteriores se perdian
       // silenciosamente. Ahora encolamos TODOS los que se cumplen en
       // este tick.
-      const avisosPendientes: Array<"3h30" | "cuota" | "veda"> = [];
+      const avisosPendientes: Array<"3h30" | "bloque_excedido" | "cuota" | "veda"> = [];
 
       if (manejando) {
         // === Está manejando ===
@@ -577,10 +632,16 @@ export async function tickVigiladorJornada(): Promise<void> {
         // BLOQUE_LIMITE_SEGUNDOS (3h45) sigue siendo referencia conceptual
         // del "fin de bloque" (lo usa commands.js /jornada para mostrar
         // info), pero ya no dispara aviso.
+
+        // Aviso 4h (infraccion). Decision Santiago 2026-05-18: si el
+        // chofer cruza 4h sin pausar, queda en infraccion real. Le
+        // mandamos aviso firme ademas de marcar el flag para Molina.
+        // 1 vez por bloque (idempotencia via bloque_excedido).
         if (
           j.bloque_actual_manejo_seg >= BLOQUE_EXCEDIDO_SEGUNDOS &&
           !j.bloque_excedido
         ) {
+          avisosPendientes.push("bloque_excedido");
           j.bloque_excedido = true;
         }
 
@@ -733,6 +794,7 @@ export async function tickVigiladorJornada(): Promise<void> {
           continue;
         }
         if (avisoTipo === "3h30") await encolarAviso3h30(dni, patente);
+        else if (avisoTipo === "bloque_excedido") await encolarAvisoBloqueExcedido(dni, patente);
         else if (avisoTipo === "cuota") await encolarAvisoCuotaCumplida(dni, patente);
         else if (avisoTipo === "veda") await encolarAvisoVedaNocturna(dni, patente);
         avisosEnviados++;

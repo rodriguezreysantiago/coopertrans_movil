@@ -859,6 +859,10 @@ async function _replyJornadaChofer(msg, { chofer, jSnap, silSnap, fecha }) {
   // Aviso 3h45 ELIMINADO 2026-05-18 (era spam — ya avisamos en 3h30).
   // alerta_3_45_enviada queda en el schema por backward-compat con
   // docs viejos pero no se muestra aca.
+  if (j.bloque_excedido) {
+    avisos.push('🚨 Pasaste las 4 hs de manejo continuo — registrado ' +
+      'como infracción.');
+  }
   if (j.alerta_cuota_enviada) {
     avisos.push('🔴 Llegaste al límite de tu jornada diaria (12 horas). ' +
       'No podés manejar más hasta tener 8 hs de descanso de corrido.');
