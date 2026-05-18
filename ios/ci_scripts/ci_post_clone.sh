@@ -54,6 +54,23 @@ echo "==> Yendo a la raiz del repo..."
 cd "$CI_PRIMARY_REPOSITORY_PATH"
 pwd
 
+# 4a. FIX 2026-05-18 (Build 14 failure): Flutter SDK reciente trae
+# Swift Package Manager activado por DEFAULT, lo que rompe el build
+# porque divide los plugins entre SPM (Firebase, sentry, image_picker)
+# y CocoaPods (printing, google_mlkit_*) — el `GeneratedPluginRegistrant.m`
+# importa con `#import <cloud_firestore/...>` estilo CocoaPods y no
+# encuentra el modulo porque Firebase se resolvio via SPM (que no
+# esta declarado en el .pbxproj).
+#
+# Sintoma: "error: Module 'cloud_firestore' not found" + Archive
+# trae solo 4 pods en lugar de los ~20 esperados.
+#
+# Fix: forzar a Flutter a usar SOLO CocoaPods (modo legacy). Hay
+# que correrlo ANTES de `flutter pub get` porque `pub get` lee la
+# config para decidir como generar `.flutter-plugins-dependencies`.
+echo "==> Forzando CocoaPods (desactivando SPM)..."
+flutter config --no-enable-swift-package-manager
+
 # 4. flutter pub get (esto crea ios/Flutter/Generated.xcconfig, necesario para Xcode)
 echo "==> flutter pub get..."
 flutter pub get
