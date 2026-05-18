@@ -30,6 +30,15 @@ import 'features/auth/screens/splash_screen.dart';
 // Clave global
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+// ─── Rate limiter para Sentry beforeSend ───
+// Map fingerprint→timestamp del último envío. Cualquier error con el
+// mismo fingerprint dentro de la ventana se dropea. Vive a nivel
+// top-level porque `SentryFlutter.init` espera un callback puro y
+// necesitamos estado persistente entre invocaciones del callback.
+// Auto-limpieza: cuando el map crece > 100 entradas, purga las > 5 min.
+final Map<String, DateTime> _sentryRateLimiter = {};
+const Duration _sentryDedupWindow = Duration(seconds: 10);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -135,27 +144,101 @@ void main() async {
         // beforeSend: filtra errores triviales antes de mandarlos a
         // Sentry. Los errores que NO aportan información de bug real
         // pero generan ruido (network glitches transient, cancelados
-        // por el usuario) se descartan en cliente — ahorra cuota Sentry
-        // y reduce el "noise" del dashboard. Errores de red persistentes
-        // o errores de lógica siguen llegando normales.
+        // por el usuario, asserts internos de Flutter framework) se
+        // descartan en cliente — ahorra cuota Sentry y reduce el
+        // "noise" del dashboard. Errores de red persistentes o errores
+        // de lógica siguen llegando normales.
+        //
+        // Capas de defensa (en orden):
+        //   1. Drop por TIPO de error / mensaje (network glitches +
+        //      cancelaciones + asserts internos de Flutter).
+        //   2. Rate limiter client-side: máximo 1 event del mismo
+        //      fingerprint cada 10s. Red de seguridad anti-storm.
+        //
+        // Auditoría 2026-05-18: un sample de 100 events tenía 86 del
+        // mismo error en 1 segundo (FAB del Scaffold haciendo hit-test
+        // mid-transición — assert benigno de Flutter framework). Sin
+        // las capas 1 y 2 ese loop solito consume 86 events de cuota.
         options.beforeSend = (event, hint) {
           final msg = (event.message?.formatted ?? '').toLowerCase();
-          final errType =
-              (event.exceptions?.firstOrNull?.type ?? '').toLowerCase();
+          final exc = event.exceptions?.firstOrNull;
+          final errType = (exc?.type ?? '').toLowerCase();
+          final errValue = (exc?.value ?? '').toLowerCase();
+          // Combinamos message + exception.value porque algunos errores
+          // tienen el detalle solo en `value` (caso típico FlutterError).
+          final texto = '$msg $errValue';
+
+          // ─── Capa 1a: Network glitches ───
           // SocketException con "failed host lookup" / "connection
-          // refused" es un network glitch típico (wifi se cae, 4G
-          // perdido). El usuario va a reintentar; no es bug.
-          if (msg.contains('failed host lookup') ||
-              msg.contains('connection refused') ||
-              msg.contains('connection closed') ||
-              msg.contains('connection timed out')) {
+          // refused" es transient (wifi se cae, 4G perdido). El usuario
+          // reintentará; no es bug.
+          if (texto.contains('failed host lookup') ||
+              texto.contains('connection refused') ||
+              texto.contains('connection closed') ||
+              texto.contains('connection timed out')) {
             return null;
           }
+
+          // ─── Capa 1b: Cancelaciones de usuario ───
           // CancelledByUserException de file_picker / image_picker
-          // (chofer abre el picker y cancela). Es flujo normal.
+          // (chofer abre el picker y cancela). Flujo normal.
           if (errType.contains('cancelledbyuser')) {
             return null;
           }
+
+          // ─── Capa 1c: Asserts internos de Flutter framework ───
+          // Estos son asserts del rendering layer que NO afectan al
+          // usuario en release builds (los asserts son no-op en
+          // release, pero FlutterError.onError los captura igual y
+          // Sentry los recibe). Casos típicos:
+          //   - "Cannot hit test a render box that has never been laid
+          //     out" → toque cae mid-transición (típico FAB del
+          //     Scaffold cambiando dinámicamente, modal bottom sheets,
+          //     AnimatedSwitcher). Sample 86x en 1 segundo (2026-05-18).
+          //   - "RenderBox was not laid out" / "NEEDS-LAYOUT"/"NEEDS-PAINT"
+          //     → mismo problema fenotipado diferente.
+          //   - "!_debugDuringDeviceUpdate" / "!_debugDoingThisLayout"
+          //     → asserts de mouse_tracker y layout pipeline.
+          //
+          // Si un error REAL de la app cae en estos patrones lo vamos a
+          // perder — pero el costo/beneficio es claro: estos asserts
+          // generan storms de cientos de events sin valor diagnóstico
+          // (el stacktrace siempre apunta a Flutter framework, nunca a
+          // código nuestro). Si una pantalla específica los dispara
+          // mucho, conviene arreglar el widget tree (oscilación entre
+          // frames, FAB condicional, etc.).
+          if (texto.contains('cannot hit test a render box') ||
+              texto.contains('renderbox was not laid out') ||
+              texto.contains('needs-layout') ||
+              texto.contains('needs-paint') ||
+              texto.contains('!_debugduringdeviceupdate') ||
+              texto.contains('!_debugdoingthislayout')) {
+            return null;
+          }
+
+          // ─── Capa 2: Rate limiter (anti event storm) ───
+          // Red de seguridad para CUALQUIER error que entre en loop
+          // (callback que se ejecuta 60-120 veces por segundo, listener
+          // que dispara error en cada paint, etc.). Si el mismo
+          // fingerprint apareció < 10s atrás, dropea. Limpia entradas
+          // viejas cada vez que el map crece > 100 (no leak de memoria
+          // en sesiones largas).
+          final fingerprint =
+              '$errType|${texto.length > 80 ? texto.substring(0, 80) : texto}';
+          final ahora = DateTime.now();
+          final ultimo = _sentryRateLimiter[fingerprint];
+          if (ultimo != null &&
+              ahora.difference(ultimo) < _sentryDedupWindow) {
+            return null;
+          }
+          _sentryRateLimiter[fingerprint] = ahora;
+          if (_sentryRateLimiter.length > 100) {
+            final cutoff = ahora.subtract(const Duration(minutes: 5));
+            _sentryRateLimiter.removeWhere(
+              (_, v) => v.isBefore(cutoff),
+            );
+          }
+
           return event;
         };
       },
