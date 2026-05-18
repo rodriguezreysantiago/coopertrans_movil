@@ -181,6 +181,42 @@ function rrPick(n: number): number {
 }
 
 /**
+ * Chequea si el chofer cumplio descanso minimo (>= 8h misma posicion)
+ * en su jornada anterior. Usado para evitar avisar veda nocturna a
+ * choferes que arrancan legitimamente entre 00:00 y 06:00 ART despues
+ * de un descanso completo.
+ *
+ * Decision Vecchi 2026-05-18: la veda 00:00-06:00 se LEVANTA si el
+ * chofer cumplio 8h descanso en el mismo lugar antes de arrancar. Asi
+ * el chofer que sale legitimamente a las 5:30 AM no recibe falso aviso
+ * de "veda activa".
+ *
+ * Returns true si la JORNADA PREVIA cerro con descanso completo.
+ * Returns false en cualquier otro caso (fail-safe: ante duda, avisar).
+ */
+async function descansoPrevioCumplido(dni: string): Promise<boolean> {
+  try {
+    const snap = await db()
+      .collection(COLECCION)
+      .where("chofer_dni", "==", dni)
+      // jornada_fin_ts != null se expresa como > 0 (Timestamp epoch).
+      // Firestore no permite where != null directamente.
+      .where("jornada_fin_ts", ">", Timestamp.fromMillis(0))
+      .orderBy("jornada_fin_ts", "desc")
+      .limit(1)
+      .get();
+    if (snap.empty) return false;
+    const j = snap.docs[0].data() as JornadaDoc;
+    return (j.descanso_segundos || 0) >= DESCANSO_MIN_SEGUNDOS;
+  } catch (e) {
+    logger.warn("[descansoPrevioCumplido] query fallo", {
+      dni, error: (e as Error).message,
+    });
+    return false; // fail-safe: avisar si dudamos
+  }
+}
+
+/**
  * Cargar set de choferes silenciados (comando /silenciar).
  */
 async function cargarSilenciados(): Promise<Set<string>> {
@@ -563,9 +599,42 @@ export async function tickVigiladorJornada(): Promise<void> {
         const enVeda =
           hora >= VEDA_NOCTURNA_DESDE_HORA && hora < VEDA_NOCTURNA_HASTA_HORA;
         if (enVeda && !j.alerta_veda_enviada) {
-          avisosPendientes.push("veda");
-          j.alerta_veda_enviada = true;
-          j.veda_excedida = true;
+          // Decision Santiago 2026-05-18: la veda se LEVANTA si el
+          // chofer cumplio 8h descanso antes de arrancar Y lleva poco
+          // tiempo manejando en esta jornada (< 2h). Cubre el caso
+          // legitimo del chofer que sale 5:30 AM tras descanso completo.
+          //
+          // Si maneja 2h+ en esta jornada y entra en veda, asumimos que
+          // ya no es arranque reciente — puede estar manejando continuo
+          // desde la jornada anterior y la veda aplica. Avisar.
+          //
+          // NO marcamos alerta_veda_enviada si skipeamos, asi el proximo
+          // tick re-evalua: si despues cumple 2h manejo, la condicion
+          // de skip deja de aplicar y avisamos. Costo: 1 query Firestore
+          // extra por chofer/tick en veda (~360 reads/noche = <$0.001).
+          const totalManejoActual =
+            j.total_manejo_seg + j.bloque_actual_manejo_seg;
+          const HORAS2_SEG = 2 * 3600;
+          let avisarVeda = true;
+          if (totalManejoActual < HORAS2_SEG) {
+            const tieneDescansoPrevio = await descansoPrevioCumplido(dni);
+            if (tieneDescansoPrevio) {
+              avisarVeda = false;
+              logger.info(
+                "[jornadas_v2.tick] veda skipeada (descanso previo + manejo reciente)",
+                {
+                  dni, patente,
+                  totalManejoActualSeg: totalManejoActual,
+                  horaArt: hora,
+                }
+              );
+            }
+          }
+          if (avisarVeda) {
+            avisosPendientes.push("veda");
+            j.alerta_veda_enviada = true;
+            j.veda_excedida = true;
+          }
         }
 
         if (lat != null) j.ultima_lat = lat;
