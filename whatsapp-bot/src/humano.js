@@ -98,6 +98,53 @@ function feriadoHoy(now = new Date()) {
 }
 
 /**
+ * Origenes "time-sensitive" — mensajes que deben procesarse SIEMPRE,
+ * incluso fuera de horario habil (de noche / fin de semana / feriados).
+ *
+ * Decision Vecchi 2026-05-18 (primera noche bot 24/7): hasta hoy el bot
+ * respetaba L-V 8-20 / Sab 8-12 para TODOS los mensajes, incluyendo los
+ * avisos del vigilador de jornada. Bug operativo: si un chofer entraba
+ * en veda nocturna 00:00 ART manejando, el aviso quedaba encolado hasta
+ * las 8 AM siguientes — para entonces ya pasaron 8 hs y el aviso es
+ * inutil (o expira por TTL_JORNADA_VEDA_MIN=180).
+ *
+ * Ahora separamos:
+ *   - Time-sensitive  -> procesar SIEMPRE (24/7)
+ *   - Normal          -> respetar horario habil (L-V 8-22 / Sab 8-12,
+ *                        domingo + feriados off)
+ *
+ * Lista cerrada (whitelist) — solo estos origenes pasan en horario
+ * inhabil. Si en el futuro se suma un cron nuevo time-sensitive, hay
+ * que agregarlo aca explicitamente.
+ */
+const ORIGENES_TIME_SENSITIVE = new Set([
+  // Vigilador de jornada (Cloud Functions jornadas_v2)
+  'jornada_v2_bloque_3h30',
+  'jornada_v2_bloque_excedido',
+  'jornada_v2_cuota_cumplida',
+  'jornada_v2_veda_nocturna',
+  // Alertas Volvo y Sitrack en tiempo real
+  'volvo_alert_high',
+  'sitrack_chofer_no_identificado',
+  // Confirmaciones de comandos del bot
+  'silenciado_aviso',
+  'desilenciado_aviso',
+  'silencio_reanudado',
+  // Alertas operativas del propio bot
+  'health_alert_cola_creciente',
+]);
+
+/**
+ * Devuelve true si el origen es time-sensitive (procesa 24/7).
+ * Devuelve false para origenes normales (vencimientos, resumenes
+ * diarios, etc) que respetan horario habil.
+ */
+function esTimeSensitive(origen) {
+  if (!origen) return false;
+  return ORIGENES_TIME_SENSITIVE.has(String(origen));
+}
+
+/**
  * Devuelve un delay aleatorio en milisegundos para esperar antes de
  * enviar el próximo mensaje. Default 15-60 segundos.
  *
@@ -205,4 +252,6 @@ module.exports = {
   sleep,
   normalizarTelefonoAWid,
   partirMensajeLargo,
+  esTimeSensitive,
+  ORIGENES_TIME_SENSITIVE,
 };

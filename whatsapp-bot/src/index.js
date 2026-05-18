@@ -69,6 +69,7 @@ const agrupador = require('./agrupador');
 const PC_ID = process.env.BOT_PC_ID || os.hostname() || 'desconocida';
 const {
   enHorarioHabil,
+  esTimeSensitive,
   delayAleatorioMs,
   sleep,
   normalizarTelefonoAWid,
@@ -386,8 +387,19 @@ async function procesarSiguiente() {
       return;
     }
 
-    if (!enHorarioHabil()) {
-      log.info(`Fuera de horario hábil. ${docId} queda PENDIENTE para que el polling lo reintente.`);
+    // Fix horarios time-sensitive 2026-05-18 (primera noche 24/7):
+    // antes saltabamos TODOS los mensajes fuera de horario habil.
+    // Ahora distinguimos:
+    //   - Time-sensitive (vigilador jornada, alertas Volvo HIGH,
+    //     pasa-iButton, confirmaciones silencio) -> SIEMPRE procesar.
+    //   - Normal (vencimientos, resumenes diarios, etc.) -> respetar
+    //     horario habil L-V 8-22 / Sab 8-12.
+    // Lista en humano.js ORIGENES_TIME_SENSITIVE.
+    if (!enHorarioHabil() && !esTimeSensitive(data.origen)) {
+      log.info(
+        `${docId} (origen=${data.origen || '?'}) fuera de horario habil ` +
+        `y NO time-sensitive. Queda PENDIENTE.`
+      );
       return;
     }
 
@@ -795,26 +807,26 @@ async function pollearCola(db) {
       log.warn(`Sweeper de PROCESANDO fallo: ${e.message}`);
     }
 
-    // Skip rapido si estamos fuera de horario habil (incluye fines de
-    // semana, noches, y feriados nacionales). Sin esto, el polling
-    // re-traia el mismo doc PENDIENTE cada 15s y logueaba "Fuera de
-    // horario..." en cada vuelta -> ~35K lineas inutiles en un fin
-    // de semana largo, que ahogan los logs reales.
+    // Fix horarios 2026-05-18 (primera noche 24/7): el polling SIEMPRE
+    // corre porque ahora hay mensajes time-sensitive (vigilador jornada,
+    // alertas Volvo HIGH, etc.) que deben entregarse 24/7 incluso fuera
+    // de horario habil. El filtrado normal vs urgente se hace dentro de
+    // procesarSiguiente (chequeo esTimeSensitive(data.origen)).
     //
-    // Loguear solo al cruzar el umbral: cuando entramos a fuera de
-    // horario, una linea; cuando volvemos a horario habil, otra.
+    // Loguear cambio de estado solo al cruzar el umbral — sino el log
+    // se inunda de "fuera de horario" cada 15s.
     const enHorario = enHorarioHabil();
     if (_ultimoEstadoHorario === null) {
       log.info(enHorario
-        ? 'Polling: en horario habil -- procesando envios.'
-        : 'Polling: fuera de horario habil -- pausa hasta proximo dia habil.');
+        ? 'Polling activo: horario habil -- procesa todos los mensajes.'
+        : 'Polling activo: fuera de horario -- solo time-sensitive (vigilador / alertas).');
     } else if (_ultimoEstadoHorario !== enHorario) {
       log.info(enHorario
-        ? 'Horario habil reanudado -- polling activo.'
-        : 'Fuera de horario habil -- pausa hasta proximo dia habil.');
+        ? 'Horario habil reanudado -- procesa todos los mensajes.'
+        : 'Fuera de horario habil -- solo time-sensitive (vigilador / alertas).');
     }
     _ultimoEstadoHorario = enHorario;
-    if (!enHorario) return;
+    // NO retornamos aca: polling sigue para procesar time-sensitive.
 
     // FIFO por encolado_en. Sin orderBy explicito Firestore devuelve
     // orden no deterministico — cuando el bot procesa cola acumulada
