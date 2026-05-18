@@ -814,35 +814,38 @@ async function _replyJornadaChofer(msg, { chofer, jSnap, silSnap, fecha }) {
   const descansoSeg = j.descanso_segundos || 0;
   const estado = (j.estado || '').toString();
 
-  const BLOQUE_LIMITE_SEG = 3 * 3600 + 45 * 60; // 3h45
-  const BLOQUES_MAX = 3;
+  const TRAMO_LIMITE_SEG = 3 * 3600 + 45 * 60; // 3h45 manejo continuo
+  const TRAMOS_MAX = 3; // == 12h jornada diaria nominal
   const DESCANSO_MIN_SEG = 8 * 3600;
 
-  // Resumen del bloque actual.
-  if (bloquesCompletos >= BLOQUES_MAX) {
-    lineas.push(`✅ *Cumpliste tus ${BLOQUES_MAX} bloques de manejo (11h15 total).*`);
-    lineas.push('   Estás en descanso obligatorio antes de la próxima jornada.');
+  // Resumen del tramo actual.
+  // Decision Santiago 2026-05-18: NO hablamos de "bloques" con el
+  // chofer. Lenguaje natural: "horas manejadas" + "12 horas de
+  // jornada" + "8 horas de descanso".
+  if (bloquesCompletos >= TRAMOS_MAX) {
+    lineas.push('✅ *Llegaste al límite de tu jornada diaria (12 horas).*');
+    lineas.push('   Estás en descanso obligatorio (mínimo 8 hs) antes de retomar.');
   } else {
-    lineas.push(`🚛 Bloque actual: ` +
-      `*${_fmtSegCompacto(bloqueActualManejo)}* manejado` +
-      ` (de ${_fmtSegCompacto(BLOQUE_LIMITE_SEG)} máximo)`);
-    const restanteBloque = BLOQUE_LIMITE_SEG - bloqueActualManejo;
+    lineas.push(`🚛 Manejo actual sin pausar: ` +
+      `*${_fmtSegCompacto(bloqueActualManejo)}*` +
+      ` (límite ${_fmtSegCompacto(TRAMO_LIMITE_SEG)} antes de parar)`);
+    const restanteBloque = TRAMO_LIMITE_SEG - bloqueActualManejo;
     if (restanteBloque > 0) {
       lineas.push(`   Te quedan *${_fmtSegCompacto(restanteBloque)}* antes ` +
         'de tu pausa obligatoria de 20 min.');
     } else {
-      lineas.push('   *Te pasaste del límite del bloque.* Pará y descansá 20 min.');
+      lineas.push('   *Te pasaste del límite.* Pará y descansá 20 min.');
     }
     if (bloqueActualPausa > 0) {
       lineas.push(`   ⏸ Pausa actual: ${_fmtSegCompacto(bloqueActualPausa)}.`);
     }
     lineas.push('');
-    lineas.push(`📦 Bloques completos: ${bloquesCompletos}/${BLOQUES_MAX}`);
-    lineas.push(`🚛 Total del día: ${_fmtSegCompacto(totalManejoSeg)}`);
+    lineas.push(`🚛 Total manejado hoy: ${_fmtSegCompacto(totalManejoSeg)} ` +
+      '(de 11 hs 15 min nominal por jornada)');
   }
 
   // Estado de descanso (cuando está parado, mostramos progreso hacia las 8h).
-  if (descansoSeg > 0 && bloquesCompletos < BLOQUES_MAX) {
+  if (descansoSeg > 0 && bloquesCompletos < TRAMOS_MAX) {
     lineas.push('');
     lineas.push(`🛏 Descanso acumulado: ${_fmtSegCompacto(descansoSeg)} ` +
       `(necesitás ${_fmtSegCompacto(DESCANSO_MIN_SEG)} para cerrar jornada)`);
@@ -853,11 +856,12 @@ async function _replyJornadaChofer(msg, { chofer, jSnap, silSnap, fecha }) {
   if (j.alerta_3_30_enviada) {
     avisos.push('🟡 Te avisamos que tenés que parar a descansar 20 min.');
   }
-  if (j.alerta_3_45_enviada) {
-    avisos.push('🔴 Llegaste al límite del bloque — tenés que parar 20 min.');
-  }
+  // Aviso 3h45 ELIMINADO 2026-05-18 (era spam — ya avisamos en 3h30).
+  // alerta_3_45_enviada queda en el schema por backward-compat con
+  // docs viejos pero no se muestra aca.
   if (j.alerta_cuota_enviada) {
-    avisos.push('🔴 Cumpliste los 3 bloques. No podés manejar más hoy.');
+    avisos.push('🔴 Llegaste al límite de tu jornada diaria (12 horas). ' +
+      'No podés manejar más hasta tener 8 hs de descanso de corrido.');
   }
   if (j.alerta_veda_enviada) {
     avisos.push('🌙 Estás manejando en horario de veda nocturna (00:00-06:00).');

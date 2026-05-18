@@ -276,22 +276,24 @@ async function encolarAvisoCuotaCumplida(
 ): Promise<void> {
   const emp = await obtenerEmpleadoLite(dni);
   if (!emp) return;
+  // 3 variantes anti-baneo. Decision Santiago 2026-05-18:
+  // NO mencionar "bloques" (jerga interna) — al chofer le hablamos
+  // de "12 horas de jornada diaria" y "8 horas de descanso".
   const variantes = [
     `${emp.saludo},\n\n` +
-      "*Cumpliste los 3 bloques de la jornada* (11 h 15 min de manejo " +
-      "neto + pausas).\n\n" +
-      `Frená el ${patente} en un lugar seguro y descansá *mínimo 8 h ` +
-      "sin moverte* antes de arrancar una nueva jornada.\n\n" +
+      "*Estás cerca de las 12 horas de jornada diaria.* Frená el " +
+      `${patente} en un lugar seguro y descansá *mínimo 8 horas de ` +
+      "corrido* antes de seguir.\n\n" +
       BANNER_TESTING + "_Coopertrans Móvil — Mensaje automático._",
     `${emp.saludo}.\n\n` +
-      "*Jornada completa — 3 bloques cumplidos.* No podés seguir " +
-      "manejando hasta tener 8 h de descanso con el camión detenido.\n\n" +
-      `Buscá dónde estacionar el ${patente} y cerrá la jornada.\n\n` +
+      "*Llegás al límite de 12 horas de jornada.* Buscá dónde " +
+      `estacionar el ${patente} — necesitás *mínimo 8 horas de descanso ` +
+      "de corrido* antes de retomar.\n\n" +
       BANNER_TESTING + "_Coopertrans Móvil — Mensaje automático._",
     `${emp.saludo}, atención.\n\n` +
-      "*Cuota diaria cumplida (3 bloques).* La jornada se cierra ahora.\n\n" +
-      `Estacioná el ${patente} en un lugar seguro y descansá 8 h en el ` +
-      "mismo lugar para que arranque la próxima jornada.\n\n" +
+      "*Tu jornada diaria está cerca de las 12 horas.* Detené el " +
+      `${patente} en un lugar seguro y descansá *al menos 8 horas ` +
+      "seguidas* antes de continuar.\n\n" +
       BANNER_TESTING + "_Coopertrans Móvil — Mensaje automático._",
   ];
   await db().collection("COLA_WHATSAPP").add({
