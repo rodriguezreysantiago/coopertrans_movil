@@ -294,6 +294,39 @@ async function _despacharFalloEnvio(docRef, error) {
   log.warn(`✗ ${docRef.id}: ERROR definitivo (${motivo}).`);
 }
 
+// ─── Cache LRU de WIDs verificados (Fix H1 24/7) ─────────────────────
+// Map<wid, {existe: boolean, expiraEn: number}>. Cap 1000 entries
+// (FIFO eviction al insertar el 1001). TTL 24h.
+//
+// `existe=null` se trata como "no esta cacheado" — los hits cachean
+// tanto true como false (numero existe o no existe igual evita repetir
+// el call). Se invalida cache si pasa el TTL o si se hace `_widCacheClear`.
+const _WID_CACHE = new Map();
+const _WID_CACHE_MAX = 1000;
+const _WID_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+function _widCacheGet(wid) {
+  const entry = _WID_CACHE.get(wid);
+  if (!entry) return null;
+  if (Date.now() > entry.expiraEn) {
+    _WID_CACHE.delete(wid);
+    return null;
+  }
+  return entry.existe;
+}
+
+function _widCacheSet(wid, existe) {
+  // FIFO eviction si llegamos al cap. Map mantiene insertion order.
+  if (_WID_CACHE.size >= _WID_CACHE_MAX) {
+    const primero = _WID_CACHE.keys().next().value;
+    if (primero !== undefined) _WID_CACHE.delete(primero);
+  }
+  _WID_CACHE.set(wid, {
+    existe,
+    expiraEn: Date.now() + _WID_CACHE_TTL_MS,
+  });
+}
+
 async function procesarSiguiente() {
   if (procesando) return;
   if (colaProcesar.length === 0) return;
@@ -369,13 +402,32 @@ async function procesarSiguiente() {
       return;
     }
 
-    let existe;
-    try {
-      existe = await wa.tieneWhatsApp(wid);
-    } catch (e) {
-      log.warn(`Verificación de ${wid} falló (transient): ${e.message}`);
-      await docRef.update({ estado: fs.ESTADO.pendiente });
-      return;
+    // Cache LRU de WIDs verificados (Fix H1 — auditoria 24/7 2026-05-18):
+    // sin cache, cada mensaje dispara `wa.getNumberId(wid)` (RPC pesado
+    // a WhatsApp Web). En backlog 24/7 (lunes 8 AM con 200+ pendientes)
+    // genera 200 calls consecutivos = signal de bot a Meta.
+    //
+    // Cache TTL 24h: misma persona normalmente recibe varios avisos al
+    // dia (vencimientos + jornada + Volvo) — verificar 5 veces el mismo
+    // numero en una manana no aporta nada.
+    let existe = _widCacheGet(wid);
+    if (existe === null) {
+      try {
+        existe = await wa.tieneWhatsApp(wid);
+        _widCacheSet(wid, existe);
+      } catch (e) {
+        log.warn(`Verificación de ${wid} falló (transient): ${e.message}`);
+        // Fix H2: marcar reintento con backoff (60s) en lugar de update
+        // directo a PENDIENTE. Sin backoff, polling cada 15s martilla
+        // un cliente medio muerto y dispara false-positive de health
+        // alert "cola creciente".
+        await fs.marcarReintento(
+          docRef,
+          `tieneWhatsApp transient: ${e.message}`,
+          new Date(Date.now() + 60 * 1000)
+        );
+        return;
+      }
     }
     if (!existe) {
       log.warn(`${docId}: ${wid} no tiene WhatsApp.`);

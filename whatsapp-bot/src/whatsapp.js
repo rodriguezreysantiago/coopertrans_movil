@@ -127,11 +127,25 @@ function _safeInitialize() {
       "cliente_wa",
       `Initialize falló: ${e.message}`
     );
-    // Importante: NO llamar _intentarReconexion() acá si ya estamos
-    // dentro del watchdog — eso lo maneja el watchdog mismo. Solo
-    // disparamos reconexión cuando el initialize falló afuera de un
-    // ciclo de watchdog (caso del primer arranque).
-    if (!_readyWatchdogTimer) {
+    // Fix H3 (auditoria 24/7 2026-05-18): la guard original
+    // `!_readyWatchdogTimer` dejaba el bot colgado en el siguiente
+    // edge case: watchdog dispara destroy + _safeInitialize, el
+    // initialize falla rapido, pero el watchdog timer aun no
+    // termino su ciclo (esta seteado). Como `_readyWatchdogTimer !=
+    // null`, NO se disparaba `_intentarReconexion`. Si el watchdog
+    // se cae despues (proceso muerto, GC raro), el cliente queda
+    // permanentemente muerto hasta que NSSM lo detecte y reinicie
+    // el servicio entero (lento, depende de health alerts).
+    //
+    // Fix: chequear AMBOS — solo skipear reconexion si efectivamente
+    // hay un ciclo de watchdog ACTIVO Y con intentos remanentes.
+    // Si el watchdog ya agoto sus intentos (intentosReadyTimeout >=
+    // maxReadyTimeouts), no nos quedamos esperando — disparamos
+    // reconexion como si fuera un arranque limpio.
+    const watchdogActivoConIntentos =
+      _readyWatchdogTimer &&
+      _intentosReadyTimeout < _maxReadyTimeouts;
+    if (!watchdogActivoConIntentos) {
       _intentarReconexion();
     }
   });
