@@ -928,6 +928,41 @@ async function main() {
   // muerta aunque el heartbeat sea reciente").
   await _verificarNoHayOtraInstancia(db);
 
+  // Auto-recovery de session corrupta/faltante (Fase 24/7 2026-05-18):
+  // si `.wwebjs_auth/` no existe (primera vez en esta PC o se borro),
+  // intentamos bajar el ultimo backup del bucket ANTES de que
+  // whatsapp-web.js empiece — asi reconecta sin pedir QR.
+  //
+  // Si la carpeta SI existe, asumimos que la session local es valida
+  // y dejamos a whatsapp-web.js verificar. Si en realidad esta
+  // corrupta y emite el evento `qr`, hay un log warning visible
+  // (whatsapp.js linea ~85) — al admin le toca escanear.
+  //
+  // No intentamos restore en respuesta a `qr` para evitar loops si el
+  // restore tambien falla. Solo restore preventivo al arranque.
+  const carpetaAuthLocal = path.resolve(process.cwd(), '.wwebjs_auth');
+  if (!fsNode.existsSync(carpetaAuthLocal)) {
+    log.warn(
+      '.wwebjs_auth/ no existe en cwd. Intentando restore desde bucket...'
+    );
+    try {
+      const restored = await backupAuth.restaurarUltimoBackup();
+      if (restored) {
+        log.info(
+          'Session restaurada desde backup. whatsapp-web.js deberia ' +
+          'reconectar sin QR.'
+        );
+      }
+      // Si fallo el restore, backup_auth.js loguea WARN — seguimos
+      // adelante y dejamos que whatsapp-web.js pida QR.
+    } catch (e) {
+      log.warn(
+        `Restore preventivo fallo: ${e.message}. Continuando — si la ` +
+        `session no es valida, va a pedir QR.`
+      );
+    }
+  }
+
   log.info('Conectando a WhatsApp Web — esto puede demorar 10-30s...');
   await wa.inicializar();
 
@@ -991,6 +1026,25 @@ async function main() {
       );
     } else {
       log.info('Cola en pausa, sin envíos ni cron en curso.');
+    }
+
+    // Backup pre-shutdown (Fase 24/7 2026-05-18): guarda el ultimo
+    // estado bueno de .wwebjs_auth/ antes de cerrar el cliente. Si el
+    // restart abrupto corrompe la carpeta local, el proximo arranque
+    // restaura desde este backup en lugar de pedir QR. Best-effort:
+    // si falla (sin red, bucket caido, archiver roto), loguea WARN y
+    // sigue con el shutdown — no bloquea el cierre.
+    try {
+      log.info('Ejecutando backup pre-shutdown de .wwebjs_auth/...');
+      await Promise.race([
+        backupAuth.ejecutarBackupAhora(),
+        new Promise((resolve) => setTimeout(() => {
+          log.warn('Backup pre-shutdown timeout 60s, continuando shutdown.');
+          resolve(false);
+        }, 60000)),
+      ]);
+    } catch (e) {
+      log.warn(`Backup pre-shutdown fallo: ${e.message}`);
     }
 
     await wa.destroy();

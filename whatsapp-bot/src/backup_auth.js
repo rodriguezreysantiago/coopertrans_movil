@@ -28,9 +28,14 @@
 // sigue. El bot no se rompe por un backup roto.
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
 const admin = require('firebase-admin');
 const log = require('./logger');
+
+const execFileAsync = promisify(execFile);
 
 let _timer = null;
 let _db = null; // No se usa hoy pero queda por si en futuro queremos persistir metadata.
@@ -333,9 +338,170 @@ async function _limpiarBackupsAntiguos(bucket, pcId) {
   }
 }
 
+// ============================================================================
+// RESTORE — bajar el ultimo backup del bucket y restaurar `.wwebjs_auth/`
+// ============================================================================
+//
+// Critico para el setup 24/7 en PC dedicada: si `.wwebjs_auth/` se corrompio
+// (restart abrupto, disk full, whatsapp web revoco la session, etc.), al
+// arrancar el bot intentamos restaurar el ultimo backup del bucket ANTES de
+// inicializar whatsapp-web.js. Si el restore es exitoso, el bot reconecta
+// sin pedir QR.
+//
+// Usa `Expand-Archive` de PowerShell (built-in Windows, no requiere npm
+// install adicional — `archiver` solo comprime, no descomprime).
+//
+// Si el restore falla (sin backups en el bucket, zip corrupto, sin red),
+// loguea WARN y el bot va a pedir QR como antes — fallback seguro.
+
+/**
+ * Baja el ultimo backup `.wwebjs_auth/` del bucket para el `pcId` dado y
+ * lo descomprime sobre la carpeta `.wwebjs_auth/` local.
+ *
+ * @param {object} [opts]
+ * @param {string} [opts.pcId] - override de BOT_PC_ID
+ * @returns {Promise<boolean>} true si restauro OK, false si no hay backup
+ *   o si el restore fallo (loguea internamente).
+ */
+async function restaurarUltimoBackup({ pcId } = {}) {
+  const bucketName =
+    process.env.WWEBJS_BACKUP_BUCKET || 'coopertrans-movil-backups';
+  const pcSafe = String(pcId || process.env.BOT_PC_ID || 'desconocida')
+    .replace(/[^a-zA-Z0-9_-]/g, '_');
+  const prefijo = `wwebjs_auth/${pcSafe}_`;
+
+  try {
+    const bucket = admin.storage().bucket(bucketName);
+    const [files] = await bucket.getFiles({ prefix: prefijo });
+
+    if (files.length === 0) {
+      log.warn(
+        `Restore .wwebjs_auth/: sin backups en gs://${bucketName}/${prefijo}*. ` +
+        `Bot va a pedir QR.`
+      );
+      return false;
+    }
+
+    // Ordenar por timeCreated descendente (mas reciente primero).
+    files.sort((a, b) => {
+      const ta = a.metadata?.timeCreated
+        ? new Date(a.metadata.timeCreated).getTime() : 0;
+      const tb = b.metadata?.timeCreated
+        ? new Date(b.metadata.timeCreated).getTime() : 0;
+      return tb - ta;
+    });
+    const ultimo = files[0];
+    const tamMb = ultimo.metadata?.size
+      ? (parseInt(ultimo.metadata.size, 10) / 1024 / 1024).toFixed(1)
+      : '?';
+
+    log.info(
+      `Restaurando .wwebjs_auth/ desde gs://${bucketName}/${ultimo.name} ` +
+      `(${tamMb} MB, creado ${ultimo.metadata?.timeCreated || '?'})...`
+    );
+
+    // Bajar a archivo temporal.
+    const tempZip = path.join(
+      os.tmpdir(),
+      `wwebjs_restore_${Date.now()}_${process.pid}.zip`
+    );
+    await ultimo.download({ destination: tempZip });
+
+    const carpetaAuth = path.resolve(process.cwd(), '.wwebjs_auth');
+
+    // Si ya existe la carpeta (corrupta), moverla a un .corrupt.<ts>
+    // para no perder datos por si el restore tambien falla. Limpieza
+    // manual despues si todo OK.
+    if (fs.existsSync(carpetaAuth)) {
+      const corruptPath = `${carpetaAuth}.corrupt.${Date.now()}`;
+      log.warn(
+        `.wwebjs_auth/ existe pero pidio restore. Lo muevo a ` +
+        `${path.basename(corruptPath)} para no perder datos.`
+      );
+      try {
+        fs.renameSync(carpetaAuth, corruptPath);
+      } catch (e) {
+        log.warn(
+          `No pude mover .wwebjs_auth/ corrupta: ${e.message}. ` +
+          `Intentando borrar...`
+        );
+        try {
+          fs.rmSync(carpetaAuth, { recursive: true, force: true });
+        } catch (e2) {
+          log.error(
+            `Tampoco pude borrar .wwebjs_auth/ vieja: ${e2.message}. ` +
+            `Aborto restore para no romper estado parcial.`
+          );
+          try { fs.unlinkSync(tempZip); } catch { /* ignore */ }
+          return false;
+        }
+      }
+    }
+
+    fs.mkdirSync(carpetaAuth, { recursive: true });
+
+    // Expand-Archive de PowerShell. Built-in en Windows desde 5.0+.
+    // Output redirect a NUL (Windows) para no spamear stderr.
+    await execFileAsync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `Expand-Archive -Path '${tempZip}' -DestinationPath '${carpetaAuth}' -Force`,
+      ],
+      { timeout: 120000 } // 2 min max
+    );
+
+    // Limpiar zip temporal.
+    try { fs.unlinkSync(tempZip); } catch { /* ignore */ }
+
+    // Verificacion minima: la carpeta tiene que tener archivos.
+    const entries = fs.readdirSync(carpetaAuth);
+    if (entries.length === 0) {
+      log.warn(
+        `Restore termino pero .wwebjs_auth/ quedo vacia. ` +
+        `Bot va a pedir QR.`
+      );
+      return false;
+    }
+
+    log.info(
+      `✓ Restore OK: .wwebjs_auth/ con ${entries.length} entries top-level. ` +
+      `whatsapp-web.js deberia reconectar sin QR.`
+    );
+    return true;
+  } catch (e) {
+    log.warn(
+      `Restore .wwebjs_auth/ fallo: ${e.message}. Bot va a pedir QR.`
+    );
+    return false;
+  }
+}
+
+/**
+ * Ejecuta un backup AHORA (sincronico desde el caller). Usado por el
+ * shutdown handler del bot para guardar el ultimo estado bueno antes
+ * de cerrar el cliente — minimiza el riesgo de que un restart agresivo
+ * deje `.wwebjs_auth/` corrupta entre 2 backups del timer normal (24h).
+ *
+ * Igual que el backup periodico, si falla loguea WARN y no tira.
+ */
+async function ejecutarBackupAhora() {
+  try {
+    await _ejecutarBackup();
+    return true;
+  } catch (e) {
+    log.warn(`Backup pre-shutdown fallo: ${e.message}`);
+    return false;
+  }
+}
+
 module.exports = {
   iniciar,
   detener,
+  restaurarUltimoBackup,
+  ejecutarBackupAhora,
   // Exportados para tests.
   _construirNombre,
 };

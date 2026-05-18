@@ -129,16 +129,41 @@ try {
         Set-Location $RepoRoot
     }
 
-    # --- 6. Restart-Service -----------------------------------------
+    # --- 6. Restart graceful (NO usar Restart-Service) --------------
+    #
+    # IMPORTANTE (Fase 24/7 2026-05-18): Restart-Service mata el proceso
+    # demasiado rapido - entre el Stop y el Start, NSSM envia SIGINT
+    # pero no espera al graceful shutdown del bot (que toma ~10-70s
+    # segun envios en curso). Si el bot estaba commiteando a
+    # `.wwebjs_auth/` cuando lo matan, la carpeta queda corrupta y la
+    # proxima vez pide QR.
+    #
+    # Secuencia correcta: Stop-Service + wait + Start-Service. NSSM
+    # respeta SIGINT y el bot tiene tiempo de cerrar limpio, hacer
+    # backup pre-shutdown a Cloud Storage, y deshacer locks de
+    # `.wwebjs_auth/` antes del exit.
     $svc = Get-Service -Name CoopertransMovilBot -ErrorAction SilentlyContinue
     if (-not $svc) {
         Write-Log 'ERROR' "Servicio CoopertransMovilBot no existe en esta PC. Cancelado."
         exit 1
     }
 
-    Write-Log 'INFO' "Restart-Service CoopertransMovilBot..."
-    Restart-Service -Name CoopertransMovilBot -Force
-    Write-Log 'INFO' "Restart-Service OK, esperando 90s para smoke test..."
+    Write-Log 'INFO' "Stop-Service CoopertransMovilBot (graceful, espera SIGINT + backup)..."
+    Stop-Service -Name CoopertransMovilBot
+    # Espera generosa: 75s cubre el grace period default del bot
+    # (DELAY_MAX_MS=60000 + 10s + backup pre-shutdown ~5s).
+    Write-Log 'INFO' "Esperando 75s para que termine envios en curso + backup pre-shutdown..."
+    Start-Sleep -Seconds 75
+    # Verificar que efectivamente este Stopped antes de arrancar.
+    $svcCheck = Get-Service -Name CoopertransMovilBot
+    if ($svcCheck.Status -ne 'Stopped') {
+        Write-Log 'WARNING' "Servicio sigue $($svcCheck.Status) tras 75s. Forzando stop..."
+        Stop-Service -Name CoopertransMovilBot -Force
+        Start-Sleep -Seconds 10
+    }
+    Write-Log 'INFO' "Start-Service CoopertransMovilBot..."
+    Start-Service -Name CoopertransMovilBot
+    Write-Log 'INFO' "Start-Service OK, esperando 90s para smoke test..."
     Start-Sleep -Seconds 90
 
     # --- 7. Smoke test via bot_estado_remoto.js --json --------------
