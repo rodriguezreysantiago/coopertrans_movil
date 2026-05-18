@@ -813,16 +813,27 @@ export async function armarResumenJornadasDiario(): Promise<void> {
     return;
   }
 
-  // Lookup nombres
+  // Lookup nombres (fix M2 24/7 2026-05-18: getAll en lugar de loop
+  // serial N+1).
   const nombrePorDni = new Map<string, string>();
-  for (const x of excesos) {
-    if (nombrePorDni.has(x.choferDni)) continue;
+  const dnisUnicos = new Set<string>(excesos.map((x) => x.choferDni));
+  if (dnisUnicos.size > 0) {
     try {
-      const s = await db().collection("EMPLEADOS").doc(x.choferDni).get();
-      const n = s.exists ? (s.data()?.NOMBRE ?? "").toString().trim() : "";
-      nombrePorDni.set(x.choferDni, n);
-    } catch {
-      nombrePorDni.set(x.choferDni, "");
+      const refs = [...dnisUnicos].map(
+        (dni) => db().collection("EMPLEADOS").doc(dni)
+      );
+      const snaps = await db().getAll(...refs);
+      for (const s of snaps) {
+        const n = s.exists ?
+          (s.data()?.NOMBRE ?? "").toString().trim() :
+          "";
+        nombrePorDni.set(s.id, n);
+      }
+    } catch (e) {
+      logger.warn("[jornadas_v2.resumen] getAll nombres fallo", {
+        error: (e as Error).message,
+      });
+      for (const dni of dnisUnicos) nombrePorDni.set(dni, "");
     }
   }
 

@@ -32,6 +32,7 @@ const fechaExtractor = require('./fecha_extractor');
 const commands = require('./commands');
 const control = require('./control');
 const cron = require('./cron');
+const { normalizarTelefonoAWid } = require('./humano');
 
 // Mapeo de teléfono normalizado (solo dígitos) → DNI del chofer.
 //
@@ -88,28 +89,40 @@ async function _resolverChofer(db, fromNumber) {
     await _refrescarCacheEmpleados(db);
   }
 
+  // Fix M3 (auditoria 24/7 2026-05-18): match ESTRICTO por
+  // normalizacion E.164, no por sufijo. El match por sufijo de 10
+  // digitos permitia spoofing entre 2 choferes con los mismos
+  // ultimos 10 digitos (raro pero posible — caso real: chofer con
+  // numero internacional cuyos ultimos 10 digitos coinciden con
+  // un argentino). Normalizar ambos a WID canonico (5492914567890)
+  // y comparar igualdad estricta.
+  //
+  // `normalizarTelefonoAWid` agrega prefijo pais 54 + mobile prefix 9
+  // si falta, y devuelve `<digitos>@c.us`. Quitamos el sufijo `@c.us`
+  // para comparar solo digitos.
+  const fromWid = normalizarTelefonoAWid(fromNumber);
+  const fromCanonical = fromWid ? String(fromWid).replace(/@c\.us$/, '') : null;
+
   for (const { dni, data } of _cacheEmpleados) {
     const tel = String(data.TELEFONO || '').replace(/\D+/g, '');
     if (!tel) continue;
 
-    // Match estricto: o coinciden exactamente los dígitos, o uno
-    // termina con el otro (caso típico: el chofer guardó "2914567890"
-    // y nos llega "5492914567890" con prefijo país, o viceversa).
-    //
-    // Antes había un match por sufijo de 8 dígitos que era vulnerable:
-    // dos números no relacionados con los mismos últimos 8 dígitos
-    // matcheaban y un atacante podía impersonar al chofer.
-    //
-    // Exigimos un mínimo de 10 dígitos en el más corto para asegurar
-    // que estamos comparando un teléfono real argentino completo
-    // (área + abonado), no solo el abonado local.
+    // Match #1: exacto bruto (sin normalizacion). Cubre el caso
+    // donde el TELEFONO en EMPLEADOS ya esta en E.164 canonico.
     if (fromDigits === tel) {
       return { dni, data };
     }
-    const corto = fromDigits.length <= tel.length ? fromDigits : tel;
-    const largo = fromDigits.length <= tel.length ? tel : fromDigits;
-    if (corto.length >= 10 && largo.endsWith(corto)) {
-      return { dni, data };
+
+    // Match #2: comparar normalizados a E.164. Si ambos se
+    // normalizan al mismo WID, es match estricto.
+    if (fromCanonical) {
+      const telWid = normalizarTelefonoAWid(tel);
+      if (telWid) {
+        const telCanonical = String(telWid).replace(/@c\.us$/, '');
+        if (fromCanonical === telCanonical) {
+          return { dni, data };
+        }
+      }
     }
   }
   return null;

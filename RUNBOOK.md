@@ -405,6 +405,58 @@ Cualquier chofer cuyo `EMPLEADOS.TELEFONO` matchee el número que manda al bot p
 - Si tipea cualquier comando admin (`/silenciar`, `/pausar`, etc.) → silencio total. Sin error visible para no exponer la existencia del comando.
 - Match teléfono: el `EMPLEADOS.TELEFONO` debe estar formateado con prefijo (ej. `5492914567890`). Si está mal cargado, el chofer no se reconoce y el bot lo ignora.
 
+### Resumen diario perdido (Emma, Giagante, Molina, Santiago)
+
+**Síntoma**: el destinatario habitual de un resumen consolidado diario
+no lo recibió hoy. Causa común: el bot estuvo caído toda la ventana
+hábil (8h+) y el TTL `expira_en` venció antes de que el bot vuelva. El
+doc se descarta automáticamente, y el lock de idempotencia diaria
+(`AVISOS_AUTOMATICOS_HISTORICO/<tipo>_<YYYY-MM-DD>_<dni>`) bloquea
+re-generación dentro del mismo día.
+
+**Re-disparar manualmente** (cuando el bot vuelva):
+
+```powershell
+# 1) Identificar el lock a borrar segun cron:
+#    - cron_service_diario:           service_diario_<fecha>_<dni>
+#    - cron_mantenimiento_diario:     ya no usa AVISOS_AUTOMATICOS_HISTORICO
+#                                      (refactor 2026-05-18, doc deterministico
+#                                      directo en COLA_WHATSAPP)
+#    - cron_vencimientos_proximos_diario: ya no usa AAH (idem)
+#    - resumen_jornadas_v2:           excesos_jornada_<fecha>
+#    - resumen_conducta_manejo_diario: conducta_manejo_<fecha>
+#    - cron_bot_resumen_diario:       bot_resumen_<fecha>_<dni>
+#    - resumen_drifts_asignaciones:   drifts_<fecha>_<dni>
+
+# 2) Desde GCP Console -> Firestore -> AVISOS_AUTOMATICOS_HISTORICO
+#    buscar el doc del dia y BORRARLO. Esto libera el lock.
+
+# 3) Forzar el cron:
+#    - Crons del bot (service/mantenimiento/vencimientos): /forzar-cron
+#      por WhatsApp al bot desde un numero ADMIN.
+#    - Crons CF (bot_resumen/drifts/jornadas/conducta): no se pueden
+#      forzar via API. Opciones:
+#        a) Esperar al proximo cron del dia siguiente (mas simple).
+#        b) Re-deployar la function con un cambio trivial → GCF
+#           dispara automaticamente la siguiente invocacion en su
+#           proximo schedule.
+#        c) Manual desde GCP Console -> Cloud Functions -> seleccionar
+#           la function -> tab "Logs" no permite trigger, pero
+#           Cloud Scheduler SI: GCP Console -> Cloud Scheduler ->
+#           buscar el job correspondiente (ej. firebase-schedule-
+#           resumenConductaManejoDiario-southamerica-east1) -> "Force
+#           run".
+
+# Importante: si borras el lock pero NO forzas el cron, el doc se
+# va a regenerar en el proximo cron natural (ej. 8 AM del dia
+# siguiente). Pero ese resumen sera del DIA SIGUIENTE, no del dia
+# perdido.
+```
+
+**Para evitarlo a futuro**: el setup 24/7 con PC dedicada + smart plug
++ BIOS auto-power-on + UPS reduce el riesgo a ~cero. Cuando ocurra
+igual, ya sabés el procedimiento.
+
 ### El bot está corriendo pero choferes no responden
 
 Probablemente WhatsApp baneó el número. Síntomas:

@@ -5390,23 +5390,45 @@ export const procesarSilenciadosExpirados = onSchedule(
       return;
     }
     let notificados = 0;
-    let saltados = 0;
+    let saltadosPermanentes = 0;
+    let conservados = 0;
     for (const d of snap.docs) {
       const data = d.data();
       const dni = (data.chofer_dni || d.id).toString();
+      let errorPermanente = false;
       try {
         await _encolarAvisoSilencioReanudado(dni);
         notificados++;
       } catch (e) {
-        logger.warn("[procesarSilenciadosExpirados] no encolé reanudación", {
-          dni,
-          error: (e as Error).message,
-        });
-        saltados++;
-        // Igual borramos el doc — sino el cron lo ve infinitas veces.
-        // Si el chofer no tiene teléfono o está inactivo, el aviso no
-        // tiene a dónde ir y reintentar no ayuda.
+        const msg = (e as Error).message || "";
+        // Errores PERMANENTES (no vale reintentar) → borrar igual.
+        // Ej: chofer no existe en EMPLEADOS, sin TELEFONO valido,
+        // ACTIVO=false. Reintentar manana no cambia nada.
+        errorPermanente =
+          /no existe en EMPLEADOS|sin TELEFONO|ACTIVO=false|inactivo/i.test(msg);
+        if (errorPermanente) {
+          logger.warn(
+            "[procesarSilenciadosExpirados] no encolé reanudación (permanente)",
+            { dni, error: msg }
+          );
+          saltadosPermanentes++;
+        } else {
+          // Fix M6 (auditoria 24/7 2026-05-18): error TRANSIENT (red,
+          // Firestore timeout, etc.). NO borrar el doc — el proximo
+          // tick (10 min) reintenta. Antes: borraba siempre → chofer
+          // quedaba des-silenciado SIN aviso y sin posibilidad de
+          // retry.
+          logger.warn(
+            "[procesarSilenciadosExpirados] no encolé reanudación " +
+            "(transient, conservo doc para retry)",
+            { dni, error: msg }
+          );
+          conservados++;
+          continue; // skip el delete de abajo
+        }
       }
+
+      // Solo borrar si encolamos OK o el error fue permanente.
       try {
         await d.ref.delete();
       } catch (e) {
@@ -5418,7 +5440,8 @@ export const procesarSilenciadosExpirados = onSchedule(
     }
     logger.info("[procesarSilenciadosExpirados] OK", {
       notificados,
-      saltados,
+      saltadosPermanentes,
+      conservados,
       total: snap.size,
     });
   }
@@ -5835,20 +5858,38 @@ export const resumenConductaManejoDiario = onSchedule(
     }
 
     // ─── Lookup nombres de choferes identificados ──────────────────
+    // Fix M2 (auditoria 24/7 2026-05-18): antes era loop serial de
+    // `db.collection("EMPLEADOS").doc(dni).get()` con `await` adentro
+    // del for — N+1 queries (60 reads serializados con flota grande).
+    // Ahora usa `getAll(...refs)` en una sola RPC. Misma cantidad de
+    // documentos leidos pero 1 round-trip de red vs N.
     const dnis = new Set<string>();
     for (const g of grupos.values()) {
       if (g.keyChoferDni !== "NO_ID") dnis.add(g.keyChoferDni);
     }
     const nombrePorDni = new Map<string, string>();
-    for (const dni of dnis) {
+    if (dnis.size > 0) {
       try {
-        const s = await db.collection("EMPLEADOS").doc(dni).get();
-        const n = s.exists ?
-          (s.data()?.NOMBRE ?? "").toString().trim() :
-          "";
-        nombrePorDni.set(dni, n);
-      } catch {
-        nombrePorDni.set(dni, "");
+        const refs = [...dnis].map(
+          (dni) => db.collection("EMPLEADOS").doc(dni)
+        );
+        const snaps = await db.getAll(...refs);
+        for (const s of snaps) {
+          const n = s.exists ?
+            (s.data()?.NOMBRE ?? "").toString().trim() :
+            "";
+          nombrePorDni.set(s.id, n);
+        }
+      } catch (e) {
+        // Si falla el batch, fallback a strings vacios (no rompe el
+        // resumen — solo aparece "DNI XXXX" en lugar de "Nombre").
+        logger.warn(
+          "[resumenConductaManejoDiario] getAll EMPLEADOS fallo",
+          { error: (e as Error).message }
+        );
+        for (const dni of dnis) {
+          nombrePorDni.set(dni, "");
+        }
       }
     }
 
@@ -6748,5 +6789,97 @@ export const asignarNumeroReciboAdelanto = onCall(
         "No se pudo asignar el número de recibo."
       );
     }
+  }
+);
+
+// ============================================================================
+// purgarColaWhatsappAntigua — limpieza periodica de COLA_WHATSAPP
+// ============================================================================
+//
+// Fix M5 (auditoria 24/7 2026-05-18): COLA_WHATSAPP crece sin tope. Cada
+// envio (~50-100/dia) queda como doc ENVIADO/ERROR/EXPIRADO permanente.
+// En 1 ano son ~30K docs - degrada queries del dedup, agrupador, polling
+// de PENDIENTE, y la pantalla "Cola de WhatsApp" del admin.
+//
+// Cron diario 04:00 ART (fuera de horario operativo): borra docs en
+// estado final (ENVIADO / ERROR / EXPIRADO) con `encolado_en` > 30 dias.
+// NUNCA toca PENDIENTE / PROCESANDO (operativos en curso).
+//
+// Cap defensivo de 5000 docs por corrida (Firestore batch tope = 500;
+// hacemos 10 batches max por ejecucion). Si quedan mas, el cron al dia
+// siguiente sigue limpiando.
+//
+// Idempotente: re-correr no rompe. Si Firestore esta caido, falla y
+// el cron del dia siguiente reintenta.
+export const purgarColaWhatsappAntigua = onSchedule(
+  {
+    schedule: "0 4 * * *", // 4 AM todos los dias (ART)
+    timeZone: "America/Argentina/Buenos_Aires",
+    timeoutSeconds: 540,
+    memory: "256MiB",
+  },
+  async () => {
+    const db = getFirestore();
+    const DIAS_RETENCION = 30;
+    const MAX_DOCS_POR_CORRIDA = 5000;
+    const BATCH_SIZE = 500;
+
+    const cutoff = Timestamp.fromMillis(
+      Date.now() - DIAS_RETENCION * 24 * 60 * 60 * 1000
+    );
+
+    logger.info("[purgarColaWhatsappAntigua] inicio", {
+      diasRetencion: DIAS_RETENCION,
+      cutoff: cutoff.toDate().toISOString(),
+    });
+
+    let totalBorrados = 0;
+    // Estados finales (no operativos en curso).
+    const estadosFinales = ["ENVIADO", "ERROR", "EXPIRADO"];
+
+    for (const estado of estadosFinales) {
+      let restantes = MAX_DOCS_POR_CORRIDA - totalBorrados;
+      if (restantes <= 0) break;
+
+      while (restantes > 0) {
+        const limit = Math.min(BATCH_SIZE, restantes);
+        try {
+          const snap = await db.collection("COLA_WHATSAPP")
+            .where("estado", "==", estado)
+            .where("encolado_en", "<", cutoff)
+            .limit(limit)
+            .get();
+
+          if (snap.empty) break;
+
+          const batch = db.batch();
+          snap.docs.forEach((d: FirebaseFirestore.QueryDocumentSnapshot) =>
+            batch.delete(d.ref));
+          await batch.commit();
+          totalBorrados += snap.size;
+          restantes -= snap.size;
+
+          logger.info(
+            `[purgarColaWhatsappAntigua] batch ${estado}: ${snap.size} ` +
+            `docs borrados (acumulado ${totalBorrados})`
+          );
+
+          // Si el batch trajo menos que el limit, no hay mas docs
+          // viejos de este estado.
+          if (snap.size < limit) break;
+        } catch (e) {
+          logger.error(
+            `[purgarColaWhatsappAntigua] error en batch ${estado}`,
+            { error: (e as Error).message }
+          );
+          break; // intentar siguiente estado / proximo ciclo del dia
+        }
+      }
+    }
+
+    logger.info("[purgarColaWhatsappAntigua] fin", {
+      totalBorrados,
+      cap: MAX_DOCS_POR_CORRIDA,
+    });
   }
 );

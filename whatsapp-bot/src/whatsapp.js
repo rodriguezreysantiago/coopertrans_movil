@@ -70,8 +70,37 @@ function _construirCliente() {
 
   client.on('qr', (qr) => {
     health.setEstadoCliente('AUTH_PENDIENTE');
-    log.info('QR recibido — escaneá desde WhatsApp en el teléfono descartable.');
-    log.info('Ajustes → Dispositivos vinculados → Vincular un dispositivo.');
+    // Fix M4 (auditoria 24/7 2026-05-18): log CRITICAL muy visible
+    // cuando el bot pide QR. La operacion 24/7 idealmente nunca
+    // requiere QR (el auto-restore desde backup cubre el caso de
+    // .wwebjs_auth/ corrupta). Si pide QR es porque:
+    //   1. PC nueva sin backups previos (primera vez en la dedicada)
+    //   2. Meta revoco el dispositivo del lado servidor (~1/6-12m)
+    //   3. Restore fallo y no hay backup viable
+    //
+    // El log con prefijo `[CRITICAL_QR_PEDIDO]` permite filtrar
+    // facil en monitor_logs.ps1 + Sentry. Tambien registramos el
+    // evento en BOT_HEALTH/main para que se pueda detectar desde
+    // el watchdog Cloud Function (BOT_HEALTH watchdog ya manda
+    // WhatsApp a Santiago — aunque irònicamente eso no funciona si
+    // justamente el bot no puede mandar WhatsApp...).
+    //
+    // TODO Fase 3 24/7: integrar canal alternativo (email/SMS via
+    // Resend o Twilio) que dispare cuando setEstadoCliente cambia
+    // a AUTH_PENDIENTE. Asi Santiago se entera al toque sin depender
+    // del bot que justo pide QR.
+    log.error(
+      '[CRITICAL_QR_PEDIDO] El bot esta pidiendo QR. La operacion ' +
+      '24/7 quedo INTERRUMPIDA hasta que alguien escanee desde el ' +
+      'celular del numero de Coopertrans. Causa probable: backup de ' +
+      '.wwebjs_auth/ corrupto, primera vez en esta PC, o Meta revoco ' +
+      'el dispositivo.'
+    );
+    health.registrarError(
+      'qr_pedido',
+      'Bot pidiendo QR — requiere intervencion humana'
+    );
+    log.info('Ajustes -> Dispositivos vinculados -> Vincular un dispositivo.');
     qrcode.generate(qr, { small: true });
   });
 
@@ -529,6 +558,28 @@ async function enviarMensaje(wid, texto) {
 // llama solo una vez en el bootstrap (no hay leak real), pero si una
 // refactor futura lo invoca 2 veces, sin este guardia se duplicaría
 // silenciosamente y cada mensaje se procesaría N veces.
+//
+// Flow completo incluyendo reconstruccion del cliente (auditoria 24/7
+// 2026-05-18 — agente reporto race, verificado que no es bug):
+//
+//   1. Bootstrap: onMensajeEntrante(handler) -> _messageHandler=handler,
+//      client.on('message_create', handler). Total: 1 listener.
+//
+//   2. Reconstruccion del cliente (recovery tras crash):
+//      _construirCliente() crea nuevo `client` y al final, si
+//      `_messageHandler` no es null, lo engancha al NUEVO client
+//      (linea ~118). El viejo client se descarta (GC). Total
+//      en cliente nuevo: 1 listener (handler) + cliente viejo
+//      descartado.
+//
+//   3. Re-registro post-reconstruccion: onMensajeEntrante(handler2):
+//      a) removeListener('message_create', handler1) sobre el NUEVO
+//         client (donde estaba enganchado tras paso 2). OK.
+//      b) _messageHandler=handler2, client.on(...handler2).
+//      Total: 1 listener (handler2).
+//
+// Sin race: el remove+add son sincronicos dentro del mismo tick, no
+// hay ventana donde queden 2 listeners.
 let _messageHandler = null;
 
 function onMensajeEntrante(handler) {

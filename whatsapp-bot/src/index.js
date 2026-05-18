@@ -327,6 +327,15 @@ function _widCacheSet(wid, existe) {
   });
 }
 
+// Timestamp del último fallo en `_despacharFalloEnvio()`. Si fue hace
+// menos de 5s, `procesarSiguiente()` corta para no martillar Firestore
+// con reintentos sincrónicos. El polling normal (cada 15s) toma el
+// relevo. 0 = nunca falló (no hay corte activo).
+// L3 24/7 2026-05-18: movido aca desde abajo de procesarSiguiente
+// (estaba declarado despues del primer uso — funcionaba por hoist pero
+// confundia al lector).
+let _despachoFalloErrorReciente = 0;
+
 async function procesarSiguiente() {
   if (procesando) return;
   if (colaProcesar.length === 0) return;
@@ -530,7 +539,10 @@ async function procesarSiguiente() {
     // recibió el contenido en los últimos minutos. Mantiene
     // consistencia con el resto del flow (ENVIADO en lugar de un
     // estado nuevo SKIPPED que requeriría cambios en queries).
-    const dupId = await _esEnvioDuplicado(db, fs, data);
+    const dupId = await _esEnvioDuplicado(
+      db, fs, data,
+      parseInt(process.env.DEDUP_VENTANA_MIN || '5', 10)
+    );
     if (dupId) {
       await docRef.update({
         estado: fs.ESTADO.enviado,
@@ -683,12 +695,6 @@ async function procesarSiguiente() {
     }
   }
 }
-
-// Timestamp del último fallo en `_despacharFalloEnvio()`. Si fue hace
-// menos de 5s, `procesarSiguiente()` corta para no martillar Firestore
-// con reintentos sincrónicos. El polling normal (cada 15s) toma el
-// relevo. 0 = nunca falló (no hay corte activo).
-let _despachoFalloErrorReciente = 0;
 
 /**
  * Detecta si en los últimos `ventanaMin` minutos ya se envió el mismo

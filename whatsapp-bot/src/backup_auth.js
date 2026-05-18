@@ -38,6 +38,9 @@ const log = require('./logger');
 const execFileAsync = promisify(execFile);
 
 let _timer = null;
+let _initialTimer = null;  // Fix L2 24/7: capturamos el setTimeout
+                            // inicial (10 min) para poder cancelarlo
+                            // si llaman `detener()` antes del primer backup.
 let _db = null; // No se usa hoy pero queda por si en futuro queremos persistir metadata.
 
 /**
@@ -73,7 +76,8 @@ function iniciar(db) {
     `después cada ${intervaloHs}h.`
   );
 
-  setTimeout(() => {
+  _initialTimer = setTimeout(() => {
+    _initialTimer = null;
     _ejecutarBackup().catch((e) => {
       log.warn(`Primer backup .wwebjs_auth/ falló: ${e.message}`);
     });
@@ -86,6 +90,16 @@ function iniciar(db) {
 }
 
 function detener() {
+  // Fix L2 24/7 (2026-05-18): cancelar tambien el setTimeout
+  // inicial. Si detener() se llama dentro de los 10 min de
+  // primerDelayMs, antes solo cancelabamos _timer (que aun no
+  // existia) y dejabamos el setTimeout pendiente -> el primer
+  // backup se disparaba igual + arrancaba _timer despues del
+  // shutdown.
+  if (_initialTimer) {
+    clearTimeout(_initialTimer);
+    _initialTimer = null;
+  }
   if (_timer) {
     clearInterval(_timer);
     _timer = null;
