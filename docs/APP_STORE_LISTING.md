@@ -17,7 +17,7 @@ Drafts listos para pegar en App Store Connect. Mirror de
 | **SKU** | `COOPERTRANS-MOVIL-001` | Free-form interno Apple. Cualquier string único sirve. |
 | **Primary Category** | `Business` | Mismo que Play Store. |
 | **Secondary Category** | `Productivity` | Opcional. |
-| **Content Rights** | `No, it does not contain, show, or access third-party content` | No usamos contenido de terceros con copyright. |
+| **Content Rights** | `No, it does not contain, show, or access third-party content` | No usamos contenido de terceros con copyright. **Datos de APIs (Volvo, Sitrack) NO cuentan como "contenido"** — son datos comerciales operativos de Vecchi vía contratos con proveedores. Las marcas Volvo/Sitrack aparecen solo como texto (uso nominativo permitido), no como logos embebidos. |
 | **Age Rating** | `4+` | Ver §5 — todas las respuestas del cuestionario son "None". |
 | **Default Language** | `Spanish (Mexico)` | Apple ofrece `es-MX` o `es-ES` — no hay `es-AR` separado. Elegir MX (más cercano al rioplatense que ES). |
 
@@ -227,7 +227,9 @@ O dejar vacío.
 
 ## 5. Age Rating (cuestionario)
 
-Cuando llenes "Age Rating Information", todas las respuestas son **None** o **Infrequent / Mild** según el wording, y el rating final debería dar **4+**.
+Cuando llenes "Age Rating Information", todas las respuestas son **None** o **No** según el wording, y el rating final debería dar **4+**.
+
+### Frecuencia de contenido (None en todos)
 
 | Categoría | Respuesta |
 |---|---|
@@ -243,11 +245,33 @@ Cuando llenes "Age Rating Information", todas las respuestas son **None** o **In
 | Sexual Content or Nudity | None |
 | Graphic Sexual Content or Nudity | None |
 | Contests | None |
-| Unrestricted Web Access | **No** (la app NO embebe un navegador open) |
-| Gambling and Contests | No |
-| Made for Kids | **No** (audiencia 18+, empleados) |
+
+### Controles dentro de la app (No en todos)
+
+| Categoría | Respuesta | Defensa si Apple cuestiona |
+|---|---|---|
+| Controles parentales | No | App para empleados adultos. |
+| Verificación de edad garantizada | No | Login por DNI + contraseña, no por edad. |
+
+### Capacidades (No en todos)
+
+| Categoría | Respuesta | Defensa si Apple cuestiona |
+|---|---|---|
+| Acceso web no restringido | No | Sin WebView open. `url_launcher` solo abre URLs predefinidas (privacy/delete-account), no permite al usuario navegar. |
+| Contenido generado por usuarios | No | Los PDFs/fotos que sube el empleado son flujo de verificación interno (admin aprueba/rechaza). NO hay feed, perfil público, comentarios ni distribución entre usuarios. |
+| Mensajería y chat | No | NO hay user-to-user messaging en la app. Las notificaciones del bot WhatsApp son sistema→usuario por canal externo, no entre usuarios. |
+| Publicidad | No | Sin ads. |
+| Made for Kids | No | Audiencia 18+, empleados. |
 
 → Resultado esperado: **4+**.
+
+### Notes for Reviewer si rechazan por UGC o mensajería
+
+Si Apple cuestiona "Contenido generado por usuarios":
+> User-uploaded files (PDFs, images of renewed work documents) are part of an internal verification workflow. The administrator reviews each upload and approves or rejects it. The files are NOT distributed to other users, there is no feed, no public profile, no comments, no social interaction.
+
+Si Apple cuestiona "Mensajería y chat":
+> The app does NOT include any user-to-user messaging. System-generated notifications about document expirations are sent via WhatsApp (external channel), but this is one-way: from server to user. No user can send a message to another user from within the app.
 
 ---
 
@@ -372,7 +396,43 @@ https://coopertrans-movil.web.app/
 
 ### 9.4 License Agreement
 
-Dejá el default de Apple (EULA estándar). NO necesitás uno custom — la app es para empleados internos y el contrato laboral cubre el uso de la app.
+**Primera opción:** ir a **App Information** → sección "License Agreement" → elegir **"Apple's Standard License Agreement"**. Eso aplica el EULA por default sin que tengas que escribir nada.
+
+**Si Apple te obliga a llenar un EULA custom**, pegá este texto en el campo "Contrato de licencia":
+
+```
+CONTRATO DE LICENCIA DE USUARIO FINAL — COOPERTRANS MÓVIL
+
+1. ALCANCE
+Esta aplicación es propiedad exclusiva de Vecchi / Sucesión Vecchi (en adelante "la Empresa") y está destinada al uso interno de su personal autorizado. El acceso a la aplicación requiere credenciales (DNI y contraseña) provistas por la administración de la Empresa.
+
+2. USO PERMITIDO
+El usuario se compromete a utilizar la aplicación exclusivamente para fines laborales relacionados con sus funciones dentro de la Empresa. Queda prohibido:
+- Compartir credenciales con terceros.
+- Acceder a información de otros empleados o vehículos sin autorización.
+- Usar la aplicación con fines no autorizados por la Empresa.
+- Realizar ingeniería inversa, descompilar o intentar acceder al código fuente.
+
+3. PROPIEDAD INTELECTUAL
+Todo el contenido, diseño, código y datos contenidos en la aplicación son propiedad exclusiva de la Empresa o de sus licenciantes (incluidos proveedores de telemetría con contratos vigentes). Su reproducción o distribución no autorizada está prohibida.
+
+4. DATOS PERSONALES
+El tratamiento de datos personales por parte de la aplicación se rige por la política de privacidad disponible en https://coopertrans-movil.web.app/privacidad, en cumplimiento con la Ley argentina N.° 25.326 de Protección de los Datos Personales.
+
+5. LIMITACIÓN DE RESPONSABILIDAD
+La Empresa proporciona la aplicación "tal cual" y no garantiza disponibilidad ininterrumpida ni la exactitud absoluta de los datos. La Empresa no será responsable por daños derivados del uso o imposibilidad de uso de la aplicación más allá de lo establecido en el contrato laboral del usuario.
+
+6. TERMINACIÓN
+La Empresa puede revocar el acceso del usuario a la aplicación en cualquier momento, especialmente ante el cese de la relación laboral o el incumplimiento de este contrato.
+
+7. JURISDICCIÓN
+Este contrato se rige por las leyes de la República Argentina. Cualquier controversia se someterá a los tribunales ordinarios de Bahía Blanca, Provincia de Buenos Aires.
+
+8. CONTACTO
+Consultas o reclamos: santiagocoopertrans@gmail.com
+
+Versión 1.0 — Mayo 2026.
+```
 
 ### 9.5 Test Information (para reviewer de TestFlight si vas a "External Testing" con > 10 testers)
 
