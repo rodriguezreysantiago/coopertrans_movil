@@ -1276,10 +1276,22 @@ async function forzarRunOnce(fs) {
   return _runOnce(fs);
 }
 
+/**
+ * Indica si hay un ciclo de cron en ejecución. Lo usa el shutdown del
+ * bot para esperar a que termine antes de tirar el cliente — sin esto,
+ * un `_runOnce` a medio-batch.commit quedaba abortado por `process.exit`
+ * y dejaba encolados sin registrar la idempotencia (próximo ciclo los
+ * re-encolaba). Auditoria 2026-05-17.
+ */
+function isRunning() {
+  return _running;
+}
+
 module.exports = {
   start,
   stop,
   forzarRunOnce,
+  isRunning,
   // Exportado para tests / debugging.
   calcularDiasRestantes,
 };

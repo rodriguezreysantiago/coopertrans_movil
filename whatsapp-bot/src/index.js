@@ -404,6 +404,15 @@ async function procesarSiguiente() {
       return;
     }
 
+    // Delay anti-bot ANTES del lock (auditoria 2026-05-17): si el bot
+    // crashea / es reiniciado durante este sleep (hasta 60s), el doc
+    // sigue PENDIENTE y el proximo poll lo agarra inmediato. Antes
+    // el delay venia despues del lock → si crasheaba en el sleep, el
+    // doc quedaba PROCESANDO y solo el sweeper de 5 min lo repescaba.
+    // Para avisos con expira_en corto (vigilador jornada), esos
+    // 5 min eran latencia perdida.
+    const delay = delayAleatorioMs();
+
     // Lock atómico: si otra instancia se adelantó (race poco probable
     // ya que el anti-doble-bot debería garantizar single-instance, pero
     // defensa en profundidad), retorna false y skipeamos sin enviar.
@@ -463,7 +472,6 @@ async function procesarSiguiente() {
       log.warn(`${docId}: agrupador falló (envío individual): ${e.message}`);
     }
 
-    const delay = delayAleatorioMs();
     log.info(`→ Enviando ${docId} a ${data.telefono} en ${Math.round(delay / 1000)}s...`);
     await sleep(delay);
 
@@ -915,8 +923,15 @@ async function main() {
     cron.stop();
     health.detener();
 
+    // Auditoria 2026-05-17: ademas del envio en curso, esperamos al
+    // cron. Si Restart-Service cae mid-cron (batch.commit en vuelo),
+    // el process.exit lo aborta y los encolados quedan sin registrar
+    // en AVISOS_AUTOMATICOS_HISTORICO → proximo ciclo los re-encola.
     const start = Date.now();
-    while (procesando && Date.now() - start < graceMs) {
+    while (
+      (procesando || cron.isRunning()) &&
+      Date.now() - start < graceMs
+    ) {
       await sleep(200);
     }
     if (procesando) {
@@ -924,8 +939,13 @@ async function main() {
         'Grace period agotado con un envío en curso. ' +
         'El doc queda en PROCESANDO; revisalo manualmente al reiniciar.'
       );
+    } else if (cron.isRunning()) {
+      log.warn(
+        'Grace period agotado con cron en ejecución. ' +
+        'Algunos avisos pueden no haberse registrado.'
+      );
     } else {
-      log.info('Cola en pausa, sin envíos en curso.');
+      log.info('Cola en pausa, sin envíos ni cron en curso.');
     }
 
     await wa.destroy();

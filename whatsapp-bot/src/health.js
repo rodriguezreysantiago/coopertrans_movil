@@ -217,7 +217,16 @@ function _escribirSerializado() {
     return;
   }
   _escribiendoHeartbeat = true;
-  escribirHeartbeat()
+  // Timeout 30s (auditoria 2026-05-17): si Firestore queda lento o
+  // se corta la red, sin timeout `escribirHeartbeat()` puede quedar
+  // pendiente para siempre. El flag _escribiendoHeartbeat se queda
+  // en true y todos los proximos intervals skipean → el doc
+  // `BOT_HEALTH/main` deja de actualizarse → `botHealthWatchdog`
+  // (Cloud Function) cree que el bot murio y manda falsa alarma.
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('Heartbeat write timeout 30s')), 30000);
+  });
+  Promise.race([escribirHeartbeat(), timeoutPromise])
     .catch((e) => {
       log.warn(`Heartbeat falló: ${e.message}`);
     })

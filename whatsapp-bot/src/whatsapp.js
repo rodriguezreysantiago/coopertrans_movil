@@ -257,8 +257,17 @@ function _intentarReconexion() {
       // procesos y recreamos el cliente desde cero. La referencia al
       // `client` viejo quedó podrida — `initialize()` no se recupera
       // sobre la misma instancia, hay que tirarla.
-      if (_esErrorBrowserHuerfano(e)) {
-        _matarChromesHuerfanos();
+      //
+      // Auditoria 2026-05-17: tambien recreamos en cualquier otro
+      // fallo a partir del 2do intento. Casos reales: logout remoto,
+      // NAVIGATION del frame de WhatsApp Web, sesion revocada. Antes
+      // estos quedaban en loop de retry sobre el mismo client podrido
+      // hasta agotar los 5 reintentos → 30+ seg de cola parada y docs
+      // que llegaban a MAX_RETRIES como ERROR.
+      const debeRecrear =
+        _esErrorBrowserHuerfano(e) || _intentosReconexion >= 2;
+      if (debeRecrear) {
+        if (_esErrorBrowserHuerfano(e)) _matarChromesHuerfanos();
         try {
           await client.destroy();
         } catch (destroyErr) {

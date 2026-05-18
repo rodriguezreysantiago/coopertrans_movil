@@ -117,12 +117,21 @@ async function planificarEnvioAgrupado(db, docActual) {
   const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - ventanaMs);
 
   // Buscar otros PENDIENTE del mismo destinatario + origen.
+  // orderBy explicito (auditoria 2026-05-17): antes la query sin orden
+  // dejaba Firestore eligiendo cualquier set arbitrario de docs. Con
+  // > 49 candidatos en la ventana, el cap defensivo abajo cortaba un
+  // subconjunto NO determinístico → algunos docs quedaban sueltos y
+  // se procesaban como individuales en el proximo poll (el chofer
+  // recibia 1 agrupado + N sueltos). Con orderBy ASC, el cap toma
+  // siempre los mas viejos primero — los nuevos quedan para el
+  // proximo poll y se agrupan entre si.
   const snap = await db
     .collection('COLA_WHATSAPP')
     .where('destinatario_id', '==', destinatarioId)
     .where('origen', '==', origen)
     .where('estado', '==', 'PENDIENTE')
     .where('encolado_en', '>=', cutoff)
+    .orderBy('encolado_en', 'asc')
     .get();
 
   // Filtrar el actual (no agruparse a sí mismo).
