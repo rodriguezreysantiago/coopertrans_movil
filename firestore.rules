@@ -461,13 +461,11 @@ service cloud.firestore {
     // server lo escribe. Lectura para los mismos roles que ven
     // tableros Volvo (admin/supervisor/SEG_HIGIENE).
 
-    match /JORNADAS_CHOFER/{doc} {
-      // LEGACY: la coleccion vieja fue migrada a JORNADAS (modelo v2 con
-      // bloques 3x4h) el 2026-05-15. Mantenemos esta rule porque puede
-      // haber docs residuales hasta que corra el cleanup definitivo.
-      allow read: if puedeVerVolvoTableros();
-      allow create, update, delete: if false;
-    }
+    // JORNADAS_CHOFER: eliminada en cleanup definitivo 2026-05-18.
+    // La coleccion vieja se borro con script (memoria: limpiar_jornadas_
+    // chofer_legacy.js). Si en el futuro reaparece un doc residual, no
+    // matcheara ninguna rule -> cae al `if false` del catch-all y queda
+    // inaccesible. Esto es defensivo: nadie deberia escribir/leer ahi.
 
     // ========================================================================
     // JORNADAS — vigilador v2 (modelo bloques 3x4h + descanso 8h)
@@ -649,8 +647,21 @@ service cloud.firestore {
     //
     // Acceso admin/supervisor (mismos que usan el modulo Logistica). No
     // exponemos al chofer (no edita viajes).
+    //
+    // Hardening 2026-05-18: cada operador SOLO ve su propio borrador.
+    // Sin este guard, si dos operadores armaban el mismo viaje en paralelo
+    // se pisaban (el docId NO incluia el operador_dni en el formato viejo;
+    // ahora si: {operadorDni}_{viajeIdOriginal|nuevo}, ver service:33).
+    // El guard compara contra el CAMPO `operador_dni` del data — ese campo
+    // es lo que el cliente realmente persiste y es defensa robusta vs
+    // splitear el docId server-side.
     match /BORRADORES_VIAJE/{doc} {
-      allow read, create, update, delete: if isAdminOrSupervisor();
+      // READ/UPDATE/DELETE: solo el dueno (mirando el doc existente).
+      allow read, update, delete: if isAdminOrSupervisor() &&
+        resource.data.operador_dni == request.auth.uid;
+      // CREATE: el doc nuevo debe llevar operador_dni == self.
+      allow create: if isAdminOrSupervisor() &&
+        request.resource.data.operador_dni == request.auth.uid;
     }
 
     // ========================================================================

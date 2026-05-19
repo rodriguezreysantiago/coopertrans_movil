@@ -232,6 +232,14 @@
       ]
     },
     {
+      "collectionGroup": "JORNADAS",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "chofer_dni", "order": "ASCENDING" },
+        { "fieldPath": "jornada_fin_ts", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "SITRACK_EVENTOS",
       "queryScope": "COLLECTION",
       "fields": [
@@ -253,6 +261,16 @@
     },
     {
       "collectionGroup": "VOLVO_ALERTAS",
+      "fieldPath": "expira_en",
+      "ttl": true,
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "DESCENDING", "queryScope": "COLLECTION" },
+        { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" }
+      ]
+    },
+    {
+      "collectionGroup": "COLA_WHATSAPP",
       "fieldPath": "expira_en",
       "ttl": true,
       "indexes": [
