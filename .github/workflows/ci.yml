@@ -36,6 +36,13 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          # Flutter version PINEADA — sin pin, `channel: stable` baja la
+          # versión current de stable en cada run y un release breaking de
+          # Flutter rompe el CI sin warning. Build 14 iOS ya falló por
+          # esto (Flutter activó SPM por default → 'Module cloud_firestore
+          # not found'). Update manual cuando se decida adoptar nueva
+          # versión + smoke test local antes.
+          flutter-version: 3.41.7
           channel: stable
           cache: true
 

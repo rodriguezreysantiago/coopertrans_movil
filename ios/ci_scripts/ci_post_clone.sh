@@ -20,8 +20,15 @@ set -e
 echo "===== Xcode Cloud post-clone (Flutter setup) ====="
 
 # 1. Instalar Flutter en HOME (el unico path persistente entre passes)
-echo "==> Clonando Flutter SDK..."
-git clone https://github.com/flutter/flutter.git -b stable --depth 1 "$HOME/flutter"
+# Flutter version PINEADA: sin pin, `-b stable` clona el HEAD del canal
+# stable en cada run y un release breaking rompe el build sin warning.
+# Build 14 ya fallo por esto (Flutter activo SPM por default ->
+# "Module cloud_firestore not found"). Update manual cuando se decida
+# adoptar nueva version + smoke test local antes. Mantener sincronizado
+# con .github/workflows/ci.yml.
+FLUTTER_VERSION="3.41.7"
+echo "==> Clonando Flutter SDK $FLUTTER_VERSION..."
+git clone https://github.com/flutter/flutter.git -b "$FLUTTER_VERSION" --depth 1 "$HOME/flutter"
 export PATH="$HOME/flutter/bin:$PATH"
 
 echo "==> Flutter version:"
