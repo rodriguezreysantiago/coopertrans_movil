@@ -228,9 +228,26 @@ class _DetalleTramo extends StatelessWidget {
       kgCargados: tramo.kgCargados,
       kgDescargados: tramo.kgDescargados,
     );
-    final comisionChoferTramo = brutos.montoChofer * (comisionPct / 100.0);
+    // Monto chofer del tramo: si la tarifa tiene `montoFijoChofer`,
+    // ese monto es lo que cobra el chofer (sin pct). Sino, aplicamos
+    // el porcentaje sobre la tarifa chofer base.
+    final montoFijoChofer = ts.montoFijoChofer;
+    final double comisionChoferTramo;
+    final bool esMontoFijo;
+    if (montoFijoChofer != null) {
+      comisionChoferTramo = montoFijoChofer;
+      esMontoFijo = true;
+    } else {
+      comisionChoferTramo = brutos.montoChofer * (comisionPct / 100.0);
+      esMontoFijo = false;
+    }
+    // Redondeo POR TRAMO al múltiplo de 5 descendente (Santiago
+    // 2026-05-19). La suma de redondeados es el monto del chofer del
+    // viaje (mismo número que `montoChoferRedondeado` en LIQUIDACION).
+    final comisionChoferTramoRedondeada =
+        CalculosViaje.redondearMultiploDe5Descendente(comisionChoferTramo);
     final hayMontos =
-        brutos.montoVecchi > 0 || brutos.montoChofer > 0;
+        brutos.montoVecchi > 0 || brutos.montoChofer > 0 || esMontoFijo;
     return Container(
       decoration: numero == null
           ? null
@@ -365,18 +382,45 @@ class _DetalleTramo extends StatelessWidget {
               label: 'Tarifa Vecchi (factura)',
               valor: '\$ ${AppFormatters.formatearMonto(brutos.montoVecchi)}',
             ),
-            _Linea(
-              label: 'Tarifa chofer (base)',
-              valor: '\$ ${AppFormatters.formatearMonto(brutos.montoChofer)}',
-              sub: true,
-            ),
-            _Linea(
-              label:
-                  'Comisión chofer (${comisionPct.toStringAsFixed(0)}%)',
-              valor:
-                  '\$ ${AppFormatters.formatearMonto(comisionChoferTramo)}',
-              highlight: true,
-            ),
+            if (esMontoFijo) ...[
+              // Tramo con monto fijo del chofer (no aplica 18%).
+              _Linea(
+                label: 'Tarifa chofer (base, referencia)',
+                valor:
+                    '\$ ${AppFormatters.formatearMonto(brutos.montoChofer)}',
+                sub: true,
+              ),
+              _Linea(
+                label: 'Monto chofer del tramo (fijo, redondeado)',
+                valor:
+                    '\$ ${AppFormatters.formatearMonto(comisionChoferTramoRedondeada)}',
+                highlight: true,
+              ),
+            ] else ...[
+              _Linea(
+                label: 'Tarifa chofer (base)',
+                valor:
+                    '\$ ${AppFormatters.formatearMonto(brutos.montoChofer)}',
+                sub: true,
+              ),
+              // Bruto sin redondear (informativo, sub-línea).
+              _Linea(
+                label:
+                    'Comisión chofer (${comisionPct.toStringAsFixed(0)}%, bruto)',
+                valor:
+                    '\$ ${AppFormatters.formatearMonto(comisionChoferTramo)}',
+                sub: true,
+              ),
+              // ESTE es el monto que efectivamente cobra el chofer
+              // por el tramo — múltiplo de 5 descendente. La suma de
+              // estos por tramo = `monto_chofer_redondeado` del viaje.
+              _Linea(
+                label: 'Comisión chofer redondeada (múltiplo de 5)',
+                valor:
+                    '\$ ${AppFormatters.formatearMonto(comisionChoferTramoRedondeada)}',
+                highlight: true,
+              ),
+            ],
           ],
         ],
       ),
