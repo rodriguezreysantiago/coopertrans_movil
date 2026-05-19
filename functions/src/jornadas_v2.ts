@@ -63,6 +63,22 @@ export const BLOQUE_LIMITE_SEGUNDOS = 3 * 3600 + 45 * 60; // 3h45 (fin bloque)
 export const BLOQUE_EXCEDIDO_SEGUNDOS = 4 * 3600; // 4h sin pausa = falta
 export const BLOQUES_POR_JORNADA = 3;
 
+// Umbrales de aviso por MANEJO NETO acumulado (no por bloques contados).
+//
+// Fix Santiago 2026-05-19: antes el aviso "12 horas de jornada" se
+// disparaba con `bloques_completos >= 3`, pero un bloque se cuenta
+// completo con CUALQUIER manejo previo + pausa de 15 min. Un chofer
+// que hace pausas cortas y frecuentes (30 min manejo + 20 min pausa
+// repetido) llegaba a "3 bloques" con apenas 1h30 manejo neto y le
+// salía "Llegás al límite de 12 horas de jornada" — falso positivo
+// confuso. Ahora avisamos por manejo NETO real:
+//   - 10h manejo neto → aviso temprano (heads-up "estás cerca").
+//   - 11h manejo neto → aviso de límite (norma YPF: 3 bloques × 3h45
+//     manejo neto = 11h15 en jornada de 12h). Mismo texto que antes
+//     pero ahora se dispara con manejo real, no con cuenta de bloques.
+export const JORNADA_MANEJO_PROXIMA_SEGUNDOS = 10 * 3600;
+export const JORNADA_MANEJO_LIMITE_SEGUNDOS = 11 * 3600;
+
 // TTLs para avisos en COLA_WHATSAPP (Fase 2 - 2026-05-18).
 // Si el bot esta caido y el aviso se entrega despues del TTL, el
 // consumer lo descarta sin enviar (mejor silencio que mensaje
@@ -121,7 +137,8 @@ export interface JornadaDoc {
   // Flags de "alerta enviada" (idempotencia: 1 vez por jornada)
   alerta_3_30_enviada: boolean;
   alerta_3_45_enviada: boolean;
-  alerta_cuota_enviada: boolean;
+  alerta_cuota_proxima_enviada: boolean; // 10h manejo neto (heads-up)
+  alerta_cuota_enviada: boolean;         // 11h manejo neto (límite)
   alerta_veda_enviada: boolean;
 
   // Flags de infracción (alimentan resumen a Molina)
@@ -424,6 +441,54 @@ async function encolarAvisoBloqueExcedido(
   });
 }
 
+async function encolarAvisoCuotaProxima(
+  dni: string, patente: string
+): Promise<void> {
+  const emp = await obtenerEmpleadoLite(dni);
+  if (!emp) return;
+  // Heads-up cuando lleva 10h manejo neto. Diferente del aviso 3h30
+  // (que es POR BLOQUE actual) — este mira el TOTAL acumulado en la
+  // jornada. Sirve para el caso del chofer que hace pausas frecuentes
+  // y cortas y nunca cruza 3h30 dentro de un bloque pero sí acumula
+  // jornada larga.
+  const variantes = [
+    `${emp.saludo},\n\n` +
+      "*Ya llevás 10 horas de manejo en esta jornada.* Cerca de las " +
+      "12 horas tenés que parar.\n\n" +
+      `Buscá dónde estacionar el ${patente} y planificá el descanso ` +
+      "(mínimo 8 horas de corrido).\n\n" +
+      "_Bot-On — Coopertrans Móvil_",
+    `${emp.saludo}.\n\n` +
+      "*Cumpliste 10 horas de conducción acumulada.* Te queda poco " +
+      "para el límite de 12 horas.\n\n" +
+      `Ubicá un lugar seguro para frenar el ${patente} y descansar ` +
+      "8 horas mínimo de corrido.\n\n" +
+      "_Bot-On — Coopertrans Móvil_",
+    `${emp.saludo}, atención.\n\n` +
+      "*Llevás 10 horas manejando hoy.* Empezá a buscar dónde " +
+      `estacionar el ${patente} — al llegar a 12 horas debés frenar ` +
+      "sí o sí.\n\n" +
+      "_Bot-On — Coopertrans Móvil_",
+  ];
+  await db().collection("COLA_WHATSAPP").add({
+    telefono: emp.tel,
+    mensaje: variantes[rrPick(variantes.length)],
+    estado: "PENDIENTE",
+    encolado_en: FieldValue.serverTimestamp(),
+    enviado_en: null,
+    error: null,
+    intentos: 0,
+    origen: "jornada_v2_cuota_proxima",
+    expira_en: expiraEnMin(TTL_JORNADA_BLOQUE_MIN),
+    destinatario_coleccion: "EMPLEADOS",
+    destinatario_id: dni,
+    campo_base: "JORNADA",
+    admin_dni: "BOT",
+    admin_nombre: "Bot vigilador jornada v2",
+    alert_patente: patente,
+  });
+}
+
 async function encolarAvisoCuotaCumplida(
   dni: string, patente: string
 ): Promise<void> {
@@ -561,6 +626,7 @@ function nuevaJornada(
     estado: "manejando",
     alerta_3_30_enviada: false,
     alerta_3_45_enviada: false,
+    alerta_cuota_proxima_enviada: false,
     alerta_cuota_enviada: false,
     alerta_veda_enviada: false,
     bloque_excedido: false,
@@ -681,7 +747,7 @@ export async function tickVigiladorJornada(): Promise<void> {
       // Solo se mandaba el ultimo, los anteriores se perdian
       // silenciosamente. Ahora encolamos TODOS los que se cumplen en
       // este tick.
-      const avisosPendientes: Array<"3h30" | "bloque_excedido" | "cuota" | "veda"> = [];
+      const avisosPendientes: Array<"3h30" | "bloque_excedido" | "cuota_proxima" | "cuota" | "veda"> = [];
 
       if (manejando) {
         // === Está manejando ===
@@ -724,14 +790,34 @@ export async function tickVigiladorJornada(): Promise<void> {
           j.bloque_excedido = true;
         }
 
-        // Cuota cumplida (avisa al chofer 1 vez por jornada si insiste en manejar)
-        if (
-          j.bloques_completos >= BLOQUES_POR_JORNADA &&
-          !j.alerta_cuota_enviada
-        ) {
-          avisosPendientes.push("cuota");
-          j.alerta_cuota_enviada = true;
-          j.cuota_excedida = true;
+        // Avisos de jornada por MANEJO NETO ACUMULADO.
+        // Fix Santiago 2026-05-19: antes mirábamos `bloques_completos >= 3`,
+        // pero un bloque cuenta como completo con cualquier manejo + pausa
+        // de 15+ min. Chofer con pausas cortas y frecuentes (30 min manejo
+        // + 20 min pausa repetido) llegaba a 3 bloques con 1h30 manejo real
+        // y le saltaba "12 horas de jornada" sin avisos previos. Ahora
+        // miramos el manejo neto y damos 2 avisos: heads-up a 10h, límite
+        // duro a 11h (norma YPF: 3 bloques × 3h45 = 11h15 manejo neto).
+        //
+        // Lógica jerárquica: si ya estamos en el umbral DURO, no mandamos
+        // el heads-up (sería incoherente recibir "10h" después de "12h").
+        // Esto también cubre el caso de jornadas pre-deploy que tenían
+        // `alerta_cuota_enviada=true` pero no el flag de cuota_proxima.
+        const totalManejoActual =
+          j.total_manejo_seg + j.bloque_actual_manejo_seg;
+        if (totalManejoActual >= JORNADA_MANEJO_LIMITE_SEGUNDOS) {
+          if (!j.alerta_cuota_enviada) {
+            avisosPendientes.push("cuota");
+            j.alerta_cuota_enviada = true;
+            j.cuota_excedida = true;
+          }
+          // Forzar el flag de heads-up — ya estamos pasados.
+          j.alerta_cuota_proxima_enviada = true;
+        } else if (totalManejoActual >= JORNADA_MANEJO_PROXIMA_SEGUNDOS) {
+          if (!j.alerta_cuota_proxima_enviada) {
+            avisosPendientes.push("cuota_proxima");
+            j.alerta_cuota_proxima_enviada = true;
+          }
         }
 
         // Veda nocturna (00:00-06:00 ART)
@@ -874,6 +960,7 @@ export async function tickVigiladorJornada(): Promise<void> {
         }
         if (avisoTipo === "3h30") await encolarAviso3h30(dni, patente);
         else if (avisoTipo === "bloque_excedido") await encolarAvisoBloqueExcedido(dni, patente);
+        else if (avisoTipo === "cuota_proxima") await encolarAvisoCuotaProxima(dni, patente);
         else if (avisoTipo === "cuota") await encolarAvisoCuotaCumplida(dni, patente);
         else if (avisoTipo === "veda") await encolarAvisoVedaNocturna(dni, patente);
         avisosEnviados++;
