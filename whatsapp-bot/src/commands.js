@@ -328,6 +328,9 @@ async function manejarSiEsComando(msg, contextos) {
           chofer
         );
         break;
+      case '/enviar-jornada':
+        await _comandoEnviarJornada(msg, contextos, args);
+        break;
       case '/silenciar':
         await _comandoSilenciar(msg, contextos, args);
         break;
@@ -516,6 +519,8 @@ async function _comandoAyuda(msg, esAdmin) {
     '/forzar-cron — correr el cron ahora.',
     '/test-aviso 12345678 — mandar prueba a ese DNI.',
     '/jornada 12345678 — estado del vigilador para ese chofer.',
+    '/enviar-jornada 12345678 — mandarle al chofer su estado de ' +
+      'jornada (el mismo que ve con /jornada).',
     '/silenciar 12345678 2h en taller — no mandar avisos por ese ' +
       'tiempo (motivo opcional).',
     '/desilenciar 12345678 — quitar el silencio.',
@@ -793,7 +798,118 @@ async function _comandoJornada(msg, { db }, args, chofer) {
  * NO le mostramos: total_dia vs jornada_actual (le confunde), flags
  * raw, último update Sitrack, último doc id, etc.
  */
-async function _replyJornadaChofer(msg, { chofer, jSnap, silSnap, fecha }) {
+async function _replyJornadaChofer(msg, opts) {
+  await msg.reply(_construirTextoJornadaChofer(opts));
+}
+
+/**
+ * `/enviar-jornada <DNI>` (solo admin) → encola al CHOFER el mismo texto
+ * que vería si tipeara `/jornada`. Santiago 2026-05-19: útil cuando el
+ * admin quiere que el chofer vea su estado sin tener que pedirlo (ej.
+ * discutiendo horas, recordatorio de descanso, etc.).
+ *
+ * Reusa `_construirTextoJornadaChofer`. Encola en COLA_WHATSAPP con
+ * origen time-sensitive `jornada_manual_admin` + TTL 30 min (el estado
+ * de jornada cambia con cada tick — si se entrega muy tarde estaría
+ * desactualizado, mejor que expire).
+ *
+ * Si el chofer está silenciado, NO encola y avisa al admin (el consumer
+ * lo skipearía de todos modos — mejor avisar de antemano y no generar
+ * un doc fantasma).
+ */
+async function _comandoEnviarJornada(msg, { db, fs }, args) {
+  const dni = (args[0] || '').replace(/\D+/g, '');
+  if (!dni) {
+    await msg.reply(
+      'Uso: /enviar-jornada <DNI>\nEj: /enviar-jornada 12345678'
+    );
+    return;
+  }
+
+  const fecha = _fechaArt();
+  const [empSnap, jQuery, silSnap] = await Promise.all([
+    db.collection('EMPLEADOS').doc(dni).get(),
+    db.collection('JORNADAS')
+      .where('chofer_dni', '==', dni)
+      .where('jornada_fin_ts', '==', null)
+      .limit(1)
+      .get(),
+    db.collection('BOT_SILENCIADOS_CHOFER').doc(dni).get(),
+  ]);
+
+  if (!empSnap.exists) {
+    await msg.reply(`No encontré un empleado con DNI ${dni} en EMPLEADOS.`);
+    return;
+  }
+  const data = empSnap.data() || {};
+  const tel = String(data.TELEFONO || '').trim();
+  if (!tel) {
+    await msg.reply(`El empleado ${dni} no tiene TELEFONO cargado.`);
+    return;
+  }
+  const nombre = String(data.NOMBRE || dni).trim();
+
+  // Si está silenciado, no encolar — avisar al admin.
+  if (silSnap.exists) {
+    const s = silSnap.data() || {};
+    const hasta = s.silenciado_hasta;
+    const hastaMs = hasta && hasta.toMillis ? hasta.toMillis() : 0;
+    if (hastaMs > Date.now()) {
+      await msg.reply(
+        `🔕 ${nombre} (DNI ${dni}) está silenciado hasta ` +
+        `${_fmtFechaHoraCompacto(hasta)} ART.\n\n` +
+        `El mensaje no se enviaría. Usá /desilenciar ${dni} primero ` +
+        `si querés mandarle la jornada igual.`
+      );
+      return;
+    }
+  }
+
+  const jSnap = jQuery.empty ? null : jQuery.docs[0];
+  const chofer = _mapChofer(dni, data);
+  const texto = _construirTextoJornadaChofer({ chofer, jSnap, silSnap, fecha });
+
+  // TTL 30 min: el estado de jornada es time-sensitive. Si el bot está
+  // caído y se entrega tarde, el contenido estaría desactualizado.
+  const admin = require('firebase-admin');
+  const expiraEn = admin.firestore.Timestamp.fromMillis(
+    Date.now() + 30 * 60 * 1000
+  );
+  const colaRef = await db.collection(fs.COLECCION).add({
+    telefono: tel,
+    mensaje: texto,
+    estado: fs.ESTADO.pendiente,
+    encolado_en: admin.firestore.FieldValue.serverTimestamp(),
+    enviado_en: null,
+    error: null,
+    intentos: 0,
+    origen: 'jornada_manual_admin',
+    expira_en: expiraEn,
+    destinatario_coleccion: 'EMPLEADOS',
+    destinatario_id: dni,
+    campo_base: 'JORNADA',
+    admin_dni: 'BOT',
+    admin_nombre: 'Bot /enviar-jornada',
+  });
+
+  await msg.reply(
+    `✓ Jornada encolada para ${nombre} (DNI ${dni}, tel ${tel}).\n` +
+    `Doc cola: ${colaRef.id}\n\n` +
+    (jSnap
+      ? 'El chofer recibe su estado actual de jornada.'
+      : 'El chofer no tiene jornada activa — recibe ese aviso.')
+  );
+}
+
+/**
+ * Construye el texto del estado de jornada en 2ª persona (el mismo que
+ * ve el chofer al tipear `/jornada`). Extraído de `_replyJornadaChofer`
+ * para poder reusarlo desde `/enviar-jornada <DNI>` (comando admin que
+ * encola este mismo texto al chat del chofer). Santiago 2026-05-19.
+ *
+ * Recibe `{ chofer, jSnap, silSnap, fecha }` y devuelve un string.
+ */
+function _construirTextoJornadaChofer({ chofer, jSnap, silSnap, fecha }) {
   const apodo = chofer.apodo || _primerNombreDe({ NOMBRE: chofer.nombre });
   const saludo = apodo ? `Hola ${apodo}` : 'Hola';
   const lineas = [`${saludo}, esta es tu jornada de hoy (${fecha}):`];
@@ -819,13 +935,13 @@ async function _replyJornadaChofer(msg, { chofer, jSnap, silSnap, fecha }) {
       'No tenés jornada activa ahora — o no manejaste en las últimas horas, ' +
       'o ya terminaste tu descanso de 8 hs.'
     );
-    await msg.reply(lineas.join('\n'));
-    return;
+    return lineas.join('\n');
   }
 
   // Modelo v2 (refactor Santiago 2026-05-19):
   // - Manejo continuo dentro de un bloque: hasta 3h45, debe pausar 15+ min.
-  // - Manejo neto total por jornada: hasta 11h15 (norma YPF — "12 hs jornada").
+  // - Manejo neto total por jornada: hasta 12h (límite — las paradas de
+  //   15 min suceden DENTRO de las 12h).
   // - Descanso entre jornadas: 8h misma posición para cerrar.
   // Avisos al chofer basados en MANEJO NETO (no en cuenta de bloques) —
   // antes con `bloques_completos >= 3` un chofer con pausas cortas y
@@ -914,7 +1030,7 @@ async function _replyJornadaChofer(msg, { chofer, jSnap, silSnap, fecha }) {
     lineas.push('✅ Jornada cerrada por descanso de 8h.');
   }
 
-  await msg.reply(lineas.join('\n'));
+  return lineas.join('\n');
 }
 
 /**
@@ -1135,5 +1251,6 @@ module.exports = {
   // Exportado para tests.
   _esAdmin,
   _adminWhitelist,
+  _construirTextoJornadaChofer,
   MIN_DIGITOS_PARA_MATCH,
 };

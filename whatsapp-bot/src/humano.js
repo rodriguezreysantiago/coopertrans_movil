@@ -121,8 +121,13 @@ const ORIGENES_TIME_SENSITIVE = new Set([
   // Vigilador de jornada (Cloud Functions jornadas_v2)
   'jornada_v2_bloque_3h30',
   'jornada_v2_bloque_excedido',
+  'jornada_v2_cuota_proxima',   // heads-up 11h (agregado 2026-05-19)
   'jornada_v2_cuota_cumplida',
   'jornada_v2_veda_nocturna',
+  // Envío manual del estado de jornada (comando admin /enviar-jornada).
+  // El admin lo pide explícitamente — debe entregarse ya, no esperar
+  // horario hábil.
+  'jornada_manual_admin',
   // Vigilador de jornada v1 (legacy — refactor a v2 2026-05-15).
   // Probablemente ya no se genera, pero por defensa lo dejamos
   // como time-sensitive (cero costo).
