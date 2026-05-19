@@ -100,14 +100,23 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
     return AppScaffold(
       title: 'Cola de WhatsApp',
       body: StreamBuilder<QuerySnapshot>(
-        stream: _service.streamCola(),
+        // Filtro server-side (Santiago 2026-05-19): si hay estado
+        // activo, el query trae solo docs con ese estado para que
+        // los conteos del header coincidan con el listado. Antes el
+        // filtro era client-side sobre los últimos 100 docs y los
+        // mensajes en posiciones más antiguas no aparecían aunque
+        // el contador sí los hubiese visto.
+        stream: _service.streamCola(estado: _filtroEstado),
         builder: (ctx, snap) {
           if (snap.hasError) {
             return AppErrorState(subtitle: snap.error.toString());
           }
           if (!snap.hasData) return const AppLoadingState();
           final docs = snap.data!.docs;
-          if (docs.isEmpty) {
+          // Listado vacío total → "No hay mensajes en cola" solo
+          // cuando NO hay filtro activo. Con filtro activo se muestra
+          // el mensaje "Sin mensajes con estado X" más abajo.
+          if (docs.isEmpty && _filtroEstado == null) {
             return const AppEmptyState(
               icon: Icons.smart_toy_outlined,
               title: 'No hay mensajes en cola',
@@ -115,19 +124,7 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
                   'Cuando encoles un aviso desde la auditoría de vencimientos, aparece acá.',
             );
           }
-          // Aplicamos el filtro por estado del lado cliente. Mantener
-          // el query original sin where() es lo más simple porque ya
-          // limita a 100 docs y permite que el _ResumenContador siga
-          // mostrando los conteos GLOBALES (no los del filtro), que es
-          // lo que el admin espera al filtrar.
-          final filtrados = _filtroEstado == null
-              ? docs
-              : docs
-                  .where((d) =>
-                      ((d.data() as Map<String, dynamic>)['estado'] ?? '')
-                          .toString() ==
-                      _filtroEstado)
-                  .toList();
+          final filtrados = docs;
           return ListView(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
             children: [

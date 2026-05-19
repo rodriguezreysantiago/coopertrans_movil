@@ -54,6 +54,14 @@
       "collectionGroup": "COLA_WHATSAPP",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "encolado_en", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "COLA_WHATSAPP",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "telefono", "order": "ASCENDING" },
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "enviado_en", "order": "ASCENDING" }

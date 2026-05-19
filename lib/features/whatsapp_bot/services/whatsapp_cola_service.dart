@@ -94,13 +94,23 @@ class WhatsAppColaService {
     await _db.collection(coleccion).doc(docId).delete();
   }
 
-  /// Stream con los últimos 100 docs ordenados por timestamp de
+  /// Stream con los últimos N docs ordenados por timestamp de
   /// encolado descendente. Útil para la pantalla "Cola de WhatsApp".
-  Stream<QuerySnapshot> streamCola({int limit = 100}) {
-    return _db
-        .collection(coleccion)
-        .orderBy('encolado_en', descending: true)
-        .limit(limit)
-        .snapshots();
+  ///
+  /// Si `estado` está, agrega `where('estado', '==', estado)` server-side.
+  /// Fix Santiago 2026-05-19: antes el filtro se aplicaba client-side
+  /// sobre los últimos 100 docs traídos — si los 4 errores estaban en
+  /// la posición 100+ por antigüedad, el listado decía "Sin mensajes
+  /// con estado ERROR" mientras el header del resumen (que traía 200)
+  /// sí los contaba. Inconsistencia confusa. Ahora el filtro va al
+  /// query → el listado siempre encuentra todos los matches del
+  /// estado pedido independientemente de la ventana cronológica.
+  Stream<QuerySnapshot> streamCola({int limit = 100, String? estado}) {
+    Query<Map<String, dynamic>> q =
+        _db.collection(coleccion).orderBy('encolado_en', descending: true);
+    if (estado != null && estado.isNotEmpty) {
+      q = q.where('estado', isEqualTo: estado);
+    }
+    return q.limit(limit).snapshots();
   }
 }
