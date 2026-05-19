@@ -250,6 +250,93 @@ class RecibosAdelantoService {
     );
     return doc.save();
   }
+
+  /// Genera UN solo PDF con el plan completo de N cuotas mensuales.
+  /// Pedido Santiago 2026-05-19: cuando un adelanto se reparte en
+  /// cuotas, el chofer firma 1 papel donde están detalladas todas
+  /// las cuotas (#, fecha, monto). Estructura A4 con 2 mitades
+  /// (COPIA OFICINA + COPIA CHOFER) — misma anatomía que el recibo
+  /// individual pero con tabla de cuotas en lugar de un solo monto.
+  ///
+  /// `cuotas` debe estar ordenado por `cuotaNumero` ascendente. La
+  /// primera cuota es la que "representa" al plan (su `numeroRecibo`
+  /// se usa como N° impreso). Las demás cuotas se liquidan
+  /// individualmente como cualquier adelanto, sin numero_recibo propio.
+  static Future<Uint8List> generarPdfPlanCuotas({
+    required List<AdelantoChofer> cuotas,
+    required int numeroRecibo,
+    required bool esReimpresion,
+  }) async {
+    if (cuotas.isEmpty) {
+      throw ArgumentError('La lista de cuotas no puede estar vacía.');
+    }
+    final robotoRegular = pw.Font.ttf(
+      await rootBundle.load('assets/fonts/Roboto-Regular.ttf'),
+    );
+    final robotoBold = pw.Font.ttf(
+      await rootBundle.load('assets/fonts/Roboto-Bold.ttf'),
+    );
+    final doc = pw.Document(
+      theme: pw.ThemeData.withFont(base: robotoRegular, bold: robotoBold),
+    );
+    final fechaImpresion = DateTime.now();
+    pw.MemoryImage? logo;
+    try {
+      final bytes = await rootBundle.load('assets/brand/vavg_logo.png');
+      logo = pw.MemoryImage(bytes.buffer.asUint8List());
+    } catch (_) {
+      logo = null;
+    }
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(20),
+        build: (ctx) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              pw.Expanded(
+                child: _MitadPlanCuotas.build(
+                  cuotas: cuotas,
+                  numeroRecibo: numeroRecibo,
+                  fechaImpresion: fechaImpresion,
+                  esReimpresion: esReimpresion,
+                  copia: 'COPIA OFICINA',
+                  logo: logo,
+                ),
+              ),
+              pw.Container(
+                margin: const pw.EdgeInsets.symmetric(vertical: 8),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.center,
+                  children: [
+                    pw.Text(
+                      '- - - - - - - - - - - - - - - - - - - - - '
+                      'CORTAR POR LA LÍNEA - - - - - - - - - - - - - - - - - - - - -',
+                      style: const pw.TextStyle(
+                        fontSize: 8, color: PdfColors.grey600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              pw.Expanded(
+                child: _MitadPlanCuotas.build(
+                  cuotas: cuotas,
+                  numeroRecibo: numeroRecibo,
+                  fechaImpresion: fechaImpresion,
+                  esReimpresion: esReimpresion,
+                  copia: 'COPIA CHOFER',
+                  logo: logo,
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    return doc.save();
+  }
 }
 
 /// Builder de cada mitad del comprobante. Encabezado + body + firma.
@@ -468,6 +555,241 @@ class _Mitad {
         ],
       ),
     );
+  }
+}
+
+/// Builder de cada mitad del comprobante de PLAN DE CUOTAS (Santiago
+/// 2026-05-19). Estructura idéntica al `_Mitad` regular pero el body
+/// es una tabla con N cuotas en lugar de un único monto. El total
+/// del plan se resalta abajo.
+class _MitadPlanCuotas {
+  static pw.Widget build({
+    required List<AdelantoChofer> cuotas,
+    required int numeroRecibo,
+    required DateTime fechaImpresion,
+    required bool esReimpresion,
+    required String copia,
+    required pw.MemoryImage? logo,
+  }) {
+    final primera = cuotas.first;
+    final total = cuotas.fold<double>(0, (acc, c) => acc + c.monto);
+    final reciboPad = numeroRecibo.toString().padLeft(6, '0');
+    final obs = primera.observacion?.trim() ?? '';
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey400, width: 0.6),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          // ─── Encabezado ────────────────────────────────────────
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              if (logo != null)
+                pw.Container(
+                  width: 50, height: 50,
+                  child: pw.Image(logo),
+                ),
+              pw.SizedBox(width: 12),
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'COMPROBANTE PLAN DE CUOTAS',
+                      style: pw.TextStyle(
+                        fontSize: 12, fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.Text(
+                      'Coopertrans Móvil',
+                      style: const pw.TextStyle(
+                        fontSize: 9, color: PdfColors.grey700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 6, vertical: 2),
+                    decoration: pw.BoxDecoration(
+                      color: copia == 'COPIA OFICINA'
+                          ? PdfColors.blueGrey800
+                          : PdfColors.green800,
+                      borderRadius: pw.BorderRadius.circular(2),
+                    ),
+                    child: pw.Text(
+                      copia,
+                      style: pw.TextStyle(
+                        color: PdfColors.white,
+                        fontSize: 8,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    'Recibo N° $reciboPad',
+                    style: pw.TextStyle(
+                      fontSize: 10, fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  if (esReimpresion)
+                    pw.Text(
+                      'REIMPRESIÓN',
+                      style: const pw.TextStyle(
+                        fontSize: 7, color: PdfColors.red700,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 8),
+          // ─── Datos del chofer ──────────────────────────────────
+          _Linea(label: 'Empleado',
+              valor: primera.choferNombre?.trim().isNotEmpty == true
+                  ? primera.choferNombre!
+                  : 'DNI ${primera.choferDni}'),
+          _Linea(label: 'DNI', valor: primera.choferDni),
+          if (obs.isNotEmpty) _Linea(label: 'Concepto', valor: obs),
+          _Linea(label: 'Medio de pago', valor: primera.medioPago.etiqueta),
+          pw.SizedBox(height: 6),
+          // ─── Tabla de cuotas ───────────────────────────────────
+          pw.Table(
+            columnWidths: const {
+              0: pw.FlexColumnWidth(1.2),
+              1: pw.FlexColumnWidth(3),
+              2: pw.FlexColumnWidth(3),
+            },
+            border: pw.TableBorder.all(
+                color: PdfColors.grey400, width: 0.5),
+            children: [
+              pw.TableRow(
+                decoration:
+                    const pw.BoxDecoration(color: PdfColors.blueGrey800),
+                children: [
+                  _cellHeader('CUOTA'),
+                  _cellHeader('FECHA'),
+                  _cellHeader('MONTO', align: pw.TextAlign.right),
+                ],
+              ),
+              for (final c in cuotas)
+                pw.TableRow(
+                  children: [
+                    _cellDato('${c.cuotaNumero ?? "?"}/'
+                        '${c.cuotasTotal ?? cuotas.length}'),
+                    _cellDato(_fmtFecha(c.fecha)),
+                    _cellDato('\$ ${_fmtMonto(c.monto)}',
+                        align: pw.TextAlign.right, bold: true),
+                  ],
+                ),
+              // Fila TOTAL
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(color: PdfColors.amber50),
+                children: [
+                  _cellDato('TOTAL', bold: true),
+                  _cellDato(''),
+                  _cellDato('\$ ${_fmtMonto(total)}',
+                      align: pw.TextAlign.right, bold: true),
+                ],
+              ),
+            ],
+          ),
+          pw.Spacer(),
+          // ─── Firma ─────────────────────────────────────────────
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.end,
+            children: [
+              pw.Expanded(
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Container(
+                      height: 0.6, color: PdfColors.black,
+                      margin: const pw.EdgeInsets.only(right: 30),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text('Firma del empleado',
+                        style: const pw.TextStyle(
+                            fontSize: 8, color: PdfColors.grey700)),
+                  ],
+                ),
+              ),
+              pw.SizedBox(width: 12),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(
+                    'Impreso ${_fmtFechaHora(fechaImpresion)}',
+                    style: const pw.TextStyle(
+                        fontSize: 7, color: PdfColors.grey600),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _cellHeader(String text,
+      {pw.TextAlign align = pw.TextAlign.left}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+      child: pw.Text(
+        text, textAlign: align,
+        style: pw.TextStyle(
+          color: PdfColors.white,
+          fontSize: 8,
+          fontWeight: pw.FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  static pw.Widget _cellDato(String text,
+      {pw.TextAlign align = pw.TextAlign.left, bool bold = false}) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      child: pw.Text(
+        text, textAlign: align,
+        style: pw.TextStyle(
+          fontSize: 9,
+          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+      ),
+    );
+  }
+
+  static String _fmtFecha(DateTime d) {
+    final dd = d.day.toString().padLeft(2, '0');
+    final mm = d.month.toString().padLeft(2, '0');
+    return '$dd-$mm-${d.year}';
+  }
+
+  static String _fmtFechaHora(DateTime d) {
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mi = d.minute.toString().padLeft(2, '0');
+    return '${_fmtFecha(d)} $hh:$mi';
+  }
+
+  static String _fmtMonto(double v) {
+    // Formato AR: 1.234,56
+    final entero = v.truncate();
+    final dec = ((v - entero).abs() * 100).round().toString().padLeft(2, '0');
+    final enteroStr = entero
+        .toString()
+        .replaceAllMapped(
+            RegExp(r'(\d)(?=(\d{3})+(?!\d))'), (m) => '${m[1]}.');
+    return '$enteroStr,$dec';
   }
 }
 

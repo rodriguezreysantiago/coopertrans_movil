@@ -180,6 +180,157 @@ class AdelantosService {
     return docRef.id;
   }
 
+  /// Crea N cuotas mensuales de un adelanto. Genera N docs
+  /// `ADELANTOS_CHOFER` con el mismo `grupo_cuotas_id` (uuid común) y
+  /// fechas escalonadas mes a mes (mismo día del mes siguiente).
+  ///
+  /// Reparto del monto:
+  ///   - `montoPorCuota = floor5(montoTotal / cuotas)` (redondeo a
+  ///     múltiplo de 5 inmediatamente inferior, consistente con la
+  ///     regla de redondeo del cálculo de viajes).
+  ///   - Si hay resto sin asignar, la PRIMERA cuota lleva la
+  ///     diferencia (para que el chofer cobre exactamente el monto
+  ///     total acordado).
+  ///   - Ejemplo: $100 en 3 cuotas → floor5(33.33) = 30. Resto = 100 −
+  ///     30×3 = 10 → cuota 1: $40, cuota 2: $30, cuota 3: $30.
+  ///
+  /// Fechas: cada cuota es el mismo día del mes siguiente. Si el día
+  /// no existe en el mes destino (31 enero + 1 mes), cae al último
+  /// día del mes destino (28 o 29 feb según bisiesto).
+  ///
+  /// Devuelve la lista de IDs de adelantos creados (en orden cuota
+  /// 1, 2, …, N) y el `grupoCuotasId` común.
+  ///
+  /// Pedido Santiago 2026-05-19: descuentos en hasta 6 cuotas con
+  /// 1 recibo único que detalla el plan completo.
+  static Future<({String grupoCuotasId, List<String> adelantoIds})>
+      crearAdelantosEnCuotas({
+    required String choferDni,
+    String? choferNombre,
+    required DateTime fechaPrimera,
+    required double montoTotal,
+    required int cuotas,
+    String? observacion,
+    MedioPagoAdelanto medioPago = MedioPagoAdelanto.efectivo,
+    String? viajeId,
+    required String creadoPorDni,
+    String? creadoPorNombre,
+  }) async {
+    if (montoTotal <= 0) {
+      throw ArgumentError('El monto total debe ser mayor a 0.');
+    }
+    if (cuotas < 2 || cuotas > 6) {
+      throw ArgumentError('Las cuotas deben estar entre 2 y 6.');
+    }
+    if (choferDni.trim().isEmpty) {
+      throw ArgumentError('El chofer es obligatorio.');
+    }
+
+    final montos = repartirEnCuotas(montoTotal: montoTotal, cuotas: cuotas);
+    final fechas = List<DateTime>.generate(
+      cuotas,
+      (i) => sumarMesesPreservandoDia(fechaPrimera, i),
+    );
+
+    // ID único del grupo (timestamp + suffix random — sin uuid lib).
+    final grupoCuotasId = 'gc_'
+        '${DateTime.now().microsecondsSinceEpoch}'
+        '_${(_db.collection('_').doc().id).substring(0, 6)}';
+
+    final batch = _db.batch();
+    final ids = <String>[];
+    for (var i = 0; i < cuotas; i++) {
+      final docRef = _col.doc();
+      ids.add(docRef.id);
+      batch.set(docRef, <String, dynamic>{
+        'chofer_dni': choferDni,
+        if (choferNombre != null) 'chofer_nombre': choferNombre,
+        'fecha': Timestamp.fromDate(fechas[i]),
+        'monto': montos[i],
+        if (observacion != null && observacion.trim().isNotEmpty)
+          'observacion': observacion.trim(),
+        'medio_pago': medioPago.codigo,
+        if (viajeId != null && viajeId.trim().isNotEmpty) 'viaje_id': viajeId,
+        'pagado': false,
+        // Campos de cuota
+        'grupo_cuotas_id': grupoCuotasId,
+        'cuota_numero': i + 1,
+        'cuotas_total': cuotas,
+        'creado_en': FieldValue.serverTimestamp(),
+        'creado_por_dni': creadoPorDni,
+        if (creadoPorNombre != null) 'creado_por_nombre': creadoPorNombre,
+        'actualizado_en': FieldValue.serverTimestamp(),
+        'actualizado_por_dni': creadoPorDni,
+      });
+    }
+    await batch.commit();
+    AppLogger.log(
+      'Plan cuotas creado: grupo=$grupoCuotasId chofer=$choferDni '
+      'monto_total=$montoTotal cuotas=$cuotas montos=$montos',
+    );
+    return (grupoCuotasId: grupoCuotasId, adelantoIds: ids);
+  }
+
+  /// Trae todas las cuotas de un grupo (incluidas pagadas/eliminadas)
+  /// ordenadas por número. Útil para el recibo único del plan.
+  static Future<List<AdelantoChofer>> obtenerCuotasDelGrupo(
+    String grupoCuotasId,
+  ) async {
+    final snap = await _col
+        .where('grupo_cuotas_id', isEqualTo: grupoCuotasId)
+        .get();
+    final lista = snap.docs
+        .map((d) => AdelantoChofer.fromMap(d.id, d.data()))
+        .toList()
+      ..sort((a, b) => (a.cuotaNumero ?? 0).compareTo(b.cuotaNumero ?? 0));
+    return lista;
+  }
+
+  /// Reparte un monto total en N cuotas. Cada cuota es múltiplo de 5
+  /// (consistente con la regla de redondeo del módulo). Si hay resto
+  /// sin asignar después del reparto exacto, la PRIMERA cuota lleva la
+  /// diferencia para que el total cobrado coincida con el acordado.
+  ///
+  /// Visible para tests.
+  static List<double> repartirEnCuotas({
+    required double montoTotal,
+    required int cuotas,
+  }) {
+    // Redondeo a múltiplo de 5 descendente — misma regla que viajes
+    final montoBase = ((montoTotal / cuotas) / 5).floor() * 5.0;
+    final asignado = montoBase * cuotas;
+    final resto = montoTotal - asignado;
+    final montos = List<double>.filled(cuotas, montoBase);
+    // El resto va a la primera cuota (asegurando que la suma == total
+    // acordado). Si resto = 0, todas las cuotas son iguales.
+    montos[0] = montoBase + resto;
+    return montos;
+  }
+
+  /// Suma N meses a una fecha preservando el día del mes. Si el día
+  /// no existe en el mes destino (ej. 31 enero + 1 mes), cae al
+  /// último día del mes destino (28/29 feb).
+  ///
+  /// Visible para tests.
+  static DateTime sumarMesesPreservandoDia(DateTime base, int meses) {
+    if (meses == 0) return base;
+    final mesObjetivo = base.month + meses;
+    final anioObjetivo = base.year + ((mesObjetivo - 1) ~/ 12);
+    final mesNormalizado = ((mesObjetivo - 1) % 12) + 1;
+    // Último día del mes destino (día 0 del mes siguiente)
+    final ultimoDia =
+        DateTime(anioObjetivo, mesNormalizado + 1, 0).day;
+    final dia = base.day > ultimoDia ? ultimoDia : base.day;
+    return DateTime(
+      anioObjetivo,
+      mesNormalizado,
+      dia,
+      base.hour,
+      base.minute,
+      base.second,
+    );
+  }
+
   /// Actualiza campos del adelanto. NO toca `numero_recibo` ni
   /// `impreso_en` (esos los gestiona la Cloud Function de impresión).
   static Future<void> actualizarAdelanto({

@@ -820,6 +820,35 @@ class _CardAdelanto extends StatelessWidget {
               // (porque suele requerir más seguimiento — comprobante
               // bancario, etc.), teal para efectivo (entrega directa).
               _ChipMedioPago(medio: adelanto.medioPago),
+              // Chip de cuota (si es parte de un plan en cuotas).
+              if (adelanto.esCuota)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentBlue.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: AppColors.accentBlue.withValues(alpha: 0.5)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.repeat,
+                          size: 11, color: AppColors.accentBlue),
+                      const SizedBox(width: 4),
+                      Text(
+                        'CUOTA ${adelanto.cuotaNumero}/${adelanto.cuotasTotal}',
+                        style: const TextStyle(
+                          color: AppColors.accentBlue,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               // Chip tappeable de estado de pago. PENDIENTE = naranja,
               // PAGADO = verde con fecha. Tap → toggle (con feedback
               // del service). Si el adelanto está eliminado, NO es
@@ -1002,6 +1031,13 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
   // Default = efectivo (Santiago 2026-05-13). La mayoría de los
   // adelantos se entregan en mano.
   MedioPagoAdelanto _medioPago = MedioPagoAdelanto.efectivo;
+  // Cuotas mensuales (Santiago 2026-05-19): si está activo, el monto
+  // ingresado es el TOTAL a financiar y se divide en N cuotas con
+  // fechas escalonadas mes a mes. Default OFF (pago único histórico).
+  // Solo disponible en MODO ALTA — editar cuotas individuales no
+  // dispara este flujo.
+  bool _enCuotas = false;
+  int _cuotas = 2;
   bool _guardando = false;
   // Si verdadero, ya guardamos el adelanto y estamos esperando que la
   // impresión salga (Cloud Function + PDF + envío a impresora). Lo
@@ -1131,15 +1167,69 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
               // ─── Monto ───
               TextField(
                 controller: _montoCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Monto *',
+                decoration: InputDecoration(
+                  labelText: _enCuotas ? 'Monto TOTAL a financiar *' : 'Monto *',
                   prefixText: '\$ ',
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
+                  helperText: _enCuotas
+                      ? 'Se dividirá en $_cuotas cuotas mensuales'
+                      : null,
                 ),
                 keyboardType: TextInputType.number,
                 inputFormatters: [AppFormatters.inputMiles],
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 12),
+              // ─── Cuotas mensuales (solo en alta) ────────────────
+              if (!_esEdicion) ...[
+                Row(
+                  children: [
+                    Checkbox(
+                      value: _enCuotas,
+                      onChanged: (v) =>
+                          setState(() => _enCuotas = v ?? false),
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'Descontar en cuotas mensuales',
+                        style: TextStyle(color: Colors.white, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_enCuotas) ...[
+                  const Padding(
+                    padding: EdgeInsets.only(left: 4, bottom: 4),
+                    child: Text(
+                      'Cantidad de cuotas',
+                      style: TextStyle(color: Colors.white60, fontSize: 12),
+                    ),
+                  ),
+                  SegmentedButton<int>(
+                    segments: const [
+                      ButtonSegment(value: 2, label: Text('2')),
+                      ButtonSegment(value: 3, label: Text('3')),
+                      ButtonSegment(value: 4, label: Text('4')),
+                      ButtonSegment(value: 5, label: Text('5')),
+                      ButtonSegment(value: 6, label: Text('6')),
+                    ],
+                    selected: {_cuotas},
+                    onSelectionChanged: (sel) =>
+                        setState(() => _cuotas = sel.first),
+                    showSelectedIcon: false,
+                    style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  _PreviewCuotas(
+                    montoTotalRaw: _montoCtrl.text,
+                    cuotas: _cuotas,
+                    fechaPrimera: _fecha,
+                  ),
+                ],
+                const SizedBox(height: 12),
+              ],
               // ─── Medio de pago ───
               // Toggle entre efectivo (default) y transferencia. Aparece
               // en el comprobante impreso, donde el chofer firma.
@@ -1303,6 +1393,33 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
       }
 
       // ─── Modo alta ──────────────────────────────────────────────
+      // Modo CUOTAS: dispara `crearAdelantosEnCuotas` que genera N
+      // docs (uno por cuota) con fechas escalonadas. El recibo
+      // impreso es UNO solo con la tabla del plan completo.
+      if (_enCuotas) {
+        final res = await AdelantosService.crearAdelantosEnCuotas(
+          choferDni: _choferDni!,
+          choferNombre: _choferNombre,
+          fechaPrimera: _fecha,
+          montoTotal: monto,
+          cuotas: _cuotas,
+          observacion: obs,
+          medioPago: _medioPago,
+          creadoPorDni: dniActual,
+          creadoPorNombre: PrefsService.nombre,
+        );
+        if (!mounted) return;
+        setState(() => _imprimiendo = true);
+        // Imprimir 1 recibo con plan completo de cuotas.
+        await _ComprobantePrinter.imprimirPlanCuotas(
+          context: context,
+          grupoCuotasId: res.grupoCuotasId,
+        );
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+
+      // Modo PAGO ÚNICO (flujo histórico).
       final adelantoId = await AdelantosService.crearAdelanto(
         choferDni: _choferDni!,
         choferNombre: _choferNombre,
@@ -1467,6 +1584,142 @@ class _ComprobantePrinter {
       );
       return false;
     }
+  }
+
+  /// Imprime UN solo comprobante con el plan completo de cuotas.
+  /// Pedido Santiago 2026-05-19: cuando un adelanto se reparte en N
+  /// cuotas, el chofer firma 1 papel donde están detalladas todas
+  /// las cuotas (fechas, montos). Cada cuota individual se liquida
+  /// después como un AdelantoChofer normal.
+  static Future<bool> imprimirPlanCuotas({
+    required BuildContext context,
+    required String grupoCuotasId,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      // 1. Traer todas las cuotas del grupo (ordenadas).
+      final cuotas =
+          await AdelantosService.obtenerCuotasDelGrupo(grupoCuotasId);
+      if (cuotas.isEmpty) {
+        AppFeedback.warningOn(messenger,
+            'No se encontraron cuotas del grupo. Probá reimprimir desde la card.');
+        return false;
+      }
+      // 2. Asignar / reusar correlativo para la PRIMERA cuota
+      // (representa al plan — las demás cuotas no necesitan número
+      // propio porque van todas en el mismo papel).
+      final primera = cuotas.first;
+      final resultado = await RecibosAdelantoService.asignarNumeroSiFalta(
+        adelantoId: primera.id,
+      );
+      final numero = resultado.numero;
+      // 3. Generar PDF con plan completo.
+      final Uint8List pdfBytes =
+          await RecibosAdelantoService.generarPdfPlanCuotas(
+        cuotas: cuotas,
+        numeroRecibo: numero,
+        esReimpresion: resultado.esReimpresion,
+      );
+      final nroPad = numero.toString().padLeft(6, '0');
+      final outcome = await PdfPrinter.imprimir(
+        bytes: pdfBytes,
+        nombreArchivo: 'Plan-Cuotas-Nro-$nroPad.pdf',
+        etiquetaCorta:
+            'Plan de ${cuotas.length} cuotas Nro. $nroPad',
+      );
+      AppFeedback.successOn(messenger, outcome.mensajeUsuario);
+      return outcome.success;
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo generar el comprobante del plan. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
+      return false;
+    }
+  }
+}
+
+/// Preview del reparto de cuotas en el form (tabla con monto y
+/// fecha de cada una). Se actualiza al cambiar monto/cuotas/fecha.
+class _PreviewCuotas extends StatelessWidget {
+  final String montoTotalRaw;
+  final int cuotas;
+  final DateTime fechaPrimera;
+
+  const _PreviewCuotas({
+    required this.montoTotalRaw,
+    required this.cuotas,
+    required this.fechaPrimera,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final monto =
+        AppFormatters.parsearMiles(montoTotalRaw)?.toDouble() ?? 0;
+    if (monto <= 0) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: const Text(
+          'Cargá el monto total para ver el detalle de las cuotas.',
+          style: TextStyle(color: Colors.white54, fontSize: 12),
+        ),
+      );
+    }
+    final montos = AdelantosService.repartirEnCuotas(
+      montoTotal: monto,
+      cuotas: cuotas,
+    );
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: AppColors.accentBlue.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+            color: AppColors.accentBlue.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < cuotas; i++)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  Text(
+                    'Cuota ${i + 1}/$cuotas',
+                    style: const TextStyle(
+                        color: Colors.white70, fontSize: 12),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      AppFormatters.formatearFecha(
+                          AdelantosService.sumarMesesPreservandoDia(
+                              fechaPrimera, i)),
+                      style: const TextStyle(
+                          color: Colors.white54, fontSize: 11),
+                    ),
+                  ),
+                  Text(
+                    '\$ ${AppFormatters.formatearMonto(montos[i])}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

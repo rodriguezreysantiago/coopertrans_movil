@@ -111,6 +111,27 @@ class AdelantoChofer {
   final String? eliminadoPorDni;
   final String? eliminadoMotivo;
 
+  // ─── Cuotas mensuales (Santiago 2026-05-19) ──────────────────────
+  /// Si el adelanto es parte de un plan de cuotas, este id es común
+  /// a todas las cuotas del grupo (uuid generado al crear). null si es
+  /// adelanto único (no en cuotas).
+  ///
+  /// Ejemplo: $90.000 en 3 cuotas → se generan 3 docs AdelantoChofer
+  /// con mismo `grupoCuotasId`, `cuotaNumero` = 1/2/3, `cuotasTotal`
+  /// = 3, fechas escalonadas un mes cada una.
+  ///
+  /// Cada cuota se liquida individualmente como cualquier adelanto.
+  final String? grupoCuotasId;
+
+  /// Número de cuota dentro del plan (1, 2, …, N). null si no es cuota.
+  final int? cuotaNumero;
+
+  /// Total de cuotas del plan al que pertenece (N). null si no es cuota.
+  final int? cuotasTotal;
+
+  /// Helper UI: ¿es parte de un plan en cuotas?
+  bool get esCuota => grupoCuotasId != null && cuotaNumero != null;
+
   // ─── Auditoría ───────────────────────────────────────────────────
   final DateTime? creadoEn;
   final String? creadoPorDni;
@@ -136,6 +157,9 @@ class AdelantoChofer {
     this.eliminadoEn,
     this.eliminadoPorDni,
     this.eliminadoMotivo,
+    this.grupoCuotasId,
+    this.cuotaNumero,
+    this.cuotasTotal,
     this.creadoEn,
     this.creadoPorDni,
     this.creadoPorNombre,
@@ -164,6 +188,9 @@ class AdelantoChofer {
       eliminadoEn: (d['eliminado_en'] as Timestamp?)?.toDate(),
       eliminadoPorDni: d['eliminado_por_dni']?.toString(),
       eliminadoMotivo: d['eliminado_motivo']?.toString(),
+      grupoCuotasId: d['grupo_cuotas_id']?.toString(),
+      cuotaNumero: (d['cuota_numero'] as num?)?.toInt(),
+      cuotasTotal: (d['cuotas_total'] as num?)?.toInt(),
       creadoEn: (d['creado_en'] as Timestamp?)?.toDate(),
       creadoPorDni: d['creado_por_dni']?.toString(),
       creadoPorNombre: d['creado_por_nombre']?.toString(),
