@@ -642,6 +642,183 @@ function nuevaJornada(
   return { ref, data };
 }
 
+// ─── Máquina de estados (PURA) ───────────────────────────────────────────────
+
+export type AvisoJornada =
+  | "3h30"
+  | "bloque_excedido"
+  | "cuota_proxima"
+  | "cuota"
+  | "veda";
+
+export interface EvaluarTickInput {
+  /** ignition ON + speed > umbral + poll no stale (lo decide el caller). */
+  manejando: boolean;
+  /** segundos transcurridos desde el último tick (ya capado a DELTA_MAX). */
+  deltaSeg: number;
+  /** epoch ms del "ahora" del tick (inyectable para tests). */
+  ahoraMs: number;
+  lat: number | null;
+  lng: number | null;
+  /**
+   * Para la excepción de veda nocturna: ¿el chofer cumplió 8h de descanso
+   * en su jornada anterior? El caller lo precomputa (query a JORNADAS) SOLO
+   * cuando hace falta (en veda + manejo < 2h + sin aviso de veda previo).
+   * `false` por default = fail-safe (avisar veda ante duda).
+   */
+  tieneDescansoPrevio: boolean;
+}
+
+export interface EvaluarTickResult {
+  /** avisos a encolar este tick (en orden). */
+  avisos: AvisoJornada[];
+  /** true si la jornada se cerró por descanso de 8h. */
+  cerrada: boolean;
+}
+
+/**
+ * Máquina de estados PURA del vigilador de jornada v2. Muta `j` in-place
+ * (segundos, flags, estado, timestamps) y devuelve los avisos a encolar
+ * + si la jornada se cerró. SIN I/O — testeable sin Firestore.
+ *
+ * Extraída de `tickVigiladorJornada` (2026-05-19) para lockear con tests
+ * la lógica de decisión, especialmente el fix de avisos por MANEJO NETO
+ * (cuota_proxima 11h / cuota 12h) en lugar de bloques contados.
+ *
+ * El único I/O del tick original (el query `descansoPrevioCumplido` para
+ * la excepción de veda) se externalizó: el caller lo precomputa y lo pasa
+ * en `input.tieneDescansoPrevio`.
+ */
+export function evaluarTickJornada(
+  j: JornadaDoc,
+  input: EvaluarTickInput
+): EvaluarTickResult {
+  const { manejando, deltaSeg, ahoraMs, lat, lng, tieneDescansoPrevio } = input;
+  const ahora = Timestamp.fromMillis(ahoraMs);
+  const avisos: AvisoJornada[] = [];
+  let cerrada = false;
+
+  if (manejando) {
+    // === Está manejando ===
+    j.bloque_actual_manejo_seg += deltaSeg;
+    j.bloque_actual_pausa_seg = 0;
+    j.estado = "manejando";
+
+    // Reset tracking descanso
+    j.descanso_inicio_ts = null;
+    j.descanso_inicio_lat = null;
+    j.descanso_inicio_lng = null;
+    j.descanso_segundos = 0;
+
+    // Aviso 3h30 (heads-up del bloque actual de manejo continuo).
+    if (
+      j.bloque_actual_manejo_seg >= BLOQUE_ALERTA_TEMPRANA_SEGUNDOS &&
+      !j.alerta_3_30_enviada
+    ) {
+      avisos.push("3h30");
+      j.alerta_3_30_enviada = true;
+    }
+
+    // Aviso 4h (infracción de bloque sin pausar). 1 vez por bloque.
+    if (
+      j.bloque_actual_manejo_seg >= BLOQUE_EXCEDIDO_SEGUNDOS &&
+      !j.bloque_excedido
+    ) {
+      avisos.push("bloque_excedido");
+      j.bloque_excedido = true;
+    }
+
+    // Avisos de jornada por MANEJO NETO acumulado (no por bloques contados).
+    // Límite = 12h de manejo neto (las paradas de 15 min suceden DENTRO de
+    // las 12h). Heads-up a 11h. Jerárquico: si pasamos el límite duro, no
+    // mandamos el heads-up (incoherente recibir "11h" después de "12h").
+    const totalManejoActual =
+      j.total_manejo_seg + j.bloque_actual_manejo_seg;
+    if (totalManejoActual >= JORNADA_MANEJO_LIMITE_SEGUNDOS) {
+      if (!j.alerta_cuota_enviada) {
+        avisos.push("cuota");
+        j.alerta_cuota_enviada = true;
+        j.cuota_excedida = true;
+      }
+      j.alerta_cuota_proxima_enviada = true;
+    } else if (totalManejoActual >= JORNADA_MANEJO_PROXIMA_SEGUNDOS) {
+      if (!j.alerta_cuota_proxima_enviada) {
+        avisos.push("cuota_proxima");
+        j.alerta_cuota_proxima_enviada = true;
+      }
+    }
+
+    // Veda nocturna (00:00-06:00 ART). Se levanta si el chofer cumplió 8h
+    // descanso previo Y lleva poco manejo en esta jornada (< 2h) — caso del
+    // chofer que sale legítimamente 5:30 AM. El query lo hizo el caller.
+    const hora = horaArt(ahoraMs);
+    const enVeda =
+      hora >= VEDA_NOCTURNA_DESDE_HORA && hora < VEDA_NOCTURNA_HASTA_HORA;
+    if (enVeda && !j.alerta_veda_enviada) {
+      const HORAS2_SEG = 2 * 3600;
+      const avisarVeda = !(totalManejoActual < HORAS2_SEG && tieneDescansoPrevio);
+      if (avisarVeda) {
+        avisos.push("veda");
+        j.alerta_veda_enviada = true;
+        j.veda_excedida = true;
+      }
+    }
+
+    if (lat != null) j.ultima_lat = lat;
+    if (lng != null) j.ultima_lng = lng;
+  } else {
+    // === Está parado o speed bajo ===
+    j.bloque_actual_pausa_seg += deltaSeg;
+    j.estado = "pausa_intra_bloque";
+
+    // Si pausa >= 15 min continuos: cierra el bloque actual.
+    if (j.bloque_actual_pausa_seg >= PAUSA_BLOQUE_SEGUNDOS) {
+      if (j.bloque_actual_manejo_seg > 0) {
+        j.bloques_completos += 1;
+        j.total_manejo_seg += j.bloque_actual_manejo_seg;
+        j.bloque_actual_manejo_seg = 0;
+        j.alerta_3_30_enviada = false; // reset alerta del bloque
+        j.estado = "descanso_post_bloque";
+      }
+    }
+
+    // Tracking descanso 8h con misma posición (radio 1000 m).
+    if (lat != null && lng != null) {
+      if (j.descanso_inicio_ts == null) {
+        j.descanso_inicio_ts = ahora;
+        j.descanso_inicio_lat = lat;
+        j.descanso_inicio_lng = lng;
+        j.descanso_segundos = 0;
+      } else if (
+        j.descanso_inicio_lat != null &&
+        j.descanso_inicio_lng != null
+      ) {
+        const dist = distanciaMetros(
+          j.descanso_inicio_lat, j.descanso_inicio_lng, lat, lng
+        );
+        if (dist > DESCANSO_RADIO_METROS) {
+          j.descanso_inicio_ts = ahora;
+          j.descanso_inicio_lat = lat;
+          j.descanso_inicio_lng = lng;
+          j.descanso_segundos = 0;
+        } else {
+          j.descanso_segundos += deltaSeg;
+        }
+      }
+    }
+
+    // Si descanso acumulado >= 8h → cierra jornada.
+    if (j.descanso_segundos >= DESCANSO_MIN_SEGUNDOS) {
+      j.estado = "descanso_jornada";
+      j.jornada_fin_ts = ahora;
+      cerrada = true;
+    }
+  }
+
+  j.ultima_actualizacion_ts = ahora;
+  return { avisos, cerrada };
+}
+
 // ─── Tick principal del vigilador ───────────────────────────────────────────
 
 /**
@@ -745,188 +922,32 @@ export async function tickVigiladorJornada(): Promise<void> {
         DELTA_MAX_SEGUNDOS
       );
 
-      // Avisos a encolar después de actualizar el doc. Lista (no scalar)
-      // — antes era un solo `avisoTipo` que se sobrescribia cuando se
-      // cruzaban varios umbrales en mismo tick (ej. cron retrasado o
-      // primer tick post-jornada vieja con cuota + veda simultaneos).
-      // Solo se mandaba el ultimo, los anteriores se perdian
-      // silenciosamente. Ahora encolamos TODOS los que se cumplen en
-      // este tick.
-      const avisosPendientes: Array<"3h30" | "bloque_excedido" | "cuota_proxima" | "cuota" | "veda"> = [];
-
-      if (manejando) {
-        // === Está manejando ===
-        j.bloque_actual_manejo_seg += deltaSeg;
-        j.bloque_actual_pausa_seg = 0;
-        j.estado = "manejando";
-
-        // Reset tracking descanso
-        j.descanso_inicio_ts = null;
-        j.descanso_inicio_lat = null;
-        j.descanso_inicio_lng = null;
-        j.descanso_segundos = 0;
-
-        // Avisos del bloque
-        if (
-          j.bloque_actual_manejo_seg >= BLOQUE_ALERTA_TEMPRANA_SEGUNDOS &&
-          !j.alerta_3_30_enviada
-        ) {
-          avisosPendientes.push("3h30");
-          j.alerta_3_30_enviada = true;
-        }
-        // Aviso 3h45 ELIMINADO 2026-05-18 (era spam, ya avisamos en 3h30).
-        // El flag alerta_3_45_enviada queda en el schema (backward-compat)
-        // pero ya no se setea ni se chequea. Si quieren reactivar, ver
-        // git log de jornadas_v2.ts.
-        //
-        // BLOQUE_LIMITE_SEGUNDOS (3h45) sigue siendo referencia conceptual
-        // del "fin de bloque" (lo usa commands.js /jornada para mostrar
-        // info), pero ya no dispara aviso.
-
-        // Aviso 4h (infraccion). Decision Santiago 2026-05-18: si el
-        // chofer cruza 4h sin pausar, queda en infraccion real. Le
-        // mandamos aviso firme ademas de marcar el flag para Molina.
-        // 1 vez por bloque (idempotencia via bloque_excedido).
-        if (
-          j.bloque_actual_manejo_seg >= BLOQUE_EXCEDIDO_SEGUNDOS &&
-          !j.bloque_excedido
-        ) {
-          avisosPendientes.push("bloque_excedido");
-          j.bloque_excedido = true;
-        }
-
-        // Avisos de jornada por MANEJO NETO ACUMULADO.
-        // Fix Santiago 2026-05-19: antes mirábamos `bloques_completos >= 3`,
-        // pero un bloque cuenta como completo con cualquier manejo + pausa
-        // de 15+ min. Chofer con pausas cortas y frecuentes (30 min manejo
-        // + 20 min pausa repetido) llegaba a 3 bloques con 1h30 manejo real
-        // y le saltaba "12 horas de jornada" sin avisos previos. Ahora
-        // miramos el manejo neto y damos 2 avisos: heads-up a 11h, límite
-        // duro a 12h. Clarificación Santiago: el límite son 12h de manejo
-        // neto, no 11 — las paradas obligatorias suceden DENTRO de las 12h.
-        //
-        // Lógica jerárquica: si ya estamos en el umbral DURO, no mandamos
-        // el heads-up (sería incoherente recibir "11h" después de "12h").
-        // Esto también cubre el caso de jornadas pre-deploy que tenían
-        // `alerta_cuota_enviada=true` pero no el flag de cuota_proxima.
-        const totalManejoActual =
-          j.total_manejo_seg + j.bloque_actual_manejo_seg;
-        if (totalManejoActual >= JORNADA_MANEJO_LIMITE_SEGUNDOS) {
-          if (!j.alerta_cuota_enviada) {
-            avisosPendientes.push("cuota");
-            j.alerta_cuota_enviada = true;
-            j.cuota_excedida = true;
-          }
-          // Forzar el flag de heads-up — ya estamos pasados.
-          j.alerta_cuota_proxima_enviada = true;
-        } else if (totalManejoActual >= JORNADA_MANEJO_PROXIMA_SEGUNDOS) {
-          if (!j.alerta_cuota_proxima_enviada) {
-            avisosPendientes.push("cuota_proxima");
-            j.alerta_cuota_proxima_enviada = true;
-          }
-        }
-
-        // Veda nocturna (00:00-06:00 ART)
-        const hora = horaArt(ahora.toMillis());
+      // Precomputar `tieneDescansoPrevio` para la excepción de veda — solo
+      // si va a hacer falta (manejando + en veda + manejo < 2h + sin aviso
+      // de veda previo). Evita el query en el caso común. El resto de la
+      // lógica vive en `evaluarTickJornada` (pura, testeable).
+      let tieneDescansoPrevio = false;
+      if (manejando && !j.alerta_veda_enviada) {
+        const horaActual = horaArt(ahora.toMillis());
         const enVeda =
-          hora >= VEDA_NOCTURNA_DESDE_HORA && hora < VEDA_NOCTURNA_HASTA_HORA;
-        if (enVeda && !j.alerta_veda_enviada) {
-          // Decision Santiago 2026-05-18: la veda se LEVANTA si el
-          // chofer cumplio 8h descanso antes de arrancar Y lleva poco
-          // tiempo manejando en esta jornada (< 2h). Cubre el caso
-          // legitimo del chofer que sale 5:30 AM tras descanso completo.
-          //
-          // Si maneja 2h+ en esta jornada y entra en veda, asumimos que
-          // ya no es arranque reciente — puede estar manejando continuo
-          // desde la jornada anterior y la veda aplica. Avisar.
-          //
-          // NO marcamos alerta_veda_enviada si skipeamos, asi el proximo
-          // tick re-evalua: si despues cumple 2h manejo, la condicion
-          // de skip deja de aplicar y avisamos. Costo: 1 query Firestore
-          // extra por chofer/tick en veda (~360 reads/noche = <$0.001).
-          const totalManejoActual =
-            j.total_manejo_seg + j.bloque_actual_manejo_seg;
-          const HORAS2_SEG = 2 * 3600;
-          let avisarVeda = true;
-          if (totalManejoActual < HORAS2_SEG) {
-            const tieneDescansoPrevio = await descansoPrevioCumplido(dni);
-            if (tieneDescansoPrevio) {
-              avisarVeda = false;
-              logger.info(
-                "[jornadas_v2.tick] veda skipeada (descanso previo + manejo reciente)",
-                {
-                  dni, patente,
-                  totalManejoActualSeg: totalManejoActual,
-                  horaArt: hora,
-                }
-              );
-            }
-          }
-          if (avisarVeda) {
-            avisosPendientes.push("veda");
-            j.alerta_veda_enviada = true;
-            j.veda_excedida = true;
-          }
-        }
-
-        if (lat != null) j.ultima_lat = lat;
-        if (lng != null) j.ultima_lng = lng;
-      } else {
-        // === Está parado o speed bajo ===
-        j.bloque_actual_pausa_seg += deltaSeg;
-        j.estado = "pausa_intra_bloque";
-
-        // Si pausa >= 15 min internos: cierra el bloque actual
-        if (j.bloque_actual_pausa_seg >= PAUSA_BLOQUE_SEGUNDOS) {
-          if (j.bloque_actual_manejo_seg > 0) {
-            j.bloques_completos += 1;
-            j.total_manejo_seg += j.bloque_actual_manejo_seg;
-            j.bloque_actual_manejo_seg = 0;
-            // Reset alertas del bloque para el próximo
-            j.alerta_3_30_enviada = false;
-            // alerta_3_45_enviada queda como esta (false por default).
-            // El aviso fue eliminado 2026-05-18, ya no se setea.
-            j.estado = "descanso_post_bloque";
-          }
-          // El bloque_actual_pausa_seg sigue acumulando hacia los 8h
-          // de descanso de jornada (no se resetea acá).
-        }
-
-        // Tracking descanso 8h con misma posición
-        if (lat != null && lng != null) {
-          if (j.descanso_inicio_ts == null) {
-            j.descanso_inicio_ts = ahora;
-            j.descanso_inicio_lat = lat;
-            j.descanso_inicio_lng = lng;
-            j.descanso_segundos = 0;
-          } else if (
-            j.descanso_inicio_lat != null &&
-            j.descanso_inicio_lng != null
-          ) {
-            const dist = distanciaMetros(
-              j.descanso_inicio_lat, j.descanso_inicio_lng, lat, lng
-            );
-            if (dist > DESCANSO_RADIO_METROS) {
-              // Se movió fuera del radio — reset
-              j.descanso_inicio_ts = ahora;
-              j.descanso_inicio_lat = lat;
-              j.descanso_inicio_lng = lng;
-              j.descanso_segundos = 0;
-            } else {
-              j.descanso_segundos += deltaSeg;
-            }
-          }
-        }
-
-        // Si descanso acumulado >= 8h → cierra jornada
-        if (j.descanso_segundos >= DESCANSO_MIN_SEGUNDOS) {
-          j.estado = "descanso_jornada";
-          j.jornada_fin_ts = ahora;
-          cerradas++;
+          horaActual >= VEDA_NOCTURNA_DESDE_HORA &&
+          horaActual < VEDA_NOCTURNA_HASTA_HORA;
+        const totalPostDelta =
+          j.total_manejo_seg + j.bloque_actual_manejo_seg + deltaSeg;
+        if (enVeda && totalPostDelta < 2 * 3600) {
+          tieneDescansoPrevio = await descansoPrevioCumplido(dni);
         }
       }
 
-      j.ultima_actualizacion_ts = ahora;
+      const { avisos: avisosPendientes, cerrada } = evaluarTickJornada(j, {
+        manejando,
+        deltaSeg,
+        ahoraMs: ahora.toMillis(),
+        lat,
+        lng,
+        tieneDescansoPrevio,
+      });
+      if (cerrada) cerradas++;
       j.ultima_patente = patente;
 
       await entrada.ref.update(j as unknown as Record<string, unknown>);
