@@ -5654,11 +5654,25 @@ export const resumenConductaManejoDiario = onSchedule(
     const eventos: EventoConducta[] = [];
 
     // ─── SITRACK_EVENTOS del día anterior ─────────────────────────
+    // Limit defensivo 50000: SITRACK ingesta ~1400 tipos de evento × 56
+    // patentes ≈ varios miles/día en pico. 50K nos da 10x de margen
+    // (jamás vimos > 5000/día). Si se cruza, loggeamos warn — alerta
+    // temprana de algo raro (Sitrack mandando ruido masivo).
+    // Auditoría 2026-05-18.
+    const LIMIT_SITRACK_DIA = 50000;
     const sitrackSnap = await db
       .collection("SITRACK_EVENTOS")
       .where("report_date", ">=", Timestamp.fromMillis(desdeMs))
       .where("report_date", "<", Timestamp.fromMillis(hastaMs))
+      .limit(LIMIT_SITRACK_DIA)
       .get();
+    if (sitrackSnap.size >= LIMIT_SITRACK_DIA) {
+      logger.warn(
+        "[resumenConductaManejoDiario] SITRACK_EVENTOS query " +
+        `alcanzó el limit (${LIMIT_SITRACK_DIA}). Datos del resumen ` +
+        "pueden estar incompletos. Investigar volumen.",
+      );
+    }
     for (const doc of sitrackSnap.docs) {
       const d = doc.data();
       const eventId = d.event_id;
@@ -5695,11 +5709,21 @@ export const resumenConductaManejoDiario = onSchedule(
     }
 
     // ─── VOLVO_ALERTAS del día anterior (solo AEBS / ESP) ─────────
+    // Limit defensivo 10000: Volvo genera ~50-200 alertas/día normales,
+    // 10K nos da margen 50x. Mismo warn pattern.
+    const LIMIT_VOLVO_DIA = 10000;
     const volvoSnap = await db
       .collection("VOLVO_ALERTAS")
       .where("creado_en", ">=", Timestamp.fromMillis(desdeMs))
       .where("creado_en", "<", Timestamp.fromMillis(hastaMs))
+      .limit(LIMIT_VOLVO_DIA)
       .get();
+    if (volvoSnap.size >= LIMIT_VOLVO_DIA) {
+      logger.warn(
+        "[resumenConductaManejoDiario] VOLVO_ALERTAS query alcanzó " +
+        `el limit (${LIMIT_VOLVO_DIA}). Investigar volumen.`,
+      );
+    }
     for (const doc of volvoSnap.docs) {
       const d = doc.data();
       const tipo = (d.tipo ?? "").toString().toUpperCase();
@@ -6406,7 +6430,10 @@ export const recomputeIcmSemanalScheduled = onSchedule(
     });
 
     // ─── 2. Lookup nombres de empleados ───────────────────────────
-    const empSnap = await db.collection("EMPLEADOS").get();
+    // Limit defensivo 5000 (mismo cap que otros queries de EMPLEADOS
+    // en este archivo). Si lo cruzamos algun dia, ojo: la app no esta
+    // hecha para mas de unos cientos de empleados.
+    const empSnap = await db.collection("EMPLEADOS").limit(5000).get();
     const nombrePorDni = new Map<string, string>();
     for (const d of empSnap.docs) {
       const data = d.data();
@@ -6416,11 +6443,23 @@ export const recomputeIcmSemanalScheduled = onSchedule(
     }
 
     // ─── 3. Cargar eventos peligrosos del rango ───────────────────
+    // Limit defensivo 200000: lectura semanal de SITRACK_EVENTOS (~7×
+    // limit diario). Si crece, ICM semanal puede quedar parcial pero
+    // no rompe — el warn alerta a investigar volumen.
+    const LIMIT_SITRACK_SEMANA = 200000;
     const evSnap = await db
       .collection("SITRACK_EVENTOS")
       .where("report_date", ">=", Timestamp.fromMillis(lunesAnteriorMs))
       .where("report_date", "<", Timestamp.fromMillis(lunesActualMs))
+      .limit(LIMIT_SITRACK_SEMANA)
       .get();
+    if (evSnap.size >= LIMIT_SITRACK_SEMANA) {
+      logger.warn(
+        "[recomputeIcmSemanalScheduled] SITRACK_EVENTOS query " +
+        `alcanzó el limit (${LIMIT_SITRACK_SEMANA}). ICM semanal ` +
+        "puede estar incompleto. Investigar volumen.",
+      );
+    }
 
     // Tracking del odómetro Sitrack por patente para cada chofer.
     // km en rango = max - min para cada patente, sumado.
