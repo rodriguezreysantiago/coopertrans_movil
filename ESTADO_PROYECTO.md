@@ -1315,4 +1315,100 @@ Al cerrar la sesión del 30 de abril, quedaron estos temas en el aire que convie
 
 ---
 
-**Cómo retomar**: leer secciones 6.9 (cleanup + RBAC del 30-abril), 6.10 (sesión grande del 1-mayo: imports bulk + fixes UI + auditoría profunda + plan 4 fases ejecutado) y 13 (lo que queda). El estado del repo es el commit más reciente — `git log --oneline -10`.
+## 14. Sesión 2026-05-18 PM — auditoría profunda + tests + splits estructurales
+
+Sesión de cierre de día con **6 agentes paralelos del code-review** que revisaron Flutter / Cloud Functions / WhatsApp bot / Firestore Rules+Indexes / CI+DevOps / Tests+Docs+Deps. Output: ~145 findings priorizados. Aplicados los **HIGH y CRITICAL** + parte de los MEDIUM. Total ~20 commits.
+
+### 14.1 🐛 Bug REAL en producción descubierto por test (lo más relevante)
+
+`functions/src/jornadas_v2.ts:horaArt()` devolvía **24** (no 0) para medianoche ART en Node V8 — `Intl.DateTimeFormat('en-CA', { hour12: false })` devuelve `"24"` para medianoche, no `"00"`. La lógica de veda nocturna (`horaActual >= 0 && horaActual < 6`) daba false con 24 → **el chofer que arrancaba 00:00-00:59 ART NO recibía aviso de veda nocturna**. Ventana ciega de 1h/día por al menos 3 refactors del vigilador sin detectarse.
+
+Test descubrió el bug. Fix: `return h === 24 ? 0 : h`. El test queda como regression guard. Commit `a4ab509`.
+
+**Lección**: tests de helpers PUROS valen la pena aunque parezcan triviales — atrapan asunciones que llevan años sin revisarse.
+
+### 14.2 Auditoría aplicada — items HIGH y CRITICAL
+
+**Sentry (4 commits)** — storm de 781 events/h en producción por FAB del Scaffold hit-test mid-transición:
+- `38315b1` — Panel km/L → L/100km (métrica AR).
+- `ed24c66` — `beforeSend` con 3 capas: drop network glitches + cancelaciones + Flutter framework asserts + rate limiter fingerprint (1/10s).
+- `0bd873c` — `SentryNavigatorObserver` para grabar ruta como breadcrumb.
+- `201c300` — Release name unificado Windows/Android/iOS via `PackageInfo.fromPlatform()`.
+
+Ver memoria `feedback_sentry_observabilidad.md` para detalle. Plan free de Sentry: filtros custom server-side requieren Team plan ($26/mes), así que los fixes son todos client-side.
+
+**Cliente Flutter — fixes (1 commit)**:
+- `f68ecdb` — **Regresión RBAC en CHECKLISTS**: query no filtraba por DNI, el chofer no veía "completado" si OTRO chofer manejaba su patente ese mes (rotación de unidades). + DNI maskeado en 4 logs (asignacion_vehiculo + auth_service).
+
+**WhatsApp bot — fixes (2 commits)**:
+- `e499da2` — `/pausar` y `/reanudar` con `serverTimestamp` (eran `new Date()` local — drift si PC desfasa hora) + delay entre chunks 5-15s (antes 2-3s, anti-baneo) + pattern "rate limit" en `_PATRONES_DEFINITIVOS` + cache silenciados (60s TTL, ahorra reads).
+- `52c36a9` — TTL **36h** en los 3 resúmenes diarios del bot (`service_diario`, `mantenimiento_diario`, `vencimientos_proximos_diario`). Cierra el gap del fix Fase 2: doc encolado en día X + bot crashea + vuelve días después → ahora consumer dropea por TTL.
+
+**Cloud Functions — fixes (1 commit)**:
+- `12fb37a` — Limits defensivos + warn al alcanzar en queries grandes (resumen conducta, ICM semanal, EMPLEADOS).
+
+**Rules + indexes (1 commit)**:
+- `0855510` — `BORRADORES_VIAJE` guard de owner (cualquier admin podía pisar borrador de otro operador) + index JORNADAS DESC (descansoPrevioCumplido iba a fallar la primera vez con "needs index") + TTL `expira_en` declarado en `fieldOverrides` para COLA_WHATSAPP.
+
+**Deps + cleanup + CI (3 commits)**:
+- `7730393` — `npm audit fix` resuelve CVE HIGH (`fast-xml-builder` en functions) + MODERATE (`ws` transitive en bot).
+- `04716d7` — Mover 4 scripts deprecated (apuntaban a JORNADAS_CHOFER legacy) a `scripts/_deprecated/` + borrar logs viejos.
+- `0abbeca` — README crons actualizado (de 9 → 16 reales), MANUAL roles de 4 → 6 (faltaban GOMERIA + SEG_HIGIENE), comment outdated en `icm_historico_service.dart`.
+- `4361c31` — Pinear Flutter **3.41.7** en `.github/workflows/ci.yml` + `ios/ci_scripts/ci_post_clone.sh` + `.flutter-version` (Build 14 iOS ya falló por esto).
+
+### 14.3 Refactor estructural — splits de archivos gigantes
+
+**`logistica_viaje_form_screen.dart` 2823 LOC → 5 archivos** (commit `95f6c27`):
+Patrón `part of` (mismo que `user_mis_vencimientos_widgets.dart`).
+- `_screen.dart` (1035 LOC) — state machine principal
+- `_tramos.dart` (523 LOC) — `_TramoEditState`, `_TramoCard`, `_DropdownProducto`, `_BotonAgregarTramo`, `_BannerEncadenamiento`
+- `_secciones.dart` (575 LOC) — Resumen + Estado + Chofer + Unidad + AdelantoAsociado + UpperCaseFormatter
+- `_tarifa_picker.dart` (296 LOC) — modal sheet con buscador
+- `_gastos.dart` (248 LOC) — sección gastos por tramo
+- `_widgets.dart` (229 LOC) — common widgets (Card, BotonFecha, ResumenTarifa, BotonesGuardar)
+
+**`functions/src/index.ts` 6884 → 3568 LOC (-48%, 50% del split hecho)** (commits `90edd44`, `a6a90f5`, `75f61f1`, `38f4acf`):
+
+Patrón `export *` desde el entry point oficial (TS no tiene `part of`):
+- `setup.ts` — initializeApp + setGlobalOptions + db + auth + constants
+- `helpers.ts` — `expiraEnMin`, `primerNombre`, `rrPick`, formatos AR (ya existía + drift fix: jornadas_v2 capitaliza nombres ahora + round-robin determinístico anti-baneo)
+- `cleanup_y_recibos.ts` — asignarNumeroReciboAdelanto + purgarColaWhatsappAntigua
+- `dashboard_stats.ts` — recomputeDashboardStats + helpers
+- `icm.ts` — recomputeIcmSemanalScheduled
+- `mantenimiento.ts` — backup + bot_health + vigilador wrappers
+- `sitrack.ts` — 2 pollers
+- `resumenes_diarios.ts` — 4 resúmenes 08:00 ART
+
+**Pendiente del split**: `auth.ts` (~1700), `volvo_alertas.ts` (~1900), `volvo_scores.ts` (~400), `telemetria.ts` (~350), auditLogWrite. Ver memoria `project_split_functions_index.md`.
+
+### 14.4 Tests de lógica de negocio crítica (2 commits)
+
+Setup: agregada dev dep `fake_cloud_firestore: ^4.0.0` (in-memory, sin emulator process aparte).
+
+- `a4ab509` — 16 tests TS (jornadas v2: `distanciaMetros` + `horaArt`) + 20 tests Dart (`categorizarIcm` + edge cases + `kTiposInfraccionIcm` drift detection). **+ fix bug horaArt 24→0**.
+- `fd28d17` — 15 tests Dart de `IcmCalculator.calcularRanking` flujo completo con `fake_cloud_firestore` (casos felices, edge cases SIN_DATOS, filtros, ordenamiento, lookup).
+
+Estado suite: **flutter test 310/310 ✓ + functions npm test 62/62 ✓**.
+
+**Liquidación NO necesita tests nuevos**: el agente reportó "0 tests" pero la lógica de plata vive en `calculos_viaje.dart` (con ~135 expects en `calculos_viaje_test.dart`), NO en `liquidacion_service.dart` (que es solo I/O a Firestore). Audit miró el archivo equivocado.
+
+**DEFERRED honestamente**: tests del flujo completo de `tickVigiladorJornada` + resúmenes diarios CF requieren `firebase-functions-test` SDK + mock manual de sentinels (Timestamp, FieldValue.serverTimestamp) + estado mutable in-memory. Realísticamente 3-4h de setup ANTES del primer test útil. Ver memoria `project_tests_logica_negocio.md` con plan detallado.
+
+### 14.5 Items deferred por decisión consciente
+
+- **Race ready/destroy en bot whatsapp.js**: complejo, baja probabilidad (race window de ms), monitorear primero.
+- **Match sufijo 10 dígitos para `/jornada` chofer**: decisión de negocio (riesgo bajo: alguien con +otra-cosa-mismos-10-dígitos finales podría leer datos de jornada de un chofer). El path admin ya tiene fix exact-match desde 17-may.
+- **DNIs hardcoded → META/destinatarios_alertas**: TODO del propio código, esperar cambio real de persona.
+- **Code-signing Windows installer**: $80/año recurrente, decisión de gasto.
+- **Major bumps Flutter** (sentry 8→9, win32 5→6, fl_chart 0→1): hacer uno por sesión con test post-bump, no todos juntos.
+
+### 14.6 Cómo retomar la próxima sesión
+
+1. `git log --oneline -25` para ver los 20+ commits del 18-may.
+2. Leer `project_split_functions_index.md` si vas a continuar el split de Cloud Functions.
+3. Leer `project_tests_logica_negocio.md` si vas a sumar tests de flujos completos CF.
+4. Leer `feedback_sentry_observabilidad.md` si Sentry vuelve a tener ruido raro.
+
+---
+
+**Cómo retomar (sesión vieja)**: leer secciones 6.9 (cleanup + RBAC del 30-abril), 6.10 (sesión grande del 1-mayo: imports bulk + fixes UI + auditoría profunda + plan 4 fases ejecutado) y 13 (anotaciones del 30-abril noche). El estado del repo es el commit más reciente — `git log --oneline -10`.

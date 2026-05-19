@@ -7,6 +7,92 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-05-18 EOD — Cierre del día (auditoría completa + tests + splits + bug horaArt)
+
+**Sesión gigante** de auditoría profunda del proyecto con 6 agentes
+paralelos + ~20 commits de fixes, refactors estructurales y tests.
+
+### Lo más importante: 🐛 1 bug REAL descubierto por test
+
+`functions/src/jornadas_v2.ts:horaArt()` devolvía **24** (no 0) para
+medianoche ART en Node V8. La lógica de veda nocturna chequeaba
+`horaActual < 6` → con 24, falso → **el chofer que arrancaba 00:00-00:59
+ART NO recibía aviso de veda nocturna**. Ventana ciega de 1h/día por
+al menos 3 refactors. Fix de 1 línea (`return h === 24 ? 0 : h`).
+Commit `a4ab509`.
+
+### Commits del día (16+)
+
+**Sentry (4)**:
+- `38315b1` — Panel: eficiencia combustible en L/100km (métrica AR)
+- `ed24c66` — Filtros + rate limiter anti-storm en `beforeSend`
+- `0bd873c` — SentryNavigatorObserver (breadcrumbs de ruta)
+- `201c300` — Release name unificado Windows/Android/iOS
+
+**Auditoría — fixes (8)**:
+- `f68ecdb` — Regresión CHECKLISTS (chofer no veía si rotación de patente) + DNI maskeado en 4 logs
+- `e499da2` — Bot: `/pausar` serverTimestamp + delay anti-baneo chunks 5-15s + rate limit pattern + cache silenciados
+- `12fb37a` — Cloud Functions: limits defensivos + warn al alcanzar (resumen conducta, ICM semanal, EMPLEADOS)
+- `0855510` — Rules: BORRADORES_VIAJE guard de owner + Index JORNADAS DESC + TTL COLA_WHATSAPP
+- `7730393` — `npm audit fix` resuelve CVE HIGH (fast-xml-builder) + MODERATE (ws)
+- `04716d7` — Cleanup: 4 scripts deprecated → `_deprecated/` + borrar logs viejos
+- `0abbeca` — Docs: README 16 crons (vs 9 documentados) + MANUAL 6 roles (vs 4) + comment ICM outdated
+- `4361c31` — CI: pin Flutter 3.41.7 en `ci.yml` + `ci_post_clone.sh` + `.flutter-version`
+
+**Refactors estructurales (5)**:
+- `95f6c27` — Split `logistica_viaje_form_screen.dart` 2823 → 5 archivos (patrón `part of`)
+- `90edd44` — Extract helpers compartidos functions a `helpers.ts` (drift fix: jornadas_v2 capitaliza nombres + round-robin)
+- `a6a90f5` — Split `functions/index.ts` iter 1-3: cleanup + dashboard + icm + mantenimiento
+- `75f61f1` — Split iter 4: sitrack.ts
+- `38f4acf` — Split iter 5: resumenes_diarios.ts (50% completado en total)
+
+**Bot fix (1)**:
+- `52c36a9` — TTL 36h en los 3 resúmenes diarios del bot (cierra gap residual del fix Fase 2)
+
+**Tests (2)**:
+- `a4ab509` — 16 tests TS (jornadas v2 helpers) + 20 tests Dart (ICM helpers) + **bug horaArt 24→0**
+- `fd28d17` — 15 tests Dart ICM flujo completo con `fake_cloud_firestore`
+
+### Estado de la suite post-sesión
+
+```
+flutter test:        310/310 ✓  (de 275 anteriores +35 nuevos)
+functions npm test:   62/62 ✓  (de 46 anteriores +16 nuevos)
+```
+
+### Deploys pendientes (para Santiago)
+
+1. `git push` — ~20 commits acumulados desde tu PC
+2. `firebase deploy --only firestore:rules` — para que entre el guard BORRADORES_VIAJE
+3. `firebase deploy --only firestore:indexes` — para crear el index JORNADAS DESC (comando separado por bug conocido del CLI)
+4. `firebase deploy --only functions` — propaga: **fix bug horaArt** (veda nocturna 00:00) + limits defensivos + helpers extraidos + módulos splitteados
+5. **Próximo build app** (Windows/Android/iOS) — propaga fixes Sentry + DNI mask + km/L → L/100km + regresión CHECKLISTS
+6. **PC dedicada** toma fix bot automático en ≤5 min vía Scheduled Task auto-update (TTL 36h resúmenes + serverTimestamp pausar + rate limit cache)
+
+### Pendiente para próximas sesiones
+
+**Completar split de `functions/index.ts`** (50% restante, ver memoria `project_split_functions_index.md`):
+- `auth.ts` (~1700 LOC, 5 functions: login + cambiar/resetear pwd + actualizar rol + rename DNI)
+- `volvo_alertas.ts` (~1900 LOC) + `volvo_scores.ts` (~400 LOC)
+- `telemetria.ts` (~350 LOC, depende de helpers Volvo, hacer DESPUÉS de volvo)
+
+**Tests de flujos completos CF** (deferred honestamente — sesión propia):
+- `tickVigiladorJornada` + resúmenes diarios CF
+- Requieren `firebase-functions-test` SDK + mock manual de Firestore (Timestamp/FieldValue sentinels + estado mutable)
+- Plan: arrancar por `resumenBotDiario` (el más simple) como proof of concept del setup
+- Tiempo estimado: 3-4h SOLO para tener mock + 1 test funcionando, después escalar
+
+**Items del audit deferred por decisión consciente**:
+- Race ready/destroy bot whatsapp.js (complejo, baja probabilidad)
+- Match sufijo 10 dígitos `/jornada` (decisión de negocio: aceptar riesgo bajo)
+- DNIs hardcoded → META/destinatarios_alertas (esperar cambio real de persona)
+- Code-signing Windows installer ($80/año, decisión gasto)
+- Major bumps Flutter (sentry 8→9, win32 5→6, fl_chart 0→1 — riesgo breaking)
+
+Ver memoria `project_tests_logica_negocio.md` y `feedback_sentry_observabilidad.md` para detalle.
+
+---
+
 ## 📅 2026-05-16 EOD — Cierre del día (iOS TestFlight operativo)
 
 **Logro del día**: 🎉 **App instalable en iPhone via TestFlight**.
