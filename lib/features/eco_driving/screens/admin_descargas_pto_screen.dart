@@ -19,12 +19,90 @@ import '../../../shared/widgets/app_widgets.dart';
 /// queda visible aunque no haya datos del período — Santiago reportó
 /// que cuando elegía un día sin PTO el calendario desaparecía y no
 /// podía cambiar de fecha.
+///
+/// **Iteración 2026-05-19**: dedup client-side por (patente, ventana
+/// de 15 min). Santiago reportó "no repetir tantas iguales si son
+/// dentro de los mismos minutos". La PTO toggea on/off varias veces
+/// en una misma descarga física (chofer subiendo y bajando la batea),
+/// y Volvo manda un evento por cada activación. Agrupamos para que
+/// el listado refleje "descargas" reales y no "activaciones de PTO".
 class AdminDescargasPtoScreen extends StatefulWidget {
   const AdminDescargasPtoScreen({super.key});
 
   @override
   State<AdminDescargasPtoScreen> createState() =>
       _AdminDescargasPtoScreenState();
+}
+
+/// Ventana para agrupar eventos PTO consecutivos de la misma patente.
+/// 15 min cubre toggles típicos de una descarga (subir/bajar batea, hueco
+/// para reacomodar el camión) sin pegar dos descargas reales distintas
+/// (cargar en cliente A → ir a cliente B suele tomar >> 15 min).
+const Duration _ventanaDedupPto = Duration(minutes: 15);
+
+/// Agrupa eventos por (patente, ventana de tiempo). Devuelve grupos
+/// ordenados del más reciente al más viejo (por primer evento del grupo).
+List<_GrupoPto> _agruparPorPatenteYVentana(
+  List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+) {
+  if (docs.isEmpty) return const [];
+  // docs vienen ordenados por `creado_en` DESC (query). Para agrupar
+  // necesitamos pasar por cada patente individualmente.
+  final porPatente = <String, List<QueryDocumentSnapshot<Map<String, dynamic>>>>{};
+  for (final d in docs) {
+    final patente = (d.data()['patente'] ?? '').toString();
+    final key = patente.isEmpty ? '(sin patente)' : patente;
+    (porPatente[key] ??= []).add(d);
+  }
+
+  final grupos = <_GrupoPto>[];
+  for (final entry in porPatente.entries) {
+    // Lista ya en DESC dentro de cada patente (lo heredamos del orden
+    // global). La invertimos para procesar cronológicamente y agrupar.
+    final ascendente = entry.value.reversed.toList();
+    _GrupoPto? actual;
+    for (final doc in ascendente) {
+      final ts = (doc.data()['creado_en'] as Timestamp?)?.toDate();
+      if (ts == null) continue;
+      if (actual == null ||
+          ts.difference(actual.ultimoTs).abs() > _ventanaDedupPto) {
+        actual = _GrupoPto(
+          patente: entry.key,
+          primero: doc,
+          eventos: [doc],
+          primerTs: ts,
+          ultimoTs: ts,
+        );
+        grupos.add(actual);
+      } else {
+        actual.eventos.add(doc);
+        actual.ultimoTs = ts;
+      }
+    }
+  }
+  // Orden final por primer evento DESC (más reciente arriba).
+  grupos.sort((a, b) => b.primerTs.compareTo(a.primerTs));
+  return grupos;
+}
+
+class _GrupoPto {
+  final String patente;
+  final QueryDocumentSnapshot<Map<String, dynamic>> primero;
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> eventos;
+  final DateTime primerTs;
+  DateTime ultimoTs;
+
+  _GrupoPto({
+    required this.patente,
+    required this.primero,
+    required this.eventos,
+    required this.primerTs,
+    required this.ultimoTs,
+  });
+
+  int get cantidad => eventos.length;
+  bool get esAgrupado => eventos.length > 1;
+  Duration get duracion => ultimoTs.difference(primerTs);
 }
 
 class _AdminDescargasPtoScreenState extends State<AdminDescargasPtoScreen> {
@@ -116,6 +194,7 @@ class _AdminDescargasPtoScreenState extends State<AdminDescargasPtoScreen> {
             return _bodyConToolbar(
               cantTotal: 0,
               cantVisibles: 0,
+              cantGrupos: 0,
               patentes: const [],
               child: AppErrorState(
                 title: 'No pudimos cargar las descargas',
@@ -127,6 +206,7 @@ class _AdminDescargasPtoScreenState extends State<AdminDescargasPtoScreen> {
             return _bodyConToolbar(
               cantTotal: 0,
               cantVisibles: 0,
+              cantGrupos: 0,
               patentes: const [],
               child: const Center(
                 child:
@@ -144,18 +224,22 @@ class _AdminDescargasPtoScreenState extends State<AdminDescargasPtoScreen> {
           }.toList()
             ..sort();
           // Filtrar in-memory por patente si hay filtro.
-          final visibles = _filtroPatente == null
+          final visiblesDocs = _filtroPatente == null
               ? docs
               : docs
                   .where((d) =>
                       (d.data()['patente'] ?? '').toString() ==
                       _filtroPatente)
                   .toList();
+          // Dedup: agrupamos eventos consecutivos de la misma patente
+          // dentro de `_ventanaDedupPto`. Cada grupo = una "descarga".
+          final grupos = _agruparPorPatenteYVentana(visiblesDocs);
 
-          if (visibles.isEmpty) {
+          if (grupos.isEmpty) {
             return _bodyConToolbar(
               cantTotal: docs.length,
               cantVisibles: 0,
+              cantGrupos: 0,
               patentes: patentes,
               child: AppEmptyState(
                 icon: Icons.local_shipping_outlined,
@@ -172,14 +256,13 @@ class _AdminDescargasPtoScreenState extends State<AdminDescargasPtoScreen> {
           }
           return _bodyConToolbar(
             cantTotal: docs.length,
-            cantVisibles: visibles.length,
+            cantVisibles: visiblesDocs.length,
+            cantGrupos: grupos.length,
             patentes: patentes,
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 80),
-              itemCount: visibles.length,
-              itemBuilder: (_, i) => _EventoPtoCard(
-                data: visibles[i].data(),
-              ),
+              itemCount: grupos.length,
+              itemBuilder: (_, i) => _EventoPtoCard(grupo: grupos[i]),
             ),
           );
         },
@@ -193,6 +276,7 @@ class _AdminDescargasPtoScreenState extends State<AdminDescargasPtoScreen> {
   Widget _bodyConToolbar({
     required int cantTotal,
     required int cantVisibles,
+    required int cantGrupos,
     required List<String> patentes,
     required Widget child,
   }) {
@@ -201,6 +285,7 @@ class _AdminDescargasPtoScreenState extends State<AdminDescargasPtoScreen> {
         _Toolbar(
           totalEventos: cantTotal,
           visibles: cantVisibles,
+          grupos: cantGrupos,
           patentes: patentes,
           filtroPatente: _filtroPatente,
           onFiltroChange: (p) => setState(() => _filtroPatente = p),
@@ -218,6 +303,7 @@ class _AdminDescargasPtoScreenState extends State<AdminDescargasPtoScreen> {
 class _Toolbar extends StatelessWidget {
   final int totalEventos;
   final int visibles;
+  final int grupos;
   final List<String> patentes;
   final String? filtroPatente;
   final ValueChanged<String?> onFiltroChange;
@@ -229,6 +315,7 @@ class _Toolbar extends StatelessWidget {
   const _Toolbar({
     required this.totalEventos,
     required this.visibles,
+    required this.grupos,
     required this.patentes,
     required this.filtroPatente,
     required this.onFiltroChange,
@@ -279,11 +366,36 @@ class _Toolbar extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            totalEventos == 0
-                ? 'Sin eventos en este período'
-                : '$visibles de $totalEventos descargas',
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  totalEventos == 0
+                      ? 'Sin eventos en este período'
+                      : grupos == visibles
+                          ? '$visibles de $totalEventos eventos PTO'
+                          : '$grupos descargas ($visibles eventos agrupados '
+                              'de $totalEventos)',
+                  style:
+                      const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+              // Botón "?" — abre cobertura PTO: cuántos Volvos reportaron
+              // en este período vs cuántos hay en la flota. Útil para
+              // saber si alguna unidad no tiene el sensor de PTO activado
+              // en Volvo Connect.
+              TextButton.icon(
+                onPressed: () => _mostrarCoberturaPto(context, patentes),
+                icon: const Icon(Icons.help_outline, size: 16),
+                label: const Text('Cobertura'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.accentBlue,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  visualDensity: VisualDensity.compact,
+                  minimumSize: const Size(0, 30),
+                ),
+              ),
+            ],
           ),
           // Filtro de patente solo se muestra si hay docs (sino chips
           // vacíos no aportan).
@@ -360,13 +472,28 @@ class _ChipFiltro extends StatelessWidget {
 }
 
 class _EventoPtoCard extends StatelessWidget {
-  final Map<String, dynamic> data;
+  final _GrupoPto grupo;
 
-  const _EventoPtoCard({required this.data});
+  const _EventoPtoCard({required this.grupo});
+
+  /// Devuelve "HH:mm – HH:mm" si el grupo dura > 1 min, sino "HH:mm".
+  String _rangoHorario() {
+    final p = grupo.primerTs;
+    final u = grupo.ultimoTs;
+    String hhmm(DateTime d) =>
+        '${d.hour.toString().padLeft(2, '0')}:'
+        '${d.minute.toString().padLeft(2, '0')}';
+    if (grupo.duracion.inMinutes <= 0) {
+      return AppFormatters.formatearFechaHoraSinSegundos(p);
+    }
+    final fechaDia = '${p.day.toString().padLeft(2, '0')}-'
+        '${p.month.toString().padLeft(2, '0')}-${p.year}';
+    return '$fechaDia · ${hhmm(p)} – ${hhmm(u)}';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final creado = (data['creado_en'] as Timestamp?)?.toDate();
+    final data = grupo.primero.data();
     final patente = (data['patente'] ?? '—').toString();
     final choferNombre = (data['chofer_nombre'] ?? '').toString();
     final choferDni = (data['chofer_dni'] ?? '').toString();
@@ -407,12 +534,32 @@ class _EventoPtoCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (creado != null)
-                Text(
-                  AppFormatters.formatearFechaHoraSinSegundos(creado),
-                  style: const TextStyle(
-                      color: Colors.white54, fontSize: 11),
+              if (grupo.esAgrupado)
+                Container(
+                  margin: const EdgeInsets.only(right: 6),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentGreen.withAlpha(40),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.accentGreen.withAlpha(80),
+                    ),
+                  ),
+                  child: Text(
+                    'x${grupo.cantidad}',
+                    style: const TextStyle(
+                      color: AppColors.accentGreen,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
+              Text(
+                _rangoHorario(),
+                style: const TextStyle(
+                    color: Colors.white54, fontSize: 11),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -505,5 +652,216 @@ class _EventoPtoCard extends StatelessWidget {
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+}
+
+/// Abre un bottom sheet con la cobertura de PTO: cuántos Volvos
+/// reportaron en este período vs cuántos hay en la flota. Si alguno no
+/// reportó, lo lista — Santiago puede confirmar si es esperable (camión
+/// en taller, sin batea) o pedir alta del sensor PTO en Volvo Connect.
+void _mostrarCoberturaPto(BuildContext context, List<String> patentesQueReportaron) {
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Theme.of(context).colorScheme.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (sCtx) => _CoberturaPtoSheet(
+      patentesQueReportaron: patentesQueReportaron.toSet(),
+    ),
+  );
+}
+
+class _CoberturaPtoSheet extends StatelessWidget {
+  final Set<String> patentesQueReportaron;
+
+  const _CoberturaPtoSheet({required this.patentesQueReportaron});
+
+  @override
+  Widget build(BuildContext context) {
+    return FractionallySizedBox(
+      heightFactor: 0.7,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          // Solo Volvos — los otros tractores no tienen Vehicle Alerts
+          // API conectada, así que no se puede saber si tienen PTO.
+          future: FirebaseFirestore.instance
+              .collection(AppCollections.vehiculos)
+              .where('MARCA', isEqualTo: 'VOLVO')
+              .get(),
+          builder: (ctx, snap) {
+            if (snap.connectionState == ConnectionState.waiting) {
+              return const Center(
+                child: CircularProgressIndicator(
+                    color: AppColors.accentGreen),
+              );
+            }
+            if (snap.hasError) {
+              return Center(
+                child: Text(
+                  'No pudimos cargar la flota Volvo:\n${snap.error}',
+                  style: const TextStyle(color: Colors.white70),
+                ),
+              );
+            }
+            final docs = snap.data?.docs ?? const [];
+            // Solo Volvos activos (no dados de baja).
+            final volvosActivos = <String>[];
+            for (final d in docs) {
+              final patente = d.id.toUpperCase();
+              final activo = (d.data()[AppActivo.campo] ?? true) as bool;
+              if (activo && patente.isNotEmpty) {
+                volvosActivos.add(patente);
+              }
+            }
+            volvosActivos.sort();
+            final reportaron = volvosActivos
+                .where((p) => patentesQueReportaron.contains(p))
+                .toList();
+            final noReportaron = volvosActivos
+                .where((p) => !patentesQueReportaron.contains(p))
+                .toList();
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.help_outline,
+                        color: AppColors.accentBlue, size: 20),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Cobertura PTO en el período',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.accentBlue.withAlpha(20),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.accentBlue.withAlpha(60),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${reportaron.length} de ${volvosActivos.length} Volvos reportaron PTO',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              noReportaron.isEmpty
+                                  ? 'Todas las unidades Volvo reportaron al menos un evento.'
+                                  : '${noReportaron.length} unidades sin eventos PTO en el período.',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Importante: que una unidad no reporte PTO puede ser '
+                  'porque (a) no salió a descargar en el período, '
+                  '(b) el sensor de PTO no está conectado / habilitado en '
+                  'Volvo Connect, o (c) es un tractor sin batea (capacidad '
+                  'distinta). Verificá en taller antes de pedir alta.',
+                  style: TextStyle(color: Colors.white60, fontSize: 11),
+                ),
+                const SizedBox(height: 12),
+                if (noReportaron.isNotEmpty) ...[
+                  const Text(
+                    'No reportaron en este período:',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Expanded(
+                    child: ListView(
+                      children: noReportaron
+                          .map((p) => Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 3),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.remove_circle_outline,
+                                        color: Colors.orangeAccent,
+                                        size: 14),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      p,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontFamily: 'monospace',
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                ] else ...[
+                  const Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                            color: AppColors.accentGreen,
+                            size: 48,
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Cobertura total',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
+        ),
+      ),
+    );
   }
 }
