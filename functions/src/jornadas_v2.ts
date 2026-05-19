@@ -221,6 +221,38 @@ async function descansoPrevioCumplido(dni: string): Promise<boolean> {
 }
 
 /**
+ * Cargar set de DNIs de choferes dados de baja (soft-delete con
+ * `ACTIVO=false`). El tick del vigilador skipea estos DNIs antes de
+ * crear/actualizar jornada → no se generan jornadas falsas ni avisos
+ * para ex-empleados. Santiago 2026-05-19 (bug Erasmo).
+ *
+ * No usa cache compartido a propósito: el tick corre cada 1 min y un
+ * empleado puede darse de baja en cualquier momento — queremos que
+ * el efecto sea inmediato (max 1 ciclo de delay).
+ */
+async function cargarChoferesInactivos(): Promise<Set<string>> {
+  try {
+    const snap = await db()
+      .collection("EMPLEADOS")
+      .where("ACTIVO", "==", false)
+      .limit(1000)
+      .get();
+    const set = new Set<string>();
+    for (const d of snap.docs) set.add(d.id);
+    return set;
+  } catch (e) {
+    logger.warn("[jornadas_v2.cargarChoferesInactivos] falló", {
+      error: (e as Error).message,
+    });
+    // Fail-safe: devolvemos set vacío → no se filtra nadie por inactivo
+    // (el check downstream en obtenerEmpleadoLite sigue siendo red de
+    // seguridad). Mejor avisar a 1 ex-empleado por 1 ciclo que romper
+    // el vigilador entero por una query caída.
+    return new Set();
+  }
+}
+
+/**
  * Cargar set de choferes silenciados (comando /silenciar).
  */
 async function cargarSilenciados(): Promise<Set<string>> {
@@ -248,11 +280,37 @@ interface EmpleadoLite {
   saludo: string;
 }
 
+/**
+ * Decide si un empleado está dado de baja. Defensivo contra valores
+ * raros en `ACTIVO` (Santiago 2026-05-19 reportó que el bot mandó
+ * mensaje a un chofer dado de baja — Erasmo). El check anterior era
+ * solo `=== false`, dejaba pasar:
+ *   - "false" / "FALSE" (string en lugar de bool)
+ *   - 0 (número)
+ *   - Por contraste, considera ACTIVO ausente / null / undefined como
+ *     ACTIVO (compat retro: empleados pre-soft-delete no tenían el
+ *     campo y debían operar normal).
+ */
+function empleadoEstaInactivo(empData: Record<string, unknown>): boolean {
+  const v = empData.ACTIVO;
+  if (v === false) return true;
+  if (typeof v === "string" && v.toLowerCase() === "false") return true;
+  if (v === 0) return true;
+  return false;
+}
+
 async function obtenerEmpleadoLite(dni: string): Promise<EmpleadoLite | null> {
   const empSnap = await db().collection("EMPLEADOS").doc(dni).get();
   if (!empSnap.exists) return null;
   const empData = empSnap.data() ?? {};
-  if (empData.ACTIVO === false) return null;
+  if (empleadoEstaInactivo(empData)) {
+    logger.warn("[jornadas_v2] skip aviso a empleado inactivo", {
+      dni,
+      activo_raw: empData.ACTIVO,
+      activo_tipo: typeof empData.ACTIVO,
+    });
+    return null;
+  }
   const tel = (empData.TELEFONO ?? "").toString().trim();
   if (!tel || tel === "-") return null;
   const apodo = (empData.APODO ?? "").toString().trim();
@@ -528,6 +586,13 @@ export async function tickVigiladorJornada(): Promise<void> {
   // Choferes/patentes de combustibles líquidos NO controlados por
   // Coopertrans Móvil — skipear sus jornadas (ver excluidos.ts).
   const excluidos = await cargarExcluidos(db());
+  // Choferes dados de baja — el vigilador NO debe crear jornada ni
+  // mandar avisos a sus DNIs. Bug Santiago 2026-05-19: el bot le
+  // mandó "Estás cerca de las 12 horas" a Erasmo que estaba dado
+  // de baja. El check en `obtenerEmpleadoLite` debería haber
+  // filtrado el mensaje, pero arreglamos UPSTREAM también para no
+  // depender de un único punto + ahorrar I/O en JORNADAS.
+  const inactivos = await cargarChoferesInactivos();
 
   // Race condition fix (auditoria 2026-05-16): si por drift de
   // CHOFER_DISTINTO un mismo DNI aparece en 2 patentes (chofer logueado
@@ -546,6 +611,8 @@ export async function tickVigiladorJornada(): Promise<void> {
     if (!dni) continue;
     // Skip choferes excluidos (combustibles líquidos).
     if (excluidos.dnis.has(dni)) continue;
+    // Skip choferes dados de baja (Santiago 2026-05-19).
+    if (inactivos.has(dni)) continue;
     // Skip patentes excluidas (defensivo: chofer Vecchi manejando un
     // tanque por algún motivo — sigue siendo operativa que no controlamos).
     if (excluidos.patentes.has(docPos.id.toUpperCase())) continue;

@@ -94,21 +94,6 @@ class _AdminPersonalListaScreenState
             onPressed: () =>
                 setState(() => _mostrarExcluidos = !_mostrarExcluidos),
           ),
-        IconButton(
-          tooltip: _mostrarInactivos
-              ? 'Ocultar empleados inactivos'
-              : 'Mostrar empleados inactivos',
-          icon: Icon(
-            _mostrarInactivos
-                ? Icons.visibility_off_outlined
-                : Icons.archive_outlined,
-            color: _mostrarInactivos
-                ? AppColors.accentOrange
-                : Colors.white70,
-          ),
-          onPressed: () =>
-              setState(() => _mostrarInactivos = !_mostrarInactivos),
-        ),
       ],
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(
@@ -123,33 +108,69 @@ class _AdminPersonalListaScreenState
         icon: const Icon(Icons.person_add_alt_1),
         label: const Text('NUEVO'),
       ),
-      body: AppListPage(
-        stream: _empleadosStream,
-        searchHint: 'Buscar por nombre, tractor o enganche...',
-        emptyTitle: 'Sin choferes cargados',
-        emptySubtitle: 'Tocá el botón + para agregar uno',
-        emptyIcon: Icons.badge_outlined,
-        filter: (doc, q) {
-          final data = doc.data() as Map<String, dynamic>;
-          // Filtro de soft-delete: por default ocultamos inactivos.
-          // El toggle del AppBar permite verlos cuando hace falta
-          // gestionar reactivaciones.
-          if (!_mostrarInactivos && !AppActivo.esActivo(data)) {
-            return false;
-          }
-          // Filtro de excluidos (tanqueros + testers). Por default
-          // ocultamos para que los empleados reales no se mezclen.
-          if (!_mostrarExcluidos &&
-              ExcluidosService.esExcluido(_excluidos, dni: doc.id)) {
-            return false;
-          }
-          final hay = '${data['NOMBRE'] ?? ''} '
-                  '${data['VEHICULO'] ?? ''} ${data['ENGANCHE'] ?? ''} '
-                  '${doc.id}'
-              .toUpperCase();
-          return hay.contains(q);
-        },
-        itemBuilder: (ctx, doc) => _EmpleadoCard(doc: doc),
+      body: Column(
+        children: [
+          // Chip "Mostrar inactivos" arriba del listado, más visible
+          // que el IconButton del AppBar anterior (Santiago 2026-05-19:
+          // "no tengo forma de ver los que fueron dados de baja").
+          // Antes vivía como icono pequeño en el AppBar, ahora es un
+          // FilterChip explícito con etiqueta y color.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            child: Row(
+              children: [
+                FilterChip(
+                  label: const Text('Mostrar inactivos'),
+                  selected: _mostrarInactivos,
+                  onSelected: (v) =>
+                      setState(() => _mostrarInactivos = v),
+                  selectedColor:
+                      AppColors.accentOrange.withValues(alpha: 0.6),
+                  avatar: Icon(
+                    _mostrarInactivos
+                        ? Icons.visibility
+                        : Icons.visibility_off,
+                    size: 16,
+                    color: _mostrarInactivos
+                        ? Colors.white
+                        : Colors.white70,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: AppListPage(
+              stream: _empleadosStream,
+              searchHint: 'Buscar por nombre, tractor o enganche...',
+              emptyTitle: 'Sin choferes cargados',
+              emptySubtitle: 'Tocá el botón + para agregar uno',
+              emptyIcon: Icons.badge_outlined,
+              filter: (doc, q) {
+                final data = doc.data() as Map<String, dynamic>;
+                // Filtro de soft-delete: por default ocultamos
+                // inactivos. El chip "Mostrar inactivos" permite verlos
+                // cuando hace falta gestionar reactivaciones.
+                if (!_mostrarInactivos && !AppActivo.esActivo(data)) {
+                  return false;
+                }
+                // Filtro de excluidos (tanqueros + testers). Por
+                // default ocultamos para que los empleados reales no
+                // se mezclen.
+                if (!_mostrarExcluidos &&
+                    ExcluidosService.esExcluido(_excluidos, dni: doc.id)) {
+                  return false;
+                }
+                final hay = '${data['NOMBRE'] ?? ''} '
+                        '${data['VEHICULO'] ?? ''} ${data['ENGANCHE'] ?? ''} '
+                        '${doc.id}'
+                    .toUpperCase();
+                return hay.contains(q);
+              },
+              itemBuilder: (ctx, doc) => _EmpleadoCard(doc: doc),
+            ),
+          ),
+        ],
       ),
     );
   }
