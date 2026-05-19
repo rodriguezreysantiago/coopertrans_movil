@@ -386,7 +386,8 @@ Mandar al **propio número del bot** desde un teléfono que esté en `ADMIN_PHON
 - `/reanudar` — reanudar.
 - `/forzar-cron` — corre el ciclo del cron ahora (no espera 60min).
 - `/test-aviso DNI` — mensaje de prueba al teléfono del DNI indicado.
-- `/jornada DNI` — estado del vigilador para ese chofer (total día, jornada actual con marker "arrancó ayer" si cruzó medianoche, continuo, pausa, avisos enviados, hora_min_arranque si llegó a 12h, patente, silenciado si aplica).
+- `/jornada DNI` — estado del vigilador para ese chofer (manejo neto total de la jornada / 12h, manejo continuo del bloque actual, pausa, avisos enviados, patente, silenciado si aplica). Output técnico.
+- `/enviar-jornada DNI` — (2026-05-19) le manda AL CHOFER su estado de jornada (el mismo texto que ve si tipea `/jornada`). Útil para recordatorios de descanso o al discutir horas con un chofer. Si el chofer está silenciado, no encola y avisa. Encola en COLA_WHATSAPP con origen `jornada_manual_admin` (time-sensitive, TTL 30 min).
 - `/silenciar DNI dur [motivo]` — suprime avisos del vigilador (Ns/Nm/Nh/Nd, cap 30d). Ej: `/silenciar 12345678 2h en taller`. Encola aviso al chofer "silenciado por X horas hasta DD/MM HH:MM ART, motivo: X". El cron `procesarSilenciadosExpirados` (cada 10 min) detecta cuando se cumple el plazo y encola "notificaciones reanudadas".
 - `/desilenciar DNI` — revierte un /silenciar previo. Si estaba activo, encola "se reanudaron las notificaciones".
 - `/ayuda` — lista comandos.

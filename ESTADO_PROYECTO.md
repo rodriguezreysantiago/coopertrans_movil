@@ -1411,4 +1411,79 @@ Estado suite: **flutter test 310/310 ✓ + functions npm test 62/62 ✓**.
 
 ---
 
+## 15. Sesión 2026-05-19 — vigilador fix + split functions completo + tests CF
+
+Sesión larga sobre un bug real reportado + cierre de dos pendientes
+estructurales (split de `index.ts`, tests de flujo CF).
+
+### 15.1 🐛 Bug del día: aviso falso de "12h jornada"
+
+Oscar y César recibieron "Llegás al límite de 12 horas de jornada" sin
+avisos progresivos previos. **Causa raíz**: el disparador era
+`bloques_completos >= 3`, pero un "bloque" se cuenta con cualquier manejo
+previo + pausa de 15+ min. Chofer con pausas frecuentes y cortas → 3
+bloques con poco manejo real. Verificado con datos reales (script
+`scripts/diagnosticar_jornada_chofer.js`): César tenía 3 bloques con
+**7h54 manejo neto** → aviso falso.
+
+**Fix** (`1c9e0af` + `97e9acb` + `bf18767`): avisos por MANEJO NETO
+acumulado (`total_manejo_seg + bloque_actual_manejo_seg`):
+- 11h neto → heads-up `cuota_proxima` ("ya llevás 11 horas").
+- 12h neto → límite firme `cuota` ("12 horas de jornada").
+
+Clarificación Santiago: el límite son **12h de manejo neto** (las paradas
+obligatorias de 15 min suceden DENTRO de las 12h, no se restan). Nueva
+flag `alerta_cuota_proxima_enviada` en el schema JORNADAS.
+
+### 15.2 Feature: comando `/enviar-jornada <DNI>` (`25c49cb`)
+
+El admin puede mandarle al chofer su estado de jornada (mismo texto que
+`/jornada`) sin que el chofer lo pida. Útil para recordar descansos o al
+discutir horas. Refactor `_construirTextoJornadaChofer` (pura) reusada.
+Si el chofer está silenciado, no encola y avisa. Fix de paso: el origen
+`jornada_v2_cuota_proxima` no estaba en ORIGENES_TIME_SENSITIVE.
+
+### 15.3 Split `functions/index.ts` COMPLETADO: 6884 → 45 LOC (-99%)
+
+Completado el split iniciado el 18-may (estaba al 50%). `index.ts` quedó
+como ENTRY POINT puro (`import "./setup"` + 11 `export *`). Módulos
+nuevos: `auth.ts` (1196), `audit.ts` (256), `comun.ts` (269 — helpers
+compartidos: asignaciones + locks + fetch + tipos), `volvo.ts` (1655 —
+proxy + alertas + scores + 2 triggers), `telemetria.ts` (310).
+Commits `383939c` `8dffd96` `6076075` `e80bfae` `442450c`. Cero cambio de
+comportamiento (validado tsc + suite en cada paso). Ver memoria
+`project_split_functions_index.md`.
+
+### 15.4 Tests de flujo CF — sacado de "deferred"
+
+NO hizo falta `firebase-functions-test` + emulator. El patrón ganador:
+**extraer la lógica pura del I/O** y testear la pura.
+- `evaluarTickJornada` (máquina de estados del vigilador, pura) + 21
+  tests — incluye REGRESIÓN del bug de César (`acb6c5a`).
+- 5 builders de mensajes de resúmenes diarios (puros) + 23 tests
+  (`b61375e`).
+
+### 15.5 Otros
+
+- **Descargas PTO** (`b647fc5`): dedup por (patente, ventana 15 min) en
+  la pantalla — la PTO toggea on/off en una misma descarga física.
+- **Fix mock agrupador** (`cd3e658`): el mock de `agrupador.test.js` no
+  tenía orderBy/limit → 9 tests del bot estaban rojos. Bot 129/129.
+
+### 15.6 Estado de las suites
+
+```
+flutter test:        310/310 ✓
+functions npm test:  148/148 ✓  (104 → +44)
+whatsapp-bot test:   129/129 ✓  (120 → +9)
+```
+
+### 15.7 Deploys pendientes (Santiago, desde su PC)
+
+`firebase deploy --only functions` (split + fix vigilador + builders) +
+verificar rules/indexes del 18-may. Bot se auto-actualiza con el push.
+Ver `PENDIENTES.md`.
+
+---
+
 **Cómo retomar (sesión vieja)**: leer secciones 6.9 (cleanup + RBAC del 30-abril), 6.10 (sesión grande del 1-mayo: imports bulk + fixes UI + auditoría profunda + plan 4 fases ejecutado) y 13 (anotaciones del 30-abril noche). El estado del repo es el commit más reciente — `git log --oneline -10`.

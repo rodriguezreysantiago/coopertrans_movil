@@ -118,7 +118,7 @@ Pollers de APIs externas:
 - `sitrackEventosPoller` (cada 5 min) — Sitrack `/files/reports` → `SITRACK_EVENTOS` (1400+ tipos de evento crudos para análisis).
 
 Vigilador jornada v2 (refactor 2026-05-15, reemplaza al v1):
-- `vigiladorJornadaV2` (cada 5 min) — tracking de bloques 3×4h (3h45 manejo + 15 min pausa) + descanso 8h + veda nocturna → escribe a `JORNADAS` (no más `JORNADAS_CHOFER` legacy) + encola avisos al chofer.
+- `vigiladorJornadaChofer` (cada 5 min) — tracking de bloques 3×4h (3h45 manejo + 15 min pausa) + descanso 8h + veda nocturna → escribe a `JORNADAS` (no más `JORNADAS_CHOFER` legacy) + encola avisos al chofer. **Avisos de jornada por MANEJO NETO acumulado** (heads-up 11h, límite firme 12h — fix 2026-05-19; antes era por `bloques_completos >= 3`, que daba falsos positivos). Lógica de decisión en `evaluarTickJornada` (pura, 21 tests).
 - `procesarSilenciadosExpirados` (cada 1h) — limpia silenciamientos vencidos en `BOT_SILENCIADOS_CHOFER`.
 
 Resúmenes diarios a Vecchi:
@@ -136,7 +136,9 @@ Salud + mantenimiento:
 - `purgarColaWhatsappAntigua` (diario) — cleanup de docs viejos en `COLA_WHATSAPP` con estado ENVIADO/ERROR.
 - `backupFirestoreScheduled` (domingo 06:00 ART) — export semanal a `gs://coopertrans-movil-backups`.
 
-(Cron eliminado en refactor v2: `avisoFinJornadaNocturna` — la veda nocturna 00:00 ART ahora se detecta en tiempo real por `vigiladorJornadaV2`.)
+(Cron eliminado en refactor v2: `avisoFinJornadaNocturna` — la veda nocturna 00:00 ART ahora se detecta en tiempo real por `vigiladorJornadaChofer`.)
+
+> **Estructura (split completado 2026-05-19)**: `functions/src/index.ts` es un entry point puro (6884 → 45 LOC, solo `import "./setup"` + re-exports). La lógica vive en módulos temáticos: `auth.ts`, `audit.ts`, `comun.ts` (helpers compartidos), `volvo.ts`, `telemetria.ts`, `sitrack.ts`, `icm.ts`, `mantenimiento.ts`, `resumenes_diarios.ts`, `jornadas_v2.ts`, `dashboard_stats.ts`, `cleanup_y_recibos.ts`. Ver `project_split_functions_index.md`.
 
 **onDocumentCreated (triggers)**
 - `onAlertaVolvoCreated` — al crear alerta Volvo, encola WhatsApp al chofer (con blacklist mantenimiento + throttle 10/h/chofer + silenciamiento universal).

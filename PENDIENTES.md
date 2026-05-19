@@ -7,6 +7,74 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-05-19 EOD — Cierre del día (vigilador fix + split functions completo + tests CF)
+
+Sesión larga: fix de un bug real reportado por Santiago + completar el
+split de `functions/index.ts` + sacar de "deferred" los tests de flujo
+de las Cloud Functions.
+
+### 🐛 Bug REAL del día: aviso falso de "12h jornada" (Oscar + César)
+
+Dos choferes recibieron "Llegás al límite de 12 horas de jornada" sin
+avisos progresivos previos y sin estar silenciados. **Causa raíz**: el
+disparador era `bloques_completos >= 3`, pero un "bloque" se cuenta con
+cualquier manejo + pausa de 15+ min. Un chofer con pausas frecuentes y
+cortas llega a 3 bloques con poco manejo real. Verificado con datos
+reales (`scripts/diagnosticar_jornada_chofer.js`): César tenía 3 bloques
+con **7h54 manejo neto** → aviso falso. **Fix**: avisos por MANEJO NETO
+acumulado (heads-up 11h, límite firme 12h). Clarificación Santiago: el
+límite son 12h de manejo neto (las paradas de 15 min suceden DENTRO).
+
+### Commits del día (9)
+
+**Vigilador jornada (3)**:
+- `1c9e0af` — cuota por manejo neto (CF jornadas_v2)
+- `97e9acb` — `/jornada` del bot usa manejo neto + heads-up 11h + script diagnóstico
+- `bf18767` — corrección límite: 12h (no 11h)
+
+**Bot WhatsApp (2)**:
+- `25c49cb` — comando admin `/enviar-jornada <DNI>` (manda al chofer su estado de jornada) + fix time-sensitive `jornada_v2_cuota_proxima`
+- `cd3e658` — fix mock Firestore de agrupador.test.js (faltaba orderBy/limit) → bot 129/129
+
+**Descargas PTO (1)**:
+- `b647fc5` — dedup por (patente, ventana 15 min) en pantalla descargas
+
+**Split functions/index.ts COMPLETADO (5)** — `6884 → 45 LOC (-99%)`:
+- `383939c` auth.ts · `8dffd96` audit.ts · `6076075` comun.ts ·
+  `e80bfae` volvo.ts · `442450c` telemetria.ts + index entry point puro
+
+**Tests de flujo CF (2)** — sacado de "deferred":
+- `acb6c5a` — `evaluarTickJornada` (máquina de estados pura) + 21 tests
+- `b61375e` — 5 builders de resúmenes (puros) + 23 tests
+
+### Estado de las suites
+
+```
+flutter test:        310/310 ✓  (sin cambios hoy)
+functions npm test:  148/148 ✓  (de 104 → +44 tests del vigilador y resúmenes)
+whatsapp-bot test:   129/129 ✓  (de 120 → +8 /enviar-jornada, +1 fix mock)
+```
+
+### Deploys pendientes (para Santiago, desde su PC)
+
+1. `git push` — (probablemente ya pusheado sobre la marcha)
+2. `firebase deploy --only functions` — propaga: **fix vigilador manejo
+   neto** (jornadas_v2) + **split completo** (redeploy de las 31
+   functions, cero cambio de comportamiento) + builders de resúmenes.
+   Tarda unos minutos por el volumen.
+3. **Bot**: el push dispara el auto-update de la PC dedicada en ≤5 min
+   (toma `/enviar-jornada` + fixes). No requiere tocar la PC.
+4. **Verificar del 18/5 si no se corrió**: `firebase deploy --only
+   firestore:rules` (guard BORRADORES_VIAJE) + `firebase deploy --only
+   firestore:indexes` (index JORNADAS DESC) — comandos separados.
+
+### Validación natural mañana 8 AM ART
+
+Que el resumen de jornadas a Molina (`resumenExcesosJornadaDiario`)
+refleje bien los excesos con la lógica nueva de manejo neto.
+
+---
+
 ## 📅 2026-05-18 EOD — Cierre del día (auditoría completa + tests + splits + bug horaArt)
 
 **Sesión gigante** de auditoría profunda del proyecto con 6 agentes
