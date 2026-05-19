@@ -52,6 +52,12 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
   /// quemó cada número de recibo) y se ven activando este chip.
   bool _mostrarEliminados = false;
 
+  /// Filtro por empleado específico (Santiago 2026-05-19): permite
+  /// ver "cuántos adelantos tuvo el empleado X en el rango". Null =
+  /// sin filtro (todos los empleados).
+  String? _empleadoFiltroDni;
+  String? _empleadoFiltroNombre;
+
   /// Set de excluidos (testers + choferes tanqueros). Se usa en el
   /// dropdown del form de alta y en el filtro de la lista. Los
   /// empleados reales preguntaban "quién es Apple Reviewer?" al ver
@@ -195,13 +201,31 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
               ],
             ),
           ),
-          // Filtro "Mostrar eliminados". Default OFF — los eliminados
-          // viven solo para auditoría (saber por qué se quemó cada
-          // número de recibo). Pedido Santiago 2026-05-14.
+          // ─── Filtros: Empleado + Mostrar eliminados ──────────────
+          // Filtro por empleado (Santiago 2026-05-19): ver "cuántos
+          // adelantos tuvo X en el rango". Tappeable, abre dialog con
+          // lista de empleados. Cuando hay filtro activo el chip se
+          // pinta y muestra el nombre con botón × para limpiar.
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-            child: Row(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
               children: [
+                _ChipFiltroEmpleado(
+                  empleadoDni: _empleadoFiltroDni,
+                  empleadoNombre: _empleadoFiltroNombre,
+                  onSeleccionar: (dni, nombre) {
+                    setState(() {
+                      _empleadoFiltroDni = dni;
+                      _empleadoFiltroNombre = nombre;
+                    });
+                  },
+                  onLimpiar: () => setState(() {
+                    _empleadoFiltroDni = null;
+                    _empleadoFiltroNombre = null;
+                  }),
+                ),
                 FilterChip(
                   label: const Text('Mostrar eliminados'),
                   selected: _mostrarEliminados,
@@ -277,6 +301,16 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                     .toList();
                 return Column(
                   children: [
+                    // Mini-resumen del empleado filtrado (Santiago
+                    // 2026-05-19): muestra "PEREZ JUAN — 8 adelantos
+                    // en rango, $X pendiente / $Y entregado". Solo
+                    // aparece si hay filtro de empleado activo.
+                    if (_empleadoFiltroDni != null)
+                      _ResumenEmpleadoFiltrado(
+                        nombre: _empleadoFiltroNombre ??
+                            'DNI $_empleadoFiltroDni',
+                        adelantos: filtrados,
+                      ),
                     _BarraSeleccion(
                       totalPendientes: seleccionables.length,
                       totalSeleccionados: seleccionados.length,
@@ -338,6 +372,11 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
             _excluidos,
             dni: a.choferDni,
           ));
+    }
+    // Filtro por empleado específico (Santiago 2026-05-19): permite
+    // ver solo los adelantos del DNI seleccionado en el rango.
+    if (_empleadoFiltroDni != null && _empleadoFiltroDni!.isNotEmpty) {
+      it = it.where((a) => a.choferDni == _empleadoFiltroDni);
     }
     // Fecha desde (inclusive — comparamos contra inicio del día).
     if (_fechaDesde != null) {
@@ -464,6 +503,237 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
 ///   - Solo hasta  → "? → 15-05-2026"
 ///   - Ambos       → "13-05-2026 → 15-05-2026"
 ///   - Mismo día   → "13-05-2026"
+/// Chip tappeable para filtrar la lista de adelantos por un empleado
+/// específico (Santiago 2026-05-19: "ver cuántos adelantos tuvo en el
+/// lapso seleccionado"). Si no hay filtro, muestra "Empleado: TODOS"
+/// y al tocar abre dialog con buscador. Si hay filtro, muestra el
+/// nombre + botón × para limpiar.
+class _ChipFiltroEmpleado extends StatelessWidget {
+  final String? empleadoDni;
+  final String? empleadoNombre;
+  final void Function(String dni, String nombre) onSeleccionar;
+  final VoidCallback onLimpiar;
+
+  const _ChipFiltroEmpleado({
+    required this.empleadoDni,
+    required this.empleadoNombre,
+    required this.onSeleccionar,
+    required this.onLimpiar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hayFiltro = empleadoDni != null && empleadoDni!.isNotEmpty;
+    final label = hayFiltro
+        ? (empleadoNombre?.trim().isNotEmpty == true
+            ? empleadoNombre!.toUpperCase()
+            : 'DNI $empleadoDni')
+        : 'Empleado: TODOS';
+    return ActionChip(
+      avatar: Icon(
+        hayFiltro ? Icons.person : Icons.people_outline,
+        size: 16,
+        color: hayFiltro ? AppColors.accentBlue : Colors.white60,
+      ),
+      label: Text(
+        label,
+        style: TextStyle(
+          color: hayFiltro ? Colors.white : Colors.white60,
+          fontSize: 12,
+          fontWeight: hayFiltro ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+      backgroundColor: hayFiltro
+          ? AppColors.accentBlue.withValues(alpha: 0.2)
+          : null,
+      side: BorderSide(
+        color: hayFiltro
+            ? AppColors.accentBlue
+            : Colors.white24,
+      ),
+      onPressed: () async {
+        final res = await showDialog<_EmpleadoElegido>(
+          context: context,
+          builder: (_) => const _DialogSeleccionarEmpleado(),
+        );
+        if (res != null) {
+          if (res.dni.isEmpty) {
+            onLimpiar();
+          } else {
+            onSeleccionar(res.dni, res.nombre);
+          }
+        }
+      },
+    );
+  }
+}
+
+class _EmpleadoElegido {
+  final String dni;
+  final String nombre;
+  const _EmpleadoElegido({required this.dni, required this.nombre});
+}
+
+/// Dialog que lista empleados (no excluidos) ordenados alfabéticamente
+/// con buscador en vivo. Opción extra "TODOS" arriba para limpiar el
+/// filtro sin tocar la lista.
+class _DialogSeleccionarEmpleado extends StatefulWidget {
+  const _DialogSeleccionarEmpleado();
+
+  @override
+  State<_DialogSeleccionarEmpleado> createState() =>
+      _DialogSeleccionarEmpleadoState();
+}
+
+class _DialogSeleccionarEmpleadoState
+    extends State<_DialogSeleccionarEmpleado> {
+  String _q = '';
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      child: SizedBox(
+        width: (MediaQuery.of(context).size.width - 80).clamp(280.0, 420.0),
+        height: (MediaQuery.of(context).size.height - 200)
+            .clamp(360.0, 560.0),
+        child: Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Row(
+                children: [
+                  Icon(Icons.person_search, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Filtrar por empleado',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+              child: TextField(
+                autofocus: true,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search, size: 18),
+                  hintText: 'Buscar por nombre o DNI…',
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  suffixIcon: _q.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.clear, size: 16),
+                          onPressed: () => setState(() => _q = ''),
+                        ),
+                ),
+                onChanged: (v) => setState(() => _q = v.trim().toUpperCase()),
+              ),
+            ),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance
+                    .collection(AppCollections.empleados)
+                    .snapshots(),
+                builder: (ctx, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final excluidos = ExcluidosService.cacheActual;
+                  final docs = (snap.data?.docs ?? const [])
+                      .where((d) => !ExcluidosService.esExcluido(
+                            excluidos,
+                            dni: d.id,
+                          ))
+                      .toList()
+                    ..sort((a, b) {
+                      final na =
+                          (a.data()['NOMBRE'] ?? '').toString().toUpperCase();
+                      final nb =
+                          (b.data()['NOMBRE'] ?? '').toString().toUpperCase();
+                      return na.compareTo(nb);
+                    });
+                  final filtrados = _q.isEmpty
+                      ? docs
+                      : docs.where((d) {
+                          final nombre = (d.data()['NOMBRE'] ?? '')
+                              .toString()
+                              .toUpperCase();
+                          return nombre.contains(_q) ||
+                              d.id.toUpperCase().contains(_q);
+                        }).toList();
+                  return ListView(
+                    children: [
+                      // Opción "TODOS" — limpia el filtro
+                      ListTile(
+                        leading: const Icon(Icons.people_outline,
+                            color: Colors.white60),
+                        title: const Text('TODOS los empleados'),
+                        subtitle: const Text('Sin filtro de empleado',
+                            style: TextStyle(fontSize: 11)),
+                        onTap: () => Navigator.pop(
+                          context,
+                          const _EmpleadoElegido(dni: '', nombre: ''),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      for (final d in filtrados)
+                        ListTile(
+                          dense: true,
+                          leading: const Icon(Icons.person,
+                              size: 18, color: AppColors.accentBlue),
+                          title: Text(
+                            (d.data()['NOMBRE'] ?? d.id).toString(),
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          subtitle: Text('DNI ${d.id}',
+                              style: const TextStyle(fontSize: 10)),
+                          onTap: () => Navigator.pop(
+                            context,
+                            _EmpleadoElegido(
+                              dni: d.id,
+                              nombre:
+                                  (d.data()['NOMBRE'] ?? d.id).toString(),
+                            ),
+                          ),
+                        ),
+                      if (filtrados.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(24),
+                          child: Text(
+                            'Sin coincidencias.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.white54),
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('CERRAR'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _BotonRangoFechas extends StatelessWidget {
   final DateTime? desde;
   final DateTime? hasta;
@@ -537,6 +807,155 @@ class _BotonRangoFechas extends StatelessWidget {
 /// Barra que muestra cuántos adelantos están seleccionados +
 /// botones para seleccionar/deseleccionar todos + botón EXPORTAR.
 /// Aparece arriba de la lista cuando hay al menos 1 adelanto visible.
+/// Mini-resumen que aparece arriba de la lista cuando hay filtro de
+/// empleado activo. Muestra cantidad de adelantos en el rango y
+/// montos totales por estado. Pedido Santiago 2026-05-19: "ver
+/// cuántos adelantos tuvo en el lapso seleccionado".
+class _ResumenEmpleadoFiltrado extends StatelessWidget {
+  final String nombre;
+  final List<AdelantoChofer> adelantos;
+
+  const _ResumenEmpleadoFiltrado({
+    required this.nombre,
+    required this.adelantos,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Excluimos los eliminados de los totales en plata (no son plata
+    // real). Pero los contamos en "total registros" por transparencia.
+    final activos = adelantos.where((a) => !a.eliminado).toList();
+    final pendientes =
+        activos.where((a) => !a.pagado).toList();
+    final entregados =
+        activos.where((a) => a.pagado).toList();
+    final totalPendiente =
+        pendientes.fold<double>(0, (acc, a) => acc + a.monto);
+    final totalEntregado =
+        entregados.fold<double>(0, (acc, a) => acc + a.monto);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.accentBlue.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: AppColors.accentBlue.withValues(alpha: 0.4),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.person, size: 16, color: AppColors.accentBlue),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  nombre.toUpperCase(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                '${adelantos.length} '
+                'adelanto${adelantos.length == 1 ? '' : 's'} en rango',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: _ChipResumen(
+                  label: 'Pendiente',
+                  cant: pendientes.length,
+                  monto: totalPendiente,
+                  color: AppColors.accentOrange,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ChipResumen(
+                  label: 'Entregado',
+                  cant: entregados.length,
+                  monto: totalEntregado,
+                  color: AppColors.accentGreen,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChipResumen extends StatelessWidget {
+  final String label;
+  final int cant;
+  final double monto;
+  final Color color;
+  const _ChipResumen({
+    required this.label,
+    required this.cant,
+    required this.monto,
+    required this.color,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 4, height: 18,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$label · $cant',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '\$ ${AppFormatters.formatearMonto(monto)}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _BarraSeleccion extends StatelessWidget {
   /// Total de adelantos SELECCIONABLES en la lista filtrada. Desde
   /// 2026-05-19 todos lo son (pendientes/pagados/eliminados).
