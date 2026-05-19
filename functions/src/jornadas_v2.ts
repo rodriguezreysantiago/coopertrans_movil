@@ -1009,6 +1009,80 @@ export async function tickVigiladorJornada(): Promise<void> {
 
 const SEG_HIGIENE_DNI = "34730329";
 
+/** Una jornada con incidencias para el resumen a Seg e Higiene. */
+export interface ExcesoJornada {
+  choferDni: string;
+  patente: string;
+  inicio: FsTimestamp;
+  fin: FsTimestamp | null;
+  bloquesCompletos: number;
+  totalManejoSeg: number;
+  bloqueExcedido: boolean;
+  cuotaExcedida: boolean;
+  vedaExcedida: boolean;
+}
+
+/**
+ * Construye el texto del resumen diario de jornadas con incidencias para
+ * Molina (Seg e Higiene). PURA — separada de `armarResumenJornadasDiario`
+ * para testear el formato sin Firestore. `nombrePorDni` resuelve el
+ * nombre del chofer; si falta, cae a "DNI X".
+ */
+export function construirMensajeResumenJornadas(
+  excesos: ExcesoJornada[],
+  nombrePorDni: Map<string, string>,
+  saludo: string,
+  fmtFecha: string,
+): string {
+  if (excesos.length === 0) {
+    return (
+      `${saludo},\n\n` +
+      `📋 *Resumen jornadas — ${fmtFecha}*\n\n` +
+      "✅ Sin incidencias: ninguna jornada cerrada ayer registró " +
+      "exceso de bloque, cuota o veda nocturna.\n\n" +
+      "_Bot-On — Coopertrans Móvil_"
+    );
+  }
+
+  const fmtHm = (s: number): string => {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    return `${h}:${m.toString().padStart(2, "0")}`;
+  };
+
+  const lineas = excesos.map((x) => {
+    const nombre = nombrePorDni.get(x.choferDni) || `DNI ${x.choferDni}`;
+    const flags: string[] = [];
+    if (x.bloqueExcedido) flags.push("bloque > 4h sin pausa");
+    if (x.cuotaExcedida) flags.push("manejó post-cuota cumplida");
+    if (x.vedaExcedida) flags.push("circuló después de 00:00 ART");
+    const incioFmt = new Intl.DateTimeFormat("es-AR", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+      hour12: false,
+    }).format(x.inicio.toDate());
+    return (
+      `🚛 *${x.patente || "—"}* — ${nombre} (DNI ${x.choferDni})\n` +
+      `   Jornada: arrancó ${incioFmt}, ${x.bloquesCompletos}/3 bloques, ` +
+      `${fmtHm(x.totalManejoSeg)} hs manejando\n` +
+      `   ⚠️ ${flags.join(", ")}`
+    );
+  });
+
+  return (
+    `${saludo},\n\n` +
+    `📋 *Resumen jornadas — ${fmtFecha}*\n\n` +
+    `${excesos.length} jornada${excesos.length === 1 ? "" : "s"} con ` +
+    "incidencias:\n\n" +
+    `${lineas.join("\n\n")}\n\n` +
+    "_Modelo de jornada: 3 bloques (3 h 45 manejo + 15 min pausa " +
+    "interna, al chofer le pedimos 20 min). Veda nocturna desde las " +
+    "00:00 ART. La jornada se cierra después de 8 hs con el camión " +
+    "detenido._\n\n" +
+    "_Bot-On — Coopertrans Móvil_"
+  );
+}
+
 /**
  * Cron 8 AM ART. Lee jornadas con flags de exceso (bloque_excedido,
  * cuota_excedida, veda_excedida) que cerraron ayer o están abiertas con
@@ -1039,18 +1113,7 @@ export async function armarResumenJornadasDiario(): Promise<void> {
     .where("jornada_fin_ts", "<", Timestamp.fromMillis(hastaMs))
     .get();
 
-  interface Exceso {
-    choferDni: string;
-    patente: string;
-    inicio: FsTimestamp;
-    fin: FsTimestamp | null;
-    bloquesCompletos: number;
-    totalManejoSeg: number;
-    bloqueExcedido: boolean;
-    cuotaExcedida: boolean;
-    vedaExcedida: boolean;
-  }
-  const excesos: Exceso[] = [];
+  const excesos: ExcesoJornada[] = [];
 
   // Skip excesos de los 3 choferes de combustibles líquidos — no son
   // operativa Vecchi (ver excluidos.ts).
@@ -1093,34 +1156,8 @@ export async function armarResumenJornadasDiario(): Promise<void> {
   const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
   const fmtFecha = fechaArtAyer.split("-").reverse().join("/");
 
-  function fmtHm(s: number): string {
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    return `${h}:${m.toString().padStart(2, "0")}`;
-  }
-
-  if (excesos.length === 0) {
-    const mensaje =
-      `${saludo},\n\n` +
-      `📋 *Resumen jornadas — ${fmtFecha}*\n\n` +
-      "✅ Sin incidencias: ninguna jornada cerrada ayer registró " +
-      "exceso de bloque, cuota o veda nocturna.\n\n" +
-      "_Bot-On — Coopertrans Móvil_";
-    await db().collection("COLA_WHATSAPP").add({
-      telefono: tel, mensaje, estado: "PENDIENTE",
-      encolado_en: FieldValue.serverTimestamp(),
-      expira_en: expiraEnMin(TTL_RESUMEN_DIARIO_MIN),
-      enviado_en: null, error: null, intentos: 0,
-      origen: "resumen_jornadas_v2", destinatario_coleccion: "EMPLEADOS",
-      destinatario_id: SEG_HIGIENE_DNI, campo_base: "JORNADA",
-      admin_dni: "BOT", admin_nombre: "Bot resumen jornadas v2",
-    });
-    logger.info("[jornadas_v2.resumen] OK (sin excesos)");
-    return;
-  }
-
   // Lookup nombres (fix M2 24/7 2026-05-18: getAll en lugar de loop
-  // serial N+1).
+  // serial N+1). Solo si hay excesos (sin excesos, el mensaje es fijo).
   const nombrePorDni = new Map<string, string>();
   const dnisUnicos = new Set<string>(excesos.map((x) => x.choferDni));
   if (dnisUnicos.size > 0) {
@@ -1143,36 +1180,10 @@ export async function armarResumenJornadasDiario(): Promise<void> {
     }
   }
 
-  const lineas = excesos.map((x) => {
-    const nombre = nombrePorDni.get(x.choferDni) || `DNI ${x.choferDni}`;
-    const flags: string[] = [];
-    if (x.bloqueExcedido) flags.push("bloque > 4h sin pausa");
-    if (x.cuotaExcedida) flags.push("manejó post-cuota cumplida");
-    if (x.vedaExcedida) flags.push("circuló después de 00:00 ART");
-    const incioFmt = new Intl.DateTimeFormat("es-AR", {
-      timeZone: "America/Argentina/Buenos_Aires",
-      day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-      hour12: false,
-    }).format(x.inicio.toDate());
-    return (
-      `🚛 *${x.patente || "—"}* — ${nombre} (DNI ${x.choferDni})\n` +
-      `   Jornada: arrancó ${incioFmt}, ${x.bloquesCompletos}/3 bloques, ` +
-      `${fmtHm(x.totalManejoSeg)} hs manejando\n` +
-      `   ⚠️ ${flags.join(", ")}`
-    );
-  });
-
-  const mensaje =
-    `${saludo},\n\n` +
-    `📋 *Resumen jornadas — ${fmtFecha}*\n\n` +
-    `${excesos.length} jornada${excesos.length === 1 ? "" : "s"} con ` +
-    "incidencias:\n\n" +
-    `${lineas.join("\n\n")}\n\n` +
-    "_Modelo de jornada: 3 bloques (3 h 45 manejo + 15 min pausa " +
-    "interna, al chofer le pedimos 20 min). Veda nocturna desde las " +
-    "00:00 ART. La jornada se cierra después de 8 hs con el camión " +
-    "detenido._\n\n" +
-    "_Bot-On — Coopertrans Móvil_";
+  // Construcción del mensaje (PURA, testeable sin Firestore).
+  const mensaje = construirMensajeResumenJornadas(
+    excesos, nombrePorDni, saludo, fmtFecha
+  );
 
   await db().collection("COLA_WHATSAPP").add({
     telefono: tel, mensaje, estado: "PENDIENTE",

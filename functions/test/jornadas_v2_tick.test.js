@@ -17,6 +17,7 @@ const { Timestamp } = require('firebase-admin/firestore');
 
 const {
   evaluarTickJornada,
+  construirMensajeResumenJornadas,
   BLOQUE_ALERTA_TEMPRANA_SEGUNDOS, // 3h30
   BLOQUE_EXCEDIDO_SEGUNDOS, // 4h
   JORNADA_MANEJO_PROXIMA_SEGUNDOS, // 11h
@@ -312,5 +313,72 @@ describe('evaluarTickJornada — parado', () => {
     tickParado(j, 300, { lat: -38.7, lng: -62.27 });
     assert.ok(j.descanso_inicio_ts != null);
     assert.strictEqual(j.descanso_segundos, 0); // primer tick: arranca, no acumula
+  });
+});
+
+// ── Resumen diario de jornadas a Molina (construcción del mensaje) ──
+
+describe('construirMensajeResumenJornadas', () => {
+  const T = (ms) => Timestamp.fromMillis(ms);
+  // 19/05/2026 06:30 ART = 09:30 UTC.
+  const inicioMs = Date.UTC(2026, 4, 19, 9, 30, 0);
+
+  function exceso(over = {}) {
+    return {
+      choferDni: '123',
+      patente: 'AAA111',
+      inicio: T(inicioMs),
+      fin: null,
+      bloquesCompletos: 3,
+      totalManejoSeg: 12 * 3600,
+      bloqueExcedido: false,
+      cuotaExcedida: false,
+      vedaExcedida: false,
+      ...over,
+    };
+  }
+
+  test('sin excesos → mensaje "Sin incidencias"', () => {
+    const m = construirMensajeResumenJornadas([], new Map(), 'Hola Molina', '19/05/2026');
+    assert.match(m, /Sin incidencias/);
+    assert.match(m, /Hola Molina/);
+    assert.match(m, /19\/05\/2026/);
+  });
+
+  test('1 exceso de bloque → muestra flag + nombre + patente', () => {
+    const nombres = new Map([['123', 'PEREZ JUAN']]);
+    const m = construirMensajeResumenJornadas(
+      [exceso({ bloqueExcedido: true })], nombres, 'Hola', '19/05/2026'
+    );
+    assert.match(m, /1 jornada con/); // singular
+    assert.match(m, /PEREZ JUAN/);
+    assert.match(m, /AAA111/);
+    assert.match(m, /bloque > 4h sin pausa/);
+  });
+
+  test('nombre faltante cae a "DNI X"', () => {
+    const m = construirMensajeResumenJornadas(
+      [exceso({ vedaExcedida: true })], new Map(), 'Hola', '19/05/2026'
+    );
+    assert.match(m, /DNI 123/);
+    assert.match(m, /circuló después de 00:00 ART/);
+  });
+
+  test('múltiples flags se listan juntos', () => {
+    const m = construirMensajeResumenJornadas(
+      [exceso({ bloqueExcedido: true, cuotaExcedida: true, vedaExcedida: true })],
+      new Map(), 'Hola', '19/05/2026'
+    );
+    assert.match(m, /bloque > 4h sin pausa/);
+    assert.match(m, /manejó post-cuota cumplida/);
+    assert.match(m, /circuló después de 00:00 ART/);
+  });
+
+  test('plural con 2+ excesos', () => {
+    const m = construirMensajeResumenJornadas(
+      [exceso({ bloqueExcedido: true }), exceso({ choferDni: '456', vedaExcedida: true })],
+      new Map(), 'Hola', '19/05/2026'
+    );
+    assert.match(m, /2 jornadas con/);
   });
 });

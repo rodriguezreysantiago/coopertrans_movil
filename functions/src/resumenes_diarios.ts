@@ -51,6 +51,100 @@ import { cargarExcluidos } from "./excluidos";
 // min, tarda en detectar; cuando llega al user puede haber pasado horas
 // y ya recuperó). Mejor consolidar al día siguiente.
 
+/** Un evento del watchdog del bot (caída / recuperación / otro). */
+export interface BotEvento {
+  tipo: string;
+  detectadoEnMs: number;
+  pcId: string;
+  minutosSinHeartbeat?: number | string;
+  duracionMin?: number;
+}
+
+export interface ResumenBotResult {
+  mensaje: string;
+  totalCaidas: number;
+  totalRecuperaciones: number;
+  minutosCaidoTotal: number;
+}
+
+/**
+ * Construye el resumen diario del bot (caídas / recuperaciones de las
+ * últimas 24h) para el admin. PURA — separada de `resumenBotDiario` para
+ * testear el formato sin Firestore. Si `eventos` está vacío devuelve el
+ * mensaje "todo OK" (decisión Santiago: silencio = ambiguo).
+ */
+export function construirResumenBot(
+  eventos: BotEvento[],
+  ahoraMs: number,
+): ResumenBotResult {
+  if (eventos.length === 0) {
+    const fechaTxt = formatFechaArg(ahoraMs);
+    return {
+      mensaje:
+        `🤖 *Resumen del bot — ${fechaTxt}*\n\n` +
+        "✅ Sin caídas ni eventos en las últimas 24 h.\n\n" +
+        BANNER_TESTING +
+        "_Si dejaras de recibir este resumen a las 8 AM, " +
+        "verificá que la Cloud Function `resumenBotDiario` esté activa._",
+      totalCaidas: 0,
+      totalRecuperaciones: 0,
+      minutosCaidoTotal: 0,
+    };
+  }
+
+  const lineas: string[] = [];
+  let totalCaidas = 0;
+  let totalRecuperaciones = 0;
+  let minutosCaidoTotal = 0;
+
+  for (const e of eventos) {
+    const horaTxt = formatHoraArg(e.detectadoEnMs);
+    const fechaTxt = formatFechaArg(e.detectadoEnMs);
+    const pcId = e.pcId || "?";
+    if (e.tipo === "caida") {
+      totalCaidas++;
+      const minSinHb = e.minutosSinHeartbeat ?? "?";
+      lineas.push(
+        `🔴 *Caída detectada* — ${fechaTxt} ${horaTxt} (PC \`${pcId}\`, ` +
+        `${minSinHb} min sin heartbeat al detectar)`
+      );
+    } else if (e.tipo === "recuperado") {
+      totalRecuperaciones++;
+      const dur = typeof e.duracionMin === "number" ? e.duracionMin : null;
+      if (dur !== null) minutosCaidoTotal += dur;
+      const durTxt = dur !== null ? `${dur} min` : "?";
+      lineas.push(
+        `🟢 *Recuperado* — ${fechaTxt} ${horaTxt} (PC \`${pcId}\`, ` +
+        `caído ~${durTxt})`
+      );
+    } else {
+      lineas.push(`• ${e.tipo} ${fechaTxt} ${horaTxt}`);
+    }
+  }
+
+  const titulo =
+    totalCaidas === 0 && totalRecuperaciones > 0 ?
+      "🤖 *Resumen del bot — recuperaciones de caídas previas*" :
+      totalCaidas > 0 ?
+        `🤖 *Resumen del bot — ${totalCaidas} ` +
+        `caída${totalCaidas !== 1 ? "s" : ""} en últimas 24h*` :
+        "🤖 *Resumen del bot — eventos del día*";
+
+  const subtotal = minutosCaidoTotal > 0 ?
+    `\n\nTiempo total caído estimado: ${minutosCaidoTotal} min.` :
+    "";
+
+  const mensaje =
+    titulo + "\n\n" +
+    lineas.join("\n") +
+    subtotal + "\n\n" +
+    BANNER_TESTING +
+    "_Si hubo caídas que no detectaste, verificá el servicio (NSSM " +
+    "del bot) en la PC correspondiente._";
+
+  return { mensaje, totalCaidas, totalRecuperaciones, minutosCaidoTotal };
+}
+
 export const resumenBotDiario = onSchedule(
   {
     schedule: "0 8 * * *",
@@ -101,103 +195,31 @@ export const resumenBotDiario = onSchedule(
         return;
       }
 
-      // Sin eventos: mandamos "todo OK" igual (decisión Santiago
+      // Normalizar eventos + construir mensaje (PURO, testeable).
+      // Sin eventos: la pura devuelve "todo OK" igual (decisión Santiago
       // 2026-05-09: silencio = ambiguo, un mensaje confirma que el cron
       // corrió y el bot estuvo sano las últimas 24h).
-      if (evSnap.empty) {
-        const fechaTxt = formatFechaArg(Date.now());
-        const mensajeOk =
-        `🤖 *Resumen del bot — ${fechaTxt}*\n\n` +
-        "✅ Sin caídas ni eventos en las últimas 24 h.\n\n" +
-        BANNER_TESTING +
-        "_Si dejaras de recibir este resumen a las 8 AM, " +
-        "verificá que la Cloud Function `resumenBotDiario` esté activa._";
-        const colaRef = await db.collection("COLA_WHATSAPP").add({
-          telefono: tel,
-          mensaje: mensajeOk,
-          estado: "PENDIENTE",
-          encolado_en: FieldValue.serverTimestamp(),
-          expira_en: expiraEnMin(TTL_RESUMEN_DIARIO_MIN),
-          enviado_en: null,
-          error: null,
-          intentos: 0,
-          origen: "cron_bot_resumen_diario",
-          destinatario_coleccion: "EMPLEADOS",
-          destinatario_id: adminDni,
-          campo_base: "BOT_RESUMEN_DIARIO",
-          admin_dni: "BOT",
-          admin_nombre: "Bot watchdog",
-        });
-        // Actualizar metadata del lock atomico (el create ya tomo el slot).
-        await histRef.update({
-          cantidad_eventos: 0,
-          cola_doc_id: colaRef.id,
-        });
-        logger.info("[resumenBotDiario] OK (sin eventos)", { colaDocId: colaRef.id });
-        exitoCron = true;
-        return;
-      }
-
-      // Armar mensaje.
-      const lineas: string[] = [];
-      let totalCaidas = 0;
-      let totalRecuperaciones = 0;
-      let minutosCaidoTotal = 0;
-
+      const eventos: BotEvento[] = [];
       for (const doc of evSnap.docs) {
         const d = doc.data();
-        const tipo = String(d.tipo ?? "");
         const detectadoEn = d.detectadoEn as Timestamp | undefined;
         if (!detectadoEn) continue;
-        const horaTxt = formatHoraArg(detectadoEn.toMillis());
-        const fechaTxt = formatFechaArg(detectadoEn.toMillis());
-        const pcId = (d.pcId ?? "?").toString();
-
-        if (tipo === "caida") {
-          totalCaidas++;
-          const minSinHb = d.minutosSinHeartbeat ?? "?";
-          lineas.push(
-            `🔴 *Caída detectada* — ${fechaTxt} ${horaTxt} (PC \`${pcId}\`, ` +
-          `${minSinHb} min sin heartbeat al detectar)`
-          );
-        } else if (tipo === "recuperado") {
-          totalRecuperaciones++;
-          const dur = typeof d.duracionMin === "number" ? d.duracionMin : null;
-          if (dur !== null) minutosCaidoTotal += dur;
-          const durTxt = dur !== null ? `${dur} min` : "?";
-          lineas.push(
-            `🟢 *Recuperado* — ${fechaTxt} ${horaTxt} (PC \`${pcId}\`, ` +
-          `caído ~${durTxt})`
-          );
-        } else {
-          lineas.push(`• ${tipo} ${fechaTxt} ${horaTxt}`);
-        }
+        eventos.push({
+          tipo: String(d.tipo ?? ""),
+          detectadoEnMs: detectadoEn.toMillis(),
+          pcId: (d.pcId ?? "?").toString(),
+          minutosSinHeartbeat: d.minutosSinHeartbeat,
+          duracionMin: typeof d.duracionMin === "number" ?
+            d.duracionMin :
+            undefined,
+        });
       }
 
-      const titulo =
-      totalCaidas === 0 && totalRecuperaciones > 0 ?
-        "🤖 *Resumen del bot — recuperaciones de caídas previas*" :
-        totalCaidas > 0 ?
-          `🤖 *Resumen del bot — ${totalCaidas} ` +
-          `caída${totalCaidas !== 1 ? "s" : ""} en últimas 24h*` :
-          "🤖 *Resumen del bot — eventos del día*";
+      const r = construirResumenBot(eventos, Date.now());
 
-      const subtotal = minutosCaidoTotal > 0 ?
-        `\n\nTiempo total caído estimado: ${minutosCaidoTotal} min.` :
-        "";
-
-      const mensaje =
-      titulo + "\n\n" +
-      lineas.join("\n") +
-      subtotal + "\n\n" +
-      BANNER_TESTING +
-      "_Si hubo caídas que no detectaste, verificá el servicio (NSSM " +
-      "del bot) en la PC correspondiente._";
-
-      // Encolar.
       const colaRef = await db.collection("COLA_WHATSAPP").add({
         telefono: tel,
-        mensaje,
+        mensaje: r.mensaje,
         estado: "PENDIENTE",
         encolado_en: FieldValue.serverTimestamp(),
         expira_en: expiraEnMin(TTL_RESUMEN_DIARIO_MIN),
@@ -214,18 +236,18 @@ export const resumenBotDiario = onSchedule(
 
       // Update metadata sobre el lock que ya tomamos al inicio.
       await histRef.update({
-        cantidad_eventos: evSnap.size,
-        cantidad_caidas: totalCaidas,
-        cantidad_recuperaciones: totalRecuperaciones,
-        minutos_caido_total: minutosCaidoTotal,
+        cantidad_eventos: eventos.length,
+        cantidad_caidas: r.totalCaidas,
+        cantidad_recuperaciones: r.totalRecuperaciones,
+        minutos_caido_total: r.minutosCaidoTotal,
         cola_doc_id: colaRef.id,
       });
 
       logger.info("[resumenBotDiario] OK", {
-        eventos: evSnap.size,
-        caidas: totalCaidas,
-        recuperaciones: totalRecuperaciones,
-        minutosCaidoTotal,
+        eventos: eventos.length,
+        caidas: r.totalCaidas,
+        recuperaciones: r.totalRecuperaciones,
+        minutosCaidoTotal: r.minutosCaidoTotal,
         colaDocId: colaRef.id,
       });
       exitoCron = true;
@@ -271,6 +293,86 @@ const ETIQUETAS_DRIFT: Record<string, string> = {
   CHOFER_NO_IDENTIFICADO: "Chofer no se identificó (iButton)",
 };
 
+/** Un drift chofer físico (iButton) ≠ asignado en sistema. */
+export interface DriftAsignacion {
+  patente: string;
+  driftTipo: string;
+  fisicoDni: string;
+  fisicoApellido: string;
+  asignadoDni: string;
+  asignadoNombre: string;
+}
+
+/**
+ * Construye el resumen diario de drifts de asignación para el admin.
+ * PURA — separada de `resumenDriftsAsignacionesDiario` para testear el
+ * formato sin Firestore. Sin drifts devuelve "todo OK". Con drifts lista
+ * hasta 10 (el resto se cuenta en "Y N más").
+ */
+export function construirMensajeDrifts(
+  drifts: DriftAsignacion[],
+  fechaTxt: string,
+): string {
+  if (drifts.length === 0) {
+    return (
+      `📋 *Resumen drifts asignaciones — ${fechaTxt}*\n\n` +
+      "✅ Sin drifts: todas las asignaciones coinciden con el " +
+      "chofer físico de Sitrack.\n\n" +
+      BANNER_TESTING +
+      "_Bot-On — Coopertrans Móvil_"
+    );
+  }
+
+  const conteoPorTipo: Record<string, number> = {};
+  for (const x of drifts) {
+    conteoPorTipo[x.driftTipo] = (conteoPorTipo[x.driftTipo] ?? 0) + 1;
+  }
+  const breakdown = Object.entries(conteoPorTipo)
+    .map(([tipo, n]) => `${n}× ${ETIQUETAS_DRIFT[tipo] ?? tipo}`)
+    .join(", ");
+
+  const MAX_DETALLE = 10;
+  const sorted = [...drifts].sort((a, b) => a.patente.localeCompare(b.patente));
+  const aMostrar = sorted.slice(0, MAX_DETALLE);
+  const restantes = sorted.length - aMostrar.length;
+
+  const bloques = aMostrar.map((x) => {
+    const fisico = x.fisicoDni ?
+      (x.fisicoApellido ?
+        `${x.fisicoApellido} (DNI ${x.fisicoDni})` :
+        `DNI ${x.fisicoDni}`) :
+      "(no se identificó)";
+    const asignado = x.asignadoDni ?
+      (x.asignadoNombre ?
+        `${x.asignadoNombre} (DNI ${x.asignadoDni})` :
+        `DNI ${x.asignadoDni}`) :
+      "(sin asignación)";
+    return `🚛 *${x.patente}*\n` +
+      `   Sistema: ${asignado}\n` +
+      `   Físico (iButton): ${fisico}\n` +
+      `   ⚠️ ${ETIQUETAS_DRIFT[x.driftTipo] ?? x.driftTipo}`;
+  });
+
+  const cantidad = drifts.length;
+  const cabecera =
+    `🔍 *Drift de asignaciones — ${fechaTxt}*\n\n` +
+    `${cantidad} ` +
+    (cantidad === 1 ? "inconsistencia" : "inconsistencias") +
+    ` chofer físico vs sistema (${breakdown}):\n\n`;
+  const cola = restantes > 0 ?
+    `\n\n_Y ${restantes} más. Resolvé desde Personal → ficha del chofer._` :
+    "\n\n_Resolvé desde Personal → ficha del chofer._";
+
+  return (
+    cabecera +
+    bloques.join("\n\n") +
+    cola +
+    "\n\n" +
+    BANNER_TESTING +
+    "_Bot-On — Coopertrans Móvil_"
+  );
+}
+
 export const resumenDriftsAsignacionesDiario = onSchedule(
   {
     // 8:00 AM ART todos los días — Vecchi prefiere los resúmenes a la
@@ -309,7 +411,7 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
       // colección tiene 1 doc por patente, no debería crecer mucho.
       const excluidos = await cargarExcluidos(db);
       const snap = await db.collection("SITRACK_POSICIONES").limit(5000).get();
-      const drifts = snap.docs
+      const drifts: DriftAsignacion[] = snap.docs
         .map((d) => ({ patente: d.id, data: d.data() }))
         .filter((x) => {
           // Skip patentes excluidas (tanques + tractores combustibles).
@@ -320,7 +422,15 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
           if (driverDni && excluidos.dnis.has(driverDni)) return false;
           const tipo = (x.data.drift_tipo ?? "").toString();
           return tipo.length > 0;
-        });
+        })
+        .map((x) => ({
+          patente: x.patente,
+          driftTipo: (x.data.drift_tipo ?? "").toString(),
+          fisicoDni: (x.data.driver_dni ?? "").toString(),
+          fisicoApellido: (x.data.driver_apellido ?? "").toString(),
+          asignadoDni: (x.data.asignacion_dni ?? "").toString(),
+          asignadoNombre: (x.data.asignacion_nombre ?? "").toString(),
+        }));
 
       // ─── Lookup teléfono del admin ─────────────────────────────────
       const adminDni = MANTENIMIENTO_DESTINATARIO_DNI;
@@ -344,12 +454,7 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
       // corrió y todas las asignaciones están alineadas con el chofer
       // físico que reporta Sitrack).
       if (drifts.length === 0) {
-        const mensajeOk =
-        `📋 *Resumen drifts asignaciones — ${fechaTxt}*\n\n` +
-        "✅ Sin drifts: todas las asignaciones coinciden con el " +
-        "chofer físico de Sitrack.\n\n" +
-        BANNER_TESTING +
-        "_Bot-On — Coopertrans Móvil_";
+        const mensajeOk = construirMensajeDrifts(drifts, fechaTxt);
         await db.collection("COLA_WHATSAPP").add({
           telefono: tel,
           mensaje: mensajeOk,
@@ -371,62 +476,9 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
         return;
       }
 
-      // Conteo por tipo (para el header).
-      const conteoPorTipo: Record<string, number> = {};
-      for (const x of drifts) {
-        const tipo = (x.data.drift_tipo ?? "").toString();
-        conteoPorTipo[tipo] = (conteoPorTipo[tipo] ?? 0) + 1;
-      }
-      const breakdown = Object.entries(conteoPorTipo)
-        .map(([tipo, n]) => `${n}× ${ETIQUETAS_DRIFT[tipo] ?? tipo}`)
-        .join(", ");
-
-      // Listar detalle, máx 10 ítems para no inflar el mensaje.
-      const MAX_DETALLE = 10;
-      const sorted = [...drifts].sort((a, b) =>
-        a.patente.localeCompare(b.patente)
-      );
-      const aMostrar = sorted.slice(0, MAX_DETALLE);
-      const restantes = sorted.length - aMostrar.length;
-
-      const bloques = aMostrar.map((x) => {
-        const tipo = (x.data.drift_tipo ?? "").toString();
-        const sitDni = (x.data.driver_dni ?? "").toString();
-        const sitApe = (x.data.driver_apellido ?? "").toString();
-        const asigDni = (x.data.asignacion_dni ?? "").toString();
-        const asigNom = (x.data.asignacion_nombre ?? "").toString();
-
-        const fisico = sitDni ?
-          (sitApe ? `${sitApe} (DNI ${sitDni})` : `DNI ${sitDni}`) :
-          "(no se identificó)";
-        const asignado = asigDni ?
-          (asigNom ? `${asigNom} (DNI ${asigDni})` : `DNI ${asigDni}`) :
-          "(sin asignación)";
-
-        return `🚛 *${x.patente}*\n` +
-        `   Sistema: ${asignado}\n` +
-        `   Físico (iButton): ${fisico}\n` +
-        `   ⚠️ ${ETIQUETAS_DRIFT[tipo] ?? tipo}`;
-      });
-
+      // Construcción del mensaje (PURA, testeable sin Firestore).
       const cantidad = drifts.length;
-      const cabecera =
-      `🔍 *Drift de asignaciones — ${fechaTxt}*\n\n` +
-      `${cantidad} ` +
-      (cantidad === 1 ? "inconsistencia" : "inconsistencias") +
-      ` chofer físico vs sistema (${breakdown}):\n\n`;
-
-      const cola = restantes > 0 ?
-        `\n\n_Y ${restantes} más. Resolvé desde Personal → ficha del chofer._` :
-        "\n\n_Resolvé desde Personal → ficha del chofer._";
-
-      const mensaje =
-      cabecera +
-      bloques.join("\n\n") +
-      cola +
-      "\n\n" +
-      BANNER_TESTING +
-      "_Bot-On — Coopertrans Móvil_";
+      const mensaje = construirMensajeDrifts(drifts, fechaTxt);
 
       // ─── Encolar en COLA_WHATSAPP ──────────────────────────────────
       await db.collection("COLA_WHATSAPP").add({
@@ -455,8 +507,8 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
       logger.info("[resumenDriftsAsignacionesDiario] encolado", {
         adminDni,
         driftsCount: cantidad,
-        mostrados: aMostrar.length,
-        restantes,
+        mostrados: Math.min(cantidad, 10),
+        restantes: Math.max(0, cantidad - 10),
       });
       exitoCron = true;
     } finally {
@@ -552,6 +604,116 @@ export const resumenExcesosJornadaDiario = onSchedule(
 // El resto ya está cubierto por Sitrack (salida carril, distancia, etc).
 // AEBS y ESP son sistemas internos de Volvo que Sitrack no ve.
 const TIPOS_VOLVO_CONSERVADOS_SEG_HIGIENE = new Set<string>(["AEBS", "ESP"]);
+
+/** Un grupo (chofer+patente) con sus eventos de conducta del día. */
+export interface GrupoConducta {
+  keyChoferDni: string;
+  patente: string;
+  atribuido: boolean;
+  sitrack: Map<string, number>;
+  volvo: Map<string, number>;
+  maxSobreLimite: { sobre: number; gpsSpeed: number; cartLimit: number } | null;
+}
+
+/**
+ * Construye el resumen diario de conducta de manejo para Molina (Seg e
+ * Higiene). PURA — separada de `resumenConductaManejoDiario` para testear
+ * el formato sin Firestore. Ordena (identificados alfabético → no
+ * identificados), mergea Sitrack + Volvo por chofer/unidad y resalta la
+ * peor sobrevelocidad. Sin grupos devuelve "sin eventos".
+ */
+export function construirMensajeConducta(
+  grupos: GrupoConducta[],
+  nombrePorDni: Map<string, string>,
+  saludo: string,
+  fmtFecha: string,
+): string {
+  if (grupos.length === 0) {
+    return (
+      `${saludo},\n\n` +
+      `🚧 *Conducta de manejo — ${fmtFecha}*\n\n` +
+      "✅ Sin eventos: ningún tractor registró eventos de conducta " +
+      "peligrosa ayer.\n\n" +
+      BANNER_TESTING +
+      "_Bot-On — Coopertrans Móvil_"
+    );
+  }
+
+  // Ordenar: identificados (alfabético por nombre) → no identificados.
+  const gruposOrdenados = [...grupos].sort((a, b) => {
+    const aIsId = a.keyChoferDni !== "NO_ID";
+    const bIsId = b.keyChoferDni !== "NO_ID";
+    if (aIsId && !bIsId) return -1;
+    if (!aIsId && bIsId) return 1;
+    if (!aIsId && !bIsId) return a.patente.localeCompare(b.patente);
+    const an = (nombrePorDni.get(a.keyChoferDni) || "").toUpperCase();
+    const bn = (nombrePorDni.get(b.keyChoferDni) || "").toUpperCase();
+    return an.localeCompare(bn);
+  });
+
+  // Sitrack ya viene con event_name en español; Volvo llega como sigla.
+  const ETIQUETAS_LEGIBLES: Record<string, string> = {
+    AEBS: "Frenado automático de emergencia",
+    ESP: "Control de estabilidad",
+  };
+  const traducir = (tipo: string): string =>
+    ETIQUETAS_LEGIBLES[tipo] ?? tipo;
+
+  let huboAtribuidos = false;
+  const bloques = gruposOrdenados.map((g) => {
+    const lineas: string[] = [];
+    let titulo: string;
+    if (g.keyChoferDni === "NO_ID") {
+      titulo = `*CHOFER NO IDENTIFICADO* · ${g.patente}`;
+    } else {
+      const nombre = nombrePorDni.get(g.keyChoferDni) ||
+        `DNI ${g.keyChoferDni}`;
+      const marca = g.atribuido ? " *" : "";
+      titulo = `*${nombre}*${marca} · ${g.patente}`;
+      if (g.atribuido) huboAtribuidos = true;
+    }
+    lineas.push(titulo);
+    // Merge Sitrack + Volvo (para Molina es info de seguridad, no importa
+    // de qué sistema vino).
+    const todosLosEventos = new Map<string, number>();
+    for (const [t, c] of g.sitrack.entries()) {
+      const etiqueta = traducir(t);
+      todosLosEventos.set(etiqueta, (todosLosEventos.get(etiqueta) ?? 0) + c);
+    }
+    for (const [t, c] of g.volvo.entries()) {
+      const etiqueta = traducir(t);
+      todosLosEventos.set(etiqueta, (todosLosEventos.get(etiqueta) ?? 0) + c);
+    }
+    const ordTipos = [...todosLosEventos.entries()].sort((x, y) => y[1] - x[1]);
+    for (const [t, c] of ordTipos) {
+      lineas.push(`  • ${t}: ${c}`);
+    }
+    if (g.maxSobreLimite !== null) {
+      const m = g.maxSobreLimite;
+      lineas.push(
+        `    ↳ Peor exceso: ${m.gpsSpeed.toFixed(0)} km/h ` +
+        `(límite ${m.cartLimit.toFixed(0)} km/h, +${m.sobre.toFixed(0)})`
+      );
+    }
+    return lineas.join("\n");
+  });
+
+  const cantGrupos = grupos.length;
+  let mensaje =
+    `${saludo},\n\n` +
+    `🚧 *Conducta de manejo — ${fmtFecha}*\n\n` +
+    `${cantGrupos} chofer${cantGrupos === 1 ? "" : "es"}/` +
+    `unidad${cantGrupos === 1 ? "" : "es"} con eventos:\n\n` +
+    bloques.join("\n\n") +
+    "\n\n";
+  if (huboAtribuidos) {
+    mensaje +=
+      "_* atribuido por asignación: el evento no traía login activo, " +
+      "se asignó al chofer que tenía la unidad en ese momento._\n\n";
+  }
+  mensaje += BANNER_TESTING + "_Bot-On — Coopertrans Móvil_";
+  return mensaje;
+}
 
 export const resumenConductaManejoDiario = onSchedule(
   {
@@ -728,19 +890,7 @@ export const resumenConductaManejoDiario = onSchedule(
     const asignaciones = await cargarAsignacionesPorPatentes([...patentesSet]);
 
     // ─── Resolver chofer + agrupar por (DNI, patente) ─────────────
-    interface Grupo {
-      keyChoferDni: string;
-      patente: string;
-      atribuido: boolean;
-      sitrack: Map<string, number>;
-      volvo: Map<string, number>;
-      // Peor sobrevelocidad detectada en el día por este chofer/unidad
-      // (gpsSpeed - cartLimit más alto). Sirve para que Molina vea la
-      // gravedad además del conteo (ej. "12 sobrevelocidades, máx +35
-      // km/h sobre límite 60 km/h").
-      maxSobreLimite: { sobre: number; gpsSpeed: number; cartLimit: number } | null;
-    }
-    const grupos = new Map<string, Grupo>();
+    const grupos = new Map<string, GrupoConducta>();
     for (const e of eventos) {
       let dni = e.driverDni;
       let atribuidoPorAsig = false;
@@ -821,37 +971,9 @@ export const resumenConductaManejoDiario = onSchedule(
     const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
     const fmtFecha = fechaArtAyer.split("-").reverse().join("/");
 
-    // ─── Caso "sin eventos" ────────────────────────────────────────
-    if (grupos.size === 0) {
-      const mensaje =
-        `${saludo},\n\n` +
-        `🚧 *Conducta de manejo — ${fmtFecha}*\n\n` +
-        "✅ Sin eventos: ningún tractor registró eventos de conducta " +
-        "peligrosa ayer.\n\n" +
-        BANNER_TESTING +
-        "_Bot-On — Coopertrans Móvil_";
-      await db.collection("COLA_WHATSAPP").add({
-        telefono: tel,
-        mensaje,
-        estado: "PENDIENTE",
-        encolado_en: FieldValue.serverTimestamp(),
-        expira_en: expiraEnMin(TTL_RESUMEN_DIARIO_MIN),
-        enviado_en: null,
-        error: null,
-        intentos: 0,
-        origen: "resumen_conducta_manejo_diario",
-        destinatario_coleccion: "EMPLEADOS",
-        destinatario_id: SEG_HIGIENE_DESTINATARIO_DNI,
-        campo_base: "CONDUCTA_MANEJO_DIARIO",
-        admin_dni: "BOT",
-        admin_nombre: "Bot resumen conducta",
-      });
-      logger.info("[resumenConductaManejoDiario] OK (sin eventos)");
-      exitoCron = true;
-      return;
-    }
-
     // ─── Lookup nombres de choferes identificados ──────────────────
+    // (la construcción del mensaje, incluido el caso "sin eventos", vive
+    //  en `construirMensajeConducta` — pura, testeable.)
     // Fix M2 (auditoria 24/7 2026-05-18): antes era loop serial de
     // `db.collection("EMPLEADOS").doc(dni).get()` con `await` adentro
     // del for — N+1 queries (60 reads serializados con flota grande).
@@ -887,88 +1009,10 @@ export const resumenConductaManejoDiario = onSchedule(
       }
     }
 
-    // ─── Ordenar: identificados (alfabético) → no identificados ────
-    const gruposOrdenados = [...grupos.values()].sort((a, b) => {
-      const aIsId = a.keyChoferDni !== "NO_ID";
-      const bIsId = b.keyChoferDni !== "NO_ID";
-      if (aIsId && !bIsId) return -1;
-      if (!aIsId && bIsId) return 1;
-      if (!aIsId && !bIsId) return a.patente.localeCompare(b.patente);
-      const an = (nombrePorDni.get(a.keyChoferDni) || "").toUpperCase();
-      const bn = (nombrePorDni.get(b.keyChoferDni) || "").toUpperCase();
-      return an.localeCompare(bn);
-    });
-
-    // ─── Construir bloques ─────────────────────────────────────────
-    // Mapeo de códigos técnicos a nombres legibles. Los eventos
-    // Sitrack ya vienen con `event_name` en español del catálogo
-    // ("Salida de carril", "Frenada brusca", etc.) → se usan tal cual.
-    // Los Volvo llegan como sigla técnica (AEBS, ESP) → traducir.
-    const ETIQUETAS_LEGIBLES: Record<string, string> = {
-      AEBS: "Frenado automático de emergencia",
-      ESP: "Control de estabilidad",
-    };
-    const traducir = (tipo: string): string =>
-      ETIQUETAS_LEGIBLES[tipo] ?? tipo;
-
-    let huboAtribuidos = false;
-    const bloques = gruposOrdenados.map((g) => {
-      const lineas: string[] = [];
-      let titulo: string;
-      if (g.keyChoferDni === "NO_ID") {
-        titulo = `*CHOFER NO IDENTIFICADO* · ${g.patente}`;
-      } else {
-        const nombre = nombrePorDni.get(g.keyChoferDni) ||
-          `DNI ${g.keyChoferDni}`;
-        const marca = g.atribuido ? " *" : "";
-        titulo = `*${nombre}*${marca} · ${g.patente}`;
-        if (g.atribuido) huboAtribuidos = true;
-      }
-      lineas.push(titulo);
-      // Merge Sitrack + Volvo en un solo mapa de eventos (sin distinguir
-      // fuente — para Molina es info de seguridad, no de qué sistema vino).
-      const todosLosEventos = new Map<string, number>();
-      for (const [t, c] of g.sitrack.entries()) {
-        const etiqueta = traducir(t);
-        todosLosEventos.set(etiqueta, (todosLosEventos.get(etiqueta) ?? 0) + c);
-      }
-      for (const [t, c] of g.volvo.entries()) {
-        const etiqueta = traducir(t);
-        todosLosEventos.set(etiqueta, (todosLosEventos.get(etiqueta) ?? 0) + c);
-      }
-      const ordTipos = [...todosLosEventos.entries()]
-        .sort((x, y) => y[1] - x[1]);
-      for (const [t, c] of ordTipos) {
-        lineas.push(`  • ${t}: ${c}`);
-      }
-      // Mostrar la peor sobrevelocidad detectada del día (si la hay).
-      // Sitrack genera el evento cuando la velocidad supera el límite
-      // cartográfico — incluimos el detalle (km/h alcanzados vs límite)
-      // para que Molina vea la gravedad además del conteo.
-      if (g.maxSobreLimite !== null) {
-        const m = g.maxSobreLimite;
-        lineas.push(
-          `    ↳ Peor exceso: ${m.gpsSpeed.toFixed(0)} km/h ` +
-          `(límite ${m.cartLimit.toFixed(0)} km/h, +${m.sobre.toFixed(0)})`
-        );
-      }
-      return lineas.join("\n");
-    });
-
-    const cantGrupos = grupos.size;
-    let mensaje =
-      `${saludo},\n\n` +
-      `🚧 *Conducta de manejo — ${fmtFecha}*\n\n` +
-      `${cantGrupos} chofer${cantGrupos === 1 ? "" : "es"}/` +
-      `unidad${cantGrupos === 1 ? "" : "es"} con eventos:\n\n` +
-      bloques.join("\n\n") +
-      "\n\n";
-    if (huboAtribuidos) {
-      mensaje +=
-        "_* atribuido por asignación: el evento no traía login activo, " +
-        "se asignó al chofer que tenía la unidad en ese momento._\n\n";
-    }
-    mensaje += BANNER_TESTING + "_Bot-On — Coopertrans Móvil_";
+    // ─── Construcción del mensaje (PURA, testeable sin Firestore) ──
+    const mensaje = construirMensajeConducta(
+      [...grupos.values()], nombrePorDni, saludo, fmtFecha
+    );
 
     await db.collection("COLA_WHATSAPP").add({
       telefono: tel,
