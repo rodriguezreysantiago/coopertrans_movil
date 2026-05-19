@@ -39,6 +39,12 @@ function fakeDoc({ id, data }) {
 function fakeDbConDocs(docs) {
   const queryChain = {
     where: function () { return this; },
+    // orderBy + limit agregados 2026-05-19: el código de producción
+    // (agrupador.js planificarEnvioAgrupado) encadena .orderBy('encolado_en')
+    // + .limit() para el FIFO. El mock los ignora (devuelve this) — el
+    // caller pasa los docs ya en el orden esperado.
+    orderBy: function () { return this; },
+    limit: function () { return this; },
     get: async () => ({ docs }),
   };
   return {
