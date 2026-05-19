@@ -232,18 +232,19 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                   onSelected: (v) =>
                       setState(() => _mostrarEliminados = v),
                   selectedColor:
-                      AppColors.accentRed.withValues(alpha: 0.4),
-                  // Ícono pidió Santiago 2026-05-19: ojo ABIERTO
-                  // cuando muestro eliminados (estoy "viendo" más),
-                  // ojo TACHADO cuando NO los muestro (están ocultos).
-                  // Antes estaba al revés y confundía.
+                      AppColors.accentRed.withValues(alpha: 0.6),
+                  // Cuando MUESTRA eliminados: ojo abierto BLANCO sobre
+                  // fondo rojo (alto contraste, se nota que está activo).
+                  // Cuando OCULTA: ojo tachado gris (estado neutro).
+                  // Santiago 2026-05-19: el ojo abierto no debe llevar
+                  // tachadura para no confundir con "off".
                   avatar: Icon(
                     _mostrarEliminados
                         ? Icons.visibility
                         : Icons.visibility_off,
                     size: 16,
                     color: _mostrarEliminados
-                        ? AppColors.accentRed
+                        ? Colors.white
                         : Colors.white70,
                   ),
                 ),
@@ -1000,33 +1001,41 @@ class _BarraSeleccion extends StatelessWidget {
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
           const Spacer(),
-          TextButton(
-            onPressed: totalSeleccionados == totalPendientes
-                ? null
-                : onSeleccionarTodos,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              minimumSize: const Size(0, 32),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          Tooltip(
+            message: 'Marcar TODOS los adelantos visibles para imprimir',
+            child: TextButton(
+              onPressed: totalSeleccionados == totalPendientes
+                  ? null
+                  : onSeleccionarTodos,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('TODOS', style: TextStyle(fontSize: 11)),
             ),
-            child: const Text('TODOS', style: TextStyle(fontSize: 11)),
           ),
-          TextButton(
-            onPressed:
-                totalSeleccionados == 0 ? null : onDeseleccionarTodos,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 6),
-              minimumSize: const Size(0, 32),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          Tooltip(
+            message: 'Desmarcar todos (no imprimir nada)',
+            child: TextButton(
+              onPressed:
+                  totalSeleccionados == 0 ? null : onDeseleccionarTodos,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                minimumSize: const Size(0, 32),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text('NINGUNO', style: TextStyle(fontSize: 11)),
             ),
-            child: const Text('NINGUNO', style: TextStyle(fontSize: 11)),
           ),
           const SizedBox(width: 4),
           ElevatedButton.icon(
             onPressed: onImprimir,
             icon: const Icon(Icons.print_outlined, size: 16),
+            // Label genérico — desde 2026-05-19 el resumen mezcla
+            // pendientes/entregados/eliminados según selección.
             label: Text(
-              'IMPRIMIR PENDIENTES ($totalSeleccionados)',
+              'IMPRIMIR SELECCIONADOS ($totalSeleccionados)',
               style: const TextStyle(fontSize: 11),
             ),
             style: ElevatedButton.styleFrom(
