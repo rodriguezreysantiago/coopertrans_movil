@@ -259,18 +259,18 @@ class ReportAdelantosService {
   static pw.Widget _tablaAdelantos(List<AdelantoChofer> adelantos) {
     // 7 columnas (anchos relativos sobre A4 margen 24):
     //   #          ~3%   centrado
-    //   FECHA      ~10%  centrado (Santiago 2026-05-19 — agregado tras
-    //                      ver resumen impreso sin fecha por fila)
-    //   EMPLEADO   ~22%
-    //   DETALLE    ~26%
+    //   FECHA      ~7%   centrado (Santiago 2026-05-19 — formato DD/MM
+    //                      sin año porque el rango ya va en el header)
+    //   EMPLEADO   ~24%
+    //   DETALLE    ~28%
     //   ESTADO     ~10%  centrado
     //   ADELANTO   ~15%  derecha
     //   N° RECIBO  ~11%  centrado
     final colWidths = <int, pw.TableColumnWidth>{
       0: const pw.FlexColumnWidth(0.8),
-      1: const pw.FlexColumnWidth(2.5),
-      2: const pw.FlexColumnWidth(5.5),
-      3: const pw.FlexColumnWidth(6.5),
+      1: const pw.FlexColumnWidth(1.5),
+      2: const pw.FlexColumnWidth(6),
+      3: const pw.FlexColumnWidth(7),
       4: const pw.FlexColumnWidth(2.4),
       5: const pw.FlexColumnWidth(3),
       6: const pw.FlexColumnWidth(2.5),
@@ -311,7 +311,11 @@ class ReportAdelantosService {
         ? ''
         : a.numeroRecibo.toString().padLeft(6, '0');
     final monto = AppFormatters.formatearMonto(a.monto);
-    final fechaStr = AppFormatters.formatearFecha(a.fecha);
+    // Fecha sin año (Santiago 2026-05-19): el rango ya está en el
+    // header "FECHAS: …" — repetir el año por fila ocupa espacio y
+    // no aporta info nueva. Formato compacto DD/MM.
+    final fechaStr = '${a.fecha.day.toString().padLeft(2, '0')}/'
+        '${a.fecha.month.toString().padLeft(2, '0')}';
     // Estado visible en el PDF (Santiago 2026-05-19): el resumen
     // ahora puede mezclar pendientes + pagados + eliminados, hay
     // que distinguirlos a simple vista.
