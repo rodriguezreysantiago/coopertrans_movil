@@ -52,6 +52,16 @@ class _LogisticaTarifaFormScreenState
   UnidadTarifa _unidad = UnidadTarifa.porTonelada;
   final _tarifaRealCtrl = TextEditingController();
   final _tarifaChoferCtrl = TextEditingController();
+  /// Monto fijo del chofer por viaje, alternativa al cálculo del 18%
+  /// sobre `tarifaChofer × TN`. Pedido Santiago 2026-05-19: para
+  /// viajes cortos donde acuerda un monto a mano con el chofer. Si el
+  /// toggle [_modoMontoFijoChofer] está OFF, este controller no se
+  /// usa al guardar (queda null en Firestore → cálculo legacy).
+  final _montoFijoChoferCtrl = TextEditingController();
+  /// `true` → la tarifa del chofer se acuerda como monto fijo por
+  /// viaje (sin TN ni 18%). `false` → comportamiento histórico (18%
+  /// sobre `tarifaChofer × TN`).
+  bool _modoMontoFijoChofer = false;
   final _notasCtrl = TextEditingController();
   /// Producto que se transporta. Opcional — null = tarifa "general"
   /// para esa ruta. Lista de opciones viene del catálogo de productos
@@ -95,6 +105,11 @@ class _LogisticaTarifaFormScreenState
           AppFormatters.formatearMiles(t.tarifaReal.toInt());
       _tarifaChoferCtrl.text =
           AppFormatters.formatearMiles(t.tarifaChofer.toInt());
+      if (t.montoFijoChofer != null) {
+        _modoMontoFijoChofer = true;
+        _montoFijoChoferCtrl.text =
+            AppFormatters.formatearMiles(t.montoFijoChofer!.toInt());
+      }
       if (t.porcentajeComisionDador != null) {
         _comisionCtrl.text =
             t.porcentajeComisionDador!.toStringAsFixed(1);
@@ -145,6 +160,7 @@ class _LogisticaTarifaFormScreenState
     _comisionCtrl.dispose();
     _tarifaRealCtrl.dispose();
     _tarifaChoferCtrl.dispose();
+    _montoFijoChoferCtrl.dispose();
     _notasCtrl.dispose();
     super.dispose();
   }
@@ -343,18 +359,83 @@ class _LogisticaTarifaFormScreenState
           AppCard(
             padding: const EdgeInsets.all(12),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _campoTarifa(
                   controller: _tarifaRealCtrl,
                   etiqueta: 'Tarifa real (lo que cobra Vecchi)',
                   color: AppColors.accentGreen,
                 ),
-                const SizedBox(height: 12),
-                _campoTarifa(
-                  controller: _tarifaChoferCtrl,
-                  etiqueta: 'Tarifa chofer (lo que se le paga)',
-                  color: AppColors.accentBlue,
+                const SizedBox(height: 16),
+                // Toggle pago al chofer: 18% sobre la tarifa chofer
+                // (default histórico) o monto fijo por viaje (pedido
+                // Santiago 2026-05-19 para viajes cortos donde el 18%
+                // no cuadra y se acuerda un monto a mano).
+                const Text(
+                  'PAGO AL CHOFER',
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                  ),
                 ),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('18% sobre tarifa chofer'),
+                      selected: !_modoMontoFijoChofer,
+                      onSelected: (sel) {
+                        if (sel) {
+                          setState(() => _modoMontoFijoChofer = false);
+                        }
+                      },
+                      selectedColor:
+                          AppColors.accentBlue.withValues(alpha: 0.4),
+                    ),
+                    ChoiceChip(
+                      label: const Text('Monto fijo por viaje'),
+                      selected: _modoMontoFijoChofer,
+                      onSelected: (sel) {
+                        if (sel) {
+                          setState(() => _modoMontoFijoChofer = true);
+                        }
+                      },
+                      selectedColor:
+                          AppColors.accentOrange.withValues(alpha: 0.4),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (_modoMontoFijoChofer) ...[
+                  _campoMontoFijoChofer(),
+                  // Mantenemos `tarifaChofer` editable también — es la
+                  // base "teórica" que se cobra al cliente y queda en
+                  // el snapshot por si más adelante se quiere volver al
+                  // 18% sin re-armar la tarifa de cero.
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tarifa chofer (base de referencia, no se paga al chofer en este modo):',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 11,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  _campoTarifa(
+                    controller: _tarifaChoferCtrl,
+                    etiqueta: 'Tarifa chofer (base de referencia)',
+                    color: AppColors.accentBlue,
+                  ),
+                ] else ...[
+                  _campoTarifa(
+                    controller: _tarifaChoferCtrl,
+                    etiqueta: 'Tarifa chofer (lo que se le paga)',
+                    color: AppColors.accentBlue,
+                  ),
+                ],
               ],
             ),
           ),
@@ -452,6 +533,27 @@ class _LogisticaTarifaFormScreenState
     );
   }
 
+  /// Campo dedicado al monto fijo del chofer — flat por viaje, no
+  /// arrastra el sufijo de unidad (`/TN` o `/viaje`) porque su unidad
+  /// es siempre "por viaje" independientemente de [_unidad].
+  Widget _campoMontoFijoChofer() {
+    return TextField(
+      controller: _montoFijoChoferCtrl,
+      keyboardType: TextInputType.number,
+      inputFormatters: [AppFormatters.inputMiles],
+      decoration: const InputDecoration(
+        labelText: 'Monto fijo al chofer (por viaje)',
+        prefixText: '\$ ',
+        prefixStyle: TextStyle(
+          color: AppColors.accentOrange,
+          fontWeight: FontWeight.bold,
+        ),
+        suffixText: '/viaje',
+      ),
+      style: const TextStyle(color: Colors.white, fontSize: 16),
+    );
+  }
+
   Widget _filaSelector<T>({
     required String etiqueta,
     required List<T> opciones,
@@ -535,6 +637,19 @@ class _LogisticaTarifaFormScreenState
           'La tarifa del chofer no puede superar la tarifa real.');
       return;
     }
+    // Si el operador eligió "monto fijo por viaje", parseamos y
+    // validamos. Si está vacío o = 0, error — sino la tarifa quedaría
+    // ambigua entre "modo monto fijo" y "no se cargó nada".
+    double? montoFijoChofer;
+    if (_modoMontoFijoChofer) {
+      montoFijoChofer = AppFormatters.parsearMiles(_montoFijoChoferCtrl.text)
+          ?.toDouble();
+      if (montoFijoChofer == null || montoFijoChofer <= 0) {
+        setState(() => _error =
+            'Cargá el monto fijo del chofer (debe ser mayor a 0).');
+        return;
+      }
+    }
 
     // Si origen y destino son la misma empresa, el campo `_flete` no
     // se le pide al operador. Normalizamos a `origen` para tener data
@@ -587,6 +702,10 @@ class _LogisticaTarifaFormScreenState
             'unidad_tarifa': _unidad.codigo,
             'tarifa_real': tarifaReal,
             'tarifa_chofer': tarifaChofer,
+            // Si el operador cambió a modo "monto fijo": guarda el
+            // valor. Si lo deshabilitó: setea explícito a null para
+            // que la tarifa vuelva al cálculo 18%.
+            'monto_fijo_chofer': montoFijoChofer,
             'notas': _notasCtrl.text.trim().isEmpty
                 ? null
                 : _notasCtrl.text.trim(),
@@ -612,6 +731,7 @@ class _LogisticaTarifaFormScreenState
           unidadTarifa: _unidad,
           tarifaReal: tarifaReal,
           tarifaChofer: tarifaChofer,
+          montoFijoChofer: montoFijoChofer,
           producto: _producto,
           notas: _notasCtrl.text,
         );

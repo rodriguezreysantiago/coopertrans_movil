@@ -102,6 +102,13 @@ class TarifaSnapshot {
   final UnidadTarifa unidadTarifa;
   final double tarifaReal;
   final double tarifaChofer;
+  /// Override flat del monto del chofer. Si != null, la liquidación
+  /// del chofer en este tramo es exactamente este valor (sin aplicar
+  /// `× TN × 18%`). Heredado de `TarifaLogistica.montoFijoChofer` al
+  /// crear el viaje, pero el operador puede modificarlo en el form
+  /// del viaje sin tocar la tarifa origen. Ver `CalculosViaje` para
+  /// la lógica que prioriza este campo cuando existe.
+  final double? montoFijoChofer;
   final String? producto;
   /// ID de la empresa origen — necesario para poblar el dropdown de
   /// productos en el form de viaje (cada tramo usa la empresa origen
@@ -118,9 +125,39 @@ class TarifaSnapshot {
     required this.unidadTarifa,
     required this.tarifaReal,
     required this.tarifaChofer,
+    this.montoFijoChofer,
     this.producto,
     this.empresaOrigenId,
   });
+
+  /// Devuelve una copia del snapshot con los campos indicados
+  /// reemplazados. Usado por el form de viaje para overridear el
+  /// `montoFijoChofer` sin tocar la tarifa origen.
+  TarifaSnapshot copyWith({
+    Object? montoFijoChofer = _sentinel,
+  }) {
+    return TarifaSnapshot(
+      origenEtiqueta: origenEtiqueta,
+      destinoEtiqueta: destinoEtiqueta,
+      empresaOrigenNombre: empresaOrigenNombre,
+      empresaDestinoNombre: empresaDestinoNombre,
+      dadorNombre: dadorNombre,
+      porcentajeComisionDador: porcentajeComisionDador,
+      unidadTarifa: unidadTarifa,
+      tarifaReal: tarifaReal,
+      tarifaChofer: tarifaChofer,
+      montoFijoChofer: identical(montoFijoChofer, _sentinel)
+          ? this.montoFijoChofer
+          : montoFijoChofer as double?,
+      producto: producto,
+      empresaOrigenId: empresaOrigenId,
+    );
+  }
+
+  /// Sentinel para distinguir "no cambiar" de "explícitamente null"
+  /// en copyWith (sin esto no se puede setear el override a null para
+  /// volver al cálculo por porcentaje).
+  static const Object _sentinel = Object();
 
   /// Etiqueta de origen lista para mostrar: `"<ubicación> (<empresa>)"`
   /// EXCEPTO si el nombre de la ubicación ya contiene el nombre de la
@@ -163,6 +200,7 @@ class TarifaSnapshot {
       unidadTarifa: t.unidadTarifa,
       tarifaReal: t.tarifaReal,
       tarifaChofer: t.tarifaChofer,
+      montoFijoChofer: t.montoFijoChofer,
       producto: t.producto,
       empresaOrigenId: t.empresaOrigenId,
     );
@@ -180,6 +218,7 @@ class TarifaSnapshot {
       unidadTarifa: UnidadTarifa.fromCodigo(d['unidad_tarifa']?.toString()),
       tarifaReal: (d['tarifa_real'] as num?)?.toDouble() ?? 0,
       tarifaChofer: (d['tarifa_chofer'] as num?)?.toDouble() ?? 0,
+      montoFijoChofer: (d['monto_fijo_chofer'] as num?)?.toDouble(),
       producto: d['producto']?.toString(),
       empresaOrigenId: d['empresa_origen_id']?.toString(),
     );
@@ -197,6 +236,7 @@ class TarifaSnapshot {
       'unidad_tarifa': unidadTarifa.codigo,
       'tarifa_real': tarifaReal,
       'tarifa_chofer': tarifaChofer,
+      if (montoFijoChofer != null) 'monto_fijo_chofer': montoFijoChofer,
       if (producto != null) 'producto': producto,
       if (empresaOrigenId != null) 'empresa_origen_id': empresaOrigenId,
     };

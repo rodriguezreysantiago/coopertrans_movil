@@ -418,6 +418,7 @@ class LogisticaService {
     required UnidadTarifa unidadTarifa,
     required double tarifaReal,
     required double tarifaChofer,
+    double? montoFijoChofer,
     String? producto,
     String? notas,
   }) async {
@@ -439,6 +440,10 @@ class LogisticaService {
         throw ArgumentError('El porcentaje de comisión debe estar entre 0 y 100.');
       }
     }
+    if (montoFijoChofer != null && montoFijoChofer <= 0) {
+      throw ArgumentError(
+          'El monto fijo del chofer debe ser mayor a 0 (dejá vacío para usar el 18%).');
+    }
 
     return tarifasCol.add({
       'tipo_carga': tipoCarga.codigo,
@@ -458,6 +463,7 @@ class LogisticaService {
       'unidad_tarifa': unidadTarifa.codigo,
       'tarifa_real': tarifaReal,
       'tarifa_chofer': tarifaChofer,
+      if (montoFijoChofer != null) 'monto_fijo_chofer': montoFijoChofer,
       if (producto != null && producto.trim().isNotEmpty)
         'producto': producto.trim(),
       'activa': true,

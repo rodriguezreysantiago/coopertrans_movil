@@ -149,10 +149,21 @@ class CalculosViaje {
   ///
   /// `comisionPct` queda como 18 si pasás `null` (default operativo).
   ///
+  /// **Monto fijo del chofer** (Santiago 2026-05-19): si pasás
+  /// `montoFijoChofer` no-null, esa cifra es lo que se le paga al
+  /// chofer FLAT (sin multiplicar por TN ni aplicar `comisionPct`).
+  /// Pensado para viajes cortos donde Vecchi acuerda un monto a mano
+  /// con el chofer que no coincide con el cálculo del 18%. El monto
+  /// Vecchi se sigue calculando normal.
+  ///
   /// Fórmula (Santiago 2026-05-13):
   ///   baseBrutaChofer = tarifaChofer × TN
   ///   montoChofer     = baseBrutaChofer × (comisionPct / 100)
   ///   redondeado      = floor5(montoChofer)
+  /// Override:
+  ///   si montoFijoChofer != null → montoChofer = montoFijoChofer
+  ///                                redondeado  = floor5(montoFijoChofer)
+  ///                                comisionPct se reporta como 0 (no aplica)
   static MontosViaje calcularTodo({
     required UnidadTarifa unidadTarifa,
     required double tarifaReal,
@@ -162,6 +173,7 @@ class CalculosViaje {
     double adelanto = 0,
     Iterable<GastoViaje>? gastos,
     double? comisionPct,
+    double? montoFijoChofer,
   }) {
     final pct = comisionPct ?? comisionChoferDefaultPct;
     final brutos = calcularMontosBrutos(
@@ -171,10 +183,18 @@ class CalculosViaje {
       kgCargados: kgCargados,
       kgDescargados: kgDescargados,
     );
-    // El monto del chofer ES el porcentaje sobre la base bruta; lo que
-    // antes se llamaba "monto chofer" era en realidad la base bruta y
-    // se le pagaba el total — bug de cálculo corregido 2026-05-13.
-    final montoChofer = brutos.montoChofer * (pct / 100.0);
+    // Si hay monto fijo del chofer, ése es el resultado final — no
+    // pasa por porcentaje ni por TN. La cifra es flat por viaje. Si
+    // no hay, cálculo legacy: base bruta × pct.
+    final double montoChofer;
+    final double pctReportado;
+    if (montoFijoChofer != null) {
+      montoChofer = montoFijoChofer;
+      pctReportado = 0; // no aplica — el monto está fijado a mano
+    } else {
+      montoChofer = brutos.montoChofer * (pct / 100.0);
+      pctReportado = pct;
+    }
     final redondeado = redondearMultiploDe5Descendente(montoChofer);
     final gastosTot = sumarGastos(gastos);
     final liquidacion = calcularLiquidacion(
@@ -186,7 +206,7 @@ class CalculosViaje {
       montoVecchi: _round2(brutos.montoVecchi),
       montoChofer: _round2(montoChofer),
       montoChoferRedondeado: redondeado,
-      comisionChoferPct: pct,
+      comisionChoferPct: pctReportado,
       gastosTotal: _round2(gastosTot),
       liquidacionChofer: _round2(liquidacion),
     );
@@ -224,6 +244,14 @@ class CalculosViaje {
     final pct = comisionPct ?? comisionChoferDefaultPct;
     var totalVecchi = 0.0;
     var baseBrutaChofer = 0.0;
+    // Suma de los montos fijos del chofer (cada tramo que tenga
+    // `montoFijoChofer` aporta su monto flat, sin pasar por el pct).
+    // Pedido Santiago 2026-05-19: tramos cortos donde se acuerda un
+    // monto a mano conviven con tramos que cobran al 18% en el mismo
+    // viaje (ej. un viaje con 1 tramo largo a Buenos Aires al 18% +
+    // 1 tramo corto interno con monto fijo).
+    var montosFijos = 0.0;
+    var hayAlgunTramoConPct = false;
     for (final t in tramos) {
       final brutos = calcularMontosBrutos(
         unidadTarifa: t.tarifaSnapshot.unidadTarifa,
@@ -233,13 +261,23 @@ class CalculosViaje {
         kgDescargados: t.kgDescargados,
       );
       totalVecchi += brutos.montoVecchi;
-      baseBrutaChofer += brutos.montoChofer;
+      final fijo = t.tarifaSnapshot.montoFijoChofer;
+      if (fijo != null) {
+        montosFijos += fijo;
+      } else {
+        baseBrutaChofer += brutos.montoChofer;
+        hayAlgunTramoConPct = true;
+      }
     }
-    // Aplicamos la comisión sobre la suma total (no por tramo) para
-    // evitar amplificación de pequeños errores de redondeo en
-    // operaciones de coma flotante.
-    final montoChofer = baseBrutaChofer * (pct / 100.0);
+    // Aplicamos la comisión sobre la suma de tramos por porcentaje
+    // (no por tramo individual) para evitar amplificación de errores
+    // de redondeo. Le sumamos los montos fijos al final.
+    final montoChofer = baseBrutaChofer * (pct / 100.0) + montosFijos;
     final redondeado = redondearMultiploDe5Descendente(montoChofer);
+    // Si TODOS los tramos son monto fijo, reportamos pct=0 porque no
+    // hubo aplicación de porcentaje. Si al menos uno usa porcentaje,
+    // reportamos el pct vigente (útil para la UI/reportes).
+    final pctReportado = hayAlgunTramoConPct ? pct : 0.0;
     // Gastos: si el caller los pasa explícito (legacy / tests), se
     // respetan. Sino se suman de cada tramo. Esto resuelve el caso
     // 2026-05-13 donde los gastos pasaron de nivel viaje a nivel
@@ -257,7 +295,7 @@ class CalculosViaje {
       montoVecchi: _round2(totalVecchi),
       montoChofer: _round2(montoChofer),
       montoChoferRedondeado: redondeado,
-      comisionChoferPct: pct,
+      comisionChoferPct: pctReportado,
       gastosTotal: _round2(gastosTot),
       liquidacionChofer: _round2(liquidacion),
     );

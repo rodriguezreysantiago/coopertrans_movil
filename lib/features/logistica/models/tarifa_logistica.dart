@@ -124,6 +124,20 @@ class TarifaLogistica {
   final UnidadTarifa unidadTarifa;
   final double tarifaReal;
   final double tarifaChofer;
+  /// Monto fijo POR VIAJE para el chofer, alternativa al cálculo
+  /// `tarifaChofer × TN × 18%`. Si no es null, ese monto se paga al
+  /// chofer FLAT, sin importar cuántas TN cargue y sin aplicar la
+  /// comisión del 18%.
+  ///
+  /// Pedido Santiago 2026-05-19: "hay veces que les asignamos viajes
+  /// cortos que se les paga un poco más que el 18%". El operador puede
+  /// dejar este campo configurado en la tarifa para que los viajes
+  /// cortos calculen automáticamente con el monto acordado.
+  ///
+  /// Si null → comportamiento legacy (porcentaje sobre tarifaChofer).
+  /// En el form del viaje también se puede overridear puntualmente
+  /// vía `TarifaSnapshot.montoFijoChofer` sin tocar la tarifa origen.
+  final double? montoFijoChofer;
   /// Producto que se transporta (snapshot del nombre del catálogo de
   /// productos de la empresa origen). Opcional — si dos productos
   /// distintos cobran lo mismo, una sola tarifa cubre ambos sin
@@ -154,6 +168,7 @@ class TarifaLogistica {
     required this.unidadTarifa,
     required this.tarifaReal,
     required this.tarifaChofer,
+    this.montoFijoChofer,
     this.producto,
     this.vigenteDesde,
     this.activa = true,
@@ -189,6 +204,7 @@ class TarifaLogistica {
       unidadTarifa: UnidadTarifa.fromCodigo(d['unidad_tarifa']?.toString()),
       tarifaReal: (d['tarifa_real'] as num?)?.toDouble() ?? 0,
       tarifaChofer: (d['tarifa_chofer'] as num?)?.toDouble() ?? 0,
+      montoFijoChofer: (d['monto_fijo_chofer'] as num?)?.toDouble(),
       producto: (d['producto'] as String?)?.trim().isEmpty ?? true
           ? null
           : (d['producto'] as String).trim(),
@@ -226,6 +242,7 @@ class TarifaLogistica {
       'unidad_tarifa': unidadTarifa.codigo,
       'tarifa_real': tarifaReal,
       'tarifa_chofer': tarifaChofer,
+      if (montoFijoChofer != null) 'monto_fijo_chofer': montoFijoChofer,
       if (producto != null) 'producto': producto,
       'activa': activa,
       if (notas != null) 'notas': notas,

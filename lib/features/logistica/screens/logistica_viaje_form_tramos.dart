@@ -24,6 +24,14 @@ class _TramoEditState {
   /// en el state del tramo (no se recrea en cada build) para no
   /// perder el foco al tipear.
   final TextEditingController productoLibreCtrl;
+  /// Override "monto fijo del chofer" a nivel TRAMO. Si `true`, este
+  /// tramo paga al chofer el valor de [montoFijoChoferCtrl] (flat,
+  /// sin TN ni 18%). Si `false`, calcula con el 18% sobre la tarifa
+  /// chofer. Se inicializa siguiendo a la tarifa elegida — si la
+  /// tarifa ya tiene `montoFijoChofer`, arranca activado y precargado
+  /// con ese valor. Pedido Santiago 2026-05-19.
+  bool montoFijoChoferActivo;
+  final TextEditingController montoFijoChoferCtrl;
   final TextEditingController descripcionCargaCtrl;
   DateTime? fechaCarga;
   final TextEditingController kgCargadosCtrl;
@@ -55,7 +63,14 @@ class _TramoEditState {
     this.remitoUrl,
     this.remitoPathStorage,
     List<GastoViaje>? gastos,
+    double? montoFijoChoferInicial,
   })  : productoLibreCtrl = TextEditingController(text: producto ?? ''),
+        montoFijoChoferActivo = montoFijoChoferInicial != null,
+        montoFijoChoferCtrl = TextEditingController(
+          text: montoFijoChoferInicial != null
+              ? AppFormatters.formatearMiles(montoFijoChoferInicial.toInt())
+              : '',
+        ),
         descripcionCargaCtrl =
             TextEditingController(text: descripcionCarga ?? ''),
         kgCargadosCtrl = TextEditingController(text: kgCargados ?? ''),
@@ -94,15 +109,44 @@ class _TramoEditState {
       remitoUrl: t.remitoUrl,
       remitoPathStorage: t.remitoPathStorage,
       gastos: List.of(t.gastos),
+      // El snapshot del tramo manda — puede tener un override del
+      // operador distinto al de la tarifa origen. Si snapshot es null
+      // (no se usó monto fijo) arranca en modo 18%.
+      montoFijoChoferInicial: t.tarifaSnapshot.montoFijoChofer,
     );
   }
 
   void dispose() {
     productoLibreCtrl.dispose();
+    montoFijoChoferCtrl.dispose();
     descripcionCargaCtrl.dispose();
     kgCargadosCtrl.dispose();
     remitoNumeroCtrl.dispose();
     kgDescargadosCtrl.dispose();
+  }
+
+  /// Aplica al `TarifaSnapshot` el override del monto fijo del
+  /// operador. Si `montoFijoChoferActivo` y el campo está vacío
+  /// (operador activó override pero no escribió monto), devuelve el
+  /// snapshot con `montoFijoChofer: null` para que el cálculo no
+  /// asuma 0. La validación de "monto fijo obligatorio si activo" se
+  /// hace al guardar el viaje.
+  TarifaSnapshot snapshotConOverride() {
+    final base = TarifaSnapshot.fromTarifa(tarifa!);
+    if (!montoFijoChoferActivo) {
+      // Explícitamente null para limpiar el override que la tarifa
+      // pueda traer — el operador eligió volver al 18%.
+      return base.copyWith(montoFijoChofer: null);
+    }
+    final parsed =
+        AppFormatters.parsearMiles(montoFijoChoferCtrl.text)?.toDouble();
+    if (parsed == null || parsed <= 0) {
+      // Activo pero sin valor válido — no aplicar override (queda
+      // null y el cálculo cae al 18%). El form valida esto antes de
+      // permitir guardar el viaje.
+      return base.copyWith(montoFijoChofer: null);
+    }
+    return base.copyWith(montoFijoChofer: parsed);
   }
 
   TramoViaje toTramoViaje() {
@@ -111,7 +155,7 @@ class _TramoEditState {
     return TramoViaje(
       id: id,
       tarifaId: tarifa!.id,
-      tarifaSnapshot: TarifaSnapshot.fromTarifa(tarifa!),
+      tarifaSnapshot: snapshotConOverride(),
       producto: producto?.trim().isEmpty ?? true ? null : producto!.trim(),
       descripcionCarga: descripcionCargaCtrl.text.trim().isEmpty
           ? null
@@ -218,6 +262,16 @@ class _TramoCard extends StatelessWidget {
             // Si cambió la tarifa, reseteamos el producto (porque
             // viene de empresa origen distinta).
             state.producto = null;
+            // Sincronizar el override del chofer con la nueva tarifa:
+            // si la tarifa elegida tiene `montoFijoChofer`, pre-cargar
+            // el modo activado con ese valor. Si no, volver a 18%.
+            // El operador después puede cambiar a su gusto en este
+            // tramo sin afectar la tarifa origen (override por tramo).
+            final fijoTarifa = elegida.montoFijoChofer;
+            state.montoFijoChoferActivo = fijoTarifa != null;
+            state.montoFijoChoferCtrl.text = fijoTarifa != null
+                ? AppFormatters.formatearMiles(fijoTarifa.toInt())
+                : '';
             onCambio();
           },
           borderRadius: BorderRadius.circular(4),
@@ -246,6 +300,13 @@ class _TramoCard extends StatelessWidget {
         if (tarifa != null) ...[
           const SizedBox(height: 8),
           _ResumenTarifa(t: tarifa),
+          const SizedBox(height: 12),
+          // Override del pago al chofer para ESTE tramo. Útil cuando
+          // la tarifa está cargada al 18% pero este viaje paga un
+          // monto distinto al chofer (acuerdo a mano). El cambio NO
+          // afecta la tarifa origen — vive solo en el snapshot del
+          // tramo, así el catálogo de tarifas queda intacto.
+          _OverridePagoChofer(state: state, onCambio: onCambio),
         ],
         const SizedBox(height: 12),
 
@@ -374,6 +435,94 @@ class _TramoCard extends StatelessWidget {
   }
 }
 
+// =============================================================================
+// _OverridePagoChofer — toggle "18% / monto fijo" + campo de monto
+// =============================================================================
+//
+// Vive entre el resumen de tarifa y la sección CARGA. Permite overridear
+// el pago al chofer para ESTE tramo sin tocar la tarifa origen del
+// catálogo. Pedido Santiago 2026-05-19: viajes cortos donde se acuerda
+// un monto a mano con el chofer en vez del 18%.
+
+class _OverridePagoChofer extends StatelessWidget {
+  final _TramoEditState state;
+  final VoidCallback onCambio;
+
+  const _OverridePagoChofer({
+    required this.state,
+    required this.onCambio,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'PAGO AL CHOFER (ESTE TRAMO)',
+          style: TextStyle(
+            color: Colors.white54,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('18%'),
+              selected: !state.montoFijoChoferActivo,
+              onSelected: (sel) {
+                if (sel) {
+                  state.montoFijoChoferActivo = false;
+                  onCambio();
+                }
+              },
+              selectedColor: AppColors.accentBlue.withValues(alpha: 0.4),
+              visualDensity: VisualDensity.compact,
+            ),
+            ChoiceChip(
+              label: const Text('Monto fijo'),
+              selected: state.montoFijoChoferActivo,
+              onSelected: (sel) {
+                if (sel) {
+                  state.montoFijoChoferActivo = true;
+                  onCambio();
+                }
+              },
+              selectedColor: AppColors.accentOrange.withValues(alpha: 0.4),
+              visualDensity: VisualDensity.compact,
+            ),
+          ],
+        ),
+        if (state.montoFijoChoferActivo) ...[
+          const SizedBox(height: 8),
+          TextField(
+            controller: state.montoFijoChoferCtrl,
+            keyboardType: TextInputType.number,
+            inputFormatters: [AppFormatters.inputMiles],
+            decoration: const InputDecoration(
+              labelText: 'Monto al chofer (por viaje)',
+              prefixText: '\$ ',
+              prefixStyle: TextStyle(
+                color: AppColors.accentOrange,
+                fontWeight: FontWeight.bold,
+              ),
+              suffixText: '/viaje',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            style: const TextStyle(color: Colors.white, fontSize: 15),
+            onChanged: (_) => onCambio(),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 class _BotonAgregarTramo extends StatelessWidget {
   final VoidCallback onPressed;
   const _BotonAgregarTramo({required this.onPressed});
@@ -441,7 +590,7 @@ class _BannerEncadenamiento extends StatelessWidget {
 // _DropdownProducto — productos de la empresa origen de la tarifa
 // =============================================================================
 
-class _DropdownProducto extends StatelessWidget {
+class _DropdownProducto extends StatefulWidget {
   final String? empresaOrigenId;
   final String? valor;
   /// Controller para el fallback de texto libre (cuando la empresa
@@ -459,8 +608,48 @@ class _DropdownProducto extends StatelessWidget {
   });
 
   @override
+  State<_DropdownProducto> createState() => _DropdownProductoState();
+}
+
+class _DropdownProductoState extends State<_DropdownProducto> {
+  /// Future MEMORIZADO. Antes (Santiago 2026-05-19) este widget era
+  /// StatelessWidget y el `future: LogisticaService.empresaPorId(...)`
+  /// se evaluaba en cada `build()` — cada keystroke en el TextField de
+  /// "producto libre" disparaba setState en el padre → rebuild de este
+  /// widget → Future NUEVO → FutureBuilder volvía a `ConnectionState.
+  /// waiting` y reemplazaba el TextField por el `LinearProgressIndicator`
+  /// → el TextField se desmontaba y el operador perdía el foco después
+  /// de tipear una sola letra. Memorizando el Future por
+  /// `empresaOrigenId` y re-creándolo solo cuando ese ID cambia
+  /// (didUpdateWidget), el TextField sigue montado entre keystrokes.
+  Future<EmpresaLogistica?>? _empresaFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _crearFutureSiHaceFalta();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DropdownProducto old) {
+    super.didUpdateWidget(old);
+    if (old.empresaOrigenId != widget.empresaOrigenId) {
+      _crearFutureSiHaceFalta();
+    }
+  }
+
+  void _crearFutureSiHaceFalta() {
+    final id = widget.empresaOrigenId;
+    if (id == null || id.isEmpty) {
+      _empresaFuture = null;
+    } else {
+      _empresaFuture = LogisticaService.empresaPorId(id);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (empresaOrigenId == null || empresaOrigenId!.isEmpty) {
+    if (_empresaFuture == null) {
       return const TextField(
         enabled: false,
         decoration: InputDecoration(
@@ -470,7 +659,7 @@ class _DropdownProducto extends StatelessWidget {
       );
     }
     return FutureBuilder<EmpresaLogistica?>(
-      future: LogisticaService.empresaPorId(empresaOrigenId!),
+      future: _empresaFuture,
       builder: (ctx, snap) {
         final productos = snap.data?.productos ?? const <String>[];
         if (snap.connectionState == ConnectionState.waiting) {
@@ -490,23 +679,25 @@ class _DropdownProducto extends StatelessWidget {
           // para no bloquear al operador. El controller viene de
           // afuera (persistente) para no perder foco en cada keystroke.
           return TextField(
-            controller: libreCtrl,
+            controller: widget.libreCtrl,
             decoration: const InputDecoration(
               labelText: 'Producto (libre — la empresa no tiene catálogo)',
               border: OutlineInputBorder(),
             ),
-            onChanged: onChanged,
+            onChanged: widget.onChanged,
           );
         }
         // Si el valor actual no está en la lista (ej. se cargó un
         // producto libre y después se catalogaron otros), lo agregamos
         // a la lista para que no se pierda.
         final items = List<String>.from(productos);
-        if (valor != null && valor!.isNotEmpty && !items.contains(valor)) {
-          items.add(valor!);
+        if (widget.valor != null &&
+            widget.valor!.isNotEmpty &&
+            !items.contains(widget.valor)) {
+          items.add(widget.valor!);
         }
         return DropdownButtonFormField<String>(
-          initialValue: items.contains(valor) ? valor : null,
+          initialValue: items.contains(widget.valor) ? widget.valor : null,
           decoration: const InputDecoration(
             labelText: 'Producto',
             border: OutlineInputBorder(),
@@ -515,7 +706,7 @@ class _DropdownProducto extends StatelessWidget {
           items: items
               .map((p) => DropdownMenuItem(value: p, child: Text(p)))
               .toList(),
-          onChanged: onChanged,
+          onChanged: widget.onChanged,
         );
       },
     );

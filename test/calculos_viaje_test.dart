@@ -572,6 +572,161 @@ void main() {
     });
   });
 
+  // ─── Monto fijo del chofer (Santiago 2026-05-19) ───
+  // Override del cálculo por porcentaje cuando Vecchi acuerda un
+  // monto flat con el chofer (viajes cortos donde el 18% no aplica).
+  group('calcularTodo — montoFijoChofer override', () {
+    test('monto fijo se respeta tal cual, sin tocar TN ni aplicar pct', () {
+      // POR_TONELADA: 35 TN × $2000 = base $70k. Si fuera por 18%
+      // serían $12.600. Con monto fijo $15.000, ése es el resultado.
+      final m = CalculosViaje.calcularTodo(
+        unidadTarifa: UnidadTarifa.porTonelada,
+        tarifaReal: 17471,
+        tarifaChofer: 2000,
+        kgCargados: 35000,
+        montoFijoChofer: 15000,
+      );
+      expect(m.montoChofer, 15000);
+      expect(m.montoChoferRedondeado, 15000); // ya es múltiplo de 5
+      expect(m.comisionChoferPct, 0); // no aplica
+      // Monto Vecchi sigue calculándose normal — 17471 × 35 = 611485.
+      expect(m.montoVecchi, closeTo(611485, 0.01));
+    });
+
+    test('monto fijo se redondea a múltiplo de 5 descendente', () {
+      // $15.234 → $15.230.
+      final m = CalculosViaje.calcularTodo(
+        unidadTarifa: UnidadTarifa.porViaje,
+        tarifaReal: 100000,
+        tarifaChofer: 50000,
+        montoFijoChofer: 15234,
+      );
+      expect(m.montoChofer, 15234);
+      expect(m.montoChoferRedondeado, 15230);
+    });
+
+    test('monto fijo + adelanto + gastos: liquidación normal', () {
+      // monto $20.000 - adelanto $5.000 + gastos $1.500 = $16.500.
+      final m = CalculosViaje.calcularTodo(
+        unidadTarifa: UnidadTarifa.porViaje,
+        tarifaReal: 80000,
+        tarifaChofer: 60000,
+        adelanto: 5000,
+        gastos: [GastoViaje(monto: 1500, fecha: DateTime(2026, 5, 19))],
+        montoFijoChofer: 20000,
+      );
+      expect(m.montoChoferRedondeado, 20000);
+      expect(m.liquidacionChofer, 16500);
+    });
+
+    test('montoFijoChofer null → fallback al cálculo por porcentaje', () {
+      // Sin override, sigue calculando 18% como siempre.
+      final m = CalculosViaje.calcularTodo(
+        unidadTarifa: UnidadTarifa.porTonelada,
+        tarifaReal: 5000,
+        tarifaChofer: 2000,
+        kgCargados: 30000,
+      );
+      // base bruta = 30 × 2000 = 60000. 18% = 10800.
+      expect(m.montoChofer, closeTo(10800, 0.01));
+      expect(m.comisionChoferPct, 18);
+    });
+  });
+
+  group('calcularTodoMultiTramo — montoFijoChofer por tramo', () {
+    TramoViaje tramo({
+      required UnidadTarifa unidad,
+      required double tarifaReal,
+      required double tarifaChofer,
+      double? montoFijoChofer,
+      double? kgCargados,
+      double? kgDescargados,
+      List<GastoViaje> gastos = const [],
+    }) {
+      return TramoViaje(
+        id: 't',
+        tarifaId: 'fake',
+        tarifaSnapshot: TarifaSnapshot(
+          origenEtiqueta: 'O',
+          destinoEtiqueta: 'D',
+          empresaOrigenNombre: 'EO',
+          empresaDestinoNombre: 'ED',
+          unidadTarifa: unidad,
+          tarifaReal: tarifaReal,
+          tarifaChofer: tarifaChofer,
+          montoFijoChofer: montoFijoChofer,
+        ),
+        kgCargados: kgCargados,
+        kgDescargados: kgDescargados,
+        gastos: gastos,
+      );
+    }
+
+    test('todos los tramos con monto fijo: suma flat sin pct', () {
+      final m = CalculosViaje.calcularTodoMultiTramo(tramos: [
+        tramo(
+          unidad: UnidadTarifa.porViaje,
+          tarifaReal: 100000,
+          tarifaChofer: 80000,
+          montoFijoChofer: 15000,
+        ),
+        tramo(
+          unidad: UnidadTarifa.porViaje,
+          tarifaReal: 50000,
+          tarifaChofer: 40000,
+          montoFijoChofer: 8000,
+        ),
+      ]);
+      expect(m.montoChofer, 23000); // 15k + 8k
+      expect(m.montoChoferRedondeado, 23000);
+      expect(m.comisionChoferPct, 0); // ningún tramo usó pct
+    });
+
+    test('mezcla: 1 tramo con pct + 1 tramo con monto fijo conviven', () {
+      // Tramo A largo: 30 TN × $2000 = base 60000. 18% = 10800.
+      // Tramo B corto con monto fijo: 5000 flat.
+      // Total chofer: 10800 + 5000 = 15800. Redondeo: 15800 (múltiplo).
+      final m = CalculosViaje.calcularTodoMultiTramo(tramos: [
+        tramo(
+          unidad: UnidadTarifa.porTonelada,
+          tarifaReal: 5000,
+          tarifaChofer: 2000,
+          kgCargados: 30000,
+        ),
+        tramo(
+          unidad: UnidadTarifa.porViaje,
+          tarifaReal: 20000,
+          tarifaChofer: 15000,
+          montoFijoChofer: 5000,
+        ),
+      ]);
+      expect(m.montoChofer, closeTo(15800, 0.01));
+      expect(m.montoChoferRedondeado, 15800);
+      expect(m.comisionChoferPct, 18); // se reporta porque al menos 1 tramo lo usó
+    });
+
+    test('redondeo se aplica sobre el TOTAL combinado (no por tramo)', () {
+      // Tramo pct: 31 TN × $1000 = 31000 base. 18% = 5580.
+      // Tramo fijo: $1234.
+      // Total: 5580 + 1234 = 6814. floor5 = 6810.
+      final m = CalculosViaje.calcularTodoMultiTramo(tramos: [
+        tramo(
+          unidad: UnidadTarifa.porTonelada,
+          tarifaReal: 2000,
+          tarifaChofer: 1000,
+          kgCargados: 31000,
+        ),
+        tramo(
+          unidad: UnidadTarifa.porViaje,
+          tarifaReal: 5000,
+          tarifaChofer: 4000,
+          montoFijoChofer: 1234,
+        ),
+      ]);
+      expect(m.montoChoferRedondeado, 6810);
+    });
+  });
+
   // ─── Compat hacia atrás del modelo Viaje (Santiago 2026-05-11) ───
   group('Viaje compat hacia atrás (single-tramo viejo → multi-tramo)', () {
     test('Viaje.fromMap construye 1 tramo a partir de campos planos', () {

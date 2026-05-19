@@ -660,6 +660,23 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
       );
       return;
     }
+    // Si un tramo tiene "monto fijo del chofer" activado pero el campo
+    // está vacío o = 0, error — sino se persistiría con monto 0 y el
+    // chofer cobraría $0 en ese tramo. Lo señalamos con el número de
+    // tramo para que el operador sepa dónde corregir.
+    for (var i = 0; i < _tramos.length; i++) {
+      final t = _tramos[i];
+      if (!t.montoFijoChoferActivo) continue;
+      final m =
+          AppFormatters.parsearMiles(t.montoFijoChoferCtrl.text)?.toDouble();
+      if (m == null || m <= 0) {
+        AppFeedback.warningOn(
+          messenger,
+          'Tramo ${i + 1}: cargá el monto fijo del chofer o cambiá a 18%.',
+        );
+        return;
+      }
+    }
 
     // Detección de duplicados — solo modo ALTA (en edición, el viaje
     // YA existe, no puede ser duplicado de sí mismo trivialmente).
