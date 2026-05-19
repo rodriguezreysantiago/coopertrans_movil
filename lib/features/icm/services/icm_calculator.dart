@@ -142,41 +142,48 @@ class IcmCalculator {
         .limit(5000)
         .get();
 
-    // ─── 2. SITRACK_EVENTOS del rango ──────────────────────────────
-    final evSnap = await db
-        .collection('SITRACK_EVENTOS')
-        .where('report_date',
-            isGreaterThanOrEqualTo: Timestamp.fromMillisecondsSinceEpoch(desdeMs))
-        .where('report_date',
-            isLessThan: Timestamp.fromMillisecondsSinceEpoch(hastaMs))
-        .limit(200000)
-        .get();
-
-    // Indexar eventos por DNI, ordenados por timestamp (binary search ready).
+    // ─── 2. SITRACK_EVENTOS del rango — paginado por cursor ────────
+    // Firestore client SDK limita .limit() a 10000 por query. Para
+    // rangos de mes completo (~25-35K eventos) paginamos con cursor
+    // sobre `report_date` ordenado. Cada página trae hasta 10000 docs;
+    // seguimos hasta que el resultado venga corto (fin del rango) o
+    // toque el cap defensivo total.
+    //
+    // Cap total 100K eventos defensivo — si en el futuro Vecchi crece
+    // a >100K eventos/mes, evita freeze del cliente. Hoy el operativo
+    // real es ~6-8K/semana = 30K/mes, sobrado.
+    const int pageSize = 10000;
+    const int capTotal = 100000;
     final eventosPorDni = <String, List<_EvRaw>>{};
-    for (final doc in evSnap.docs) {
-      final d = doc.data();
-      final dni = (d['driver_dni'] ?? '').toString().trim();
-      if (dni.isEmpty) continue;
-      final tsMs = (d['report_date'] as Timestamp?)?.millisecondsSinceEpoch;
-      if (tsMs == null) continue;
-      final eId = d['event_id'];
-      if (eId is! int) continue;
-      final raw = _EvRaw(
-        eventId: eId,
-        reportDateMs: tsMs,
-        assetId: (d['asset_id'] ?? '').toString().trim().toUpperCase(),
-        driverDni: dni,
-        eventName: (d['event_name'] ?? 'Evento $eId').toString(),
-        speed: (d['speed'] as num?)?.toDouble() ??
-            (d['gps_speed'] as num?)?.toDouble(),
-        cartLimit: (d['cartography_limit_speed'] as num?)?.toDouble(),
-        areaType: (d['area_type'] ?? 'unknown').toString(),
-        odometer: (d['odometer'] as num?)?.toDouble() ??
-            (d['gps_odometer'] as num?)?.toDouble(),
-      );
-      eventosPorDni.putIfAbsent(dni, () => []).add(raw);
+    DocumentSnapshot<Map<String, dynamic>>? cursor;
+    var totalLeidos = 0;
+    while (totalLeidos < capTotal) {
+      Query<Map<String, dynamic>> q = db
+          .collection('SITRACK_EVENTOS')
+          .where('report_date',
+              isGreaterThanOrEqualTo:
+                  Timestamp.fromMillisecondsSinceEpoch(desdeMs))
+          .where('report_date',
+              isLessThan: Timestamp.fromMillisecondsSinceEpoch(hastaMs))
+          .orderBy('report_date')
+          .limit(pageSize);
+      if (cursor != null) {
+        q = q.startAfterDocument(cursor);
+      }
+      final pageSnap = await q.get();
+      if (pageSnap.docs.isEmpty) break;
+      _indexarEventos(pageSnap.docs, eventosPorDni);
+      totalLeidos += pageSnap.docs.length;
+      if (pageSnap.docs.length < pageSize) break; // última página
+      cursor = pageSnap.docs.last;
     }
+    if (totalLeidos >= capTotal) {
+      debugPrint(
+        '[ICM] cap defensivo de $capTotal eventos alcanzado — el '
+        'ranking puede estar incompleto. Considerar reducir el rango.',
+      );
+    }
+    // Ordenar cada array por timestamp ascendente (binary search ready).
     for (final arr in eventosPorDni.values) {
       arr.sort((a, b) => a.reportDateMs.compareTo(b.reportDateMs));
     }
@@ -321,6 +328,38 @@ class IcmCalculator {
   /// Categoría helper para tests y consumidores externos (alineada con
   /// el módulo CESVI puro).
   static CategoriaIcm categorizar(double icm) => categorizarIcm(icm);
+
+  /// Indexa una página de docs SITRACK_EVENTOS en el map `eventosPorDni`.
+  /// Mutador in-place: no devuelve nada. Filtra docs sin `driver_dni`
+  /// o sin `event_id` numérico (datos viejos / corruptos).
+  static void _indexarEventos(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    Map<String, List<_EvRaw>> eventosPorDni,
+  ) {
+    for (final doc in docs) {
+      final d = doc.data();
+      final dni = (d['driver_dni'] ?? '').toString().trim();
+      if (dni.isEmpty) continue;
+      final tsMs = (d['report_date'] as Timestamp?)?.millisecondsSinceEpoch;
+      if (tsMs == null) continue;
+      final eId = d['event_id'];
+      if (eId is! int) continue;
+      final raw = _EvRaw(
+        eventId: eId,
+        reportDateMs: tsMs,
+        assetId: (d['asset_id'] ?? '').toString().trim().toUpperCase(),
+        driverDni: dni,
+        eventName: (d['event_name'] ?? 'Evento $eId').toString(),
+        speed: (d['speed'] as num?)?.toDouble() ??
+            (d['gps_speed'] as num?)?.toDouble(),
+        cartLimit: (d['cartography_limit_speed'] as num?)?.toDouble(),
+        areaType: (d['area_type'] ?? 'unknown').toString(),
+        odometer: (d['odometer'] as num?)?.toDouble() ??
+            (d['gps_odometer'] as num?)?.toDouble(),
+      );
+      eventosPorDni.putIfAbsent(dni, () => []).add(raw);
+    }
+  }
 
   static CategoriaIcm _cesviToLegacy(CategoriaCesvi c) {
     switch (c) {
