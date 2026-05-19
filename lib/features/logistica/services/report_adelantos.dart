@@ -202,7 +202,7 @@ class ReportAdelantosService {
                     ),
                     pw.SizedBox(height: 2),
                     pw.Text(
-                      'Adelantos pendientes de pago',
+                      'Resumen de adelantos',
                       style: const pw.TextStyle(
                         fontSize: 11,
                         color: PdfColors.grey700,
@@ -403,22 +403,22 @@ class ReportAdelantosService {
   }
 
   static pw.Widget _tablaAdelantos(List<AdelantoChofer> adelantos) {
-    // 7 columnas (anchos relativos sobre A4 margen 24):
-    //   #          ~3%   centrado
-    //   FECHA      ~7%   centrado (Santiago 2026-05-19 — formato DD/MM
-    //                      sin año porque el rango ya va en el header)
-    //   EMPLEADO   ~24%
-    //   DETALLE    ~28%
-    //   ESTADO     ~10%  centrado
-    //   ADELANTO   ~15%  derecha
-    //   N° RECIBO  ~11%  centrado
+    // 7 columnas — anchos ajustados Santiago 2026-05-19 tras ver que
+    // # / FECHA / ESTADO se cortaban en 2 líneas. Cambios:
+    //   #         flex 0.8 → 1.2   (entra "16" sin wrap)
+    //   FECHA     flex 1.5 → 2.2   (entra "14/05" sin wrap)
+    //   ESTADO    flex 2.4 → 3.0   (entra "ENTREGADO" sin wrap)
+    //   EMPLEADO  flex 6   → 5.5   (compensa)
+    //   DETALLE   flex 7   → 6.5
+    //   ADELANTO  flex 3   → 3.0   (sin cambio)
+    //   N° RECIBO flex 2.5 → 2.5   (sin cambio)
     final colWidths = <int, pw.TableColumnWidth>{
-      0: const pw.FlexColumnWidth(0.8),
-      1: const pw.FlexColumnWidth(1.5),
-      2: const pw.FlexColumnWidth(6),
-      3: const pw.FlexColumnWidth(7),
-      4: const pw.FlexColumnWidth(2.4),
-      5: const pw.FlexColumnWidth(3),
+      0: const pw.FlexColumnWidth(1.2),
+      1: const pw.FlexColumnWidth(2.2),
+      2: const pw.FlexColumnWidth(5.5),
+      3: const pw.FlexColumnWidth(6.5),
+      4: const pw.FlexColumnWidth(3.0),
+      5: const pw.FlexColumnWidth(3.0),
       6: const pw.FlexColumnWidth(2.5),
     };
 
@@ -496,12 +496,12 @@ class ReportAdelantosService {
   static pw.Widget _celdaHeader(String text,
       {pw.TextAlign align = pw.TextAlign.left}) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 7),
       child: pw.Text(
         text,
         textAlign: align,
         style: pw.TextStyle(
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: pw.FontWeight.bold,
           color: PdfColors.white,
         ),
@@ -515,12 +515,12 @@ class ReportAdelantosService {
       bool tachado = false,
       PdfColor? color}) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 6),
       child: pw.Text(
         text,
         textAlign: align,
         style: pw.TextStyle(
-          fontSize: 10,
+          fontSize: 9,
           fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
           color: color ?? (tachado ? PdfColors.grey500 : PdfColors.black),
           decoration: tachado ? pw.TextDecoration.lineThrough : null,
@@ -529,9 +529,14 @@ class ReportAdelantosService {
     );
   }
 
-  /// Decide entre "FECHA: dd-mm-aaaa" (todos del mismo día), "FECHAS:
-  /// a · b · c" (hasta 5 días distintos) o "FECHAS: primer AL último"
-  /// (más de 5).
+  /// Devuelve "FECHA: dd-mm-aaaa" si todos los adelantos son del
+  /// mismo día, o "FECHAS: primero AL último" si son varios días.
+  ///
+  /// (Antes 2026-05-19 listaba cada fecha distinta con · cuando eran
+  /// ≤5 días — pero quedaba feo en el papel impreso: "FECHAS:
+  /// 14/05/2026 · 15/05/2026 · 16/05/2026 · 18/05/2026 · 19/05/2026".
+  /// Santiago pidió rango compacto "DESDE al HASTA" siempre que sean
+  /// más de 1 día, sin importar cuántos.)
   static String _etiquetaFechas(List<AdelantoChofer> adelantos) {
     final dias = <DateTime>{};
     for (final a in adelantos) {
@@ -541,11 +546,8 @@ class ReportAdelantosService {
     if (ordenados.length == 1) {
       return 'FECHA: ${AppFormatters.formatearFecha(ordenados.first)}';
     }
-    if (ordenados.length > 5) {
-      return 'FECHAS: ${AppFormatters.formatearFecha(ordenados.first)} '
-          'AL ${AppFormatters.formatearFecha(ordenados.last)}';
-    }
-    return 'FECHAS: ${ordenados.map(AppFormatters.formatearFecha).join(" · ")}';
+    return 'FECHAS: ${AppFormatters.formatearFecha(ordenados.first)} '
+        'al ${AppFormatters.formatearFecha(ordenados.last)}';
   }
 
   // ===========================================================================

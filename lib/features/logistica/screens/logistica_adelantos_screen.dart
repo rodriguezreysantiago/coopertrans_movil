@@ -446,58 +446,13 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
               ? _empleadoFiltroNombre!
               : 'DNI $_empleadoFiltroDni'),
     );
-    // Después de imprimir, ofrecer marcar como pagados en bulk. El
-    // flow operativo es: "imprimo el resumen para que la oficina
-    // pague → cuando ya pagaron, marco todos como pagados". Si el
-    // operador decide hacerlo después manualmente, también puede.
-    if (!mounted) return;
-    final confirmar = await showDialog<bool>(
-      context: context,
-      builder: (dCtx) => AlertDialog(
-        backgroundColor: Theme.of(dCtx).colorScheme.surface,
-        title: const Text('¿Marcar estos adelantos como pagados?'),
-        content: Text(
-          'Acabás de imprimir el resumen de ${seleccionados.length} '
-          'adelanto(s). Si ya se pagaron, podés marcarlos ahora — '
-          'dejarán de aparecer en el próximo resumen de pendientes.\n\n'
-          'Si todavía falta efectivamente pagarlos, dale "Más tarde" '
-          'y los marcás cuando corresponda.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dCtx, false),
-            child: const Text('MÁS TARDE'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.accentGreen,
-              foregroundColor: Colors.black,
-            ),
-            onPressed: () => Navigator.pop(dCtx, true),
-            child: const Text('MARCAR PAGADOS'),
-          ),
-        ],
-      ),
-    );
-    if (confirmar != true || !mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await AdelantosService.marcarPagadosBulk(
-        adelantoIds: seleccionados.map((a) => a.id).toList(),
-        marcadoPorDni: PrefsService.dni,
-      );
-      AppFeedback.successOn(
-        messenger,
-        '${seleccionados.length} adelanto(s) marcado(s) como pagado(s).',
-      );
-    } catch (e, s) {
-      AppFeedback.errorTecnicoOn(
-        messenger,
-        usuario: 'No se pudieron marcar todos los adelantos como pagados. Probá de nuevo.',
-        tecnico: e,
-        stack: s,
-      );
-    }
+    // Antes (≤ 2026-05-19) acá aparecía un dialog "marcar todos
+    // como pagados". Santiago lo sacó: el resumen ahora puede
+    // contener mix de pendientes/entregados/eliminados (no solo
+    // pendientes), y ofrecer marcar todo como pagado en bulk
+    // confunde más de lo que ayuda. El operador marca pagado por
+    // card (toggle chip) o por bulk desde otra acción si la
+    // necesita.
   }
 }
 
