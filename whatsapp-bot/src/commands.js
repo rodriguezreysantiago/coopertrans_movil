@@ -728,12 +728,13 @@ async function _comandoJornada(msg, { db }, args, chofer) {
   // Este es el criterio nuevo (post Santiago 2026-05-19) para el aviso
   // de 12h jornada — antes era `bloques_completos >= 3` pero un bloque
   // se cuenta con cualquier manejo previo + pausa 15+ min, no garantiza
-  // que el chofer realmente manejó 11h+.
+  // que el chofer realmente manejó 12h. Límite = 12h manejo neto (las
+  // paradas obligatorias de 15 min suceden DENTRO de las 12h).
   const manejoNeto = totalManejo + bloqueActualManejo;
-  const JORNADA_LIMITE_SEG = 11 * 3600;
+  const JORNADA_LIMITE_SEG = 12 * 3600;
 
   lineas.push('');
-  lineas.push(`🚛 Manejo neto total: ${_fmtSegCompacto(manejoNeto)} / 11h ` +
+  lineas.push(`🚛 Manejo neto total: ${_fmtSegCompacto(manejoNeto)} / 12h ` +
     `(criterio aviso de jornada)`);
   lineas.push(`   Bloques cerrados (>=15 min pausa): ${bloquesCompletos} · ` +
     `Acumulado cerrados: ${_fmtSegCompacto(totalManejo)}`);
@@ -751,8 +752,8 @@ async function _comandoJornada(msg, { db }, args, chofer) {
   const flags = [];
   if (j.alerta_3_30_enviada) flags.push('3h30 (manejo continuo)');
   if (j.alerta_3_45_enviada) flags.push('3h45 (deprecated)');
-  if (j.alerta_cuota_proxima_enviada) flags.push('10h jornada (heads-up)');
-  if (j.alerta_cuota_enviada) flags.push('11h jornada (límite)');
+  if (j.alerta_cuota_proxima_enviada) flags.push('11h jornada (heads-up)');
+  if (j.alerta_cuota_enviada) flags.push('12h jornada (límite)');
   if (j.alerta_veda_enviada) flags.push('veda-nocturna');
   if (flags.length > 0) {
     lineas.push(`🚨 Avisos enviados: ${flags.join(', ')}`);
@@ -761,7 +762,7 @@ async function _comandoJornada(msg, { db }, args, chofer) {
   }
   const infracciones = [];
   if (j.bloque_excedido) infracciones.push('bloque excedido (>4h sin pausa)');
-  if (j.cuota_excedida) infracciones.push('cuota excedida (>11h manejo neto)');
+  if (j.cuota_excedida) infracciones.push('cuota excedida (>12h manejo neto)');
   if (j.veda_excedida) infracciones.push('manejo en veda nocturna');
   if (infracciones.length > 0) {
     lineas.push(`⚠ Infracciones: ${infracciones.join(', ')}`);
@@ -838,7 +839,7 @@ async function _replyJornadaChofer(msg, { chofer, jSnap, silSnap, fecha }) {
   const manejoNetoSeg = totalManejoSeg + bloqueActualManejo;
 
   const TRAMO_LIMITE_SEG = 3 * 3600 + 45 * 60; // 3h45 manejo continuo
-  const JORNADA_LIMITE_SEG = 11 * 3600;         // 11h manejo neto = "12h jornada"
+  const JORNADA_LIMITE_SEG = 12 * 3600;         // 12h manejo neto = límite
   const DESCANSO_MIN_SEG = 8 * 3600;
 
   // Resumen del tramo actual.
@@ -865,7 +866,7 @@ async function _replyJornadaChofer(msg, { chofer, jSnap, silSnap, fecha }) {
     lineas.push('');
     const restanteJornada = JORNADA_LIMITE_SEG - manejoNetoSeg;
     lineas.push(`🚛 Total manejado hoy: ${_fmtSegCompacto(manejoNetoSeg)} ` +
-      `de 11 hs (te quedan *${_fmtSegCompacto(restanteJornada)}* ` +
+      `de 12 hs (te quedan *${_fmtSegCompacto(restanteJornada)}* ` +
       'antes del límite de jornada)');
   }
 
@@ -889,8 +890,8 @@ async function _replyJornadaChofer(msg, { chofer, jSnap, silSnap, fecha }) {
       'como infracción.');
   }
   if (j.alerta_cuota_proxima_enviada && !j.alerta_cuota_enviada) {
-    avisos.push('🟠 Llevás 10 horas de manejo en esta jornada. ' +
-      'Cerca del límite de 12 horas.');
+    avisos.push('🟠 Llevás 11 horas de manejo en esta jornada. ' +
+      'Te queda 1 hora antes del límite.');
   }
   if (j.alerta_cuota_enviada) {
     avisos.push('🔴 Llegaste al límite de tu jornada diaria (12 horas). ' +

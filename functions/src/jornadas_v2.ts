@@ -71,13 +71,18 @@ export const BLOQUES_POR_JORNADA = 3;
 // que hace pausas cortas y frecuentes (30 min manejo + 20 min pausa
 // repetido) llegaba a "3 bloques" con apenas 1h30 manejo neto y le
 // salía "Llegás al límite de 12 horas de jornada" — falso positivo
-// confuso. Ahora avisamos por manejo NETO real:
-//   - 10h manejo neto → aviso temprano (heads-up "estás cerca").
-//   - 11h manejo neto → aviso de límite (norma YPF: 3 bloques × 3h45
-//     manejo neto = 11h15 en jornada de 12h). Mismo texto que antes
-//     pero ahora se dispara con manejo real, no con cuenta de bloques.
-export const JORNADA_MANEJO_PROXIMA_SEGUNDOS = 10 * 3600;
-export const JORNADA_MANEJO_LIMITE_SEGUNDOS = 11 * 3600;
+// confuso. Ahora avisamos por manejo NETO real.
+//
+// Clarificación Santiago 2026-05-19 (segundo mensaje): el LÍMITE son
+// 12 hs de manejo neto, no 11 hs. Las paradas obligatorias de 15 min
+// entre bloques suceden DENTRO de las 12 hs (la pausa es descanso,
+// no manejo, pero la jornada total permitida son 12 hs completas de
+// conducción). 3 bloques × 4h continuos = 12h, con las 3 paradas de
+// 15 min embebidas.
+//   - 11h neto → aviso temprano (heads-up "te queda 1 hora").
+//   - 12h neto → aviso de límite firme.
+export const JORNADA_MANEJO_PROXIMA_SEGUNDOS = 11 * 3600;
+export const JORNADA_MANEJO_LIMITE_SEGUNDOS = 12 * 3600;
 
 // TTLs para avisos en COLA_WHATSAPP (Fase 2 - 2026-05-18).
 // Si el bot esta caido y el aviso se entrega despues del TTL, el
@@ -453,19 +458,19 @@ async function encolarAvisoCuotaProxima(
   // jornada larga.
   const variantes = [
     `${emp.saludo},\n\n` +
-      "*Ya llevás 10 horas de manejo en esta jornada.* Cerca de las " +
-      "12 horas tenés que parar.\n\n" +
+      "*Ya llevás 11 horas de manejo en esta jornada.* Te queda 1 hora " +
+      "para el límite de 12 horas.\n\n" +
       `Buscá dónde estacionar el ${patente} y planificá el descanso ` +
       "(mínimo 8 horas de corrido).\n\n" +
       "_Bot-On — Coopertrans Móvil_",
     `${emp.saludo}.\n\n` +
-      "*Cumpliste 10 horas de conducción acumulada.* Te queda poco " +
-      "para el límite de 12 horas.\n\n" +
+      "*Cumpliste 11 horas de conducción acumulada.* Te queda 1 hora " +
+      "antes del límite de 12 horas.\n\n" +
       `Ubicá un lugar seguro para frenar el ${patente} y descansar ` +
       "8 horas mínimo de corrido.\n\n" +
       "_Bot-On — Coopertrans Móvil_",
     `${emp.saludo}, atención.\n\n` +
-      "*Llevás 10 horas manejando hoy.* Empezá a buscar dónde " +
+      "*Llevás 11 horas manejando hoy.* Empezá a buscar dónde " +
       `estacionar el ${patente} — al llegar a 12 horas debés frenar ` +
       "sí o sí.\n\n" +
       "_Bot-On — Coopertrans Móvil_",
@@ -796,11 +801,12 @@ export async function tickVigiladorJornada(): Promise<void> {
         // de 15+ min. Chofer con pausas cortas y frecuentes (30 min manejo
         // + 20 min pausa repetido) llegaba a 3 bloques con 1h30 manejo real
         // y le saltaba "12 horas de jornada" sin avisos previos. Ahora
-        // miramos el manejo neto y damos 2 avisos: heads-up a 10h, límite
-        // duro a 11h (norma YPF: 3 bloques × 3h45 = 11h15 manejo neto).
+        // miramos el manejo neto y damos 2 avisos: heads-up a 11h, límite
+        // duro a 12h. Clarificación Santiago: el límite son 12h de manejo
+        // neto, no 11 — las paradas obligatorias suceden DENTRO de las 12h.
         //
         // Lógica jerárquica: si ya estamos en el umbral DURO, no mandamos
-        // el heads-up (sería incoherente recibir "10h" después de "12h").
+        // el heads-up (sería incoherente recibir "11h" después de "12h").
         // Esto también cubre el caso de jornadas pre-deploy que tenían
         // `alerta_cuota_enviada=true` pero no el flag de cuota_proxima.
         const totalManejoActual =
