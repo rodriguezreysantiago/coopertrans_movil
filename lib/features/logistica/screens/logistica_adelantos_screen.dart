@@ -1,12 +1,7 @@
-import 'dart:io' show File, Platform, Process;
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:printing/printing.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/excluidos_service.dart';
@@ -14,6 +9,7 @@ import '../../../core/services/prefs_service.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
+import '../../../shared/utils/pdf_printer.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../../shared/widgets/keyboard_shortcuts.dart';
 import '../models/adelanto_chofer.dart';
@@ -1353,9 +1349,8 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
 /// Botón "Imprimir comprobante" — replica el flow del detalle de viaje
 /// pero apuntando a `AdelantoChofer`. Asigna correlativo server-side la
 /// primera vez (Cloud Function `asignarNumeroReciboAdelanto`),
-/// reimpresión usa el mismo número. Imprime directo a la impresora
-/// default del sistema con `Printing.directPrintPdf`. Si falla, abre el
-/// PDF con el viewer del SO como fallback.
+/// reimpresión usa el mismo número. Impresión delegada a `PdfPrinter`
+/// (sheet nativo en iOS/Android, impresora default en desktop).
 class _BotonImprimirComprobante extends StatefulWidget {
   final AdelantoChofer adelanto;
   const _BotonImprimirComprobante({required this.adelanto});
@@ -1448,20 +1443,16 @@ class _ComprobantePrinter {
         numeroRecibo: numero,
         esReimpresion: resultado.esReimpresion,
       );
-      // 3. Imprimir directo o fallback a viewer.
-      final nombreArchivo =
-          'Comprobante-Adelanto-Nro-${numero.toString().padLeft(6, '0')}.pdf';
-      final impresoOk = await _imprimirDirecto(pdfBytes, nombreArchivo);
-      if (impresoOk) {
-        AppFeedback.successOn(messenger,
-            'Comprobante Nro. ${numero.toString().padLeft(6, '0')} '
-            'enviado a la impresora.');
-      } else {
-        AppFeedback.successOn(messenger,
-            'Comprobante Nro. ${numero.toString().padLeft(6, '0')} abierto. '
-            'Imprimí desde el visor (Ctrl+P).');
-      }
-      return impresoOk;
+      // 3. Delegar a `PdfPrinter` — sheet nativo en iOS/Android,
+      // directo a impresora default en desktop.
+      final nroPad = numero.toString().padLeft(6, '0');
+      final outcome = await PdfPrinter.imprimir(
+        bytes: pdfBytes,
+        nombreArchivo: 'Comprobante-Adelanto-Nro-$nroPad.pdf',
+        etiquetaCorta: 'Comprobante Nro. $nroPad',
+      );
+      AppFeedback.successOn(messenger, outcome.mensajeUsuario);
+      return outcome.success;
     } catch (e, s) {
       AppFeedback.errorTecnicoOn(
         messenger,
@@ -1470,57 +1461,6 @@ class _ComprobantePrinter {
         stack: s,
       );
       return false;
-    }
-  }
-
-  static Future<bool> _imprimirDirecto(
-      Uint8List bytes, String nombreArchivo) async {
-    try {
-      final printers = await Printing.listPrinters();
-      if (printers.isEmpty) {
-        await _abrirPdfConViewerSistema(bytes, nombreArchivo: nombreArchivo);
-        return false;
-      }
-      final printer = printers.firstWhere(
-        (p) => p.isDefault,
-        orElse: () => printers.first,
-      );
-      final ok = await Printing.directPrintPdf(
-        printer: printer,
-        onLayout: (_) async => bytes,
-        name: nombreArchivo,
-      );
-      if (!ok) {
-        await _abrirPdfConViewerSistema(bytes, nombreArchivo: nombreArchivo);
-        return false;
-      }
-      return true;
-    } catch (e, stack) {
-      debugPrint('⚠️ Printing.directPrintPdf falló: $e');
-      debugPrint(stack.toString());
-      await _abrirPdfConViewerSistema(bytes, nombreArchivo: nombreArchivo);
-      return false;
-    }
-  }
-
-  static Future<void> _abrirPdfConViewerSistema(
-    List<int> bytes, {
-    required String nombreArchivo,
-  }) async {
-    final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/$nombreArchivo');
-    await file.writeAsBytes(bytes, flush: true);
-    if (!kIsWeb && Platform.isWindows) {
-      await Process.start(
-        'cmd',
-        ['/c', 'start', '', file.path],
-        runInShell: true,
-      );
-    } else {
-      await launchUrl(
-        Uri.file(file.path),
-        mode: LaunchMode.externalApplication,
-      );
     }
   }
 }

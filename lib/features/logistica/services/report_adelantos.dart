@@ -1,17 +1,14 @@
-import 'dart:io' show File, Platform, Process;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
+import '../../../shared/utils/pdf_printer.dart';
 import '../models/adelanto_chofer.dart';
 
 /// Resumen de adelantos en PDF — pensado para imprimir, NO para
@@ -29,9 +26,10 @@ import '../models/adelanto_chofer.dart';
 ///   - Tabla con: # | CHOFER | DETALLE | ADELANTO $ | N° RECIBO.
 ///   - Footer chico con timestamp de impresión.
 ///
-/// Imprime directo a la impresora default del sistema con
-/// `Printing.directPrintPdf` y fallback al viewer del SO si falla.
-/// Mismo patrón que `_ComprobantePrinter` de la pantalla de adelantos.
+/// Impresión delegada a `PdfPrinter` (lib/shared/utils/pdf_printer.dart):
+/// directo a impresora default en desktop, sheet nativo (AirPrint /
+/// Cloud Print) en iOS y Android. Mismo helper que usa el comprobante
+/// individual de la pantalla de adelantos.
 class ReportAdelantosService {
   ReportAdelantosService._();
 
@@ -72,14 +70,12 @@ class ReportAdelantosService {
       final nombreArchivo =
           'Adelantos-Pendientes-${_slugFecha(ts)}_${_hhmmss(ts)}.pdf';
 
-      final impresoOk = await _imprimirDirecto(pdfBytes, nombreArchivo);
-      if (impresoOk) {
-        AppFeedback.successOn(messenger,
-            'Resumen de ${ordenados.length} adelanto(s) enviado a la impresora.');
-      } else {
-        AppFeedback.successOn(messenger,
-            'Resumen abierto en el visor. Imprimí desde ahí (Ctrl+P).');
-      }
+      final outcome = await PdfPrinter.imprimir(
+        bytes: pdfBytes,
+        nombreArchivo: nombreArchivo,
+        etiquetaCorta: 'Resumen de ${ordenados.length} adelanto(s)',
+      );
+      AppFeedback.successOn(messenger, outcome.mensajeUsuario);
     } catch (e, s) {
       AppFeedback.errorTecnicoOn(
         messenger,
@@ -365,64 +361,6 @@ class ReportAdelantosService {
           'AL ${AppFormatters.formatearFecha(ordenados.last)}';
     }
     return 'FECHAS: ${ordenados.map(AppFormatters.formatearFecha).join(" · ")}';
-  }
-
-  // ===========================================================================
-  // IMPRESIÓN (mismo flow que _ComprobantePrinter del recibo individual)
-  // ===========================================================================
-
-  /// Manda el PDF a la impresora default del sistema. Devuelve `true`
-  /// si pudo mandar a imprimir, `false` si terminó abriendo el viewer
-  /// (sin impresora / falla del subsystem).
-  static Future<bool> _imprimirDirecto(
-      Uint8List bytes, String nombreArchivo) async {
-    try {
-      final printers = await Printing.listPrinters();
-      if (printers.isEmpty) {
-        await _abrirPdfConViewerSistema(bytes, nombreArchivo: nombreArchivo);
-        return false;
-      }
-      final printer = printers.firstWhere(
-        (p) => p.isDefault,
-        orElse: () => printers.first,
-      );
-      final ok = await Printing.directPrintPdf(
-        printer: printer,
-        onLayout: (_) async => bytes,
-        name: nombreArchivo,
-      );
-      if (!ok) {
-        await _abrirPdfConViewerSistema(bytes, nombreArchivo: nombreArchivo);
-        return false;
-      }
-      return true;
-    } catch (e, stack) {
-      debugPrint('⚠️ Printing.directPrintPdf falló: $e');
-      debugPrint(stack.toString());
-      await _abrirPdfConViewerSistema(bytes, nombreArchivo: nombreArchivo);
-      return false;
-    }
-  }
-
-  static Future<void> _abrirPdfConViewerSistema(
-    Uint8List bytes, {
-    required String nombreArchivo,
-  }) async {
-    final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/$nombreArchivo');
-    await file.writeAsBytes(bytes, flush: true);
-    if (!kIsWeb && Platform.isWindows) {
-      await Process.start(
-        'cmd',
-        ['/c', 'start', '', file.path],
-        runInShell: true,
-      );
-    } else {
-      await launchUrl(
-        Uri.file(file.path),
-        mode: LaunchMode.externalApplication,
-      );
-    }
   }
 
   // ===========================================================================
