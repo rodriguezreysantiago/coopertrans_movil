@@ -46,11 +46,11 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
   DateTime? _fechaDesde;
   DateTime? _fechaHasta;
 
-  /// Si true, también muestra los adelantos eliminados (soft-delete).
-  /// Por default false — el caso operativo es "ver lo activo". Los
-  /// eliminados quedan en la base para auditoría (saber por qué se
-  /// quemó cada número de recibo) y se ven activando este chip.
-  bool _mostrarEliminados = false;
+  /// Vista activa del listado (Santiago 2026-05-19): default
+  /// PENDIENTES — el caso operativo diario es "qué falta pagar".
+  /// Los otros 3 son consultas puntuales (ver lo pagado en el rango,
+  /// auditar eliminados, ver el panorama completo).
+  _VistaAdelantos _vista = _VistaAdelantos.pendientes;
 
   /// Filtro por empleado específico (Santiago 2026-05-19): permite
   /// ver "cuántos adelantos tuvo el empleado X en el rango". Null =
@@ -201,54 +201,70 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
               ],
             ),
           ),
-          // ─── Filtros: Empleado + Mostrar eliminados ──────────────
+          // ─── Filtros: Empleado + Vista ───────────────────────────
           // Filtro por empleado (Santiago 2026-05-19): ver "cuántos
           // adelantos tuvo X en el rango". Tappeable, abre dialog con
           // lista de empleados. Cuando hay filtro activo el chip se
           // pinta y muestra el nombre con botón × para limpiar.
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                _ChipFiltroEmpleado(
-                  empleadoDni: _empleadoFiltroDni,
-                  empleadoNombre: _empleadoFiltroNombre,
-                  onSeleccionar: (dni, nombre) {
-                    setState(() {
-                      _empleadoFiltroDni = dni;
-                      _empleadoFiltroNombre = nombre;
-                    });
-                  },
-                  onLimpiar: () => setState(() {
-                    _empleadoFiltroDni = null;
-                    _empleadoFiltroNombre = null;
-                  }),
-                ),
-                FilterChip(
-                  label: const Text('Mostrar eliminados'),
-                  selected: _mostrarEliminados,
-                  onSelected: (v) =>
-                      setState(() => _mostrarEliminados = v),
-                  selectedColor:
-                      AppColors.accentRed.withValues(alpha: 0.6),
-                  // Cuando MUESTRA eliminados: ojo abierto BLANCO sobre
-                  // fondo rojo (alto contraste, se nota que está activo).
-                  // Cuando OCULTA: ojo tachado gris (estado neutro).
-                  // Santiago 2026-05-19: el ojo abierto no debe llevar
-                  // tachadura para no confundir con "off".
-                  avatar: Icon(
-                    _mostrarEliminados
-                        ? Icons.visibility
-                        : Icons.visibility_off,
-                    size: 16,
-                    color: _mostrarEliminados
-                        ? Colors.white
-                        : Colors.white70,
+            child: _ChipFiltroEmpleado(
+              empleadoDni: _empleadoFiltroDni,
+              empleadoNombre: _empleadoFiltroNombre,
+              onSeleccionar: (dni, nombre) {
+                setState(() {
+                  _empleadoFiltroDni = dni;
+                  _empleadoFiltroNombre = nombre;
+                });
+              },
+              onLimpiar: () => setState(() {
+                _empleadoFiltroDni = null;
+                _empleadoFiltroNombre = null;
+              }),
+            ),
+          ),
+          // Toggle de vista — 4 opciones mutuamente exclusivas
+          // (Santiago 2026-05-19): pendientes (default), pagados,
+          // eliminados, todos. Reemplaza al FilterChip "Mostrar
+          // eliminados" anterior.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SegmentedButton<_VistaAdelantos>(
+                segments: const [
+                  ButtonSegment(
+                    value: _VistaAdelantos.pendientes,
+                    label: Text('PENDIENTES'),
+                    icon: Icon(Icons.schedule, size: 14),
+                  ),
+                  ButtonSegment(
+                    value: _VistaAdelantos.pagados,
+                    label: Text('PAGADOS'),
+                    icon: Icon(Icons.check_circle_outline, size: 14),
+                  ),
+                  ButtonSegment(
+                    value: _VistaAdelantos.eliminados,
+                    label: Text('ELIMINADOS'),
+                    icon: Icon(Icons.delete_outline, size: 14),
+                  ),
+                  ButtonSegment(
+                    value: _VistaAdelantos.todos,
+                    label: Text('TODOS'),
+                    icon: Icon(Icons.list, size: 14),
+                  ),
+                ],
+                selected: {_vista},
+                onSelectionChanged: (sel) =>
+                    setState(() => _vista = sel.first),
+                showSelectedIcon: false,
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                  textStyle: WidgetStatePropertyAll(
+                    TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
                   ),
                 ),
-              ],
+              ),
             ),
           ),
           Expanded(
@@ -265,7 +281,10 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                           ? DateTime(_fechaHasta!.year, _fechaHasta!.month,
                               _fechaHasta!.day + 1)
                           : DateTime.now().add(const Duration(days: 1)),
-                      incluirEliminados: _mostrarEliminados,
+                      // Optimización query: solo traemos eliminados
+                      // si la vista activa los va a mostrar.
+                      incluirEliminados: _vista == _VistaAdelantos.eliminados ||
+                          _vista == _VistaAdelantos.todos,
                     )
                   : AdelantosService.streamAdelantos(),
               builder: (ctx, snap) {
@@ -364,11 +383,21 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
   /// el service.
   List<AdelantoChofer> _aplicarFiltro(List<AdelantoChofer> items) {
     Iterable<AdelantoChofer> it = items;
-    // Filtro de soft-delete: por default NO mostrar eliminados.
-    // El operador puede activar el chip "Mostrar eliminados" para
-    // ver auditoría de adelantos cancelados.
-    if (!_mostrarEliminados) {
-      it = it.where((a) => !a.eliminado);
+    // Filtro de vista (Santiago 2026-05-19): el toggle de 4 opciones
+    // reemplaza al "Mostrar eliminados" anterior.
+    switch (_vista) {
+      case _VistaAdelantos.pendientes:
+        it = it.where((a) => !a.eliminado && !a.pagado);
+        break;
+      case _VistaAdelantos.pagados:
+        it = it.where((a) => !a.eliminado && a.pagado);
+        break;
+      case _VistaAdelantos.eliminados:
+        it = it.where((a) => a.eliminado);
+        break;
+      case _VistaAdelantos.todos:
+        // Sin filtro adicional — muestra todo.
+        break;
     }
     // Excluir adelantos de testers + tanqueros (Santiago 2026-05-18).
     // Si en histórico quedó algún adelanto asociado a esos DNIs (ej
@@ -2208,3 +2237,8 @@ class _ChipEstadoPago extends StatelessWidget {
     );
   }
 }
+
+/// Vistas mutuamente exclusivas del listado de adelantos
+/// (Santiago 2026-05-19). Reemplaza al toggle "Mostrar eliminados".
+/// Default es `pendientes` — el caso operativo diario.
+enum _VistaAdelantos { pendientes, pagados, eliminados, todos }
