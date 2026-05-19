@@ -233,12 +233,18 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                       setState(() => _mostrarEliminados = v),
                   selectedColor:
                       AppColors.accentRed.withValues(alpha: 0.4),
+                  // Ícono pidió Santiago 2026-05-19: ojo ABIERTO
+                  // cuando muestro eliminados (estoy "viendo" más),
+                  // ojo TACHADO cuando NO los muestro (están ocultos).
+                  // Antes estaba al revés y confundía.
                   avatar: Icon(
                     _mostrarEliminados
                         ? Icons.visibility
                         : Icons.visibility_off,
                     size: 16,
-                    color: Colors.white70,
+                    color: _mostrarEliminados
+                        ? AppColors.accentRed
+                        : Colors.white70,
                   ),
                 ),
               ],
@@ -430,6 +436,14 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
       adelantos: seleccionados,
       fechaDesde: _fechaDesde,
       fechaHasta: _fechaHasta,
+      // Si hay filtro de empleado activo, se imprime arriba del PDF
+      // el mismo mini-resumen que ve el operador en pantalla
+      // (Santiago 2026-05-19).
+      empleadoFiltradoNombre: _empleadoFiltroDni == null
+          ? null
+          : (_empleadoFiltroNombre?.trim().isNotEmpty == true
+              ? _empleadoFiltroNombre!
+              : 'DNI $_empleadoFiltroDni'),
     );
     // Después de imprimir, ofrecer marcar como pagados en bulk. El
     // flow operativo es: "imprimo el resumen para que la oficina

@@ -44,6 +44,11 @@ class ReportAdelantosService {
     required List<AdelantoChofer> adelantos,
     DateTime? fechaDesde,
     DateTime? fechaHasta,
+    /// Si el listado está filtrado por un empleado específico, su
+    /// nombre se imprime en el header del PDF como bloque resaltado
+    /// con cantidad de adelantos + totales por estado (Santiago
+    /// 2026-05-19). Pasar null cuando no hay filtro de empleado.
+    String? empleadoFiltradoNombre,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
 
@@ -66,7 +71,10 @@ class ReportAdelantosService {
       final ordenados = [...adelantos]
         ..sort((a, b) => a.fecha.compareTo(b.fecha));
 
-      final pdfBytes = await _generarPdf(ordenados);
+      final pdfBytes = await _generarPdf(
+        ordenados,
+        empleadoFiltradoNombre: empleadoFiltradoNombre,
+      );
 
       // Nombre tipo "Adelantos-Resumen-2026-05-13_HHmmss.pdf".
       // (era "Pendientes-" hasta 2026-05-19, ahora el resumen mezcla
@@ -95,7 +103,10 @@ class ReportAdelantosService {
   // PDF
   // ===========================================================================
 
-  static Future<Uint8List> _generarPdf(List<AdelantoChofer> adelantos) async {
+  static Future<Uint8List> _generarPdf(
+    List<AdelantoChofer> adelantos, {
+    String? empleadoFiltradoNombre,
+  }) async {
     // Roboto regular + bold — necesarias para acentos españoles, °, —, etc.
     // Mismo motivo que `recibos_adelanto_service`: Helvetica embedded
     // del package `pdf` no garantiza esos glifos.
@@ -140,6 +151,13 @@ class ReportAdelantosService {
           totalPaginas: ctx.pagesCount,
         ),
         build: (ctx) => [
+          // Bloque de resumen del empleado filtrado (solo si hay
+          // filtro activo). Mismo contenido que el mini-card que ve
+          // el operador en la app antes de imprimir.
+          if (empleadoFiltradoNombre != null) ...[
+            _bloqueResumenEmpleado(empleadoFiltradoNombre, adelantos),
+            pw.SizedBox(height: 10),
+          ],
           _tablaAdelantos(adelantos),
         ],
       ),
@@ -250,6 +268,134 @@ class ReportAdelantosService {
             pw.Text(
               '$numeroPagina / $totalPaginas',
               style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Bloque de resumen del empleado filtrado (Santiago 2026-05-19).
+  /// Aparece en el PDF cuando se imprime con filtro de empleado
+  /// activo — mismo contenido que el mini-card de la pantalla:
+  /// nombre, cantidad de adelantos en el rango, totales por estado
+  /// (pendiente / entregado / eliminado).
+  static pw.Widget _bloqueResumenEmpleado(
+    String nombre,
+    List<AdelantoChofer> adelantos,
+  ) {
+    // Excluimos eliminados de los totales en plata (no son plata
+    // real) pero los contamos en "X adelantos en rango".
+    final activos = adelantos.where((a) => !a.eliminado).toList();
+    final pendientes = activos.where((a) => !a.pagado).toList();
+    final entregados = activos.where((a) => a.pagado).toList();
+    final eliminados = adelantos.where((a) => a.eliminado).toList();
+    final totPend = pendientes.fold<double>(0, (s, a) => s + a.monto);
+    final totEntr = entregados.fold<double>(0, (s, a) => s + a.monto);
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(10),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.blue50,
+        border: pw.Border.all(color: PdfColors.blue300, width: 0.8),
+        borderRadius: pw.BorderRadius.circular(4),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+        children: [
+          pw.Row(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Expanded(
+                child: pw.Text(
+                  nombre.toUpperCase(),
+                  style: pw.TextStyle(
+                    color: PdfColors.blue900,
+                    fontSize: 13,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              pw.Text(
+                '${adelantos.length} adelanto'
+                '${adelantos.length == 1 ? '' : 's'} en rango',
+                style: pw.TextStyle(
+                  color: PdfColors.blue900,
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 6),
+          pw.Row(
+            children: [
+              pw.Expanded(
+                child: _miniChipPdf(
+                  label: 'PENDIENTE',
+                  cant: pendientes.length,
+                  monto: totPend,
+                  color: PdfColors.orange700,
+                ),
+              ),
+              pw.SizedBox(width: 8),
+              pw.Expanded(
+                child: _miniChipPdf(
+                  label: 'ENTREGADO',
+                  cant: entregados.length,
+                  monto: totEntr,
+                  color: PdfColors.green700,
+                ),
+              ),
+              if (eliminados.isNotEmpty) ...[
+                pw.SizedBox(width: 8),
+                pw.Expanded(
+                  child: _miniChipPdf(
+                    label: 'ELIMINADO',
+                    cant: eliminados.length,
+                    monto: 0,
+                    color: PdfColors.grey600,
+                    sinMonto: true,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  static pw.Widget _miniChipPdf({
+    required String label,
+    required int cant,
+    required double monto,
+    required PdfColor color,
+    bool sinMonto = false,
+  }) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.white,
+        border: pw.Border(left: pw.BorderSide(color: color, width: 3)),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            '$label · $cant',
+            style: pw.TextStyle(
+              color: color,
+              fontSize: 8,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+          if (!sinMonto)
+            pw.Text(
+              '\$ ${AppFormatters.formatearMonto(monto)}',
+              style: pw.TextStyle(
+                color: PdfColors.black,
+                fontSize: 12,
+                fontWeight: pw.FontWeight.bold,
+              ),
             ),
         ],
       ),
