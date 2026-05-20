@@ -10,7 +10,7 @@ SOLO LECTURA por default; con --go escribe. Sirve cualquier Python con
 firebase-admin (p. ej. el venv del cachatore). El serviceAccountKey.json se
 busca en la raíz del repo automáticamente (independiente del cwd):
 
-    # desde C:\coopertrans_movil  (la RAIZ del repo, no la subcarpeta cachatore)
+    # desde la RAIZ del repo (C:/coopertrans_movil), NO desde la subcarpeta cachatore
     cachatore\\venv\\Scripts\\python.exe scripts\\backfill_empresa_cuit.py        # preview
     cachatore\\venv\\Scripts\\python.exe scripts\\backfill_empresa_cuit.py --go    # aplica
 """
