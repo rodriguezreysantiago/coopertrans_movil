@@ -296,9 +296,27 @@ def ensure_scanner(targets: dict):
 
 
 # ---- reserva / reagendar --------------------------------------------------
+def _marcar_reservado(t: Target, hora, fecha=None, cuando=None):
+    """Deja al target marcado con turno tras una reserva exitosa y prepara el
+    próximo refrescar_estado para que publique el turno real (uuid) y dispare
+    el aviso de WhatsApp."""
+    t.tiene_turno = True
+    if cuando is None and fecha:
+        cuando = _fmt_cuando(fecha, hora)
+    _reportar_estado(t, "reservado", hora=hora, cuando=cuando)
+    t.notificar = "reservado"   # refrescar_estado dispara el aviso WhatsApp
+    t.ultimo_check = 0.0   # forzar refrescar_estado → publica el turno real (uuid)
+
+
 def intentar_reservar(t: Target, slot: dict, dry: bool) -> bool:
     """Reserva `slot` para `t`. reservar() hace el GET /reservar/{ISO} que toma
-    el slot en la sesión de ESTE chofer + el POST con patente/DNI/empresa."""
+    el slot en la sesión de ESTE chofer + el POST con patente/DNI/empresa.
+
+    La heurística de éxito del POST es FRÁGIL (depende del HTML de respuesta).
+    Cuando no puede confirmar ('revisar') NO re-intentamos a ciegas: le
+    preguntamos a mis_turnos(), que es la fuente autoritativa. Sin esto, un
+    falso negativo dejaba al bot reservando en loop cada ~5 s (bug 2026-05-20)
+    — con riesgo de doble reserva si la reserva en realidad SÍ había entrado."""
     if dry:
         log("EXITO", t.nombre, f"[DRY] reservaría {slot['fecha']} {slot['hora']}")
         t.tiene_turno = True
@@ -311,16 +329,27 @@ def intentar_reservar(t: Target, slot: dict, dry: bool) -> bool:
     if r.get("ok"):
         log("EXITO", t.nombre,
             f"RESERVADO {slot['fecha']} {slot['hora']} — unidad {t.patente}")
-        t.tiene_turno = True
-        _reportar_estado(t, "reservado", hora=slot["hora"],
-                         cuando=_fmt_cuando(slot["fecha"], slot["hora"]))
-        t.notificar = "reservado"   # refrescar_estado dispara el aviso WhatsApp
-        t.ultimo_check = 0.0   # forzar refrescar_estado → publica el turno real (uuid)
+        _marcar_reservado(t, slot["hora"], fecha=slot["fecha"])
         return True
     if r.get("motivo") == "tomado":
         log("LOG", t.nombre, f"{slot['hora']} lo tomaron, sigo buscando")
-    else:
-        log("LOG", t.nombre, f"reserva sin confirmar ({r.get('motivo')})")
+        return False
+    # 'revisar': el POST no confirmó por el HTML. Antes de re-intentar (y
+    # arriesgar doblar la reserva), preguntamos la VERDAD a mis_turnos.
+    try:
+        turnos = t.cli.mis_turnos()
+    except Exception:
+        turnos = None
+    if turnos:
+        turno = turnos[0]
+        t.uuid = turno.get("uuid")
+        log("EXITO", t.nombre, f"RESERVADO {turno.get('cuando') or slot['hora']} "
+            f"(confirmado por mis_turnos) — unidad {t.patente}")
+        _marcar_reservado(t, turno.get("hora") or slot["hora"],
+                          cuando=turno.get("cuando"))
+        return True
+    log("LOG", t.nombre,
+        f"reserva sin confirmar (motivo={r.get('motivo')}, status={r.get('status')})")
     return False
 
 
