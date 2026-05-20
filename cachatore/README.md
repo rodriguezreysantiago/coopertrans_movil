@@ -77,6 +77,9 @@ asignada del chofer).
 - `instalar_servicio_vigia.ps1` / `ver_logs_vigia.ps1` — instalan el vigía como
   servicio NSSM (Auto diferido + log rotado a `logs/`) en la PC dedicada y siguen
   el log en vivo. Mismo patrón que el servicio del bot.
+- `instalar_todo_cachatore.ps1` — setup completo de un saque en la dedicada
+  (Python + venv + deps + `claves.json` + `drop.json` + servicio). Idempotente.
+  `.\instalar_todo_cachatore.ps1 -Clave Cooper2022`.
 
 ## Estado (2026-05-20)
 - **Login validado**: los **51 choferes no-tanque loguean OK** con el `MAIL` de
@@ -108,14 +111,17 @@ Requiere `serviceAccountKey.json` en la raíz del repo (un nivel arriba).
 `claves.json` (credenciales) está **gitignoreado** — nunca se commitea.
 
 ### Servicio 24/7 en la PC dedicada
-El vigía vive en la **misma PC dedicada del bot** (prendida 24/7). Ahí, con el
-repo clonado + `venv` + `serviceAccountKey.json` + `claves.json` puestos a mano
-(los 2 últimos NO vienen del git), en PowerShell **como administrador**:
+El vigía vive en la **misma PC dedicada del bot** (prendida 24/7). El `git pull`
+(o el auto-update del bot) trae el **código**, pero el runtime no viene en git.
+Un solo comando lo completa todo (Python + venv + deps + `claves.json` +
+`drop.json` + servicio), en PowerShell **como administrador**:
 ```powershell
 cd cachatore
-.\instalar_servicio_vigia.ps1     # NSSM Auto (diferido) + log rotado en logs/
-.\ver_logs_vigia.ps1              # seguir el log en vivo
+.\instalar_todo_cachatore.ps1 -Clave Cooper2022   # idempotente, re-corrible
+.\ver_logs_vigia.ps1                               # seguir el log en vivo
 ```
+A mano sería: `python -m venv venv` + `pip install curl_cffi beautifulsoup4
+firebase-admin`, poner `claves.json`/`drop.json` y `.\instalar_servicio_vigia.ps1`.
 Queda como servicio `cachatore-vigia` (arranca solo al bootear, junto con el
 auto-login de Windows). La selección del día va en `drop.json` (lo relee en
 caliente; lo va a escribir la UI de la app). Parar/arrancar:
