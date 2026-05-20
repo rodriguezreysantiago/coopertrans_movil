@@ -21,6 +21,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/digit_only_formatter.dart';
 import '../../../shared/utils/formatters.dart';
+import '../../../shared/utils/phone_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../../shared/widgets/fecha_dialog.dart';
 import '../../asignaciones/services/asignacion_enganche_service.dart';
@@ -84,6 +85,32 @@ class EmpleadoActions {
         stack: s,
       );
     }
+  }
+
+  /// Guarda el TELÉFONO normalizado en EMPLEADOS, pero NO pisa el número
+  /// bueno si el admin tipeó algo que no es un teléfono AR válido.
+  ///
+  /// El bug 2026-05-20 (teléfono de Errazu "se guardaba vacío") tenía dos
+  /// patas: (1) `paraGuardar` mutilaba números legítimos con "15" — ya
+  /// arreglado en el formatter; (2) cuando la entrada normaliza a "" pero
+  /// el admin SÍ tipeó algo, igual se guardaba "" y el toast decía
+  /// "guardado" → confusión. Acá cortamos esa segunda pata: si tipeó algo
+  /// y no es un teléfono válido, avisamos y no tocamos el dato. Vaciar a
+  /// propósito (campo en blanco) sigue funcionando → guarda "".
+  static Future<void> telefono(
+    BuildContext context,
+    String dni,
+    String raw,
+  ) async {
+    final normalizado = PhoneFormatter.paraGuardar(raw);
+    if (raw.trim().isNotEmpty && normalizado.isEmpty) {
+      AppFeedback.errorOn(
+        ScaffoldMessenger.of(context),
+        'Número de teléfono inválido. Revisá los dígitos (no se guardó).',
+      );
+      return;
+    }
+    await dato(context, dni, 'TELEFONO', normalizado);
   }
 
   /// Endpoint del callable `actualizarRolEmpleado`. Mismo patrón que

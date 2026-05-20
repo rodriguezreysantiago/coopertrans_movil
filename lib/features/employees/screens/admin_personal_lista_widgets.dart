@@ -350,12 +350,9 @@ class _DetalleChofer extends StatelessWidget {
           inputFormatters: [DigitOnlyFormatter()],
           keyboardType: TextInputType.phone,
           aplicarMayusculas: false,
-          onSave: (v) => EmpleadoActions.dato(
-            context,
-            dni,
-            'TELEFONO',
-            PhoneFormatter.paraGuardar(v),
-          ),
+          // `telefono()` normaliza + avisa si el número es inválido en vez
+          // de pisar el dato bueno con "" (bug Errazu 2026-05-20).
+          onSave: (v) => EmpleadoActions.telefono(context, dni, v),
         ),
         _DatoEditableEmpresa(
           valor: (data['EMPRESA'] ?? '-').toString(),
