@@ -10,13 +10,21 @@ asignada del chofer).
 > ⚠️ El `cazador.py` viejo (que vivía suelto en el Drive) quedó **obsoleto**:
 > apuntaba a `secure.iturnos.com`, dado de baja por la migración de iTurnos.
 
-## Cómo funciona el drop (operativa)
-- Los turnos se liberan ~**10:30 ART** (a veces lo cambian). El bot arranca
-  ~1 min antes, reserva para **varios choferes en paralelo** (cada uno su
-  cuenta) un turno dentro de la **franja elegida**, y cierra al terminar.
+## Cómo funciona (operativa)
+- **Vigía 24/7** (`vigia.py`, corre como servicio en la PC dedicada del bot):
+  queda **latente** todo el día escaneando suave la agenda. Si se libera un
+  turno (porque alguien **canceló**) en la franja de un chofer que lo necesita,
+  lo agarra al toque — **sin esperar al drop de las 10:30**.
+- Cerca de la hora del drop (`hora_inicio`) entra en modo **agresivo**: cada
+  chofer sin turno caza su propia agenda a full (varios en paralelo, cada uno su
+  cuenta) para ganar la pulseada. Pasada la ventana, vuelve solo a latente.
+- También **reagenda** (mueve un turno ya tomado) cuando se libera un slot mejor
+  dentro de la franja, para los choferes marcados con `reagendar:true`.
 - 4 franjas: `madrugada` 00:00–05:30 · `manana` 06:00–11:30 ·
   `tarde` 12:00–17:30 · `noche` 18:00–23:30. Toma cualquier slot libre dentro
   de la franja del chofer.
+- `orquestador.py` sigue para una corrida **one-shot** manual (sin servicio):
+  espera el drop, caza en paralelo y cierra.
 
 ## Hallazgos del sitio (revisión 2026-05-20, con la extensión Chrome)
 - iTurnos migró a **`agendas.iturnos.com`** (Laravel) **detrás de Cloudflare**.
@@ -52,11 +60,22 @@ asignada del chofer).
   hay que corregirles el `MAIL`/clave. `python verificar_logins.py [N]`.
 - `claves.ejemplo.json` — plantilla. El real es `claves.json` (gitignoreado):
   `{"_comun": "Cooper2022"}` (o per-DNI si alguno difiere).
-- `orquestador.py` — el motor: a la hora del drop, en paralelo (un hilo por
-  chofer) loguea, caza un slot en la franja de cada uno y reserva, con reintento.
-  `python orquestador.py` (espera la hora) / `--ya` (arranca ya) / `--dry` (no
-  reserva, testeo). La selección del día va en `drop.json` (plantilla
+- `orquestador.py` — corrida one-shot manual: a la hora del drop, en paralelo
+  (un hilo por chofer) loguea, caza un slot en la franja de cada uno y reserva,
+  con reintento. `python orquestador.py` (espera la hora) / `--ya` (arranca ya) /
+  `--dry` (no reserva, testeo). La selección del día va en `drop.json` (plantilla
   `drop.ejemplo.json`, ambos gitignoreados).
+- `vigia.py` — **el daemon 24/7** (lo que vive en la PC dedicada). Dos modos
+  automáticos: **latente** (un escaneo suave compartido cada ~25 s que caza
+  cancelaciones) y **agresivo** (en la ventana `hora_inicio`, cada chofer caza su
+  propia agenda a full). Relee `drop.json` en caliente, re-trae unidad/mail de
+  Firestore cada ~10 min (si reasignás el camión en la app, lo toma solo),
+  re-chequea `mis_turnos` (no dobla reserva y sobrevive reinicios) y reagenda los
+  marcados con `reagendar:true`. `python vigia.py` / `--dry` / `--latente` /
+  `--agresivo`. Validado en `--dry --latente`.
+- `instalar_servicio_vigia.ps1` / `ver_logs_vigia.ps1` — instalan el vigía como
+  servicio NSSM (Auto diferido + log rotado a `logs/`) en la PC dedicada y siguen
+  el log en vivo. Mismo patrón que el servicio del bot.
 
 ## Estado (2026-05-20)
 - **Login validado**: los **51 choferes no-tanque loguean OK** con el `MAIL` de
@@ -69,8 +88,13 @@ asignada del chofer).
 - **Orquestador hecho y validado**: login en paralelo + caza por franja +
   reintento + scheduler (espera hasta `hora_inicio`) + resumen. Probado en
   `--ya --dry` (2 choferes loguean en paralelo y pollean OK).
-- **Pendiente**: confirmar la heurística de reserva en el 1er drop real + UI
-  dentro de la app (`lib/features/`).
+- **Vigía 24/7 hecho**: daemon latente + agresivo + reagendar, con hot-reload de
+  `drop.json`, re-pull de Firestore (refleja reasignaciones de unidad) y barrido
+  de `mis_turnos` (no dobla reserva, sobrevive reinicios). Probado en
+  `--dry --latente` (loguea, escanea read-only y no reserva). Servicio NSSM listo
+  para la PC dedicada (`instalar_servicio_vigia.ps1`).
+- **Pendiente**: confirmar en el 1er drop real (heurística de `reservar()` +
+  reagendar real) + UI dentro de la app (`lib/features/`).
 
 ## Setup / correr
 ```bash
@@ -81,3 +105,17 @@ cp claves.ejemplo.json claves.json     # y poner la clave común (Cooper2022)
 ```
 Requiere `serviceAccountKey.json` en la raíz del repo (un nivel arriba).
 `claves.json` (credenciales) está **gitignoreado** — nunca se commitea.
+
+### Servicio 24/7 en la PC dedicada
+El vigía vive en la **misma PC dedicada del bot** (prendida 24/7). Ahí, con el
+repo clonado + `venv` + `serviceAccountKey.json` + `claves.json` puestos a mano
+(los 2 últimos NO vienen del git), en PowerShell **como administrador**:
+```powershell
+cd cachatore
+.\instalar_servicio_vigia.ps1     # NSSM Auto (diferido) + log rotado en logs/
+.\ver_logs_vigia.ps1              # seguir el log en vivo
+```
+Queda como servicio `cachatore-vigia` (arranca solo al bootear, junto con el
+auto-login de Windows). La selección del día va en `drop.json` (lo relee en
+caliente; lo va a escribir la UI de la app). Parar/arrancar:
+`nssm stop cachatore-vigia` / `nssm start cachatore-vigia`.

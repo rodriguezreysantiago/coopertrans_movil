@@ -1,0 +1,97 @@
+# Instala/actualiza el vigia 24/7 del cachatore como servicio de Windows (NSSM)
+# en la PC dedicada del bot. Correr en PowerShell COMO ADMINISTRADOR.
+#
+# Mismo patron que el servicio del bot de WhatsApp: NSSM + Auto (arranque
+# diferido) + log rotado. El servicio queda prendido 24/7 y arranca solo al
+# bootear la PC (junto con el auto-login de Windows).
+#
+# Prerequisitos en la PC dedicada (NO vienen del git, hay que ponerlos a mano):
+#   - venv creado en cachatore\venv con: curl_cffi beautifulsoup4 firebase-admin
+#   - serviceAccountKey.json en la raiz del repo (un nivel arriba de cachatore)
+#   - cachatore\claves.json con la clave comun (Cooper2022)
+#   - cachatore\drop.json con la seleccion del dia (o lo escribe la UI)
+#
+# Uso:
+#   .\instalar_servicio_vigia.ps1
+#   .\instalar_servicio_vigia.ps1 -Reinstalar   # borra y recrea el servicio
+
+param([switch]$Reinstalar)
+
+$ErrorActionPreference = "Stop"
+$Servicio = "cachatore-vigia"
+$Dir      = Split-Path -Parent $MyInvocation.MyCommand.Path
+$Python   = Join-Path $Dir "venv\Scripts\python.exe"
+$Script   = "vigia.py"
+$LogsDir  = Join-Path $Dir "logs"
+$LogFile  = Join-Path $LogsDir "vigia.log"
+
+function Fail($msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
+
+# --- admin? ---
+$esAdmin = ([Security.Principal.WindowsPrincipal] `
+    [Security.Principal.WindowsIdentity]::GetCurrent()
+  ).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+if (-not $esAdmin) { Fail "Hay que correr esta consola COMO ADMINISTRADOR." }
+
+# --- nssm en el PATH? ---
+$nssm = (Get-Command nssm.exe -ErrorAction SilentlyContinue).Source
+if (-not $nssm) {
+  foreach ($p in @("C:\nssm\nssm.exe", "C:\Program Files\nssm\nssm.exe",
+                   "C:\ProgramData\chocolatey\bin\nssm.exe")) {
+    if (Test-Path $p) { $nssm = $p; break }
+  }
+}
+if (-not $nssm) { Fail "No encontre nssm.exe (el mismo que usa el bot). Instalalo o agregalo al PATH." }
+
+# --- prerequisitos ---
+if (-not (Test-Path $Python)) {
+  Fail "No existe el venv: $Python`n  Crealo:  python -m venv venv ; venv\Scripts\pip install curl_cffi beautifulsoup4 firebase-admin"
+}
+$sak = Join-Path (Split-Path -Parent $Dir) "serviceAccountKey.json"
+if (-not (Test-Path $sak))                       { Write-Host "AVISO: falta serviceAccountKey.json en la raiz del repo ($sak)" -ForegroundColor Yellow }
+if (-not (Test-Path (Join-Path $Dir "claves.json"))) { Write-Host "AVISO: falta cachatore\claves.json (la clave comun)" -ForegroundColor Yellow }
+if (-not (Test-Path (Join-Path $Dir "drop.json")))   { Write-Host "AVISO: falta cachatore\drop.json (la seleccion del dia)" -ForegroundColor Yellow }
+
+New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
+
+# --- recrear si se pidio ---
+$existe = (& $nssm status $Servicio 2>$null)
+if ($existe -and $Reinstalar) {
+  Write-Host "Borrando servicio existente para recrearlo..." -ForegroundColor Yellow
+  & $nssm stop   $Servicio 2>$null | Out-Null
+  & $nssm remove $Servicio confirm | Out-Null
+  Start-Sleep -Seconds 1
+  $existe = $null
+}
+
+if (-not $existe) {
+  Write-Host "Instalando servicio '$Servicio'..." -ForegroundColor Cyan
+  & $nssm install $Servicio $Python $Script
+} else {
+  Write-Host "El servicio ya existe; actualizo su configuracion..." -ForegroundColor Cyan
+  & $nssm stop $Servicio 2>$null | Out-Null
+  & $nssm set $Servicio Application $Python
+  & $nssm set $Servicio AppParameters $Script
+}
+
+& $nssm set $Servicio AppDirectory   $Dir
+& $nssm set $Servicio DisplayName     "Cachatore - sniper de turnos YPF (vigia 24/7)"
+& $nssm set $Servicio Description      "Caza/reserva/reagenda turnos de carga YPF en iTurnos las 24 hs."
+& $nssm set $Servicio Start            SERVICE_DELAYED_AUTO_START
+& $nssm set $Servicio AppStdout        $LogFile
+& $nssm set $Servicio AppStderr        $LogFile
+& $nssm set $Servicio AppRotateFiles   1
+& $nssm set $Servicio AppRotateOnline  1
+& $nssm set $Servicio AppRotateBytes   5242880      # rota a los ~5 MB
+& $nssm set $Servicio AppStopMethodConsole 5000     # Ctrl-C ordenado antes de matar
+& $nssm set $Servicio AppExit Default Restart       # si se cae, reinicia
+& $nssm set $Servicio AppRestartDelay 5000
+
+& $nssm start $Servicio 2>$null | Out-Null
+Start-Sleep -Seconds 2
+Write-Host ""
+Write-Host "Estado: $(& $nssm status $Servicio)" -ForegroundColor Green
+Write-Host "Log:    $LogFile"
+Write-Host "Ver en vivo:   .\ver_logs_vigia.ps1"
+Write-Host "Parar/arrancar: nssm stop $Servicio  /  nssm start $Servicio"
+Write-Host "Desinstalar:    nssm remove $Servicio confirm"

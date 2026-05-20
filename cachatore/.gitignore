@@ -15,5 +15,8 @@ captura_*.html
 venv/
 __pycache__/
 
+# Logs del vigia 24/7 (servicio NSSM en la PC dedicada).
+logs/
+
 # Capturas del formulario de reserva (pueden traer datos de sesión).
 captura_*.html

@@ -1,10 +1,12 @@
 {
-  "_comentario": "Selección del drop del día. La UI de la app va a escribir este archivo; mientras tanto se edita a mano. franja: madrugada|manana|tarde|noche. fecha: null = cualquier fecha que liberen, o 'AAAA-MM-DD' para una puntual.",
+  "_comentario": "Selección/vigilancia de turnos (la UI de la app va a escribir esto; el vigía lo relee EN CALIENTE, no hace falta reiniciar). franja: madrugada|manana|tarde|noche. fecha: null=cualquier fecha que liberen | 'hoy' | 'manana' | 'AAAA-MM-DD'. hora_inicio = ventana del drop (modo agresivo); fuera de esa ventana queda LATENTE cazando cancelaciones. reagendar:true mueve el turno de ese chofer a su franja apenas se libere un slot. poll_*_seg son opcionales (cadencia).",
   "fecha": null,
   "hora_inicio": "10:29",
-  "duracion_min": 15,
+  "duracion_min": 20,
+  "poll_latente_seg": 25,
+  "poll_agresivo_seg": 1.5,
   "choferes": [
     {"dni": "26129762", "franja": "manana"},
-    {"dni": "26973923", "franja": "tarde"}
+    {"dni": "26973923", "franja": "tarde", "reagendar": true}
   ]
 }
