@@ -1,0 +1,18 @@
+[
+  {
+    "nombre": "FERNANDEZ JOSE LUIS",
+    "email": "PONER_EMAIL_DEL_PERFIL_ITURNOS",
+    "clave": "CLAVE_COMUN",
+    "dni": "PONER_DNI",
+    "patente": "PONER_PATENTE_DEL_CAMION",
+    "franja": "manana"
+  },
+  {
+    "nombre": "EJEMPLO 2 - dejar solo los que uses",
+    "email": "otro@email.com",
+    "clave": "CLAVE_COMUN",
+    "dni": "30111222",
+    "patente": "AB123CD",
+    "franja": "tarde"
+  }
+]

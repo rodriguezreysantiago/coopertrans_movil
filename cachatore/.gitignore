@@ -1,0 +1,13 @@
+# Cachatore — herramienta Python (sniper de turnos YPF en iTurnos).
+# Runtime y CREDENCIALES: NUNCA al repo.
+
+# Credenciales reales de iTurnos (email + clave de cada chofer).
+# Plantilla: cuentas.ejemplo.json. El cuentas.json real vive acá, fuera de git.
+cuentas.json
+
+# Virtualenv (regenerable: python -m venv venv && pip install curl_cffi beautifulsoup4)
+venv/
+__pycache__/
+
+# Capturas del formulario de reserva (pueden traer datos de sesión).
+captura_*.html
