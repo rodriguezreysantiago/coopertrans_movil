@@ -41,6 +41,11 @@ enum _Sev { info, ok, warn, error }
 class CachatoreObjetivo {
   final String dni;
   final String? nombre;
+
+  /// Objetivo de fecha de ESTE chofer: 'AAAA-MM-DD' o null = cualquier fecha
+  /// que se libere dentro de la franja.
+  final String? fecha;
+
   final FranjaCarga franja;
 
   /// Si true, el bot mueve el turno de este chofer a su franja apenas se
@@ -62,6 +67,7 @@ class CachatoreObjetivo {
   const CachatoreObjetivo({
     required this.dni,
     this.nombre,
+    this.fecha,
     required this.franja,
     this.reagendar = false,
     this.activo = true,
@@ -74,6 +80,25 @@ class CachatoreObjetivo {
 
   EstadoObjetivo get estado => EstadoObjetivo.fromCodigo(estadoRaw);
 
+  static final RegExp _reFechaIso = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+
+  /// La fecha objetivo como DateTime (null si es "cualquier fecha").
+  DateTime? get fechaComoDate {
+    final f = (fecha ?? '').trim();
+    return _reFechaIso.hasMatch(f) ? DateTime.tryParse(f) : null;
+  }
+
+  /// Fecha objetivo en formato AR DD-MM-AAAA, o "Cualquier fecha".
+  String get fechaDisplay {
+    final d = fechaComoDate;
+    if (d == null) return 'Cualquier fecha';
+    return '${d.day.toString().padLeft(2, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-${d.year}';
+  }
+
+  /// Resumen del objetivo para mostrar: "Cualquier fecha · Mañana (06:00 a 11:30)".
+  String get objetivoLabel => '$fechaDisplay · ${franja.etiqueta} (${franja.rango})';
+
   /// `true` si el chofer ya tiene turno conseguido por el bot.
   bool get tieneTurno =>
       estado == EstadoObjetivo.reservado || estado == EstadoObjetivo.reagendado;
@@ -82,6 +107,7 @@ class CachatoreObjetivo {
     return CachatoreObjetivo(
       dni: (d['dni'] ?? id).toString(),
       nombre: d['nombre']?.toString(),
+      fecha: d['fecha']?.toString(),
       franja: FranjaCarga.fromCodigo(d['franja']?.toString()),
       reagendar: d['reagendar'] == true,
       activo: d['activo'] != false, // default activo si falta el campo

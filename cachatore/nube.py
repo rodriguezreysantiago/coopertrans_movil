@@ -52,6 +52,7 @@ def leer_config_nube() -> dict:
         if franja in FRANJAS_VALIDAS:
             objetivos.append({
                 "dni": str(x.get("dni") or d.id),
+                "fecha": x.get("fecha"),   # 'AAAA-MM-DD' o None=cualquiera
                 "franja": franja,
                 "reagendar": bool(x.get("reagendar")),
             })

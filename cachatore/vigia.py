@@ -134,16 +134,17 @@ def en_ventana_drop(cfg) -> bool:
 
 class Target:
     """Estado de un chofer vigilado. Objetivo: tener un turno en su franja."""
-    __slots__ = ("dni", "nombre", "email", "clave", "patente", "franja",
-                 "reagendar", "cli", "logueado", "tiene_turno", "uuid",
+    __slots__ = ("dni", "nombre", "email", "clave", "patente", "fecha",
+                 "franja", "reagendar", "cli", "logueado", "tiene_turno", "uuid",
                  "reagendar_hecho", "ultimo_check", "estado_reportado")
 
-    def __init__(self, ch: dict, franja: str, reagendar: bool):
+    def __init__(self, ch: dict, fecha, franja: str, reagendar: bool):
         self.dni = ch["dni"]
         self.nombre = ch.get("nombre") or ch["dni"]
         self.email = (ch.get("email") or "").strip().lower()
         self.clave = ch.get("clave")
         self.patente = ch.get("patente")
+        self.fecha = fecha          # 'AAAA-MM-DD' | 'hoy' | 'manana' | None
         self.franja = franja
         self.reagendar = reagendar
         self.cli = None
@@ -283,7 +284,7 @@ def _reservar_async(t: Target, slot: dict, dry: bool):
         t.reagendar_hecho = True   # ya quedó en franja al reservar; no hay que mover
 
 
-def _agresivo_async(t: Target, fecha, dry: bool):
+def _agresivo_async(t: Target, dry: bool):
     if not asegurar_login(t):
         _reportar_estado(t, "login_fallo")
         return
@@ -295,9 +296,10 @@ def _agresivo_async(t: Target, fecha, dry: bool):
     if 'id="login-form"' in html:
         t.logueado = False
         return
+    fobj = resolver_fecha(t.fecha)
     slots = iturnos.slots_en_franja(iturnos.parsear_disponibilidad(html)["slots"], t.franja)
-    if fecha:
-        slots = [s for s in slots if s["fecha"] == fecha]
+    if fobj:
+        slots = [s for s in slots if s["fecha"] == fobj]
     if not slots:
         return
     log("LOG", t.nombre, f"slot LIBRE {slots[0]['fecha']} {slots[0]['hora']} → reservando")
@@ -383,6 +385,8 @@ def sincronizar_targets(cfg: dict, targets: dict):
         if nf in iturnos.FRANJAS and nf != t.franja:
             log("LOG", "sistema", f"{t.nombre}: franja {t.franja} → {nf}")
             t.franja = nf
+        if spec.get("fecha") != t.fecha:
+            t.fecha = spec.get("fecha")
         nr = bool(spec.get("reagendar"))
         if nr != t.reagendar:
             t.reagendar = nr
@@ -405,7 +409,7 @@ def sincronizar_targets(cfg: dict, targets: dict):
             if franja not in iturnos.FRANJAS:
                 log("ERROR", ch.get("nombre") or dni, f"franja inválida: {franja!r}")
                 continue
-            t = Target(ch, franja, bool(spec.get("reagendar")))
+            t = Target(ch, spec.get("fecha"), franja, bool(spec.get("reagendar")))
             if not t.credenciales_ok:
                 log("ERROR", t.nombre, "sin email/clave (revisar en la app/claves.json)")
                 _reportar_dni(dni, "sin_credenciales")
@@ -427,15 +431,15 @@ def sincronizar_targets(cfg: dict, targets: dict):
 
 
 # ---- ciclos ---------------------------------------------------------------
-def ciclo_agresivo(targets: dict, fecha, dry: bool):
+def ciclo_agresivo(targets: dict, dry: bool):
     necesitan = [t for t in targets.values()
                  if not t.tiene_turno and t.credenciales_ok and t.patente]
     if necesitan:
-        _en_paralelo(necesitan, lambda t: _agresivo_async(t, fecha, dry),
+        _en_paralelo(necesitan, lambda t: _agresivo_async(t, dry),
                      max_hilos=len(necesitan), timeout=15)
 
 
-def ciclo_latente(targets: dict, fecha, dry: bool):
+def ciclo_latente(targets: dict, dry: bool):
     cli = ensure_scanner(targets)
     if cli is None:
         return
@@ -450,18 +454,20 @@ def ciclo_latente(targets: dict, fecha, dry: bool):
         return
 
     libres = iturnos.parsear_disponibilidad(html)["slots"]
-    if fecha:
-        libres = [s for s in libres if s["fecha"] == fecha]
     if not libres:
         return
 
-    # asignar slots LIBRES a los choferes que necesitan turno (uno por slot)
+    # asignar slots LIBRES a los choferes que necesitan turno (uno por slot),
+    # respetando la FECHA y la FRANJA de cada chofer.
     usados, asignaciones = set(), []
     for t in targets.values():
         if t.tiene_turno or not t.credenciales_ok or not t.patente:
             continue
+        fobj = resolver_fecha(t.fecha)
         cand = [s for s in libres
-                if s["iso"] not in usados and iturnos.hora_en_franja(s["hora"], t.franja)]
+                if s["iso"] not in usados
+                and (fobj is None or s["fecha"] == fobj)
+                and iturnos.hora_en_franja(s["hora"], t.franja)]
         if cand:
             usados.add(cand[0]["iso"])
             asignaciones.append((t, cand[0]))
@@ -471,20 +477,20 @@ def ciclo_latente(targets: dict, fecha, dry: bool):
         _en_paralelo(asignaciones, lambda a: _reservar_async(a[0], a[1], dry),
                      max_hilos=len(asignaciones), timeout=25)
 
-    # reagendar: mover el turno de quien lo pidió, si hay slot libre en su franja
+    # reagendar: mover el turno de quien lo pidió a su nueva fecha+franja. La
+    # disponibilidad de reagendar está en OTRA página (calendario propio), así
+    # que se consulta directo (no contra el `libres` de arriba).
     for t in targets.values():
         if not (t.reagendar and t.tiene_turno and t.uuid and not t.reagendar_hecho):
             continue
-        if not any(iturnos.hora_en_franja(s["hora"], t.franja) for s in libres):
-            continue
         if dry:
-            log("EXITO", t.nombre, f"[DRY] reagendaría a un slot de '{t.franja}'")
+            log("EXITO", t.nombre, f"[DRY] reagendaría a '{t.franja}' / {t.fecha or 'cualquier fecha'}")
             t.reagendar_hecho = True
             continue
         if not asegurar_login(t):
             continue
         try:
-            r = t.cli.reagendar(t.uuid, t.franja)
+            r = t.cli.reagendar(t.uuid, t.franja, resolver_fecha(t.fecha))
         except Exception as e:
             log("LOG", t.nombre, f"error reagendando: {e}")
             continue
@@ -547,9 +553,9 @@ def main():
             for t in vencidos:
                 refrescar_estado(t)
 
-            fecha = resolver_fecha(cfg.get("fecha"))
             # El drop time ya no importa: SIEMPRE latente (barre cada ~5 s).
-            # `--agresivo` sigue disponible para testeo manual.
+            # `--agresivo` sigue disponible para testeo manual. La fecha y la
+            # franja son POR CHOFER (no globales).
             en_drop = forzar_agresivo
 
             if not targets:
@@ -564,16 +570,15 @@ def main():
             if modo != modo_anterior:
                 pend = sum(1 for t in targets.values() if not t.tiene_turno)
                 log("LOG", "sistema", f"modo {modo.upper()} — {len(targets)} chofer(es), "
-                    f"{pend} sin turno"
-                    + (f" — objetivo {fecha}" if fecha else " — cualquier fecha en franja"))
+                    f"{pend} sin turno (fecha/franja por chofer)")
                 modo_anterior = modo
 
             # 4) actuar según modo
             if modo == "agresivo":
-                ciclo_agresivo(targets, fecha, dry)
+                ciclo_agresivo(targets, dry)
                 espera = cfg.get("poll_agresivo_seg", POLL_AGRESIVO_SEG)
             elif modo == "latente":
-                ciclo_latente(targets, fecha, dry)
+                ciclo_latente(targets, dry)
                 espera = cfg.get("poll_latente_seg", POLL_LATENTE_SEG) \
                     + random.uniform(0, JITTER_LATENTE_SEG)
             else:  # idle / pausado: el bot no toca nada (pero late igual)

@@ -11,10 +11,12 @@ import '../models/franja_carga.dart';
 import '../services/cachatore_service.dart';
 
 /// Panel de control del bot que reserva/reagenda turnos de carga YPF en
-/// iTurnos (corre 24/7 en la PC dedicada). Desde acá se elige a qué
-/// choferes les caza turno, en qué franja, se prende/pausa el bot y se ve
-/// el estado en vivo. Todo va por Firestore: la app escribe la selección,
-/// el bot la lee y devuelve el estado.
+/// iTurnos (corre 24/7 en la PC dedicada). Flujo:
+///   1. Agregar: elegir chofer → fecha (calendario) → franja → "Vigilados".
+///   2. Cuando el bot saca el turno, el chofer pasa solo a "Turnos concretados".
+///   3. Tocar un turno concretado → Reagendar (nueva fecha + franja).
+/// Todo va por Firestore: la app escribe la selección, el bot la lee y devuelve
+/// el estado en vivo.
 class CachatoreHubScreen extends StatelessWidget {
   const CachatoreHubScreen({super.key});
 
@@ -22,15 +24,31 @@ class CachatoreHubScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Cachatore — Turnos YPF',
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: const [
-          _BotStatusCard(),
-          SizedBox(height: 12),
-          _ConfigCard(),
-          SizedBox(height: 12),
-          _ObjetivosSection(),
-        ],
+      body: StreamBuilder<List<CachatoreObjetivo>>(
+        stream: CachatoreService.streamObjetivos(),
+        builder: (ctx, snap) {
+          final todos = snap.data ?? const <CachatoreObjetivo>[];
+          final vigilados = todos.where((o) => !o.tieneTurno).toList();
+          final concretados = todos.where((o) => o.tieneTurno).toList();
+          final cargando = snap.connectionState == ConnectionState.waiting;
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const _BotStatusCard(),
+              const SizedBox(height: 12),
+              const _MasterSwitch(),
+              const SizedBox(height: 18),
+              _SeccionVigilados(
+                vigilados: vigilados,
+                yaAgregados: todos.map((e) => e.dni).toSet(),
+                cargando: cargando,
+              ),
+              const SizedBox(height: 22),
+              _SeccionConcretados(concretados: concretados),
+              const SizedBox(height: 24),
+            ],
+          );
+        },
       ),
     );
   }
@@ -90,10 +108,9 @@ class _BotStatusCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: color,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
+                          color: color,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -114,28 +131,10 @@ class _BotStatusCard extends StatelessWidget {
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// Config global: interruptor maestro + hora del drop + fecha objetivo
+// Interruptor maestro (encendido/pausado)
 // ───────────────────────────────────────────────────────────────────────
-class _ConfigCard extends StatelessWidget {
-  const _ConfigCard();
-
-  Future<void> _elegirFecha(BuildContext context, CachatoreConfig cfg) async {
-    final hoy = DateTime.now();
-    final base = DateTime(hoy.year, hoy.month, hoy.day);
-    final actual = cfg.fechaComoDate;
-    final r = await showDatePicker(
-      context: context,
-      initialDate: (actual != null && !actual.isBefore(base)) ? actual : base,
-      firstDate: base,
-      lastDate: base.add(const Duration(days: 90)),
-      helpText: 'Fecha del turno a buscar',
-    );
-    if (r != null) {
-      final iso = '${r.year}-${r.month.toString().padLeft(2, '0')}-'
-          '${r.day.toString().padLeft(2, '0')}';
-      await CachatoreService.setFecha(iso);
-    }
-  }
+class _MasterSwitch extends StatelessWidget {
+  const _MasterSwitch();
 
   @override
   Widget build(BuildContext context) {
@@ -144,66 +143,22 @@ class _ConfigCard extends StatelessWidget {
       builder: (ctx, snap) {
         final cfg = snap.data ?? const CachatoreConfig();
         return AppCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                value: cfg.activo,
-                activeThumbColor: AppColors.accentGreen,
-                title: const Text(
-                  'Bot encendido',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15),
-                ),
-                subtitle: Text(
-                  cfg.activo
-                      ? 'Cazando turnos para los choferes de abajo'
-                      : 'Pausado — no reserva ni reagenda nada',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                onChanged: (v) => CachatoreService.setActivo(v),
-              ),
-              const Divider(height: 18, color: Colors.white12),
-              const Text(
-                'Fecha del turno a buscar',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _FechaChip(
-                    etiqueta: 'Cualquiera',
-                    seleccionada: !cfg.tieneFechaPuntual,
-                    onTap: () => CachatoreService.setFecha(null),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () => _elegirFecha(context, cfg),
-                      icon: const Icon(Icons.calendar_month, size: 18),
-                      label: Text(
-                        cfg.tieneFechaPuntual ? cfg.fechaDisplay : 'Elegir fecha…',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: cfg.tieneFechaPuntual
-                            ? AppColors.accentCyan
-                            : Colors.white70,
-                        side: BorderSide(
-                          color: cfg.tieneFechaPuntual
-                              ? AppColors.accentCyan.withValues(alpha: 0.6)
-                              : Colors.white24,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+          child: SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            value: cfg.activo,
+            activeThumbColor: AppColors.accentGreen,
+            title: const Text('Bot encendido',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15)),
+            subtitle: Text(
+              cfg.activo
+                  ? 'Buscando turnos para los choferes vigilados'
+                  : 'Pausado — no reserva ni reagenda nada',
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+            onChanged: (v) => CachatoreService.setActivo(v),
           ),
         );
       },
@@ -211,146 +166,107 @@ class _ConfigCard extends StatelessWidget {
   }
 }
 
-class _FechaChip extends StatelessWidget {
-  final String etiqueta;
-  final bool seleccionada;
-  final VoidCallback onTap;
-  const _FechaChip({
-    required this.etiqueta,
-    required this.seleccionada,
-    required this.onTap,
+// ───────────────────────────────────────────────────────────────────────
+// Sección: choferes vigilados (todavía sin turno)
+// ───────────────────────────────────────────────────────────────────────
+class _SeccionVigilados extends StatelessWidget {
+  final List<CachatoreObjetivo> vigilados;
+  final Set<String> yaAgregados;
+  final bool cargando;
+  const _SeccionVigilados({
+    required this.vigilados,
+    required this.yaAgregados,
+    required this.cargando,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ChoiceChip(
-      label: Text(etiqueta),
-      selected: seleccionada,
-      onSelected: (_) => onTap(),
-      selectedColor: AppColors.accentCyan.withValues(alpha: 0.3),
-      labelStyle: TextStyle(
-        color: seleccionada ? AppColors.accentCyan : Colors.white70,
-        fontWeight: seleccionada ? FontWeight.bold : FontWeight.normal,
-        fontSize: 12,
-      ),
-      backgroundColor: Colors.white.withValues(alpha: 0.05),
-      side: BorderSide(
-        color: seleccionada
-            ? AppColors.accentCyan.withValues(alpha: 0.6)
-            : Colors.white24,
-      ),
-    );
-  }
-}
-
-// ───────────────────────────────────────────────────────────────────────
-// Lista de choferes vigilados
-// ───────────────────────────────────────────────────────────────────────
-class _ObjetivosSection extends StatelessWidget {
-  const _ObjetivosSection();
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<List<CachatoreObjetivo>>(
-      stream: CachatoreService.streamObjetivos(),
-      builder: (ctx, snap) {
-        final objetivos = snap.data ?? const <CachatoreObjetivo>[];
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
           children: [
-            Row(
+            Expanded(
+              child: Text(
+                'CHOFERES VIGILADOS (${vigilados.length})',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                    fontSize: 13),
+              ),
+            ),
+            FilledButton.icon(
+              onPressed: () => _abrirAlta(context),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Agregar'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accentCyan,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (cargando)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else if (vigilados.isEmpty)
+          const AppCard(
+            child: Column(
               children: [
-                Expanded(
-                  child: Text(
-                    'CHOFERES VIGILADOS (${objetivos.length})',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-                FilledButton.icon(
-                  onPressed: () => _mostrarAgregar(context, objetivos),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Agregar'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.accentCyan,
-                    foregroundColor: Colors.black,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  ),
+                Icon(Icons.person_search_outlined,
+                    color: Colors.white24, size: 40),
+                SizedBox(height: 8),
+                Text('Sin choferes vigilados',
+                    style: TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14)),
+                SizedBox(height: 4),
+                Text(
+                  'Tocá "Agregar": elegís chofer, fecha y franja, y el bot le '
+                  'busca turno.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            if (snap.connectionState == ConnectionState.waiting)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (objetivos.isEmpty)
-              _vacio()
-            else
-              ...objetivos.map((o) => _ObjetivoCard(objetivo: o)),
-          ],
-        );
-      },
+          )
+        else
+          ...vigilados.map((o) => _VigiladoCard(objetivo: o)),
+      ],
     );
   }
 
-  Widget _vacio() {
-    return const AppCard(
-      child: Column(
-        children: [
-          Icon(Icons.person_off_outlined, color: Colors.white24, size: 40),
-          SizedBox(height: 8),
-          Text(
-            'Sin choferes',
-            style: TextStyle(
-                color: Colors.white70,
-                fontWeight: FontWeight.bold,
-                fontSize: 14),
-          ),
-          SizedBox(height: 4),
-          Text(
-            'Tocá "Agregar" para que el bot empiece a cazarle turno a un chofer.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white38, fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _mostrarAgregar(
-      BuildContext context, List<CachatoreObjetivo> existentes) {
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => _AgregarChoferSheet(
-        yaAgregados: existentes.map((e) => e.dni).toSet(),
+  Future<void> _abrirAlta(BuildContext context) {
+    return _abrirWizard(
+      context,
+      titulo: 'Agregar chofer',
+      yaAgregados: yaAgregados,
+      onConfirm: (dni, nombre, fecha, franja) => CachatoreService.agregarObjetivo(
+        dni: dni,
+        nombre: nombre,
+        fecha: fecha,
+        franja: franja,
       ),
     );
   }
 }
 
-class _ObjetivoCard extends StatelessWidget {
+class _VigiladoCard extends StatelessWidget {
   final CachatoreObjetivo objetivo;
-  const _ObjetivoCard({required this.objetivo});
+  const _VigiladoCard({required this.objetivo});
 
   @override
   Widget build(BuildContext context) {
     final o = objetivo;
-    final atenuado = !o.activo;
     return AppCard(
       child: Opacity(
-        opacity: atenuado ? 0.55 : 1.0,
+        opacity: o.activo ? 1.0 : 0.55,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -366,95 +282,42 @@ class _ObjetivoCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'DNI ${o.dni}',
-                        style: const TextStyle(
-                            color: Colors.white38, fontSize: 11),
-                      ),
-                      if (o.tieneTurno && (o.estadoTurno ?? '').isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(Icons.event_available,
-                                size: 13, color: AppColors.accentGreen),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                o.estadoTurno!,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    color: AppColors.accentGreen,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600),
-                              ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          const Icon(Icons.event, size: 13, color: Colors.white38),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              o.objetivoLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: Colors.white60, fontSize: 12),
                             ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
                 _EstadoBadge(objetivo: o),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 6),
             Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                // Franja (tappable)
-                Expanded(
-                  child: InkWell(
-                    onTap: () => _elegirFranja(context, o),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white12),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.schedule,
-                              size: 16, color: Colors.white54),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  o.franja.etiqueta,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600),
-                                ),
-                                Text(
-                                  o.franja.rango,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      color: Colors.white38, fontSize: 10),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Icon(Icons.edit, size: 14, color: Colors.white38),
-                        ],
-                      ),
-                    ),
-                  ),
+                TextButton.icon(
+                  onPressed: () => _editar(context, o),
+                  icon: const Icon(Icons.edit_calendar, size: 16),
+                  label: const Text('Fecha/franja'),
+                  style: TextButton.styleFrom(foregroundColor: Colors.white70),
                 ),
-                const SizedBox(width: 8),
                 IconButton(
                   tooltip: o.activo ? 'Pausar este chofer' : 'Reanudar',
                   visualDensity: VisualDensity.compact,
@@ -476,54 +339,35 @@ class _ObjetivoCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            // Reagendar
-            Row(
-              children: [
-                Switch(
-                  value: o.reagendar,
-                  activeThumbColor: AppColors.accentCyan,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  onChanged: (v) => CachatoreService.setReagendar(o.dni, v),
-                ),
-                const SizedBox(width: 4),
-                const Expanded(
-                  child: Text(
-                    'Reagendar (mover el turno a su franja si se libera uno)',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: Colors.white60, fontSize: 11),
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
       ),
     );
   }
 
-  Future<void> _elegirFranja(BuildContext context, CachatoreObjetivo o) async {
-    final elegida = await mostrarSelectorFranja(context, actual: o.franja);
-    if (elegida != null && elegida != o.franja) {
-      await CachatoreService.setFranja(o.dni, elegida);
-    }
+  Future<void> _editar(BuildContext context, CachatoreObjetivo o) {
+    return _abrirWizard(
+      context,
+      titulo: 'Editar ${o.nombre ?? o.dni}',
+      dniFijo: o.dni,
+      nombreFijo: o.nombre,
+      fechaInicial: o.fecha,
+      franjaInicial: o.franja,
+      onConfirm: (_, __, fecha, franja) =>
+          CachatoreService.editarObjetivo(dni: o.dni, fecha: fecha, franja: franja),
+    );
   }
 
-  Future<void> _confirmarBorrar(
-      BuildContext context, CachatoreObjetivo o) async {
+  Future<void> _confirmarBorrar(BuildContext context, CachatoreObjetivo o) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Quitar chofer'),
-        content: Text(
-            'El bot deja de cazarle turno a ${o.nombre ?? o.dni}. '
-            'Los turnos ya reservados NO se cancelan.'),
+        content: Text('El bot deja de buscarle turno a ${o.nombre ?? o.dni}.'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
-          ),
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.accentRed),
             onPressed: () => Navigator.pop(context, true),
@@ -532,9 +376,123 @@ class _ObjetivoCard extends StatelessWidget {
         ],
       ),
     );
-    if (ok == true) {
-      await CachatoreService.eliminarObjetivo(o.dni);
-    }
+    if (ok == true) await CachatoreService.eliminarObjetivo(o.dni);
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Sección: turnos concretados (ya tienen turno)
+// ───────────────────────────────────────────────────────────────────────
+class _SeccionConcretados extends StatelessWidget {
+  final List<CachatoreObjetivo> concretados;
+  const _SeccionConcretados({required this.concretados});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'TURNOS CONCRETADOS (${concretados.length})',
+          style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 0.5,
+              fontSize: 13),
+        ),
+        const SizedBox(height: 8),
+        if (concretados.isEmpty)
+          const AppCard(
+            child: Text(
+              'Todavía no hay turnos sacados. Cuando el bot consiga uno, '
+              'el chofer aparece acá. Tocalo para reagendarlo.',
+              style: TextStyle(color: Colors.white38, fontSize: 12),
+            ),
+          )
+        else
+          ...concretados.map((o) => _ConcretadoCard(objetivo: o)),
+      ],
+    );
+  }
+}
+
+class _ConcretadoCard extends StatelessWidget {
+  final CachatoreObjetivo objetivo;
+  const _ConcretadoCard({required this.objetivo});
+
+  @override
+  Widget build(BuildContext context) {
+    final o = objetivo;
+    final reagendando = o.reagendar;
+    return AppCard(
+      onTap: () => _reagendar(context, o),
+      child: Row(
+        children: [
+          const Icon(Icons.event_available,
+              color: AppColors.accentGreen, size: 26),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  o.nombre ?? o.dni,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  (o.estadoTurno ?? '').isNotEmpty
+                      ? o.estadoTurno!
+                      : 'Turno ${o.estado.etiqueta.toLowerCase()}'
+                          '${o.estadoHora != null ? ' ${o.estadoHora}' : ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      color: AppColors.accentGreen, fontSize: 12),
+                ),
+                if (reagendando) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Reagendando → ${o.objetivoLabel}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: AppColors.accentAmber, fontSize: 11),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Column(
+            children: [
+              Icon(Icons.edit_calendar, color: Colors.white54, size: 20),
+              SizedBox(height: 2),
+              Text('Reagendar',
+                  style: TextStyle(color: Colors.white38, fontSize: 10)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _reagendar(BuildContext context, CachatoreObjetivo o) {
+    return _abrirWizard(
+      context,
+      titulo: 'Reagendar ${o.nombre ?? o.dni}',
+      dniFijo: o.dni,
+      nombreFijo: o.nombre,
+      fechaInicial: o.fecha,
+      franjaInicial: o.franja,
+      onConfirm: (_, __, fecha, franja) => CachatoreService.reagendarObjetivo(
+          dni: o.dni, fecha: fecha, franja: franja),
+    );
   }
 }
 
@@ -555,10 +513,6 @@ class _EstadoBadge extends StatelessWidget {
     } else {
       color = Colors.white54;
     }
-    final hora = objetivo.estadoHora;
-    final texto = (objetivo.tieneTurno && hora != null && hora.isNotEmpty)
-        ? '${est.etiqueta} $hora'
-        : est.etiqueta;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
@@ -567,285 +521,385 @@ class _EstadoBadge extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Text(
-        texto,
+        est.etiqueta,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-            color: color, fontSize: 11, fontWeight: FontWeight.bold),
+        style:
+            TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
       ),
     );
   }
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// Selector de franja (bottom sheet reutilizable)
+// Wizard: chofer (opcional) → fecha (calendario) → franja
 // ───────────────────────────────────────────────────────────────────────
-Future<FranjaCarga?> mostrarSelectorFranja(
+Future<void> _abrirWizard(
   BuildContext context, {
-  FranjaCarga? actual,
+  required String titulo,
+  required Future<void> Function(
+          String dni, String nombre, String? fecha, FranjaCarga franja)
+      onConfirm,
+  String? dniFijo,
+  String? nombreFijo,
+  String? fechaInicial,
+  FranjaCarga? franjaInicial,
+  Set<String> yaAgregados = const {},
 }) {
-  return showModalBottomSheet<FranjaCarga>(
+  return showModalBottomSheet<void>(
     context: context,
+    isScrollControlled: true,
     backgroundColor: AppColors.surface,
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
     ),
-    builder: (_) => SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: Text('Elegí la franja',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16)),
-          ),
-          ...FranjaCarga.values.map(
-            (f) => ListTile(
-              leading: Icon(
-                f == actual
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_unchecked,
-                color: f == actual ? AppColors.accentCyan : Colors.white38,
-              ),
-              title: Text(f.etiqueta,
-                  style: const TextStyle(color: Colors.white)),
-              subtitle: Text(f.rango,
-                  style: const TextStyle(color: Colors.white38, fontSize: 12)),
-              onTap: () => Navigator.pop(context, f),
-            ),
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
+    builder: (_) => _WizardSheet(
+      titulo: titulo,
+      onConfirm: onConfirm,
+      dniFijo: dniFijo,
+      nombreFijo: nombreFijo,
+      fechaInicial: fechaInicial,
+      franjaInicial: franjaInicial,
+      yaAgregados: yaAgregados,
     ),
   );
 }
 
-// ───────────────────────────────────────────────────────────────────────
-// Bottom sheet: agregar chofer (buscador EMPLEADOS ROL=CHOFER)
-// ───────────────────────────────────────────────────────────────────────
-class _AgregarChoferSheet extends StatefulWidget {
+class _WizardSheet extends StatefulWidget {
+  final String titulo;
+  final Future<void> Function(
+      String dni, String nombre, String? fecha, FranjaCarga franja) onConfirm;
+  final String? dniFijo;
+  final String? nombreFijo;
+  final String? fechaInicial;
+  final FranjaCarga? franjaInicial;
   final Set<String> yaAgregados;
-  const _AgregarChoferSheet({required this.yaAgregados});
+
+  const _WizardSheet({
+    required this.titulo,
+    required this.onConfirm,
+    this.dniFijo,
+    this.nombreFijo,
+    this.fechaInicial,
+    this.franjaInicial,
+    this.yaAgregados = const {},
+  });
 
   @override
-  State<_AgregarChoferSheet> createState() => _AgregarChoferSheetState();
+  State<_WizardSheet> createState() => _WizardSheetState();
 }
 
-class _AgregarChoferSheetState extends State<_AgregarChoferSheet> {
-  String _filtro = '';
+class _WizardSheetState extends State<_WizardSheet> {
+  // pasos: 0=chofer, 1=fecha, 2=franja
+  late int _paso;
+  late int _pasoInicial;
   String? _dni;
   String? _nombre;
-  FranjaCarga _franja = FranjaCarga.manana;
-  bool _reagendar = false;
+  String? _fecha; // ISO AAAA-MM-DD o null=cualquiera
+  String _filtro = '';
   bool _guardando = false;
 
-  Future<void> _guardar() async {
-    if (_dni == null) return;
+  @override
+  void initState() {
+    super.initState();
+    _dni = widget.dniFijo;
+    _nombre = widget.nombreFijo;
+    _fecha = widget.fechaInicial;
+    _pasoInicial = widget.dniFijo != null ? 1 : 0;
+    _paso = _pasoInicial;
+  }
+
+  static final RegExp _reIso = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+  String get _fechaLabel {
+    final f = (_fecha ?? '').trim();
+    if (!_reIso.hasMatch(f)) return 'Cualquier fecha';
+    final d = DateTime.tryParse(f);
+    if (d == null) return f;
+    return '${d.day.toString().padLeft(2, '0')}-'
+        '${d.month.toString().padLeft(2, '0')}-${d.year}';
+  }
+
+  Future<void> _confirmar(FranjaCarga franja) async {
+    if (_dni == null || _guardando) return;
     setState(() => _guardando = true);
-    await CachatoreService.agregarObjetivo(
-      dni: _dni!,
-      nombre: _nombre ?? _dni!,
-      franja: _franja,
-      reagendar: _reagendar,
-    );
+    await widget.onConfirm(_dni!, _nombre ?? _dni!, _fecha, franja);
     if (mounted) Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final alto = MediaQuery.of(context).size.height * 0.78;
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
-      child: DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.7,
-        maxChildSize: 0.95,
-        minChildSize: 0.5,
-        builder: (ctx, scrollCtrl) {
-          return Column(
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text('Agregar chofer',
-                    style: TextStyle(
+      child: SizedBox(
+        height: alto,
+        child: Column(
+          children: [
+            _header(),
+            const Divider(height: 1, color: Colors.white12),
+            Expanded(child: _cuerpo()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _header() {
+    final pasos = ['Chofer', 'Fecha', 'Franja'];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
+      child: Row(
+        children: [
+          if (_paso > _pasoInicial)
+            IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white70),
+              onPressed: () => setState(() => _paso -= 1),
+            )
+          else
+            const SizedBox(width: 48),
+          Expanded(
+            child: Column(
+              children: [
+                Text(widget.titulo,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 16)),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  autofocus: true,
-                  textCapitalization: TextCapitalization.characters,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: const InputDecoration(
-                    hintText: 'Buscar por nombre (ej. PEREZ)',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (v) => setState(() => _filtro = v.trim().toUpperCase()),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Expanded(child: _listaChoferes(scrollCtrl)),
-              if (_dni != null) _panelSeleccion(),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _listaChoferes(ScrollController scrollCtrl) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection(AppCollections.empleados)
-          .where('ROL', isEqualTo: 'CHOFER')
-          .snapshots(),
-      builder: (ctx, snap) {
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final docs = snap.data!.docs.where((d) {
-          final data = d.data();
-          if (data['ACTIVO'] == false) return false; // baja
-          final n = (data['NOMBRE'] ?? '').toString().toUpperCase();
-          return _filtro.isEmpty || n.contains(_filtro);
-        }).toList()
-          ..sort((a, b) => (a.data()['NOMBRE'] ?? '')
-              .toString()
-              .toUpperCase()
-              .compareTo((b.data()['NOMBRE'] ?? '').toString().toUpperCase()));
-
-        if (docs.isEmpty) {
-          return const Center(
-            child: Text('Sin resultados',
-                style: TextStyle(color: Colors.white38)),
-          );
-        }
-        return ListView.builder(
-          controller: scrollCtrl,
-          itemCount: docs.length,
-          itemBuilder: (c, i) {
-            final data = docs[i].data();
-            final dni = (data['DNI'] ?? docs[i].id).toString();
-            final nombre = (data['NOMBRE'] ?? dni).toString();
-            final unidad = data['VEHICULO']?.toString();
-            final yaEsta = widget.yaAgregados.contains(dni);
-            final sel = _dni == dni;
-            return ListTile(
-              dense: true,
-              selected: sel,
-              selectedTileColor: AppColors.accentCyan.withValues(alpha: 0.12),
-              leading: Icon(
-                sel ? Icons.check_circle : Icons.person_outline,
-                color: sel ? AppColors.accentCyan : Colors.white38,
-              ),
-              title: Text(nombre,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 14)),
-              subtitle: Text(
-                'DNI $dni${unidad != null && unidad.isNotEmpty ? ' · $unidad' : ''}'
-                '${yaEsta ? ' · ya en la lista' : ''}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                    color: yaEsta ? AppColors.accentAmber : Colors.white38,
-                    fontSize: 11),
-              ),
-              onTap: () => setState(() {
-                _dni = dni;
-                _nombre = nombre;
-              }),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _panelSeleccion() {
-    return Container(
-      decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Colors.white12)),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            _nombre ?? _dni!,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: FranjaCarga.values.map((f) {
-              final sel = f == _franja;
-              return ChoiceChip(
-                label: Text(f.etiqueta),
-                selected: sel,
-                onSelected: (_) => setState(() => _franja = f),
-                selectedColor: AppColors.accentCyan.withValues(alpha: 0.3),
-                backgroundColor: Colors.white.withValues(alpha: 0.05),
-                labelStyle: TextStyle(
-                  color: sel ? AppColors.accentCyan : Colors.white70,
-                  fontSize: 12,
-                  fontWeight: sel ? FontWeight.bold : FontWeight.normal,
-                ),
-                side: BorderSide(
-                    color: sel
-                        ? AppColors.accentCyan.withValues(alpha: 0.6)
-                        : Colors.white24),
-              );
-            }).toList(),
-          ),
-          Row(
-            children: [
-              Checkbox(
-                value: _reagendar,
-                activeColor: AppColors.accentCyan,
-                onChanged: (v) => setState(() => _reagendar = v ?? false),
-              ),
-              const Expanded(
-                child: Text(
-                  'Reagendar si se libera un turno mejor',
-                  style: TextStyle(color: Colors.white60, fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: _guardando ? null : _guardar,
-              icon: _guardando
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.check),
-              label: const Text('Agregar a la lista'),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
-                foregroundColor: Colors.black,
-              ),
+                        fontSize: 15)),
+                Text('Paso ${_paso + 1} de 3 · ${pasos[_paso]}',
+                    style:
+                        const TextStyle(color: Colors.white38, fontSize: 11)),
+              ],
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, color: Colors.white70),
+            onPressed: () => Navigator.pop(context),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _cuerpo() {
+    switch (_paso) {
+      case 0:
+        return _pasoChofer();
+      case 1:
+        return _pasoFecha();
+      default:
+        return _pasoFranja();
+    }
+  }
+
+  // ── Paso 0: elegir chofer ──
+  Widget _pasoChofer() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(12),
+          child: TextField(
+            autofocus: true,
+            textCapitalization: TextCapitalization.characters,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              hintText: 'Buscar chofer por nombre (ej. PEREZ)',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (v) => setState(() => _filtro = v.trim().toUpperCase()),
+          ),
+        ),
+        Expanded(
+          child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: FirebaseFirestore.instance
+                .collection(AppCollections.empleados)
+                .where('ROL', isEqualTo: 'CHOFER')
+                .snapshots(),
+            builder: (ctx, snap) {
+              if (!snap.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              final docs = snap.data!.docs.where((d) {
+                final data = d.data();
+                if (data['ACTIVO'] == false) return false;
+                final n = (data['NOMBRE'] ?? '').toString().toUpperCase();
+                return _filtro.isEmpty || n.contains(_filtro);
+              }).toList()
+                ..sort((a, b) => (a.data()['NOMBRE'] ?? '')
+                    .toString()
+                    .toUpperCase()
+                    .compareTo(
+                        (b.data()['NOMBRE'] ?? '').toString().toUpperCase()));
+              if (docs.isEmpty) {
+                return const Center(
+                  child: Text('Sin resultados',
+                      style: TextStyle(color: Colors.white38)),
+                );
+              }
+              return ListView.builder(
+                itemCount: docs.length,
+                itemBuilder: (c, i) {
+                  final data = docs[i].data();
+                  final dni = (data['DNI'] ?? docs[i].id).toString();
+                  final nombre = (data['NOMBRE'] ?? dni).toString();
+                  final unidad = data['VEHICULO']?.toString();
+                  final yaEsta = widget.yaAgregados.contains(dni);
+                  return ListTile(
+                    dense: true,
+                    leading: const Icon(Icons.person_outline,
+                        color: Colors.white38),
+                    title: Text(nombre,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 14)),
+                    subtitle: Text(
+                      'DNI $dni'
+                      '${unidad != null && unidad.isNotEmpty ? ' · $unidad' : ''}'
+                      '${yaEsta ? ' · ya en la lista' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color:
+                              yaEsta ? AppColors.accentAmber : Colors.white38,
+                          fontSize: 11),
+                    ),
+                    trailing: const Icon(Icons.chevron_right,
+                        color: Colors.white24),
+                    onTap: () => setState(() {
+                      _dni = dni;
+                      _nombre = nombre;
+                      _paso = 1;
+                    }),
+                  );
+                },
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Paso 1: elegir fecha ──
+  Widget _pasoFecha() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(
+          _nombre ?? _dni ?? '',
+          style: const TextStyle(
+              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+        ),
+        const SizedBox(height: 4),
+        const Text('¿Para qué fecha buscamos el turno?',
+            style: TextStyle(color: Colors.white60, fontSize: 13)),
+        const SizedBox(height: 16),
+        ListTile(
+          leading: const Icon(Icons.all_inclusive, color: AppColors.accentCyan),
+          title: const Text('Cualquier fecha',
+              style: TextStyle(color: Colors.white)),
+          subtitle: const Text('Agarra el primero que se libere en la franja',
+              style: TextStyle(color: Colors.white38, fontSize: 12)),
+          tileColor: Colors.white.withValues(alpha: 0.04),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: const BorderSide(color: Colors.white12)),
+          onTap: () => setState(() {
+            _fecha = null;
+            _paso = 2;
+          }),
+        ),
+        const SizedBox(height: 10),
+        ListTile(
+          leading:
+              const Icon(Icons.calendar_month, color: AppColors.accentCyan),
+          title: Text(
+            _reIso.hasMatch((_fecha ?? '').trim())
+                ? 'Fecha: $_fechaLabel'
+                : 'Elegir una fecha del calendario',
+            style: const TextStyle(color: Colors.white),
+          ),
+          subtitle: const Text('Solo turnos de ese día',
+              style: TextStyle(color: Colors.white38, fontSize: 12)),
+          tileColor: Colors.white.withValues(alpha: 0.04),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+              side: const BorderSide(color: Colors.white12)),
+          onTap: _elegirDelCalendario,
+        ),
+      ],
+    );
+  }
+
+  Future<void> _elegirDelCalendario() async {
+    final hoy = DateTime.now();
+    final base = DateTime(hoy.year, hoy.month, hoy.day);
+    final actual = DateTime.tryParse((_fecha ?? '').trim());
+    final r = await showDatePicker(
+      context: context,
+      initialDate: (actual != null && !actual.isBefore(base)) ? actual : base,
+      firstDate: base,
+      lastDate: base.add(const Duration(days: 90)),
+      helpText: 'Fecha del turno a buscar',
+    );
+    if (r != null) {
+      setState(() {
+        _fecha = '${r.year}-${r.month.toString().padLeft(2, '0')}-'
+            '${r.day.toString().padLeft(2, '0')}';
+        _paso = 2;
+      });
+    }
+  }
+
+  // ── Paso 2: elegir franja (con los números) ──
+  Widget _pasoFranja() {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('$_fechaLabel · ${_nombre ?? _dni ?? ''}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white60, fontSize: 13)),
+        const SizedBox(height: 4),
+        const Text('Elegí la franja horaria',
+            style: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+        const SizedBox(height: 12),
+        ...FranjaCarga.values.map((f) {
+          final sel = f == widget.franjaInicial;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: ListTile(
+              tileColor: Colors.white.withValues(alpha: 0.04),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+                side: BorderSide(
+                    color: sel
+                        ? AppColors.accentCyan.withValues(alpha: 0.6)
+                        : Colors.white12),
+              ),
+              title: Text(f.rango,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 17)),
+              subtitle: Text(f.etiqueta,
+                  style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              trailing: _guardando
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.chevron_right, color: Colors.white24),
+              onTap: _guardando ? null : () => _confirmar(f),
+            ),
+          );
+        }),
+      ],
     );
   }
 }

@@ -53,7 +53,7 @@ FRANJAS = {
     "madrugada": ("00:00", "05:30"),
     "manana":    ("06:00", "11:30"),
     "tarde":     ("12:00", "17:30"),
-    "noche":     ("18:00", "23:00"),
+    "noche":     ("18:00", "23:30"),
 }
 
 
@@ -275,14 +275,20 @@ class IturnosClient:
                                "reagendar_url": f"{BASE}/reagendar/calendario/{uuid}"})
         return turnos
 
-    def reagendar(self, uuid: str, franja: str) -> dict:
-        """Reagenda el turno {uuid} a un slot libre dentro de la franja.
+    def reagendar(self, uuid: str, franja: str, fecha: str = None) -> dict:
+        """Reagenda el turno {uuid} a un slot libre dentro de la franja (y de la
+        `fecha` si se da: 'AAAA-MM-DD').
 
         Flujo (Santiago 2026-05-20): GET /reagendar/calendario/{uuid} muestra
-        el calendario; **clickear un slot libre lo reasigna directo** (no hay
-        formulario). Si no hay ningún slot libre en la franja, no hace nada.
+        el calendario (un día a la vez; se navega con ?d=AAAA-MM-DD, igual que
+        el input date `name=d` del sitio); **clickear un slot libre lo reasigna
+        directo** (no hay formulario). Si no hay slot libre en la franja, no
+        hace nada.
         """
-        cal = self.s.get(f"{BASE}/reagendar/calendario/{uuid}").text
+        url = f"{BASE}/reagendar/calendario/{uuid}"
+        if fecha:
+            url += f"?d={fecha}"
+        cal = self.s.get(url).text
         slots = [s for s in parsear_slots_reagendar(cal)
                  if hora_en_franja(s["hora"], franja)]
         if not slots:

@@ -6,7 +6,7 @@ enum FranjaCarga {
   madrugada('madrugada', 'Madrugada', '00:00 a 05:30'),
   manana('manana', 'Mañana', '06:00 a 11:30'),
   tarde('tarde', 'Tarde', '12:00 a 17:30'),
-  noche('noche', 'Noche', '18:00 a 23:00');
+  noche('noche', 'Noche', '18:00 a 23:30');
 
   /// Código que se guarda en Firestore y entiende el bot.
   final String codigo;

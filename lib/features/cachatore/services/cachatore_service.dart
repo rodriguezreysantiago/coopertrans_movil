@@ -47,41 +47,53 @@ class CachatoreService {
         'actualizado_por_dni': PrefsService.dni,
       };
 
-  // ─── Config global ─────────────────────────────────────────────────
+  // ─── Config global (interruptor maestro) ────────────────────────────
   static Future<void> setActivo(bool v) =>
       _configDoc.set({'activo': v, ..._meta}, SetOptions(merge: true));
 
-  /// fecha: null = cualquier fecha en la franja; 'hoy' / 'manana' / 'AAAA-MM-DD'.
-  static Future<void> setFecha(String? fecha) =>
-      _configDoc.set({'fecha': fecha, ..._meta}, SetOptions(merge: true));
-
-  static Future<void> setHoraInicio(String horaInicio) =>
-      _configDoc.set({'hora_inicio': horaInicio, ..._meta}, SetOptions(merge: true));
-
   // ─── Objetivos (choferes a vigilar) ────────────────────────────────
+  /// Alta de un chofer a vigilar. `fecha`: 'AAAA-MM-DD' o null = cualquiera.
   static Future<void> agregarObjetivo({
     required String dni,
     required String nombre,
+    String? fecha,
     required FranjaCarga franja,
-    bool reagendar = false,
   }) =>
       objetivosCol.doc(dni).set({
         'dni': dni,
         'nombre': nombre,
+        'fecha': fecha,
         'franja': franja.codigo,
-        'reagendar': reagendar,
+        'reagendar': false,
         'activo': true,
         'creado_en': FieldValue.serverTimestamp(),
         'creado_por_dni': PrefsService.dni,
         ..._meta,
       }, SetOptions(merge: true));
 
-  static Future<void> setFranja(String dni, FranjaCarga franja) =>
+  /// Cambia fecha+franja de un objetivo que TODAVÍA no tiene turno (vigilado).
+  static Future<void> editarObjetivo({
+    required String dni,
+    String? fecha,
+    required FranjaCarga franja,
+  }) =>
       objetivosCol.doc(dni).set(
-          {'franja': franja.codigo, ..._meta}, SetOptions(merge: true));
+          {'fecha': fecha, 'franja': franja.codigo, ..._meta},
+          SetOptions(merge: true));
 
-  static Future<void> setReagendar(String dni, bool v) =>
-      objetivosCol.doc(dni).set({'reagendar': v, ..._meta}, SetOptions(merge: true));
+  /// Pide reagendar un turno YA concretado a otra fecha+franja: setea el nuevo
+  /// objetivo y marca reagendar=true para que el bot lo mueva al liberarse uno.
+  static Future<void> reagendarObjetivo({
+    required String dni,
+    String? fecha,
+    required FranjaCarga franja,
+  }) =>
+      objetivosCol.doc(dni).set({
+        'fecha': fecha,
+        'franja': franja.codigo,
+        'reagendar': true,
+        ..._meta,
+      }, SetOptions(merge: true));
 
   static Future<void> setObjetivoActivo(String dni, bool v) =>
       objetivosCol.doc(dni).set({'activo': v, ..._meta}, SetOptions(merge: true));
