@@ -105,6 +105,25 @@ def slots_en_franja(slots: list, franja_key: str) -> list:
     return [s for s in slots if s.get("hora") and hora_en_franja(s["hora"], franja_key)]
 
 
+def parsear_slots_reagendar(html: str) -> list:
+    """Slots libres en el calendario de REAGENDAR (/reagendar/calendario/{uuid}).
+    Mismo estilo que la reserva: libre = <a class="btn-outline-success">HH:MM</a>,
+    pero al clickearlo **reasigna directo** (sin formulario de patente/DNI).
+    Devuelve [{hora, url}]. Ignora el botón 'Horarios' (href="#")."""
+    soup = BeautifulSoup(html, "html.parser")
+    slots = []
+    for a in soup.find_all("a", class_=re.compile("btn-outline-success")):
+        txt = a.get_text(strip=True)
+        href = a.get("href", "")
+        if not re.fullmatch(r"\d{1,2}:\d{2}", txt) or not href or href == "#":
+            continue
+        slots.append({
+            "hora": txt,
+            "url": href if href.startswith("http") else BASE + "/" + href.lstrip("/"),
+        })
+    return slots
+
+
 # Cartel que iTurnos muestra cuando el slot ya fue tomado por otro
 # (Santiago 2026-05-20: el texto "máximo de iTurnos permitidos" NO significa
 # que la cuenta esté excedida, sino que ESE turno ya lo agarraron).
@@ -213,3 +232,39 @@ class IturnosClient:
             "status": resp.status_code,
             "url_final": resp.url,
         }
+
+    # ---- REAGENDAR (mover un turno ya tomado a otro slot) ------------------
+    def mis_turnos(self) -> list:
+        """Turnos actuales del chofer logueado. Cada uno tiene un UUID que se
+        usa para reagendar/cancelar. Devuelve [{uuid, reagendar_url}]."""
+        html = self.s.get(f"{BASE}/misiturnos").text
+        vistos, turnos = set(), []
+        for m in re.finditer(r"/reagendar/calendario/([0-9a-f-]{36})", html):
+            uuid = m.group(1)
+            if uuid in vistos:
+                continue
+            vistos.add(uuid)
+            turnos.append({"uuid": uuid,
+                           "reagendar_url": f"{BASE}/reagendar/calendario/{uuid}"})
+        return turnos
+
+    def reagendar(self, uuid: str, franja: str) -> dict:
+        """Reagenda el turno {uuid} a un slot libre dentro de la franja.
+
+        Flujo (Santiago 2026-05-20): GET /reagendar/calendario/{uuid} muestra
+        el calendario; **clickear un slot libre lo reasigna directo** (no hay
+        formulario). Si no hay ningún slot libre en la franja, no hace nada.
+        """
+        cal = self.s.get(f"{BASE}/reagendar/calendario/{uuid}").text
+        slots = [s for s in parsear_slots_reagendar(cal)
+                 if hora_en_franja(s["hora"], franja)]
+        if not slots:
+            return {"ok": False, "motivo": "sin_slot_en_franja"}
+        slot = slots[0]
+        resp = self.s.get(slot["url"], allow_redirects=True)  # clickear = reasignar
+        txt = resp.text or ""
+        if self.reserva_tomada(txt):
+            return {"ok": False, "motivo": "tomado", "hora": slot["hora"]}
+        ok = resp.status_code in (200, 302)
+        return {"ok": ok, "motivo": "reagendado" if ok else "revisar",
+                "hora": slot["hora"], "status": resp.status_code}

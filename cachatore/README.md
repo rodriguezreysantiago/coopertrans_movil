@@ -39,8 +39,11 @@ asignada del chofer).
 
 ## Archivos
 - `iturnos.py` — cliente del sitio: login, parseo de slots (validado contra el
-  HTML real del drop), filtro por franja, y `reservar()` (GET `/reservar/{ISO}`
-  para tomar el slot en sesión + POST `/r/{cliente}/{agenda}` con los `campo[N]`).
+  HTML real del drop), filtro por franja, `reservar()` (GET `/reservar/{ISO}`
+  para tomar el slot en sesión + POST `/r/{cliente}/{agenda}` con los `campo[N]`),
+  y **reagendar**: `mis_turnos()` (encuentra el UUID del turno del chofer) +
+  `reagendar(uuid, franja)` (GET `/reagendar/calendario/{uuid}` → clickear un
+  slot libre lo reasigna directo, sin formulario). mis_turnos validado.
 - `choferes.py` — datos vivos de Firestore: por cada chofer (`ROL=CHOFER`) trae
   DNI + email (`MAIL`) + **patente vigente** (`ASIGNACIONES_VEHICULO` con
   `hasta==null`) + clave (de `claves.json`). Si se reasigna la unidad en la app,
