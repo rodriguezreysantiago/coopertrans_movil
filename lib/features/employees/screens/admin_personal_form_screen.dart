@@ -113,6 +113,9 @@ class _AdminPersonalFormScreenState
         'ROL': _rol,
         'AREA': _area,
         'EMPRESA': _empresa,
+        // CUIT denormalizado: la regla de Firestore lo usa para dejar al chofer
+        // leer SU propia empresa empleadora (Póliza ART, F.931, etc.).
+        'EMPRESA_CUIT': AppEmpresasEmpleadoras.cuitDeStringEmpresa(_empresa),
         'VEHICULO': '-',
         'ENGANCHE': '-',
         'ARCHIVO_PERFIL': '-',

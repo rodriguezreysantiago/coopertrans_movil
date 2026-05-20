@@ -55,13 +55,20 @@ class EmpleadoActions {
   ) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
+      final cambios = <String, dynamic>{
+        campo: valor,
+        'fecha_ultima_actualizacion': FieldValue.serverTimestamp(),
+      };
+      // Al editar la EMPRESA, denormalizamos el CUIT en EMPRESA_CUIT para que la
+      // regla de Firestore deje al chofer leer SU propia empresa empleadora.
+      if (campo == 'EMPRESA') {
+        cambios['EMPRESA_CUIT'] =
+            AppEmpresasEmpleadoras.cuitDeStringEmpresa(valor?.toString());
+      }
       await FirebaseFirestore.instance
           .collection(AppCollections.empleados)
           .doc(dni.trim())
-          .update({
-        campo: valor,
-        'fecha_ultima_actualizacion': FieldValue.serverTimestamp(),
-      });
+          .update(cambios);
       unawaited(AuditLog.registrar(
         accion: AuditAccion.editarChofer,
         entidad: 'EMPLEADOS',

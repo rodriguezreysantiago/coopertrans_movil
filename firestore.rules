@@ -736,7 +736,15 @@ service cloud.firestore {
     // Escritura: admin/supervisor (los mismos que ya manejan personal y
     // vencimientos). NO permitimos delete — es histórico.
     match /EMPRESAS_EMPLEADORAS/{cuit} {
-      allow read: if isAdminOrSupervisor() || isSegHigiene();
+      // Admin/supervisor/SEG_HIGIENE ven todas. El chofer ve SOLO su propia
+      // empresa: comparamos el docId (CUIT) contra EMPRESA_CUIT denormalizado
+      // en SU legajo (request.auth.uid == DNI == docId de EMPLEADOS). Si su
+      // EMPRESA_CUIT todavía no está cargado, no puede leer (la UI muestra
+      // "Documentación a cargo de la oficina"). Estos docs (Póliza ART, F.931,
+      // SCVO, libre deuda) NO tienen sueldos — Vecchi 2026-05-20.
+      allow read: if isAdminOrSupervisor() || isSegHigiene()
+        || (isSignedIn()
+            && get(/databases/$(database)/documents/EMPLEADOS/$(request.auth.uid)).data.EMPRESA_CUIT == cuit);
       allow create, update: if isAdminOrSupervisor();
       allow delete: if false;
     }
