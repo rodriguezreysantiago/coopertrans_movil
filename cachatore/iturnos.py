@@ -53,7 +53,7 @@ FRANJAS = {
     "madrugada": ("00:00", "05:30"),
     "manana":    ("06:00", "11:30"),
     "tarde":     ("12:00", "17:30"),
-    "noche":     ("18:00", "23:30"),
+    "noche":     ("18:00", "23:00"),
 }
 
 
@@ -129,6 +129,9 @@ def parsear_slots_reagendar(html: str) -> list:
 # que la cuenta esté excedida, sino que ESE turno ya lo agarraron).
 _RE_TOMADO = re.compile(
     r"máximo de iTurnos|no disponible|ya fue tomado|no hay turnos", re.I)
+
+# UUID del turno en el botón Cancelar de /misiturnos (mismo UUID que reagendar).
+_RE_CANCELAR = re.compile(r"/misiturnos/cancelar/([0-9a-f-]{36})")
 
 
 class IturnosClient:
@@ -235,17 +238,41 @@ class IturnosClient:
 
     # ---- REAGENDAR (mover un turno ya tomado a otro slot) ------------------
     def mis_turnos(self) -> list:
-        """Turnos actuales del chofer logueado. Cada uno tiene un UUID que se
-        usa para reagendar/cancelar. Devuelve [{uuid, reagendar_url}]."""
+        """Turnos actuales del chofer logueado. Devuelve
+        [{uuid, reagendar_url, cuando, hora}] — `cuando` es el texto legible que
+        muestra iTurnos (ej. 'Miércoles 20 May 2026 14:00 hs.') y `hora` el HH:MM.
+        Cada turno tiene un botón Cancelar con
+        data-bs-href=.../misiturnos/cancelar/{uuid} y data-bs-info="<cuando>"
+        (el UUID es el mismo que usa reagendar)."""
         html = self.s.get(f"{BASE}/misiturnos").text
+        soup = BeautifulSoup(html, "html.parser")
         vistos, turnos = set(), []
-        for m in re.finditer(r"/reagendar/calendario/([0-9a-f-]{36})", html):
+        for btn in soup.find_all(attrs={"data-bs-href": _RE_CANCELAR}):
+            m = _RE_CANCELAR.search(btn.get("data-bs-href", ""))
+            if not m:
+                continue
             uuid = m.group(1)
             if uuid in vistos:
                 continue
             vistos.add(uuid)
-            turnos.append({"uuid": uuid,
-                           "reagendar_url": f"{BASE}/reagendar/calendario/{uuid}"})
+            cuando = (btn.get("data-bs-info") or "").strip()
+            hm = re.search(r"(\d{1,2}:\d{2})", cuando)
+            turnos.append({
+                "uuid": uuid,
+                "reagendar_url": f"{BASE}/reagendar/calendario/{uuid}",
+                "cuando": cuando or None,
+                "hora": hm.group(1) if hm else None,
+            })
+        # Fallback: si la página no trajo botones Cancelar, sacar al menos los
+        # UUID de los links de reagendar (sin fecha/hora).
+        if not turnos:
+            for m in re.finditer(r"/reagendar/calendario/([0-9a-f-]{36})", html):
+                uuid = m.group(1)
+                if uuid in vistos:
+                    continue
+                vistos.add(uuid)
+                turnos.append({"uuid": uuid, "cuando": None, "hora": None,
+                               "reagendar_url": f"{BASE}/reagendar/calendario/{uuid}"})
         return turnos
 
     def reagendar(self, uuid: str, franja: str) -> dict:

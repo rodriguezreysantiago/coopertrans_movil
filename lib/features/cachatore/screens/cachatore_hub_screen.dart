@@ -119,21 +119,21 @@ class _BotStatusCard extends StatelessWidget {
 class _ConfigCard extends StatelessWidget {
   const _ConfigCard();
 
-  Future<void> _editarHora(BuildContext context, String actual) async {
-    final partes = actual.split(':');
-    final inicial = TimeOfDay(
-      hour: int.tryParse(partes.isNotEmpty ? partes[0] : '') ?? 10,
-      minute: int.tryParse(partes.length > 1 ? partes[1] : '') ?? 29,
-    );
-    final r = await showTimePicker(
+  Future<void> _elegirFecha(BuildContext context, CachatoreConfig cfg) async {
+    final hoy = DateTime.now();
+    final base = DateTime(hoy.year, hoy.month, hoy.day);
+    final actual = cfg.fechaComoDate;
+    final r = await showDatePicker(
       context: context,
-      initialTime: inicial,
-      helpText: 'Hora del drop (cuándo libera iTurnos)',
+      initialDate: (actual != null && !actual.isBefore(base)) ? actual : base,
+      firstDate: base,
+      lastDate: base.add(const Duration(days: 90)),
+      helpText: 'Fecha del turno a buscar',
     );
     if (r != null) {
-      final hhmm =
-          '${r.hour.toString().padLeft(2, '0')}:${r.minute.toString().padLeft(2, '0')}';
-      await CachatoreService.setHoraInicio(hhmm);
+      final iso = '${r.year}-${r.month.toString().padLeft(2, '0')}-'
+          '${r.day.toString().padLeft(2, '0')}';
+      await CachatoreService.setFecha(iso);
     }
   }
 
@@ -167,59 +167,39 @@ class _ConfigCard extends StatelessWidget {
                 onChanged: (v) => CachatoreService.setActivo(v),
               ),
               const Divider(height: 18, color: Colors.white12),
-              // Hora del drop
-              InkWell(
-                onTap: () => _editarHora(context, cfg.horaInicio),
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.alarm,
-                          size: 20, color: Colors.white54),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Hora del drop',
-                          style:
-                              TextStyle(color: Colors.white70, fontSize: 13),
-                        ),
-                      ),
-                      Text(
-                        cfg.horaInicio,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14),
-                      ),
-                      const Icon(Icons.edit, size: 16, color: Colors.white38),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
               const Text(
-                'Fecha objetivo',
+                'Fecha del turno a buscar',
                 style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
+              Row(
                 children: [
                   _FechaChip(
                     etiqueta: 'Cualquiera',
-                    seleccionada: (cfg.fecha ?? '').isEmpty,
+                    seleccionada: !cfg.tieneFechaPuntual,
                     onTap: () => CachatoreService.setFecha(null),
                   ),
-                  _FechaChip(
-                    etiqueta: 'Hoy',
-                    seleccionada: cfg.fecha == 'hoy',
-                    onTap: () => CachatoreService.setFecha('hoy'),
-                  ),
-                  _FechaChip(
-                    etiqueta: 'Mañana',
-                    seleccionada: cfg.fecha == 'manana',
-                    onTap: () => CachatoreService.setFecha('manana'),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _elegirFecha(context, cfg),
+                      icon: const Icon(Icons.calendar_month, size: 18),
+                      label: Text(
+                        cfg.tieneFechaPuntual ? cfg.fechaDisplay : 'Elegir fecha…',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: cfg.tieneFechaPuntual
+                            ? AppColors.accentCyan
+                            : Colors.white70,
+                        side: BorderSide(
+                          color: cfg.tieneFechaPuntual
+                              ? AppColors.accentCyan.withValues(alpha: 0.6)
+                              : Colors.white24,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -397,6 +377,27 @@ class _ObjetivoCard extends StatelessWidget {
                         style: const TextStyle(
                             color: Colors.white38, fontSize: 11),
                       ),
+                      if (o.tieneTurno && (o.estadoTurno ?? '').isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Icon(Icons.event_available,
+                                size: 13, color: AppColors.accentGreen),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                o.estadoTurno!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: AppColors.accentGreen,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),

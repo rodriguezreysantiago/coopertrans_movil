@@ -43,12 +43,31 @@ class CachatoreConfig {
     );
   }
 
+  static final RegExp _reFechaIso = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+
+  String _fmt(DateTime d) => '${d.day.toString().padLeft(2, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-${d.year}';
+
+  /// `true` si `fecha` es una fecha puntual 'AAAA-MM-DD' (no null/hoy/mañana).
+  bool get tieneFechaPuntual => _reFechaIso.hasMatch((fecha ?? '').trim());
+
+  /// La fecha puntual como DateTime (null si es cualquiera/hoy/mañana).
+  DateTime? get fechaComoDate =>
+      tieneFechaPuntual ? DateTime.tryParse(fecha!.trim()) : null;
+
+  /// Fecha puntual en formato AR DD-MM-AAAA (o la etiqueta si no es puntual).
+  String get fechaDisplay {
+    final d = fechaComoDate;
+    return d != null ? _fmt(d) : fechaEtiqueta;
+  }
+
   /// Etiqueta legible del objetivo de fecha (para mostrar en la UI).
   String get fechaEtiqueta {
     final f = (fecha ?? '').trim().toLowerCase();
     if (f.isEmpty) return 'Cualquier fecha';
     if (f == 'hoy') return 'Hoy';
     if (f == 'manana' || f == 'mañana') return 'Mañana';
-    return fecha!; // fecha puntual AAAA-MM-DD
+    final d = fechaComoDate;
+    return d != null ? _fmt(d) : fecha!;
   }
 }

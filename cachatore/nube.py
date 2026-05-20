@@ -59,7 +59,9 @@ def leer_config_nube() -> dict:
         # activo: por defecto FALSE (arranca pausado hasta que lo prendan).
         "activo": cfg.get("activo", False),
         "fecha": cfg.get("fecha"),
-        "hora_inicio": cfg.get("hora_inicio", "10:29"),
+        # hora_inicio ya no importa (siempre latente cada ~5 s); se deja por si
+        # alguien lo setea a mano y quiere la ventana agresiva.
+        "hora_inicio": cfg.get("hora_inicio"),
         "duracion_min": cfg.get("duracion_min", 20),
         "poll_latente_seg": cfg.get("poll_latente_seg", 5),
         "choferes": objetivos,
@@ -77,13 +79,17 @@ def escribir_estado_bot(modo: str, total: int, pendientes: int):
     }, merge=True)
 
 
-def escribir_estado_chofer(dni: str, estado: str, hora=None, detalle=None):
-    """Estado en vivo de un chofer (lo muestra la UI). `hora`/`detalle` solo
-    se escriben si vienen (no piso la hora del turno con None en cada tick)."""
+def escribir_estado_chofer(dni: str, estado: str, hora=None, detalle=None,
+                           cuando=None):
+    """Estado en vivo de un chofer (lo muestra la UI). `hora`/`detalle`/`cuando`
+    solo se escriben si vienen (no piso el dato del turno con None en cada tick).
+    `cuando` = texto legible del turno (ej. 'Miércoles 20 May 2026 14:00 hs.')."""
     data = {"estado": estado, "estado_en": firestore.SERVER_TIMESTAMP}
     if hora is not None:
         data["estado_hora"] = hora
     if detalle is not None:
         data["estado_detalle"] = detalle
+    if cuando is not None:
+        data["estado_turno"] = cuando
     db = choferes._db()
     db.collection(COL_OBJETIVOS).document(str(dni)).set(data, merge=True)

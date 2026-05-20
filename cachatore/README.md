@@ -17,13 +17,14 @@ estado; reutiliza los datos de la app (mail + patente asignada del chofer).
   queda **latente** todo el día escaneando suave la agenda. Si se libera un
   turno (porque alguien **canceló**) en la franja de un chofer que lo necesita,
   lo agarra al toque — **sin esperar al drop de las 10:30**.
-- Cerca de la hora del drop (`hora_inicio`) entra en modo **agresivo**: cada
-  chofer sin turno caza su propia agenda a full (varios en paralelo, cada uno su
-  cuenta) para ganar la pulseada. Pasada la ventana, vuelve solo a latente.
+- Por defecto el **drop time ya no importa**: el bot está **siempre latente**
+  (barre cada ~5 s). El modo **agresivo** (cada chofer caza su agenda a full,
+  en paralelo) queda solo para una corrida manual puntual con `--agresivo`.
 - También **reagenda** (mueve un turno ya tomado) cuando se libera un slot mejor
   dentro de la franja, para los choferes marcados con `reagendar:true`.
+- Escribe el **latido** del bot cada ~5 s (lo lee la app para mostrarlo vivo).
 - 4 franjas: `madrugada` 00:00–05:30 · `manana` 06:00–11:30 ·
-  `tarde` 12:00–17:30 · `noche` 18:00–23:30. Toma cualquier slot libre dentro
+  `tarde` 12:00–17:30 · `noche` 18:00–23:00. Toma cualquier slot libre dentro
   de la franja del chofer.
 - **Control desde la app**: el bot lee su worklist de **Firestore** (lo que
   edita el módulo Cachatore de la app: `CACHATORE_CONFIG/global` +

@@ -62,7 +62,7 @@ LOGIN_REINTENTOS = 3
 REFRESH_CONFIG_SEG = 30      # cada cuánto releer la worklist (Firestore/archivo)
 REFRESH_TURNOS_SEG = 600     # cada cuánto re-chequear mis_turnos de cada chofer
 REFRESH_DATOS_SEG = 600      # cada cuánto re-traer unidad/mail de Firestore
-HEARTBEAT_SEG = 30           # cada cuánto escribir el latido del bot
+HEARTBEAT_SEG = 5            # latido del bot: SIEMPRE cada ~5 s
 MAX_REFRESH_POR_CICLO = 2    # cuántos mis_turnos refrescar por ciclo (no bloquear)
 ESPERA_SIN_CONFIG_SEG = 30   # si falta config / no hay choferes / pausado
 
@@ -160,16 +160,28 @@ class Target:
 
 
 # ---- reporte de estado a Firestore (lo lee la UI) -------------------------
-def _reportar_estado(t: "Target", estado: str, hora=None, detalle=None):
+def _fmt_cuando(fecha_iso, hora):
+    """'2026-05-20' + '17:00' → '20-05-2026 17:00 hs.' (formato AR legible)."""
+    try:
+        y, m, d = fecha_iso.split("-")
+        return f"{d}-{m}-{y} {hora} hs."
+    except Exception:
+        return f"{fecha_iso} {hora}"
+
+
+def _reportar_estado(t: "Target", estado: str, hora=None, detalle=None,
+                     cuando=None):
     """Escribe el estado del chofer en Firestore (dedupe: solo si cambió, o si
-    viene una hora nueva). No-op si no estamos escribiendo estado."""
-    if estado == t.estado_reportado and hora is None:
+    viene hora/cuando nuevos). `cuando` = texto legible del turno. No-op si no
+    estamos escribiendo estado."""
+    if estado == t.estado_reportado and hora is None and cuando is None:
         return
     t.estado_reportado = estado
     if not _ESCRIBIR_ESTADO:
         return
     try:
-        nube.escribir_estado_chofer(t.dni, estado, hora=hora, detalle=detalle)
+        nube.escribir_estado_chofer(t.dni, estado, hora=hora, detalle=detalle,
+                                    cuando=cuando)
     except Exception as e:
         log("LOG", t.nombre, f"no pude escribir estado: {e}")
 
@@ -253,7 +265,8 @@ def intentar_reservar(t: Target, slot: dict, dry: bool) -> bool:
         log("EXITO", t.nombre,
             f"RESERVADO {slot['fecha']} {slot['hora']} — unidad {t.patente}")
         t.tiene_turno = True
-        _reportar_estado(t, "reservado", hora=slot["hora"])
+        _reportar_estado(t, "reservado", hora=slot["hora"],
+                         cuando=_fmt_cuando(slot["fecha"], slot["hora"]))
         return True
     if r.get("motivo") == "tomado":
         log("LOG", t.nombre, f"{slot['hora']} lo tomaron, sigo buscando")
@@ -315,11 +328,13 @@ def refrescar_estado(t: Target):
         log("LOG", t.nombre, f"error leyendo mis turnos: {e}")
         return
     if turnos:
-        t.uuid = turnos[0]["uuid"]
+        turno = turnos[0]
+        t.uuid = turno["uuid"]
         if not t.tiene_turno:
-            log("LOG", t.nombre, "ya tiene turno (detectado en mis turnos)")
+            log("LOG", t.nombre, f"ya tiene turno ({turno.get('cuando') or 'detectado'})")
         t.tiene_turno = True
-        _reportar_estado(t, "reagendado" if t.reagendar_hecho else "reservado")
+        _reportar_estado(t, "reagendado" if t.reagendar_hecho else "reservado",
+                         hora=turno.get("hora"), cuando=turno.get("cuando"))
     else:
         t.tiene_turno = False
         t.uuid = None
@@ -500,7 +515,6 @@ def main():
     cfg = None
     ultimo_config = 0.0
     ultimo_datos = 0.0
-    ultimo_heartbeat = 0.0
     modo_anterior = None
 
     while True:
@@ -534,7 +548,9 @@ def main():
                 refrescar_estado(t)
 
             fecha = resolver_fecha(cfg.get("fecha"))
-            en_drop = forzar_agresivo or (not forzar_latente and en_ventana_drop(cfg))
+            # El drop time ya no importa: SIEMPRE latente (barre cada ~5 s).
+            # `--agresivo` sigue disponible para testeo manual.
+            en_drop = forzar_agresivo
 
             if not targets:
                 modo = "idle"
@@ -560,13 +576,11 @@ def main():
                 ciclo_latente(targets, fecha, dry)
                 espera = cfg.get("poll_latente_seg", POLL_LATENTE_SEG) \
                     + random.uniform(0, JITTER_LATENTE_SEG)
-            else:  # idle / pausado: el bot no toca nada
-                espera = ESPERA_SIN_CONFIG_SEG
+            else:  # idle / pausado: el bot no toca nada (pero late igual)
+                espera = HEARTBEAT_SEG
 
-            # 5) latido (para que la UI sepa que está vivo)
-            if time.time() - ultimo_heartbeat > HEARTBEAT_SEG:
-                _heartbeat(modo, targets)
-                ultimo_heartbeat = time.time()
+            # 5) latido cada ciclo (~5 s) para que la UI sepa que está vivo
+            _heartbeat(modo, targets)
 
             time.sleep(espera)
 

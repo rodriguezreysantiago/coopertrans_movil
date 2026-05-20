@@ -54,6 +54,8 @@ class CachatoreObjetivo {
   // ─── Estado en vivo (lo escribe el bot) ───
   final String? estadoRaw;
   final String? estadoHora; // 'HH:MM' del turno conseguido
+  /// Texto legible del turno que ya tiene (ej. 'Miércoles 20 May 2026 14:00 hs.').
+  final String? estadoTurno;
   final String? estadoDetalle;
   final DateTime? estadoEn;
 
@@ -65,6 +67,7 @@ class CachatoreObjetivo {
     this.activo = true,
     this.estadoRaw,
     this.estadoHora,
+    this.estadoTurno,
     this.estadoDetalle,
     this.estadoEn,
   });
@@ -84,6 +87,7 @@ class CachatoreObjetivo {
       activo: d['activo'] != false, // default activo si falta el campo
       estadoRaw: d['estado']?.toString(),
       estadoHora: d['estado_hora']?.toString(),
+      estadoTurno: d['estado_turno']?.toString(),
       estadoDetalle: d['estado_detalle']?.toString(),
       estadoEn: (d['estado_en'] as Timestamp?)?.toDate(),
     );
