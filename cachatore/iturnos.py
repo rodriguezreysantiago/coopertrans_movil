@@ -223,38 +223,52 @@ class IturnosClient:
 
     def reservar(self, slot: dict, patente: str, dni: str,
                  empresa: str = EMPRESA_CARGA, motivo: str = "") -> dict:
-        """Reserva (confirma) un slot. Flujo capturado del drop 2026-05-20:
+        """Reserva (confirma) un slot. Flujo CONFIRMADO el 2026-05-20:
 
         1) GET de slot['url'] (= /reservar/{ISO}) → "toma" el slot en la sesión
-           y trae el formulario + el CSRF token.
+           y trae el formulario (con el CSRF token y los campos OCULTOS).
         2) Si ya lo agarró otro → {ok:False, motivo:'tomado'}.
-        3) POST a /r/{cliente}/{agenda} con _token + patente + DNI + empresa.
-           El slot va por sesión (no en el body).
+        3) POST a la action del form (/r/{cliente}/{agenda}) con TODOS los
+           campos ocultos del form + patente + DNI + empresa + motivo.
+
+        CRÍTICO: el form trae `fecha` y `hora` como inputs OCULTOS que SÍ van
+        en el body — sin ellos iTurnos rechaza la reserva. Ése era el bug del
+        2026-05-20 (el bot no sacaba NINGÚN turno: mandábamos solo patente/DNI/
+        empresa). Por eso arrastramos todos los hidden del form en vez de armar
+        el body a mano — así también sobrevivimos si iTurnos agrega campos.
 
         Devuelve {ok, motivo, status, ...}.
         """
         html = self.abrir_reserva(slot["url"])
         if self.reserva_tomada(html):
             return {"ok": False, "motivo": "tomado"}
-        token = self._csrf_token(html)
-        if not token:
+
+        soup = BeautifulSoup(html, "html.parser")
+        form = soup.find("form", action=re.compile(r"/r/" + re.escape(CLIENTE_SLUG)))
+        if form is None:
+            return {"ok": False, "motivo": "sin_form"}
+        # Arrastrar TODOS los campos del form (incluye _token, fecha, hora).
+        data = {}
+        for inp in form.find_all("input"):
+            nombre = inp.get("name")
+            if nombre:
+                data[nombre] = inp.get("value", "")
+        if not data.get("_token"):
             return {"ok": False, "motivo": "sin_token"}
-        resp = self.s.post(
-            RESERVAR_ACTION,
-            data={
-                "_token": token,
-                CAMPO_PATENTE: patente,
-                CAMPO_DNI: dni,
-                CAMPO_EMPRESA: empresa,
-                "motivo": motivo,
-            },
-            allow_redirects=True,
-        )
+        # Pisar los que cargamos nosotros.
+        data[CAMPO_PATENTE] = patente
+        data[CAMPO_DNI] = dni
+        data[CAMPO_EMPRESA] = empresa
+        data["motivo"] = motivo
+
+        accion = form.get("action") or RESERVAR_ACTION
+        resp = self.s.post(accion, data=data, allow_redirects=True)
         txt = resp.text or ""
         if self.reserva_tomada(txt):
             return {"ok": False, "motivo": "tomado", "status": resp.status_code}
-        # Heurística de éxito (afinar con la 1ª reserva real): status OK y la
-        # respuesta no es el form de nuevo ni un error de validación.
+        # Éxito: status OK y la respuesta no volvió a mostrar el form (que
+        # tendría el campo de patente). El vigía igual lo re-confirma contra
+        # mis_turnos, que es la fuente autoritativa.
         ok = resp.status_code in (200, 302) and (CAMPO_PATENTE not in txt)
         return {
             "ok": ok,
