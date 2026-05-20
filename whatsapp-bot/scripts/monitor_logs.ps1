@@ -78,12 +78,46 @@ function Write-Color([string]$line) {
     Write-Host $line -ForegroundColor $color
 }
 
-# Get-Content -Wait sigue mostrando lineas nuevas a medida que se
-# escriben en el archivo. Equivalente a `tail -f` de Unix.
-#
-# -Encoding UTF8 es CRITICO: sino lee el archivo como Windows-1252 y
-# las flechas/tildes/checks salen como mojibake (chars basura tipo
-# "a-circunfleja + daga" en lugar de la flecha original).
-Get-Content -Path $outLog -Wait -Tail 100 -Encoding UTF8 | ForEach-Object {
-    Write-Color $_
+# tail -f robusto a la ROTACION de NSSM. El clasico Get-Content -Wait sigue el
+# archivo por handle: cuando NSSM rota (renombra bot.out.log y crea uno nuevo al
+# pasar ~10 MB) la ventana queda pegada al archivo VIEJO y no muestra mas nada
+# ("zombie"), aunque el bot siga logueando bien en el nuevo. Aca leemos por
+# offset de bytes: si el archivo se achico (rotado/recreado) reabrimos desde 0;
+# si crecio, leemos solo lo nuevo. FileShare ReadWrite = no trabamos a NSSM.
+# -Encoding UTF8 / GetString UTF8 es CRITICO para no mojibakear flechas/tildes.
+$utf8 = [System.Text.UTF8Encoding]::new($false)
+
+Get-Content -Path $outLog -Tail 100 -Encoding UTF8 | ForEach-Object { Write-Color $_ }
+$lastSize = (Get-Item $outLog).Length
+
+while ($true) {
+    Start-Sleep -Milliseconds 700
+    if (-not (Test-Path $outLog)) { continue }       # instante de la rotacion
+    try { $len = (Get-Item $outLog).Length } catch { continue }
+    if ($len -eq $lastSize) { continue }
+    if ($len -lt $lastSize) {                         # se roto/recreo: reabrir
+        Write-Host '--- (log rotado, reabriendo) ---' -ForegroundColor DarkGray
+        $lastSize = 0
+        if ($len -eq 0) { continue }
+    }
+    $fs = $null
+    try {
+        $fs = [System.IO.FileStream]::new(
+            $outLog, [System.IO.FileMode]::Open,
+            [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        $fs.Seek($lastSize, [System.IO.SeekOrigin]::Begin) | Out-Null
+        $count = [int]($len - $lastSize)
+        $buf = New-Object byte[] $count
+        $read = $fs.Read($buf, 0, $count)
+    } catch {
+        continue
+    } finally {
+        if ($fs) { $fs.Dispose() }
+    }
+    if ($read -le 0) { continue }
+    $text = $utf8.GetString($buf, 0, $read)
+    $nl = $text.LastIndexOf("`n")
+    if ($nl -lt 0) { continue }                       # linea a medio escribir: esperar
+    foreach ($line in ($text.Substring(0, $nl) -split "`r?`n")) { Write-Color $line }
+    $lastSize += $utf8.GetByteCount($text.Substring(0, $nl + 1))
 }
