@@ -114,11 +114,21 @@ def cargar_choferes(solo_dnis=None, incluir_excluidos: bool = False) -> list:
             enganche = (e.get("ENGANCHE") or "").strip().upper()
             if enganche and enganche in patentes_tanque:
                 continue  # chofer de tanque → se omite
+        # Patente vigente desde ASIGNACIONES_VEHICULO (hasta==null). Si justo no
+        # hay (caso real 2026-05-20: una reasignacion de unidad deja un gap de
+        # segundos entre cerrar la vieja y crear la nueva, y el chofer queda con
+        # 0 vigentes), caemos al espejo EMPLEADOS.VEHICULO (lo que muestra la
+        # app) para no "perder" al chofer y saltearlo en la reserva.
+        patente = patente_por_dni.get(dni)
+        if not patente:
+            espejo = (e.get("VEHICULO") or "").strip()
+            if espejo and espejo not in ("-", "S/D"):
+                patente = espejo
         choferes.append({
             "dni": dni,
             "nombre": e.get("NOMBRE"),
             "email": (e.get("MAIL") or "").strip().lower(),
-            "patente": patente_por_dni.get(dni),
+            "patente": patente,
             "clave": claves.get(dni) or comun,
         })
     choferes.sort(key=lambda c: c["nombre"] or "")
