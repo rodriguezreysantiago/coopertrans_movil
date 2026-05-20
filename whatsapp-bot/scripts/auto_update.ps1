@@ -93,6 +93,7 @@ try {
     $changedFiles = git diff --name-only $localHead $remoteHead
     $tocaBot = $changedFiles | Where-Object { $_ -like 'whatsapp-bot/*' }
     $tocaPkg = $changedFiles | Where-Object { $_ -eq 'whatsapp-bot/package.json' -or $_ -eq 'whatsapp-bot/package-lock.json' }
+    $tocaCachatore = $changedFiles | Where-Object { $_ -like 'cachatore/*' }
 
     Write-Log 'INFO' "Cambios detectados: $($localHead.Substring(0,7)) -> $($remoteHead.Substring(0,7)) ($($changedFiles.Count) archivos)"
 
@@ -106,8 +107,27 @@ try {
         exit 1
     }
 
+    # --- Cachatore: reiniciar el vigia si cambio cachatore/** -------
+    # Es un servicio aparte (Python, cachatore-vigia); el bot de WhatsApp
+    # no se toca. Restart liviano (no necesita el grace period del bot).
+    # Solo si el servicio esta instalado en esta PC.
+    if ($tocaCachatore) {
+        $svcVigia = Get-Service -Name cachatore-vigia -ErrorAction SilentlyContinue
+        if ($svcVigia) {
+            Write-Log 'INFO' "Cambios tocan cachatore/**, reiniciando cachatore-vigia..."
+            try {
+                Restart-Service -Name cachatore-vigia -ErrorAction Stop
+                Write-Log 'INFO' "cachatore-vigia reiniciado OK."
+            } catch {
+                Write-Log 'WARNING' "No pude reiniciar cachatore-vigia: $($_.Exception.Message)"
+            }
+        } else {
+            Write-Log 'INFO' "cachatore/** cambio pero cachatore-vigia no esta instalado aca (omito)."
+        }
+    }
+
     if (-not $tocaBot) {
-        Write-Log 'INFO' "Pull OK, no toca whatsapp-bot/** (sin restart)."
+        Write-Log 'INFO' "Pull OK, no toca whatsapp-bot/** (sin restart del bot)."
         exit 0
     }
 
