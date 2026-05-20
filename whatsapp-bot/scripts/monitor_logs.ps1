@@ -38,7 +38,7 @@ $Host.UI.RawUI.WindowTitle = 'Coopertrans Bot - Logs en vivo'
 Write-Host ''
 Write-Host '====================================================' -ForegroundColor Cyan
 Write-Host '  COOPERTRANS BOT - Logs en vivo' -ForegroundColor Cyan
-Write-Host '  visor v2 (resiste la rotacion del log)' -ForegroundColor DarkGray
+Write-Host '  visor v3 (resiste rotacion + muestra el auto-update)' -ForegroundColor DarkGray
 Write-Host '====================================================' -ForegroundColor Cyan
 Write-Host "  Archivo: $outLog" -ForegroundColor DarkGray
 Write-Host '  Ctrl+C para salir' -ForegroundColor DarkGray
@@ -79,46 +79,58 @@ function Write-Color([string]$line) {
     Write-Host $line -ForegroundColor $color
 }
 
-# tail -f robusto a la ROTACION de NSSM. El clasico Get-Content -Wait sigue el
-# archivo por handle: cuando NSSM rota (renombra bot.out.log y crea uno nuevo al
-# pasar ~10 MB) la ventana queda pegada al archivo VIEJO y no muestra mas nada
-# ("zombie"), aunque el bot siga logueando bien en el nuevo. Aca leemos por
-# offset de bytes: si el archivo se achico (rotado/recreado) reabrimos desde 0;
-# si crecio, leemos solo lo nuevo. FileShare ReadWrite = no trabamos a NSSM.
-# -Encoding UTF8 / GetString UTF8 es CRITICO para no mojibakear flechas/tildes.
+# Log del AUTO-UPDATE (la tarea programada que hace el git pull + reinicia los
+# servicios). Lo mostramos INTERCALADO aca (en cyan) para ver en vivo cuando se
+# actualiza/reinicia el bot. Vive en el mismo logs\ del bot.
+$auLog = Join-Path $logsDir 'auto_update.log'
+
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 
-Get-Content -Path $outLog -Tail 100 -Encoding UTF8 | ForEach-Object { Write-Color $_ }
-$lastSize = (Get-Item $outLog).Length
-
-while ($true) {
-    Start-Sleep -Milliseconds 700
-    if (-not (Test-Path $outLog)) { continue }       # instante de la rotacion
-    try { $len = (Get-Item $outLog).Length } catch { continue }
-    if ($len -eq $lastSize) { continue }
-    if ($len -lt $lastSize) {                         # se roto/recreo: reabrir
-        Write-Host '--- (log rotado, reabriendo) ---' -ForegroundColor DarkGray
-        $lastSize = 0
-        if ($len -eq 0) { continue }
-    }
+# tail -f robusto a la ROTACION de NSSM. El clasico Get-Content -Wait sigue el
+# archivo por handle y queda "zombie" cuando NSSM rota (renombra el log y crea
+# uno nuevo al pasar ~10 MB). Aca leemos por offset: si el archivo se achico
+# (rotado/recreado) reabrimos desde 0; si crecio, leemos solo lo nuevo.
+# FileShare ReadWrite = no trabamos a NSSM. UTF8 para no mojibakear flechas/
+# tildes. Devuelve el nuevo offset; imprime las lineas nuevas con $Pintor.
+function Mostrar-Nuevas {
+    param([string]$Path, [long]$Desde, [scriptblock]$Pintor)
+    if (-not (Test-Path $Path)) { return $Desde }
+    try { $len = (Get-Item $Path).Length } catch { return $Desde }
+    if ($len -lt $Desde) { $Desde = 0 }   # rotado/recreado: reabrir desde 0
+    if ($len -le $Desde) { return $len }
     $fs = $null
     try {
         $fs = [System.IO.FileStream]::new(
-            $outLog, [System.IO.FileMode]::Open,
+            $Path, [System.IO.FileMode]::Open,
             [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
-        $fs.Seek($lastSize, [System.IO.SeekOrigin]::Begin) | Out-Null
-        $count = [int]($len - $lastSize)
+        $fs.Seek($Desde, [System.IO.SeekOrigin]::Begin) | Out-Null
+        $count = [int]($len - $Desde)
         $buf = New-Object byte[] $count
         $read = $fs.Read($buf, 0, $count)
     } catch {
-        continue
+        return $Desde
     } finally {
         if ($fs) { $fs.Dispose() }
     }
-    if ($read -le 0) { continue }
+    if ($read -le 0) { return $Desde }
     $text = $utf8.GetString($buf, 0, $read)
     $nl = $text.LastIndexOf("`n")
-    if ($nl -lt 0) { continue }                       # linea a medio escribir: esperar
-    foreach ($line in ($text.Substring(0, $nl) -split "`r?`n")) { Write-Color $line }
-    $lastSize += $utf8.GetByteCount($text.Substring(0, $nl + 1))
+    if ($nl -lt 0) { return $Desde }   # linea a medio escribir: esperar
+    foreach ($line in ($text.Substring(0, $nl) -split "`r?`n")) { & $Pintor $line }
+    return $Desde + $utf8.GetByteCount($text.Substring(0, $nl + 1))
+}
+
+# Arranque: ultimas 100 lineas del log y nos paramos al final de AMBOS (del
+# auto-update solo mostramos lo NUEVO de aca en adelante).
+Get-Content -Path $outLog -Tail 100 -Encoding UTF8 | ForEach-Object { Write-Color $_ }
+$posMain = (Get-Item $outLog).Length
+$posAu = if (Test-Path $auLog) { (Get-Item $auLog).Length } else { 0 }
+
+$pintarMain = { param($l) Write-Color $l }
+$pintarAu = { param($l) Write-Host "  [auto-update] $l" -ForegroundColor Cyan }
+
+while ($true) {
+    Start-Sleep -Milliseconds 700
+    $posMain = Mostrar-Nuevas $outLog $posMain $pintarMain
+    $posAu = Mostrar-Nuevas $auLog $posAu $pintarAu
 }

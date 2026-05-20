@@ -95,7 +95,7 @@ try {
     $tocaPkg = $changedFiles | Where-Object { $_ -eq 'whatsapp-bot/package.json' -or $_ -eq 'whatsapp-bot/package-lock.json' }
     $tocaCachatore = $changedFiles | Where-Object { $_ -like 'cachatore/*' }
 
-    Write-Log 'INFO' "Cambios detectados: $($localHead.Substring(0,7)) -> $($remoteHead.Substring(0,7)) ($($changedFiles.Count) archivos)"
+    Write-Log 'INFO' "PULL EN PROCESO: actualizando $($localHead.Substring(0,7)) -> $($remoteHead.Substring(0,7)) ($($changedFiles.Count) archivo/s)..."
 
     # --- 4. git pull --ff-only --------------------------------------
     $pullOut = & {
