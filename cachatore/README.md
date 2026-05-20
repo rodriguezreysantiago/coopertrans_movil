@@ -141,5 +141,9 @@ A mano sería: `python -m venv venv` + `pip install curl_cffi beautifulsoup4
 firebase-admin`, poner `claves.json`/`drop.json` y `.\instalar_servicio_vigia.ps1`.
 Queda como servicio `cachatore-vigia` (arranca solo al bootear, junto con el
 auto-login de Windows). La selección la maneja la **UI de la app** (vía
-Firestore); `drop.json` solo se usa con `--archivo`. Parar/arrancar:
-`nssm stop cachatore-vigia` / `nssm start cachatore-vigia`.
+Firestore); `drop.json` solo se usa con `--archivo`. Reiniciar/parar/arrancar
+con cmdlets nativos (no hace falta `nssm` en el PATH — es un servicio de Windows
+normal): `Restart-Service cachatore-vigia` · `Stop-Service ...` ·
+`Start-Service ...`. **Tras un cambio de código de `vigia.py` hay que
+`Restart-Service cachatore-vigia`** (el auto-update pull-ea pero no reinicia
+este servicio).

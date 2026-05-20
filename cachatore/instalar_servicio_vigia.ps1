@@ -97,6 +97,9 @@ $estado = (Get-Service -Name $Servicio -ErrorAction SilentlyContinue).Status
 Write-Host ""
 Write-Host "Estado: $estado" -ForegroundColor Green
 Write-Host "Log:    $LogFile"
-Write-Host "Ver en vivo:   .\ver_logs_vigia.ps1"
-Write-Host "Parar/arrancar: nssm stop $Servicio  /  nssm start $Servicio"
-Write-Host "Desinstalar:    nssm remove $Servicio confirm"
+# nssm puede no estar en el PATH; los cmdlets nativos siempre funcionan
+# (un servicio NSSM es un servicio de Windows normal).
+Write-Host "Ver en vivo:    .\ver_logs_vigia.ps1"
+Write-Host "Reiniciar:      Restart-Service $Servicio"
+Write-Host "Parar/arrancar: Stop-Service $Servicio  /  Start-Service $Servicio"
+Write-Host "Desinstalar:    Stop-Service $Servicio; sc.exe delete $Servicio"
