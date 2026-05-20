@@ -170,7 +170,7 @@ describe('commands._construirTextoJornadaChofer', () => {
     const txt = _construirTextoJornadaChofer({
       chofer, jSnap, silSnap: fakeSnap(null), fecha,
     });
-    assert.match(txt, /Total manejado hoy: 7h 00m de 12 hs/);
+    assert.match(txt, /Total manejado en la jornada: 7h 00m de 12 hs/);
     assert.match(txt, /te quedan \*5h 00m\*/);   // 12h - 7h = 5h restante
     assert.doesNotMatch(txt, /Llegaste al límite/);
   });

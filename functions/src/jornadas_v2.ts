@@ -451,7 +451,7 @@ async function encolarAvisoCuotaProxima(
 ): Promise<void> {
   const emp = await obtenerEmpleadoLite(dni);
   if (!emp) return;
-  // Heads-up cuando lleva 10h manejo neto. Diferente del aviso 3h30
+  // Heads-up cuando lleva 11h manejo neto. Diferente del aviso 3h30
   // (que es POR BLOQUE actual) — este mira el TOTAL acumulado en la
   // jornada. Sirve para el caso del chofer que hace pausas frecuentes
   // y cortas y nunca cruza 3h30 dentro de un bloque pero sí acumula
@@ -470,7 +470,7 @@ async function encolarAvisoCuotaProxima(
       "8 horas mínimo de corrido.\n\n" +
       "_Bot-On — Coopertrans Móvil_",
     `${emp.saludo}, atención.\n\n` +
-      "*Llevás 11 horas manejando hoy.* Empezá a buscar dónde " +
+      "*Llevás 11 horas de jornada de manejo.* Empezá a buscar dónde " +
       `estacionar el ${patente} — al llegar a 12 horas debés frenar ` +
       "sí o sí.\n\n" +
       "_Bot-On — Coopertrans Móvil_",

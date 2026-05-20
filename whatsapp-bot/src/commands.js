@@ -912,7 +912,7 @@ async function _comandoEnviarJornada(msg, { db, fs }, args) {
 function _construirTextoJornadaChofer({ chofer, jSnap, silSnap, fecha }) {
   const apodo = chofer.apodo || _primerNombreDe({ NOMBRE: chofer.nombre });
   const saludo = apodo ? `Hola ${apodo}` : 'Hola';
-  const lineas = [`${saludo}, esta es tu jornada de hoy (${fecha}):`];
+  const lineas = [`${saludo}, este es el estado de tu jornada de manejo (${fecha}):`];
   lineas.push('');
 
   // Aviso de silencio — útil para que el chofer entienda por qué no
@@ -981,7 +981,7 @@ function _construirTextoJornadaChofer({ chofer, jSnap, silSnap, fecha }) {
     }
     lineas.push('');
     const restanteJornada = JORNADA_LIMITE_SEG - manejoNetoSeg;
-    lineas.push(`🚛 Total manejado hoy: ${_fmtSegCompacto(manejoNetoSeg)} ` +
+    lineas.push(`🚛 Total manejado en la jornada: ${_fmtSegCompacto(manejoNetoSeg)} ` +
       `de 12 hs (te quedan *${_fmtSegCompacto(restanteJornada)}* ` +
       'antes del límite de jornada)');
   }
