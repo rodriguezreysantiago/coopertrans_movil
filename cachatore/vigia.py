@@ -73,6 +73,7 @@ REFRESH_DATOS_SEG = 600      # cada cuánto re-traer unidad/mail de Firestore
 HEARTBEAT_SEG = 5            # latido del bot: SIEMPRE cada ~5 s
 MAX_REFRESH_POR_CICLO = 2    # cuántos mis_turnos refrescar por ciclo (no bloquear)
 MONITOR_BATCH = 10           # cuántos choferes del monitor escanear por ciclo
+HORA_RESUMEN = 8             # hora ART del resumen diario de turnos al encargado
 ESPERA_SIN_CONFIG_SEG = 30   # si falta config / no hay choferes / pausado
 
 _log_lock = threading.Lock()
@@ -673,6 +674,7 @@ def main():
     ultimo_config = 0.0
     ultimo_datos = 0.0
     ultimo_roster = 0.0
+    ultimo_resumen = None     # 'YYYY-MM-DD' del último resumen diario al encargado
     modo_anterior = None
 
     while True:
@@ -746,6 +748,20 @@ def main():
 
             # 5) latido cada ciclo (~5 s) para que la UI sepa que está vivo
             _heartbeat(modo, targets)
+
+            # 6) resumen diario de turnos al encargado de logística (~8 AM ART).
+            #    Idempotente por día (nube chequea doc determinístico) → un
+            #    reinicio no duplica. Si la PC bootea tarde, igual lo manda.
+            if _ESCRIBIR_ESTADO:
+                hoy = datetime.now().strftime("%Y-%m-%d")
+                if ultimo_resumen != hoy and datetime.now().hour >= HORA_RESUMEN:
+                    try:
+                        if nube.enviar_resumen_diario_turnos():
+                            log("LOG", "sistema",
+                                "resumen diario de turnos enviado al encargado")
+                    except Exception as e:
+                        log("LOG", "sistema", f"error en resumen diario: {e}")
+                    ultimo_resumen = hoy
 
             time.sleep(espera)
 

@@ -11,6 +11,8 @@ Colecciones (ver lib/core/constants/app_constants.dart → AppCollections):
 - CACHATORE_ESTADO/bot          : {modo, total, pendientes, ultimo_tick_en}
                                   ← SOLO lo escribe el bot (latido)
 """
+from datetime import datetime
+
 from firebase_admin import firestore
 
 import choferes
@@ -165,3 +167,45 @@ def avisar_turno(chofer_dni, chofer_nombre, cuando, evento):
         msg_enc = (f"Turno YPF — {nombre} (DNI {chofer_dni}): {cuando}.")
     encolar_whatsapp(_telefono_de(db, chofer_dni), msg_chofer)
     encolar_whatsapp(_telefono_de(db, ENCARGADO_LOGISTICA_DNI), msg_enc)
+
+
+def resumen_turnos_para_encargado():
+    """Texto con TODOS los turnos concretados (CACHATORE_TURNOS). None si no hay."""
+    db = choferes._db()
+    turnos = []
+    for d in db.collection(COL_TURNOS).stream():
+        x = d.to_dict() or {}
+        nombre = str(x.get("nombre") or x.get("dni") or d.id)
+        cuando = str(x.get("cuando") or x.get("hora") or "—")
+        turnos.append((nombre, cuando))
+    if not turnos:
+        return None
+    turnos.sort(key=lambda t: t[0].upper())
+    lineas = "\n".join(f"• {n}: {c}" for n, c in turnos)
+    return f"*Turnos de carga YPF* ({len(turnos)})\n{lineas}"
+
+
+def enviar_resumen_diario_turnos():
+    """Encola (idempotente por día) el resumen de turnos al encargado de
+    logística. Devuelve True si lo encoló ahora; False si ya estaba hoy o sin tel.
+    Idempotencia: doc determinístico `cachatore_resumen_<fecha>` en COLA_WHATSAPP
+    (si ya existe, no re-encola aunque el bot se reinicie)."""
+    db = choferes._db()
+    hoy = datetime.now().strftime("%Y-%m-%d")
+    ref = db.collection(COL_COLA).document(f"cachatore_resumen_{hoy}")
+    if ref.get().exists:
+        return False
+    tel = _telefono_de(db, ENCARGADO_LOGISTICA_DNI)
+    if not tel:
+        return False
+    texto = resumen_turnos_para_encargado() or \
+        "*Turnos de carga YPF*: hoy no hay turnos cargados."
+    ref.set({
+        "telefono": tel,
+        "mensaje": texto,
+        "estado": "PENDIENTE",
+        "encolado_en": firestore.SERVER_TIMESTAMP,
+        "enviado_en": None,
+        "origen": "cachatore_resumen",
+    })
+    return True
