@@ -185,7 +185,7 @@ class _CardVencimientoEmpresa extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (cuitEmpresa == null || cuitEmpresa!.isEmpty) {
-      return _placeholderSinEmpresa();
+      return _placeholder('No tenés empresa cargada — consultá a la oficina.');
     }
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
@@ -198,7 +198,10 @@ class _CardVencimientoEmpresa extends StatelessWidget {
         // leer este doc — el stream tira permission-denied. Mostramos
         // placeholder en lugar de error tecnico crudo.
         if (snap.hasError) {
-          return _placeholderSinEmpresa();
+          // El chofer SÍ tiene empresa (cuitEmpresa no es null), pero la rule
+          // de EMPRESAS_EMPLEADORAS no lo deja leer el doc (tiene datos
+          // sensibles como el F.931). No es "sin empresa" — lo aclaramos.
+          return _placeholder('Documentación a cargo de la oficina.');
         }
         final data = snap.data?.data() ?? const <String, dynamic>{};
         final fecha = data[campoFecha];
@@ -260,7 +263,7 @@ class _CardVencimientoEmpresa extends StatelessWidget {
     );
   }
 
-  Widget _placeholderSinEmpresa() {
+  Widget _placeholder(String subtitulo) {
     return AppCard(
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -282,9 +285,9 @@ class _CardVencimientoEmpresa extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                const Text(
-                  'No tenés empresa cargada — consultá a la oficina.',
-                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                Text(
+                  subtitulo,
+                  style: const TextStyle(color: Colors.white38, fontSize: 11),
                 ),
               ],
             ),
