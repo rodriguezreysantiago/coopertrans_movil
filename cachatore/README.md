@@ -49,6 +49,11 @@ asignada del chofer).
   hay que corregirles el `MAIL`/clave. `python verificar_logins.py [N]`.
 - `claves.ejemplo.json` — plantilla. El real es `claves.json` (gitignoreado):
   `{"_comun": "Cooper2022"}` (o per-DNI si alguno difiere).
+- `orquestador.py` — el motor: a la hora del drop, en paralelo (un hilo por
+  chofer) loguea, caza un slot en la franja de cada uno y reserva, con reintento.
+  `python orquestador.py` (espera la hora) / `--ya` (arranca ya) / `--dry` (no
+  reserva, testeo). La selección del día va en `drop.json` (plantilla
+  `drop.ejemplo.json`, ambos gitignoreados).
 
 ## Estado (2026-05-20)
 - **Login validado**: los **51 choferes no-tanque loguean OK** con el `MAIL` de
@@ -58,8 +63,11 @@ asignada del chofer).
   omitidos como en la app; email + patente vigente correctos.
 - `reservar()` implementado con el form capturado; la heurística de éxito se
   afina con la 1ª reserva real.
-- **Pendiente**: orquestador (multi-chofer en paralelo + scheduler ~10:29, con
-  reintento) + UI dentro de la app (`lib/features/`).
+- **Orquestador hecho y validado**: login en paralelo + caza por franja +
+  reintento + scheduler (espera hasta `hora_inicio`) + resumen. Probado en
+  `--ya --dry` (2 choferes loguean en paralelo y pollean OK).
+- **Pendiente**: confirmar la heurística de reserva en el 1er drop real + UI
+  dentro de la app (`lib/features/`).
 
 ## Setup / correr
 ```bash

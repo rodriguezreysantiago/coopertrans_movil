@@ -7,6 +7,10 @@
 claves.json
 cuentas.json
 
+# Selección del drop del día (la escribe la UI; plantilla: drop.ejemplo.json).
+drop.json
+captura_*.html
+
 # Virtualenv (regenerable: python -m venv venv && pip install curl_cffi beautifulsoup4)
 venv/
 __pycache__/

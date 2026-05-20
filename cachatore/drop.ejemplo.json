@@ -1,0 +1,10 @@
+{
+  "_comentario": "Selección del drop del día. La UI de la app va a escribir este archivo; mientras tanto se edita a mano. franja: madrugada|manana|tarde|noche. fecha: null = cualquier fecha que liberen, o 'AAAA-MM-DD' para una puntual.",
+  "fecha": null,
+  "hora_inicio": "10:29",
+  "duracion_min": 15,
+  "choferes": [
+    {"dni": "26129762", "franja": "manana"},
+    {"dni": "26973923", "franja": "tarde"}
+  ]
+}
