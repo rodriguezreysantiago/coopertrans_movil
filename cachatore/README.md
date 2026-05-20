@@ -51,13 +51,15 @@ asignada del chofer).
   `{"_comun": "Cooper2022"}` (o per-DNI si alguno difiere).
 
 ## Estado (2026-05-20)
-- **Login validado** (8/10 en una muestra loguean con el `MAIL` de la app +
-  `Cooper2022`; los que fallan tienen el mail mal cargado o clave distinta).
-- **Integración Firestore validada**: 55 choferes con email + patente vigente.
+- **Login validado**: los **51 choferes no-tanque loguean OK** con el `MAIL` de
+  la app + `Cooper2022`. (En corridas masivas hay blips transitorios de
+  Cloudflare → el orquestador debe **reintentar** el login fallido.)
+- **Integración Firestore validada**: 55 choferes; tanques/testers/inactivos
+  omitidos como en la app; email + patente vigente correctos.
 - `reservar()` implementado con el form capturado; la heurística de éxito se
   afina con la 1ª reserva real.
-- **Pendiente**: orquestador (multi-chofer en paralelo + scheduler ~10:29) +
-  UI dentro de la app (`lib/features/`).
+- **Pendiente**: orquestador (multi-chofer en paralelo + scheduler ~10:29, con
+  reintento) + UI dentro de la app (`lib/features/`).
 
 ## Setup / correr
 ```bash
