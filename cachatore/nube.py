@@ -20,6 +20,7 @@ DOC_CONFIG = "global"
 COL_OBJETIVOS = "CACHATORE_OBJETIVOS"
 COL_ESTADO = "CACHATORE_ESTADO"
 DOC_ESTADO = "bot"
+COL_TURNOS = "CACHATORE_TURNOS"
 
 FRANJAS_VALIDAS = {"madrugada", "manana", "tarde", "noche"}
 
@@ -94,3 +95,24 @@ def escribir_estado_chofer(dni: str, estado: str, hora=None, detalle=None,
         data["estado_turno"] = cuando
     db = choferes._db()
     db.collection(COL_OBJETIVOS).document(str(dni)).set(data, merge=True)
+
+
+def escribir_turno(dni, nombre, cuando, hora, uuid):
+    """Publica el turno REAL del chofer en CACHATORE_TURNOS (lo lee la pantalla
+    'Turnos concretados'). Lo escribe el bot para CUALQUIER chofer con turno,
+    lo haya sacado el bot o no."""
+    db = choferes._db()
+    db.collection(COL_TURNOS).document(str(dni)).set({
+        "dni": str(dni),
+        "nombre": nombre,
+        "cuando": cuando,
+        "hora": hora,
+        "uuid": uuid,
+        "actualizado_en": firestore.SERVER_TIMESTAMP,
+    }, merge=True)
+
+
+def borrar_turno(dni):
+    """El chofer ya no tiene turno → sacarlo de 'Turnos concretados'."""
+    db = choferes._db()
+    db.collection(COL_TURNOS).document(str(dni)).delete()

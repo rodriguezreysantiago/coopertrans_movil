@@ -389,6 +389,14 @@ class AppCollections {
   /// pausado), total, pendientes, ultimo_tick_en}`. Lo escribe SOLO el bot
   /// (Admin SDK) — la app lo lee para mostrar si está vivo y qué hace.
   static const String cachatoreEstado = 'CACHATORE_ESTADO';
+
+  /// Turnos REALES que tiene cada chofer en iTurnos (los saque o no el bot,
+  /// incluso si se cargaron por fuera). DocId = DNI. Lo popula el bot
+  /// escaneando `mis_turnos` de TODOS los choferes (no solo los vigilados):
+  /// `{dni, nombre, cuando (texto legible), hora, uuid, actualizado_en}`.
+  /// La pantalla "Turnos concretados" lee de acá. Si un chofer no tiene turno,
+  /// el bot borra su doc. Solo lo escribe el bot (Admin SDK).
+  static const String cachatoreTurnos = 'CACHATORE_TURNOS';
 }
 
 /// Documentos laborales que viven a NIVEL EMPRESA (no por empleado).

@@ -5,6 +5,7 @@ import '../../../core/services/prefs_service.dart';
 import '../models/cachatore_config.dart';
 import '../models/cachatore_estado_bot.dart';
 import '../models/cachatore_objetivo.dart';
+import '../models/cachatore_turno.dart';
 import '../models/franja_carga.dart';
 
 /// Capa de datos del módulo Cachatore. La app SOLO escribe configuración
@@ -24,6 +25,9 @@ class CachatoreService {
   static DocumentReference<Map<String, dynamic>> get _estadoDoc =>
       _db.collection(AppCollections.cachatoreEstado).doc('bot');
 
+  static CollectionReference<Map<String, dynamic>> get turnosCol =>
+      _db.collection(AppCollections.cachatoreTurnos);
+
   // ─── Streams ───────────────────────────────────────────────────────
   static Stream<CachatoreConfig> streamConfig() =>
       _configDoc.snapshots().map((d) => CachatoreConfig.fromMap(d.data()));
@@ -35,6 +39,17 @@ class CachatoreService {
       objetivosCol.snapshots().map((s) {
         final lista = s.docs.map(CachatoreObjetivo.fromDoc).toList();
         // Orden alfabético por nombre (client-side; son ~50 choferes).
+        lista.sort((a, b) => (a.nombre ?? a.dni)
+            .toUpperCase()
+            .compareTo((b.nombre ?? b.dni).toUpperCase()));
+        return lista;
+      });
+
+  /// Turnos REALES de todos los choferes (los publica el bot). Para la pantalla
+  /// "Turnos concretados".
+  static Stream<List<CachatoreTurno>> streamTurnos() =>
+      turnosCol.snapshots().map((s) {
+        final lista = s.docs.map(CachatoreTurno.fromDoc).toList();
         lista.sort((a, b) => (a.nombre ?? a.dni)
             .toUpperCase()
             .compareTo((b.nombre ?? b.dni).toUpperCase()));

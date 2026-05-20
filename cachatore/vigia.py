@@ -72,10 +72,12 @@ REFRESH_TURNOS_SEG = 600     # cada cuánto re-chequear mis_turnos de cada chofe
 REFRESH_DATOS_SEG = 600      # cada cuánto re-traer unidad/mail de Firestore
 HEARTBEAT_SEG = 5            # latido del bot: SIEMPRE cada ~5 s
 MAX_REFRESH_POR_CICLO = 2    # cuántos mis_turnos refrescar por ciclo (no bloquear)
+MONITOR_BATCH = 10           # cuántos choferes del monitor escanear por ciclo
 ESPERA_SIN_CONFIG_SEG = 30   # si falta config / no hay choferes / pausado
 
 _log_lock = threading.Lock()
 _scanner = {"cli": None, "logueado": False}   # sesión dedicada al escaneo latente
+_monitor: dict = {}          # {dni: Monitor} — turnos reales de TODOS los choferes
 
 # Seteados en main() según los flags.
 _USAR_NUBE = True            # leer config de Firestore (False = drop.json)
@@ -206,6 +208,28 @@ def _reportar_dni(dni: str, estado: str):
         pass
 
 
+def _publicar_turno(dni, nombre, turno: dict):
+    """Publica el turno REAL del chofer en CACHATORE_TURNOS (lo lee la pantalla
+    'Turnos concretados'). turno = item de mis_turnos()."""
+    if not _ESCRIBIR_ESTADO:
+        return
+    try:
+        nube.escribir_turno(dni, nombre, turno.get("cuando"), turno.get("hora"),
+                            turno.get("uuid"))
+    except Exception as e:
+        log("LOG", nombre, f"no pude publicar turno: {e}")
+
+
+def _despublicar_turno(dni):
+    """El chofer ya no tiene turno → sacarlo de 'Turnos concretados'."""
+    if not _ESCRIBIR_ESTADO:
+        return
+    try:
+        nube.borrar_turno(dni)
+    except Exception:
+        pass
+
+
 def _heartbeat(modo: str, targets: dict):
     if not _ESCRIBIR_ESTADO:
         return
@@ -276,6 +300,7 @@ def intentar_reservar(t: Target, slot: dict, dry: bool) -> bool:
         t.tiene_turno = True
         _reportar_estado(t, "reservado", hora=slot["hora"],
                          cuando=_fmt_cuando(slot["fecha"], slot["hora"]))
+        t.ultimo_check = 0.0   # forzar refrescar_estado → publica el turno real (uuid)
         return True
     if r.get("motivo") == "tomado":
         log("LOG", t.nombre, f"{slot['hora']} lo tomaron, sigo buscando")
@@ -345,10 +370,12 @@ def refrescar_estado(t: Target):
         t.tiene_turno = True
         _reportar_estado(t, "reagendado" if t.reagendar_hecho else "reservado",
                          hora=turno.get("hora"), cuando=turno.get("cuando"))
+        _publicar_turno(t.dni, t.nombre, turno)   # → "Turnos concretados"
     else:
         t.tiene_turno = False
         t.uuid = None
         _reportar_estado(t, "buscando")
+        _despublicar_turno(t.dni)
     t.ultimo_check = time.time()
 
 
@@ -373,6 +400,101 @@ def refrescar_datos_firestore(targets: dict):
             t.email = ch["email"].strip().lower()
         if ch.get("clave"):
             t.clave = ch["clave"]
+
+
+# ---- monitor: turnos REALES de TODOS los choferes -------------------------
+# La pantalla "Turnos concretados" no sale de los vigilados: el bot chequea
+# mis_turnos de CADA chofer (los saque o no el bot, incluso turnos cargados por
+# fuera) y los publica en CACHATORE_TURNOS. Los vigilados los publica el Target
+# (refrescar_estado); el resto, este monitor (sesión liviana por chofer).
+class Monitor:
+    __slots__ = ("dni", "nombre", "email", "clave", "cli", "logueado",
+                 "ultimo_check", "tiene")
+
+    def __init__(self, ch: dict):
+        self.dni = ch["dni"]
+        self.nombre = ch.get("nombre") or ch["dni"]
+        self.email = (ch.get("email") or "").strip().lower()
+        self.clave = ch.get("clave")
+        self.cli = None
+        self.logueado = False
+        self.ultimo_check = 0.0
+        self.tiene = None   # None=desconocido | False=sin turno | (uuid,cuando)
+
+    @property
+    def credenciales_ok(self) -> bool:
+        return bool(self.email and self.clave)
+
+
+def _login_generico(email, clave):
+    cli = iturnos.IturnosClient()
+    for _ in range(LOGIN_REINTENTOS):
+        try:
+            if cli.login(email, clave):
+                return cli
+        except Exception:
+            pass
+        time.sleep(1.5)
+    return None
+
+
+def _escanear_monitor_uno(m: "Monitor"):
+    if m.cli is None or not m.logueado:
+        m.cli = _login_generico(m.email, m.clave)
+        m.logueado = m.cli is not None
+    m.ultimo_check = time.time()
+    if not m.logueado:
+        return
+    try:
+        turnos = m.cli.mis_turnos()
+    except Exception as e:
+        log("LOG", m.nombre, f"monitor: error mis_turnos: {e}")
+        m.logueado = False
+        return
+    if turnos:
+        t0 = turnos[0]
+        clave = (t0.get("uuid"), t0.get("cuando"))
+        if m.tiene != clave:        # solo escribir si cambió (evita spam)
+            m.tiene = clave
+            _publicar_turno(m.dni, m.nombre, t0)
+    elif m.tiene is not False:
+        m.tiene = False
+        _despublicar_turno(m.dni)
+
+
+def sincronizar_monitor(roster: dict, targets: dict):
+    """Monitor = roster (TODOS los choferes) MENOS los vigilados (esos los
+    publica el Target). Una entrada Monitor por chofer no-vigilado."""
+    for dni, ch in roster.items():
+        if dni in targets:
+            _monitor.pop(dni, None)        # pasó a vigilado → lo maneja el Target
+            continue
+        m = _monitor.get(dni)
+        if m is None:
+            _monitor[dni] = Monitor(ch)
+        else:                              # refrescar mail/clave por si cambiaron
+            if ch.get("email"):
+                m.email = ch["email"].strip().lower()
+            if ch.get("clave"):
+                m.clave = ch["clave"]
+            m.nombre = ch.get("nombre") or m.nombre
+    for dni in list(_monitor):             # sacar los que ya no van
+        if dni not in roster or dni in targets:
+            del _monitor[dni]
+
+
+def ciclo_monitor():
+    """Escanea unos pocos choferes vencidos del monitor por ciclo (en paralelo),
+    para no bloquear ni golpear de más a iTurnos. Solo si publicamos estado."""
+    if not _ESCRIBIR_ESTADO:
+        return
+    ahora = time.time()
+    vencidos = sorted(
+        (m for m in _monitor.values()
+         if m.credenciales_ok and ahora - m.ultimo_check > REFRESH_TURNOS_SEG),
+        key=lambda m: m.ultimo_check)[:MONITOR_BATCH]
+    if vencidos:
+        _en_paralelo(vencidos, _escanear_monitor_uno, max_hilos=MONITOR_BATCH)
 
 
 # ---- sincronización de targets con la config (hot reload) -----------------
@@ -506,6 +628,7 @@ def ciclo_latente(targets: dict, dry: bool):
             log("EXITO", t.nombre, f"REAGENDADO a {r.get('hora')} (franja '{t.franja}')")
             t.reagendar_hecho = True
             _reportar_estado(t, "reagendado", hora=r.get("hora"))
+            t.ultimo_check = 0.0   # refrescar_estado publica el turno nuevo
         elif r.get("motivo") == "tomado":
             log("LOG", t.nombre, f"{r.get('hora')} lo tomaron al reagendar, sigo")
         elif r.get("motivo") != "sin_slot_en_franja":
@@ -526,14 +649,16 @@ def main():
         f"— config: {fuente} (pid {os.getpid()})")
 
     targets: dict = {}
+    roster: dict = {}
     cfg = None
     ultimo_config = 0.0
     ultimo_datos = 0.0
+    ultimo_roster = 0.0
     modo_anterior = None
 
     while True:
         try:
-            # 1) refrescar la worklist (config) cada REFRESH_CONFIG_SEG
+            # 1) refrescar la worklist (config / vigilados) cada REFRESH_CONFIG_SEG
             if cfg is None or time.time() - ultimo_config > REFRESH_CONFIG_SEG:
                 nueva = leer_config(cfg)
                 if nueva is not None:
@@ -541,25 +666,33 @@ def main():
                     sincronizar_targets(cfg, targets)
                 ultimo_config = time.time()
 
-            if cfg is None:
-                log("LOG", "sistema", "sin config todavía (ver drop.ejemplo.json); espero")
-                time.sleep(ESPERA_SIN_CONFIG_SEG)
-                continue
-
-            activo = bool(cfg.get("activo", True))
-
-            # 2) re-traer unidad/mail de Firestore (refleja reasignaciones)
+            # 2) re-traer unidad/mail de los vigilados (refleja reasignaciones)
             if targets and time.time() - ultimo_datos > REFRESH_DATOS_SEG:
                 refrescar_datos_firestore(targets)
                 ultimo_datos = time.time()
 
-            # 3) re-chequear mis_turnos de a poco (sin bloquear el ciclo)
+            # 3) MONITOR: turnos reales de TODOS los choferes (no solo vigilados).
+            #    Read-only, independiente de la config y del interruptor. Solo si
+            #    publicamos estado (en dry/--archivo no).
+            if _ESCRIBIR_ESTADO and (not roster
+                                     or time.time() - ultimo_roster > REFRESH_DATOS_SEG):
+                try:
+                    roster = {c["dni"]: c for c in choferes.cargar_choferes()}
+                except Exception as e:
+                    log("LOG", "sistema", f"error cargando roster: {e}")
+                sincronizar_monitor(roster, targets)
+                ultimo_roster = time.time()
+            ciclo_monitor()
+
+            # 4) re-chequear mis_turnos de los vigilados de a poco (no bloquear)
             vencidos = sorted(
                 (t for t in targets.values()
                  if time.time() - t.ultimo_check > REFRESH_TURNOS_SEG),
                 key=lambda t: t.ultimo_check)[:MAX_REFRESH_POR_CICLO]
             for t in vencidos:
                 refrescar_estado(t)
+
+            activo = bool(cfg.get("activo", True)) if cfg else False
 
             # El drop time ya no importa: SIEMPRE latente (barre cada ~5 s).
             # `--agresivo` sigue disponible para testeo manual. La fecha y la

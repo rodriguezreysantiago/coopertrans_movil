@@ -713,6 +713,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Turnos reales de cada chofer en iTurnos (los popula el bot escaneando
+    // mis_turnos de todos). La app los lee para "Turnos concretados".
+    match /CACHATORE_TURNOS/{dni} {
+      allow read: if isAdminOrSupervisor();
+      allow write: if false;
+    }
+
     // ========================================================================
     // EMPRESAS_EMPLEADORAS — Póliza ART y F.931 a nivel empresa
     // ========================================================================

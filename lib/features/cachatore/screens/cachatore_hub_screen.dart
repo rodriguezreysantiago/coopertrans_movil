@@ -7,6 +7,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../models/cachatore_config.dart';
 import '../models/cachatore_estado_bot.dart';
 import '../models/cachatore_objetivo.dart';
+import '../models/cachatore_turno.dart';
 import '../models/franja_carga.dart';
 import '../services/cachatore_service.dart';
 
@@ -24,31 +25,18 @@ class CachatoreHubScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Cachatore — Turnos YPF',
-      body: StreamBuilder<List<CachatoreObjetivo>>(
-        stream: CachatoreService.streamObjetivos(),
-        builder: (ctx, snap) {
-          final todos = snap.data ?? const <CachatoreObjetivo>[];
-          final vigilados = todos.where((o) => !o.tieneTurno).toList();
-          final concretados = todos.where((o) => o.tieneTurno).toList();
-          final cargando = snap.connectionState == ConnectionState.waiting;
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              const _BotStatusCard(),
-              const SizedBox(height: 12),
-              const _MasterSwitch(),
-              const SizedBox(height: 18),
-              _SeccionVigilados(
-                vigilados: vigilados,
-                yaAgregados: todos.map((e) => e.dni).toSet(),
-                cargando: cargando,
-              ),
-              const SizedBox(height: 22),
-              _SeccionConcretados(concretados: concretados),
-              const SizedBox(height: 24),
-            ],
-          );
-        },
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: const [
+          _BotStatusCard(),
+          SizedBox(height: 12),
+          _MasterSwitch(),
+          SizedBox(height: 18),
+          _SeccionVigilados(),
+          SizedBox(height: 22),
+          _SeccionConcretados(),
+          SizedBox(height: 24),
+        ],
       ),
     );
   }
@@ -170,89 +158,90 @@ class _MasterSwitch extends StatelessWidget {
 // Sección: choferes vigilados (todavía sin turno)
 // ───────────────────────────────────────────────────────────────────────
 class _SeccionVigilados extends StatelessWidget {
-  final List<CachatoreObjetivo> vigilados;
-  final Set<String> yaAgregados;
-  final bool cargando;
-  const _SeccionVigilados({
-    required this.vigilados,
-    required this.yaAgregados,
-    required this.cargando,
-  });
+  const _SeccionVigilados();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+    return StreamBuilder<List<CachatoreObjetivo>>(
+      stream: CachatoreService.streamObjetivos(),
+      builder: (ctx, snap) {
+        final todos = snap.data ?? const <CachatoreObjetivo>[];
+        // Vigilados = los que el bot todavía está intentando conseguir turno.
+        final vigilados = todos.where((o) => !o.tieneTurno).toList();
+        final yaAgregados = todos.map((e) => e.dni).toSet();
+        final cargando = snap.connectionState == ConnectionState.waiting;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: Text(
-                'CHOFERES VIGILADOS (${vigilados.length})',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                    fontSize: 13),
-              ),
-            ),
-            FilledButton.icon(
-              onPressed: () => _abrirAlta(context),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Agregar'),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (cargando)
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Center(child: CircularProgressIndicator()),
-          )
-        else if (vigilados.isEmpty)
-          const AppCard(
-            child: Column(
+            Row(
               children: [
-                Icon(Icons.person_search_outlined,
-                    color: Colors.white24, size: 40),
-                SizedBox(height: 8),
-                Text('Sin choferes vigilados',
-                    style: TextStyle(
-                        color: Colors.white70,
+                Expanded(
+                  child: Text(
+                    'CHOFERES VIGILADOS (${vigilados.length})',
+                    style: const TextStyle(
+                        color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 14)),
-                SizedBox(height: 4),
-                Text(
-                  'Tocá "Agregar": elegís chofer, fecha y franja, y el bot le '
-                  'busca turno.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                        letterSpacing: 0.5,
+                        fontSize: 13),
+                  ),
+                ),
+                FilledButton.icon(
+                  onPressed: () => _abrirWizard(
+                    context,
+                    titulo: 'Agregar chofer',
+                    yaAgregados: yaAgregados,
+                    onConfirm: (dni, nombre, fecha, franja) =>
+                        CachatoreService.agregarObjetivo(
+                      dni: dni,
+                      nombre: nombre,
+                      fecha: fecha,
+                      franja: franja,
+                    ),
+                  ),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Agregar'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.accentCyan,
+                    foregroundColor: Colors.black,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  ),
                 ),
               ],
             ),
-          )
-        else
-          ...vigilados.map((o) => _VigiladoCard(objetivo: o)),
-      ],
-    );
-  }
-
-  Future<void> _abrirAlta(BuildContext context) {
-    return _abrirWizard(
-      context,
-      titulo: 'Agregar chofer',
-      yaAgregados: yaAgregados,
-      onConfirm: (dni, nombre, fecha, franja) => CachatoreService.agregarObjetivo(
-        dni: dni,
-        nombre: nombre,
-        fecha: fecha,
-        franja: franja,
-      ),
+            const SizedBox(height: 8),
+            if (cargando)
+              const Padding(
+                padding: EdgeInsets.all(24),
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (vigilados.isEmpty)
+              const AppCard(
+                child: Column(
+                  children: [
+                    Icon(Icons.person_search_outlined,
+                        color: Colors.white24, size: 40),
+                    SizedBox(height: 8),
+                    Text('Sin choferes vigilados',
+                        style: TextStyle(
+                            color: Colors.white70,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14)),
+                    SizedBox(height: 4),
+                    Text(
+                      'Tocá "Agregar": elegís chofer, fecha y franja, y el bot le '
+                      'busca turno.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                  ],
+                ),
+              )
+            else
+              ...vigilados.map((o) => _VigiladoCard(objetivo: o)),
+          ],
+        );
+      },
     );
   }
 }
@@ -384,48 +373,56 @@ class _VigiladoCard extends StatelessWidget {
 // Sección: turnos concretados (ya tienen turno)
 // ───────────────────────────────────────────────────────────────────────
 class _SeccionConcretados extends StatelessWidget {
-  final List<CachatoreObjetivo> concretados;
-  const _SeccionConcretados({required this.concretados});
+  const _SeccionConcretados();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text(
-          'TURNOS CONCRETADOS (${concretados.length})',
-          style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
-              fontSize: 13),
-        ),
-        const SizedBox(height: 8),
-        if (concretados.isEmpty)
-          const AppCard(
-            child: Text(
-              'Todavía no hay turnos sacados. Cuando el bot consiga uno, '
-              'el chofer aparece acá. Tocalo para reagendarlo.',
-              style: TextStyle(color: Colors.white38, fontSize: 12),
+    return StreamBuilder<List<CachatoreTurno>>(
+      stream: CachatoreService.streamTurnos(),
+      builder: (ctx, snap) {
+        final turnos = snap.data ?? const <CachatoreTurno>[];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'TURNOS CONCRETADOS (${turnos.length})',
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                  fontSize: 13),
             ),
-          )
-        else
-          ...concretados.map((o) => _ConcretadoCard(objetivo: o)),
-      ],
+            const SizedBox(height: 8),
+            if (turnos.isEmpty)
+              const AppCard(
+                child: Text(
+                  'No hay turnos sacados. El bot chequea en iTurnos los turnos de '
+                  'CADA chofer (los haya sacado el bot o no); cuando aparece uno, '
+                  'tocalo para reagendarlo.',
+                  style: TextStyle(color: Colors.white38, fontSize: 12),
+                ),
+              )
+            else
+              ...turnos.map((t) => _ConcretadoCard(turno: t)),
+          ],
+        );
+      },
     );
   }
 }
 
 class _ConcretadoCard extends StatelessWidget {
-  final CachatoreObjetivo objetivo;
-  const _ConcretadoCard({required this.objetivo});
+  final CachatoreTurno turno;
+  const _ConcretadoCard({required this.turno});
 
   @override
   Widget build(BuildContext context) {
-    final o = objetivo;
-    final reagendando = o.reagendar;
+    final t = turno;
+    final cuando = (t.cuando ?? '').isNotEmpty
+        ? t.cuando!
+        : 'Turno${t.hora != null ? ' ${t.hora}' : ''}';
     return AppCard(
-      onTap: () => _reagendar(context, o),
+      onTap: () => _reagendar(context),
       child: Row(
         children: [
           const Icon(Icons.event_available,
@@ -436,7 +433,7 @@ class _ConcretadoCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  o.nombre ?? o.dni,
+                  t.nombre ?? t.dni,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -446,25 +443,12 @@ class _ConcretadoCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  (o.estadoTurno ?? '').isNotEmpty
-                      ? o.estadoTurno!
-                      : 'Turno ${o.estado.etiqueta.toLowerCase()}'
-                          '${o.estadoHora != null ? ' ${o.estadoHora}' : ''}',
+                  cuando,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                       color: AppColors.accentGreen, fontSize: 12),
                 ),
-                if (reagendando) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'Reagendando → ${o.objetivoLabel}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: AppColors.accentAmber, fontSize: 11),
-                  ),
-                ],
               ],
             ),
           ),
@@ -482,16 +466,14 @@ class _ConcretadoCard extends StatelessWidget {
     );
   }
 
-  Future<void> _reagendar(BuildContext context, CachatoreObjetivo o) {
+  Future<void> _reagendar(BuildContext context) {
     return _abrirWizard(
       context,
-      titulo: 'Reagendar ${o.nombre ?? o.dni}',
-      dniFijo: o.dni,
-      nombreFijo: o.nombre,
-      fechaInicial: o.fecha,
-      franjaInicial: o.franja,
+      titulo: 'Reagendar ${turno.nombre ?? turno.dni}',
+      dniFijo: turno.dni,
+      nombreFijo: turno.nombre,
       onConfirm: (_, __, fecha, franja) => CachatoreService.reagendarObjetivo(
-          dni: o.dni, fecha: fecha, franja: franja),
+          dni: turno.dni, fecha: fecha, franja: franja),
     );
   }
 }
