@@ -374,9 +374,12 @@ def _agresivo_async(t: Target, dry: bool):
         t.logueado = False
         return
     fobj = resolver_fecha(t.fecha)
-    slots = iturnos.slots_en_franja(iturnos.parsear_disponibilidad(html)["slots"], t.franja)
-    if fobj:
-        slots = [s for s in slots if s["fecha"] == fobj]
+    ahora = datetime.now()
+    slots = sorted(
+        (s for s in iturnos.slots_en_franja(
+            iturnos.parsear_disponibilidad(html)["slots"], t.franja)
+         if iturnos.slot_es_futuro(s, ahora) and (fobj is None or s["fecha"] == fobj)),
+        key=lambda s: s["iso"])   # el más próximo primero
     if not slots:
         return
     log("LOG", t.nombre, f"slot LIBRE {slots[0]['fecha']} {slots[0]['hora']} → reservando")
@@ -560,7 +563,7 @@ def sincronizar_targets(cfg: dict, targets: dict):
         if not t:
             continue
         nf = spec.get("franja")
-        if nf in iturnos.FRANJAS and nf != t.franja:
+        if iturnos.franja_valida(nf) and nf != t.franja:
             log("LOG", "sistema", f"{t.nombre}: franja {t.franja} → {nf}")
             t.franja = nf
         if spec.get("fecha") != t.fecha:
@@ -584,7 +587,7 @@ def sincronizar_targets(cfg: dict, targets: dict):
                 log("ERROR", dni, "no está en la base (¿tanque/excluido/inactivo?)")
                 continue
             franja = spec.get("franja")
-            if franja not in iturnos.FRANJAS:
+            if not iturnos.franja_valida(franja):
                 log("ERROR", ch.get("nombre") or dni, f"franja inválida: {franja!r}")
                 continue
             t = Target(ch, spec.get("fecha"), franja, bool(spec.get("reagendar")))
@@ -637,15 +640,19 @@ def ciclo_latente(targets: dict, dry: bool):
 
     # asignar slots LIBRES a los choferes que necesitan turno (uno por slot),
     # respetando la FECHA y la FRANJA de cada chofer.
+    ahora = datetime.now()
     usados, asignaciones = set(), []
     for t in targets.values():
         if t.tiene_turno or not t.credenciales_ok or not t.patente:
             continue
         fobj = resolver_fecha(t.fecha)
-        cand = [s for s in libres
-                if s["iso"] not in usados
-                and (fobj is None or s["fecha"] == fobj)
-                and iturnos.hora_en_franja(s["hora"], t.franja)]
+        cand = sorted(
+            (s for s in libres
+             if s["iso"] not in usados
+             and (fobj is None or s["fecha"] == fobj)
+             and iturnos.hora_en_franja(s["hora"], t.franja)
+             and iturnos.slot_es_futuro(s, ahora)),
+            key=lambda s: s["iso"])   # el más próximo primero
         if cand:
             usados.add(cand[0]["iso"])
             asignaciones.append((t, cand[0]))

@@ -24,6 +24,7 @@ Capturado en el drop real del 2026-05-20:
 La heurística de éxito de reservar() se afina con la 1ª reserva real.
 """
 import re
+from datetime import datetime
 from curl_cffi import requests as cf
 from bs4 import BeautifulSoup
 
@@ -56,6 +57,16 @@ FRANJAS = {
     "noche":     ("18:00", "23:30"),
 }
 
+# Comodín: "cualquier horario" (sin ventana). La UI lo manda como codigo
+# 'cualquiera' y el bot agarra cualquier slot; combinado con fecha=None es
+# "el primer turno futuro que se libere, sea la fecha y la hora que sea".
+CUALQUIERA = "cualquiera"
+
+
+def franja_valida(franja_key: str) -> bool:
+    """`True` para las 4 franjas o el comodín 'cualquiera'."""
+    return franja_key == CUALQUIERA or franja_key in FRANJAS
+
 
 def _hhmm_a_min(hhmm: str) -> int:
     h, m = hhmm.split(":")
@@ -63,10 +74,26 @@ def _hhmm_a_min(hhmm: str) -> int:
 
 
 def hora_en_franja(hora_slot: str, franja_key: str) -> bool:
-    """¿El horario del slot (ej '06:30') cae dentro de la franja elegida?"""
+    """¿El horario del slot (ej '06:30') cae dentro de la franja elegida?
+    El comodín 'cualquiera' acepta cualquier hora."""
+    if franja_key == CUALQUIERA:
+        return True
     ini, fin = FRANJAS[franja_key]
     t = _hhmm_a_min(hora_slot)
     return _hhmm_a_min(ini) <= t <= _hhmm_a_min(fin)
+
+
+def slot_es_futuro(slot: dict, ahora: datetime = None) -> bool:
+    """`True` si el slot (fecha+hora del iso 'AAAA-MM-DDTHH:MM') es ESTRICTAMENTE
+    posterior a `ahora` (hora local del equipo = ART). Evita reservar un horario
+    ya pasado — clave para 'cualquier horario', donde no hay ventana de franja
+    que descarte los de más temprano hoy. Si el iso no parsea, no lo descarta."""
+    iso = slot.get("iso") or ""
+    try:
+        dt = datetime.strptime(iso, "%Y-%m-%dT%H:%M")
+    except (ValueError, TypeError):
+        return True
+    return dt > (ahora or datetime.now())
 
 
 def parsear_disponibilidad(html: str) -> dict:

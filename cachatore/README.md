@@ -25,7 +25,12 @@ estado; reutiliza los datos de la app (mail + patente asignada del chofer).
 - Escribe el **latido** del bot cada ~5 s (lo lee la app para mostrarlo vivo).
 - 4 franjas: `madrugada` 00:00–05:30 · `manana` 06:00–11:30 ·
   `tarde` 12:00–17:30 · `noche` 18:00–23:30. Toma cualquier slot libre dentro
-  de la franja del chofer.
+  de la franja del chofer. Además el comodín **`cualquiera`** ("cualquier
+  horario", sin ventana): combinado con `fecha=None` agarra el **primer turno
+  futuro** que se libere, sea la fecha y la hora que sea.
+- **Solo slots futuros**: nunca reserva un horario ya pasado (guard
+  `iturnos.slot_es_futuro`, hora local = ART), y entre los candidatos elige
+  el **más próximo** primero.
 - **Control desde la app**: el bot lee su worklist de **Firestore** (lo que
   edita el módulo Cachatore de la app: `CACHATORE_CONFIG/global` +
   `CACHATORE_OBJETIVOS/{dni}`) y devuelve el estado en vivo

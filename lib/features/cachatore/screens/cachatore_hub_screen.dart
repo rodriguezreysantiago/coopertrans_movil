@@ -628,7 +628,7 @@ class _WizardSheetState extends State<_WizardSheet> {
   }
 
   Widget _header() {
-    final pasos = ['Chofer', 'Fecha', 'Franja'];
+    final pasos = ['Chofer', 'Fecha', 'Horario'];
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
       child: Row(
@@ -784,7 +784,7 @@ class _WizardSheetState extends State<_WizardSheet> {
           leading: const Icon(Icons.all_inclusive, color: AppColors.accentCyan),
           title: const Text('Cualquier fecha',
               style: TextStyle(color: Colors.white)),
-          subtitle: const Text('Agarra el primero que se libere en la franja',
+          subtitle: const Text('Agarra el primero que se libere en el horario elegido',
               style: TextStyle(color: Colors.white38, fontSize: 12)),
           tileColor: Colors.white.withValues(alpha: 0.04),
           shape: RoundedRectangleBorder(
@@ -847,15 +847,19 @@ class _WizardSheetState extends State<_WizardSheet> {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: Colors.white60, fontSize: 13)),
         const SizedBox(height: 4),
-        const Text('Elegí la franja horaria',
+        const Text('Elegí el horario',
             style: TextStyle(
                 color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
         const SizedBox(height: 12),
         ...FranjaCarga.values.map((f) {
           final sel = f == widget.franjaInicial;
+          final esC = f.esCualquiera;
           return Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: ListTile(
+              leading: esC
+                  ? const Icon(Icons.all_inclusive, color: AppColors.accentCyan)
+                  : null,
               tileColor: Colors.white.withValues(alpha: 0.04),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -864,12 +868,15 @@ class _WizardSheetState extends State<_WizardSheet> {
                         ? AppColors.accentCyan.withValues(alpha: 0.6)
                         : Colors.white12),
               ),
-              title: Text(f.rango,
+              // Comodín: mostramos la etiqueta arriba; las 4 franjas muestran el
+              // rango horario (los números) arriba y la etiqueta abajo.
+              title: Text(esC ? f.etiqueta : f.rango,
                   style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 17)),
-              subtitle: Text(f.etiqueta,
+              subtitle: Text(
+                  esC ? 'El primero que se libere, a cualquier hora' : f.etiqueta,
                   style: const TextStyle(color: Colors.white54, fontSize: 12)),
               trailing: _guardando
                   ? const SizedBox(

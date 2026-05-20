@@ -96,8 +96,11 @@ class CachatoreObjetivo {
         '${d.month.toString().padLeft(2, '0')}-${d.year}';
   }
 
-  /// Resumen del objetivo para mostrar: "Cualquier fecha · Mañana (06:00 a 11:30)".
-  String get objetivoLabel => '$fechaDisplay · ${franja.etiqueta} (${franja.rango})';
+  /// Resumen del objetivo para mostrar: "Cualquier fecha · Mañana (06:00 a 11:30)"
+  /// o, con el comodín, "Cualquier fecha · Cualquier horario" (sin paréntesis).
+  String get objetivoLabel => franja.esCualquiera
+      ? '$fechaDisplay · ${franja.etiqueta}'
+      : '$fechaDisplay · ${franja.etiqueta} (${franja.rango})';
 
   /// `true` si el chofer ya tiene turno conseguido por el bot.
   bool get tieneTurno =>

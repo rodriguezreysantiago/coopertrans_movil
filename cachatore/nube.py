@@ -24,7 +24,7 @@ COL_ESTADO = "CACHATORE_ESTADO"
 DOC_ESTADO = "bot"
 COL_TURNOS = "CACHATORE_TURNOS"
 
-FRANJAS_VALIDAS = {"madrugada", "manana", "tarde", "noche"}
+FRANJAS_VALIDAS = {"madrugada", "manana", "tarde", "noche", "cualquiera"}
 
 # FieldFilter (API nueva) para evitar el warning de "positional arguments".
 try:  # pragma: no cover
