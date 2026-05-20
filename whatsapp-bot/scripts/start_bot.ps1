@@ -146,17 +146,16 @@ Write-Host "RECORDATORIO: si tenes el bot tambien en otra PC, asegurate" -Foregr
 Write-Host "de que esa otra este APAGADA o el bot detenido alla." -ForegroundColor Yellow
 Write-Host ""
 
-# Abrir ventana con los logs en vivo. Al estar el sistema en UTF-8
-# global, el QR ASCII y los acentos se renderizan bien sin parametros
-# extra. Pasamos -Encoding UTF8 igual por defensa en profundidad.
-$logFile = Join-Path $logsDir 'bot.out.log'
-$tailCmd = "`$Host.UI.RawUI.WindowTitle='Logs Bot WhatsApp'; Get-Content '$logFile' -Tail 80 -Wait -Encoding UTF8"
+# Abrir ventana con los logs en vivo usando monitor_logs.ps1 (visor v3):
+# resiste la rotacion del log (no se "cuelga") y muestra ademas el auto-update.
+# Antes usaba un Get-Content -Wait inline que quedaba zombie al rotar el log.
+$verLogs = Join-Path $PSScriptRoot 'monitor_logs.ps1'
 Write-Host "Abriendo ventana con los logs en vivo..." -ForegroundColor Cyan
 try {
     Start-Process powershell -ArgumentList @(
-        '-NoProfile', '-NoExit', '-Command', $tailCmd
+        '-NoProfile', '-NoExit', '-ExecutionPolicy', 'Bypass', '-File', $verLogs
     ) -ErrorAction Stop | Out-Null
 } catch {
     Write-Host "No pude abrir la ventana de logs. Abrila a mano:" -ForegroundColor Yellow
-    Write-Host "  Get-Content '$logFile' -Tail 50 -Wait" -ForegroundColor Yellow
+    Write-Host "  .\scripts\monitor_logs.ps1" -ForegroundColor Yellow
 }

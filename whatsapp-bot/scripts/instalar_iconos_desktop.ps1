@@ -1,161 +1,139 @@
-# Crea 3 iconos en el escritorio del user actual:
-#   - "Iniciar Bot WhatsApp"  -> ejecuta scripts\start_bot.ps1
-#   - "Detener Bot WhatsApp"  -> ejecuta scripts\stop_bot.ps1
-#   - "PowerShell Admin - Bot" -> abre PS admin en la raiz del bot
+# Crea los iconos de operacion en el escritorio del user actual (PC dedicada).
 #
-# Pensado para la PC dedicada al bot: en lugar de abrir PowerShell y
-# tipear comandos, el operador hace doble click en el escritorio.
+#   BOT WHATSAPP:
+#     - Iniciar Bot WhatsApp   -> start_bot.ps1 (arranca + abre los logs) [admin]
+#     - Detener Bot WhatsApp   -> stop_bot.ps1                            [admin]
+#     - Logs Bot WhatsApp      -> monitor_logs.ps1 (solo ver logs)        [normal]
+#     - PowerShell Admin - Bot -> shell admin parada en whatsapp-bot/     [admin]
+#   CACHATORE (turnos YPF):
+#     - Iniciar Cachatore      -> iniciar_cachatore.ps1 (arranca + logs)  [admin]
+#     - Detener Cachatore      -> detener_cachatore.ps1                   [admin]
+#     - Logs Cachatore         -> ver_logs_vigia.ps1 (solo ver logs)      [normal]
 #
-# Los 3 shortcuts vienen con el flag "Run as Administrator" porque:
-#   - Start/Stop-Service requiere admin (sino el script interno hace
-#     un segundo UAC prompt y queda feo).
-#   - La shell admin sirve justamente para tareas de mantenimiento
-#     (git pull, npm install, debug del servicio, etc.).
+# Los de iniciar/detener vienen con "Run as Administrator" (Start/Stop-Service
+# lo necesita). Los de "Logs" NO (solo leen el archivo de log) -> no piden UAC.
 #
-# El icono visual es de la libreria estandar de Windows (imageres.dll)
-# para que se vea consistente con el resto del sistema:
-#   - Play verde para Iniciar
-#   - Stop rojo para Detener
-#   - Consola para la PowerShell admin
+# Iconos de la libreria estandar de Windows: play verde (iniciar), stop rojo
+# (detener), consola PowerShell (logs / shell).
 #
-# Idempotente: se puede correr de nuevo, sobreescribe los .lnk.
+# Idempotente: se puede correr de nuevo (sobreescribe los .lnk).
+# DESINSTALAR: borrar los .lnk del escritorio.
 #
-# USO:
 #   .\instalar_iconos_desktop.ps1
-#
-# DESINSTALAR: borrar los 3 .lnk del escritorio.
 
 $ErrorActionPreference = 'Stop'
 
-# Paths -------------------------------------------------------------
-$scriptsDir = $PSScriptRoot
-$botDir = Split-Path $scriptsDir -Parent  # whatsapp-bot/
-$startScript = Join-Path $scriptsDir 'start_bot.ps1'
-$stopScript = Join-Path $scriptsDir 'stop_bot.ps1'
+$scriptsDir   = $PSScriptRoot                      # whatsapp-bot\scripts
+$botDir       = Split-Path $scriptsDir -Parent     # whatsapp-bot
+$repoRoot     = Split-Path $botDir -Parent         # raiz del repo
+$cachatoreDir = Join-Path $repoRoot 'cachatore'
+$desktopDir   = [Environment]::GetFolderPath('Desktop')
+$psIcon       = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0"
 
-foreach ($s in @($startScript, $stopScript)) {
-    if (-not (Test-Path $s)) {
-        Write-Host "ERROR no encuentro $s" -ForegroundColor Red
-        exit 1
-    }
-}
-
-$desktopDir = [Environment]::GetFolderPath('Desktop')
-$lnkStart = Join-Path $desktopDir 'Iniciar Bot WhatsApp.lnk'
-$lnkStop = Join-Path $desktopDir 'Detener Bot WhatsApp.lnk'
-$lnkShell = Join-Path $desktopDir 'PowerShell Admin - Bot.lnk'
-
-Write-Host ''
-Write-Host '====================================================' -ForegroundColor Cyan
-Write-Host '  ICONOS DE ESCRITORIO - Bot WhatsApp' -ForegroundColor Cyan
-Write-Host '====================================================' -ForegroundColor Cyan
-
-# Helper: crea un .lnk + le pega el flag RunAsAdmin -----------------
-#
-# El flag "Run as Administrator" NO se puede setear via WScript.Shell
-# directamente. La tecnica estandar es:
-#   1. Crear el shortcut normal con WScript.Shell.
-#   2. Leer los bytes del .lnk.
-#   3. Setear bit 0x20 en el byte 0x15 (parte de LinkFlags) que es el
-#      "RunAsUser" flag del formato MS-SHLLINK.
-#   4. Escribir los bytes de vuelta.
-#
-# Probado y funcional en Windows 10/11.
-function New-AdminShortcut {
+# Crea un .lnk a powershell.exe que ejecuta un .ps1. Con -Admin le pega el flag
+# "Run as Administrator" (bit 0x20 del byte 0x15 del formato MS-SHLLINK; no se
+# puede via WScript.Shell). Con -NoExit la ventana queda abierta (para logs).
+function New-Lnk {
     param(
-        [Parameter(Mandatory)] [string]$LnkPath,
-        [Parameter(Mandatory)] [string]$Arguments,
-        [Parameter(Mandatory)] [string]$WorkingDirectory,
-        [Parameter(Mandatory)] [string]$IconResource,
-        [Parameter(Mandatory)] [string]$Description
+        [Parameter(Mandatory)][string]$Nombre,
+        [Parameter(Mandatory)][string]$File,
+        [Parameter(Mandatory)][string]$WorkingDirectory,
+        [Parameter(Mandatory)][string]$IconResource,
+        [Parameter(Mandatory)][string]$Description,
+        [switch]$Admin,
+        [switch]$NoExit
     )
-    # Crear shortcut basico
+    $lnk = Join-Path $desktopDir "$Nombre.lnk"
+    if (-not (Test-Path $File)) {
+        Write-Host "  SKIP $Nombre (no encuentro $File)" -ForegroundColor Yellow
+        return
+    }
+    $noexit = if ($NoExit) { '-NoExit ' } else { '' }
+    $argLine = "-NoProfile $noexit-ExecutionPolicy Bypass -File `"$File`""
     $shell = New-Object -ComObject WScript.Shell
-    $shortcut = $shell.CreateShortcut($LnkPath)
-    $shortcut.TargetPath = 'powershell.exe'
-    $shortcut.Arguments = $Arguments
-    $shortcut.WorkingDirectory = $WorkingDirectory
-    $shortcut.WindowStyle = 1  # Normal
-    $shortcut.Description = $Description
-    $shortcut.IconLocation = $IconResource
-    $shortcut.Save()
+    $sc = $shell.CreateShortcut($lnk)
+    $sc.TargetPath = 'powershell.exe'
+    $sc.Arguments = $argLine
+    $sc.WorkingDirectory = $WorkingDirectory
+    $sc.WindowStyle = 1
+    $sc.Description = $Description
+    $sc.IconLocation = $IconResource
+    $sc.Save()
+    if ($Admin) {
+        $bytes = [System.IO.File]::ReadAllBytes($lnk)
+        $bytes[0x15] = $bytes[0x15] -bor 0x20
+        [System.IO.File]::WriteAllBytes($lnk, $bytes)
+    }
+    Write-Host "  OK $Nombre" -ForegroundColor Green
+}
 
-    # Setear flag RunAsAdmin
-    $bytes = [System.IO.File]::ReadAllBytes($LnkPath)
+Write-Host ''
+Write-Host '====================================================' -ForegroundColor Cyan
+Write-Host '  ICONOS DE ESCRITORIO - Bot WhatsApp + Cachatore' -ForegroundColor Cyan
+Write-Host '====================================================' -ForegroundColor Cyan
+Write-Host ''
+Write-Host 'BOT WHATSAPP:' -ForegroundColor White
+
+New-Lnk -Nombre 'Iniciar Bot WhatsApp' `
+    -File (Join-Path $scriptsDir 'start_bot.ps1') -WorkingDirectory $scriptsDir `
+    -IconResource 'imageres.dll,98' -Admin `
+    -Description 'Inicia el bot WhatsApp y abre la ventana de logs (admin)'
+
+New-Lnk -Nombre 'Detener Bot WhatsApp' `
+    -File (Join-Path $scriptsDir 'stop_bot.ps1') -WorkingDirectory $scriptsDir `
+    -IconResource 'imageres.dll,100' -Admin `
+    -Description 'Detiene el bot WhatsApp (admin)'
+
+New-Lnk -Nombre 'Logs Bot WhatsApp' `
+    -File (Join-Path $scriptsDir 'monitor_logs.ps1') -WorkingDirectory $scriptsDir `
+    -IconResource $psIcon -NoExit `
+    -Description 'Ventana de logs en vivo del bot WhatsApp'
+
+# PowerShell Admin - Bot: shell admin parada en whatsapp-bot/ (no ejecuta un
+# .ps1; sirve para tareas manuales). Caso especial, no usa New-Lnk.
+try {
+    $lnkShell = Join-Path $desktopDir 'PowerShell Admin - Bot.lnk'
+    $shell = New-Object -ComObject WScript.Shell
+    $sc = $shell.CreateShortcut($lnkShell)
+    $sc.TargetPath = 'powershell.exe'
+    $sc.Arguments = '-NoExit -NoProfile'
+    $sc.WorkingDirectory = $botDir
+    $sc.WindowStyle = 1
+    $sc.Description = "PowerShell admin parado en $botDir"
+    $sc.IconLocation = $psIcon
+    $sc.Save()
+    $bytes = [System.IO.File]::ReadAllBytes($lnkShell)
     $bytes[0x15] = $bytes[0x15] -bor 0x20
-    [System.IO.File]::WriteAllBytes($LnkPath, $bytes)
+    [System.IO.File]::WriteAllBytes($lnkShell, $bytes)
+    Write-Host '  OK PowerShell Admin - Bot' -ForegroundColor Green
+} catch {
+    Write-Host "  FAIL PowerShell Admin - Bot: $($_.Exception.Message)" -ForegroundColor Red
 }
 
-# Crear "Iniciar Bot WhatsApp" --------------------------------------
 Write-Host ''
-Write-Host '[1/3] Creando "Iniciar Bot WhatsApp.lnk"...' -ForegroundColor Cyan
-try {
-    New-AdminShortcut `
-        -LnkPath $lnkStart `
-        -Arguments "-NoProfile -ExecutionPolicy Bypass -File `"$startScript`"" `
-        -WorkingDirectory $scriptsDir `
-        -IconResource 'imageres.dll,98' `
-        -Description 'Inicia el servicio CoopertransMovilBot (requiere admin)'
-    Write-Host "  OK $lnkStart" -ForegroundColor Green
-} catch {
-    Write-Host "  FAIL $($_.Exception.Message)" -ForegroundColor Red
-    exit 1
-}
+Write-Host 'CACHATORE (turnos YPF):' -ForegroundColor White
 
-# Crear "Detener Bot WhatsApp" --------------------------------------
-Write-Host ''
-Write-Host '[2/3] Creando "Detener Bot WhatsApp.lnk"...' -ForegroundColor Cyan
-try {
-    New-AdminShortcut `
-        -LnkPath $lnkStop `
-        -Arguments "-NoProfile -ExecutionPolicy Bypass -File `"$stopScript`"" `
-        -WorkingDirectory $scriptsDir `
-        -IconResource 'imageres.dll,100' `
-        -Description 'Detiene el servicio CoopertransMovilBot (requiere admin)'
-    Write-Host "  OK $lnkStop" -ForegroundColor Green
-} catch {
-    Write-Host "  FAIL $($_.Exception.Message)" -ForegroundColor Red
-    exit 1
-}
+New-Lnk -Nombre 'Iniciar Cachatore' `
+    -File (Join-Path $cachatoreDir 'iniciar_cachatore.ps1') -WorkingDirectory $cachatoreDir `
+    -IconResource 'imageres.dll,98' -Admin `
+    -Description 'Inicia el cachatore (turnos YPF) y abre la ventana de logs (admin)'
 
-# Crear "PowerShell Admin - Bot" ------------------------------------
-# Abre PS admin parado en la raiz del bot (whatsapp-bot/), sin
-# ejecutar ningun script. Sirve para tareas manuales: git pull,
-# npm install, debug, ver status del servicio, etc.
-#
-# -NoExit para que la ventana quede abierta despues de cargar el
-# profile (sino se cerraria sola al no haber -File ni -Command).
-Write-Host ''
-Write-Host '[3/3] Creando "PowerShell Admin - Bot.lnk"...' -ForegroundColor Cyan
-try {
-    New-AdminShortcut `
-        -LnkPath $lnkShell `
-        -Arguments '-NoExit -NoProfile' `
-        -WorkingDirectory $botDir `
-        -IconResource "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe,0" `
-        -Description "PowerShell admin parado en $botDir"
-    Write-Host "  OK $lnkShell" -ForegroundColor Green
-} catch {
-    Write-Host "  FAIL $($_.Exception.Message)" -ForegroundColor Red
-    exit 1
-}
+New-Lnk -Nombre 'Detener Cachatore' `
+    -File (Join-Path $cachatoreDir 'detener_cachatore.ps1') -WorkingDirectory $cachatoreDir `
+    -IconResource 'imageres.dll,100' -Admin `
+    -Description 'Detiene el cachatore (turnos YPF) (admin)'
+
+New-Lnk -Nombre 'Logs Cachatore' `
+    -File (Join-Path $cachatoreDir 'ver_logs_vigia.ps1') -WorkingDirectory $cachatoreDir `
+    -IconResource $psIcon -NoExit `
+    -Description 'Ventana de logs en vivo del cachatore (turnos YPF)'
 
 Write-Host ''
 Write-Host '====================================================' -ForegroundColor Green
-Write-Host '  ICONOS INSTALADOS' -ForegroundColor Green
+Write-Host '  LISTO - revisa el escritorio' -ForegroundColor Green
 Write-Host '====================================================' -ForegroundColor Green
 Write-Host ''
-Write-Host '  Ya tenes 3 iconos en el escritorio:' -ForegroundColor White
-Write-Host '    - Iniciar Bot WhatsApp     (icono play verde)' -ForegroundColor Green
-Write-Host '    - Detener Bot WhatsApp     (icono stop rojo)' -ForegroundColor Red
-Write-Host '    - PowerShell Admin - Bot   (icono PS azul)' -ForegroundColor Cyan
-Write-Host ''
-Write-Host '  Doble click en cada uno te pide UAC (admin) y:' -ForegroundColor Cyan
-Write-Host '    - Iniciar / Detener        ejecutan el script' -ForegroundColor Cyan
-Write-Host '    - PowerShell Admin - Bot   abre PS parado en' -ForegroundColor Cyan
-Write-Host "                                 $botDir" -ForegroundColor Cyan
-Write-Host '                                 para tareas manuales' -ForegroundColor Cyan
-Write-Host '                                 (git pull, npm i, debug)' -ForegroundColor Cyan
-Write-Host ''
+Write-Host '  Iniciar/Detener piden UAC (admin). Los de "Logs" no.' -ForegroundColor Cyan
+Write-Host '  "Iniciar ..." arranca el servicio Y abre los logs.' -ForegroundColor Cyan
 Write-Host '  Para desinstalar: borrar los .lnk del escritorio.' -ForegroundColor DarkGray
 Write-Host ''
