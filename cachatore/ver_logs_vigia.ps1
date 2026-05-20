@@ -97,7 +97,15 @@ $posMain = (Get-Item $logFile).Length
 $posAu = if (Test-Path $auLog) { (Get-Item $auLog).Length } else { 0 }
 
 $pintarMain = { param($l) Write-Color $l }
-$pintarAu = { param($l) Write-Host "  [auto-update] $l" -ForegroundColor Cyan }
+# En la ventana del CACHATORE mostramos del auto-update SOLO el aviso de pull y
+# lo del propio cachatore. Lo del bot WhatsApp (su Stop/Start, npm, smoke test)
+# se omite aca: va en la ventana del bot.
+$pintarAu = {
+    param($l)
+    if ($l -match 'cachatore|PULL EN PROCESO|git (fetch|pull)|Excepcion no manejada') {
+        Write-Host "  [auto-update] $l" -ForegroundColor Cyan
+    }
+}
 
 while ($true) {
     Start-Sleep -Milliseconds 700

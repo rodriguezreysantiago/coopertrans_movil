@@ -127,7 +127,14 @@ $posMain = (Get-Item $outLog).Length
 $posAu = if (Test-Path $auLog) { (Get-Item $auLog).Length } else { 0 }
 
 $pintarMain = { param($l) Write-Color $l }
-$pintarAu = { param($l) Write-Host "  [auto-update] $l" -ForegroundColor Cyan }
+# En la ventana del BOT mostramos del auto-update SOLO el aviso de pull y lo del
+# propio bot. Lo del cachatore se omite aca: va en la ventana del cachatore.
+$pintarAu = {
+    param($l)
+    if ($l -match 'CoopertransMovilBot|whatsapp-bot|smoke|npm|DEPLOY|PULL EN PROCESO|git (fetch|pull)|Excepcion no manejada') {
+        Write-Host "  [auto-update] $l" -ForegroundColor Cyan
+    }
+}
 
 while ($true) {
     Start-Sleep -Milliseconds 700
