@@ -48,8 +48,11 @@ function New-Lnk {
         Write-Host "  SKIP $Nombre (no encuentro $File)" -ForegroundColor Yellow
         return
     }
-    $noexit = if ($NoExit) { '-NoExit ' } else { '' }
-    $argLine = "-NoProfile $noexit-ExecutionPolicy Bypass -File `"$File`""
+    # OJO: la variable NO puede llamarse $noexit -> en PowerShell las variables
+    # son case-insensitive, asi que colisionaria con el switch $NoExit y al
+    # asignarle un string falla con "no se puede convertir '' a SwitchParameter".
+    $neArg = if ($NoExit) { '-NoExit ' } else { '' }
+    $argLine = "-NoProfile $neArg-ExecutionPolicy Bypass -File `"$File`""
     $shell = New-Object -ComObject WScript.Shell
     $sc = $shell.CreateShortcut($lnk)
     $sc.TargetPath = 'powershell.exe'
@@ -74,20 +77,11 @@ Write-Host '====================================================' -ForegroundCol
 Write-Host ''
 Write-Host 'BOT WHATSAPP:' -ForegroundColor White
 
-New-Lnk -Nombre 'Iniciar Bot WhatsApp' `
-    -File (Join-Path $scriptsDir 'start_bot.ps1') -WorkingDirectory $scriptsDir `
-    -IconResource 'imageres.dll,98' -Admin `
-    -Description 'Inicia el bot WhatsApp y abre la ventana de logs (admin)'
+New-Lnk -Nombre 'Iniciar Bot WhatsApp' -File (Join-Path $scriptsDir 'start_bot.ps1') -WorkingDirectory $scriptsDir -IconResource 'imageres.dll,98' -Description 'Inicia el bot WhatsApp y abre la ventana de logs (admin)' -Admin
 
-New-Lnk -Nombre 'Detener Bot WhatsApp' `
-    -File (Join-Path $scriptsDir 'stop_bot.ps1') -WorkingDirectory $scriptsDir `
-    -IconResource 'imageres.dll,100' -Admin `
-    -Description 'Detiene el bot WhatsApp (admin)'
+New-Lnk -Nombre 'Detener Bot WhatsApp' -File (Join-Path $scriptsDir 'stop_bot.ps1') -WorkingDirectory $scriptsDir -IconResource 'imageres.dll,100' -Description 'Detiene el bot WhatsApp (admin)' -Admin
 
-New-Lnk -Nombre 'Logs Bot WhatsApp' `
-    -File (Join-Path $scriptsDir 'monitor_logs.ps1') -WorkingDirectory $scriptsDir `
-    -IconResource $psIcon -NoExit `
-    -Description 'Ventana de logs en vivo del bot WhatsApp'
+New-Lnk -Nombre 'Logs Bot WhatsApp' -File (Join-Path $scriptsDir 'monitor_logs.ps1') -WorkingDirectory $scriptsDir -IconResource $psIcon -Description 'Ventana de logs en vivo del bot WhatsApp' -NoExit
 
 # PowerShell Admin - Bot: shell admin parada en whatsapp-bot/ (no ejecuta un
 # .ps1; sirve para tareas manuales). Caso especial, no usa New-Lnk.
@@ -113,20 +107,11 @@ try {
 Write-Host ''
 Write-Host 'CACHATORE (turnos YPF):' -ForegroundColor White
 
-New-Lnk -Nombre 'Iniciar Cachatore' `
-    -File (Join-Path $cachatoreDir 'iniciar_cachatore.ps1') -WorkingDirectory $cachatoreDir `
-    -IconResource 'imageres.dll,98' -Admin `
-    -Description 'Inicia el cachatore (turnos YPF) y abre la ventana de logs (admin)'
+New-Lnk -Nombre 'Iniciar Cachatore' -File (Join-Path $cachatoreDir 'iniciar_cachatore.ps1') -WorkingDirectory $cachatoreDir -IconResource 'imageres.dll,98' -Description 'Inicia el cachatore (turnos YPF) y abre la ventana de logs (admin)' -Admin
 
-New-Lnk -Nombre 'Detener Cachatore' `
-    -File (Join-Path $cachatoreDir 'detener_cachatore.ps1') -WorkingDirectory $cachatoreDir `
-    -IconResource 'imageres.dll,100' -Admin `
-    -Description 'Detiene el cachatore (turnos YPF) (admin)'
+New-Lnk -Nombre 'Detener Cachatore' -File (Join-Path $cachatoreDir 'detener_cachatore.ps1') -WorkingDirectory $cachatoreDir -IconResource 'imageres.dll,100' -Description 'Detiene el cachatore (turnos YPF) (admin)' -Admin
 
-New-Lnk -Nombre 'Logs Cachatore' `
-    -File (Join-Path $cachatoreDir 'ver_logs_vigia.ps1') -WorkingDirectory $cachatoreDir `
-    -IconResource $psIcon -NoExit `
-    -Description 'Ventana de logs en vivo del cachatore (turnos YPF)'
+New-Lnk -Nombre 'Logs Cachatore' -File (Join-Path $cachatoreDir 'ver_logs_vigia.ps1') -WorkingDirectory $cachatoreDir -IconResource $psIcon -Description 'Ventana de logs en vivo del cachatore (turnos YPF)' -NoExit
 
 Write-Host ''
 Write-Host '====================================================' -ForegroundColor Green
