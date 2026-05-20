@@ -43,12 +43,19 @@ class PhoneFormatter {
       digitos = digitos.substring(1);
     }
 
-    // 3) Quitar el "15" después del código de área. Aparece en formatos
-    //    viejos como "0291-15-4567890". El "15" lo agregaba la línea
-    //    fija para distinguir móviles, hoy ya no se usa para WhatsApp.
-    final m15 = RegExp(r'^(\d{2,4})15(\d{6,8})$').firstMatch(digitos);
-    if (m15 != null) {
-      digitos = '${m15.group(1)}${m15.group(2)}';
+    // 3) Quitar el "15" del formato viejo "0291-15-4567890". El "15" lo
+    //    agregaba la línea fija para distinguir móviles, hoy ya no se usa
+    //    para WhatsApp. Tras sacar el 0, ese formato queda en 12 dígitos
+    //    (área+abonado = 10 SIEMPRE en AR, + los 2 del "15").
+    //    CRÍTICO: un número NORMAL de 10 dígitos que CASUALMENTE contenga
+    //    "15" (ej. "2915456789" = área 291 + abonado 5456789) NO se debe
+    //    tocar — sin el guard de longitud, el regex lo mutilaba y devolvía
+    //    "" (bug 2026-05-20: teléfonos que "no se guardaban").
+    if (digitos.length == 12) {
+      final m15 = RegExp(r'^(\d{2,4})15(\d{6,8})$').firstMatch(digitos);
+      if (m15 != null) {
+        digitos = '${m15.group(1)}${m15.group(2)}';
+      }
     }
 
     // 4) Asegurar prefijo 549 (Argentina + móvil).
