@@ -116,3 +116,52 @@ def borrar_turno(dni):
     """El chofer ya no tiene turno → sacarlo de 'Turnos concretados'."""
     db = choferes._db()
     db.collection(COL_TURNOS).document(str(dni)).delete()
+
+
+# ---- avisos por WhatsApp (vía COLA_WHATSAPP, la consume el bot) ------------
+COL_COLA = "COLA_WHATSAPP"
+COL_EMPLEADOS = "EMPLEADOS"
+# Encargado de logística: recibe TODOS los turnos (Errazu Esteban).
+ENCARGADO_LOGISTICA_DNI = "25022800"
+
+
+def _telefono_de(db, dni):
+    snap = db.collection(COL_EMPLEADOS).document(str(dni)).get()
+    tel = ((snap.to_dict() or {}).get("TELEFONO") or "").strip()
+    return tel if tel and tel != "-" else None
+
+
+def encolar_whatsapp(telefono, mensaje):
+    """Encola un mensaje para que lo mande el bot (mismo formato que las CF)."""
+    if not telefono:
+        return
+    db = choferes._db()
+    db.collection(COL_COLA).add({
+        "telefono": telefono,
+        "mensaje": mensaje,
+        "estado": "PENDIENTE",
+        "encolado_en": firestore.SERVER_TIMESTAMP,
+        "enviado_en": None,
+        "origen": "cachatore",
+    })
+
+
+def avisar_turno(chofer_dni, chofer_nombre, cuando, evento):
+    """Avisa por WhatsApp al chofer + al encargado de logística cuando el bot
+    consigue (`evento='reservado'`) o reprograma (`'reagendado'`) un turno."""
+    db = choferes._db()
+    cuando = cuando or "(ver en iTurnos)"
+    nombre = (chofer_nombre or chofer_dni)
+    primer = nombre.split()[0].title() if nombre and nombre != chofer_dni else ""
+    hola = f"Hola {primer}, " if primer else "Hola, "
+    if evento == "reagendado":
+        msg_chofer = (f"{hola}te reprogramamos el turno de carga YPF: "
+                      f"ahora es *{cuando}*.\n\n_Coopertrans Móvil_")
+        msg_enc = (f"Turno YPF REPROGRAMADO — {nombre} (DNI {chofer_dni}): "
+                   f"{cuando}.")
+    else:
+        msg_chofer = (f"{hola}te conseguimos turno de carga YPF para "
+                      f"*{cuando}*.\n\n_Coopertrans Móvil_")
+        msg_enc = (f"Turno YPF — {nombre} (DNI {chofer_dni}): {cuando}.")
+    encolar_whatsapp(_telefono_de(db, chofer_dni), msg_chofer)
+    encolar_whatsapp(_telefono_de(db, ENCARGADO_LOGISTICA_DNI), msg_enc)

@@ -146,7 +146,7 @@ class Target:
     """Estado de un chofer vigilado. Objetivo: tener un turno en su franja."""
     __slots__ = ("dni", "nombre", "email", "clave", "patente", "fecha",
                  "franja", "reagendar", "cli", "logueado", "tiene_turno", "uuid",
-                 "reagendar_hecho", "ultimo_check", "estado_reportado")
+                 "reagendar_hecho", "ultimo_check", "estado_reportado", "notificar")
 
     def __init__(self, ch: dict, fecha, franja: str, reagendar: bool):
         self.dni = ch["dni"]
@@ -164,6 +164,7 @@ class Target:
         self.reagendar_hecho = False
         self.ultimo_check = 0.0
         self.estado_reportado = None
+        self.notificar = None   # None | 'reservado' | 'reagendado' (aviso pendiente)
 
     @property
     def credenciales_ok(self) -> bool:
@@ -228,6 +229,18 @@ def _despublicar_turno(dni):
         nube.borrar_turno(dni)
     except Exception:
         pass
+
+
+def _avisar_turno(t, evento: str, cuando):
+    """Encola los avisos WhatsApp (chofer + encargado de logística) al conseguir
+    (`reservado`) o reprogramar (`reagendado`) el turno. No-op en dry/--archivo."""
+    if not _ESCRIBIR_ESTADO:
+        return
+    try:
+        nube.avisar_turno(t.dni, t.nombre, cuando, evento)
+        log("EXITO", t.nombre, f"aviso WhatsApp encolado ({evento})")
+    except Exception as e:
+        log("LOG", t.nombre, f"no pude encolar aviso WhatsApp: {e}")
 
 
 def _heartbeat(modo: str, targets: dict):
@@ -300,6 +313,7 @@ def intentar_reservar(t: Target, slot: dict, dry: bool) -> bool:
         t.tiene_turno = True
         _reportar_estado(t, "reservado", hora=slot["hora"],
                          cuando=_fmt_cuando(slot["fecha"], slot["hora"]))
+        t.notificar = "reservado"   # refrescar_estado dispara el aviso WhatsApp
         t.ultimo_check = 0.0   # forzar refrescar_estado → publica el turno real (uuid)
         return True
     if r.get("motivo") == "tomado":
@@ -371,11 +385,15 @@ def refrescar_estado(t: Target):
         _reportar_estado(t, "reagendado" if t.reagendar_hecho else "reservado",
                          hora=turno.get("hora"), cuando=turno.get("cuando"))
         _publicar_turno(t.dni, t.nombre, turno)   # → "Turnos concretados"
+        if t.notificar:   # el bot recién consiguió/reprogramó → avisar (1 vez)
+            _avisar_turno(t, t.notificar, turno.get("cuando"))
+            t.notificar = None
     else:
         t.tiene_turno = False
         t.uuid = None
         _reportar_estado(t, "buscando")
         _despublicar_turno(t.dni)
+        t.notificar = None   # perdió el turno antes de avisar → cancelar aviso
     t.ultimo_check = time.time()
 
 
@@ -628,7 +646,8 @@ def ciclo_latente(targets: dict, dry: bool):
             log("EXITO", t.nombre, f"REAGENDADO a {r.get('hora')} (franja '{t.franja}')")
             t.reagendar_hecho = True
             _reportar_estado(t, "reagendado", hora=r.get("hora"))
-            t.ultimo_check = 0.0   # refrescar_estado publica el turno nuevo
+            t.notificar = "reagendado"
+            t.ultimo_check = 0.0   # refrescar_estado publica el turno nuevo + avisa
         elif r.get("motivo") == "tomado":
             log("LOG", t.nombre, f"{r.get('hora')} lo tomaron al reagendar, sigo")
         elif r.get("motivo") != "sin_slot_en_franja":
