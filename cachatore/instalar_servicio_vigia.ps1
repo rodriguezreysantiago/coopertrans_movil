@@ -17,7 +17,11 @@
 
 param([switch]$Reinstalar)
 
-$ErrorActionPreference = "Stop"
+# OJO: NO usar 'Stop' global. nssm escribe a stderr (ej. "Can't open service!"
+# cuando el servicio no existe) y en PS 5.1 ese stderr se vuelve NativeCommandError
+# y aborta el script. Manejamos errores a mano (Fail) y chequeamos existencia con
+# Get-Service (cmdlet, no native).
+$ErrorActionPreference = "Continue"
 $Servicio = "cachatore-vigia"
 $Dir      = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Python   = Join-Path $Dir "venv\Scripts\python.exe"
@@ -54,8 +58,8 @@ if (-not (Test-Path (Join-Path $Dir "drop.json")))   { Write-Host "AVISO: falta 
 
 New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
 
-# --- recrear si se pidio ---
-$existe = (& $nssm status $Servicio 2>$null)
+# --- recrear si se pidio (Get-Service evita el stderr de nssm que aborta en PS 5.1) ---
+$existe = Get-Service -Name $Servicio -ErrorAction SilentlyContinue
 if ($existe -and $Reinstalar) {
   Write-Host "Borrando servicio existente para recrearlo..." -ForegroundColor Yellow
   & $nssm stop   $Servicio 2>$null | Out-Null
@@ -89,8 +93,9 @@ if (-not $existe) {
 
 & $nssm start $Servicio 2>$null | Out-Null
 Start-Sleep -Seconds 2
+$estado = (Get-Service -Name $Servicio -ErrorAction SilentlyContinue).Status
 Write-Host ""
-Write-Host "Estado: $(& $nssm status $Servicio)" -ForegroundColor Green
+Write-Host "Estado: $estado" -ForegroundColor Green
 Write-Host "Log:    $LogFile"
 Write-Host "Ver en vivo:   .\ver_logs_vigia.ps1"
 Write-Host "Parar/arrancar: nssm stop $Servicio  /  nssm start $Servicio"

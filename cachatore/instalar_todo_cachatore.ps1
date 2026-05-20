@@ -105,12 +105,16 @@ if ($Clave) {
 }
 
 # --- 4) drop.json (seleccion del dia) ---
+# Lo creamos VACIO (sin choferes) a proposito: asi el vigia arranca IDLE y no
+# saca turnos para nadie hasta que lo configures. El formato esta en
+# drop.ejemplo.json; lo va a escribir la UI de la app.
 Paso 4 "drop.json"
 if (-not (Test-Path $DropPath)) {
-  Copy-Item (Join-Path $Dir "drop.ejemplo.json") $DropPath
-  Aviso "copie drop.ejemplo.json -> drop.json. Edita los choferes (DNI) y franjas. La UI lo va a escribir mas adelante."
+  $dropIdle = "{`n  ""fecha"": null,`n  ""hora_inicio"": ""10:29"",`n  ""duracion_min"": 20,`n  ""poll_latente_seg"": 5,`n  ""choferes"": []`n}`n"
+  [System.IO.File]::WriteAllText($DropPath, $dropIdle, (New-Object System.Text.UTF8Encoding($false)))
+  Aviso "cree drop.json VACIO (sin choferes = vigia IDLE). Edita drop.json y agrega los choferes (DNI) + franjas; se relee en caliente (no hace falta reiniciar)."
 } else {
-  Ok "drop.json ya existe"
+  Ok "drop.json ya existe (no lo toco)"
 }
 
 # --- 5) serviceAccountKey.json (Firestore) ---
