@@ -19,6 +19,7 @@ Documento operativo para resolver incidentes en producción. Pensado para que **
 9. [Backup y disaster recovery](#backup-y-disaster-recovery)
 10. [Comandos rápidos de diagnóstico](#comandos-rápidos-de-diagnóstico)
 11. [Contactos y secretos](#contactos-y-secretos)
+12. [Web institucional + deploy del sitio y la app web](#web-institucional--deploy-del-sitio-y-la-app-web)
 
 ---
 
@@ -647,6 +648,55 @@ Errores comunes después de un deploy:
 - `permission-denied: ...allUsers Cloud Run Invoker missing` → idem.
 
 ---
+
+## Web institucional + deploy del sitio y la app web
+
+La web pública (`https://cooper-trans.com.ar`) y el acceso web a esta misma app
+(`/sistema/`) viven en **`C:\Users\Colo Logistica\web_coopertrans\`** — proyecto
+separado, **NO versionado en git**. Detalle: memoria `project_web_institucional.md`.
+
+**Hosting:** FTP, Apache/LiteSpeed, fuerza HTTPS. Credenciales **solo** en
+`~/Desktop/ftp_datos.txt` (`SERVIDOR` / `USUARIO` / `PASSWORD`) — nunca hardcodear ni
+commitear. Raíz del server = `/public_html`.
+
+### Actualizar la app web (lo normal: ya va dentro del release)
+`release_completo.ps1` lo hace solo (paso best-effort, flag `-SkipWeb` para omitir).
+A mano:
+
+```powershell
+cd "C:\Users\Colo Logistica\coopertrans_movil"
+flutter build web --release --base-href /sistema/    # ¡PowerShell, NO git-bash!
+Copy-Item build\web\* "..\web_coopertrans\sitio_nuevo\sistema\" -Recurse -Force
+cd "..\web_coopertrans"
+python _subir_sitio.py sistema                        # sube SOLO /sistema
+```
+
+⚠️ El `--base-href /sistema/` SOLO funciona desde **PowerShell**. En git-bash la ruta
+se mangle a `C:/Program Files/Git/sistema/` y el build queda con base `/` (los assets
+dan 404 al servirse en `/sistema/`).
+
+### Actualizar el sitio de marketing (la home)
+Editar `web_coopertrans\sitio_nuevo\` y subir:
+
+```powershell
+cd "C:\Users\Colo Logistica\web_coopertrans"
+python _subir_sitio.py            # sube TODO (sitio de marketing + /sistema)
+python _subir_sitio.py --dry      # simular sin tocar el server
+```
+
+### Cosas a saber
+- **Login web** = mismo DNI + contraseña (callable `loginConDni`, CORS lo maneja el
+  framework de callables). Si el login web falla pero el de la app no: confirmar HTTPS
+  (contexto seguro) — el `.htaccess` raíz lo fuerza.
+- `.htaccess` raíz: HTTPS + `DirectoryIndex index.html ...` (gana al `index.php` viejo)
+  + gzip. `sistema/.htaccess`: fallback SPA (sirve index.html en rutas internas) + gzip.
+  Si el host ignorara `.htaccess` (no Apache), el refresh en una ruta interna de la app
+  podría dar 404.
+- Backup del sitio viejo (Flash/PHP): `web_coopertrans\cooper-trans_sitio_viejo_backup_2026-05-19.zip`.
+- Para deployar desde la **OTRA PC**: copiar `web_coopertrans` + `ftp_datos.txt` allá
+  (si no, el paso web del release simplemente se saltea).
+- Limpiar restos del sitio viejo en el server: `python _limpiar_viejo.py` (dry) /
+  `--go` (ejecuta). Excluye cgi-bin / local-cgi / .well-known.
 
 ## Rollback de un deploy malo
 

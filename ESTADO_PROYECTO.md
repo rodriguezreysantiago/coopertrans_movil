@@ -1486,4 +1486,45 @@ Ver `PENDIENTES.md`.
 
 ---
 
+## 16. Sesión 2026-05-20 — Web institucional VAVG + acceso web a la app
+
+Proyecto **nuevo y separado** del repo: remodelación de la web pública del
+cliente (`cooper-trans.com.ar`) + se le agregó el **acceso web a la app**. Vive en
+`C:\Users\Colo Logistica\web_coopertrans\` (**NO versionado en git todavía**).
+Detalle completo en la memoria `project_web_institucional.md`.
+
+### 16.1 Sitio nuevo (marca VAVG)
+- El sitio viejo era Flash/PHP (InGraphica). Reemplazado por uno moderno
+  (HTML/CSS/JS vanilla, paleta cobalto alineada a la app), responsive, single-page:
+  hero (2 Volvo) + empresa (historia/misión/visión/valores) + flota (carga seca +
+  líquidos) + ventajas + clientes + acceso al sistema + ubicación + contacto + footer.
+- Marca **VAVG** (Vecchi Ariel y Vecchi Graciela SRL). Logo + fotos de flota
+  extraídos del **brochure VECCHI** (PyMuPDF + PIL). Logos de clientes a color
+  (YPF/Cargill/Profertil/Bunge/Holcim/Boortmalt).
+- Dominio y email **se quedan en cooper-trans.com.ar** (`transporte@cooper-trans.com.ar`).
+  Sin teléfonos en contacto (solo WhatsApp bot **5492914231504** + email).
+- Deploy por **FTP** (credenciales SOLO en `~/Desktop/ftp_datos.txt`). Sitio viejo
+  respaldado (`cooper-trans_sitio_viejo_backup_2026-05-19.zip`) y limpiado del server.
+
+### 16.2 Acceso web a la app (`/sistema/`) — sin cambios de lógica
+- La app Flutter compila a web tal cual. Único cambio fuente: branding de
+  `web/index.html` (título + splash cobalto + listener `flutter-first-frame`),
+  commit **`0d940c1`**.
+- Login = **mismo DNI + contraseña** (callable `loginConDni` → el framework de
+  callables maneja CORS solo + `signInWithCustomToken`). Verificado en vivo.
+- Build: `flutter build web --release --base-href /sistema/` **desde PowerShell**
+  (git-bash mangle `/sistema/` → `C:/Program Files/Git/sistema/`).
+
+### 16.3 release_completo.ps1 ahora también sube la web (commit `d1a3af3`)
+- Nuevo paso **best-effort**: compila web + sube SOLO `/sistema` por FTP. Flag
+  `-SkipWeb`. Si la PC no tiene el proyecto web o las credenciales, saltea SIN
+  abortar el release de Windows/Android. **Multi-PC**: solo corre donde estén
+  `web_coopertrans` + `ftp_datos.txt`.
+
+### 16.4 Pendiente
+- Push de `0d940c1` + `d1a3af3` (salen solos en el próximo release, paso 6 = git push).
+- Idea: versionar `web_coopertrans` en git local (anti-pérdida, bus-factor).
+
+---
+
 **Cómo retomar (sesión vieja)**: leer secciones 6.9 (cleanup + RBAC del 30-abril), 6.10 (sesión grande del 1-mayo: imports bulk + fixes UI + auditoría profunda + plan 4 fases ejecutado) y 13 (anotaciones del 30-abril noche). El estado del repo es el commit más reciente — `git log --oneline -10`.

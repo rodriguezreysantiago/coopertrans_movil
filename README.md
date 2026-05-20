@@ -173,18 +173,29 @@ Escucha `COLA_WHATSAPP` en Firestore. Cron cada 60 min escanea EMPLEADOS y VEHIC
 
 ## Release de una versión nueva
 
-Script todo-en-uno (bump + build Windows + instalador + GitHub Release + AAB Android):
+Script todo-en-uno (bump + build Windows + instalador + GitHub Release + AAB
+Android + **deploy de la app web** a cooper-trans.com.ar/sistema/):
 
 ```powershell
 .\scripts\release_completo.ps1                  # bump patch+1+build+1, todo
 .\scripts\release_completo.ps1 -DryRun          # ver qué haría sin tocar nada
 .\scripts\release_completo.ps1 -SkipAndroid     # solo Windows
+.\scripts\release_completo.ps1 -SkipWeb         # no actualiza la web
 .\scripts\release_completo.ps1 -Version 1.2.3+45  # versión explícita
 ```
 
 Después subir manual el AAB a Play Console (Closed Testing → nueva
 versión → upload). El AAB queda en
 `build/app/outputs/bundle/release/app-release.aab`.
+
+### Web institucional + acceso web a la app
+
+La web pública del cliente (`https://cooper-trans.com.ar`) y el acceso web a esta
+misma app (`/sistema/`) viven en un proyecto **separado**:
+`C:\Users\Colo Logistica\web_coopertrans\` (no versionado en git todavía). El paso
+web del `release_completo` compila `flutter build web --base-href /sistema/` y lo
+sube por FTP — es best-effort (si no está ese proyecto o las credenciales FTP en la
+PC, lo saltea). Ver memoria `project_web_institucional.md` para el detalle.
 
 ⚠️ **Bug conocido**: si renombrás la carpeta del proyecto, el cache
 de CMake en `build/windows/x64/CMakeCache.txt` queda con el path

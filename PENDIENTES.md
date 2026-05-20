@@ -7,6 +7,35 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-05-20 EOD — Web institucional VAVG + acceso web a la app (proyecto nuevo)
+
+Remodelación completa de la web pública del cliente + se le agregó el acceso web a la
+app. **EN VIVO.** Proyecto separado en `C:\Users\Colo Logistica\web_coopertrans\` (NO
+versionado en git). Detalle en `ESTADO_PROYECTO.md` §16 y memoria
+`project_web_institucional.md`.
+
+### Hecho (en vivo)
+- Sitio nuevo marca **VAVG** en `https://cooper-trans.com.ar` (reemplazó al Flash/PHP viejo).
+- App web en `https://cooper-trans.com.ar/sistema/` — mismo DNI + contraseña.
+- Sitio viejo respaldado (`cooper-trans_sitio_viejo_backup_2026-05-19.zip`) y limpiado del server.
+- `release_completo.ps1` ahora también compila + sube `/sistema` (best-effort, flag `-SkipWeb`).
+
+### Deploys / push pendientes (Santiago, desde su PC)
+- Push de los 2 commits del repo: `0d940c1` (branding `web/index.html`) + `d1a3af3`
+  (integración web en release). Salen solos en el próximo `release_completo` (paso git
+  push), o `git push` a mano cuando quieras.
+- (Sigue pendiente lo del 19-may: `firebase deploy --only functions` + verificar
+  rules/indexes del 18-may.)
+
+### Pendiente / ideas
+- **Versionar `web_coopertrans` en git local** (anti-pérdida; hoy el proyecto web NO está
+  en ningún repo → bus-factor).
+- Para actualizar la web/app desde la OTRA PC: copiar `web_coopertrans` + `ftp_datos.txt` allá.
+- Fotos de flota del hero son media-res (recortes del brochure ~700px). Si hay fotos
+  propias en alta, mejoran.
+
+---
+
 ## 📅 2026-05-19 EOD — Cierre del día (vigilador fix + split functions completo + tests CF)
 
 Sesión larga: fix de un bug real reportado por Santiago + completar el
