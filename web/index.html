@@ -18,21 +18,42 @@
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta name="description" content="Sistema de gestión de flota y logística — Coopertrans Móvil (VAVG).">
+  <meta name="theme-color" content="#08193B">
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="logistica_app_profesional">
+  <meta name="apple-mobile-web-app-title" content="Coopertrans Móvil">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>logistica_app_profesional</title>
+  <title>Coopertrans Móvil — Sistema de gestión</title>
   <link rel="manifest" href="manifest.json">
+
+  <!-- Fondo cobalto durante la carga (evita el flash blanco antes de que
+       CanvasKit renderice la pantalla de login). -->
+  <style>
+    html, body { margin: 0; padding: 0; background-color: #0B2A6B; }
+    #cargando {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      color: #cfe0ff; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      font-size: 15px; letter-spacing: .3px;
+      background: linear-gradient(135deg, #08193B 0%, #0B2A6B 60%, #1746A2 100%);
+    }
+  </style>
 </head>
 <body>
+  <div id="cargando">Cargando Coopertrans Móvil…</div>
+  <script>
+    // Saca la pantalla de carga cobalto cuando Flutter pinta el primer frame.
+    window.addEventListener('flutter-first-frame', function () {
+      var el = document.getElementById('cargando');
+      if (el) el.remove();
+    });
+  </script>
   <!--
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
