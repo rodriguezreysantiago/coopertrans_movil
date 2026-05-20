@@ -19,6 +19,14 @@ import re
 import firebase_admin
 from firebase_admin import credentials, firestore
 
+# FieldFilter (API nueva) evita el UserWarning del SDK por "positional
+# arguments" en .where() — el mismo que usa nube.py. Si la versión del SDK
+# es vieja y no lo trae, caemos al modo posicional sin romper.
+try:  # pragma: no cover
+    from google.cloud.firestore_v1.base_query import FieldFilter
+except Exception:  # pragma: no cover
+    FieldFilter = None
+
 _DIR = os.path.dirname(os.path.abspath(__file__))
 _SAK = os.path.join(_DIR, "..", "serviceAccountKey.json")
 _CLAVES = os.path.join(_DIR, "claves.json")
@@ -34,6 +42,14 @@ def _db():
     return firestore.client()
 
 
+def _where(ref, campo, op, valor):
+    """`.where()` con FieldFilter si está disponible (sin el warning del SDK);
+    cae a posicional si la versión es vieja."""
+    if FieldFilter is not None:
+        return ref.where(filter=FieldFilter(campo, op, valor))
+    return ref.where(campo, op, valor)
+
+
 def _cargar_claves() -> dict:
     """claves.json: {"_comun": "claveParaTodos", "<dni>": "claveEspecifica"}.
     Si la clave es la misma para todos, alcanza con "_comun"."""
@@ -47,7 +63,7 @@ def _patentes_vigentes(db) -> dict:
     """Mapa dni -> patente de la asignación chofer↔vehículo activa."""
     mapa = {}
     # hasta == null  => asignación vigente (igual criterio que la app).
-    for d in db.collection(COL_ASIGNACIONES).where("hasta", "==", None).stream():
+    for d in _where(db.collection(COL_ASIGNACIONES), "hasta", "==", None).stream():
         x = d.to_dict() or {}
         dni = x.get("chofer_dni")
         if dni:
@@ -64,7 +80,7 @@ def _patentes_tanque(db) -> set:
     carga de arenas YPF; mismo criterio que los EXCLUIDOS de la app)."""
     return {
         d.id.upper()
-        for d in db.collection("VEHICULOS").where("TIPO", "==", "TANQUE").stream()
+        for d in _where(db.collection("VEHICULOS"), "TIPO", "==", "TANQUE").stream()
     }
 
 
@@ -84,7 +100,7 @@ def cargar_choferes(solo_dnis=None, incluir_excluidos: bool = False) -> list:
     patentes_tanque = set() if incluir_excluidos else _patentes_tanque(db)
 
     choferes = []
-    q = db.collection(COL_EMPLEADOS).where("ROL", "==", ROL_CHOFER)
+    q = _where(db.collection(COL_EMPLEADOS), "ROL", "==", ROL_CHOFER)
     for doc in q.stream():
         dni = doc.id
         if solo_dnis and dni not in solo_dnis:
