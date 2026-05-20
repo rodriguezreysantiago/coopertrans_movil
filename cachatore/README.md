@@ -37,21 +37,34 @@ asignada del chofer).
 - Al reservar se tipea a mano: **patente**, **DNI del chofer** y **empresa**
   (constante: `VECCHI ARIEL Y VECCHI GRACIELA SRL`). **Sin captcha.**
 
-## Estado
-- `iturnos.py`: cliente nuevo. **Hecho y testeado**: login (mecánica), parseo de
-  disponibilidad (validado contra el HTML real del drop), filtro por franja,
-  fetch de la pantalla de reserva + detección de "ya tomado", y un **modo
-  auto-captura** que vuelca el HTML del formulario la 1ª vez que cace un slot
-  libre (para mapear los campos y completar el POST de reserva).
-- **Pendiente**: capturar el formulario de reserva (se auto-captura en el
-  próximo drop) → completar `reservar()`; orquestador multi-chofer + scheduler;
-  integrar DNI/patente desde Coopertrans Móvil; UI dentro de la app.
+## Archivos
+- `iturnos.py` — cliente del sitio: login, parseo de slots (validado contra el
+  HTML real del drop), filtro por franja, y `reservar()` (GET `/reservar/{ISO}`
+  para tomar el slot en sesión + POST `/r/{cliente}/{agenda}` con los `campo[N]`).
+- `choferes.py` — datos vivos de Firestore: por cada chofer (`ROL=CHOFER`) trae
+  DNI + email (`MAIL`) + **patente vigente** (`ASIGNACIONES_VEHICULO` con
+  `hasta==null`) + clave (de `claves.json`). Si se reasigna la unidad en la app,
+  se refleja solo. `python choferes.py` lista todo (smoke test).
+- `verificar_logins.py` — prueba el login chofer por chofer y reporta a quiénes
+  hay que corregirles el `MAIL`/clave. `python verificar_logins.py [N]`.
+- `claves.ejemplo.json` — plantilla. El real es `claves.json` (gitignoreado):
+  `{"_comun": "Cooper2022"}` (o per-DNI si alguno difiere).
+
+## Estado (2026-05-20)
+- **Login validado** (8/10 en una muestra loguean con el `MAIL` de la app +
+  `Cooper2022`; los que fallan tienen el mail mal cargado o clave distinta).
+- **Integración Firestore validada**: 55 choferes con email + patente vigente.
+- `reservar()` implementado con el form capturado; la heurística de éxito se
+  afina con la 1ª reserva real.
+- **Pendiente**: orquestador (multi-chofer en paralelo + scheduler ~10:29) +
+  UI dentro de la app (`lib/features/`).
 
 ## Setup / correr
 ```bash
 cd cachatore
 python -m venv venv
-venv/Scripts/pip install curl_cffi beautifulsoup4
-cp cuentas.ejemplo.json cuentas.json   # y completar email + clave común + dni + patente + franja
+venv/Scripts/pip install curl_cffi beautifulsoup4 firebase-admin
+cp claves.ejemplo.json claves.json     # y poner la clave común (Cooper2022)
 ```
-`cuentas.json` (credenciales) está **gitignoreado** — nunca se commitea.
+Requiere `serviceAccountKey.json` en la raíz del repo (un nivel arriba).
+`claves.json` (credenciales) está **gitignoreado** — nunca se commitea.

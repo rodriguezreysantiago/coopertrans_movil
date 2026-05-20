@@ -15,9 +15,13 @@ Hallazgos de la revisión (2026-05-20):
   (URL: /c/proyecto-arenas-ypf/a/transporte-directo-a-anelo).
 - Server-rendered (no API JSON) → se parsea el HTML con BeautifulSoup.
 
-PENDIENTE (capturar en un drop real, ~10:30 ART): el HTML de las franjas/
-slots disponibles y el formulario final de reserva (campos exactos: patente,
-DNI, empresa). Ver parsear_disponibilidad() y reservar() — marcados TODO.
+Capturado en el drop real del 2026-05-20:
+- Slots: libre = <a class="btn-outline-success" href=".../reservar/{ISO}">.
+- Reserva: GET /reservar/{ISO} (toma el slot en sesión) + POST /r/{cliente}/{agenda}
+  con _token + Patente (campo[4767]) + DNI (campo[4768]) + Empresa (campo[5293]).
+- Datos de cada chofer (DNI/email/patente vigente) salen de Firestore via
+  choferes.py; la clave común sale de claves.json (local, gitignoreado).
+La heurística de éxito de reservar() se afina con la 1ª reserva real.
 """
 import re
 from curl_cffi import requests as cf
@@ -30,6 +34,15 @@ LOGIN_URL = f"{BASE}/login"
 CLIENTE_SLUG = "proyecto-arenas-ypf"
 AGENDA_SLUG = "transporte-directo-a-anelo"
 AGENDA_URL = f"{BASE}/c/{CLIENTE_SLUG}/a/{AGENDA_SLUG}"
+
+# Confirmación de reserva: POST a /r/{cliente}/{agenda} (form capturado del
+# drop 2026-05-20). El slot (fecha/hora) NO va en el body: queda "tomado" en
+# la sesión al hacer el GET de /reservar/{ISO} previo. Los "campo[N]" son IDs
+# propios de ESTA agenda en iTurnos (cambiarían si reconfiguran el form).
+RESERVAR_ACTION = f"{BASE}/r/{CLIENTE_SLUG}/{AGENDA_SLUG}"
+CAMPO_PATENTE = "campo[4767]"   # label "Patente Camión"
+CAMPO_DNI = "campo[4768]"       # label "Nro DNI Chofer"
+CAMPO_EMPRESA = "campo[5293]"   # label "Empresa de Transporte"
 
 # Empresa que se tipea a mano en el formulario de reserva (constante, la
 # misma para todos los choferes). Confirmado por Santiago 2026-05-20.
@@ -160,29 +173,43 @@ class IturnosClient:
         return bool(_RE_TOMADO.search(html))
 
     def reservar(self, slot: dict, patente: str, dni: str,
-                 empresa: str = EMPRESA_CARGA,
-                 capturar_en: str | None = "captura_form_reserva.html") -> dict:
-        """Intenta reservar un slot.
+                 empresa: str = EMPRESA_CARGA, motivo: str = "") -> dict:
+        """Reserva (confirma) un slot. Flujo capturado del drop 2026-05-20:
 
-        1) GET de slot['url'] (la pantalla de reserva).
-        2) Si el slot ya fue tomado -> {ok:False, motivo:'tomado'}.
-        3) Si aparece el FORMULARIO:
-           - **MODO CAPTURA** (mientras no tengamos mapeados los campos):
-             si `capturar_en` está seteado, vuelca el HTML a ese archivo y
-             devuelve {ok:False, motivo:'form_capturado'} SIN enviar nada.
-             Con ese HTML mapeamos action + nombres de campos (patente / DNI /
-             empresa) + _token, y completamos el POST real acá abajo.
+        1) GET de slot['url'] (= /reservar/{ISO}) → "toma" el slot en la sesión
+           y trae el formulario + el CSRF token.
+        2) Si ya lo agarró otro → {ok:False, motivo:'tomado'}.
+        3) POST a /r/{cliente}/{agenda} con _token + patente + DNI + empresa.
+           El slot va por sesión (no en el body).
 
-        TODO (tras capturar): armar el POST con los campos reales y confirmar.
+        Devuelve {ok, motivo, status, ...}.
         """
         html = self.abrir_reserva(slot["url"])
         if self.reserva_tomada(html):
             return {"ok": False, "motivo": "tomado"}
-        if capturar_en:
-            with open(capturar_en, "w", encoding="utf-8") as f:
-                f.write(html)
-            return {"ok": False, "motivo": "form_capturado", "archivo": capturar_en}
-        # --- TODO: con los campos ya mapeados, armar y enviar el POST ---
-        raise NotImplementedError(
-            "reservar(): faltan mapear los campos del form (ver captura)"
+        token = self._csrf_token(html)
+        if not token:
+            return {"ok": False, "motivo": "sin_token"}
+        resp = self.s.post(
+            RESERVAR_ACTION,
+            data={
+                "_token": token,
+                CAMPO_PATENTE: patente,
+                CAMPO_DNI: dni,
+                CAMPO_EMPRESA: empresa,
+                "motivo": motivo,
+            },
+            allow_redirects=True,
         )
+        txt = resp.text or ""
+        if self.reserva_tomada(txt):
+            return {"ok": False, "motivo": "tomado", "status": resp.status_code}
+        # Heurística de éxito (afinar con la 1ª reserva real): status OK y la
+        # respuesta no es el form de nuevo ni un error de validación.
+        ok = resp.status_code in (200, 302) and (CAMPO_PATENTE not in txt)
+        return {
+            "ok": ok,
+            "motivo": "reservado" if ok else "revisar",
+            "status": resp.status_code,
+            "url_final": resp.url,
+        }
