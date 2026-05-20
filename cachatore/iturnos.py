@@ -320,25 +320,49 @@ class IturnosClient:
         """Reagenda el turno {uuid} a un slot libre dentro de la franja (y de la
         `fecha` si se da: 'AAAA-MM-DD').
 
-        Flujo (Santiago 2026-05-20): GET /reagendar/calendario/{uuid} muestra
-        el calendario (un día a la vez; se navega con ?d=AAAA-MM-DD, igual que
-        el input date `name=d` del sitio); **clickear un slot libre lo reasigna
-        directo** (no hay formulario). Si no hay slot libre en la franja, no
-        hace nada.
+        Flujo CONFIRMADO 2026-05-20 (misma mecánica de 2 pasos que reservar):
+        1) GET /reagendar/calendario/{uuid}[?d=AAAA-MM-DD] → lista los slots
+           libres como <a href=".../editar/{ISO}">HH:MM</a>.
+        2) GET de ese href (página /editar) → trae el FORM de confirmación con
+           los ocultos `fecha` + `hora` (es read-only: NO reasigna por sí solo).
+        3) POST a /reagendar/calendario/{uuid} con _token + fecha + hora → ahí
+           recién se reasigna.
+
+        Bug viejo (2026-05-20): hacía solo el paso 2 (GET de /editar) y asumía
+        que reasignaba — nunca posteaba, así que NO movía el turno.
         """
         url = f"{BASE}/reagendar/calendario/{uuid}"
         if fecha:
             url += f"?d={fecha}"
-        cal = self.s.get(url).text
-        slots = [s for s in parsear_slots_reagendar(cal)
+        slots = [s for s in parsear_slots_reagendar(self.s.get(url).text)
                  if hora_en_franja(s["hora"], franja)]
         if not slots:
             return {"ok": False, "motivo": "sin_slot_en_franja"}
         slot = slots[0]
-        resp = self.s.get(slot["url"], allow_redirects=True)  # clickear = reasignar
+
+        # Abrir la página /editar del slot → trae el form de confirmación.
+        html = self.s.get(slot["url"]).text
+        if self.reserva_tomada(html):
+            return {"ok": False, "motivo": "tomado", "hora": slot["hora"]}
+        soup = BeautifulSoup(html, "html.parser")
+        form = soup.find("form", action=re.compile(r"/reagendar/calendario/"))
+        if form is None:
+            return {"ok": False, "motivo": "sin_form", "hora": slot["hora"]}
+        # Arrastrar todos los campos del form (incluye _token, fecha, hora).
+        data = {}
+        for inp in form.find_all("input"):
+            nombre = inp.get("name")
+            if nombre:
+                data[nombre] = inp.get("value", "")
+        if not data.get("_token"):
+            return {"ok": False, "motivo": "sin_token", "hora": slot["hora"]}
+
+        accion = form.get("action") or url
+        resp = self.s.post(accion, data=data, allow_redirects=True)
         txt = resp.text or ""
         if self.reserva_tomada(txt):
-            return {"ok": False, "motivo": "tomado", "hora": slot["hora"]}
+            return {"ok": False, "motivo": "tomado", "hora": slot["hora"],
+                    "status": resp.status_code}
         ok = resp.status_code in (200, 302)
         return {"ok": ok, "motivo": "reagendado" if ok else "revisar",
                 "hora": slot["hora"], "status": resp.status_code}
