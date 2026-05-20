@@ -8,6 +8,7 @@
 #   .\scripts\release_completo.ps1                  # bump patch+1+build+1
 #   .\scripts\release_completo.ps1 -Version 1.2.3+45   # versión explícita
 #   .\scripts\release_completo.ps1 -SkipAndroid     # solo Windows
+#   .\scripts\release_completo.ps1 -SkipWeb         # no actualiza la web
 #   .\scripts\release_completo.ps1 -SkipLocalUpdate # no actualiza tu PC
 #   .\scripts\release_completo.ps1 -DryRun          # muestra qué haría
 #
@@ -20,9 +21,12 @@
 #   6. git push (incluye el bump y todo lo previo).
 #   7. release_app.ps1 (zip + .exe → GitHub Release, auto-update Win).
 #   8. release_android.ps1 -PlayStore (AAB para Play Console).
-#   9. Forzar update local en esta PC (cierra la app, borra
+#   9. App web: flutter build web + subir SOLO /sistema por FTP a
+#      cooper-trans.com.ar/sistema/ (best-effort: si falla o no está el
+#      proyecto web/credenciales en esta PC, avisa y NO corta el release).
+#  10. Forzar update local en esta PC (cierra la app, borra
 #      VERSION.txt, lanza el launcher para que baje la nueva).
-#  10. Imprime instrucciones para subir el AAB a Play Console.
+#  11. Imprime instrucciones para subir el AAB a Play Console.
 #
 # Si querés republicar el MISMO tag (no bumpear), usá `release_app.ps1`
 # directo — ese script ya maneja la republicación.
@@ -30,12 +34,14 @@
 param(
     [string]$Version = '',
     [switch]$SkipAndroid,
+    [switch]$SkipWeb,
     [switch]$SkipLocalUpdate,
     [switch]$DryRun
 )
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$webStatus = 'no ejecutado'   # estado del deploy web, se reporta al final
 
 function Invoke-Native {
     param([scriptblock]$Block)
@@ -166,6 +172,72 @@ if (-not $SkipAndroid) {
     if ($LASTEXITCODE -ne 0) { throw "release_android.ps1 fallo" }
 }
 
+# ─── 8b. App web -> cooper-trans.com.ar/sistema/ ─────────────────
+# Best-effort: compila la app a web y sube SOLO /sistema por FTP. Si
+# algo falla (sin proyecto web / sin credenciales / FTP caido), avisa
+# y sigue — el release de Windows/Android ya quedó publicado y NO se
+# debe abortar por la web.
+if (-not $SkipWeb) {
+    Write-Host ""
+    Write-Host "[WEB] App web -> https://cooper-trans.com.ar/sistema/ ..." -ForegroundColor Cyan
+
+    $webRoot  = Join-Path (Split-Path $repoRoot -Parent) 'web_coopertrans'
+    $sitioApp = Join-Path $webRoot 'sitio_nuevo\sistema'
+    $subirPy  = Join-Path $webRoot '_subir_sitio.py'
+    $ftpCreds = Join-Path $env:USERPROFILE 'Desktop\ftp_datos.txt'
+
+    if (-not (Test-Path $subirPy)) {
+        Write-Host "  AVISO: no encuentro $subirPy" -ForegroundColor Yellow
+        Write-Host "  Salteo el deploy web (esta PC no tiene el proyecto web)." -ForegroundColor DarkGray
+        $webStatus = 'salteado (sin proyecto web en esta PC)'
+    }
+    elseif (-not (Test-Path $ftpCreds)) {
+        Write-Host "  AVISO: no encuentro credenciales FTP ($ftpCreds)" -ForegroundColor Yellow
+        Write-Host "  Salteo el deploy web." -ForegroundColor DarkGray
+        $webStatus = 'salteado (sin credenciales FTP en esta PC)'
+    }
+    else {
+        try {
+            # 1) Build web con base-href /sistema/ (PowerShell pasa la ruta
+            #    literal; NO usar git-bash que la mangle a C:/Program Files/Git/).
+            Write-Host "  Compilando flutter web..." -ForegroundColor DarkGray
+            Push-Location $repoRoot
+            try {
+                Invoke-Native { & flutter build web --release --base-href /sistema/ }
+                if ($LASTEXITCODE -ne 0) { throw "flutter build web fallo (exit $LASTEXITCODE)" }
+            }
+            finally { Pop-Location }
+
+            # 2) Copiar build/web -> sitio_nuevo/sistema (overwrite; preserva
+            #    el .htaccess del SPA que no viene en el build).
+            Write-Host "  Copiando build/web a la carpeta del sitio..." -ForegroundColor DarkGray
+            $buildWeb = Join-Path $repoRoot 'build\web'
+            New-Item -ItemType Directory -Force -Path $sitioApp | Out-Null
+            Copy-Item (Join-Path $buildWeb '*') $sitioApp -Recurse -Force
+
+            # 3) Subir SOLO /sistema por FTP (no re-sube el sitio de marketing).
+            Write-Host "  Subiendo por FTP (solo /sistema)..." -ForegroundColor DarkGray
+            Push-Location $webRoot
+            try {
+                Invoke-Native { & python $subirPy sistema }
+                if ($LASTEXITCODE -ne 0) { throw "subida FTP fallo (exit $LASTEXITCODE)" }
+            }
+            finally { Pop-Location }
+
+            Write-Host "  OK app web actualizada." -ForegroundColor Green
+            $webStatus = 'OK'
+        }
+        catch {
+            Write-Host "  AVISO: el deploy web fallo: $_" -ForegroundColor Yellow
+            Write-Host "  (El release de Windows/Android NO se ve afectado.)" -ForegroundColor DarkGray
+            $webStatus = "FALLO: $_"
+        }
+    }
+}
+else {
+    $webStatus = 'salteado (-SkipWeb)'
+}
+
 # ─── 9. Forzar update local en esta PC ───────────────────────────
 # Cierra la instancia abierta (si la hay) y dispara el launcher para
 # que baje la nueva versión. Sin esto, la PC del operador queda con
@@ -213,7 +285,10 @@ Write-Host "==========================================" -ForegroundColor Green
 Write-Host "  OK RELEASE $newVersion COMPLETO" -ForegroundColor Green
 Write-Host "==========================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "[9/9] Pasos manuales que quedan:" -ForegroundColor Cyan
+$webColor = if ($webStatus -eq 'OK') { 'Green' } elseif ($webStatus -like 'FALLO*') { 'Yellow' } else { 'DarkGray' }
+Write-Host "  App web (cooper-trans.com.ar/sistema/): $webStatus" -ForegroundColor $webColor
+Write-Host ""
+Write-Host "[11/11] Pasos manuales que quedan:" -ForegroundColor Cyan
 Write-Host ""
 if (-not $SkipAndroid) {
     Write-Host "  1. Subir el AAB a Play Console:" -ForegroundColor White
