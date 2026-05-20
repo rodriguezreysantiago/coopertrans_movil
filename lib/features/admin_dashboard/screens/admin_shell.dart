@@ -17,6 +17,7 @@ import '../../revisions/screens/admin_revisiones_screen.dart';
 import '../../eco_driving/screens/admin_descargas_pto_screen.dart';
 import '../../fleet_map/screens/admin_mapa_flota_screen.dart';
 import '../../icm/screens/icm_hub_screen.dart';
+import '../../cachatore/screens/cachatore_hub_screen.dart';
 import '../../gomeria/screens/gomeria_hub_screen.dart';
 import '../../logistica/screens/logistica_hub_screen.dart';
 import '../../sync_dashboard/screens/sync_dashboard_screen.dart';
@@ -118,6 +119,13 @@ class _AdminShellState extends State<AdminShell> {
       iconActive: Icons.route,
       requiredCapability: Capability.verLogistica,
       build: () => const LogisticaHubScreen(),
+    ),
+    _ShellSection(
+      label: 'Cachatore',
+      icon: Icons.schedule,
+      iconActive: Icons.schedule,
+      requiredCapability: Capability.verCachatore,
+      build: () => const CachatoreHubScreen(),
     ),
     _ShellSection(
       label: 'Gomería',
