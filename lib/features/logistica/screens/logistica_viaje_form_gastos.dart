@@ -46,7 +46,7 @@ class _SeccionGastos extends StatelessWidget {
       detalleCtrl.dispose();
     }
     if (ok) {
-      final monto = AppFormatters.parsearMiles(montoCtrl.text)?.toDouble() ?? 0;
+      final monto = AppFormatters.parsearMonto(montoCtrl.text) ?? 0;
       // NOTA: montoCtrl ya fue disposed arriba pero su .text es String
       // (no requiere el ctrl vivo). Lo mismo detalleCtrl.text abajo.
       if (monto <= 0) return;
@@ -92,7 +92,7 @@ class _SeccionGastos extends StatelessWidget {
                 border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
-              inputFormatters: [AppFormatters.inputMiles],
+              inputFormatters: [AppFormatters.inputMilesDecimal],
             ),
             const SizedBox(height: 8),
             TextField(

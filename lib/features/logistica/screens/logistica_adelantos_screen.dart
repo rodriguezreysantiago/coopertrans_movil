@@ -1482,7 +1482,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
       _choferDni = a.choferDni;
       _choferNombre = a.choferNombre;
       _fecha = a.fecha;
-      _montoCtrl.text = AppFormatters.formatearMiles(a.monto.toInt());
+      _montoCtrl.text = AppFormatters.formatearMonto(a.monto);
       _obsCtrl.text = a.observacion ?? '';
       _medioPago = a.medioPago;
     }
@@ -1602,7 +1602,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                       : null,
                 ),
                 keyboardType: TextInputType.number,
-                inputFormatters: [AppFormatters.inputMiles],
+                inputFormatters: [AppFormatters.inputMilesDecimal],
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 12),
@@ -1754,7 +1754,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
       return;
     }
     final monto =
-        AppFormatters.parsearMiles(_montoCtrl.text)?.toDouble() ?? 0;
+        AppFormatters.parsearMonto(_montoCtrl.text) ?? 0;
     if (monto <= 0) {
       setState(() => _error = 'El monto debe ser mayor a 0.');
       return;
@@ -2083,7 +2083,7 @@ class _PreviewCuotas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final monto =
-        AppFormatters.parsearMiles(montoTotalRaw)?.toDouble() ?? 0;
+        AppFormatters.parsearMonto(montoTotalRaw) ?? 0;
     if (monto <= 0) {
       return Container(
         padding: const EdgeInsets.all(8),

@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:coopertrans_movil/shared/utils/formatters.dart';
 
@@ -226,6 +227,68 @@ void main() {
         expect(AppFormatters.parsearMiles(str), v,
             reason: 'roundtrip de $v');
       }
+    });
+  });
+
+  group('AppFormatters.parsearMonto (decimales AR)', () {
+    test('parsea monto con miles y decimales', () {
+      expect(AppFormatters.parsearMonto('123.456,50'), 123456.5);
+      expect(AppFormatters.parsearMonto('45.000,00'), 45000.0);
+      expect(AppFormatters.parsearMonto('123.456.789,00'), 123456789.0);
+    });
+
+    test('acepta entero sin coma y crudo', () {
+      expect(AppFormatters.parsearMonto('123.456'), 123456.0);
+      expect(AppFormatters.parsearMonto('123456,5'), 123456.5);
+      expect(AppFormatters.parsearMonto('0,50'), 0.5);
+    });
+
+    test('null / vacío devuelve null', () {
+      expect(AppFormatters.parsearMonto(null), isNull);
+      expect(AppFormatters.parsearMonto(''), isNull);
+      expect(AppFormatters.parsearMonto('   '), isNull);
+    });
+
+    test('roundtrip formatearMonto → parsearMonto preserva valor', () {
+      for (final v in [0.0, 1.0, 999.99, 45000.0, 123456.5, 200000.05]) {
+        final str = AppFormatters.formatearMonto(v);
+        expect(AppFormatters.parsearMonto(str), closeTo(v, 0.001),
+            reason: 'roundtrip de $v (formateado "$str")');
+      }
+    });
+  });
+
+  group('AppFormatters.inputMilesDecimal (formatter en vivo)', () {
+    String fmt(String input) {
+      final r = AppFormatters.inputMilesDecimal.formatEditUpdate(
+        const TextEditingValue(text: ''),
+        TextEditingValue(
+          text: input,
+          selection: TextSelection.collapsed(offset: input.length),
+        ),
+      );
+      return r.text;
+    }
+
+    test('agrega separador de miles a la parte entera', () {
+      expect(fmt('123456789'), '123.456.789');
+      expect(fmt('1000'), '1.000');
+    });
+
+    test('mantiene la coma decimal (hasta 2 dígitos)', () {
+      expect(fmt('123456789,5'), '123.456.789,5');
+      expect(fmt('1000000,00'), '1.000.000,00');
+    });
+
+    test('corta a 2 decimales y descarta comas extra', () {
+      expect(fmt('1234,567'), '1.234,56');
+      expect(fmt('12,34,56'), '12,34');
+    });
+
+    test('descarta caracteres no numéricos y vacío queda vacío', () {
+      expect(fmt('abc'), '');
+      expect(fmt(''), '');
+      expect(fmt(r'$ 4.500,50'), '4.500,50');
     });
   });
 }

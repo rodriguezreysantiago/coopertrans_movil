@@ -92,6 +92,25 @@ class AppFormatters {
     return int.tryParse(limpio);
   }
 
+  /// Igual que [inputMiles] pero acepta UNA coma decimal (formato AR de
+  /// plata: `123.456.789,00`). Miles con `.`, decimales con `,` (hasta 2).
+  /// Para montos en pesos donde hacen falta centavos (tarifas, gastos,
+  /// adelantos). El valor se lee con [parsearMonto].
+  static final TextInputFormatter inputMilesDecimal =
+      _MilesDecimalInputFormatter();
+
+  /// Parsea un monto AR (`"123.456,50"`) a `double`: saca los `.` de miles
+  /// y convierte la `,` decimal en `.`. Acepta también enteros sin coma
+  /// (`"123.456"` → `123456.0`) y crudos (`"123456,5"`). Devuelve `null` si
+  /// está vacío o no es numérico. Complemento de [parsearMiles] cuando hacen
+  /// falta decimales.
+  static double? parsearMonto(String? texto) {
+    if (texto == null) return null;
+    final limpio = texto.replaceAll('.', '').replaceAll(',', '.').trim();
+    if (limpio.isEmpty) return null;
+    return double.tryParse(limpio);
+  }
+
   // --- FORMATEAR DNI (XX.XXX.XXX) ---
   static String formatearDNI(dynamic dni) {
     final String s = dni?.toString().replaceAll(RegExp(r'[^0-9]'), '') ?? "";
@@ -338,6 +357,73 @@ class _MilesInputFormatter extends TextInputFormatter {
     var nuevoCursor = 0;
     var contador = 0;
     while (contador < digitosAntesCursor && nuevoCursor < formateado.length) {
+      if (formateado[nuevoCursor] != '.') contador++;
+      nuevoCursor++;
+    }
+
+    return TextEditingValue(
+      text: formateado,
+      selection: TextSelection.collapsed(offset: nuevoCursor),
+    );
+  }
+}
+
+/// Variante de [_MilesInputFormatter] que admite UNA coma decimal (formato
+/// AR de plata: `123.456.789,00`). Expuesto como
+/// `AppFormatters.inputMilesDecimal`. Reglas mientras se tipea:
+///   - parte entera: separador de miles `.` automático;
+///   - una sola `,` para los decimales; las comas extra se ignoran;
+///   - máximo 2 dígitos después de la coma (los de más se cortan).
+/// Mismo manejo de cursor que el entero, contando "significativos" (dígitos
+/// y la coma) y saltando los puntos de miles.
+class _MilesDecimalInputFormatter extends TextInputFormatter {
+  static const int _maxDecimales = 2;
+
+  static final RegExp _milesReg = RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))');
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Solo dígitos y comas; el resto se descarta.
+    final crudo = newValue.text.replaceAll(RegExp(r'[^\d,]'), '');
+    if (crudo.isEmpty) {
+      return const TextEditingValue(text: '');
+    }
+    // Separar por la PRIMERA coma. Las comas extra se juntan como decimales.
+    final tieneComa = crudo.contains(',');
+    String enteraDig;
+    String decimalDig;
+    if (tieneComa) {
+      final idx = crudo.indexOf(',');
+      enteraDig = crudo.substring(0, idx).replaceAll(',', '');
+      decimalDig = crudo.substring(idx + 1).replaceAll(',', '');
+      if (decimalDig.length > _maxDecimales) {
+        decimalDig = decimalDig.substring(0, _maxDecimales);
+      }
+    } else {
+      enteraDig = crudo;
+      decimalDig = '';
+    }
+
+    final enteraFmt = enteraDig.isEmpty
+        ? ''
+        : enteraDig.replaceAllMapped(_milesReg, (m) => '${m[1]}.');
+    final formateado = tieneComa ? '$enteraFmt,$decimalDig' : enteraFmt;
+
+    // Cursor: contar significativos (dígitos + coma) antes del cursor en el
+    // texto nuevo y reposicionar tras la misma cantidad en el formateado,
+    // saltando los puntos de miles.
+    final cursorRaw =
+        newValue.selection.baseOffset.clamp(0, newValue.text.length);
+    final sigAntes = newValue.text
+        .substring(0, cursorRaw)
+        .replaceAll(RegExp(r'[^\d,]'), '')
+        .length;
+    var nuevoCursor = 0;
+    var contador = 0;
+    while (contador < sigAntes && nuevoCursor < formateado.length) {
       if (formateado[nuevoCursor] != '.') contador++;
       nuevoCursor++;
     }

@@ -68,7 +68,7 @@ class _TramoEditState {
         montoFijoChoferActivo = montoFijoChoferInicial != null,
         montoFijoChoferCtrl = TextEditingController(
           text: montoFijoChoferInicial != null
-              ? AppFormatters.formatearMiles(montoFijoChoferInicial.toInt())
+              ? AppFormatters.formatearMonto(montoFijoChoferInicial)
               : '',
         ),
         descripcionCargaCtrl =
@@ -139,7 +139,7 @@ class _TramoEditState {
       return base.copyWith(montoFijoChofer: null);
     }
     final parsed =
-        AppFormatters.parsearMiles(montoFijoChoferCtrl.text)?.toDouble();
+        AppFormatters.parsearMonto(montoFijoChoferCtrl.text);
     if (parsed == null || parsed <= 0) {
       // Activo pero sin valor válido — no aplicar override (queda
       // null y el cálculo cae al 18%). El form valida esto antes de
@@ -270,7 +270,7 @@ class _TramoCard extends StatelessWidget {
             final fijoTarifa = elegida.montoFijoChofer;
             state.montoFijoChoferActivo = fijoTarifa != null;
             state.montoFijoChoferCtrl.text = fijoTarifa != null
-                ? AppFormatters.formatearMiles(fijoTarifa.toInt())
+                ? AppFormatters.formatearMonto(fijoTarifa)
                 : '';
             onCambio();
           },
@@ -502,7 +502,7 @@ class _OverridePagoChofer extends StatelessWidget {
           TextField(
             controller: state.montoFijoChoferCtrl,
             keyboardType: TextInputType.number,
-            inputFormatters: [AppFormatters.inputMiles],
+            inputFormatters: [AppFormatters.inputMilesDecimal],
             decoration: const InputDecoration(
               labelText: 'Monto al chofer (por viaje)',
               prefixText: '\$ ',

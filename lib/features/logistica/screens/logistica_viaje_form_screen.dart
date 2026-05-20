@@ -668,7 +668,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
       final t = _tramos[i];
       if (!t.montoFijoChoferActivo) continue;
       final m =
-          AppFormatters.parsearMiles(t.montoFijoChoferCtrl.text)?.toDouble();
+          AppFormatters.parsearMonto(t.montoFijoChoferCtrl.text);
       if (m == null || m <= 0) {
         AppFeedback.warningOn(
           messenger,

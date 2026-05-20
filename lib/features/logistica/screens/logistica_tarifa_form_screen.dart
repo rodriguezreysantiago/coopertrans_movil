@@ -101,14 +101,12 @@ class _LogisticaTarifaFormScreenState
       _tipoCarga = t.tipoCarga;
       _flete = t.flete;
       _unidad = t.unidadTarifa;
-      _tarifaRealCtrl.text =
-          AppFormatters.formatearMiles(t.tarifaReal.toInt());
-      _tarifaChoferCtrl.text =
-          AppFormatters.formatearMiles(t.tarifaChofer.toInt());
+      _tarifaRealCtrl.text = AppFormatters.formatearMonto(t.tarifaReal);
+      _tarifaChoferCtrl.text = AppFormatters.formatearMonto(t.tarifaChofer);
       if (t.montoFijoChofer != null) {
         _modoMontoFijoChofer = true;
         _montoFijoChoferCtrl.text =
-            AppFormatters.formatearMiles(t.montoFijoChofer!.toInt());
+            AppFormatters.formatearMonto(t.montoFijoChofer!);
       }
       if (t.porcentajeComisionDador != null) {
         _comisionCtrl.text =
@@ -522,7 +520,7 @@ class _LogisticaTarifaFormScreenState
     return TextField(
       controller: controller,
       keyboardType: TextInputType.number,
-      inputFormatters: [AppFormatters.inputMiles],
+      inputFormatters: [AppFormatters.inputMilesDecimal],
       decoration: InputDecoration(
         labelText: etiqueta,
         prefixText: '\$ ',
@@ -540,7 +538,7 @@ class _LogisticaTarifaFormScreenState
     return TextField(
       controller: _montoFijoChoferCtrl,
       keyboardType: TextInputType.number,
-      inputFormatters: [AppFormatters.inputMiles],
+      inputFormatters: [AppFormatters.inputMilesDecimal],
       decoration: const InputDecoration(
         labelText: 'Monto fijo al chofer (por viaje)',
         prefixText: '\$ ',
@@ -621,10 +619,9 @@ class _LogisticaTarifaFormScreenState
     //
     // El parser devuelve null si está vacío o no parsea — lo
     // tratamos como 0 (tarifa por definir).
-    final tarifaReal =
-        AppFormatters.parsearMiles(_tarifaRealCtrl.text)?.toDouble() ?? 0;
+    final tarifaReal = AppFormatters.parsearMonto(_tarifaRealCtrl.text) ?? 0;
     final tarifaChofer =
-        AppFormatters.parsearMiles(_tarifaChoferCtrl.text)?.toDouble() ?? 0;
+        AppFormatters.parsearMonto(_tarifaChoferCtrl.text) ?? 0;
     if (tarifaReal < 0 || tarifaChofer < 0) {
       setState(() => _error = 'Las tarifas no pueden ser negativas.');
       return;
@@ -642,8 +639,8 @@ class _LogisticaTarifaFormScreenState
     // ambigua entre "modo monto fijo" y "no se cargó nada".
     double? montoFijoChofer;
     if (_modoMontoFijoChofer) {
-      montoFijoChofer = AppFormatters.parsearMiles(_montoFijoChoferCtrl.text)
-          ?.toDouble();
+      montoFijoChofer =
+          AppFormatters.parsearMonto(_montoFijoChoferCtrl.text);
       if (montoFijoChofer == null || montoFijoChofer <= 0) {
         setState(() => _error =
             'Cargá el monto fijo del chofer (debe ser mayor a 0).');
