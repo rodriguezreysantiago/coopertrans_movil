@@ -14,6 +14,7 @@ mismo que usan los demás scripts de admin.
 """
 import json
 import os
+import re
 
 import firebase_admin
 from firebase_admin import credentials, firestore
@@ -54,13 +55,33 @@ def _patentes_vigentes(db) -> dict:
     return mapa
 
 
-def cargar_choferes(solo_dnis=None) -> list:
+# Tester por NOMBRE (mismo regex que functions/src/excluidos.ts).
+_RE_TESTER = re.compile(r"\b(reviewer|tester|demo)\b", re.I)
+
+
+def _patentes_tanque(db) -> set:
+    """Patentes de vehículos TIPO=TANQUE (los tanques NO se usan para la
+    carga de arenas YPF; mismo criterio que los EXCLUIDOS de la app)."""
+    return {
+        d.id.upper()
+        for d in db.collection("VEHICULOS").where("TIPO", "==", "TANQUE").stream()
+    }
+
+
+def cargar_choferes(solo_dnis=None, incluir_excluidos: bool = False) -> list:
     """Lista [{dni, nombre, email, patente, clave}] con datos vivos de la app.
-    `solo_dnis`: si se pasa una lista, filtra a esos DNIs."""
+
+    Por defecto OMITE (igual que la app): inactivos, testers (reviewer/tester/
+    demo) y **choferes de tanque** (su ENGANCHE es un vehículo TIPO=TANQUE) —
+    los tanques no se usan para la carga de arenas YPF.
+
+    `solo_dnis`: filtra a esos DNIs. `incluir_excluidos`: no omite nada.
+    """
     db = _db()
     claves = _cargar_claves()
     comun = claves.get("_comun")
     patente_por_dni = _patentes_vigentes(db)
+    patentes_tanque = set() if incluir_excluidos else _patentes_tanque(db)
 
     choferes = []
     q = db.collection(COL_EMPLEADOS).where("ROL", "==", ROL_CHOFER)
@@ -69,6 +90,14 @@ def cargar_choferes(solo_dnis=None) -> list:
         if solo_dnis and dni not in solo_dnis:
             continue
         e = doc.to_dict() or {}
+        if not incluir_excluidos:
+            if e.get("ACTIVO") is False:
+                continue
+            if _RE_TESTER.search(e.get("NOMBRE") or ""):
+                continue
+            enganche = (e.get("ENGANCHE") or "").strip().upper()
+            if enganche and enganche in patentes_tanque:
+                continue  # chofer de tanque → se omite
         choferes.append({
             "dni": dni,
             "nombre": e.get("NOMBRE"),
