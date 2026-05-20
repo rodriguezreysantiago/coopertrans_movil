@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
-import '../../../shared/utils/responsive_grid.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../constants/posiciones.dart';
 import '../models/cubierta_instalada.dart';
@@ -36,65 +35,78 @@ class GomeriaHubScreen extends StatelessWidget {
             // alertas). El gap inferior está adentro del propio banner
             // para que cuando no hay alertas no quede espacio en blanco.
             const _AlertasFinDeVida(),
-            // Hub principal — 4 tiles que llenan todo el alto disponible.
-            // El ratio se calcula con LayoutBuilder según el espacio que
-            // sobre después del banner: las cards se achican o se agrandan
-            // para que entren las 4 sin scrollear, sea mobile o tablet,
-            // con o sin banner. Antes era ratio 1.1 fijo + scroll → no
-            // adaptaba al tamaño de pantalla y obligaba a scrollear.
+            // Hub principal — 4 tiles. En pantallas con alto acotado
+            // (mobile/tablet) llenan el alto disponible sin scroll. En la
+            // web/escritorio el ancho se capea (Center + maxWidth) para que
+            // las tarjetas no queden gigantes; y si el alto no alcanza para
+            // 2 filas legibles, en lugar de cortarse/desbordar pasa a scroll.
             Expanded(
-              child: LayoutBuilder(
-                builder: (ctx, constraints) {
-                  const spacing = 16.0;
-                  // Helper compartido — defensa contra alto cero / NaN
-                  // y clamp 0.5..2.0 para evitar cards ridículamente
-                  // altas/anchas en pantallas extremas.
-                  final ratio = computeGridRatio(
-                    boxWidth: constraints.maxWidth,
-                    boxHeight: constraints.maxHeight,
-                    cols: 2,
-                    rows: 2,
-                    spacing: spacing,
-                    clampMin: 0.5,
-                  );
-                  return GridView.count(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: spacing,
-                    mainAxisSpacing: spacing,
-                    childAspectRatio: ratio,
-                    physics: const NeverScrollableScrollPhysics(),
-                    children: const [
-                      _HubTile(
-                        titulo: 'UNIDADES',
-                        subtitulo: 'Cambiar cubiertas por posición',
-                        icono: Icons.local_shipping_outlined,
-                        color: AppColors.accentOrange,
-                        ruta: AppRoutes.adminGomeriaUnidades,
-                      ),
-                      _HubTile(
-                        titulo: 'STOCK',
-                        subtitulo: 'Cubiertas + buscar por código',
-                        icono: Icons.inventory_2_outlined,
-                        color: AppColors.accentBlue,
-                        ruta: AppRoutes.adminGomeriaStock,
-                      ),
-                      _HubTile(
-                        titulo: 'RECAPADOS',
-                        subtitulo: 'Envíos y recepciones',
-                        icono: Icons.swap_horiz_outlined,
-                        color: AppColors.accentTeal,
-                        ruta: AppRoutes.adminGomeriaRecapados,
-                      ),
-                      _HubTile(
-                        titulo: 'MARCAS Y MODELOS',
-                        subtitulo: 'Catálogo (ABM)',
-                        icono: Icons.category_outlined,
-                        color: AppColors.accentPurple,
-                        ruta: AppRoutes.adminGomeriaMarcasModelos,
-                      ),
-                    ],
-                  );
-                },
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 760),
+                  child: LayoutBuilder(
+                    builder: (ctx, constraints) {
+                      const spacing = 16.0;
+                      const cols = 2;
+                      const rows = 2;
+                      // Más chica que esto y el ícono + los textos no entran.
+                      const minTileAlto = 150.0;
+                      final anchoCelda =
+                          (constraints.maxWidth - spacing * (cols - 1)) / cols;
+                      final altoLlenando = constraints.maxHeight.isFinite
+                          ? (constraints.maxHeight - spacing * (rows - 1)) / rows
+                          : double.infinity;
+                      // ¿Entran las 2 filas sin achicar las tiles de más?
+                      final entra =
+                          altoLlenando.isFinite && altoLlenando >= minTileAlto;
+                      final altoCelda = entra ? altoLlenando : 200.0;
+                      final ratio =
+                          altoCelda > 0 ? anchoCelda / altoCelda : 1.0;
+                      return GridView.count(
+                        crossAxisCount: cols,
+                        crossAxisSpacing: spacing,
+                        mainAxisSpacing: spacing,
+                        childAspectRatio: ratio,
+                        // Llena el alto cuando entra; si no, scrollea (sin
+                        // desbordar ni cortar las tarjetas).
+                        physics: entra
+                            ? const NeverScrollableScrollPhysics()
+                            : const BouncingScrollPhysics(),
+                        shrinkWrap: !entra,
+                        children: const [
+                          _HubTile(
+                            titulo: 'UNIDADES',
+                            subtitulo: 'Cambiar cubiertas por posición',
+                            icono: Icons.local_shipping_outlined,
+                            color: AppColors.accentOrange,
+                            ruta: AppRoutes.adminGomeriaUnidades,
+                          ),
+                          _HubTile(
+                            titulo: 'STOCK',
+                            subtitulo: 'Cubiertas + buscar por código',
+                            icono: Icons.inventory_2_outlined,
+                            color: AppColors.accentBlue,
+                            ruta: AppRoutes.adminGomeriaStock,
+                          ),
+                          _HubTile(
+                            titulo: 'RECAPADOS',
+                            subtitulo: 'Envíos y recepciones',
+                            icono: Icons.swap_horiz_outlined,
+                            color: AppColors.accentTeal,
+                            ruta: AppRoutes.adminGomeriaRecapados,
+                          ),
+                          _HubTile(
+                            titulo: 'MARCAS Y MODELOS',
+                            subtitulo: 'Catálogo (ABM)',
+                            icono: Icons.category_outlined,
+                            color: AppColors.accentPurple,
+                            ruta: AppRoutes.adminGomeriaMarcasModelos,
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
               ),
             ),
           ],
