@@ -187,7 +187,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             if (Capabilities.can(PrefsService.rol, Capability.verCachatore))
               const _AdminTile(
                 titulo: 'CACHATORE',
-                subtitulo: 'Turnos de carga YPF (bot iTurnos)',
+                subtitulo: '',
                 icono: Icons.schedule,
                 color: AppColors.accentCyan,
                 ruta: AppRoutes.adminCachatoreHub,
