@@ -3,9 +3,10 @@
 A diferencia de `orquestador.py` (one-shot: espera el drop, caza y cierra),
 este proceso queda **LATENTE las 24 hs** en la PC dedicada del bot:
 
-- **Latente** (todo el día): un único escaneo suave de la agenda cada ~25 s.
-  Si alguien CANCELA y se libera un turno en la franja de un chofer que lo
-  necesita, lo agarra al toque — sin esperar al drop de las 10:30.
+- **Latente** (todo el día): barre cada ~5 s TODA la worklist (lo que dejamos
+  en drop.json) — tanto agendar a los que no tienen turno como reagendar a los
+  marcados. Si alguien CANCELA y se libera un turno en la franja de un chofer
+  que lo necesita, lo agarra al toque — sin esperar al drop de las 10:30.
 - **Agresivo** (alrededor de `hora_inicio`): cada chofer sin turno escanea su
   propia agenda a full y reserva apenas aparece un slot en su franja (igual que
   el orquestador, para ganar la pulseada del drop). Pasada la ventana, vuelve
@@ -45,8 +46,8 @@ DROP_CONFIG = os.path.join(_DIR, "drop.json")
 
 # Cadencias (se pueden pisar desde drop.json).
 POLL_AGRESIVO_SEG = 1.5      # en la ventana del drop: re-escaneo rápido por chofer
-POLL_LATENTE_SEG = 25.0      # resto del día: un escaneo compartido cada tanto
-JITTER_LATENTE_SEG = 10.0    # + ruido aleatorio (para no pegar siempre al mismo seg)
+POLL_LATENTE_SEG = 5.0       # resto del día: barre la worklist cada ~5 s
+JITTER_LATENTE_SEG = 1.0     # + ruido chico (para no pegar siempre al mismo seg)
 DROP_DURACION_MIN = 20       # largo de la ventana agresiva si no se especifica
 
 LOGIN_REINTENTOS = 3

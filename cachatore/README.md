@@ -66,8 +66,9 @@ asignada del chofer).
   `--dry` (no reserva, testeo). La selección del día va en `drop.json` (plantilla
   `drop.ejemplo.json`, ambos gitignoreados).
 - `vigia.py` — **el daemon 24/7** (lo que vive en la PC dedicada). Dos modos
-  automáticos: **latente** (un escaneo suave compartido cada ~25 s que caza
-  cancelaciones) y **agresivo** (en la ventana `hora_inicio`, cada chofer caza su
+  automáticos: **latente** (barre la worklist cada ~5 s — agenda a los que no
+  tienen turno y reagenda a los marcados; caza cancelaciones) y **agresivo** (en
+  la ventana `hora_inicio`, cada chofer caza su
   propia agenda a full). Relee `drop.json` en caliente, re-trae unidad/mail de
   Firestore cada ~10 min (si reasignás el camión en la app, lo toma solo),
   re-chequea `mis_turnos` (no dobla reserva y sobrevive reinicios) y reagenda los
