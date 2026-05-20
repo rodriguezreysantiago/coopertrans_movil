@@ -6,13 +6,15 @@ chofer leer SU propia empresa empleadora (Póliza ART, F.931, SCVO, libre deuda)
 De ahora en más la app escribe EMPRESA_CUIT sola al crear/editar la EMPRESA;
 este script es SOLO para los legajos que ya existían.
 
-SOLO LECTURA por default; con --go escribe. Correr desde la raíz del repo
-(necesita serviceAccountKey.json ahí). Sirve cualquier Python con firebase-admin
-(p. ej. el venv del cachatore):
+SOLO LECTURA por default; con --go escribe. Sirve cualquier Python con
+firebase-admin (p. ej. el venv del cachatore). El serviceAccountKey.json se
+busca en la raíz del repo automáticamente (independiente del cwd):
 
-    python scripts/backfill_empresa_cuit.py          # dry-run (no escribe)
-    python scripts/backfill_empresa_cuit.py --go     # aplica
+    # desde C:\coopertrans_movil  (la RAIZ del repo, no la subcarpeta cachatore)
+    cachatore\\venv\\Scripts\\python.exe scripts\\backfill_empresa_cuit.py        # preview
+    cachatore\\venv\\Scripts\\python.exe scripts\\backfill_empresa_cuit.py --go    # aplica
 """
+import os
 import re
 import sys
 
@@ -20,13 +22,17 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 
 RE_CUIT = re.compile(r"(\d{2}-\d{8}-\d)")
+# serviceAccountKey.json vive en la raíz del repo (scripts/..), lo ubicamos
+# relativo a ESTE archivo para no depender del directorio desde donde se corra.
+_SAK = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "serviceAccountKey.json")
 
 
 def main():
     go = "--go" in sys.argv
     if not firebase_admin._apps:
-        firebase_admin.initialize_app(
-            credentials.Certificate("serviceAccountKey.json"))
+        firebase_admin.initialize_app(credentials.Certificate(_SAK))
     db = firestore.client()
 
     a_tocar, ya_ok, sin_cuit = [], 0, 0
