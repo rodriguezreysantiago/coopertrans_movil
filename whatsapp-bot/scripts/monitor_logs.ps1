@@ -38,6 +38,7 @@ $Host.UI.RawUI.WindowTitle = 'Coopertrans Bot - Logs en vivo'
 Write-Host ''
 Write-Host '====================================================' -ForegroundColor Cyan
 Write-Host '  COOPERTRANS BOT - Logs en vivo' -ForegroundColor Cyan
+Write-Host '  visor v2 (resiste la rotacion del log)' -ForegroundColor DarkGray
 Write-Host '====================================================' -ForegroundColor Cyan
 Write-Host "  Archivo: $outLog" -ForegroundColor DarkGray
 Write-Host '  Ctrl+C para salir' -ForegroundColor DarkGray

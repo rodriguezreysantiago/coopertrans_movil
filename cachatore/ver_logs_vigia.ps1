@@ -19,6 +19,7 @@ $Host.UI.RawUI.WindowTitle = 'Cachatore - Logs en vivo'
 Write-Host ''
 Write-Host '====================================================' -ForegroundColor Magenta
 Write-Host '  CACHATORE (turnos YPF) - Logs en vivo' -ForegroundColor Magenta
+Write-Host '  visor v2 (resiste la rotacion del log)' -ForegroundColor DarkGray
 Write-Host '====================================================' -ForegroundColor Magenta
 Write-Host "  Archivo: $logFile" -ForegroundColor DarkGray
 Write-Host '  Ctrl+C para salir' -ForegroundColor DarkGray
