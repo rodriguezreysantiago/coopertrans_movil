@@ -183,37 +183,41 @@ try {
     }
     Write-Log 'INFO' "Start-Service CoopertransMovilBot..."
     Start-Service -Name CoopertransMovilBot
-    Write-Log 'INFO' "Start-Service OK, esperando 90s para smoke test..."
-    Start-Sleep -Seconds 90
+    Write-Log 'INFO' "Start-Service OK. Smoke test con reintentos (hasta ~4 min)..."
 
-    # --- 7. Smoke test via bot_estado_remoto.js --json --------------
+    # --- 7. Smoke test via bot_estado_remoto.js --json -------------------
+    # El bot puede tardar 2-4 min en quedar LISTO (a veces reinicia el cliente
+    # de WhatsApp internamente). En lugar de chequear una sola vez a los 90s
+    # (que daba un falso "sospechoso" cuando el bot solo estaba tardando),
+    # polleamos cada 20s y cortamos OK apenas esta LISTO. Solo si NUNCA llega
+    # tras ~4 min damos WARNING.
     Set-Location $RepoRoot
-    $jsonOut = & {
-        $ErrorActionPreference = 'Continue'
-        & node "scripts\bot_estado_remoto.js" --json 2>&1
-    }
-    if ($LASTEXITCODE -ne 0) {
-        Write-Log 'WARNING' "Smoke test fallo (script exit $LASTEXITCODE): $jsonOut"
-        Write-Log 'WARNING' "DEPLOY HECHO pero estado del bot NO confirmado. Revisar manualmente."
-        exit 0
-    }
-
-    try {
-        $health = $jsonOut | ConvertFrom-Json
-        $hbMs = $health.ultimoHeartbeat._seconds * 1000 + [math]::Floor($health.ultimoHeartbeat._nanoseconds / 1e6)
-        $hbAgeSeg = [math]::Floor(((Get-Date).ToUniversalTime() - [DateTime]'1970-01-01').TotalSeconds - $health.ultimoHeartbeat._seconds)
-        $estadoCliente = $health.estadoCliente
-        $version = $health.bot.version
-
-        if ($hbAgeSeg -lt 120 -and $estadoCliente -eq 'LISTO') {
-            Write-Log 'INFO' "Smoke test OK: bot LISTO, heartbeat hace ${hbAgeSeg}s, version $version."
-        } else {
-            Write-Log 'WARNING' "Smoke test sospechoso: estadoCliente=$estadoCliente heartbeatAge=${hbAgeSeg}s version=$version"
-            Write-Log 'WARNING' "DEPLOY hecho pero bot puede no estar 100%. Revisar logs del bot."
+    $listo = $false
+    $ultimoEstado = '?'
+    $intentos = 12   # 12 x 20s = ~4 min
+    for ($i = 1; $i -le $intentos; $i++) {
+        Start-Sleep -Seconds 20
+        $jsonOut = & {
+            $ErrorActionPreference = 'Continue'
+            & node "scripts\bot_estado_remoto.js" --json 2>&1
         }
-    } catch {
-        Write-Log 'WARNING' "No pude parsear el JSON del smoke test: $_"
-        Write-Log 'WARNING' "Output crudo: $jsonOut"
+        if ($LASTEXITCODE -ne 0) { continue }   # el chequeo fallo; reintentar
+        try {
+            $health = $jsonOut | ConvertFrom-Json
+            $hbAgeSeg = [math]::Floor(((Get-Date).ToUniversalTime() - [DateTime]'1970-01-01').TotalSeconds - $health.ultimoHeartbeat._seconds)
+            $ultimoEstado = $health.estadoCliente
+            if ($hbAgeSeg -lt 120 -and $ultimoEstado -eq 'LISTO') {
+                Write-Log 'INFO' "Smoke test OK: bot LISTO (~$($i * 20)s), heartbeat hace ${hbAgeSeg}s, version $($health.bot.version)."
+                $listo = $true
+                break
+            }
+        } catch {
+            # JSON ilegible en este intento; reintentar.
+        }
+    }
+    if (-not $listo) {
+        Write-Log 'WARNING' "Smoke test: el bot no llego a LISTO tras ~4 min (ultimo estado=$ultimoEstado)."
+        Write-Log 'WARNING' "DEPLOY hecho pero conviene revisar los logs del bot."
     }
 
 } catch {
