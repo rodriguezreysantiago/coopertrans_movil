@@ -88,10 +88,13 @@ estado; reutiliza los datos de la app (mail + patente asignada del chofer).
   Validado en `--dry` (nube) y `--dry --latente`.
 - `instalar_servicio_vigia.ps1` / `ver_logs_vigia.ps1` — instalan el vigía como
   servicio NSSM (Auto diferido + log rotado a `logs/`) en la PC dedicada y siguen
-  el log en vivo. Mismo patrón que el servicio del bot.
+  el log en vivo (coloreado por prefijo). Mismo patrón que el servicio del bot.
+- `instalar_monitor_logs_vigia.ps1` — abre la ventana de logs del cachatore sola
+  al iniciar sesión (shortcut en Startup), igual que la del bot → en la dedicada
+  ves las dos ventanas (bot + cachatore).
 - `instalar_todo_cachatore.ps1` — setup completo de un saque en la dedicada
-  (Python + venv + deps + `claves.json` + `drop.json` + servicio). Idempotente.
-  `.\instalar_todo_cachatore.ps1 -Clave Cooper2022`.
+  (Python + venv + deps + `claves.json` + `drop.json` + servicio + ventana de
+  logs al login). Idempotente. `.\instalar_todo_cachatore.ps1 -Clave Cooper2022`.
 
 ## Estado (2026-05-20)
 - **Login validado**: los **51 choferes no-tanque loguean OK** con el `MAIL` de

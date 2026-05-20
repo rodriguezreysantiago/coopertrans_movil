@@ -131,5 +131,14 @@ $svc = Join-Path $Dir "instalar_servicio_vigia.ps1"
 if (-not (Test-Path $svc)) { Fail "no encuentro instalar_servicio_vigia.ps1 junto a este script." }
 if ($Reinstalar) { & $svc -Reinstalar } else { & $svc }
 
+# --- 7) ventana de logs al login (como el bot de WhatsApp) ---
+Paso 7 "Ventana de logs al iniciar sesion"
+$mon = Join-Path $Dir "instalar_monitor_logs_vigia.ps1"
+if (Test-Path $mon) {
+  & $mon
+} else {
+  Aviso "no encontre instalar_monitor_logs_vigia.ps1 (omito la ventana al login)."
+}
+
 Write-Host "`n== Listo ==" -ForegroundColor Green
 Write-Host "Ver el log en vivo:  .\ver_logs_vigia.ps1"

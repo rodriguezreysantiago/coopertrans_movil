@@ -49,6 +49,14 @@ import iturnos
 import choferes
 import nube
 
+# Logs en UTF-8: NSSM captura stdout a logs/vigia.log y la ventana de logs lo
+# lee como UTF-8. Sin esto, en Windows el stdout redirigido sale en cp1252 y los
+# acentos/ñ de los nombres de choferes salen como mojibake.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 _DIR = os.path.dirname(os.path.abspath(__file__))
 DROP_CONFIG = os.path.join(_DIR, "drop.json")
 
