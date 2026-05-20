@@ -85,6 +85,11 @@ class AppRoutes {
   /// y vencimientos en su MIS VENCIMIENTOS, read-only.
   static const String adminEmpresasEmpleadoras = '/admin_empresas_empleadoras';
 
+  // Cachatore — control del bot que reserva/reagenda turnos de carga YPF
+  // en iTurnos (corre 24/7 en la PC dedicada). La app escribe la selección
+  // (qué choferes, qué franja) en Firestore y el bot la lee en vivo.
+  static const String adminCachatoreHub = '/admin_cachatore';
+
 
   // Auditorías
   static const String vencimientosChoferes = '/vencimientos_choferes';
@@ -361,6 +366,29 @@ class AppCollections {
   /// sale parseable directo del campo `EMPRESA` que ya guardamos en
   /// EMPLEADOS (formato `'NOMBRE: (CUIT)'`).
   static const String empresasEmpleadoras = 'EMPRESAS_EMPLEADORAS';
+
+  // ─── Módulo Cachatore (2026-05-20) ───
+  // Control del bot que reserva/reagenda turnos de carga YPF en iTurnos
+  // (vive 24/7 en la PC dedicada — proyecto `cachatore/`). La app escribe
+  // la selección; el bot (Python, Admin SDK) la lee y devuelve el estado.
+
+  /// Config global del bot. Doc único `global`:
+  /// `{activo (interruptor maestro), fecha (null|'hoy'|'manana'|'AAAA-MM-DD'),
+  /// hora_inicio ('HH:MM' = hora del drop), duracion_min, poll_latente_seg,
+  /// actualizado_en, actualizado_por_dni}`.
+  static const String cachatoreConfig = 'CACHATORE_CONFIG';
+
+  /// Choferes que el bot debe vigilar. DocId = DNI. La app escribe
+  /// `{dni, nombre, franja (madrugada|manana|tarde|noche), reagendar (bool),
+  /// activo (bool), creado_*/actualizado_*}`. El bot escribe de vuelta el
+  /// estado en vivo: `{estado (buscando|reservado|reagendado|login_fallo|...),
+  /// estado_hora (HH:MM del turno), estado_detalle, estado_en}`.
+  static const String cachatoreObjetivos = 'CACHATORE_OBJETIVOS';
+
+  /// Latido/estado del bot. Doc único `bot`: `{modo (idle|latente|agresivo|
+  /// pausado), total, pendientes, ultimo_tick_en}`. Lo escribe SOLO el bot
+  /// (Admin SDK) — la app lo lee para mostrar si está vivo y qué hace.
+  static const String cachatoreEstado = 'CACHATORE_ESTADO';
 }
 
 /// Documentos laborales que viven a NIVEL EMPRESA (no por empleado).

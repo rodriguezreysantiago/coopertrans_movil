@@ -3,10 +3,10 @@
 A diferencia de `orquestador.py` (one-shot: espera el drop, caza y cierra),
 este proceso queda **LATENTE las 24 hs** en la PC dedicada del bot:
 
-- **Latente** (todo el día): barre cada ~5 s TODA la worklist (lo que dejamos
-  en drop.json) — tanto agendar a los que no tienen turno como reagendar a los
-  marcados. Si alguien CANCELA y se libera un turno en la franja de un chofer
-  que lo necesita, lo agarra al toque — sin esperar al drop de las 10:30.
+- **Latente** (todo el día): barre cada ~5 s TODA la worklist — tanto agendar a
+  los que no tienen turno como reagendar a los marcados. Si alguien CANCELA y se
+  libera un turno en la franja de un chofer que lo necesita, lo agarra al toque
+  — sin esperar al drop de las 10:30.
 - **Agresivo** (alrededor de `hora_inicio`): cada chofer sin turno escanea su
   propia agenda a full y reserva apenas aparece un slot en su franja (igual que
   el orquestador, para ganar la pulseada del drop). Pasada la ventana, vuelve
@@ -14,16 +14,23 @@ este proceso queda **LATENTE las 24 hs** en la PC dedicada del bot:
 - **Reagendar**: si un chofer tiene `reagendar:true`, mueve su turno a un slot
   de su franja apenas se libere uno (sin formulario, lo reasigna directo).
 
+**Config**: por defecto la lee de **Firestore** (lo que escribe la UI de la app:
+`CACHATORE_CONFIG/global` + `CACHATORE_OBJETIVOS`), y le devuelve el estado en
+vivo (latido `CACHATORE_ESTADO/bot` + estado por chofer). Con `--archivo` usa
+`drop.json` local (sin escribir a Firestore) — para correr suelto/testeo. Si
+Firestore no responde, cae a `drop.json` igual. La config se relee cada ~30 s
+(el barrido de ~5 s pega contra iTurnos, NO contra Firestore).
+
 Todo el día además:
-- Re-lee `drop.json` en caliente (no hace falta reiniciar el servicio).
 - Re-trae de Firestore (cada ~10 min) la unidad/mail de cada chofer: si en la
   app le reasignan el camión, el vigía lo toma solo.
 - Re-chequea `mis_turnos` (de a poco, para no bloquear): así sabe quién ya tiene
   turno y nunca dobla reserva ni pierde el estado si el servicio se reinicia.
 
 Uso:
-    python vigia.py                 # daemon 24/7 (lo corre el servicio NSSM)
-    python vigia.py --dry           # no reserva/reagenda, solo loguea qué haría
+    python vigia.py                 # daemon 24/7 (config de Firestore / UI)
+    python vigia.py --archivo       # config de drop.json local (no toca Firestore)
+    python vigia.py --dry           # no reserva/reagenda ni escribe estado
     python vigia.py --latente       # fuerza modo latente (ignora ventana drop)
     python vigia.py --agresivo      # fuerza modo agresivo (testeo)
 
@@ -40,24 +47,31 @@ from datetime import datetime, timedelta
 
 import iturnos
 import choferes
+import nube
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 DROP_CONFIG = os.path.join(_DIR, "drop.json")
 
-# Cadencias (se pueden pisar desde drop.json).
+# Cadencias (se pueden pisar desde la config).
 POLL_AGRESIVO_SEG = 1.5      # en la ventana del drop: re-escaneo rápido por chofer
 POLL_LATENTE_SEG = 5.0       # resto del día: barre la worklist cada ~5 s
 JITTER_LATENTE_SEG = 1.0     # + ruido chico (para no pegar siempre al mismo seg)
 DROP_DURACION_MIN = 20       # largo de la ventana agresiva si no se especifica
 
 LOGIN_REINTENTOS = 3
+REFRESH_CONFIG_SEG = 30      # cada cuánto releer la worklist (Firestore/archivo)
 REFRESH_TURNOS_SEG = 600     # cada cuánto re-chequear mis_turnos de cada chofer
 REFRESH_DATOS_SEG = 600      # cada cuánto re-traer unidad/mail de Firestore
+HEARTBEAT_SEG = 30           # cada cuánto escribir el latido del bot
 MAX_REFRESH_POR_CICLO = 2    # cuántos mis_turnos refrescar por ciclo (no bloquear)
-ESPERA_SIN_CONFIG_SEG = 30   # si falta/está vacío drop.json
+ESPERA_SIN_CONFIG_SEG = 30   # si falta config / no hay choferes / pausado
 
 _log_lock = threading.Lock()
 _scanner = {"cli": None, "logueado": False}   # sesión dedicada al escaneo latente
+
+# Seteados en main() según los flags.
+_USAR_NUBE = True            # leer config de Firestore (False = drop.json)
+_ESCRIBIR_ESTADO = False     # escribir latido/estado a Firestore
 
 
 def log(tag: str, quien: str, msg: str):
@@ -66,8 +80,8 @@ def log(tag: str, quien: str, msg: str):
 
 
 def resolver_fecha(valor):
-    """drop.json `fecha`: null=cualquier fecha en la franja; 'hoy'/'manana' se
-    re-resuelven cada día (útil 24/7); o una fecha puntual 'AAAA-MM-DD'."""
+    """`fecha`: null=cualquier fecha en la franja; 'hoy'/'manana' se re-resuelven
+    cada día (útil 24/7); o una fecha puntual 'AAAA-MM-DD'."""
     if not valor:
         return None
     v = str(valor).strip().lower()
@@ -78,7 +92,7 @@ def resolver_fecha(valor):
     return str(valor)
 
 
-def leer_config(ultimo):
+def _leer_config_archivo(ultimo):
     """Lee drop.json tolerando que esté a medio escribir (devuelve la última
     config buena en ese caso). None = no existe."""
     try:
@@ -89,6 +103,18 @@ def leer_config(ultimo):
     except Exception as e:
         log("LOG", "sistema", f"drop.json ilegible ({e}); sigo con la última config")
         return ultimo
+
+
+def leer_config(ultimo):
+    """Config (worklist) desde Firestore (UI de la app) o drop.json."""
+    if _USAR_NUBE:
+        try:
+            return nube.leer_config_nube()
+        except Exception as e:
+            log("LOG", "sistema",
+                f"no pude leer config de Firestore ({e}); pruebo drop.json")
+            return _leer_config_archivo(ultimo)
+    return _leer_config_archivo(ultimo)
 
 
 def en_ventana_drop(cfg) -> bool:
@@ -110,7 +136,7 @@ class Target:
     """Estado de un chofer vigilado. Objetivo: tener un turno en su franja."""
     __slots__ = ("dni", "nombre", "email", "clave", "patente", "franja",
                  "reagendar", "cli", "logueado", "tiene_turno", "uuid",
-                 "reagendar_hecho", "ultimo_check")
+                 "reagendar_hecho", "ultimo_check", "estado_reportado")
 
     def __init__(self, ch: dict, franja: str, reagendar: bool):
         self.dni = ch["dni"]
@@ -126,10 +152,47 @@ class Target:
         self.uuid = None
         self.reagendar_hecho = False
         self.ultimo_check = 0.0
+        self.estado_reportado = None
 
     @property
     def credenciales_ok(self) -> bool:
         return bool(self.email and self.clave)
+
+
+# ---- reporte de estado a Firestore (lo lee la UI) -------------------------
+def _reportar_estado(t: "Target", estado: str, hora=None, detalle=None):
+    """Escribe el estado del chofer en Firestore (dedupe: solo si cambió, o si
+    viene una hora nueva). No-op si no estamos escribiendo estado."""
+    if estado == t.estado_reportado and hora is None:
+        return
+    t.estado_reportado = estado
+    if not _ESCRIBIR_ESTADO:
+        return
+    try:
+        nube.escribir_estado_chofer(t.dni, estado, hora=hora, detalle=detalle)
+    except Exception as e:
+        log("LOG", t.nombre, f"no pude escribir estado: {e}")
+
+
+def _reportar_dni(dni: str, estado: str):
+    """Igual que _reportar_estado pero para un DNI que NO llegó a ser Target
+    (ej. sin credenciales/patente — se reporta para que la UI lo muestre)."""
+    if not _ESCRIBIR_ESTADO:
+        return
+    try:
+        nube.escribir_estado_chofer(dni, estado)
+    except Exception:
+        pass
+
+
+def _heartbeat(modo: str, targets: dict):
+    if not _ESCRIBIR_ESTADO:
+        return
+    pendientes = sum(1 for t in targets.values() if not t.tiene_turno)
+    try:
+        nube.escribir_estado_bot(modo, len(targets), pendientes)
+    except Exception as e:
+        log("LOG", "sistema", f"no pude escribir latido: {e}")
 
 
 # ---- login (con reintento por los blips de Cloudflare) --------------------
@@ -179,7 +242,7 @@ def intentar_reservar(t: Target, slot: dict, dry: bool) -> bool:
     el slot en la sesión de ESTE chofer + el POST con patente/DNI/empresa."""
     if dry:
         log("EXITO", t.nombre, f"[DRY] reservaría {slot['fecha']} {slot['hora']}")
-        t.tiene_turno = True   # simula éxito para no repetir el log en bucle
+        t.tiene_turno = True
         return True
     try:
         r = t.cli.reservar(slot, patente=t.patente, dni=t.dni)
@@ -190,6 +253,7 @@ def intentar_reservar(t: Target, slot: dict, dry: bool) -> bool:
         log("EXITO", t.nombre,
             f"RESERVADO {slot['fecha']} {slot['hora']} — unidad {t.patente}")
         t.tiene_turno = True
+        _reportar_estado(t, "reservado", hora=slot["hora"])
         return True
     if r.get("motivo") == "tomado":
         log("LOG", t.nombre, f"{slot['hora']} lo tomaron, sigo buscando")
@@ -200,6 +264,7 @@ def intentar_reservar(t: Target, slot: dict, dry: bool) -> bool:
 
 def _reservar_async(t: Target, slot: dict, dry: bool):
     if not asegurar_login(t):
+        _reportar_estado(t, "login_fallo")
         return
     if intentar_reservar(t, slot, dry) and t.reagendar:
         t.reagendar_hecho = True   # ya quedó en franja al reservar; no hay que mover
@@ -207,6 +272,7 @@ def _reservar_async(t: Target, slot: dict, dry: bool):
 
 def _agresivo_async(t: Target, fecha, dry: bool):
     if not asegurar_login(t):
+        _reportar_estado(t, "login_fallo")
         return
     try:
         html = t.cli.abrir_agenda()
@@ -241,6 +307,7 @@ def _en_paralelo(items, func, max_hilos=10, timeout=30):
 def refrescar_estado(t: Target):
     """Mira mis_turnos: marca tiene_turno y guarda el UUID (para reagendar)."""
     if not asegurar_login(t):
+        _reportar_estado(t, "login_fallo")
         return
     try:
         turnos = t.cli.mis_turnos()
@@ -252,9 +319,11 @@ def refrescar_estado(t: Target):
         if not t.tiene_turno:
             log("LOG", t.nombre, "ya tiene turno (detectado en mis turnos)")
         t.tiene_turno = True
+        _reportar_estado(t, "reagendado" if t.reagendar_hecho else "reservado")
     else:
         t.tiene_turno = False
         t.uuid = None
+        _reportar_estado(t, "buscando")
     t.ultimo_check = time.time()
 
 
@@ -281,13 +350,13 @@ def refrescar_datos_firestore(targets: dict):
             t.clave = ch["clave"]
 
 
-# ---- sincronización de targets con drop.json (hot reload) -----------------
+# ---- sincronización de targets con la config (hot reload) -----------------
 def sincronizar_targets(cfg: dict, targets: dict):
     deseados = {c["dni"]: c for c in cfg.get("choferes", []) if c.get("dni")}
 
     for dni in list(targets):                       # sacar los que ya no están
         if dni not in deseados:
-            log("LOG", "sistema", f"saco a {targets[dni].nombre} (ya no está en drop.json)")
+            log("LOG", "sistema", f"saco a {targets[dni].nombre} (ya no está en la lista)")
             del targets[dni]
 
     # actualizar franja/reagendar de los que siguen
@@ -324,9 +393,11 @@ def sincronizar_targets(cfg: dict, targets: dict):
             t = Target(ch, franja, bool(spec.get("reagendar")))
             if not t.credenciales_ok:
                 log("ERROR", t.nombre, "sin email/clave (revisar en la app/claves.json)")
+                _reportar_dni(dni, "sin_credenciales")
                 continue
             if not t.patente:
                 log("ERROR", t.nombre, "sin patente/unidad asignada en la app")
+                _reportar_dni(dni, "sin_patente")
                 continue
             targets[dni] = t
             log("LOG", "sistema", f"vigilando {t.nombre} — franja '{t.franja}'"
@@ -405,6 +476,7 @@ def ciclo_latente(targets: dict, fecha, dry: bool):
         if r.get("ok"):
             log("EXITO", t.nombre, f"REAGENDADO a {r.get('hora')} (franja '{t.franja}')")
             t.reagendar_hecho = True
+            _reportar_estado(t, "reagendado", hora=r.get("hora"))
         elif r.get("motivo") == "tomado":
             log("LOG", t.nombre, f"{r.get('hora')} lo tomaron al reagendar, sigo")
         elif r.get("motivo") != "sin_slot_en_franja":
@@ -413,35 +485,47 @@ def ciclo_latente(targets: dict, fecha, dry: bool):
 
 # ---- loop principal -------------------------------------------------------
 def main():
+    global _USAR_NUBE, _ESCRIBIR_ESTADO
     dry = "--dry" in sys.argv
     forzar_latente = "--latente" in sys.argv
     forzar_agresivo = "--agresivo" in sys.argv
+    _USAR_NUBE = "--archivo" not in sys.argv
+    _ESCRIBIR_ESTADO = _USAR_NUBE and not dry
 
-    log("LOG", "sistema", f"vigía 24/7 arrancando{' [DRY]' if dry else ''} (pid {os.getpid()})")
+    fuente = "Firestore (UI de la app)" if _USAR_NUBE else "drop.json (local)"
+    log("LOG", "sistema", f"vigía 24/7 arrancando{' [DRY]' if dry else ''} "
+        f"— config: {fuente} (pid {os.getpid()})")
+
     targets: dict = {}
     cfg = None
-    ultimo_refresh_datos = 0.0
+    ultimo_config = 0.0
+    ultimo_datos = 0.0
+    ultimo_heartbeat = 0.0
     modo_anterior = None
 
     while True:
         try:
-            nueva = leer_config(cfg)
-            if nueva is None:
-                log("LOG", "sistema", "falta drop.json (ver drop.ejemplo.json); espero")
-                time.sleep(ESPERA_SIN_CONFIG_SEG)
-                continue
-            cfg = nueva
-            sincronizar_targets(cfg, targets)
-            if not targets:
+            # 1) refrescar la worklist (config) cada REFRESH_CONFIG_SEG
+            if cfg is None or time.time() - ultimo_config > REFRESH_CONFIG_SEG:
+                nueva = leer_config(cfg)
+                if nueva is not None:
+                    cfg = nueva
+                    sincronizar_targets(cfg, targets)
+                ultimo_config = time.time()
+
+            if cfg is None:
+                log("LOG", "sistema", "sin config todavía (ver drop.ejemplo.json); espero")
                 time.sleep(ESPERA_SIN_CONFIG_SEG)
                 continue
 
-            # re-traer unidad/mail de Firestore (refleja reasignaciones de la app)
-            if time.time() - ultimo_refresh_datos > REFRESH_DATOS_SEG:
+            activo = bool(cfg.get("activo", True))
+
+            # 2) re-traer unidad/mail de Firestore (refleja reasignaciones)
+            if targets and time.time() - ultimo_datos > REFRESH_DATOS_SEG:
                 refrescar_datos_firestore(targets)
-                ultimo_refresh_datos = time.time()
+                ultimo_datos = time.time()
 
-            # re-chequear mis_turnos de a poco (sin bloquear el ciclo)
+            # 3) re-chequear mis_turnos de a poco (sin bloquear el ciclo)
             vencidos = sorted(
                 (t for t in targets.values()
                  if time.time() - t.ultimo_check > REFRESH_TURNOS_SEG),
@@ -450,22 +534,40 @@ def main():
                 refrescar_estado(t)
 
             fecha = resolver_fecha(cfg.get("fecha"))
-            agresivo = forzar_agresivo or (not forzar_latente and en_ventana_drop(cfg))
-            modo = "agresivo" if agresivo else "latente"
+            en_drop = forzar_agresivo or (not forzar_latente and en_ventana_drop(cfg))
+
+            if not targets:
+                modo = "idle"
+            elif not activo:
+                modo = "pausado"
+            elif en_drop:
+                modo = "agresivo"
+            else:
+                modo = "latente"
+
             if modo != modo_anterior:
-                pendientes = sum(1 for t in targets.values() if not t.tiene_turno)
+                pend = sum(1 for t in targets.values() if not t.tiene_turno)
                 log("LOG", "sistema", f"modo {modo.upper()} — {len(targets)} chofer(es), "
-                    f"{pendientes} sin turno"
+                    f"{pend} sin turno"
                     + (f" — objetivo {fecha}" if fecha else " — cualquier fecha en franja"))
                 modo_anterior = modo
 
-            if agresivo:
+            # 4) actuar según modo
+            if modo == "agresivo":
                 ciclo_agresivo(targets, fecha, dry)
                 espera = cfg.get("poll_agresivo_seg", POLL_AGRESIVO_SEG)
-            else:
+            elif modo == "latente":
                 ciclo_latente(targets, fecha, dry)
                 espera = cfg.get("poll_latente_seg", POLL_LATENTE_SEG) \
                     + random.uniform(0, JITTER_LATENTE_SEG)
+            else:  # idle / pausado: el bot no toca nada
+                espera = ESPERA_SIN_CONFIG_SEG
+
+            # 5) latido (para que la UI sepa que está vivo)
+            if time.time() - ultimo_heartbeat > HEARTBEAT_SEG:
+                _heartbeat(modo, targets)
+                ultimo_heartbeat = time.time()
+
             time.sleep(espera)
 
         except KeyboardInterrupt:

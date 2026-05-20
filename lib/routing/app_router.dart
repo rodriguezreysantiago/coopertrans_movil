@@ -62,6 +62,8 @@ import '../features/icm/screens/icm_reporte_semanal_screen.dart';
 import '../features/icm/screens/icm_mapa_calor_screen.dart';
 import '../features/icm/screens/icm_detalle_chofer_screen.dart';
 
+import '../features/cachatore/screens/cachatore_hub_screen.dart';
+
 
 class AppRouter {
   AppRouter._();
@@ -398,6 +400,16 @@ class AppRouter {
       case AppRoutes.adminGomeriaMarcasModelos:
         return _buildRoute(
           _protegerSoloAdmin(const AdminGomeriaMarcasModelosScreen()),
+          settings,
+        );
+
+      // ================= CACHATORE =================
+      // Control del bot que reserva/reagenda turnos de carga YPF en
+      // iTurnos (corre 24/7 en la PC dedicada). Acceso ADMIN + SUPERVISOR
+      // (cap verCachatore). La app escribe la selección en Firestore.
+      case AppRoutes.adminCachatoreHub:
+        return _buildRoute(
+          _protegerAdmin(const CachatoreHubScreen()),
           settings,
         );
 

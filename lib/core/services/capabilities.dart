@@ -66,6 +66,11 @@ enum Capability {
   /// Pensada para el panorama rápido de gestión (Diego/Carlos, Santiago,
   /// supervisores). Reusa el módulo ICM y los datos de viajes existentes.
   verVistaEjecutiva,
+  /// Módulo Cachatore — control del bot que reserva/reagenda turnos de
+  /// carga YPF en iTurnos (corre 24/7 en la PC dedicada). Desde acá se
+  /// elige a qué choferes les caza turno, en qué franja, y se ve el
+  /// estado en vivo. Acceso ADMIN + SUPERVISOR (operación, como Logística).
+  verCachatore,
 
   // ─── Acciones sobre personal ───
   crearEmpleado,
@@ -134,6 +139,7 @@ class Capabilities {
       Capability.verLogistica,
       Capability.verIcm,
       Capability.verVistaEjecutiva,
+      Capability.verCachatore,
       // Editar y crear personal/vehículos: sí. Pero NO puede asignar
       // rol ADMIN ni cambiar rol de admins existentes.
       Capability.crearEmpleado,

@@ -686,6 +686,34 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // CACHATORE — control del bot que reserva turnos de carga YPF
+    // ========================================================================
+    // El bot vive 24/7 en la PC dedicada (Python, Admin SDK — bypassa rules).
+    // La app escribe la selección (qué choferes, qué franja, prendido/pausado)
+    // y el bot devuelve el estado en vivo. Operación: admin/supervisor (igual
+    // que Logística). El chofer no entra.
+
+    // Config global (doc `global`): interruptor maestro + hora del drop +
+    // fecha objetivo. La app lo edita.
+    match /CACHATORE_CONFIG/{doc} {
+      allow read, write: if isAdminOrSupervisor();
+    }
+
+    // Choferes a vigilar (docId = DNI). La app crea/edita/borra; el bot
+    // (Admin SDK) le escribe encima el estado en vivo sin pasar por estas
+    // reglas.
+    match /CACHATORE_OBJETIVOS/{dni} {
+      allow read, create, update, delete: if isAdminOrSupervisor();
+    }
+
+    // Latido/estado del bot (doc `bot`). SOLO lo escribe el bot vía Admin
+    // SDK; la app lo lee para saber si está vivo y qué hace.
+    match /CACHATORE_ESTADO/{doc} {
+      allow read: if isAdminOrSupervisor();
+      allow write: if false;
+    }
+
+    // ========================================================================
     // EMPRESAS_EMPLEADORAS — Póliza ART y F.931 a nivel empresa
     // ========================================================================
     // Una entrada por empresa empleadora del personal (Vecchi Ariel,

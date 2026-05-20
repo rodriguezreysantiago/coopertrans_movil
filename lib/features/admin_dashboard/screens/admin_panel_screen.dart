@@ -184,6 +184,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 color: AppColors.accentGreen,
                 ruta: AppRoutes.adminLogisticaHub,
               ),
+            if (Capabilities.can(PrefsService.rol, Capability.verCachatore))
+              const _AdminTile(
+                titulo: 'CACHATORE',
+                subtitulo: 'Turnos de carga YPF (bot iTurnos)',
+                icono: Icons.schedule,
+                color: AppColors.accentCyan,
+                ruta: AppRoutes.adminCachatoreHub,
+              ),
             if (Capabilities.can(PrefsService.rol, Capability.verGomeria))
               const _AdminTile(
                 titulo: 'GOMERÍA',

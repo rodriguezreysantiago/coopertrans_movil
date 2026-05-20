@@ -3,9 +3,11 @@
 Herramienta para **sacar (reservar) automáticamente los turnos de carga** de
 los choferes en **iTurnos**, en el momento del drop diario. Forma parte del
 monorepo de **Coopertrans Móvil** (no es un proyecto Flutter aparte): el
-**núcleo es este tool Python**; la **UI de control será un módulo dentro de la
-app Flutter** (`lib/features/...`), reutilizando datos de la app (DNI + patente
-asignada del chofer).
+**núcleo es este tool Python** (corre 24/7 en la PC dedicada) y la **UI de
+control es un módulo dentro de la app Flutter** (`lib/features/cachatore/`,
+capability `verCachatore`). La app escribe la selección en **Firestore** (qué
+choferes, qué franja, prendido/pausado) y el bot la lee en vivo y le devuelve el
+estado; reutiliza los datos de la app (mail + patente asignada del chofer).
 
 > ⚠️ El `cazador.py` viejo (que vivía suelto en el Drive) quedó **obsoleto**:
 > apuntaba a `secure.iturnos.com`, dado de baja por la migración de iTurnos.
@@ -23,6 +25,11 @@ asignada del chofer).
 - 4 franjas: `madrugada` 00:00–05:30 · `manana` 06:00–11:30 ·
   `tarde` 12:00–17:30 · `noche` 18:00–23:30. Toma cualquier slot libre dentro
   de la franja del chofer.
+- **Control desde la app**: el bot lee su worklist de **Firestore** (lo que
+  edita el módulo Cachatore de la app: `CACHATORE_CONFIG/global` +
+  `CACHATORE_OBJETIVOS/{dni}`) y devuelve el estado en vivo
+  (`CACHATORE_ESTADO/bot` + estado por chofer). `activo` es el interruptor
+  maestro (pausa todo). `drop.json` queda como fallback local (`--archivo`).
 - `orquestador.py` sigue para una corrida **one-shot** manual (sin servicio):
   espera el drop, caza en paralelo y cierra.
 
@@ -56,6 +63,9 @@ asignada del chofer).
   DNI + email (`MAIL`) + **patente vigente** (`ASIGNACIONES_VEHICULO` con
   `hasta==null`) + clave (de `claves.json`). Si se reasigna la unidad en la app,
   se refleja solo. `python choferes.py` lista todo (smoke test).
+- `nube.py` — puente Firestore: lee la config que escribe la UI de la app
+  (`CACHATORE_CONFIG/global` + `CACHATORE_OBJETIVOS` activos) y devuelve el
+  estado en vivo (latido del bot + estado por chofer). Reusa `choferes._db()`.
 - `verificar_logins.py` — prueba el login chofer por chofer y reporta a quiénes
   hay que corregirles el `MAIL`/clave. `python verificar_logins.py [N]`.
 - `claves.ejemplo.json` — plantilla. El real es `claves.json` (gitignoreado):
@@ -68,12 +78,13 @@ asignada del chofer).
 - `vigia.py` — **el daemon 24/7** (lo que vive en la PC dedicada). Dos modos
   automáticos: **latente** (barre la worklist cada ~5 s — agenda a los que no
   tienen turno y reagenda a los marcados; caza cancelaciones) y **agresivo** (en
-  la ventana `hora_inicio`, cada chofer caza su
-  propia agenda a full). Relee `drop.json` en caliente, re-trae unidad/mail de
-  Firestore cada ~10 min (si reasignás el camión en la app, lo toma solo),
-  re-chequea `mis_turnos` (no dobla reserva y sobrevive reinicios) y reagenda los
-  marcados con `reagendar:true`. `python vigia.py` / `--dry` / `--latente` /
-  `--agresivo`. Validado en `--dry --latente`.
+  la ventana `hora_inicio`, cada chofer caza su propia agenda a full). Por
+  defecto lee la config de **Firestore** (UI de la app) cada ~30 s y escribe el
+  estado/latido de vuelta; `--archivo` usa `drop.json` local sin tocar Firestore.
+  Re-trae unidad/mail de Firestore cada ~10 min (si reasignás el camión, lo toma
+  solo), re-chequea `mis_turnos` (no dobla reserva y sobrevive reinicios).
+  `python vigia.py` / `--archivo` / `--dry` / `--latente` / `--agresivo`.
+  Validado en `--dry` (nube) y `--dry --latente`.
 - `instalar_servicio_vigia.ps1` / `ver_logs_vigia.ps1` — instalan el vigía como
   servicio NSSM (Auto diferido + log rotado a `logs/`) en la PC dedicada y siguen
   el log en vivo. Mismo patrón que el servicio del bot.
@@ -97,8 +108,14 @@ asignada del chofer).
   de `mis_turnos` (no dobla reserva, sobrevive reinicios). Probado en
   `--dry --latente` (loguea, escanea read-only y no reserva). Servicio NSSM listo
   para la PC dedicada (`instalar_servicio_vigia.ps1`).
-- **Pendiente**: confirmar en el 1er drop real (heurística de `reservar()` +
-  reagendar real) + UI dentro de la app (`lib/features/`).
+- **UI en la app hecha**: módulo `lib/features/cachatore/` (capability
+  `verCachatore`, admin/supervisor) — interruptor maestro, hora del drop, fecha
+  objetivo, alta/baja de choferes con franja + reagendar, y estado en vivo +
+  latido del bot. La app escribe Firestore; `nube.py` lo lee. `flutter analyze`
+  limpio; `nube` + `vigia --dry` validados contra Firestore real.
+- **Pendiente**: deploy de `firestore.rules` (3 colecciones `CACHATORE_*`) +
+  release de la app; confirmar en el 1er drop real (heurística de `reservar()` +
+  reagendar real).
 
 ## Setup / correr
 ```bash
@@ -123,6 +140,6 @@ cd cachatore
 A mano sería: `python -m venv venv` + `pip install curl_cffi beautifulsoup4
 firebase-admin`, poner `claves.json`/`drop.json` y `.\instalar_servicio_vigia.ps1`.
 Queda como servicio `cachatore-vigia` (arranca solo al bootear, junto con el
-auto-login de Windows). La selección del día va en `drop.json` (lo relee en
-caliente; lo va a escribir la UI de la app). Parar/arrancar:
+auto-login de Windows). La selección la maneja la **UI de la app** (vía
+Firestore); `drop.json` solo se usa con `--archivo`. Parar/arrancar:
 `nssm stop cachatore-vigia` / `nssm start cachatore-vigia`.
