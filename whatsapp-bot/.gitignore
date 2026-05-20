@@ -10,6 +10,9 @@ node_modules/
 # Variables de entorno (rutas a credenciales, tokens).
 .env
 .env.local
+# Backups del .env que generan los scripts de instalacion (.env.bak.<fecha>):
+# tienen los mismos secrets, NUNCA commitear.
+.env.bak*
 
 # Service account de Firebase — el bot lo lee desde la ruta que
 # defina .env. Si lo copiás al lado de package.json para simplificar,
