@@ -46,6 +46,22 @@ function asObj(v: unknown): Record<string, unknown> | undefined {
 function asStr(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
 }
+/**
+ * Quita null/undefined y arrays vacíos de un objeto. CLAVE para el `merge:true`:
+ * la flota Vecchi manda el snapshot por CONTENIDO (un poll trae SNAPSHOT, otro
+ * UPTIME) → si escribiéramos `tell_tales:[]` cuando no vino, borraríamos los
+ * 44 testigos que capturó el poll anterior. Omitir = preservar último conocido.
+ * Mantiene `false` y `0` (son significativos: velocidad 0, motor apagado).
+ */
+function limpiarNulos(o: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, val] of Object.entries(o)) {
+    if (val === null || val === undefined) continue;
+    if (Array.isArray(val) && val.length === 0) continue;
+    out[k] = val;
+  }
+  return out;
+}
 
 export interface TellTale {
   id: string;
@@ -59,8 +75,14 @@ export interface EstadoVolvo {
   /** km/h — preferencia tachographSpeed > wheelBasedSpeed > gnss.speed. */
   speed_kmh: number | null;
   heading: number | null;
-  /** engineSpeed (rpm) > 0 ⇒ motor encendido. null si el campo no viene. */
+  /** engineSpeed>0 ⇒ encendido; si no viene, speed>0 ⇒ encendido; else null. */
   motor_encendido: boolean | null;
+  /**
+   * driver1WorkingState del tacógrafo (DRIVE/WORK/REST/DRIVE_AVAILABLE/…). Viene
+   * en CADA snapshot de la flota Vecchi — señal directa para el vigilador de
+   * jornada (#36), más fiable que inferir manejo/pausa por posición.
+   */
+  conductor_estado: string | null;
   /** TIMESTAMP REAL en que el equipo reportó la posición (ISO). Clave jornada. */
   posicion_ts: string | null;
   /** Timestamp del snapshot (created/received). */
@@ -143,7 +165,16 @@ export function parseEstadoVolvo(raw: unknown): EstadoVolvo | null {
     lng: asNum(gnss?.longitude),
     speed_kmh: speed,
     heading: asNum(gnss?.heading),
-    motor_encendido: engineSpeed != null ? engineSpeed > 0 : null,
+    // engineSpeed casi nunca viene (3/53). Fallback: si hay velocidad > 0 el
+    // motor está encendido. Con velocidad 0 NO afirmamos apagado (puede estar
+    // ralentí parado) → null.
+    motor_encendido:
+      engineSpeed != null
+        ? engineSpeed > 0
+        : speed != null && speed > 0
+          ? true
+          : null,
+    conductor_estado: asStr(snap?.driver1WorkingState),
     posicion_ts: asStr(gnss?.positionDateTime),
     snapshot_ts: asStr(v.createdDateTime) ?? asStr(v.receivedDateTime),
     odometro_km: odoM != null ? odoM / 1000 : null,
@@ -274,7 +305,7 @@ export const estadoVolvoPoller = onSchedule(
         db.collection("VOLVO_ESTADO").doc(patente),
         {
           patente,
-          ...est,
+          ...limpiarNulos(est as unknown as Record<string, unknown>),
           consultado_en: FieldValue.serverTimestamp(),
         },
         { merge: true }

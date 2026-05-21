@@ -22,6 +22,7 @@ const SAMPLE = {
     tachographSpeed: 79,
     wheelBasedSpeed: 78,
     engineSpeed: 1200,
+    driver1WorkingState: 'DRIVE',
     engineCoolantTemperature: 88,
     gnssPosition: {
       latitude: -38.97043,
@@ -54,6 +55,7 @@ describe('parseEstadoVolvo', () => {
     assert.strictEqual(e.speed_kmh, 79); // tachographSpeed gana
     assert.strictEqual(e.heading, 270);
     assert.strictEqual(e.motor_encendido, true); // engineSpeed 1200 > 0
+    assert.strictEqual(e.conductor_estado, 'DRIVE'); // driver1WorkingState
     assert.strictEqual(e.posicion_ts, '2026-05-21T19:25:30Z'); // timestamp REAL
     assert.strictEqual(e.snapshot_ts, '2026-05-21T19:26:00Z');
     assert.strictEqual(e.odometro_km, 1245516);
@@ -78,6 +80,21 @@ describe('parseEstadoVolvo', () => {
     });
     assert.strictEqual(e.motor_encendido, false);
     assert.strictEqual(e.speed_kmh, 12);
+  });
+
+  test('motor: sin engineSpeed pero con velocidad ⇒ encendido', () => {
+    // Caso real flota Vecchi: engineSpeed ausente en 50/53 unidades.
+    const movil = parseEstadoVolvo({
+      vin: 'X',
+      snapshotData: { wheelBasedSpeed: 60, gnssPosition: {} },
+    });
+    assert.strictEqual(movil.motor_encendido, true); // velocidad 60 > 0
+    // Parado sin engineSpeed ⇒ null (puede estar en ralentí, no afirmamos).
+    const parado = parseEstadoVolvo({
+      vin: 'X',
+      snapshotData: { wheelBasedSpeed: 0, gnssPosition: {} },
+    });
+    assert.strictEqual(parado.motor_encendido, null);
   });
 
   test('sin VIN → null', () => {
