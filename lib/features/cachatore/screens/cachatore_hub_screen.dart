@@ -381,30 +381,43 @@ class _SeccionConcretados extends StatelessWidget {
       stream: CachatoreService.streamTurnos(),
       builder: (ctx, snap) {
         final turnos = snap.data ?? const <CachatoreTurno>[];
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'TURNOS CONCRETADOS (${turnos.length})',
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                  fontSize: 13),
-            ),
-            const SizedBox(height: 8),
-            if (turnos.isEmpty)
-              const AppCard(
-                child: Text(
-                  'No hay turnos sacados. El bot chequea en iTurnos los turnos de '
-                  'CADA chofer (los haya sacado el bot o no); cuando aparece uno, '
-                  'tocalo para reagendarlo.',
-                  style: TextStyle(color: Colors.white38, fontSize: 12),
+        return StreamBuilder<List<CachatoreObjetivo>>(
+          stream: CachatoreService.streamObjetivos(),
+          builder: (ctx2, snapObj) {
+            // Mapa dni -> objetivo: la info de reagendar (flag + fecha/franja
+            // objetivo) vive en el objetivo, no en el turno. La cruzamos para
+            // que la card del turno muestre si está en reagendar pendiente.
+            final objetivos = <String, CachatoreObjetivo>{
+              for (final o in (snapObj.data ?? const <CachatoreObjetivo>[]))
+                o.dni: o,
+            };
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'TURNOS CONCRETADOS (${turnos.length})',
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                      fontSize: 13),
                 ),
-              )
-            else
-              ...turnos.map((t) => _ConcretadoCard(turno: t)),
-          ],
+                const SizedBox(height: 8),
+                if (turnos.isEmpty)
+                  const AppCard(
+                    child: Text(
+                      'No hay turnos sacados. El bot chequea en iTurnos los turnos de '
+                      'CADA chofer (los haya sacado el bot o no); cuando aparece uno, '
+                      'tocalo para reagendarlo.',
+                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                    ),
+                  )
+                else
+                  ...turnos.map((t) =>
+                      _ConcretadoCard(turno: t, objetivo: objetivos[t.dni])),
+              ],
+            );
+          },
         );
       },
     );
@@ -413,7 +426,15 @@ class _SeccionConcretados extends StatelessWidget {
 
 class _ConcretadoCard extends StatelessWidget {
   final CachatoreTurno turno;
-  const _ConcretadoCard({required this.turno});
+  final CachatoreObjetivo? objetivo;
+  const _ConcretadoCard({required this.turno, this.objetivo});
+
+  /// `true` si el chofer está marcado para reagendar y el bot todavía no movió
+  /// el turno (estado != reagendado). En ese caso la card se pinta distinta.
+  bool get _reagendarPendiente =>
+      objetivo != null &&
+      objetivo!.reagendar &&
+      objetivo!.estado != EstadoObjetivo.reagendado;
 
   @override
   Widget build(BuildContext context) {
@@ -421,12 +442,15 @@ class _ConcretadoCard extends StatelessWidget {
     final cuando = (t.cuando ?? '').isNotEmpty
         ? t.cuando!
         : 'Turno${t.hora != null ? ' ${t.hora}' : ''}';
+    final reag = _reagendarPendiente;
+    final acento = reag ? AppColors.accentAmber : AppColors.accentGreen;
     return AppCard(
       onTap: () => _reagendar(context),
+      borderColor: reag ? AppColors.accentAmber.withValues(alpha: 0.55) : null,
       child: Row(
         children: [
-          const Icon(Icons.event_available,
-              color: AppColors.accentGreen, size: 26),
+          Icon(reag ? Icons.event_repeat : Icons.event_available,
+              color: acento, size: 26),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -443,22 +467,44 @@ class _ConcretadoCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  cuando,
+                  reag ? 'Turno actual: $cuando' : cuando,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: AppColors.accentGreen, fontSize: 12),
+                  style: TextStyle(
+                      color: reag ? Colors.white54 : AppColors.accentGreen,
+                      fontSize: 12),
                 ),
+                if (reag) ...[
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      const Icon(Icons.sync,
+                          size: 13, color: AppColors.accentAmber),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          'Buscando reagendar a ${objetivo!.objetivoLabel}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: AppColors.accentAmber,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),
           const SizedBox(width: 8),
-          const Column(
+          Column(
             children: [
-              Icon(Icons.edit_calendar, color: Colors.white54, size: 20),
-              SizedBox(height: 2),
-              Text('Reagendar',
-                  style: TextStyle(color: Colors.white38, fontSize: 10)),
+              const Icon(Icons.edit_calendar, color: Colors.white54, size: 20),
+              const SizedBox(height: 2),
+              Text(reag ? 'Cambiar' : 'Reagendar',
+                  style: const TextStyle(color: Colors.white38, fontSize: 10)),
             ],
           ),
         ],
