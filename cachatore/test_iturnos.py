@@ -133,5 +133,51 @@ class TestTurnoEnObjetivo(unittest.TestCase):
             "10:00", "horario raro", "manana", "2026-05-22"))
 
 
+class TestParsearSlotsReagendar(unittest.TestCase):
+    """El calendario de reagendar muestra la SEMANA entera. Cada slot tiene que
+    traer su `fecha`/`iso` (del href /editar/{ISO}) para no reagendar al día
+    equivocado. Lockea el fix 2026-05-21 (verificado en vivo con Oscar Glez)."""
+
+    HTML = (
+        '<div class="calendario">'
+        '<a class="btn btn-light" href="#">Horarios</a>'
+        '<a class="btn btn-outline-success" '
+        'href="https://agendas.iturnos.com/c/x/a/y/reagendar/editar/2026-05-22T09:00">09:00</a>'
+        '<a class="btn btn-outline-success" '
+        'href="https://agendas.iturnos.com/c/x/a/y/reagendar/editar/2026-05-22T14:00">14:00</a>'
+        '<a class="btn btn-outline-success" '
+        'href="https://agendas.iturnos.com/c/x/a/y/reagendar/editar/2026-05-23T10:00">10:00</a>'
+        '<button class="btn btn-dark">11:00</button>'
+        '</div>'
+    )
+
+    def test_extrae_fecha_iso_hora(self):
+        slots = iturnos.parsear_slots_reagendar(self.HTML)
+        self.assertEqual(len(slots), 3)
+        primero = slots[0]
+        self.assertEqual(primero["hora"], "09:00")
+        self.assertEqual(primero["fecha"], "2026-05-22")
+        self.assertEqual(primero["iso"], "2026-05-22T09:00")
+        self.assertTrue(primero["url"].endswith("/editar/2026-05-22T09:00"))
+
+    def test_ignora_boton_horarios_y_ocupados(self):
+        horas = [s["hora"] for s in iturnos.parsear_slots_reagendar(self.HTML)]
+        self.assertNotIn("Horarios", horas)  # el <a href="#">
+        self.assertNotIn("11:00", horas)      # el <button> ocupado
+
+    def test_distintos_dias_traen_distinta_fecha(self):
+        fechas = {s["fecha"] for s in iturnos.parsear_slots_reagendar(self.HTML)}
+        self.assertEqual(fechas, {"2026-05-22", "2026-05-23"})
+
+    def test_href_sin_iso_no_rompe(self):
+        # btn-outline-success cuyo href no matchea /editar/{ISO}: fecha/iso None.
+        html = '<a class="btn-outline-success" href="/algo/raro">08:00</a>'
+        slots = iturnos.parsear_slots_reagendar(html)
+        self.assertEqual(len(slots), 1)
+        self.assertEqual(slots[0]["hora"], "08:00")
+        self.assertIsNone(slots[0]["fecha"])
+        self.assertIsNone(slots[0]["iso"])
+
+
 if __name__ == "__main__":
     unittest.main()

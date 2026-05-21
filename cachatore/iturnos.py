@@ -172,11 +172,20 @@ def turno_en_objetivo(turno_hora: str, turno_cuando: str, franja: str,
     return True
 
 
+# Href de un slot del calendario de REAGENDAR: /editar/{AAAA-MM-DDTHH:MM}.
+_RE_EDITAR_ISO = re.compile(r"/editar/(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})")
+
+
 def parsear_slots_reagendar(html: str) -> list:
     """Slots libres en el calendario de REAGENDAR (/reagendar/calendario/{uuid}).
     Mismo estilo que la reserva: libre = <a class="btn-outline-success">HH:MM</a>,
     pero al clickearlo **reasigna directo** (sin formulario de patente/DNI).
-    Devuelve [{hora, url}]. Ignora el botón 'Horarios' (href="#")."""
+
+    OJO (2026-05-21, verificado en vivo): el calendario muestra la SEMANA ENTERA,
+    no un solo día. Por eso cada slot trae su `fecha`+`iso` (los del href
+    /editar/{ISO}); antes solo se sacaba la `hora` y el bot podía reagendar al
+    DÍA EQUIVOCADO (elegía el primer <a> de la semana que cayera en la franja).
+    Devuelve [{hora, fecha, iso, url}]. Ignora el botón 'Horarios' (href="#")."""
     soup = BeautifulSoup(html, "html.parser")
     slots = []
     for a in soup.find_all("a", class_=re.compile("btn-outline-success")):
@@ -184,8 +193,11 @@ def parsear_slots_reagendar(html: str) -> list:
         href = a.get("href", "")
         if not re.fullmatch(r"\d{1,2}:\d{2}", txt) or not href or href == "#":
             continue
+        m = _RE_EDITAR_ISO.search(href)
         slots.append({
             "hora": txt,
+            "fecha": m.group(1) if m else None,
+            "iso": f"{m.group(1)}T{m.group(2)}" if m else None,
             "url": href if href.startswith("http") else BASE + "/" + href.lstrip("/"),
         })
     return slots
@@ -374,10 +386,18 @@ class IturnosClient:
         url = f"{BASE}/reagendar/calendario/{uuid}"
         if fecha:
             url += f"?d={fecha}"
+        # El calendario trae la semana entera → filtrar por franja + fecha (si se
+        # pidió) + que sea a futuro, y elegir el MÁS TEMPRANO (fecha+hora). Sin el
+        # filtro de fecha el bot reagendaba al día equivocado (ver
+        # parsear_slots_reagendar).
+        ahora = datetime.now()
         slots = [s for s in parsear_slots_reagendar(self.s.get(url).text)
-                 if hora_en_franja(s["hora"], franja)]
+                 if hora_en_franja(s["hora"], franja)
+                 and (not fecha or s.get("fecha") == fecha)
+                 and slot_es_futuro(s, ahora)]
         if not slots:
             return {"ok": False, "motivo": "sin_slot_en_franja"}
+        slots.sort(key=lambda s: s.get("iso") or s["hora"])
         slot = slots[0]
 
         # Abrir la página /editar del slot → trae el form de confirmación.
