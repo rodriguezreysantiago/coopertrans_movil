@@ -70,6 +70,32 @@ function New-Lnk {
     Write-Host "  OK $Nombre" -ForegroundColor Green
 }
 
+# Shortcut a un PowerShell de ADMINISTRADOR parado en una carpeta. OJO: al
+# elevar (UAC) Windows ignora el WorkingDirectory del .lnk y abriria en
+# System32; por eso forzamos la ruta con Set-Location al arrancar (-NoExit deja
+# la ventana abierta despues del cd).
+function New-AdminShell {
+    param([string]$Nombre, [string]$Dir, [string]$Descripcion)
+    try {
+        $lnk = Join-Path $desktopDir "$Nombre.lnk"
+        $shell = New-Object -ComObject WScript.Shell
+        $sc = $shell.CreateShortcut($lnk)
+        $sc.TargetPath = 'powershell.exe'
+        $sc.Arguments = "-NoExit -NoProfile -Command `"Set-Location '$Dir'`""
+        $sc.WorkingDirectory = $Dir
+        $sc.WindowStyle = 1
+        $sc.Description = $Descripcion
+        $sc.IconLocation = $psIcon
+        $sc.Save()
+        $bytes = [System.IO.File]::ReadAllBytes($lnk)
+        $bytes[0x15] = $bytes[0x15] -bor 0x20
+        [System.IO.File]::WriteAllBytes($lnk, $bytes)
+        Write-Host "  OK $Nombre" -ForegroundColor Green
+    } catch {
+        Write-Host "  FAIL $Nombre : $($_.Exception.Message)" -ForegroundColor Red
+    }
+}
+
 Write-Host ''
 Write-Host '====================================================' -ForegroundColor Cyan
 Write-Host '  ICONOS DE ESCRITORIO - Bot WhatsApp + Cachatore' -ForegroundColor Cyan
@@ -83,26 +109,12 @@ New-Lnk -Nombre 'Detener Bot WhatsApp' -File (Join-Path $scriptsDir 'stop_bot.ps
 
 New-Lnk -Nombre 'Logs Bot WhatsApp' -File (Join-Path $scriptsDir 'monitor_logs.ps1') -WorkingDirectory $scriptsDir -IconResource $psIcon -Description 'Ventana de logs en vivo del bot WhatsApp' -NoExit
 
-# PowerShell Admin - Bot: shell admin parada en whatsapp-bot/ (no ejecuta un
-# .ps1; sirve para tareas manuales). Caso especial, no usa New-Lnk.
-try {
-    $lnkShell = Join-Path $desktopDir 'PowerShell Admin - Bot.lnk'
-    $shell = New-Object -ComObject WScript.Shell
-    $sc = $shell.CreateShortcut($lnkShell)
-    $sc.TargetPath = 'powershell.exe'
-    $sc.Arguments = '-NoExit -NoProfile'
-    $sc.WorkingDirectory = $botDir
-    $sc.WindowStyle = 1
-    $sc.Description = "PowerShell admin parado en $botDir"
-    $sc.IconLocation = $psIcon
-    $sc.Save()
-    $bytes = [System.IO.File]::ReadAllBytes($lnkShell)
-    $bytes[0x15] = $bytes[0x15] -bor 0x20
-    [System.IO.File]::WriteAllBytes($lnkShell, $bytes)
-    Write-Host '  OK PowerShell Admin - Bot' -ForegroundColor Green
-} catch {
-    Write-Host "  FAIL PowerShell Admin - Bot: $($_.Exception.Message)" -ForegroundColor Red
-}
+# PowerShell de administrador parados en una ruta (ver New-AdminShell). El de
+# la RAIZ del repo (C:\coopertrans_movil en la dedicada) es el mas util para
+# tareas manuales: git pull, correr scripts, etc. El de whatsapp-bot queda por
+# compatibilidad.
+New-AdminShell -Nombre 'PowerShell Admin - coopertrans' -Dir $repoRoot -Descripcion "PowerShell admin parado en $repoRoot (raiz del repo)"
+New-AdminShell -Nombre 'PowerShell Admin - Bot' -Dir $botDir -Descripcion "PowerShell admin parado en $botDir"
 
 Write-Host ''
 Write-Host 'CACHATORE (turnos YPF):' -ForegroundColor White
