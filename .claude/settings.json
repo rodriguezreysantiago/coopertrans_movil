@@ -1,5 +1,18 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/scripts/validate_changes.py\"",
+            "timeout": 330,
+            "statusMessage": "Validando cambios antes del commit (tsc/eslint/analyze)..."
+          }
+        ]
+      }
+    ],
     "SessionStart": [
       {
         "hooks": [
@@ -36,6 +49,7 @@
       "Bash(git rev-parse*)",
       "Bash(git add *)",
       "Bash(git commit *)",
+      "Bash(git push*)",
       "Bash(git merge --ff-only*)",
       "Bash(git merge claude/* --ff-only*)",
       "Bash(git -C * status*)",
@@ -59,6 +73,8 @@
       "Bash(gcloud auth list*)",
       "Bash(firebase functions:log*)",
       "Bash(firebase use*)",
+      "Bash(firebase deploy*)",
+      "Bash(gcloud functions deploy*)",
       "Bash(tsc*)",
       "Bash(eslint*)",
       "Skill(update-config)",
@@ -66,13 +82,10 @@
       "Skill(fewer-permission-prompts)"
     ],
     "ask": [
-      "Bash(git push*)",
       "Bash(git reset --hard*)",
       "Bash(git push --force*)",
-      "Bash(firebase deploy*)",
       "Bash(gcloud functions delete*)",
       "Bash(gcloud run services delete*)",
-      "Bash(gcloud functions deploy*)",
       "Bash(gcloud run services add-iam-policy-binding*)",
       "Bash(gcloud run services remove-iam-policy-binding*)",
       "Bash(rm -rf*)",

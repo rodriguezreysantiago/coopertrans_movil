@@ -80,6 +80,7 @@ windows/runner/resources/*.ico.bak-*
 !.claude/settings.json
 !.claude/scripts/
 !.claude/scripts/**
+.claude/scripts/__pycache__/
 
 # Buffer local del SDK nativo de Sentry — guarda eventos pendientes
 # de envío antes de transmitirlos al server. Local de la PC, no
