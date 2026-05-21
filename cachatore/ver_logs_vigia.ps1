@@ -37,12 +37,13 @@ while (-not (Test-Path $logFile)) {
 }
 
 function Write-Color([string]$line) {
+    # El bot loguea "[dd/mm HH:MM:SS] TAG [quien] msg" -> coloreamos por TAG.
     $color = 'Gray'
-    if ($line -match '^ERROR:') {
+    if ($line -match '^\[\d\d/\d\d \d\d:\d\d:\d\d\] ERROR\b') {
         $color = 'Red'
-    } elseif ($line -match '^EXITO:') {
+    } elseif ($line -match '^\[\d\d/\d\d \d\d:\d\d:\d\d\] EXITO\b') {
         $color = 'Green'
-    } elseif ($line -match '^LOG:') {
+    } elseif ($line -match '^\[\d\d/\d\d \d\d:\d\d:\d\d\] LOG\b') {
         $color = 'White'
     }
     Write-Host $line -ForegroundColor $color
@@ -103,7 +104,10 @@ $pintarMain = { param($l) Write-Color $l }
 $pintarAu = {
     param($l)
     if ($l -match 'cachatore|PULL EN PROCESO|git (fetch|pull)|Excepcion no manejada') {
-        Write-Host "  [auto-update] $l" -ForegroundColor Cyan
+        # Insertamos "auto-update" DESPUES de la fecha (no antes) para que la
+        # linea arranque con la fecha, igual que las del cachatore.
+        $shown = $l -replace '^(\[\d\d/\d\d \d\d:\d\d:\d\d\]) ', '$1 auto-update '
+        Write-Host $shown -ForegroundColor Cyan
     }
 }
 

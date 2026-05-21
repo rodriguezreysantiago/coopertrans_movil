@@ -35,8 +35,10 @@ if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Forc
 # --- Helpers --------------------------------------------------------
 function Write-Log {
     param([string]$Level, [string]$Msg)
-    $ts = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
-    "$ts [$Level] $Msg" | Out-File -FilePath $LogFile -Append -Encoding utf8
+    # Formato unificado con el cachatore: fecha PRIMERO entre corchetes
+    # (dd/mm, sin anio), despues el nivel. Asi toda linea arranca con la fecha.
+    $ts = (Get-Date).ToString('dd/MM HH:mm:ss')
+    "[$ts] [$Level] $Msg" | Out-File -FilePath $LogFile -Append -Encoding utf8
 }
 
 function Rotate-LogIfBig {

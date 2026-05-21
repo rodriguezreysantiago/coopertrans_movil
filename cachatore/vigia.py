@@ -34,7 +34,8 @@ Uso:
     python vigia.py --latente       # fuerza modo latente (ignora ventana drop)
     python vigia.py --agresivo      # fuerza modo agresivo (testeo)
 
-Logs con prefijo LOG:/EXITO:/ERROR: (la UI los parsea y colorea).
+Logs con formato "[dd/mm HH:MM:SS] TAG [quien] msg" (TAG = LOG/EXITO/ERROR,
+lo colorea el visor). Mismo arranque que el auto-update (fecha primero).
 La hora local del equipo se asume ART (igual que el bot en la PC dedicada).
 """
 import json
@@ -86,8 +87,11 @@ _ESCRIBIR_ESTADO = False     # escribir latido/estado a Firestore
 
 
 def log(tag: str, quien: str, msg: str):
+    # Formato unificado con el auto-update: fecha PRIMERO entre corchetes
+    # (dd/mm, sin anio), despues el tag (LOG/EXITO/ERROR, lo colorea el visor)
+    # y el quien. Asi todas las lineas (cachatore + auto-update) arrancan igual.
     with _log_lock:
-        print(f"{tag}:[{datetime.now():%Y-%m-%d %H:%M:%S}] [{quien}] {msg}", flush=True)
+        print(f"[{datetime.now():%d/%m %H:%M:%S}] {tag} [{quien}] {msg}", flush=True)
 
 
 def resolver_fecha(valor):

@@ -132,7 +132,9 @@ $pintarMain = { param($l) Write-Color $l }
 $pintarAu = {
     param($l)
     if ($l -match 'CoopertransMovilBot|whatsapp-bot|smoke|npm|DEPLOY|PULL EN PROCESO|git (fetch|pull)|Excepcion no manejada') {
-        Write-Host "  [auto-update] $l" -ForegroundColor Cyan
+        # "auto-update" DESPUES de la fecha, igual que en el visor del cachatore.
+        $shown = $l -replace '^(\[\d\d/\d\d \d\d:\d\d:\d\d\]) ', '$1 auto-update '
+        Write-Host $shown -ForegroundColor Cyan
     }
 }
 
