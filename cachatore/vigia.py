@@ -138,7 +138,8 @@ class Target:
     __slots__ = ("dni", "nombre", "email", "clave", "patente", "fecha",
                  "franja", "reagendar", "cli", "logueado", "tiene_turno", "uuid",
                  "reagendar_hecho", "ultimo_check", "estado_reportado", "notificar",
-                 "turno_hora", "turno_cuando")
+                 "turno_hora", "turno_cuando", "turno_conseguido", "vacios_seguidos",
+                 "ciclo_completo")
 
     def __init__(self, ch: dict, fecha, franja: str, reagendar: bool):
         self.dni = ch["dni"]
@@ -159,6 +160,9 @@ class Target:
         self.notificar = None   # None | 'reservado' | 'reagendado' (aviso pendiente)
         self.turno_hora = None      # 'HH:MM' del turno actual (si tiene)
         self.turno_cuando = None    # texto legible del turno actual
+        self.turno_conseguido = False  # ¿alguna vez consiguió turno en este ciclo?
+        self.vacios_seguidos = 0       # lecturas de mis_turnos vacías seguidas
+        self.ciclo_completo = False    # turno usado/finalizado → sacarlo del ciclo
 
     @property
     def credenciales_ok(self) -> bool:
@@ -407,6 +411,8 @@ def refrescar_estado(t: Target):
         t.uuid = turno["uuid"]
         t.turno_hora = turno.get("hora")
         t.turno_cuando = turno.get("cuando")
+        t.turno_conseguido = True
+        t.vacios_seguidos = 0
         if not t.tiene_turno:
             log("LOG", t.nombre, f"ya tiene turno ({turno.get('cuando') or 'detectado'})")
         t.tiene_turno = True
@@ -416,6 +422,15 @@ def refrescar_estado(t: Target):
         if t.notificar:   # el bot recién consiguió/reprogramó → avisar (1 vez)
             _avisar_turno(t, t.notificar, turno.get("cuando"))
             t.notificar = None
+    elif t.turno_conseguido:
+        # Tenía turno y ya NO aparece en mis_turnos → se concretó/ausentó/canceló
+        # (cualquier estado que NO sea "reagendado", que seguiría como reservado).
+        # La lista es CÍCLICA: cerramos el ciclo y el chofer DESAPARECE (lo saca
+        # el loop principal). Confirmamos con 2 lecturas vacías seguidas para no
+        # cerrar por un blip puntual; NO volvemos a "buscando" (no re-reservar).
+        t.vacios_seguidos += 1
+        if t.vacios_seguidos >= 2:
+            t.ciclo_completo = True
     else:
         t.tiene_turno = False
         t.uuid = None
@@ -667,6 +682,21 @@ def main():
                 key=lambda t: t.ultimo_check)[:MAX_REFRESH_POR_CICLO]
             for t in vencidos:
                 refrescar_estado(t)
+
+            # 3.b) cierre de ciclo: los que YA USARON su turno (concretado/
+            #      ausente/etc — no reagendado) DESAPARECEN de la lista (es
+            #      cíclica; se re-agregan a mano). Acá (single-thread) para no
+            #      mutar `targets` desde los hilos de refrescar_estado.
+            for dni in [d for d, t in targets.items() if t.ciclo_completo]:
+                fin = targets.pop(dni)
+                log("LOG", "sistema",
+                    f"{fin.nombre}: turno usado/finalizado → lo saco del ciclo")
+                _despublicar_turno(dni)
+                if _ESCRIBIR_ESTADO:
+                    try:
+                        nube.eliminar_objetivo(dni)
+                    except Exception as e:
+                        log("LOG", "sistema", f"no pude sacar objetivo {dni}: {e}")
 
             activo = bool(cfg.get("activo", True)) if cfg else False
 

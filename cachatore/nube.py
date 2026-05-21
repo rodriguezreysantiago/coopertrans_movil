@@ -143,6 +143,14 @@ def listar_dnis_turnos():
     return [d.id for d in db.collection(COL_TURNOS).stream()]
 
 
+def eliminar_objetivo(dni: str):
+    """Saca al chofer de la lista de vigilados (borra CACHATORE_OBJETIVOS/{dni}).
+    Lo usa el bot cuando el chofer YA USÓ su turno (ciclo completo): la lista es
+    cíclica, se re-agrega a mano para el próximo turno."""
+    db = choferes._db()
+    db.collection(COL_OBJETIVOS).document(str(dni)).delete()
+
+
 # ---- avisos por WhatsApp (vía COLA_WHATSAPP, la consume el bot) ------------
 COL_COLA = "COLA_WHATSAPP"
 COL_EMPLEADOS = "EMPLEADOS"
