@@ -65,13 +65,13 @@ class _SeccionUnidad extends StatelessWidget {
                 ),
               ),
               if (!estaVacia && !tienePendiente)
-                // Wording cambiado 2026-05-14 (Santiago): el botón decía
-                // "SOLICITAR CAMBIO" pero los choferes interpretaban que
-                // podían elegir libremente la unidad. La intención real
-                // es que reporten un ERROR de asignación a la oficina.
-                // "ESTA NO ES MI UNIDAD" deja claro el caso de uso.
+                // Santiago 2026-05-21: el chofer YA NO elige la unidad (antes
+                // abría una lista de unidades libres y la gente la usaba para
+                // pedir cambios viendo qué había libre). Ahora solo REPORTA
+                // "esta no es mi unidad" → flag a Revisiones; el admin asigna
+                // la unidad correcta en el momento.
                 TextButton.icon(
-                  onPressed: () => _SelectorCambio.abrir(
+                  onPressed: () => _ReporteUnidad.reportar(
                     context,
                     titulo: titulo,
                     patenteActual: patente,
@@ -128,7 +128,16 @@ class _CardEnRevision extends StatelessWidget {
       );
     }
     final data = raw;
-    final patenteSolicitada = (data['patente'] ?? '—').toString();
+    final patenteSolicitada = (data['patente'] ?? '').toString().trim();
+    // Flujo nuevo (2026-05-21): el chofer reporta sin elegir unidad → patente
+    // vacío. Mostramos el aviso de "la oficina asignará". Si por compat hay una
+    // patente (solicitudes viejas), seguimos mostrando "CAMBIO A X".
+    final titulo = patenteSolicitada.isEmpty
+        ? 'REPORTASTE QUE NO ES TU UNIDAD'
+        : 'CAMBIO A $patenteSolicitada';
+    final subtitulo = patenteSolicitada.isEmpty
+        ? 'La oficina va a asignarte la unidad correcta.'
+        : 'VALIDACIÓN PENDIENTE...';
 
     return AppCard(
       highlighted: true,
@@ -143,7 +152,7 @@ class _CardEnRevision extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'CAMBIO A $patenteSolicitada',
+                  titulo,
                   style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -151,9 +160,9 @@ class _CardEnRevision extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'VALIDACIÓN PENDIENTE...',
-                  style: TextStyle(
+                Text(
+                  subtitulo,
+                  style: const TextStyle(
                     color: AppColors.accentOrange,
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
@@ -661,194 +670,86 @@ class _DatoCombustible extends StatelessWidget {
 // para evitar duplicación contra la pantalla MIS VENCIMIENTOS.
 
 // =============================================================================
-// SELECTOR DE NUEVA UNIDAD (al solicitar cambio)
+// REPORTE "ESTA NO ES MI UNIDAD" — el chofer NO elige unidad: solo flaguea a
+// Revisiones y el admin le asigna la unidad correcta (Santiago 2026-05-21).
+// Antes abría una lista de unidades LIBRES y la gente la usaba para "pedir"
+// cambios mirando qué había disponible.
 // =============================================================================
 
-class _SelectorCambio {
-  _SelectorCambio._();
+class _ReporteUnidad {
+  _ReporteUnidad._();
 
-  /// Abre un bottom sheet con las unidades LIBRES del tipo correspondiente.
-  static Future<void> abrir(
+  static Future<void> reportar(
     BuildContext context, {
     required String titulo,
     required String patenteActual,
     required String nombreChofer,
     required String dni,
-  }) {
-    final esTractor = titulo.contains('TRACTOR');
-    final tipoBusqueda = esTractor ? 'TRACTOR' : null;
-
-    return AppDetailSheet.show(
-      context: context,
-      title: 'Seleccionar nuevo $titulo',
-      icon: Icons.swap_horiz,
-      builder: (sheetCtx, scrollCtl) => _ListaUnidadesLibres(
-        scrollController: scrollCtl,
-        tipoBusqueda: tipoBusqueda,
-        patenteActual: patenteActual,
-        titulo: titulo,
-        nombreChofer: nombreChofer,
-        dni: dni,
-      ),
-    );
-  }
-}
-
-class _ListaUnidadesLibres extends StatelessWidget {
-  final ScrollController scrollController;
-  final String? tipoBusqueda;
-  final String patenteActual;
-  final String titulo;
-  final String nombreChofer;
-  final String dni;
-
-  const _ListaUnidadesLibres({
-    required this.scrollController,
-    required this.tipoBusqueda,
-    required this.patenteActual,
-    required this.titulo,
-    required this.nombreChofer,
-    required this.dni,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final stream = tipoBusqueda != null
-        ? FirebaseFirestore.instance
-            .collection(AppCollections.vehiculos)
-            .where('TIPO', isEqualTo: tipoBusqueda)
-            .where('ESTADO', isEqualTo: 'LIBRE')
-            .snapshots()
-        : FirebaseFirestore.instance
-            .collection(AppCollections.vehiculos)
-            .where('TIPO', whereIn: AppTiposVehiculo.enganches)
-            .where('ESTADO', isEqualTo: 'LIBRE')
-            .snapshots();
-
-    return Column(
-      children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Text(
-            'Solo se muestran unidades disponibles (LIBRE)',
-            style: TextStyle(color: AppColors.accentGreen, fontSize: 11),
-          ),
-        ),
-        const Divider(color: Colors.white10, height: 1),
-        Expanded(
-          child: StreamBuilder<QuerySnapshot>(
-            stream: stream,
-            builder: (context, snap) {
-              if (!snap.hasData) return const AppLoadingState();
-              final unidades = snap.data!.docs
-                  .where((d) => d.id != patenteActual)
-                  .toList();
-
-              if (unidades.isEmpty) {
-                return const AppEmptyState(
-                  icon: Icons.directions_car_outlined,
-                  title: 'No hay unidades libres',
-                  subtitle:
-                      'Volvé a intentarlo más tarde o consultá con tu administrador.',
-                );
-              }
-
-              return ListView.builder(
-                controller: scrollController,
-                itemCount: unidades.length,
-                itemBuilder: (ctx, idx) {
-                  final unidad = unidades[idx];
-                  final data = unidad.data() as Map<String, dynamic>;
-                  return ListTile(
-                    leading: const Icon(Icons.check_circle_outline,
-                        color: Colors.white38),
-                    title: Text(
-                      unidad.id,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    subtitle: Text(
-                      '${data['MARCA'] ?? 'S/D'} ${data['MODELO'] ?? ''}',
-                      style: const TextStyle(
-                          color: Colors.white54, fontSize: 12),
-                    ),
-                    trailing: const Icon(Icons.add_circle,
-                        color: AppColors.accentOrange),
-                    onTap: () {
-                      Navigator.pop(context);
-                      _enviarSolicitud(
-                        context,
-                        titulo: titulo,
-                        actual: patenteActual,
-                        nueva: unidad.id,
-                        nombre: nombreChofer,
-                        // dni se pasa explícito desde el ancestor — antes
-                        // se buscaba con findAncestorStateOfType, pero
-                        // como el sheet vive en su propio Overlay esa
-                        // búsqueda fallaba y devolvía '' (string vacío).
-                        dni: dni,
-                      );
-                    },
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _enviarSolicitud(
-    BuildContext context, {
-    required String titulo,
-    required String actual,
-    required String nueva,
-    required String nombre,
-    required String dni,
   }) async {
     final messenger = ScaffoldMessenger.of(context);
     final esTractor = titulo.contains('TRACTOR');
 
-    // Defensa profunda: si por algún motivo (refactor futuro, bug en el
-    // árbol de widgets) llegáramos acá con campos vacíos, no creamos
-    // una solicitud "envenenada" que el admin no pueda aprobar después.
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('¿Esta no es tu unidad?'),
+        content: Text(
+          'Le vas a avisar a la oficina que el '
+          '${esTractor ? "tractor" : "enganche"} $patenteActual NO es el que '
+          'manejás. La oficina lo revisa y te asigna la unidad correcta — '
+          'vos no la elegís.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: AppColors.accentOrange),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sí, avisar a la oficina'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
     final cleanDni = dni.trim();
-    final cleanNueva = nueva.trim();
-    if (cleanDni.isEmpty || cleanNueva.isEmpty) {
-      debugPrint(
-          'Solicitud bloqueada: dni="$cleanDni" nueva="$cleanNueva"');
-      AppFeedback.errorOn(messenger, 'No se pudo enviar la solicitud (faltan datos del chofer o la unidad). Cerrá la app y volvé a iniciar sesión.');
+    if (cleanDni.isEmpty) {
+      AppFeedback.errorOn(messenger,
+          'No se pudo enviar el aviso (faltan datos del chofer). Cerrá la app y volvé a iniciar sesión.');
       return;
     }
 
     try {
-      await FirebaseFirestore.instance.collection(AppCollections.revisiones).add({
+      // `patente` VACÍO a propósito: el chofer no elige. El admin asigna la
+      // unidad al aprobar la revisión (ver admin_revisiones_screen).
+      await FirebaseFirestore.instance
+          .collection(AppCollections.revisiones)
+          .add({
         'dni': cleanDni,
-        'nombre_usuario': nombre,
-        'etiqueta':
-            'CAMBIO DE ${esTractor ? "UNIDAD" : "EQUIPO"}',
+        'nombre_usuario': nombreChofer,
+        'etiqueta': 'NO ES MI ${esTractor ? "UNIDAD" : "ENGANCHE"}',
         'campo': esTractor ? 'SOLICITUD_VEHICULO' : 'SOLICITUD_ENGANCHE',
-        'patente': cleanNueva,
-        'unidad_actual': actual.trim(),
+        'patente': '',
+        'unidad_actual': patenteActual.trim(),
         'fecha_vencimiento': '2026-12-31',
         'tipo_solicitud': 'CAMBIO_EQUIPO',
         'coleccion_destino': 'EMPLEADOS',
         'url_archivo': '',
-        // ✅ Campo necesario para que el contador del panel admin la cuente.
         'estado': 'PENDIENTE',
         'fecha_solicitud': FieldValue.serverTimestamp(),
       });
 
       if (!context.mounted) return;
-      AppFeedback.warningOn(messenger, 'Solicitud enviada. Aguarde aprobación de oficina.');
+      AppFeedback.warningOn(messenger,
+          'Aviso enviado. La oficina te va a asignar la unidad correcta.');
     } catch (e, s) {
       if (!context.mounted) return;
       AppFeedback.errorTecnicoOn(
         messenger,
-        usuario: 'No se pudo enviar la solicitud. Probá de nuevo en un momento.',
+        usuario: 'No se pudo enviar el aviso. Probá de nuevo en un momento.',
         tecnico: e,
         stack: s,
       );

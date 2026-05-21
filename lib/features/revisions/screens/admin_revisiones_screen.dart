@@ -124,7 +124,9 @@ class _RevisionCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   esCambioEquipo
-                      ? 'Solicita: ${data['patente'] ?? '—'}'
+                      ? ((data['patente'] ?? '').toString().trim().isEmpty
+                          ? 'Reporta que ${data['unidad_actual'] ?? 'su unidad'} no es la suya'
+                          : 'Solicita: ${data['patente']}')
                       : '$etiqueta · vence ${AppFormatters.formatearFecha(data['fecha_vencimiento'])}',
                   style: const TextStyle(
                     color: Colors.white54,
@@ -277,12 +279,22 @@ class _DetalleRevision extends StatelessWidget {
         icon: Icons.link_off,
       ),
       const SizedBox(height: 10),
-      _InfoCard(
-        label: 'SOLICITA',
-        valor: (data['patente'] ?? 'S/D').toString(),
-        valorColor: AppColors.accentGreen,
-        icon: Icons.add_link,
-      ),
+      if ((data['patente'] ?? '').toString().trim().isEmpty)
+        // Flujo "no es mi unidad" (2026-05-21): el chofer no eligió. El admin
+        // elige la unidad al tocar APROBAR.
+        const _InfoCard(
+          label: 'EL CHOFER REPORTA QUE NO ES SU UNIDAD',
+          valor: 'Elegí la unidad correcta al aprobar',
+          valorColor: AppColors.accentOrange,
+          icon: Icons.report_problem_outlined,
+        )
+      else
+        _InfoCard(
+          label: 'SOLICITA',
+          valor: (data['patente'] ?? 'S/D').toString(),
+          valorColor: AppColors.accentGreen,
+          icon: Icons.add_link,
+        ),
     ];
   }
 
@@ -343,7 +355,19 @@ class _DetalleRevision extends StatelessWidget {
     try {
       if (aprobado) {
         if (esCambioEquipo) {
-          await _aprobarCambioEquipo();
+          var datosFinal = data;
+          final patenteSolicitada = (data['patente'] ?? '').toString().trim();
+          if (patenteSolicitada.isEmpty) {
+            // Flujo nuevo 2026-05-21: el chofer reporta "no es mi unidad" SIN
+            // elegir. El admin asigna la unidad correcta acá. Sin elección no
+            // se aprueba (return sin tocar nada).
+            final esTractor = (data['campo'] ?? '') == 'SOLICITUD_VEHICULO';
+            final elegida =
+                await _elegirUnidadLibre(context, esTractor: esTractor);
+            if (elegida == null || elegida.trim().isEmpty) return;
+            datosFinal = {...data, 'patente': elegida.trim()};
+          }
+          await _aprobarCambioEquipo(datosFinal);
         } else {
           await _aprobarDocumento();
         }
@@ -404,7 +428,7 @@ class _DetalleRevision extends StatelessWidget {
     }
   }
 
-  Future<void> _aprobarCambioEquipo() async {
+  Future<void> _aprobarCambioEquipo(Map<String, dynamic> datos) async {
     // Delegamos al RevisionService que YA pasa por AsignacionVehiculoService
     // / AsignacionEngancheService — esos services crean el doc en
     // ASIGNACIONES_VEHICULO/ASIGNACIONES_ENGANCHE (log temporal
@@ -412,11 +436,8 @@ class _DetalleRevision extends StatelessWidget {
     // ademas de actualizar EMPLEADOS.VEHICULO/ENGANCHE y
     // VEHICULOS.ESTADO.
     //
-    // ANTES: este método hacia batch.update() directo SIN crear el doc
-    // en ASIGNACIONES_VEHICULO. Resultado: el histórico inmutable
-    // que usan multas tardías, atribución de eventos Volvo y reportes
-    // de km por chofer/unidad quedaba vacio para esos cambios — bug
-    // critico detectado en auditoria 2026-05-16.
+    // `datos` puede traer la `patente` que eligió el admin (flujo "no es mi
+    // unidad" 2026-05-21) o la que ya venía en la solicitud (flujo viejo).
     //
     // RevisionService.finalizarRevision tiene su propia validacion
     // defensiva (StateError si la solicitud no tiene IDs minimos +
@@ -424,7 +445,103 @@ class _DetalleRevision extends StatelessWidget {
     await RevisionService().finalizarRevision(
       idSolicitud: idDoc,
       aprobado: true,
-      datos: data,
+      datos: datos,
+    );
+  }
+
+  /// Bottom sheet para que el ADMIN elija una unidad LIBRE al aprobar un
+  /// reporte "no es mi unidad" (el chofer ya no elige; ver
+  /// user_mi_equipo_widgets). Devuelve la patente elegida, o null si cerró.
+  Future<String?> _elegirUnidadLibre(
+    BuildContext context, {
+    required bool esTractor,
+  }) {
+    final patenteActual = (data['unidad_actual'] ?? '').toString().trim();
+    final stream = esTractor
+        ? FirebaseFirestore.instance
+            .collection(AppCollections.vehiculos)
+            .where('TIPO', isEqualTo: 'TRACTOR')
+            .where('ESTADO', isEqualTo: 'LIBRE')
+            .snapshots()
+        : FirebaseFirestore.instance
+            .collection(AppCollections.vehiculos)
+            .where('TIPO', whereIn: AppTiposVehiculo.enganches)
+            .where('ESTADO', isEqualTo: 'LIBRE')
+            .snapshots();
+
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.background,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.7,
+        maxChildSize: 0.95,
+        minChildSize: 0.4,
+        builder: (c, scrollCtl) => Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(
+                'ASIGNAR ${esTractor ? "TRACTOR" : "ENGANCHE"} LIBRE',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                ),
+              ),
+            ),
+            const Divider(color: Colors.white10, height: 1),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: stream,
+                builder: (c2, snap) {
+                  if (!snap.hasData) return const AppLoadingState();
+                  final unidades = snap.data!.docs
+                      .where((d) => d.id != patenteActual)
+                      .toList();
+                  if (unidades.isEmpty) {
+                    return const AppEmptyState(
+                      icon: Icons.directions_car_outlined,
+                      title: 'No hay unidades libres',
+                      subtitle:
+                          'No hay unidades de este tipo en estado LIBRE.',
+                    );
+                  }
+                  return ListView.builder(
+                    controller: scrollCtl,
+                    itemCount: unidades.length,
+                    itemBuilder: (c3, i) {
+                      final u = unidades[i];
+                      final d = u.data() as Map<String, dynamic>;
+                      return ListTile(
+                        leading: const Icon(Icons.local_shipping_outlined,
+                            color: Colors.white38),
+                        title: Text(
+                          u.id,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        subtitle: Text(
+                          '${d['MARCA'] ?? 'S/D'} ${d['MODELO'] ?? ''}',
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 12),
+                        ),
+                        trailing: const Icon(Icons.check_circle,
+                            color: AppColors.accentGreen),
+                        onTap: () => Navigator.pop(ctx, u.id),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
