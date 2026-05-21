@@ -226,5 +226,65 @@ class TestCancelar(unittest.TestCase):
         self.assertTrue(r["sigue"])
 
 
+class TestFranjaDeHora(unittest.TestCase):
+    def test_cada_franja(self):
+        self.assertEqual(iturnos.franja_de_hora("00:00"), "madrugada")
+        self.assertEqual(iturnos.franja_de_hora("05:30"), "madrugada")
+        self.assertEqual(iturnos.franja_de_hora("06:00"), "manana")
+        self.assertEqual(iturnos.franja_de_hora("11:30"), "manana")
+        self.assertEqual(iturnos.franja_de_hora("12:00"), "tarde")
+        self.assertEqual(iturnos.franja_de_hora("18:00"), "noche")
+        self.assertEqual(iturnos.franja_de_hora("23:30"), "noche")
+
+    def test_vacio_o_none(self):
+        self.assertIsNone(iturnos.franja_de_hora(""))
+        self.assertIsNone(iturnos.franja_de_hora(None))
+
+
+class TestTurnoEnObjetivoCualquiera(unittest.TestCase):
+    """reagendar 'cualquiera' = moverse a OTRA franja → NUNCA auto-cancelar (si
+    no, se cancelaba al toque porque el slot actual siempre cae en 'cualquiera').
+    Lockea el fix 2026-05-21 (VOGEL madrugada)."""
+
+    def test_cualquiera_siempre_false(self):
+        self.assertFalse(iturnos.turno_en_objetivo(
+            "00:00", "Viernes 22 May 2026 00:00 hs.", "cualquiera", None))
+        self.assertFalse(iturnos.turno_en_objetivo(
+            "14:00", "Viernes 22 May 2026 14:00 hs.", "cualquiera", "2026-05-22"))
+
+    def test_franja_concreta_sigue_detectando(self):
+        self.assertTrue(iturnos.turno_en_objetivo(
+            "10:00", "Viernes 22 May 2026 10:00 hs.", "manana", None))
+
+
+class TestReagendarCualquieraExcluyeFranjaActual(unittest.TestCase):
+    """Con 'cualquiera' + franja_actual, reagendar() ignora los slots de la franja
+    actual (no se queda donde está); si solo hay de esa franja, no mueve (espera)."""
+
+    def _cli(self):
+        cli = iturnos.IturnosClient()
+        cli.s = mock.MagicMock()
+        return cli
+
+    def test_elige_otra_franja_no_la_actual(self):
+        cal = ('<a class="btn btn-outline-success" '
+               'href="https://x/reagendar/editar/2099-05-22T02:00">02:00</a>'
+               '<a class="btn btn-outline-success" '
+               'href="https://x/reagendar/editar/2099-05-22T07:00">07:00</a>')
+        cli = self._cli()
+        cli.s.get.side_effect = [mock.MagicMock(text=cal),
+                                 mock.MagicMock(text="máximo de iTurnos")]
+        r = cli.reagendar("U", "cualquiera", None, franja_actual="madrugada")
+        self.assertEqual(r["hora"], "07:00")  # 02:00=madrugada (excluida) → 07:00
+
+    def test_si_solo_hay_de_la_franja_actual_no_mueve(self):
+        cal = ('<a class="btn btn-outline-success" '
+               'href="https://x/reagendar/editar/2099-05-22T02:00">02:00</a>')
+        cli = self._cli()
+        cli.s.get.return_value.text = cal
+        r = cli.reagendar("U", "cualquiera", None, franja_actual="madrugada")
+        self.assertEqual(r["motivo"], "sin_slot_en_franja")  # espera, no autocancela
+
+
 if __name__ == "__main__":
     unittest.main()

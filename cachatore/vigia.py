@@ -634,13 +634,22 @@ def ciclo_latente(targets: dict, dry: bool):
         if not asegurar_login(t):
             continue
         try:
-            r = t.cli.reagendar(t.uuid, t.franja, resolver_fecha(t.fecha))
+            # franja_actual: si la franja es 'cualquiera', excluye la franja del
+            # turno actual → mover a OTRA franja (no quedarse donde ya está).
+            r = t.cli.reagendar(t.uuid, t.franja, resolver_fecha(t.fecha),
+                                franja_actual=iturnos.franja_de_hora(t.turno_hora))
         except Exception as e:
             log("LOG", t.nombre, f"error reagendando: {e}")
             continue
         if r.get("ok"):
             log("EXITO", t.nombre, f"REAGENDADO a {r.get('hora')} (franja '{t.franja}')")
             t.reagendar_hecho = True
+            t.reagendar = False   # ya se movió → apagar el flag. CLAVE para
+            if _ESCRIBIR_ESTADO:  # 'cualquiera' (que no auto-cancela): si no, al
+                try:              # reiniciar el bot lo volvería a sacar de franja.
+                    nube.cancelar_reagendar(t.dni)
+                except Exception as e:
+                    log("LOG", t.nombre, f"no pude apagar reagendar en la base: {e}")
             _reportar_estado(t, "reagendado", hora=r.get("hora"))
             t.notificar = "reagendado"
             t.ultimo_check = 0.0   # refrescar_estado publica el turno nuevo + avisa

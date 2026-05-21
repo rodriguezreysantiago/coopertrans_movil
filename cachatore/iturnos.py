@@ -83,6 +83,19 @@ def hora_en_franja(hora_slot: str, franja_key: str) -> bool:
     return _hhmm_a_min(ini) <= t <= _hhmm_a_min(fin)
 
 
+def franja_de_hora(hora_slot: str):
+    """Devuelve la franja ('madrugada'/'manana'/'tarde'/'noche') a la que
+    pertenece un 'HH:MM', o None si no cae en ninguna. Sirve para EXCLUIR la
+    franja actual cuando se reagenda con 'cualquiera' (= mover a otra franja)."""
+    if not hora_slot:
+        return None
+    t = _hhmm_a_min(hora_slot)
+    for key, (ini, fin) in FRANJAS.items():
+        if _hhmm_a_min(ini) <= t <= _hhmm_a_min(fin):
+            return key
+    return None
+
+
 def slot_es_futuro(slot: dict, ahora: datetime = None) -> bool:
     """`True` si el slot (fecha+hora del iso 'AAAA-MM-DDTHH:MM') es ESTRICTAMENTE
     posterior a `ahora` (hora local del equipo = ART). Evita reservar un horario
@@ -164,8 +177,15 @@ def turno_en_objetivo(turno_hora: str, turno_cuando: str, franja: str,
     fecha. Sirve para que el bot detecte que un turno ya esta donde se queria y
     cancele solo el reagendar (en vez de seguir moviendolo). Conservador: si hay
     fecha objetivo y no se puede parsear la del turno, devuelve False (no
-    cancela; mejor seguir intentando que cancelar de mas)."""
-    if not turno_hora or not hora_en_franja(turno_hora, franja):
+    cancela; mejor seguir intentando que cancelar de mas).
+
+    OJO 'cualquiera': reagendar con el comodín = "moveme a OTRA franja". El slot
+    actual SIEMPRE cae en 'cualquiera', así que si devolviéramos True se
+    autocancelaría al toque (bug 2026-05-21). Por eso con 'cualquiera' NUNCA está
+    "en el objetivo" → el bot sigue buscando en las demás franjas."""
+    if not turno_hora or franja == CUALQUIERA:
+        return False
+    if not hora_en_franja(turno_hora, franja):
         return False
     if fecha_obj:
         return fecha_iso_de_cuando(turno_cuando or "") == fecha_obj
@@ -368,9 +388,15 @@ class IturnosClient:
                                "reagendar_url": f"{BASE}/reagendar/calendario/{uuid}"})
         return turnos
 
-    def reagendar(self, uuid: str, franja: str, fecha: str = None) -> dict:
+    def reagendar(self, uuid: str, franja: str, fecha: str = None,
+                  franja_actual: str = None) -> dict:
         """Reagenda el turno {uuid} a un slot libre dentro de la franja (y de la
         `fecha` si se da: 'AAAA-MM-DD').
+
+        `franja_actual`: si `franja=='cualquiera'`, EXCLUYE esa franja (la del
+        turno actual) → "moveme a cualquier OTRA franja". Sin esto, con cualquiera
+        se quedaba en la misma franja (bug 2026-05-21: VOGEL madrugada no salía
+        de madrugada).
 
         Flujo CONFIRMADO 2026-05-20 (misma mecánica de 2 pasos que reservar):
         1) GET /reagendar/calendario/{uuid}[?d=AAAA-MM-DD] → lista los slots
@@ -394,7 +420,10 @@ class IturnosClient:
         slots = [s for s in parsear_slots_reagendar(self.s.get(url).text)
                  if hora_en_franja(s["hora"], franja)
                  and (not fecha or s.get("fecha") == fecha)
-                 and slot_es_futuro(s, ahora)]
+                 and slot_es_futuro(s, ahora)
+                 # 'cualquiera' = otra franja: descartar los de la franja actual.
+                 and not (franja == CUALQUIERA and franja_actual
+                          and franja_de_hora(s["hora"]) == franja_actual)]
         if not slots:
             return {"ok": False, "motivo": "sin_slot_en_franja"}
         slots.sort(key=lambda s: s.get("iso") or s["hora"])
