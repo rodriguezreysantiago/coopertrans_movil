@@ -7,10 +7,10 @@ este proceso queda **LATENTE las 24 hs** en la PC dedicada del bot:
   los que no tienen turno como reagendar a los marcados. Si alguien CANCELA y se
   libera un turno en la franja de un chofer que lo necesita, lo agarra al toque
   — sin esperar al drop de las 10:30.
-- **Agresivo** (alrededor de `hora_inicio`): cada chofer sin turno escanea su
-  propia agenda a full y reserva apenas aparece un slot en su franja (igual que
-  el orquestador, para ganar la pulseada del drop). Pasada la ventana, vuelve
-  solo a latente.
+- **Agresivo** (botón "Barrido agresivo" de la app): mientras está activo
+  (`agresivo_hasta` futuro, ~10 min), el barrido latente corre MÁS RÁPIDO
+  (~poll_agresivo_seg) para ganar la pulseada del drop; vuelve solo a latente al
+  expirar. (`--agresivo` por CLI usa el barrido per-chofer, para testeo.)
 - **Reagendar**: si un chofer tiene `reagendar:true`, mueve su turno a un slot
   de su franja apenas se libere uno (sin formulario, lo reasigna directo).
 
@@ -65,15 +65,18 @@ DROP_CONFIG = os.path.join(_DIR, "drop.json")
 POLL_AGRESIVO_SEG = 1.5      # en la ventana del drop: re-escaneo rápido por chofer
 POLL_LATENTE_SEG = 5.0       # resto del día: barre la worklist cada ~5 s
 JITTER_LATENTE_SEG = 1.0     # + ruido chico (para no pegar siempre al mismo seg)
-DROP_DURACION_MIN = 20       # largo de la ventana agresiva si no se especifica
 
 LOGIN_REINTENTOS = 3
 REFRESH_CONFIG_SEG = 30      # cada cuánto releer la worklist (Firestore/archivo)
 REFRESH_TURNOS_SEG = 600     # cada cuánto re-chequear mis_turnos de cada chofer
 REFRESH_DATOS_SEG = 600      # cada cuánto re-traer unidad/mail de Firestore
-HEARTBEAT_SEG = 5            # latido del bot: SIEMPRE cada ~5 s
+HEARTBEAT_SEG = 5            # sleep base del loop en idle/pausado
+LATIDO_SEG = 30             # cada cuánto ESCRIBIR el latido a Firestore. La UI
+                            # considera vivo si latió hace <120 s, asi que no
+                            # hace falta cada ciclo (serian ~17k writes/dia).
+BACKOFF_MAX_SEG = 120       # tope del backoff cuando el scanner no puede loguear
 MAX_REFRESH_POR_CICLO = 2    # cuántos mis_turnos refrescar por ciclo (no bloquear)
-MONITOR_BATCH = 10           # cuántos choferes del monitor escanear por ciclo
+MONITOR_BATCH = 5            # cuántos choferes del monitor escanear por ciclo
 HORA_RESUMEN = 8             # hora ART del resumen diario de turnos al encargado
 ESPERA_SIN_CONFIG_SEG = 30   # si falta config / no hay choferes / pausado
 
@@ -130,21 +133,6 @@ def leer_config(ultimo):
                 f"no pude leer config de Firestore ({e}); pruebo drop.json")
             return _leer_config_archivo(ultimo)
     return _leer_config_archivo(ultimo)
-
-
-def en_ventana_drop(cfg) -> bool:
-    """¿Estamos dentro de la ventana agresiva [hora_inicio, +duracion_min]?"""
-    hi = cfg.get("hora_inicio")
-    if not hi:
-        return False
-    try:
-        h, m = map(int, str(hi).split(":"))
-    except Exception:
-        return False
-    ahora = datetime.now()
-    ini = ahora.replace(hour=h, minute=m, second=0, microsecond=0)
-    dur = cfg.get("duracion_min", DROP_DURACION_MIN) or DROP_DURACION_MIN
-    return ini <= ahora <= ini + timedelta(minutes=dur)
 
 
 class Target:
@@ -533,7 +521,12 @@ def sincronizar_monitor(roster: dict, targets: dict):
             continue
         m = _monitor.get(dni)
         if m is None:
-            _monitor[dni] = Monitor(ch)
+            nm = Monitor(ch)
+            # Stagger del 1er chequeo: si no, al arrancar los ~55 monitores
+            # quedan TODOS vencidos (ultimo_check=0) y se logean de golpe contra
+            # Cloudflare. Repartimos el 1er scan en los próximos ~REFRESH_TURNOS_SEG.
+            nm.ultimo_check = time.time() - random.uniform(0, REFRESH_TURNOS_SEG)
+            _monitor[dni] = nm
         else:                              # refrescar mail/clave por si cambiaron
             if ch.get("email"):
                 m.email = ch["email"].strip().lower()
@@ -739,6 +732,8 @@ def main():
     ultimo_roster = 0.0
     ultimo_resumen = None     # 'YYYY-MM-DD' del último resumen diario al encargado
     modo_anterior = None
+    ultimo_latido = 0.0       # último latido escrito (para throttlear el heartbeat)
+    fallos_scanner = 0        # logins fallidos seguidos del scanner (para backoff)
 
     while True:
         try:
@@ -793,12 +788,13 @@ def main():
                 modo = "idle"
             elif not activo:
                 modo = "pausado"
-            elif forzar_agresivo or boton_agresivo:
+            elif (forzar_agresivo or boton_agresivo) and not forzar_latente:
                 modo = "agresivo"
             else:
                 modo = "latente"
 
-            if modo != modo_anterior:
+            cambio_modo = modo != modo_anterior
+            if cambio_modo:
                 pend = sum(1 for t in targets.values() if not t.tiene_turno)
                 log("LOG", "sistema", f"modo {modo.upper()} — {len(targets)} chofer(es), "
                     f"{pend} sin turno (fecha/franja por chofer)")
@@ -821,8 +817,26 @@ def main():
             else:  # idle / pausado: el bot no toca nada (pero late igual)
                 espera = HEARTBEAT_SEG
 
-            # 5) latido cada ciclo (~5 s) para que la UI sepa que está vivo
-            _heartbeat(modo, targets)
+            # 4.b) backoff si el scanner no logra loguear (Cloudflare bloqueando):
+            #      no martillar el WAF cada ~5 s — esperar cada vez más (tope
+            #      BACKOFF_MAX_SEG). Se resetea apenas vuelve a loguear.
+            usa_scanner = modo in ("latente", "agresivo") and not forzar_agresivo
+            if usa_scanner and not _scanner["logueado"]:
+                fallos_scanner += 1
+                espera = min(espera * (2 ** min(fallos_scanner, 5)), BACKOFF_MAX_SEG)
+                if fallos_scanner == 1 or fallos_scanner % 5 == 0:
+                    log("LOG", "scanner",
+                        f"sin login (¿Cloudflare?), backoff a {espera:.0f}s "
+                        f"(fallo {fallos_scanner})")
+            else:
+                fallos_scanner = 0
+
+            # 5) latido THROTTLED: ~cada LATIDO_SEG o al cambiar de modo. La UI
+            #    considera vivo si latió hace <120 s, así que no escribimos cada
+            #    ciclo (eran ~17k writes/día solo para el latido).
+            if cambio_modo or time.time() - ultimo_latido >= LATIDO_SEG:
+                _heartbeat(modo, targets)
+                ultimo_latido = time.time()
 
             # 6) resumen diario de turnos al encargado de logística (~8 AM ART).
             #    Idempotente por día (nube chequea doc determinístico) → un
