@@ -197,13 +197,62 @@ export function parseEstadoVolvo(raw: unknown): EstadoVolvo | null {
   };
 }
 
+// ─── fetch helper (3 reintentos con backoff) ─────────────────────────────────
+/**
+ * GET a `vehiclestatuses` con 3 reintentos. Devuelve el array
+ * `vehicleStatuses` o [] si falló. `etiqueta` distingue las consultas en logs.
+ */
+async function fetchStatuses(
+  url: string,
+  authHeader: string,
+  etiqueta: string
+): Promise<unknown[]> {
+  let intentos = 0;
+  while (intentos < 3) {
+    intentos++;
+    try {
+      const res = await fetchWithTimeout(url, {
+        method: "GET",
+        headers: { "Authorization": authHeader, "Accept": ACCEPT_STATUSES },
+      });
+      if (!res.ok) {
+        logger.warn("[estadoVolvo] Volvo HTTP error", {
+          etiqueta,
+          statusCode: res.status,
+          intento: intentos,
+        });
+        if (intentos >= 3) return [];
+        await new Promise((r) => setTimeout(r, 5000 * intentos));
+        continue;
+      }
+      const body = (await res.json()) as Record<string, unknown>;
+      const sr = body?.vehicleStatusResponse as
+        | Record<string, unknown>
+        | undefined;
+      if (Array.isArray(sr?.vehicleStatuses)) {
+        return sr!.vehicleStatuses as unknown[];
+      }
+      return [];
+    } catch (e) {
+      logger.warn("[estadoVolvo] error consultando Volvo", {
+        etiqueta,
+        error: (e as Error).message,
+        intento: intentos,
+      });
+      if (intentos >= 3) return [];
+      await new Promise((r) => setTimeout(r, 5000 * intentos));
+    }
+  }
+  return [];
+}
+
 // ─── poller ──────────────────────────────────────────────────────────────────
 export const estadoVolvoPoller = onSchedule(
   {
     schedule: "every 5 minutes",
     timeZone: "America/Argentina/Buenos_Aires",
     secrets: [volvoUsername, volvoPassword],
-    timeoutSeconds: 60,
+    timeoutSeconds: 120,
     memory: "256MiB",
   },
   async () => {
@@ -213,51 +262,57 @@ export const estadoVolvoPoller = onSchedule(
         `${volvoUsername.value()}:${volvoPassword.value()}`
       ).toString("base64");
 
+    // Consulta 1 — estado general (posición/velocidad/combustible/odo/horas).
     const qs = new URLSearchParams({
       latestOnly: "true",
       contentFilter: "ACCUMULATED,SNAPSHOT,UPTIME",
       additionalContent: "VOLVOGROUPSNAPSHOT",
     });
-    const url = `${VOLVO_BASE}/vehicle/vehiclestatuses?${qs.toString()}`;
-
-    let cache: unknown[] = [];
-    let intentos = 0;
-    while (intentos < 3) {
-      intentos++;
-      try {
-        const res = await fetchWithTimeout(url, {
-          method: "GET",
-          headers: { "Authorization": authHeader, "Accept": ACCEPT_STATUSES },
-        });
-        if (!res.ok) {
-          logger.warn("[estadoVolvo] Volvo HTTP error", {
-            statusCode: res.status,
-            intento: intentos,
-          });
-          if (intentos >= 3) return;
-          await new Promise((r) => setTimeout(r, 5000 * intentos));
-          continue;
-        }
-        const body = (await res.json()) as Record<string, unknown>;
-        const sr = body?.vehicleStatusResponse as
-          | Record<string, unknown>
-          | undefined;
-        if (Array.isArray(sr?.vehicleStatuses)) cache = sr!.vehicleStatuses;
-        break;
-      } catch (e) {
-        logger.warn("[estadoVolvo] error consultando Volvo", {
-          error: (e as Error).message,
-          intento: intentos,
-        });
-        if (intentos >= 3) return;
-        await new Promise((r) => setTimeout(r, 5000 * intentos));
-      }
-    }
+    const cache = await fetchStatuses(
+      `${VOLVO_BASE}/vehicle/vehiclestatuses?${qs.toString()}`,
+      authHeader,
+      "estado"
+    );
 
     if (cache.length === 0) {
       logger.warn("[estadoVolvo] flota Volvo vacía, abortando");
       return;
     }
+
+    // Consulta 2 — SOLO UPTIME (testigos del tablero + serviceDistance + temp).
+    // Con `latestOnly` el record más nuevo por unidad suele ser SNAPSHOT y NO
+    // trae `tellTaleInfo` (sólo 2/53). Pidiendo UPTIME explícito forzamos el
+    // último record de uptime de cada unidad → advertencias EXACTAS de toda la
+    // flota para mantenimiento (#43). Ver project_volvo_estado_fundacion.md.
+    const qsUptime = new URLSearchParams({
+      latestOnly: "true",
+      contentFilter: "UPTIME",
+    });
+    const cacheUptime = await fetchStatuses(
+      `${VOLVO_BASE}/vehicle/vehiclestatuses?${qsUptime.toString()}`,
+      authHeader,
+      "uptime"
+    );
+    // VIN → {tell_tales, service_distance_km, temp_motor_c} del record UPTIME.
+    const uptimePorVin = new Map<
+      string,
+      Pick<EstadoVolvo, "tell_tales" | "service_distance_km" | "temp_motor_c">
+    >();
+    let conTellTales = 0;
+    for (const raw of cacheUptime) {
+      const e = parseEstadoVolvo(raw);
+      if (!e) continue;
+      uptimePorVin.set(e.vin, {
+        tell_tales: e.tell_tales,
+        service_distance_km: e.service_distance_km,
+        temp_motor_c: e.temp_motor_c,
+      });
+      if (e.tell_tales.length > 0) conTellTales++;
+    }
+    logger.info("[estadoVolvo] uptime", {
+      recibidosUptime: cacheUptime.length,
+      conTellTales,
+    });
 
     // MUESTRA para verificar la estructura real (se quita tras confirmar paths).
     try {
@@ -300,6 +355,17 @@ export const estadoVolvoPoller = onSchedule(
       if (!patente) {
         sinPatente++;
         continue;
+      }
+      // Overlay de la consulta UPTIME: testigos + service + temp del record
+      // de uptime (más fiable que lo que trajo el record de estado, que casi
+      // nunca incluye uptimeData). limpiarNulos + merge preservan lo previo.
+      const up = uptimePorVin.get(est.vin);
+      if (up) {
+        if (up.tell_tales.length > 0) est.tell_tales = up.tell_tales;
+        if (up.service_distance_km != null) {
+          est.service_distance_km = up.service_distance_km;
+        }
+        if (up.temp_motor_c != null) est.temp_motor_c = up.temp_motor_c;
       }
       batch.set(
         db.collection("VOLVO_ESTADO").doc(patente),
