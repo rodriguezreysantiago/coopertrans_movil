@@ -136,6 +136,13 @@ def borrar_turno(dni):
     db.collection(COL_TURNOS).document(str(dni)).delete()
 
 
+def listar_dnis_turnos():
+    """DNIs (doc IDs) con turno publicado en CACHATORE_TURNOS. Lo usa el bot
+    para limpiar los que ya no vigila (reconciliación al arrancar)."""
+    db = choferes._db()
+    return [d.id for d in db.collection(COL_TURNOS).stream()]
+
+
 # ---- avisos por WhatsApp (vía COLA_WHATSAPP, la consume el bot) ------------
 COL_COLA = "COLA_WHATSAPP"
 COL_EMPLEADOS = "EMPLEADOS"

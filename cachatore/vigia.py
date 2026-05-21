@@ -631,6 +631,7 @@ def main():
     modo_anterior = None
     ultimo_latido = 0.0       # último latido escrito (para throttlear el heartbeat)
     fallos_scanner = 0        # logins fallidos seguidos del scanner (para backoff)
+    reconciliado = False      # limpieza one-shot de turnos viejos de no-vigilados
 
     while True:
         try:
@@ -641,6 +642,18 @@ def main():
                     cfg = nueva
                     sincronizar_targets(cfg, targets)
                 ultimo_config = time.time()
+
+            # 1.b) limpieza one-shot al arrancar: sacar de "Concretados" los
+            #      turnos de choferes que YA NO vigilamos (quedaron de la versión
+            #      vieja que monitoreaba a todos los choferes).
+            if _ESCRIBIR_ESTADO and not reconciliado and cfg is not None:
+                try:
+                    for dni in nube.listar_dnis_turnos():
+                        if dni not in targets:
+                            _despublicar_turno(dni)
+                    reconciliado = True
+                except Exception as e:
+                    log("LOG", "sistema", f"no pude reconciliar turnos viejos: {e}")
 
             # 2) re-traer unidad/mail de los vigilados (refleja reasignaciones)
             if targets and time.time() - ultimo_datos > REFRESH_DATOS_SEG:
