@@ -553,32 +553,35 @@ def ciclo_latente(targets: dict, dry: bool):
         return
 
     libres = iturnos.parsear_disponibilidad(html)["slots"]
-    if not libres:
-        return
 
     # asignar slots LIBRES a los choferes que necesitan turno (uno por slot),
-    # respetando la FECHA y la FRANJA de cada chofer.
-    ahora = datetime.now()
-    usados, asignaciones = set(), []
-    for t in targets.values():
-        if t.tiene_turno or not t.credenciales_ok or not t.patente:
-            continue
-        fobj = resolver_fecha(t.fecha)
-        cand = sorted(
-            (s for s in libres
-             if s["iso"] not in usados
-             and (fobj is None or s["fecha"] == fobj)
-             and iturnos.hora_en_franja(s["hora"], t.franja)
-             and iturnos.slot_es_futuro(s, ahora)),
-            key=lambda s: s["iso"])   # el más próximo primero
-        if cand:
-            usados.add(cand[0]["iso"])
-            asignaciones.append((t, cand[0]))
-    if asignaciones:
-        log("LOG", "sistema",
-            f"latente: {len(asignaciones)} slot(s) libre(s) en franja → reservando")
-        _en_paralelo(asignaciones, lambda a: _reservar_async(a[0], a[1], dry),
-                     max_hilos=len(asignaciones), timeout=25)
+    # respetando la FECHA y la FRANJA de cada chofer. OJO: si NO hay libres NO
+    # cortamos acá — el bloque de reagendar de abajo tiene que correr igual (su
+    # disponibilidad está en OTRA página y el auto-cancel del reagendar ni
+    # siquiera necesita slots). El bug viejo (2026-05-21) era un `return` acá que
+    # se comía el reagendar/auto-cancel cuando la agenda estaba sin huecos.
+    if libres:
+        ahora = datetime.now()
+        usados, asignaciones = set(), []
+        for t in targets.values():
+            if t.tiene_turno or not t.credenciales_ok or not t.patente:
+                continue
+            fobj = resolver_fecha(t.fecha)
+            cand = sorted(
+                (s for s in libres
+                 if s["iso"] not in usados
+                 and (fobj is None or s["fecha"] == fobj)
+                 and iturnos.hora_en_franja(s["hora"], t.franja)
+                 and iturnos.slot_es_futuro(s, ahora)),
+                key=lambda s: s["iso"])   # el más próximo primero
+            if cand:
+                usados.add(cand[0]["iso"])
+                asignaciones.append((t, cand[0]))
+        if asignaciones:
+            log("LOG", "sistema",
+                f"latente: {len(asignaciones)} slot(s) libre(s) en franja → reservando")
+            _en_paralelo(asignaciones, lambda a: _reservar_async(a[0], a[1], dry),
+                         max_hilos=len(asignaciones), timeout=25)
 
     # reagendar: mover el turno de quien lo pidió a su nueva fecha+franja. La
     # disponibilidad de reagendar está en OTRA página (calendario propio), así
