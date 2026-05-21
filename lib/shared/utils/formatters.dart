@@ -386,6 +386,28 @@ class _MilesDecimalInputFormatter extends TextInputFormatter {
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
+    // El usuario NUNCA tipea los separadores de miles (los ponemos nosotros);
+    // el unico que tipea es el decimal, y segun teclado/locale/numpad puede
+    // venir como ',' o como '.'. La ',' siempre es decimal. La '.' es decimal
+    // solo si NO hay ',' y la ULTIMA '.' viene seguida de 0-2 digitos y nada
+    // mas (las de miles agrupan de a 3). En ese caso la convertimos a ',' para
+    // reusar la logica de abajo. Asi anda igual tipear "1234.50" (numpad/EEUU)
+    // que "1234,50" (AR).
+    if (!newValue.text.contains(',')) {
+      final idx = newValue.text.lastIndexOf('.');
+      if (idx >= 0) {
+        final cola = newValue.text.substring(idx + 1);
+        final colaDigitos = cola.replaceAll(RegExp(r'\D'), '');
+        if (cola == colaDigitos && colaDigitos.length <= _maxDecimales) {
+          newValue = TextEditingValue(
+            text: '${newValue.text.substring(0, idx)},'
+                '${newValue.text.substring(idx + 1)}',
+            selection: newValue.selection,
+          );
+        }
+      }
+    }
+
     // Solo dígitos y comas; el resto se descarta.
     final crudo = newValue.text.replaceAll(RegExp(r'[^\d,]'), '');
     if (crudo.isEmpty) {

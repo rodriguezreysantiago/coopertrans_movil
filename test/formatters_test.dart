@@ -290,5 +290,24 @@ void main() {
       expect(fmt(''), '');
       expect(fmt(r'$ 4.500,50'), '4.500,50');
     });
+
+    test('acepta punto como separador decimal (numpad / teclado EEUU)', () {
+      // El usuario nunca tipea los puntos de miles (los pone el formatter);
+      // un punto que tipea como decimal lo tratamos como coma. Robustez para
+      // numpad y teclados que mandan "." en vez de ",".
+      expect(fmt('1234.50'), '1.234,50');
+      expect(fmt('1234.5'), '1.234,5');
+      expect(fmt('0.99'), '0,99');
+      // Punto al final = empezó a tipear los centavos.
+      expect(fmt('1234.'), '1.234,');
+      // Sobre una parte entera ya formateada con miles, el último punto (con
+      // <=2 dígitos detrás) es el decimal.
+      expect(fmt('1.234.50'), '1.234,50');
+    });
+
+    test('punto seguido de 3 dígitos es separador de miles, no decimal', () {
+      expect(fmt('123456.789'), '123.456.789');
+      expect(fmt('1.234.567'), '1.234.567');
+    });
   });
 }

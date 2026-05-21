@@ -1601,7 +1601,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                       ? 'Se dividirá en $_cuotas cuotas mensuales'
                       : null,
                 ),
-                keyboardType: TextInputType.number,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 inputFormatters: [AppFormatters.inputMilesDecimal],
                 onChanged: (_) => setState(() {}),
               ),

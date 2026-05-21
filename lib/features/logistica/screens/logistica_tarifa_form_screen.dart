@@ -519,7 +519,7 @@ class _LogisticaTarifaFormScreenState
   }) {
     return TextField(
       controller: controller,
-      keyboardType: TextInputType.number,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [AppFormatters.inputMilesDecimal],
       decoration: InputDecoration(
         labelText: etiqueta,
@@ -537,7 +537,7 @@ class _LogisticaTarifaFormScreenState
   Widget _campoMontoFijoChofer() {
     return TextField(
       controller: _montoFijoChoferCtrl,
-      keyboardType: TextInputType.number,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [AppFormatters.inputMilesDecimal],
       decoration: const InputDecoration(
         labelText: 'Monto fijo al chofer (por viaje)',

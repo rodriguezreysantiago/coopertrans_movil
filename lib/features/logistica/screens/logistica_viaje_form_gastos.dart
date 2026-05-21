@@ -91,7 +91,7 @@ class _SeccionGastos extends StatelessWidget {
                 prefixText: '\$ ',
                 border: OutlineInputBorder(),
               ),
-              keyboardType: TextInputType.number,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [AppFormatters.inputMilesDecimal],
             ),
             const SizedBox(height: 8),

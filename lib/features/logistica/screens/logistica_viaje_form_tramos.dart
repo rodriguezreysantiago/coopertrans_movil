@@ -501,7 +501,7 @@ class _OverridePagoChofer extends StatelessWidget {
           const SizedBox(height: 8),
           TextField(
             controller: state.montoFijoChoferCtrl,
-            keyboardType: TextInputType.number,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [AppFormatters.inputMilesDecimal],
             decoration: const InputDecoration(
               labelText: 'Monto al chofer (por viaje)',
