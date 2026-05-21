@@ -99,6 +99,9 @@ class TarifaSnapshot {
   final String empresaDestinoNombre;
   final String? dadorNombre;
   final double? porcentajeComisionDador;
+  /// Monto fijo por viaje del dador (alternativa al %). Ver
+  /// `TarifaLogistica.montoFijoDador`.
+  final double? montoFijoDador;
   final UnidadTarifa unidadTarifa;
   final double tarifaReal;
   final double tarifaChofer;
@@ -122,6 +125,7 @@ class TarifaSnapshot {
     required this.empresaDestinoNombre,
     this.dadorNombre,
     this.porcentajeComisionDador,
+    this.montoFijoDador,
     required this.unidadTarifa,
     required this.tarifaReal,
     required this.tarifaChofer,
@@ -143,6 +147,7 @@ class TarifaSnapshot {
       empresaDestinoNombre: empresaDestinoNombre,
       dadorNombre: dadorNombre,
       porcentajeComisionDador: porcentajeComisionDador,
+      montoFijoDador: montoFijoDador,
       unidadTarifa: unidadTarifa,
       tarifaReal: tarifaReal,
       tarifaChofer: tarifaChofer,
@@ -197,6 +202,7 @@ class TarifaSnapshot {
       empresaDestinoNombre: t.empresaDestinoNombre,
       dadorNombre: t.dadorNombre,
       porcentajeComisionDador: t.porcentajeComisionDador,
+      montoFijoDador: t.montoFijoDador,
       unidadTarifa: t.unidadTarifa,
       tarifaReal: t.tarifaReal,
       tarifaChofer: t.tarifaChofer,
@@ -215,6 +221,7 @@ class TarifaSnapshot {
       dadorNombre: d['dador_nombre']?.toString(),
       porcentajeComisionDador:
           (d['porcentaje_comision_dador'] as num?)?.toDouble(),
+      montoFijoDador: (d['monto_fijo_dador'] as num?)?.toDouble(),
       unidadTarifa: UnidadTarifa.fromCodigo(d['unidad_tarifa']?.toString()),
       tarifaReal: (d['tarifa_real'] as num?)?.toDouble() ?? 0,
       tarifaChofer: (d['tarifa_chofer'] as num?)?.toDouble() ?? 0,
@@ -233,6 +240,7 @@ class TarifaSnapshot {
       if (dadorNombre != null) 'dador_nombre': dadorNombre,
       if (porcentajeComisionDador != null)
         'porcentaje_comision_dador': porcentajeComisionDador,
+      if (montoFijoDador != null) 'monto_fijo_dador': montoFijoDador,
       'unidad_tarifa': unidadTarifa.codigo,
       'tarifa_real': tarifaReal,
       'tarifa_chofer': tarifaChofer,

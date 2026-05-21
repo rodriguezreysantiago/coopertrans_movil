@@ -84,6 +84,13 @@ class TarifaLogistica {
   /// carga, no es fijo por dador).
   final double? porcentajeComisionDador;
 
+  /// Monto FIJO por viaje del dador, alternativa al
+  /// `porcentajeComisionDador`. Pedido Santiago 2026-05-21 (caso
+  /// GASPERINI: nos brinda viajes con un monto fijo por viaje en lugar de
+  /// un % del flete). Mutuamente excluyente con el %: si está seteado, la
+  /// comisión del dador es ese monto flat por viaje.
+  final double? montoFijoDador;
+
   // Origen: empresa + ubicación (refs a EMPRESAS_LOGISTICA y
   // UBICACIONES_LOGISTICA) + snapshots para listas rápidas.
   final String empresaOrigenId;
@@ -156,6 +163,7 @@ class TarifaLogistica {
     this.dadorId,
     this.dadorNombre,
     this.porcentajeComisionDador,
+    this.montoFijoDador,
     required this.empresaOrigenId,
     required this.empresaOrigenNombre,
     required this.ubicacionOrigenId,
@@ -190,6 +198,7 @@ class TarifaLogistica {
       dadorNombre: d['dador_nombre']?.toString(),
       porcentajeComisionDador:
           (d['porcentaje_comision_dador'] as num?)?.toDouble(),
+      montoFijoDador: (d['monto_fijo_dador'] as num?)?.toDouble(),
       empresaOrigenId: (d['empresa_origen_id'] ?? '').toString(),
       empresaOrigenNombre: (d['empresa_origen_nombre'] ?? '').toString(),
       ubicacionOrigenId: (d['ubicacion_origen_id'] ?? '').toString(),
@@ -230,6 +239,7 @@ class TarifaLogistica {
       if (dadorNombre != null) 'dador_nombre': dadorNombre,
       if (porcentajeComisionDador != null)
         'porcentaje_comision_dador': porcentajeComisionDador,
+      if (montoFijoDador != null) 'monto_fijo_dador': montoFijoDador,
       'empresa_origen_id': empresaOrigenId,
       'empresa_origen_nombre': empresaOrigenNombre,
       'ubicacion_origen_id': ubicacionOrigenId,

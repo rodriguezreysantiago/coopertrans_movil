@@ -42,6 +42,10 @@ class _LogisticaTarifaFormScreenState
   TipoCargaLogistica _tipoCarga = TipoCargaLogistica.propia;
   EmpresaLogistica? _dador;
   final _comisionCtrl = TextEditingController();
+  /// `true` → el dador cobra un MONTO FIJO por viaje (caso GASPERINI), en
+  /// [_montoFijoDadorCtrl]. `false` → comisión por porcentaje del flete.
+  bool _modoMontoFijoDador = false;
+  final _montoFijoDadorCtrl = TextEditingController();
 
   EmpresaLogistica? _empOrigen;
   UbicacionLogistica? _ubicOrigen;
@@ -112,6 +116,11 @@ class _LogisticaTarifaFormScreenState
         _comisionCtrl.text =
             t.porcentajeComisionDador!.toStringAsFixed(1);
       }
+      if (t.montoFijoDador != null) {
+        _modoMontoFijoDador = true;
+        _montoFijoDadorCtrl.text =
+            AppFormatters.formatearMonto(t.montoFijoDador!);
+      }
       _notasCtrl.text = t.notas ?? '';
       _producto = t.producto;
 
@@ -156,6 +165,7 @@ class _LogisticaTarifaFormScreenState
   @override
   void dispose() {
     _comisionCtrl.dispose();
+    _montoFijoDadorCtrl.dispose();
     _tarifaRealCtrl.dispose();
     _tarifaChoferCtrl.dispose();
     _montoFijoChoferCtrl.dispose();
@@ -197,6 +207,8 @@ class _LogisticaTarifaFormScreenState
                             if (t == TipoCargaLogistica.propia) {
                               _dador = null;
                               _comisionCtrl.clear();
+                              _montoFijoDadorCtrl.clear();
+                              _modoMontoFijoDador = false;
                             }
                           });
                         }
@@ -223,19 +235,78 @@ class _LogisticaTarifaFormScreenState
             const SizedBox(height: 8),
             AppCard(
               padding: const EdgeInsets.all(12),
-              child: TextField(
-                controller: _comisionCtrl,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'COMISIÓN DEL DADOR',
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Porcentaje (%)'),
+                        selected: !_modoMontoFijoDador,
+                        onSelected: (sel) {
+                          if (sel) {
+                            setState(() => _modoMontoFijoDador = false);
+                          }
+                        },
+                        selectedColor:
+                            AppColors.accentBlue.withValues(alpha: 0.4),
+                      ),
+                      ChoiceChip(
+                        label: const Text('Monto fijo por viaje'),
+                        selected: _modoMontoFijoDador,
+                        onSelected: (sel) {
+                          if (sel) {
+                            setState(() => _modoMontoFijoDador = true);
+                          }
+                        },
+                        selectedColor:
+                            AppColors.accentOrange.withValues(alpha: 0.4),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (_modoMontoFijoDador)
+                    TextField(
+                      controller: _montoFijoDadorCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [AppFormatters.inputMilesDecimal],
+                      decoration: const InputDecoration(
+                        labelText: 'Monto fijo del dador (por viaje)',
+                        prefixText: '\$ ',
+                        suffixText: '/viaje',
+                      ),
+                      style: const TextStyle(
+                          color: Colors.white, fontSize: 16),
+                    )
+                  else
+                    TextField(
+                      controller: _comisionCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'Comisión del dador (%)',
+                        hintText: 'Ej. 12.5',
+                        suffixText: '%',
+                      ),
+                    ),
                 ],
-                decoration: const InputDecoration(
-                  labelText: 'Comisión del dador (%)',
-                  hintText: 'Ej. 12.5',
-                  suffixText: '%',
-                ),
               ),
             ),
           ],
@@ -646,16 +717,28 @@ class _LogisticaTarifaFormScreenState
         _empOrigen!.id == _empDestino!.id) {
       _flete = FleteLogistica.origen;
     }
+    // Comisión del dador: % o monto fijo por viaje (excluyentes). Solo
+    // aplica a TERCEROS. En PROPIA ambos quedan null.
     double? comision;
-    if (_tipoCarga == TipoCargaLogistica.terceros &&
-        _comisionCtrl.text.trim().isNotEmpty) {
-      // Aceptamos coma o punto como separador decimal (input AR).
-      final raw = _comisionCtrl.text.trim().replaceAll(',', '.');
-      comision = double.tryParse(raw);
-      if (comision == null || comision < 0 || comision > 100) {
-        setState(() =>
-            _error = 'El % de comisión debe estar entre 0 y 100.');
-        return;
+    double? montoFijoDador;
+    if (_tipoCarga == TipoCargaLogistica.terceros) {
+      if (_modoMontoFijoDador) {
+        montoFijoDador =
+            AppFormatters.parsearMonto(_montoFijoDadorCtrl.text);
+        if (montoFijoDador == null || montoFijoDador <= 0) {
+          setState(() => _error =
+              'Cargá el monto fijo del dador (debe ser mayor a 0).');
+          return;
+        }
+      } else if (_comisionCtrl.text.trim().isNotEmpty) {
+        // Aceptamos coma o punto como separador decimal (input AR).
+        final raw = _comisionCtrl.text.trim().replaceAll(',', '.');
+        comision = double.tryParse(raw);
+        if (comision == null || comision < 0 || comision > 100) {
+          setState(() =>
+              _error = 'El % de comisión debe estar entre 0 y 100.');
+          return;
+        }
       }
     }
 
@@ -675,6 +758,7 @@ class _LogisticaTarifaFormScreenState
             'dador_id': _dador?.id,
             'dador_nombre': _dador?.nombre,
             'porcentaje_comision_dador': comision,
+            'monto_fijo_dador': montoFijoDador,
             'empresa_origen_id': _empOrigen!.id,
             'empresa_origen_nombre': _empOrigen!.nombre,
             'ubicacion_origen_id': _ubicOrigen!.id,
@@ -707,6 +791,7 @@ class _LogisticaTarifaFormScreenState
           dadorId: _dador?.id,
           dadorNombre: _dador?.nombre,
           porcentajeComisionDador: comision,
+          montoFijoDador: montoFijoDador,
           empresaOrigenId: _empOrigen!.id,
           empresaOrigenNombre: _empOrigen!.nombre,
           ubicacionOrigenId: _ubicOrigen!.id,

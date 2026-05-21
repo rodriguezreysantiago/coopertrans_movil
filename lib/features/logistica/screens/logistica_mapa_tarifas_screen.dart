@@ -1070,7 +1070,7 @@ class _DetalleTarifaSheet extends StatelessWidget {
               icono: Icons.handshake_outlined,
               etiqueta: 'Dador',
               valor: '${t.dadorNombre}'
-                  '${t.porcentajeComisionDador != null ? " (${t.porcentajeComisionDador!.toStringAsFixed(1)}%)" : ""}',
+                  '${t.montoFijoDador != null ? " (\$ ${AppFormatters.formatearMonto(t.montoFijoDador!)}/viaje)" : t.porcentajeComisionDador != null ? " (${t.porcentajeComisionDador!.toStringAsFixed(1)}%)" : ""}',
             ),
           const Divider(color: Colors.white12, height: 24),
           // En **mobile** (chofer/supervisor manejando) los botones

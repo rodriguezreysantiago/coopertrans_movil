@@ -312,7 +312,7 @@ class _CardTarifa extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'Dador: ${tarifa.dadorNombre}'
-                    '${tarifa.porcentajeComisionDador != null ? " · ${tarifa.porcentajeComisionDador!.toStringAsFixed(1)}%" : ""}',
+                    '${tarifa.montoFijoDador != null ? " · \$ ${AppFormatters.formatearMonto(tarifa.montoFijoDador!)}/viaje" : tarifa.porcentajeComisionDador != null ? " · ${tarifa.porcentajeComisionDador!.toStringAsFixed(1)}%" : ""}',
                     style: const TextStyle(
                       color: Colors.white60,
                       fontSize: 11,

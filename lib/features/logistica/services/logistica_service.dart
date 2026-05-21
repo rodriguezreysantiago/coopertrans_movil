@@ -406,6 +406,7 @@ class LogisticaService {
     String? dadorId,
     String? dadorNombre,
     double? porcentajeComisionDador,
+    double? montoFijoDador,
     required String empresaOrigenId,
     required String empresaOrigenNombre,
     required String ubicacionOrigenId,
@@ -443,6 +444,9 @@ class LogisticaService {
         throw ArgumentError('El porcentaje de comisión debe estar entre 0 y 100.');
       }
     }
+    if (montoFijoDador != null && montoFijoDador <= 0) {
+      throw ArgumentError('El monto fijo del dador debe ser mayor a 0.');
+    }
     if (montoFijoChofer != null && montoFijoChofer <= 0) {
       throw ArgumentError(
           'El monto fijo del chofer debe ser mayor a 0 (dejá vacío para usar el 18%).');
@@ -454,6 +458,7 @@ class LogisticaService {
       if (dadorNombre != null) 'dador_nombre': dadorNombre,
       if (porcentajeComisionDador != null)
         'porcentaje_comision_dador': porcentajeComisionDador,
+      if (montoFijoDador != null) 'monto_fijo_dador': montoFijoDador,
       'empresa_origen_id': empresaOrigenId,
       'empresa_origen_nombre': empresaOrigenNombre,
       'ubicacion_origen_id': ubicacionOrigenId,
