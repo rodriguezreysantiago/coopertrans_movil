@@ -191,10 +191,19 @@ function matarProcesosChromiumZombi() {
 const colaProcesar = [];
 let procesando = false;
 
+// Para logs LEGIBLES: nombre del destinatario si esta en el cache de empleados,
+// sino el telefono. Nunca toca Firestore (usa el cache ya cargado del
+// message_handler) -> el log dice "a JUAN PEREZ" en vez de un id cryptic.
+function _quien(telefono) {
+  return messageHandler.nombrePorTelefono(telefono) || telefono || '?';
+}
+
 function encolar(doc) {
   if (colaProcesar.includes(doc.id)) return;
   colaProcesar.push(doc.id);
-  log.info(`+ Encolado ${doc.id} (total en cola: ${colaProcesar.length})`);
+  let tel = null;
+  try { tel = doc.data() && doc.data().telefono; } catch (_) { /* best-effort */ }
+  log.info(`+ En cola: ${_quien(tel)} (${colaProcesar.length} en espera)`);
   if (!procesando) procesarSiguiente();
 }
 
@@ -657,7 +666,7 @@ async function procesarSiguiente() {
       log.warn(`${docId}: agrupador falló (envío individual): ${e.message}`);
     }
 
-    log.info(`→ Enviando ${docId} a ${data.telefono} en ${Math.round(delay / 1000)}s...`);
+    log.info(`→ Enviando a ${_quien(data.telefono)} (en ${Math.round(delay / 1000)}s)...`);
     await sleep(delay);
 
     // Splitting anti-baneo: WhatsApp puede flaggear mensajes > ~4096
@@ -747,7 +756,7 @@ async function procesarSiguiente() {
     }
 
     health.registrarEnvio();
-    log.info(`✓ Enviado ${docId} (wa_id: ${waMessageId || '?'})`);
+    log.info(`✓ Enviado a ${_quien(data.telefono)}`);
   } catch (e) {
     log.error(`✗ Falló ${docId}: ${e.message}`);
     health.registrarError('envio', `${docId}: ${e.message}`);

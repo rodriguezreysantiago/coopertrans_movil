@@ -484,8 +484,36 @@ function crearHandler(fs, wa) {
   };
 }
 
+/**
+ * Resuelve un telefono a NOMBRE usando el cache de empleados YA cargado
+ * (sincronico, sin tocar Firestore -- pensado para logs legibles). Devuelve
+ * null si el cache no esta cargado o no hay match (ej. encargados/admins, que
+ * NO estan en este cache -- es solo de CHOFER). Misma normalizacion E.164 que
+ * _resolverChofer.
+ */
+function nombrePorTelefono(telefono) {
+  if (!_cacheEmpleados || !telefono) return null;
+  const digits = String(telefono).replace(/\D+/g, '');
+  if (!digits) return null;
+  const wid = normalizarTelefonoAWid(telefono);
+  const canonical = wid ? String(wid).replace(/@c\.us$/, '') : null;
+  for (const { data } of _cacheEmpleados) {
+    const tel = String(data.TELEFONO || '').replace(/\D+/g, '');
+    if (!tel) continue;
+    if (digits === tel) return data.NOMBRE || null;
+    if (canonical) {
+      const telWid = normalizarTelefonoAWid(tel);
+      if (telWid && canonical === String(telWid).replace(/@c\.us$/, '')) {
+        return data.NOMBRE || null;
+      }
+    }
+  }
+  return null;
+}
+
 module.exports = {
   crearHandler,
+  nombrePorTelefono,
   invalidarCacheEmpleados,
   // Exportados para tests:
   _resolverChofer,

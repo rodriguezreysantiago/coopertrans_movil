@@ -10,13 +10,14 @@
 
 function _timestampLocal() {
   const d = new Date();
-  const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   const hh = String(d.getHours()).padStart(2, '0');
   const mm = String(d.getMinutes()).padStart(2, '0');
   const ss = String(d.getSeconds()).padStart(2, '0');
-  return `${day}-${m}-${y} ${hh}:${mm}:${ss}`;
+  // dd/mm HH:MM:SS (sin anio): mismo criterio que el cachatore y el
+  // auto-update -> toda linea de log arranca con [dd/mm HH:MM:SS].
+  return `${day}/${m} ${hh}:${mm}:${ss}`;
 }
 
 function fmt(level, args) {
