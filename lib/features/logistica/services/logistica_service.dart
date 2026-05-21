@@ -428,10 +428,13 @@ class LogisticaService {
         throw ArgumentError('Si la carga es de TERCEROS, el dador es obligatorio.');
       }
     }
-    if (tarifaReal <= 0 || tarifaChofer <= 0) {
-      throw ArgumentError('Las tarifas deben ser mayores a 0.');
+    // 0 es válido = "tarifa por definir" (alineado con el form desde
+    // 2026-05-14) y necesario para el modo "monto fijo por viaje", donde la
+    // tarifa_chofer (%) no se usa y queda en 0. Solo rechazamos negativos.
+    if (tarifaReal < 0 || tarifaChofer < 0) {
+      throw ArgumentError('Las tarifas no pueden ser negativas.');
     }
-    if (tarifaChofer > tarifaReal) {
+    if (tarifaReal > 0 && tarifaChofer > 0 && tarifaChofer > tarifaReal) {
       throw ArgumentError(
           'La tarifa del chofer no puede superar la tarifa real.');
     }

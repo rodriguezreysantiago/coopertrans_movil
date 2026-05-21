@@ -409,24 +409,10 @@ class _LogisticaTarifaFormScreenState
                 const SizedBox(height: 12),
                 if (_modoMontoFijoChofer) ...[
                   _campoMontoFijoChofer(),
-                  // Mantenemos `tarifaChofer` editable también — es la
-                  // base "teórica" que se cobra al cliente y queda en
-                  // el snapshot por si más adelante se quiere volver al
-                  // 18% sin re-armar la tarifa de cero.
-                  const SizedBox(height: 8),
-                  Text(
-                    'Tarifa chofer (base de referencia, no se paga al chofer en este modo):',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.5),
-                      fontSize: 11,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  _campoTarifa(
-                    controller: _tarifaChoferCtrl,
-                    etiqueta: 'Tarifa chofer (base de referencia)',
-                    color: AppColors.accentBlue,
-                  ),
+                  // En modo monto fijo NO se muestra la tarifa chofer (%): el
+                  // chofer cobra el monto fijo y la tarifa_chofer queda en 0
+                  // (pedido Santiago 2026-05-21 — antes confundía y bloqueaba
+                  // el guardado al quedar en 0).
                 ] else ...[
                   _campoTarifa(
                     controller: _tarifaChoferCtrl,
@@ -620,8 +606,12 @@ class _LogisticaTarifaFormScreenState
     // El parser devuelve null si está vacío o no parsea — lo
     // tratamos como 0 (tarifa por definir).
     final tarifaReal = AppFormatters.parsearMonto(_tarifaRealCtrl.text) ?? 0;
-    final tarifaChofer =
-        AppFormatters.parsearMonto(_tarifaChoferCtrl.text) ?? 0;
+    // En modo "monto fijo por viaje" la tarifa_chofer (%) no se usa → 0: el
+    // chofer cobra el monto fijo. Así no bloquea el guardado ni deja un %
+    // viejo confuso (pedido Santiago 2026-05-21).
+    final tarifaChofer = _modoMontoFijoChofer
+        ? 0.0
+        : (AppFormatters.parsearMonto(_tarifaChoferCtrl.text) ?? 0);
     if (tarifaReal < 0 || tarifaChofer < 0) {
       setState(() => _error = 'Las tarifas no pueden ser negativas.');
       return;
@@ -703,6 +693,9 @@ class _LogisticaTarifaFormScreenState
             // valor. Si lo deshabilitó: setea explícito a null para
             // que la tarifa vuelva al cálculo 18%.
             'monto_fijo_chofer': montoFijoChofer,
+            // BUGFIX 2026-05-21: el producto no se incluía en la edición →
+            // al reabrir aparecía desasignado. null = lo limpia (correcto).
+            'producto': _producto,
             'notas': _notasCtrl.text.trim().isEmpty
                 ? null
                 : _notasCtrl.text.trim(),
@@ -823,12 +816,59 @@ class _SelectorEmpresa extends StatelessWidget {
   }
 }
 
-class _ListaSelectorEmpresa extends StatelessWidget {
+/// Campo de búsqueda reutilizable para los bottom-sheets de selección.
+class _BuscadorField extends StatelessWidget {
+  final String hint;
+  final ValueChanged<String> onChanged;
+  const _BuscadorField({required this.hint, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      onChanged: onChanged,
+      style: const TextStyle(color: Colors.white, fontSize: 14),
+      decoration: InputDecoration(
+        hintText: hint,
+        prefixIcon:
+            const Icon(Icons.search, color: Colors.white54, size: 20),
+        isDense: true,
+        filled: true,
+        fillColor: AppColors.surface,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide.none,
+        ),
+      ),
+    );
+  }
+}
+
+class _ListaSelectorEmpresa extends StatefulWidget {
   final TipoEmpresaLogistica? soloTipo;
   const _ListaSelectorEmpresa({this.soloTipo});
 
   @override
+  State<_ListaSelectorEmpresa> createState() => _ListaSelectorEmpresaState();
+}
+
+class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
+  String _q = '';
+
+  List<EmpresaLogistica> _filtrar(List<EmpresaLogistica> all) {
+    final q = _q.trim().toLowerCase();
+    if (q.isEmpty) return all;
+    return all.where((e) {
+      final p = e.etiquetaPrincipal.toLowerCase();
+      final s = (e.etiquetaSecundaria ?? '').toLowerCase();
+      return p.contains(q) || s.contains(q);
+    }).toList();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final soloTipo = widget.soloTipo;
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.7,
@@ -859,6 +899,13 @@ class _ListaSelectorEmpresa extends StatelessWidget {
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: _BuscadorField(
+              hint: 'Buscar empresa...',
+              onChanged: (v) => setState(() => _q = v),
+            ),
+          ),
           Expanded(
             child: StreamBuilder<List<EmpresaLogistica>>(
               stream: LogisticaService.streamEmpresas(
@@ -869,14 +916,18 @@ class _ListaSelectorEmpresa extends StatelessWidget {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final items = snap.data ?? const [];
+                final items = _filtrar(snap.data ?? const []);
                 if (items.isEmpty) {
                   return AppEmptyState(
                     icon: Icons.business_outlined,
-                    title: 'Sin empresas activas',
-                    subtitle: soloTipo == TipoEmpresaLogistica.dadorTransporte
-                        ? 'Cargá un dador desde el catálogo Empresas.'
-                        : 'Cargá un cliente desde el catálogo Empresas.',
+                    title: _q.trim().isNotEmpty
+                        ? 'Sin resultados'
+                        : 'Sin empresas activas',
+                    subtitle: _q.trim().isNotEmpty
+                        ? 'Probá con otro texto.'
+                        : (soloTipo == TipoEmpresaLogistica.dadorTransporte
+                            ? 'Cargá un dador desde el catálogo Empresas.'
+                            : 'Cargá un cliente desde el catálogo Empresas.'),
                   );
                 }
                 return ListView.separated(
@@ -1032,6 +1083,7 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
   /// por empresa. Útil cuando la ubicación deseada aún no fue
   /// asociada a la empresa.
   bool _mostrarTodas = false;
+  String _q = '';
 
   @override
   Widget build(BuildContext context) {
@@ -1080,6 +1132,13 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            child: _BuscadorField(
+              hint: 'Buscar ubicación...',
+              onChanged: (v) => setState(() => _q = v),
+            ),
+          ),
           Expanded(
             child: StreamBuilder<List<UbicacionLogistica>>(
               stream:
@@ -1095,12 +1154,21 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                 // empresas. Filtrar por array-contains client-side
                 // (el catálogo es chico, no vale la pena un índice
                 // Firestore para esto).
-                final items = (widget.filtroEmpresaId != null && !_mostrarTodas)
+                final base = (widget.filtroEmpresaId != null && !_mostrarTodas)
                     ? all
                         .where((u) =>
                             u.empresaIds.contains(widget.filtroEmpresaId))
                         .toList()
                     : all;
+                // + filtro por texto del buscador (nombre o etiqueta).
+                final q = _q.trim().toLowerCase();
+                final items = q.isEmpty
+                    ? base
+                    : base
+                        .where((u) =>
+                            u.nombre.toLowerCase().contains(q) ||
+                            u.etiquetaCompleta.toLowerCase().contains(q))
+                        .toList();
                 if (items.isEmpty) {
                   if (widget.filtroEmpresaId != null && !_mostrarTodas) {
                     return const AppEmptyState(
