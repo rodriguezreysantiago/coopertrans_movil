@@ -30,6 +30,14 @@ def _target_reagendar(fecha, franja, turno_hora, turno_cuando):
     return t
 
 
+def _target_pendiente(dni, nombre, fecha, franja, tiene_turno=False):
+    ch = {"dni": dni, "nombre": nombre, "email": f"{dni}@y.com",
+          "clave": "k", "patente": "AB123CD"}
+    t = vigia.Target(ch, fecha=fecha, franja=franja, reagendar=False)
+    t.tiene_turno = tiene_turno
+    return t
+
+
 class TestCicloLatenteReagendarSinLibres(unittest.TestCase):
     def setUp(self):
         # cli falso: la agenda existe pero no tiene huecos libres.
@@ -65,6 +73,57 @@ class TestCicloLatenteReagendarSinLibres(unittest.TestCase):
         self.m_nube.cancelar_reagendar.assert_not_called()
         self.assertTrue(t.reagendar)
         self.assertFalse(t.reagendar_hecho)
+
+    def test_reserva_a_pendiente_cuando_el_scanner_ve_un_hueco(self):
+        # El scanner ve un hueco madrugada 22-05; VOGEL (madrugada) lo toma (dry).
+        self.cli.abrir_agenda.return_value = (
+            '<a class="btn btn-outline-success" href="https://agendas.iturnos.com'
+            '/c/x/a/y/reservar/2026-05-22T02:00">02:00</a>')
+        t = _target_pendiente("999", "VOGEL", "2026-05-22", "madrugada")
+        with mock.patch.object(vigia, "asegurar_login", return_value=True):
+            vigia.ciclo_latente({t.dni: t}, dry=True)
+        # en dry, intentar_reservar marca tiene_turno=True (no postea de verdad).
+        self.assertTrue(t.tiene_turno)
+
+
+class TestEnsureScannerEligePendiente(unittest.TestCase):
+    """El scanner DEBE loguearse como un chofer SIN turno (iTurnos muestra
+    disponibilidad por usuario). Lockea el fix 2026-05-21."""
+
+    def setUp(self):
+        mock.patch.object(vigia, "log").start()
+        self.addCleanup(mock.patch.stopall)
+        vigia._scanner.update(cli=None, logueado=False, dni=None)
+        self.addCleanup(vigia._scanner.update, cli=None, logueado=False, dni=None)
+
+    def test_elige_un_chofer_sin_turno_no_el_primero(self):
+        con = _target_pendiente("111", "CON", None, "cualquiera", tiene_turno=True)
+        sin = _target_pendiente("222", "SIN", None, "cualquiera", tiene_turno=False)
+        fake = mock.MagicMock(); fake.login.return_value = True
+        with mock.patch.object(vigia.iturnos, "IturnosClient", return_value=fake):
+            cli = vigia.ensure_scanner({"111": con, "222": sin})  # 111 va primero
+        self.assertIs(cli, fake)
+        fake.login.assert_called_once_with("222@y.com", "k")   # logueó al SIN turno
+        self.assertEqual(vigia._scanner["dni"], "222")
+
+    def test_sin_pendientes_devuelve_None_y_no_loguea(self):
+        con = _target_pendiente("111", "CON", None, "cualquiera", tiene_turno=True)
+        with mock.patch.object(vigia.iturnos, "IturnosClient") as Mk:
+            cli = vigia.ensure_scanner({"111": con})
+        self.assertIsNone(cli)
+        Mk.assert_not_called()
+        self.assertIsNone(vigia._scanner["dni"])
+
+    def test_re_loguea_si_el_scanner_cacheado_saco_turno(self):
+        # El scanner cacheado era 222; ahora 222 tiene turno → re-elige a 333.
+        vigia._scanner.update(cli=mock.MagicMock(), logueado=True, dni="222")
+        con = _target_pendiente("222", "EX", None, "cualquiera", tiene_turno=True)
+        sin = _target_pendiente("333", "NUEVO", None, "cualquiera", tiene_turno=False)
+        fake = mock.MagicMock(); fake.login.return_value = True
+        with mock.patch.object(vigia.iturnos, "IturnosClient", return_value=fake):
+            vigia.ensure_scanner({"222": con, "333": sin})
+        fake.login.assert_called_once_with("333@y.com", "k")
+        self.assertEqual(vigia._scanner["dni"], "333")
 
 
 if __name__ == "__main__":

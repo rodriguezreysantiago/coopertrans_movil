@@ -80,7 +80,7 @@ HORA_RESUMEN = 8             # hora ART del resumen diario de turnos al encargad
 ESPERA_SIN_CONFIG_SEG = 30   # si falta config / no hay choferes / pausado
 
 _log_lock = threading.Lock()
-_scanner = {"cli": None, "logueado": False}   # sesión dedicada al escaneo latente
+_scanner = {"cli": None, "logueado": False, "dni": None}  # escaneo: un chofer SIN turno
 
 # Seteados en main() según los flags.
 _USAR_NUBE = True            # leer config de Firestore (False = drop.json)
@@ -272,18 +272,30 @@ def asegurar_login(t: Target) -> bool:
 
 
 def ensure_scanner(targets: dict):
-    """Sesión única (cualquier chofer sirve: la clave es común y la agenda se
-    ve igual) usada SOLO para el escaneo latente — así no pegamos N veces."""
-    if _scanner["cli"] is not None and _scanner["logueado"]:
+    """Sesión para el escaneo latente de la agenda. CLAVE (verificado en vivo
+    2026-05-21): iTurnos muestra disponibilidad POR USUARIO — un chofer que YA
+    tiene turno ve CERO huecos libres. Por eso el scanner DEBE loguearse como un
+    chofer SIN turno (pendiente); si no, queda ciego y el bot nunca reserva para
+    los que esperan ("hay lugares y no toma ninguno"). Entre los pendientes la
+    agenda se ve igual (todos sin turno) → basta UNO de scanner y no
+    multiplicamos requests a Cloudflare."""
+    # El scanner cacheado solo sirve si su chofer SIGUE sin turno (si sacó turno
+    # mientras era scanner, ahora ve 0 → hay que re-loguear con otro pendiente).
+    if (_scanner["cli"] is not None and _scanner["logueado"]
+            and any(t.dni == _scanner["dni"] and not t.tiene_turno
+                    for t in targets.values())):
         return _scanner["cli"]
-    cred = next((t for t in targets.values() if t.credenciales_ok), None)
+    cred = next((t for t in targets.values()
+                 if t.credenciales_ok and not t.tiene_turno), None)
     if cred is None:
+        # nadie sin turno → no hay nada para reservar; soltar la sesión vieja.
+        _scanner.update(cli=None, logueado=False, dni=None)
         return None
     cli = iturnos.IturnosClient()
     for _ in range(LOGIN_REINTENTOS):
         try:
             if cli.login(cred.email, cred.clave):
-                _scanner["cli"], _scanner["logueado"] = cli, True
+                _scanner.update(cli=cli, logueado=True, dni=cred.dni)
                 return cli
         except Exception as e:
             log("LOG", "scanner", f"login error: {e}")
@@ -539,27 +551,29 @@ def ciclo_agresivo(targets: dict, dry: bool):
 
 
 def ciclo_latente(targets: dict, dry: bool):
+    # --- RESERVA: escanear la agenda y asignar huecos a los que NO tienen turno.
+    # El scanner se loguea como un chofer SIN turno (ensure_scanner): iTurnos
+    # muestra disponibilidad POR USUARIO y un chofer con turno ve 0 huecos. Si no
+    # hay pendientes (ensure_scanner devuelve None) o el scanner no puede leer,
+    # NO cortamos acá: el bloque de reagendar de abajo corre igual (usa OTRA
+    # página propia de cada chofer y el auto-cancel es un chequeo en memoria).
+    libres = []
     cli = ensure_scanner(targets)
-    if cli is None:
-        return
-    try:
-        html = cli.abrir_agenda()
-    except Exception as e:
-        log("LOG", "scanner", f"error leyendo agenda: {e}")
-        _scanner["logueado"] = False
-        return
-    if 'id="login-form"' in html:
-        _scanner["logueado"] = False
-        return
-
-    libres = iturnos.parsear_disponibilidad(html)["slots"]
+    if cli is not None:
+        try:
+            html = cli.abrir_agenda()
+        except Exception as e:
+            log("LOG", "scanner", f"error leyendo agenda: {e}")
+            _scanner["logueado"] = False
+            html = None
+        if html is not None and 'id="login-form"' in html:
+            _scanner["logueado"] = False
+            html = None
+        if html is not None:
+            libres = iturnos.parsear_disponibilidad(html)["slots"]
 
     # asignar slots LIBRES a los choferes que necesitan turno (uno por slot),
-    # respetando la FECHA y la FRANJA de cada chofer. OJO: si NO hay libres NO
-    # cortamos acá — el bloque de reagendar de abajo tiene que correr igual (su
-    # disponibilidad está en OTRA página y el auto-cancel del reagendar ni
-    # siquiera necesita slots). El bug viejo (2026-05-21) era un `return` acá que
-    # se comía el reagendar/auto-cancel cuando la agenda estaba sin huecos.
+    # respetando la FECHA y la FRANJA de cada chofer.
     if libres:
         ahora = datetime.now()
         usados, asignaciones = set(), []
@@ -750,7 +764,13 @@ def main():
             # 4.b) backoff si el scanner no logra loguear (Cloudflare bloqueando):
             #      no martillar el WAF cada ~5 s — esperar cada vez más (tope
             #      BACKOFF_MAX_SEG). Se resetea apenas vuelve a loguear.
-            usa_scanner = modo in ("latente", "agresivo") and not forzar_agresivo
+            # solo "usa scanner" si hay choferes SIN turno (algo para reservar):
+            # si todos tienen turno, que el scanner no esté logueado NO es falla
+            # (no hay a quién reservarle) → no disparar el backoff de Cloudflare.
+            hay_pendientes = any(not t.tiene_turno and t.credenciales_ok
+                                 for t in targets.values())
+            usa_scanner = (hay_pendientes and modo in ("latente", "agresivo")
+                           and not forzar_agresivo)
             if usa_scanner and not _scanner["logueado"]:
                 fallos_scanner += 1
                 espera = min(espera * (2 ** min(fallos_scanner, 5)), BACKOFF_MAX_SEG)
