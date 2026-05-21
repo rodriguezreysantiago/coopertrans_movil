@@ -13,7 +13,11 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
 
-const { distanciaMetros, horaArt } = require('../lib/jornadas_v2');
+const {
+  distanciaMetros,
+  horaArt,
+  decidirManejando,
+} = require('../lib/jornadas_v2');
 
 describe('distanciaMetros (Haversine)', () => {
   test('mismo punto → 0', () => {
@@ -155,5 +159,177 @@ describe('horaArt — extrae hora 0..23 en TZ Argentina', () => {
       assert.strictEqual(typeof h, 'number');
       assert.ok(Number.isInteger(h), `no es entero: ${h}`);
     }
+  });
+});
+
+describe('decidirManejando — fuente híbrida Volvo/SITRACK (fix #36)', () => {
+  const NOW = Date.UTC(2026, 4, 21, 18, 0, 0);
+  // posicion_ts a N minutos ANTES de NOW (ISO string, como guarda Volvo).
+  const isoHace = (min) => new Date(NOW - min * 60000).toISOString();
+  // POLL_STALE_SEGUNDOS = 600 (10 min). fresco = 3min, stale = 15min.
+  const FRESCO = isoHace(3);
+  const STALE = isoHace(15);
+
+  // Base SITRACK "parado y viejo" — el default del fallback en los tests
+  // que sólo prueban la rama Volvo.
+  const sitParado = {
+    sitrackSpeed: 0,
+    sitrackIgnition: false,
+    sitrackLat: -38.5,
+    sitrackLng: -62.5,
+    sitrackReportMs: NOW - 40 * 60000,
+  };
+
+  test('Volvo moviéndose (fresco + speed>15) → manejando, fuente volvo', () => {
+    const d = decidirManejando({
+      ...sitParado,
+      volvoSpeedKmh: 78.9,
+      volvoPosicionTs: FRESCO,
+      volvoLat: -38.7,
+      volvoLng: -62.3,
+    }, NOW);
+    assert.strictEqual(d.manejando, true);
+    assert.strictEqual(d.fuente, 'volvo');
+    assert.strictEqual(d.lat, -38.7); // usa posición Volvo
+    assert.strictEqual(d.lng, -62.3);
+  });
+
+  test('Volvo parado fresco (speed 0) → NO manejando', () => {
+    const d = decidirManejando({
+      ...sitParado,
+      volvoSpeedKmh: 0,
+      volvoPosicionTs: FRESCO,
+      volvoLat: -38.7,
+      volvoLng: -62.3,
+    }, NOW);
+    assert.strictEqual(d.manejando, false);
+    assert.strictEqual(d.fuente, 'volvo');
+  });
+
+  test('Volvo stale + speed>15 → NO manejando (backstop equipo mudo)', () => {
+    // Escenario Y: el último snapshot decía 60 km/h pero el equipo está
+    // mudo hace 15 min → no podemos afirmar que sigue manejando.
+    const d = decidirManejando({
+      ...sitParado,
+      volvoSpeedKmh: 60,
+      volvoPosicionTs: STALE,
+      volvoLat: -38.7,
+      volvoLng: -62.3,
+    }, NOW);
+    assert.strictEqual(d.manejando, false);
+    assert.strictEqual(d.fuente, 'volvo');
+  });
+
+  test('CASO AG218ZD: SITRACK stale dice 74 km/h, Volvo dice 0 → parado', () => {
+    // El bug exacto reportado: SITRACK report_date 31min (pero consultado_en
+    // fresco lo enmascaraba). Volvo: speed 0. Antes contaba manejando=true.
+    const d = decidirManejando({
+      volvoSpeedKmh: 0,
+      volvoPosicionTs: isoHace(12),
+      volvoLat: -38.71,
+      volvoLng: -62.31,
+      sitrackSpeed: 74,
+      sitrackIgnition: true,
+      sitrackLat: -38.71,
+      sitrackLng: -62.31,
+      sitrackReportMs: NOW - 31 * 60000, // stale real
+    }, NOW);
+    assert.strictEqual(d.manejando, false); // FIX: ya no infla la jornada
+    assert.strictEqual(d.fuente, 'volvo');
+  });
+
+  test('sin Volvo → fallback SITRACK fresco + ignición + speed>15 → manejando', () => {
+    const d = decidirManejando({
+      volvoSpeedKmh: null,
+      volvoPosicionTs: null,
+      volvoLat: null,
+      volvoLng: null,
+      sitrackSpeed: 80,
+      sitrackIgnition: true,
+      sitrackLat: -38.5,
+      sitrackLng: -62.5,
+      sitrackReportMs: NOW - 2 * 60000,
+    }, NOW);
+    assert.strictEqual(d.manejando, true);
+    assert.strictEqual(d.fuente, 'sitrack');
+    assert.strictEqual(d.lat, -38.5);
+  });
+
+  test('sin Volvo → SITRACK report_date stale → NO manejando (el bug viejo)', () => {
+    // Con la lógica vieja (consultado_en) esto daba manejando=true.
+    const d = decidirManejando({
+      volvoSpeedKmh: null,
+      volvoPosicionTs: null,
+      volvoLat: null,
+      volvoLng: null,
+      sitrackSpeed: 80,
+      sitrackIgnition: true,
+      sitrackLat: -38.5,
+      sitrackLng: -62.5,
+      sitrackReportMs: NOW - 25 * 60000, // 25min stale
+    }, NOW);
+    assert.strictEqual(d.manejando, false);
+    assert.strictEqual(d.fuente, 'sitrack');
+  });
+
+  test('sin Volvo y sin report_date → fuente ninguna, parado (fail-safe)', () => {
+    const d = decidirManejando({
+      volvoSpeedKmh: null,
+      volvoPosicionTs: null,
+      volvoLat: null,
+      volvoLng: null,
+      sitrackSpeed: 80,
+      sitrackIgnition: true,
+      sitrackLat: -38.5,
+      sitrackLng: -62.5,
+      sitrackReportMs: null,
+    }, NOW);
+    assert.strictEqual(d.manejando, false);
+    assert.strictEqual(d.fuente, 'ninguna');
+    assert.strictEqual(d.lat, -38.5); // cae a SITRACK para no perder posición
+  });
+
+  test('Volvo posicion_ts no parseable → cae a SITRACK', () => {
+    const d = decidirManejando({
+      volvoSpeedKmh: 90,
+      volvoPosicionTs: 'no-es-fecha',
+      volvoLat: -38.7,
+      volvoLng: -62.3,
+      sitrackSpeed: 0,
+      sitrackIgnition: false,
+      sitrackLat: -38.5,
+      sitrackLng: -62.5,
+      sitrackReportMs: NOW - 2 * 60000,
+    }, NOW);
+    assert.strictEqual(d.fuente, 'sitrack');
+    assert.strictEqual(d.manejando, false); // SITRACK speed 0
+  });
+
+  test('Volvo sin lat/lng → usa SITRACK para tracking de descanso', () => {
+    const d = decidirManejando({
+      volvoSpeedKmh: 0,
+      volvoPosicionTs: FRESCO,
+      volvoLat: null,
+      volvoLng: null,
+      sitrackSpeed: 0,
+      sitrackIgnition: false,
+      sitrackLat: -38.55,
+      sitrackLng: -62.55,
+      sitrackReportMs: NOW - 5 * 60000,
+    }, NOW);
+    assert.strictEqual(d.fuente, 'volvo');
+    assert.strictEqual(d.lat, -38.55); // fallback de posición a SITRACK
+    assert.strictEqual(d.lng, -62.55);
+  });
+
+  test('umbral: speed exactamente 15 NO es manejando (> estricto)', () => {
+    const d = decidirManejando({
+      ...sitParado,
+      volvoSpeedKmh: 15,
+      volvoPosicionTs: FRESCO,
+      volvoLat: -38.7,
+      volvoLng: -62.3,
+    }, NOW);
+    assert.strictEqual(d.manejando, false);
   });
 });

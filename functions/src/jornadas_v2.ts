@@ -22,7 +22,17 @@
 //
 // Reanudación: solo después de ≥ 8 hs detenido en misma posición.
 //
-// Fuente de datos: SITRACK_POSICIONES (último snapshot por patente).
+// Fuente de datos (HÍBRIDA desde 2026-05-21, fix #36):
+//   - SITRACK_POSICIONES → QUIÉN maneja (driver_dni del iButton). Volvo no
+//     sabe el conductor (drivertimes vacío para Vecchi).
+//   - VOLVO_ESTADO → movimiento REAL del camión: speed_kmh + `posicion_ts`
+//     (timestamp REAL del reporte del equipo). PRIMARIO.
+// El bug que se arregla: la staleness se medía sobre `consultado_en` (cuándo
+// NOSOTROS consultamos SITRACK — SIEMPRE fresco), no sobre el reporte real.
+// Un camión PARADO cuyo último reporte SITRACK (de hace 30 min) decía 74 km/h
+// se contaba como "manejando" → la parada no cerraba el bloque (caso AG218ZD,
+// AF869ZU). Volvo da speed=0 con timestamp fresco apenas el camión frena.
+// Ver memoria project_volvo_estado_fundacion.md.
 
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
@@ -193,6 +203,90 @@ export function horaArt(tsMs: number): number {
   }).format(new Date(tsMs));
   const h = parseInt(partes, 10);
   return h === 24 ? 0 : h;
+}
+
+// ─── Decisión de movimiento (PURA, fix #36) ─────────────────────────────────
+
+/** Lo que necesita `decidirManejando` de cada fuente (sin I/O). */
+export interface FuenteMovimiento {
+  /** VOLVO_ESTADO[patente] — primario. null si la unidad no es Volvo. */
+  volvoSpeedKmh: number | null;
+  /** ISO string del reporte GNSS real (ej. "2026-05-21T14:25:56Z"). */
+  volvoPosicionTs: string | null;
+  volvoLat: number | null;
+  volvoLng: number | null;
+  /** SITRACK_POSICIONES — fallback (y fuente del driver_dni aguas arriba). */
+  sitrackSpeed: number;
+  sitrackIgnition: boolean;
+  sitrackLat: number | null;
+  sitrackLng: number | null;
+  /** epoch ms del `report_date` REAL de SITRACK (NO `consultado_en`). */
+  sitrackReportMs: number | null;
+}
+
+export interface DecisionMovimiento {
+  manejando: boolean;
+  lat: number | null;
+  lng: number | null;
+  fuente: "volvo" | "sitrack" | "ninguna";
+}
+
+/**
+ * Decide si un camión está MANEJANDO, con qué posición, y de qué fuente —
+ * PURA, testeable sin Firestore. Corazón del fix #36.
+ *
+ * Prioridad VOLVO (más preciso + timestamp real del equipo):
+ *   manejando = posicion_ts fresco (≤ POLL_STALE) Y speed_kmh > umbral.
+ * El gate de frescura corta el caso "último reporte decía 74 km/h pero el
+ * equipo está mudo hace 30 min" (= parado). Volvo además manda speed=0
+ * apenas frena, así que el camino dominante es speed=0 → parado inmediato.
+ *
+ * Fallback SITRACK SOLO si la unidad no tiene Volvo (4 no-Volvo: test + tanques).
+ * Usa `report_date` REAL (no `consultado_en`, que era el origen del bug).
+ *
+ * Sin ninguna fuente fiable → parado (fail-safe: nunca inflar la jornada con
+ * tiempo de manejo que no podemos confirmar).
+ */
+export function decidirManejando(
+  f: FuenteMovimiento,
+  nowMs: number
+): DecisionMovimiento {
+  if (f.volvoPosicionTs != null) {
+    const posMs = Date.parse(f.volvoPosicionTs);
+    if (Number.isFinite(posMs)) {
+      const frescoSeg = (nowMs - posMs) / 1000;
+      const fresco = frescoSeg <= POLL_STALE_SEGUNDOS;
+      const manejando =
+        fresco &&
+        f.volvoSpeedKmh != null &&
+        f.volvoSpeedKmh > UMBRAL_MOVIMIENTO_KMH;
+      return {
+        manejando,
+        // Posición Volvo si vino; si no, caemos a SITRACK para el tracking
+        // de descanso (radio 1000 m) y no perder el dato.
+        lat: f.volvoLat ?? f.sitrackLat,
+        lng: f.volvoLng ?? f.sitrackLng,
+        fuente: "volvo",
+      };
+    }
+  }
+  if (f.sitrackReportMs != null && f.sitrackReportMs > 0) {
+    const fresco = (nowMs - f.sitrackReportMs) / 1000 <= POLL_STALE_SEGUNDOS;
+    const manejando =
+      fresco && f.sitrackIgnition && f.sitrackSpeed > UMBRAL_MOVIMIENTO_KMH;
+    return {
+      manejando,
+      lat: f.sitrackLat,
+      lng: f.sitrackLng,
+      fuente: "sitrack",
+    };
+  }
+  return {
+    manejando: false,
+    lat: f.sitrackLat ?? f.volvoLat,
+    lng: f.sitrackLng ?? f.volvoLng,
+    fuente: "ninguna",
+  };
 }
 
 // `primerNombre` y `rrPick` movidos a helpers.ts (refactor 2026-05-18).
@@ -842,6 +936,31 @@ export async function tickVigiladorJornada(): Promise<void> {
   // depender de un único punto + ahorrar I/O en JORNADAS.
   const inactivos = await cargarChoferesInactivos();
 
+  // VOLVO_ESTADO: fuente PRIMARIA de movimiento (fix #36). Una query (~53
+  // docs). Si falla, el Map queda vacío y `decidirManejando` cae a SITRACK
+  // — el vigilador sigue operativo aunque Volvo esté caído.
+  const volvoPorPatente = new Map<string, {
+    speed_kmh: number | null; posicion_ts: string | null;
+    lat: number | null; lng: number | null;
+  }>();
+  try {
+    const volSnap = await db().collection("VOLVO_ESTADO").limit(5000).get();
+    for (const d of volSnap.docs) {
+      const x = d.data();
+      volvoPorPatente.set(d.id.toUpperCase(), {
+        speed_kmh: typeof x.speed_kmh === "number" ? x.speed_kmh : null,
+        posicion_ts: typeof x.posicion_ts === "string" ? x.posicion_ts : null,
+        lat: typeof x.lat === "number" ? x.lat : null,
+        lng: typeof x.lng === "number" ? x.lng : null,
+      });
+    }
+  } catch (e) {
+    logger.warn(
+      "[jornadas_v2.tick] no se pudo cargar VOLVO_ESTADO, usando solo SITRACK",
+      { error: (e as Error).message }
+    );
+  }
+
   // Race condition fix (auditoria 2026-05-16): si por drift de
   // CHOFER_DISTINTO un mismo DNI aparece en 2 patentes (chofer logueado
   // con su iButton + otro tractor reportando su nombre legacy), antes
@@ -877,27 +996,45 @@ export async function tickVigiladorJornada(): Promise<void> {
   let silenciadosCount = 0;
   let nuevasJornadas = 0;
   let cerradas = 0;
+  // Observabilidad fix #36: cuántas decisiones salieron de cada fuente.
+  let fuenteVolvo = 0;
+  let fuenteSitrack = 0;
 
   for (const [dni, entry] of choferesProcesados.entries()) {
     const docPos = entry.docPos;
     const data = docPos.data();
 
     const patente = docPos.id;
-    const speed = typeof data.speed === "number" ? data.speed : 0;
-    // Default ignitionOn=FALSE (fail-closed). Antes el default era true
-    // — si SITRACK_POSICIONES no traia el campo `ignition`, considerabamos
-    // que el motor estaba encendido y inflabamos las jornadas con tiempo
-    // de tractores parados. Mejor no contar tiempo que no podemos
-    // confirmar que es manejo real.
-    const ignitionOn =
+    // Default ignition=FALSE (fail-closed). Para el fallback SITRACK.
+    const sitIgnition =
       typeof data.ignition === "boolean" ? data.ignition : false;
-    const lat = typeof data.lat === "number" ? data.lat : null;
-    const lng = typeof data.lng === "number" ? data.lng : null;
-    const polledMs = entry.polledMs;
-    const polledHaceSeg =
-      polledMs > 0 ? (Date.now() - polledMs) / 1000 : Infinity;
-    const pollStale = polledHaceSeg > POLL_STALE_SEGUNDOS;
-    const manejando = !pollStale && ignitionOn && speed > UMBRAL_MOVIMIENTO_KMH;
+    // report_date = timestamp REAL del último reporte SITRACK. Usamos ESTE
+    // (no `consultado_en`, que es cuándo NOSOTROS consultamos y siempre está
+    // fresco → enmascaraba el stale = bug #36).
+    const sitReportMs =
+      (data.report_date as FsTimestamp | undefined)?.toMillis() ?? null;
+
+    // Fix #36: movimiento desde Volvo (primario) con fallback a SITRACK.
+    const vol = volvoPorPatente.get(patente.toUpperCase());
+    const decision = decidirManejando(
+      {
+        volvoSpeedKmh: vol?.speed_kmh ?? null,
+        volvoPosicionTs: vol?.posicion_ts ?? null,
+        volvoLat: vol?.lat ?? null,
+        volvoLng: vol?.lng ?? null,
+        sitrackSpeed: typeof data.speed === "number" ? data.speed : 0,
+        sitrackIgnition: sitIgnition,
+        sitrackLat: typeof data.lat === "number" ? data.lat : null,
+        sitrackLng: typeof data.lng === "number" ? data.lng : null,
+        sitrackReportMs: sitReportMs,
+      },
+      Date.now()
+    );
+    const manejando = decision.manejando;
+    const lat = decision.lat;
+    const lng = decision.lng;
+    if (decision.fuente === "volvo") fuenteVolvo++;
+    else if (decision.fuente === "sitrack") fuenteSitrack++;
 
     evaluados++;
 
@@ -1002,6 +1139,7 @@ export async function tickVigiladorJornada(): Promise<void> {
   logger.info("[jornadas_v2.tick] OK", {
     evaluados, avisosEnviados, silenciadosCount, nuevasJornadas, cerradas,
     silenciados: silenciados.size,
+    fuenteVolvo, fuenteSitrack,
   });
 }
 
