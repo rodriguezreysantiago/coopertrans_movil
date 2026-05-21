@@ -131,6 +131,15 @@ class CachatoreService {
       .doc(dni)
       .set({'reagendar': false, ..._meta}, SetOptions(merge: true));
 
+  /// Pide CANCELAR el turno: marca `cancelar_pedido` para que el bot lo cancele
+  /// en iTurnos y saque al chofer del ciclo. Acción DESTRUCTIVA (libera el slot,
+  /// no se puede deshacer). Deja estado='cancelando' como feedback en la UI.
+  static Future<void> cancelarTurno(String dni) => objetivosCol.doc(dni).set({
+        'cancelar_pedido': true,
+        'estado': 'cancelando',
+        ..._meta,
+      }, SetOptions(merge: true));
+
   static Future<void> setObjetivoActivo(String dni, bool v) =>
       objetivosCol.doc(dni).set({'activo': v, ..._meta}, SetOptions(merge: true));
 

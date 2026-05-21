@@ -58,6 +58,9 @@ def leer_config_nube() -> dict:
                 "fecha": x.get("fecha"),   # 'AAAA-MM-DD' o None=cualquiera
                 "franja": franja,
                 "reagendar": bool(x.get("reagendar")),
+                # pedido de cancelacion desde la app: el bot cancela en iTurnos
+                # y saca al chofer del ciclo.
+                "cancelar": bool(x.get("cancelar_pedido")),
             })
     return {
         # activo: por defecto FALSE (arranca pausado hasta que lo prendan).

@@ -139,7 +139,7 @@ class Target:
                  "franja", "reagendar", "cli", "logueado", "tiene_turno", "uuid",
                  "reagendar_hecho", "ultimo_check", "estado_reportado", "notificar",
                  "turno_hora", "turno_cuando", "turno_conseguido", "vacios_seguidos",
-                 "ciclo_completo")
+                 "ciclo_completo", "cancelar_pedido")
 
     def __init__(self, ch: dict, fecha, franja: str, reagendar: bool):
         self.dni = ch["dni"]
@@ -163,6 +163,7 @@ class Target:
         self.turno_conseguido = False  # ¿alguna vez consiguió turno en este ciclo?
         self.vacios_seguidos = 0       # lecturas de mis_turnos vacías seguidas
         self.ciclo_completo = False    # turno usado/finalizado → sacarlo del ciclo
+        self.cancelar_pedido = False   # la app pidió cancelar el turno (+ iTurnos)
 
     @property
     def credenciales_ok(self) -> bool:
@@ -533,6 +534,13 @@ def sincronizar_targets(cfg: dict, targets: dict):
             log("LOG", "sistema", f"vigilando {t.nombre} — franja '{t.franja}'"
                 + (" (reagendar)" if t.reagendar else ""))
 
+    # flag de cancelación (lo setea la app en el objetivo; lo procesa el loop
+    # principal: cancela en iTurnos y saca al chofer del ciclo).
+    for dni, spec in deseados.items():
+        t = targets.get(dni)
+        if t is not None:
+            t.cancelar_pedido = bool(spec.get("cancelar"))
+
     # barrido de estado de los recién agregados (evita doble reserva / arranca
     # sabiendo quién ya tiene turno; corre en paralelo para no demorar).
     sin_chequear = [t for t in targets.values() if t.ultimo_check == 0.0]
@@ -699,6 +707,46 @@ def main():
                 key=lambda t: t.ultimo_check)[:MAX_REFRESH_POR_CICLO]
             for t in vencidos:
                 refrescar_estado(t)
+
+            # 3.a.bis) PEDIDOS DE CANCELACIÓN (la app marcó cancelar_pedido):
+            #          cancela el turno en iTurnos (si lo tiene) y saca al chofer
+            #          del ciclo. ⚠️ destructivo. Single-thread acá (no mutar
+            #          `targets` desde hilos). Si la cancelación falla, NO lo saca
+            #          y reintenta en el próximo refresh de config (throttle).
+            for dni in [d for d, t in targets.items() if t.cancelar_pedido]:
+                t = targets[dni]
+                if dry:
+                    log("EXITO", t.nombre, "[DRY] cancelaría el turno en iTurnos")
+                    ok = True
+                elif not (t.tiene_turno and t.uuid):
+                    ok = True   # no hay turno que cancelar → solo sacarlo del ciclo
+                elif not asegurar_login(t):
+                    log("LOG", t.nombre, "login falló para cancelar; reintento luego")
+                    t.cancelar_pedido = False
+                    ok = False
+                else:
+                    try:
+                        r = t.cli.cancelar(t.uuid)
+                        ok = bool(r.get("ok"))
+                        if ok:
+                            log("EXITO", t.nombre,
+                                "turno CANCELADO en iTurnos (pedido de la app)")
+                        else:
+                            log("LOG", t.nombre, "cancelación no confirmada "
+                                f"({r.get('motivo') or r.get('status')}); reintento luego")
+                            t.cancelar_pedido = False
+                    except Exception as e:
+                        log("LOG", t.nombre, f"error cancelando en iTurnos: {e}")
+                        t.cancelar_pedido = False
+                        ok = False
+                if ok:
+                    targets.pop(dni)
+                    _despublicar_turno(dni)
+                    if _ESCRIBIR_ESTADO:
+                        try:
+                            nube.eliminar_objetivo(dni)
+                        except Exception as e:
+                            log("LOG", "sistema", f"no pude sacar objetivo {dni}: {e}")
 
             # 3.b) cierre de ciclo: los que YA USARON su turno (concretado/
             #      ausente/etc — no reagendado) DESAPARECEN de la lista (es

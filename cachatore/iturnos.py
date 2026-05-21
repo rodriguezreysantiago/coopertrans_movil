@@ -426,3 +426,28 @@ class IturnosClient:
         ok = resp.status_code in (200, 302)
         return {"ok": ok, "motivo": "reagendado" if ok else "revisar",
                 "hora": slot["hora"], "status": resp.status_code}
+
+    def cancelar(self, uuid: str) -> dict:
+        """CANCELA el turno {uuid} en iTurnos. ⚠️ DESTRUCTIVO: libera el slot y no
+        se puede deshacer. Flujo confirmado 2026-05-21: el botón "Cancelar" abre el
+        modal #cancelarModal cuyo form #formCancelar (POST + _token) recibe
+        action=/misiturnos/cancelar/{uuid} vía JS. Replicamos: GET /misiturnos para
+        sacar el _token + POST a /misiturnos/cancelar/{uuid}. Verifica con
+        mis_turnos que el turno ya no esté (verdad autoritativa)."""
+        html = self.s.get(f"{BASE}/misiturnos").text
+        soup = BeautifulSoup(html, "html.parser")
+        token = None
+        form = soup.find(id="formCancelar")
+        if form is not None:
+            inp = form.find("input", attrs={"name": "_token"})
+            token = inp.get("value") if inp else None
+        if not token:
+            meta = soup.find("meta", attrs={"name": "csrf-token"})
+            token = meta.get("content") if meta is not None else None
+        if not token:
+            return {"ok": False, "motivo": "sin_token"}
+        resp = self.s.post(f"{BASE}/misiturnos/cancelar/{uuid}",
+                           data={"_token": token}, allow_redirects=True)
+        sigue = any(t.get("uuid") == uuid for t in self.mis_turnos())
+        ok = (resp.status_code in (200, 302)) and not sigue
+        return {"ok": ok, "status": resp.status_code, "sigue": sigue}

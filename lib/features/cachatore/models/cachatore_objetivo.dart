@@ -12,6 +12,7 @@ enum EstadoObjetivo {
   sinCredenciales('sin_credenciales', 'Sin mail/clave', _Sev.error),
   sinPatente('sin_patente', 'Sin unidad asignada', _Sev.error),
   loginFallo('login_fallo', 'No puede loguear', _Sev.error),
+  cancelando('cancelando', 'Cancelando turno', _Sev.warn),
   revisar('revisar', 'Revisar', _Sev.warn);
 
   final String codigo;

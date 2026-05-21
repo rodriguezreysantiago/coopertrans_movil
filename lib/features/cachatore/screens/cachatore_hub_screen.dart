@@ -550,7 +550,7 @@ class _ConcretadoCard extends StatelessWidget {
     final reag = _reagendarPendiente;
     final acento = reag ? AppColors.accentAmber : AppColors.accentGreen;
     return AppCard(
-      onTap: () => _reagendar(context),
+      onTap: () => _abrirMenu(context),
       borderColor: reag ? AppColors.accentAmber.withValues(alpha: 0.55) : null,
       child: Row(
         children: [
@@ -617,12 +617,12 @@ class _ConcretadoCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Column(
+          const Column(
             children: [
-              const Icon(Icons.edit_calendar, color: Colors.white54, size: 20),
-              const SizedBox(height: 2),
-              Text(reag ? 'Cambiar' : 'Reagendar',
-                  style: const TextStyle(color: Colors.white38, fontSize: 10)),
+              Icon(Icons.more_vert, color: Colors.white54, size: 20),
+              SizedBox(height: 2),
+              Text('Opciones',
+                  style: TextStyle(color: Colors.white38, fontSize: 10)),
             ],
           ),
         ],
@@ -662,6 +662,92 @@ class _ConcretadoCard extends StatelessWidget {
       ),
     );
     if (ok == true) await CachatoreService.cancelarReagendar(turno.dni);
+  }
+
+  /// Menú al tocar la card: Reagendar o Cancelar turno.
+  void _abrirMenu(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  turno.nombre ?? turno.dni,
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16),
+                ),
+              ),
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.event_repeat, color: AppColors.accentAmber),
+              title:
+                  const Text('Reagendar', style: TextStyle(color: Colors.white)),
+              subtitle: const Text('Mover el turno a otra fecha/franja',
+                  style: TextStyle(color: AppColors.textTertiary)),
+              onTap: () {
+                Navigator.pop(context);
+                _reagendar(context);
+              },
+            ),
+            ListTile(
+              leading:
+                  const Icon(Icons.delete_outline, color: AppColors.accentRed),
+              title: const Text('Cancelar turno',
+                  style: TextStyle(color: AppColors.accentRed)),
+              subtitle: const Text('Lo cancela también en iTurnos (libera el cupo)',
+                  style: TextStyle(color: AppColors.textTertiary)),
+              onTap: () {
+                Navigator.pop(context);
+                _confirmarCancelarTurno(context);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmarCancelarTurno(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Cancelar turno'),
+        content: Text(
+          'Se va a CANCELAR el turno de ${turno.nombre ?? turno.dni}'
+          "${(turno.cuando ?? '').isNotEmpty ? ' (${turno.cuando})' : ''} "
+          'también en iTurnos. El cupo queda libre y no se puede deshacer.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('No')),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.accentRed),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sí, cancelar turno'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await CachatoreService.cancelarTurno(turno.dni);
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Cancelando turno en iTurnos…')));
+    }
   }
 }
 

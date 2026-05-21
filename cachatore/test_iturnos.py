@@ -8,6 +8,7 @@ Correr con el venv del cachatore (trae curl_cffi/bs4 que iturnos importa):
 """
 import unittest
 from datetime import datetime
+from unittest import mock
 
 import iturnos
 
@@ -177,6 +178,52 @@ class TestParsearSlotsReagendar(unittest.TestCase):
         self.assertEqual(slots[0]["hora"], "08:00")
         self.assertIsNone(slots[0]["fecha"])
         self.assertIsNone(slots[0]["iso"])
+
+
+class TestCancelar(unittest.TestCase):
+    """cancelar(uuid): GET /misiturnos por el _token + POST a
+    /misiturnos/cancelar/{uuid}; verifica con mis_turnos que el turno ya no esté.
+    Lockea el flujo verificado en vivo 2026-05-21 (form #formCancelar POST)."""
+
+    def _cli(self, html):
+        cli = iturnos.IturnosClient()
+        cli.s = mock.MagicMock()
+        cli.s.get.return_value.text = html
+        return cli
+
+    def test_postea_con_token_y_confirma(self):
+        cli = self._cli('<form id="formCancelar" method="POST">'
+                        '<input name="_token" value="TOK123"></form>')
+        cli.s.post.return_value.status_code = 302
+        with mock.patch.object(cli, "mis_turnos", return_value=[]):
+            r = cli.cancelar("UUID-1")
+        self.assertTrue(r["ok"])
+        url = cli.s.post.call_args.args[0]
+        self.assertTrue(url.endswith("/misiturnos/cancelar/UUID-1"))
+        self.assertEqual(cli.s.post.call_args.kwargs["data"]["_token"], "TOK123")
+
+    def test_usa_meta_csrf_si_no_hay_form(self):
+        cli = self._cli('<meta name="csrf-token" content="METATOK">')
+        cli.s.post.return_value.status_code = 200
+        with mock.patch.object(cli, "mis_turnos", return_value=[]):
+            r = cli.cancelar("UUID-9")
+        self.assertTrue(r["ok"])
+        self.assertEqual(cli.s.post.call_args.kwargs["data"]["_token"], "METATOK")
+
+    def test_sin_token_no_postea(self):
+        cli = self._cli("<html>sin token</html>")
+        r = cli.cancelar("UUID-1")
+        self.assertFalse(r["ok"])
+        self.assertEqual(r["motivo"], "sin_token")
+        cli.s.post.assert_not_called()
+
+    def test_si_el_turno_sigue_es_fallo(self):
+        cli = self._cli('<meta name="csrf-token" content="M">')
+        cli.s.post.return_value.status_code = 200
+        with mock.patch.object(cli, "mis_turnos", return_value=[{"uuid": "UUID-1"}]):
+            r = cli.cancelar("UUID-1")
+        self.assertFalse(r["ok"])   # sigue apareciendo → no se canceló
+        self.assertTrue(r["sigue"])
 
 
 if __name__ == "__main__":
