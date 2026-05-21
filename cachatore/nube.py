@@ -68,6 +68,11 @@ def leer_config_nube() -> dict:
         "hora_inicio": cfg.get("hora_inicio"),
         "duracion_min": cfg.get("duracion_min", 20),
         "poll_latente_seg": cfg.get("poll_latente_seg", 5),
+        "poll_agresivo_seg": cfg.get("poll_agresivo_seg", 1.5),
+        # Boton "barrido agresivo" de la app: timestamp (UTC) hasta cuando
+        # barrer rapido. La app lo setea a now+10min; el bot lo evalua cada
+        # ciclo y vuelve a latente al expirar.
+        "agresivo_hasta": cfg.get("agresivo_hasta"),
         "choferes": objetivos,
     }
 
@@ -97,6 +102,17 @@ def escribir_estado_chofer(dni: str, estado: str, hora=None, detalle=None,
         data["estado_turno"] = cuando
     db = choferes._db()
     db.collection(COL_OBJETIVOS).document(str(dni)).set(data, merge=True)
+
+
+def cancelar_reagendar(dni: str):
+    """Apaga el flag `reagendar` de un objetivo. Lo usa el bot cuando detecta
+    que el turno YA esta en la franja/fecha pedida (no hay que moverlo mas) y
+    asi la UI deja de mostrar 'buscando reagendar'."""
+    db = choferes._db()
+    db.collection(COL_OBJETIVOS).document(str(dni)).set(
+        {"reagendar": False, "actualizado_en": firestore.SERVER_TIMESTAMP},
+        merge=True,
+    )
 
 
 def escribir_turno(dni, nombre, cuando, hora, uuid):

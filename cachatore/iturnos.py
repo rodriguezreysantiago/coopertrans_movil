@@ -132,6 +132,46 @@ def slots_en_franja(slots: list, franja_key: str) -> list:
     return [s for s in slots if s.get("hora") and hora_en_franja(s["hora"], franja_key)]
 
 
+# Meses (es/en, por las primeras 3 letras) -> numero, para parsear el `cuando`
+# legible de iTurnos ("Viernes 22 May 2026 10:00 hs.") a fecha ISO.
+_MESES = {
+    "ene": 1, "jan": 1, "feb": 2, "mar": 3, "abr": 4, "apr": 4, "may": 5,
+    "jun": 6, "jul": 7, "ago": 8, "aug": 8, "sep": 9, "set": 9, "oct": 10,
+    "nov": 11, "dic": 12, "dec": 12,
+}
+_RE_CUANDO_FECHA = re.compile(r"(\d{1,2})\s+([A-Za-záéíóú]+)\.?\s+(\d{4})")
+
+
+def fecha_iso_de_cuando(cuando: str) -> str:
+    """Extrae 'AAAA-MM-DD' del texto legible de un turno
+    ('Viernes 22 May 2026 10:00 hs.' -> '2026-05-22'). None si no parsea."""
+    if not cuando:
+        return None
+    m = _RE_CUANDO_FECHA.search(cuando)
+    if not m:
+        return None
+    dia, mes_txt, anio = m.group(1), m.group(2)[:3].lower(), m.group(3)
+    mes = _MESES.get(mes_txt)
+    if not mes:
+        return None
+    return f"{anio}-{mes:02d}-{int(dia):02d}"
+
+
+def turno_en_objetivo(turno_hora: str, turno_cuando: str, franja: str,
+                      fecha_obj: str = None) -> bool:
+    """`True` si el turno (hora 'HH:MM' + texto `cuando`) YA cae dentro de la
+    franja pedida y, si `fecha_obj` no es None ('AAAA-MM-DD'), tambien en esa
+    fecha. Sirve para que el bot detecte que un turno ya esta donde se queria y
+    cancele solo el reagendar (en vez de seguir moviendolo). Conservador: si hay
+    fecha objetivo y no se puede parsear la del turno, devuelve False (no
+    cancela; mejor seguir intentando que cancelar de mas)."""
+    if not turno_hora or not hora_en_franja(turno_hora, franja):
+        return False
+    if fecha_obj:
+        return fecha_iso_de_cuando(turno_cuando or "") == fecha_obj
+    return True
+
+
 def parsear_slots_reagendar(html: str) -> list:
     """Slots libres en el calendario de REAGENDAR (/reagendar/calendario/{uuid}).
     Mismo estilo que la reserva: libre = <a class="btn-outline-success">HH:MM</a>,

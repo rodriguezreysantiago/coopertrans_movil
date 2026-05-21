@@ -85,5 +85,53 @@ class TestSlotsEnFranjaConComodin(unittest.TestCase):
         self.assertEqual([s["hora"] for s in soloTarde], ["14:00"])
 
 
+class TestFechaIsoDeCuando(unittest.TestCase):
+    def test_formato_iturnos(self):
+        self.assertEqual(
+            iturnos.fecha_iso_de_cuando("Viernes 22 May 2026 10:00 hs."),
+            "2026-05-22")
+        self.assertEqual(
+            iturnos.fecha_iso_de_cuando("Jueves 21 May 2026 19:30 hs."),
+            "2026-05-21")
+
+    def test_mes_completo_y_otros(self):
+        self.assertEqual(iturnos.fecha_iso_de_cuando("5 Enero 2026"), "2026-01-05")
+        self.assertEqual(iturnos.fecha_iso_de_cuando("1 Dic 2025 08:00"), "2025-12-01")
+
+    def test_no_parsea(self):
+        self.assertIsNone(iturnos.fecha_iso_de_cuando(""))
+        self.assertIsNone(iturnos.fecha_iso_de_cuando(None))
+        self.assertIsNone(iturnos.fecha_iso_de_cuando("ayer a la tarde"))
+
+
+class TestTurnoEnObjetivo(unittest.TestCase):
+    CUANDO = "Viernes 22 May 2026 10:00 hs."
+
+    def test_franja_y_fecha_ok(self):
+        self.assertTrue(iturnos.turno_en_objetivo(
+            "10:00", self.CUANDO, "manana", "2026-05-22"))
+
+    def test_fecha_distinta_no_matchea(self):
+        self.assertFalse(iturnos.turno_en_objetivo(
+            "10:00", self.CUANDO, "manana", "2026-05-23"))
+
+    def test_sin_fecha_objetivo_solo_franja(self):
+        self.assertTrue(iturnos.turno_en_objetivo(
+            "10:00", self.CUANDO, "manana", None))
+
+    def test_franja_distinta_no_matchea(self):
+        self.assertFalse(iturnos.turno_en_objetivo(
+            "14:00", self.CUANDO, "manana", "2026-05-22"))
+
+    def test_sin_hora_no_matchea(self):
+        self.assertFalse(iturnos.turno_en_objetivo(
+            None, self.CUANDO, "manana", None))
+
+    def test_fecha_objetivo_pero_cuando_inparseable_es_conservador(self):
+        # No se puede confirmar la fecha -> NO cancela (False).
+        self.assertFalse(iturnos.turno_en_objetivo(
+            "10:00", "horario raro", "manana", "2026-05-22"))
+
+
 if __name__ == "__main__":
     unittest.main()

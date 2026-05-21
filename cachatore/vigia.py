@@ -43,7 +43,7 @@ import random
 import sys
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import iturnos
 import choferes
@@ -147,7 +147,8 @@ class Target:
     """Estado de un chofer vigilado. Objetivo: tener un turno en su franja."""
     __slots__ = ("dni", "nombre", "email", "clave", "patente", "fecha",
                  "franja", "reagendar", "cli", "logueado", "tiene_turno", "uuid",
-                 "reagendar_hecho", "ultimo_check", "estado_reportado", "notificar")
+                 "reagendar_hecho", "ultimo_check", "estado_reportado", "notificar",
+                 "turno_hora", "turno_cuando")
 
     def __init__(self, ch: dict, fecha, franja: str, reagendar: bool):
         self.dni = ch["dni"]
@@ -166,6 +167,8 @@ class Target:
         self.ultimo_check = 0.0
         self.estado_reportado = None
         self.notificar = None   # None | 'reservado' | 'reagendado' (aviso pendiente)
+        self.turno_hora = None      # 'HH:MM' del turno actual (si tiene)
+        self.turno_cuando = None    # texto legible del turno actual
 
     @property
     def credenciales_ok(self) -> bool:
@@ -412,6 +415,8 @@ def refrescar_estado(t: Target):
     if turnos:
         turno = turnos[0]
         t.uuid = turno["uuid"]
+        t.turno_hora = turno.get("hora")
+        t.turno_cuando = turno.get("cuando")
         if not t.tiene_turno:
             log("LOG", t.nombre, f"ya tiene turno ({turno.get('cuando') or 'detectado'})")
         t.tiene_turno = True
@@ -424,6 +429,8 @@ def refrescar_estado(t: Target):
     else:
         t.tiene_turno = False
         t.uuid = None
+        t.turno_hora = None
+        t.turno_cuando = None
         _reportar_estado(t, "buscando")
         _despublicar_turno(t.dni)
         t.notificar = None   # perdió el turno antes de avisar → cancelar aviso
@@ -668,6 +675,22 @@ def ciclo_latente(targets: dict, dry: bool):
     for t in targets.values():
         if not (t.reagendar and t.tiene_turno and t.uuid and not t.reagendar_hecho):
             continue
+        # ¿El turno actual YA cae en la franja/fecha pedida? Entonces no hay nada
+        # que mover -> cancelamos solo el reagendar (y la UI deja de mostrar
+        # "buscando reagendar"). Cubre el caso de reagendar a mano por fuera del
+        # bot (Santiago 2026-05-21).
+        if iturnos.turno_en_objetivo(t.turno_hora, t.turno_cuando, t.franja,
+                                     resolver_fecha(t.fecha)):
+            log("EXITO", t.nombre,
+                "el turno ya esta en la franja/fecha pedida -> cancelo reagendar")
+            t.reagendar_hecho = True
+            t.reagendar = False
+            if _ESCRIBIR_ESTADO:
+                try:
+                    nube.cancelar_reagendar(t.dni)
+                except Exception as e:
+                    log("LOG", t.nombre, f"no pude cancelar reagendar en la base: {e}")
+            continue
         if dry:
             log("EXITO", t.nombre, f"[DRY] reagendaría a '{t.franja}' / {t.fecha or 'cualquier fecha'}")
             t.reagendar_hecho = True
@@ -751,16 +774,22 @@ def main():
 
             activo = bool(cfg.get("activo", True)) if cfg else False
 
-            # El drop time ya no importa: SIEMPRE latente (barre cada ~5 s).
-            # `--agresivo` sigue disponible para testeo manual. La fecha y la
-            # franja son POR CHOFER (no globales).
-            en_drop = forzar_agresivo
+            # "Barrido agresivo": el boton de la app setea `agresivo_hasta`
+            # (timestamp UTC = now + ~10 min). Mientras no expira, el bot barre
+            # RAPIDO (cada ~poll_agresivo_seg) con el scanner UNICO -> no
+            # multiplica requests por chofer (eso irritaria a Cloudflare y nos
+            # cortaria justo en el drop). Se evalua cada ciclo y vuelve solo a
+            # latente al expirar. `--agresivo` (CLI, testeo) usa el barrido
+            # per-chofer. Fecha/franja son POR CHOFER.
+            ag_hasta = cfg.get("agresivo_hasta") if cfg else None
+            boton_agresivo = (ag_hasta is not None
+                              and datetime.now(timezone.utc) < ag_hasta)
 
             if not targets:
                 modo = "idle"
             elif not activo:
                 modo = "pausado"
-            elif en_drop:
+            elif forzar_agresivo or boton_agresivo:
                 modo = "agresivo"
             else:
                 modo = "latente"
@@ -773,8 +802,14 @@ def main():
 
             # 4) actuar según modo
             if modo == "agresivo":
-                ciclo_agresivo(targets, dry)
-                espera = cfg.get("poll_agresivo_seg", POLL_AGRESIVO_SEG)
+                # boton de la app -> barrido RAPIDO con el scanner unico.
+                # --agresivo (CLI, testeo) -> barrido per-chofer.
+                if forzar_agresivo:
+                    ciclo_agresivo(targets, dry)
+                else:
+                    ciclo_latente(targets, dry)
+                espera = cfg.get("poll_agresivo_seg", POLL_AGRESIVO_SEG) \
+                    + random.uniform(0, JITTER_LATENTE_SEG)
             elif modo == "latente":
                 ciclo_latente(targets, dry)
                 espera = cfg.get("poll_latente_seg", POLL_LATENTE_SEG) \
