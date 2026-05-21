@@ -36,6 +36,7 @@ export * from "./comun";
 export * from "./auth";
 export * from "./audit";
 export * from "./volvo";
+export * from "./volvo_estado";
 export * from "./telemetria";
 export * from "./cleanup_y_recibos";
 export * from "./dashboard_stats";
