@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -31,6 +33,8 @@ class CachatoreHubScreen extends StatelessWidget {
           _BotStatusCard(),
           SizedBox(height: 12),
           _MasterSwitch(),
+          SizedBox(height: 12),
+          _BarridoAgresivoCard(),
           SizedBox(height: 18),
           _SeccionVigilados(),
           SizedBox(height: 22),
@@ -157,6 +161,107 @@ class _MasterSwitch extends StatelessWidget {
 // ───────────────────────────────────────────────────────────────────────
 // Sección: choferes vigilados (todavía sin turno)
 // ───────────────────────────────────────────────────────────────────────
+// Botón de barrido agresivo: control manual del modo rápido del bot. Lo tocás
+// justo antes del drop; el bot barre rápido por 10 min y se apaga solo.
+class _BarridoAgresivoCard extends StatefulWidget {
+  const _BarridoAgresivoCard();
+
+  @override
+  State<_BarridoAgresivoCard> createState() => _BarridoAgresivoCardState();
+}
+
+class _BarridoAgresivoCardState extends State<_BarridoAgresivoCard> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresca el contador cada segundo mientras la pantalla está abierta.
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _mmss(int seg) {
+    final m = seg ~/ 60;
+    final s = seg % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<CachatoreConfig>(
+      stream: CachatoreService.streamConfig(),
+      builder: (ctx, snap) {
+        final cfg = snap.data ?? const CachatoreConfig();
+        final activo = cfg.agresivoActivo;
+        return AppCard(
+          borderColor:
+              activo ? AppColors.accentOrange.withValues(alpha: 0.6) : null,
+          child: Row(
+            children: [
+              Icon(activo ? Icons.bolt : Icons.bolt_outlined,
+                  color: activo ? AppColors.accentOrange : Colors.white54,
+                  size: 26),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      activo ? 'Barrido agresivo ACTIVO' : 'Barrido agresivo',
+                      style: TextStyle(
+                          color: activo
+                              ? AppColors.accentOrange
+                              : Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      activo
+                          ? 'Barre rápido — se apaga en ${_mmss(cfg.agresivoSegundosRestantes)}'
+                          : 'Tocalo justo antes del drop: barre rápido 10 min y se apaga solo.',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          const TextStyle(color: Colors.white54, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              if (activo)
+                TextButton(
+                  onPressed: () => CachatoreService.cancelarAgresivo(),
+                  style:
+                      TextButton.styleFrom(foregroundColor: Colors.white70),
+                  child: const Text('Cortar'),
+                )
+              else
+                FilledButton.icon(
+                  onPressed: () => CachatoreService.activarAgresivo(),
+                  icon: const Icon(Icons.bolt, size: 18),
+                  label: const Text('Activar'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.accentOrange,
+                    foregroundColor: Colors.black,
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 class _SeccionVigilados extends StatelessWidget {
   const _SeccionVigilados();
 
@@ -494,6 +599,19 @@ class _ConcretadoCard extends StatelessWidget {
                       ),
                     ],
                   ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => _cancelarReagendar(context),
+                      icon: const Icon(Icons.cancel_outlined, size: 15),
+                      label: const Text('Cancelar reagendar'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.accentAmber,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -521,6 +639,29 @@ class _ConcretadoCard extends StatelessWidget {
       onConfirm: (_, __, fecha, franja) => CachatoreService.reagendarObjetivo(
           dni: turno.dni, fecha: fecha, franja: franja),
     );
+  }
+
+  Future<void> _cancelarReagendar(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Cancelar reagendar'),
+        content: Text(
+          'El bot deja de buscarle un horario mejor a '
+          '${turno.nombre ?? turno.dni} y le mantiene el turno actual.',
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('No')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sí, cancelar'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await CachatoreService.cancelarReagendar(turno.dni);
   }
 }
 

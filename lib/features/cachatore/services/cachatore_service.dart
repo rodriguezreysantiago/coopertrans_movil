@@ -66,6 +66,21 @@ class CachatoreService {
   static Future<void> setActivo(bool v) =>
       _configDoc.set({'activo': v, ..._meta}, SetOptions(merge: true));
 
+  // ─── Barrido agresivo (botón de la app) ─────────────────────────────
+  /// Activa el "barrido agresivo": el bot barre rápido (cada ~1.5s, escáner
+  /// único) hasta `minutos` desde ahora, y se apaga solo al expirar. Tocalo
+  /// justo antes del drop para ganarles los slots a los que sacan a mano.
+  static Future<void> activarAgresivo({int minutos = 10}) =>
+      _configDoc.set({
+        'agresivo_hasta':
+            Timestamp.fromDate(DateTime.now().add(Duration(minutes: minutos))),
+        ..._meta,
+      }, SetOptions(merge: true));
+
+  /// Corta el barrido agresivo antes de que expire.
+  static Future<void> cancelarAgresivo() => _configDoc
+      .set({'agresivo_hasta': null, ..._meta}, SetOptions(merge: true));
+
   // ─── Objetivos (choferes a vigilar) ────────────────────────────────
   /// Alta de un chofer a vigilar. `fecha`: 'AAAA-MM-DD' o null = cualquiera.
   static Future<void> agregarObjetivo({
@@ -109,6 +124,12 @@ class CachatoreService {
         'reagendar': true,
         ..._meta,
       }, SetOptions(merge: true));
+
+  /// Apaga el reagendar de un objetivo (sin tocar fecha/franja). Para el botón
+  /// "Cancelar reagendar" de la card. El bot deja de moverle el turno.
+  static Future<void> cancelarReagendar(String dni) => objetivosCol
+      .doc(dni)
+      .set({'reagendar': false, ..._meta}, SetOptions(merge: true));
 
   static Future<void> setObjetivoActivo(String dni, bool v) =>
       objetivosCol.doc(dni).set({'activo': v, ..._meta}, SetOptions(merge: true));
