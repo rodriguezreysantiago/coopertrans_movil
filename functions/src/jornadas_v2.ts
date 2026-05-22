@@ -235,56 +235,64 @@ export interface DecisionMovimiento {
  * Decide si un camión está MANEJANDO, con qué posición, y de qué fuente —
  * PURA, testeable sin Firestore. Corazón del fix #36.
  *
- * Prioridad VOLVO (más preciso + timestamp real del equipo):
- *   manejando = posicion_ts fresco (≤ POLL_STALE) Y speed_kmh > umbral.
- * El gate de frescura corta el caso "último reporte decía 74 km/h pero el
- * equipo está mudo hace 30 min" (= parado). Volvo además manda speed=0
- * apenas frena, así que el camino dominante es speed=0 → parado inmediato.
- *
- * Fallback SITRACK SOLO si la unidad no tiene Volvo (4 no-Volvo: test + tanques).
- * Usa `report_date` REAL (no `consultado_en`, que era el origen del bug).
- *
- * Sin ninguna fuente fiable → parado (fail-safe: nunca inflar la jornada con
- * tiempo de manejo que no podemos confirmar).
+ * Gana la fuente MÁS FRESCA (no Volvo a ciegas). Clave: VOLVO_ESTADO guarda
+ * el último `posicion_ts` conocido (merge-preserve) → SIEMPRE hay un valor,
+ * pero puede estar viejo (un camión parado deja de reportar). Si priorizáramos
+ * Volvo apenas exista el campo, un Volvo viejo (camión moviéndose pero equipo
+ * lageado) lo marcaría "parado" ignorando un SITRACK fresco. Por eso:
+ *   - Volvo fresco (≤ POLL_STALE)            → Volvo (velocidad más precisa).
+ *   - Volvo viejo pero SITRACK fresco        → SITRACK (report_date REAL).
+ *   - Ninguno fresco                          → PARADO (fail-safe), posición
+ *                                               = la fuente menos vieja.
+ * El gate de frescura corta el bug original (SITRACK con `consultado_en`
+ * siempre fresco enmascaraba paradas: camión mudo hace 30 min "a 74 km/h").
  */
 export function decidirManejando(
   f: FuenteMovimiento,
   nowMs: number
 ): DecisionMovimiento {
-  if (f.volvoPosicionTs != null) {
-    const posMs = Date.parse(f.volvoPosicionTs);
-    if (Number.isFinite(posMs)) {
-      const frescoSeg = (nowMs - posMs) / 1000;
-      const fresco = frescoSeg <= POLL_STALE_SEGUNDOS;
-      const manejando =
-        fresco &&
-        f.volvoSpeedKmh != null &&
-        f.volvoSpeedKmh > UMBRAL_MOVIMIENTO_KMH;
-      return {
-        manejando,
-        // Posición Volvo si vino; si no, caemos a SITRACK para el tracking
-        // de descanso (radio 1000 m) y no perder el dato.
-        lat: f.volvoLat ?? f.sitrackLat,
-        lng: f.volvoLng ?? f.sitrackLng,
-        fuente: "volvo",
-      };
-    }
-  }
-  if (f.sitrackReportMs != null && f.sitrackReportMs > 0) {
-    const fresco = (nowMs - f.sitrackReportMs) / 1000 <= POLL_STALE_SEGUNDOS;
+  const volvoMs = f.volvoPosicionTs != null ? Date.parse(f.volvoPosicionTs) : NaN;
+  const volvoEdadSeg = Number.isFinite(volvoMs)
+    ? (nowMs - volvoMs) / 1000
+    : Infinity;
+  const sitEdadSeg =
+    f.sitrackReportMs != null && f.sitrackReportMs > 0
+      ? (nowMs - f.sitrackReportMs) / 1000
+      : Infinity;
+  const volvoFresco = volvoEdadSeg <= POLL_STALE_SEGUNDOS;
+  const sitFresco = sitEdadSeg <= POLL_STALE_SEGUNDOS;
+
+  if (volvoFresco) {
     const manejando =
-      fresco && f.sitrackIgnition && f.sitrackSpeed > UMBRAL_MOVIMIENTO_KMH;
+      f.volvoSpeedKmh != null && f.volvoSpeedKmh > UMBRAL_MOVIMIENTO_KMH;
     return {
       manejando,
-      lat: f.sitrackLat,
-      lng: f.sitrackLng,
+      lat: f.volvoLat ?? f.sitrackLat,
+      lng: f.volvoLng ?? f.sitrackLng,
+      fuente: "volvo",
+    };
+  }
+  if (sitFresco) {
+    const manejando =
+      f.sitrackIgnition && f.sitrackSpeed > UMBRAL_MOVIMIENTO_KMH;
+    return {
+      manejando,
+      lat: f.sitrackLat ?? f.volvoLat,
+      lng: f.sitrackLng ?? f.volvoLng,
       fuente: "sitrack",
     };
   }
+  // Ninguna fuente fresca → parado. Damos la posición MENOS vieja para que el
+  // tracking de descanso (8h misma posición) no se corte.
+  const usarVolvoPos = volvoEdadSeg <= sitEdadSeg;
   return {
     manejando: false,
-    lat: f.sitrackLat ?? f.volvoLat,
-    lng: f.sitrackLng ?? f.volvoLng,
+    lat: usarVolvoPos
+      ? f.volvoLat ?? f.sitrackLat
+      : f.sitrackLat ?? f.volvoLat,
+    lng: usarVolvoPos
+      ? f.volvoLng ?? f.sitrackLng
+      : f.sitrackLng ?? f.volvoLng,
     fuente: "ninguna",
   };
 }

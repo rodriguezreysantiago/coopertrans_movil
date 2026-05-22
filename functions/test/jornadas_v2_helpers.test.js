@@ -206,9 +206,9 @@ describe('decidirManejando — fuente híbrida Volvo/SITRACK (fix #36)', () => {
     assert.strictEqual(d.fuente, 'volvo');
   });
 
-  test('Volvo stale + speed>15 → NO manejando (backstop equipo mudo)', () => {
-    // Escenario Y: el último snapshot decía 60 km/h pero el equipo está
-    // mudo hace 15 min → no podemos afirmar que sigue manejando.
+  test('Volvo stale + SITRACK stale → NO manejando, fuente ninguna', () => {
+    // Escenario Y: Volvo decía 60 km/h pero está mudo hace 15 min Y SITRACK
+    // también viejo (40 min) → no podemos afirmar que sigue manejando.
     const d = decidirManejando({
       ...sitParado,
       volvoSpeedKmh: 60,
@@ -217,24 +217,62 @@ describe('decidirManejando — fuente híbrida Volvo/SITRACK (fix #36)', () => {
       volvoLng: -62.3,
     }, NOW);
     assert.strictEqual(d.manejando, false);
-    assert.strictEqual(d.fuente, 'volvo');
+    assert.strictEqual(d.fuente, 'ninguna');
   });
 
-  test('CASO AG218ZD: SITRACK stale dice 74 km/h, Volvo dice 0 → parado', () => {
-    // El bug exacto reportado: SITRACK report_date 31min (pero consultado_en
-    // fresco lo enmascaraba). Volvo: speed 0. Antes contaba manejando=true.
+  test('FIX bug latente: Volvo VIEJO pero SITRACK fresco moviéndose → manejando vía SITRACK', () => {
+    // El bug que encontró la auditoría: Volvo lageado (camión moviéndose, equipo
+    // mudo hace 15 min) no debe marcar "parado" si SITRACK reporta fresco que
+    // se mueve. Antes (Volvo a ciegas) daba parado; ahora gana SITRACK fresco.
+    const d = decidirManejando({
+      volvoSpeedKmh: 0, // último Volvo viejo decía parado
+      volvoPosicionTs: STALE, // 15 min → stale
+      volvoLat: -38.7,
+      volvoLng: -62.3,
+      sitrackSpeed: 70,
+      sitrackIgnition: true,
+      sitrackLat: -38.6,
+      sitrackLng: -62.4,
+      sitrackReportMs: NOW - 2 * 60000, // fresco
+    }, NOW);
+    assert.strictEqual(d.manejando, true);
+    assert.strictEqual(d.fuente, 'sitrack');
+    assert.strictEqual(d.lat, -38.6); // posición SITRACK (la fresca)
+  });
+
+  test('ambos frescos → gana Volvo (velocidad más precisa)', () => {
+    // SITRACK fresco diciendo 20 (jitter), Volvo fresco diciendo 78 → Volvo.
+    const d = decidirManejando({
+      volvoSpeedKmh: 78,
+      volvoPosicionTs: FRESCO,
+      volvoLat: -38.7,
+      volvoLng: -62.3,
+      sitrackSpeed: 20,
+      sitrackIgnition: true,
+      sitrackLat: -38.6,
+      sitrackLng: -62.4,
+      sitrackReportMs: NOW - 4 * 60000,
+    }, NOW);
+    assert.strictEqual(d.fuente, 'volvo');
+    assert.strictEqual(d.manejando, true);
+    assert.strictEqual(d.lat, -38.7);
+  });
+
+  test('CASO AG218ZD: Volvo fresco dice 0, SITRACK viejo decía 74 → parado', () => {
+    // El bug original: SITRACK report_date 31min (pero consultado_en fresco lo
+    // enmascaraba). Volvo fresco dice speed 0 → parado. Ya no infla la jornada.
     const d = decidirManejando({
       volvoSpeedKmh: 0,
-      volvoPosicionTs: isoHace(12),
+      volvoPosicionTs: isoHace(5), // Volvo fresco
       volvoLat: -38.71,
       volvoLng: -62.31,
       sitrackSpeed: 74,
       sitrackIgnition: true,
       sitrackLat: -38.71,
       sitrackLng: -62.31,
-      sitrackReportMs: NOW - 31 * 60000, // stale real
+      sitrackReportMs: NOW - 31 * 60000, // SITRACK stale real
     }, NOW);
-    assert.strictEqual(d.manejando, false); // FIX: ya no infla la jornada
+    assert.strictEqual(d.manejando, false);
     assert.strictEqual(d.fuente, 'volvo');
   });
 
@@ -255,7 +293,7 @@ describe('decidirManejando — fuente híbrida Volvo/SITRACK (fix #36)', () => {
     assert.strictEqual(d.lat, -38.5);
   });
 
-  test('sin Volvo → SITRACK report_date stale → NO manejando (el bug viejo)', () => {
+  test('sin Volvo → SITRACK report_date stale → NO manejando, ninguna', () => {
     // Con la lógica vieja (consultado_en) esto daba manejando=true.
     const d = decidirManejando({
       volvoSpeedKmh: null,
@@ -269,7 +307,7 @@ describe('decidirManejando — fuente híbrida Volvo/SITRACK (fix #36)', () => {
       sitrackReportMs: NOW - 25 * 60000, // 25min stale
     }, NOW);
     assert.strictEqual(d.manejando, false);
-    assert.strictEqual(d.fuente, 'sitrack');
+    assert.strictEqual(d.fuente, 'ninguna');
   });
 
   test('sin Volvo y sin report_date → fuente ninguna, parado (fail-safe)', () => {
