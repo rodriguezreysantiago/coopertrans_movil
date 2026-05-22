@@ -7,6 +7,33 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-05-22 PM — ICM OFICIAL de Sitrack ingerido + automatización dedicada
+
+Santiago: "esa página de Sitrack es de donde saca YPF el ICM, ¿no podemos
+replicar esa info?". **Sí, y resuelve de raíz el "framing" del ítem de abajo:**
+Sitrack (proveedor satelital) YA calcula el ICM con la cartografía de segmento
+vial que nosotros NO tenemos → ingerimos SU número en vez de estimar.
+
+### Hecho + validado
+- **`sitrack_sync/`** (Playwright): login portal site5 (usuario **SantiagoRRey**,
+  reCAPTCHA pasivo) → endpoint `get_ranking_data` (JSON por chofer, match por
+  **DNI**) → `ICM_OFICIAL/{YYYY-MM}`. Escala INVERTIDA (más bajo = mejor; flota
+  ~20, peor LESCANO 64.5). Parser puro + 6 tests. Regla read deployada.
+- **Automatización dedicada**: 2 Scheduled Tasks (Volvo taller 05:10, Sitrack
+  ICM 06:10) validadas end-to-end por la tarea (`LastTaskResult 0`), reinicio-OK.
+  Detalle + lecciones (prioridad 7→5, pipe→archivo, Volvo por **fetch directo**
+  porque la SPA no renderiza bajo la tarea) en `project_bot_pc_dedicada.md`.
+- **Bot**: `BOT_PC_ID` de la dedicada corregido a `dedicada` (era `oficina`);
+  log nombra admins/destinatarios de resúmenes (no solo choferes). Tests 129/129.
+
+### ⚠️ PENDIENTE
+- **Fase B — rework del módulo ICM de la app a la escala oficial de Sitrack**
+  (más-bajo-mejor + severidad NO/LOW/MEDIUM/HIGH + leer `ICM_OFICIAL`). Reemplaza
+  el CESVI propio (que queda como referencia interna). **Necesita release.**
+  Esto vuelve MOOT el ítem "framing" de abajo (ya mostramos el número oficial).
+
+---
+
 ## 📅 2026-05-22 — Rediseño del ICM (#49): "todo marca ~100"
 
 Santiago: "estamos haciendo mal los cálculos, los rankings no me parecen
