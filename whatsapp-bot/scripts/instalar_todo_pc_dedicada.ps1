@@ -75,7 +75,7 @@ function Test-Command {
 }
 
 # --- 1. Admin check -------------------------------------------------
-$totalSteps = 11
+$totalSteps = 12
 Write-Step 1 $totalSteps "Verificando privilegios de Administrador..."
 $isAdmin = ([Security.Principal.WindowsPrincipal] `
     [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
@@ -286,8 +286,25 @@ if (Test-Path $autoUpd) {
     Write-Warn "$autoUpd no existe. Skip (instalar a mano despues)."
 }
 
-# --- 11. Smoke test -------------------------------------------------
-Write-Step 11 $totalSteps "Smoke test: esperando que el bot heartbeatee..."
+# --- 11. Ventana de logs en vivo al inicio (Startup) ----------------
+# Crea el shortcut en Startup que abre monitor_logs.ps1 al login. El
+# shortcut apunta al script DEL REPO, asi cada reinicio/corte de luz abre
+# la ventana con el visor ACTUAL (UTF-8 + "auto-update" despues de la fecha).
+Write-Step 11 $totalSteps "Instalando la ventana de logs del bot en el inicio de Windows..."
+$instLogs = Join-Path $botDir 'scripts\instalar_monitor_logs.ps1'
+if (Test-Path $instLogs) {
+    try {
+        & $instLogs | Out-Null
+        Write-Ok "Ventana de logs del bot: se abre sola al login (UTF-8 + fecha primero)."
+    } catch {
+        Write-Warn "No pude instalar la ventana de logs del bot: $($_.Exception.Message)"
+    }
+} else {
+    Write-Warn "$instLogs no existe. Skip (instalar a mano con instalar_monitor_logs.ps1)."
+}
+
+# --- 12. Smoke test -------------------------------------------------
+Write-Step 12 $totalSteps "Smoke test: esperando que el bot heartbeatee..."
 Write-Host "  Esperando 60s para que el servicio termine de arrancar..." -ForegroundColor Cyan
 Start-Sleep -Seconds 60
 
