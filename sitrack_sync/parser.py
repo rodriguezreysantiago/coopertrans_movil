@@ -34,6 +34,37 @@ SEVERIDAD_ES = {
 _ORDEN_SEVERIDAD = {"HIGH": 0, "MEDIUM": 1, "LOW": 2, "NO": 3,
                     "UNAVAILABLE_NO_ACTIVITY": 9}
 
+# Entradas del ranking de Sitrack que NO son choferes y hay que ocultar:
+# contactos/sistema que no se pueden borrar del portal (vienen como "scope"
+# sin DNI). BUSCIO GUILLERMO es el contacto admin de Sitrack
+# (guillermo.buscio@sitrack.com, atado a reglas → no se puede deshabilitar).
+_NO_CHOFERES_NOMBRES = {
+    "BUSCIO GUILLERMO",
+    "TALLER TALLER",
+    "LAVADERO GOMERIA",
+}
+
+
+def _es_no_chofer(item: dict) -> bool:
+    """True si el item NO es un chofer real (contacto admin, taller, lavadero,
+    unidad-dispositivo de Sitrack). Se excluye del doc para que no ensucie el
+    ranking ni los conteos. Criterio:
+      - nombre en la lista negra explícita, o
+      - sin DNI + nombre de unidad-dispositivo ("Vecchi Ariel 012E..."), o
+      - sin DNI + sin actividad (entrada de sistema, no una persona).
+    Un chofer real SIN DNI cargado pero CON actividad NO se filtra (se ve
+    grisado para que se note y se le cargue el DNI en Sitrack)."""
+    nombre = (item.get("scope") or "").strip().upper()
+    dni = (item.get("document") or "").strip()
+    sev = (item.get("severity") or "").strip().upper()
+    if nombre in _NO_CHOFERES_NOMBRES:
+        return True
+    if not dni and nombre.startswith("VECCHI ARIEL "):
+        return True
+    if not dni and sev == "UNAVAILABLE_NO_ACTIVITY":
+        return True
+    return False
+
 
 def _num(v, default=0.0):
     """Coerce defensivo a float (los campos vienen como number, pero por las
@@ -139,7 +170,8 @@ def construir_doc_icm(raw_driver: dict, raw_holder: dict | None,
     endpoint por chofer (raw_driver, obligatorio) y por vehículo (raw_holder,
     opcional). `periodo` ej. '2026-05'. Devuelve dict listo para Firestore
     (sin serverTimestamp — eso lo agrega el caller)."""
-    items_d = list((raw_driver or {}).get("rankingItemsByScope", {}).values())
+    items_d = [i for i in (raw_driver or {}).get("rankingItemsByScope", {}).values()
+               if not _es_no_chofer(i)]
     choferes = _ordenar_peor_primero([parsear_chofer(i) for i in items_d])
 
     vehiculos = []

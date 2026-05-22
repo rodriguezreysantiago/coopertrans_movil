@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from parser import (  # noqa: E402
     parsear_chofer, parsear_vehiculo, construir_doc_icm,
-    _patente_de_scope, SEVERIDAD_ES, _tendencia_diaria,
+    _patente_de_scope, SEVERIDAD_ES, _tendencia_diaria, _es_no_chofer,
 )
 
 
@@ -150,6 +150,37 @@ def test_tendencia_diaria():
     # También sale dentro del doc completo.
     doc = construir_doc_icm(raw, None, "2026-05", "2026-05-01", "2026-05-22")
     assert len(doc["tendencia_diaria"]) == 2
+
+
+def test_filtra_no_choferes():
+    # Entradas de sistema/no-chofer afuera; chofer real adentro; chofer SIN
+    # DNI pero CON actividad se conserva (para que se note y se cargue el DNI).
+    items = [
+        _chofer_raw("100", "REAL CHOFER", 10.0, "LOW"),
+        {"scopeId": 1, "scope": "BUSCIO GUILLERMO", "document": "",
+         "severity": "UNAVAILABLE_NO_ACTIVITY", "score": 0, "distance": 0},
+        {"scopeId": 2, "scope": "TALLER TALLER", "document": "",
+         "severity": "UNAVAILABLE_NO_ACTIVITY", "score": 0, "distance": 0},
+        {"scopeId": 3, "scope": "Vecchi Ariel 012E823C", "document": "",
+         "severity": "UNAVAILABLE_NO_ACTIVITY", "score": 0, "distance": 0},
+        {"scopeId": 4, "scope": "SIN DNI PERO MANEJO", "document": "",
+         "severity": "HIGH", "score": 40.0, "distance": 500.0},
+    ]
+    doc = construir_doc_icm(_wrap(items), None, "2026-05", "2026-05-01",
+                            "2026-05-22")
+    nombres = [c["nombre"] for c in doc["choferes"]]
+    assert "BUSCIO GUILLERMO" not in nombres, nombres
+    assert "TALLER TALLER" not in nombres
+    assert "Vecchi Ariel 012E823C" not in nombres
+    assert "REAL CHOFER" in nombres
+    assert "SIN DNI PERO MANEJO" in nombres  # con actividad → se conserva
+    assert doc["choferes_total"] == 2  # solo los 2 reales
+    # helper directo
+    assert _es_no_chofer({"scope": "BUSCIO GUILLERMO", "document": "",
+                          "severity": "UNAVAILABLE_NO_ACTIVITY"})
+    assert not _es_no_chofer({"scope": "SIN DNI PERO MANEJO", "document": "",
+                              "severity": "HIGH"})
+    assert not _es_no_chofer({"scope": "X", "document": "123", "severity": "LOW"})
 
 
 def main():
