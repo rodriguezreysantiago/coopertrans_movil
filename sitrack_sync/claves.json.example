@@ -1,5 +1,5 @@
 {
-  "_comentario": "Copiá a claves.json (gitignoreado) y completá con las credenciales del PORTAL site5 de Sitrack. Santiago eligió usar las mismas que la API (ws41629VecchiSRL). NUNCA se commitea.",
-  "usuario": "ws41629VecchiSRL",
+  "_comentario": "Copiá a claves.json (gitignoreado) y completá con el USUARIO PERSONAL del portal site5 de Sitrack (NO el web-service ws41629 de la API). NUNCA se commitea.",
+  "usuario": "TU_USUARIO_DEL_PORTAL",
   "password": "TU_CONTRASEÑA_DEL_PORTAL"
 }
