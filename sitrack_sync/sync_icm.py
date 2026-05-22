@@ -129,6 +129,40 @@ def _fetch_ranking(page, client_id, scope, grant, desde, hasta):
         return {}
 
 
+def _rango_semana_actual(hoy_art):
+    """(desde, hasta, week_id) de la semana EN CURSO: lunes ART → hoy. El id
+    del doc es la fecha del lunes (YYYY-MM-DD) — simple, sin ambigüedad de
+    numeración ISO; la app calcula el mismo lunes para leerlo."""
+    lunes = hoy_art - dt.timedelta(days=hoy_art.weekday())  # weekday(): lun=0
+    return lunes.isoformat(), hoy_art.isoformat(), lunes.isoformat()
+
+
+def _persistir(raw_driver, raw_holder, periodo, desde, hasta, alcance,
+               coleccion, commit, db):
+    """Construye el doc ICM y (si commit) lo escribe en coleccion/periodo.
+    Devuelve True si había data de choferes."""
+    n = len((raw_driver or {}).get("rankingItemsByScope", {}))
+    if not n:
+        print(f"  [{coleccion}/{periodo}] driver vacío — salteado")
+        return False
+    doc = construir_doc_icm(raw_driver, raw_holder, periodo, desde, hasta,
+                            alcance)
+    print(f"  [{coleccion}/{periodo}] ICM flota {doc['icm_general']} | "
+          f"activos {doc['choferes_activos']}/{doc['choferes_total']} | "
+          f"veh {len(doc['vehiculos'])} | km {doc['distancia_total_km']:,.0f} | "
+          f"días {len(doc['tendencia_diaria'])}")
+    peor = doc["choferes"][0] if doc["choferes"] else None
+    if peor:
+        print(f"      peor: {peor['icm']:.2f} {peor['severidad_label']} "
+              f"{peor['nombre']}")
+    if commit:
+        db.collection(coleccion).document(periodo).set({
+            **doc, "sincronizado_en": firestore.SERVER_TIMESTAMP,
+        })
+        print(f"      COMMIT OK -> {coleccion}/{periodo}")
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--commit", action="store_true", help="escribe Firestore (sin esto = dry-run)")
@@ -138,7 +172,7 @@ def main():
     args = ap.parse_args()
 
     # Período por defecto: mes en curso, en hora Argentina (UTC-3).
-    hoy_art = (dt.datetime.utcnow() - dt.timedelta(hours=3)).date()
+    hoy_art = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=3)).date()
     desde = args.desde or hoy_art.replace(day=1).isoformat()
     hasta = args.hasta or hoy_art.isoformat()
     periodo = args.periodo or hoy_art.strftime("%Y-%m")
@@ -174,31 +208,33 @@ def main():
         client_id, grant = _extraer_client_grant(page)
         print(f"clientId={client_id} grant={grant[:40]}{'...' if len(grant) > 40 else ''}")
 
-        raw_driver = _fetch_ranking(page, client_id, "scopeDriver", grant, desde, hasta)
-        raw_holder = _fetch_ranking(page, client_id, "scopeHolder", grant, desde, hasta)
+        # Mensual (rango pedido / mes en curso).
+        raw_driver = _fetch_ranking(page, client_id, "scopeDriver", grant,
+                                    desde, hasta)
+        raw_holder = _fetch_ranking(page, client_id, "scopeHolder", grant,
+                                    desde, hasta)
+        # Semanal (lunes ART → hoy) — mismo request, otro rango. Para el
+        # ranking semanal de la app (premios por semana).
+        sem_desde, sem_hasta, sem_id = _rango_semana_actual(hoy_art)
+        raw_drv_sem = _fetch_ranking(page, client_id, "scopeDriver", grant,
+                                     sem_desde, sem_hasta)
+        raw_hold_sem = _fetch_ranking(page, client_id, "scopeHolder", grant,
+                                      sem_desde, sem_hasta)
         browser.close()
 
-    n_drv = len((raw_driver or {}).get("rankingItemsByScope", {}))
-    if not n_drv:
-        print("get_ranking_data por chofer vino vacío — abortando (revisar grant/sesión)")
+    db = _db() if args.commit else None
+
+    ok = _persistir(raw_driver, raw_holder, periodo, desde, hasta, "mensual",
+                    "ICM_OFICIAL", args.commit, db)
+    if not ok:
+        print("mensual vino vacío — abortando (revisar grant/sesión)")
         return 1
 
-    doc = construir_doc_icm(raw_driver, raw_holder, periodo, desde, hasta)
-    print(f"ICM general flota: {doc['icm_general']}  | choferes activos: "
-          f"{doc['choferes_activos']}/{doc['choferes_total']}  | "
-          f"vehículos: {len(doc['vehiculos'])}  | km: {doc['distancia_total_km']:,.0f}")
-    print("  peores 5 choferes:")
-    for c in doc["choferes"][:5]:
-        print(f"    {c['icm']:6.2f}  {c['severidad_label']:14s}  {c['nombre']}")
+    print(f"--- semanal {sem_id} ({sem_desde} → {sem_hasta}) ---")
+    _persistir(raw_drv_sem, raw_hold_sem, sem_id, sem_desde, sem_hasta,
+               "semanal", "ICM_OFICIAL_SEMANAL", args.commit, db)
 
-    if args.commit:
-        db = _db()
-        db.collection("ICM_OFICIAL").document(periodo).set({
-            **doc,
-            "sincronizado_en": firestore.SERVER_TIMESTAMP,
-        })
-        print(f"\n=== COMMIT OK → ICM_OFICIAL/{periodo} ===")
-    else:
+    if not args.commit:
         print("\n=== DRY-RUN (no escribió). Agregá --commit para guardar. ===")
     return 0
 

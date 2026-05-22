@@ -313,6 +313,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ICM_OFICIAL_SEMANAL — mismo ICM oficial de Sitrack pero por SEMANA
+    // (doc id = fecha del lunes YYYY-MM-DD). Lo escribe el mismo ingestor
+    // `sync_icm.py` (Admin SDK) en cada corrida. Para el ranking semanal de
+    // premios. Misma política de lectura que ICM_OFICIAL.
+    match /ICM_OFICIAL_SEMANAL/{semana} {
+      allow read: if isAdminOrSupervisor() || isSegHigiene();
+      allow write: if false;
+    }
+
     // ========================================================================
     // COUNTERS — correlativos atómicos para impresos
     // ========================================================================

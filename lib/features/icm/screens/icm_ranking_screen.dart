@@ -21,7 +21,7 @@ class IcmRankingScreen extends StatefulWidget {
   State<IcmRankingScreen> createState() => _IcmRankingScreenState();
 }
 
-enum _Periodo { mesActual, mesAnterior }
+enum _Periodo { semanaActual, mesActual, mesAnterior }
 
 class _IcmRankingScreenState extends State<IcmRankingScreen> {
   _Periodo _periodo = _Periodo.mesActual;
@@ -37,15 +37,41 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
     _future = _cargar(_periodo);
   }
 
-  String _periodoId(_Periodo p) =>
-      IcmOficialService.periodoId(offsetMeses: p == _Periodo.mesActual ? 0 : -1);
+  /// (id del doc, colección Firestore, label legible) según el período.
+  ({String id, String coleccion, String label}) _ref(_Periodo p) {
+    switch (p) {
+      case _Periodo.semanaActual:
+        final id = IcmOficialService.semanaId();
+        return (
+          id: id,
+          coleccion: IcmOficialService.coleccionSemanal,
+          label: IcmOficialService.labelSemana(id),
+        );
+      case _Periodo.mesActual:
+        final id = IcmOficialService.periodoId();
+        return (
+          id: id,
+          coleccion: IcmOficialService.coleccion,
+          label: IcmOficialService.labelPeriodo(id),
+        );
+      case _Periodo.mesAnterior:
+        final id = IcmOficialService.periodoId(offsetMeses: -1);
+        return (
+          id: id,
+          coleccion: IcmOficialService.coleccion,
+          label: IcmOficialService.labelPeriodo(id),
+        );
+    }
+  }
 
   Future<IcmOficialPeriodo?> _cargar(_Periodo p) async {
     final db = FirebaseFirestore.instance;
     final excluidos = await ExcluidosService.cargar(db: db);
+    final r = _ref(p);
     return IcmOficialService.cargarPeriodo(
       db,
-      _periodoId(p),
+      r.id,
+      coleccionFirestore: r.coleccion,
       // Sacamos tanqueros + testers del ranking visible (mismo criterio
       // que el resto de la app). Los totales de cabecera quedan tal cual
       // los reporta Sitrack porque ESE es el número auditado.
@@ -84,18 +110,22 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
                 if (periodo == null || periodo.vacio) {
                   return _MensajeCentro(
                     'Aún no hay datos del ICM oficial de '
-                    '${IcmOficialService.labelPeriodo(_periodoId(_periodo))}.\n\n'
+                    '${_ref(_periodo).label}.\n\n'
                     'Se sincroniza una vez al día desde el portal de Sitrack. '
-                    'Si recién arranca el mes, esperá a la próxima madrugada.',
+                    'Si recién arranca el período, esperá a la próxima '
+                    'madrugada.',
                     color: Colors.white54,
                   );
                 }
                 final filas = periodo.choferesParaRanking;
+                final label = _ref(_periodo).label;
                 return ListView.builder(
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
                   itemCount: filas.length + 1,
                   itemBuilder: (ctx, i) {
-                    if (i == 0) return _HeaderFlota(periodo: periodo);
+                    if (i == 0) {
+                      return _HeaderFlota(periodo: periodo, label: label);
+                    }
                     final c = filas[i - 1];
                     return _FilaChofer(posicion: i, chofer: c);
                   },
@@ -143,6 +173,11 @@ class _BarraFiltros extends StatelessWidget {
         spacing: 8,
         children: [
           ChoiceChip(
+            label: const Text('Semana actual'),
+            selected: periodoActual == _Periodo.semanaActual,
+            onSelected: (_) => onChanged(_Periodo.semanaActual),
+          ),
+          ChoiceChip(
             label: const Text('Mes actual'),
             selected: periodoActual == _Periodo.mesActual,
             onSelected: (_) => onChanged(_Periodo.mesActual),
@@ -161,7 +196,8 @@ class _BarraFiltros extends StatelessWidget {
 /// Cabecera con el ICM de la flota (oficial) + cómo leerlo + distribución.
 class _HeaderFlota extends StatelessWidget {
   final IcmOficialPeriodo periodo;
-  const _HeaderFlota({required this.periodo});
+  final String label;
+  const _HeaderFlota({required this.periodo, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -202,7 +238,10 @@ class _HeaderFlota extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        IcmOficialService.labelPeriodo(periodo.periodo),
+                        label,
+                        textAlign: TextAlign.end,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 14,

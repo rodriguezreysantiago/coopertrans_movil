@@ -252,5 +252,19 @@ void main() {
       expect(IcmOficialService.labelPeriodo('2026-05'), 'Mayo 2026');
       expect(IcmOficialService.labelPeriodo('2026-01'), 'Enero 2026');
     });
+
+    test('semanaId devuelve el lunes (YYYY-MM-DD) — coincide con el scraper',
+        () {
+      // 2026-05-22 es viernes → lunes de esa semana = 2026-05-18.
+      expect(IcmOficialService.semanaId(DateTime(2026, 5, 22)), '2026-05-18');
+      // Un lunes devuelve sí mismo.
+      expect(IcmOficialService.semanaId(DateTime(2026, 5, 18)), '2026-05-18');
+      // El domingo pertenece a la semana que arrancó el lunes previo.
+      expect(IcmOficialService.semanaId(DateTime(2026, 5, 24)), '2026-05-18');
+    });
+
+    test('labelSemana formatea "Semana del DD/MM"', () {
+      expect(IcmOficialService.labelSemana('2026-05-18'), 'Semana del 18/05');
+    });
   });
 }

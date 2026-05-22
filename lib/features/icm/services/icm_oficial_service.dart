@@ -323,10 +323,31 @@ class IcmOficialService {
   IcmOficialService._();
 
   static const String coleccion = 'ICM_OFICIAL';
+  static const String coleccionSemanal = 'ICM_OFICIAL_SEMANAL';
 
   /// Día calendario ART (UTC-3, sin DST) de ahora.
   static DateTime _hoyArt() =>
       DateTime.now().toUtc().subtract(const Duration(hours: 3));
+
+  /// Id del doc semanal = fecha del LUNES (ART) de la semana de [d], en
+  /// 'YYYY-MM-DD'. Coincide con `_rango_semana_actual` del scraper
+  /// (lunes = hoy − (weekday−1)). Default: semana en curso.
+  static String semanaId([DateTime? d]) {
+    final base = d ?? _hoyArt();
+    final lunes =
+        base.subtract(Duration(days: base.weekday - DateTime.monday));
+    final y = lunes.year.toString().padLeft(4, '0');
+    final m = lunes.month.toString().padLeft(2, '0');
+    final dd = lunes.day.toString().padLeft(2, '0');
+    return '$y-$m-$dd';
+  }
+
+  /// Label de una semana (id = lunes 'YYYY-MM-DD') → "Semana del 18/05".
+  static String labelSemana(String semanaId) {
+    final p = semanaId.split('-');
+    if (p.length != 3) return semanaId;
+    return 'Semana del ${p[2]}/${p[1]}';
+  }
 
   /// ID del período (mes) en formato 'YYYY-MM' ART. `offsetMeses` = 0 mes
   /// actual, -1 mes anterior, etc.
@@ -357,10 +378,11 @@ class IcmOficialService {
   static Future<IcmOficialPeriodo?> cargarPeriodo(
     FirebaseFirestore db,
     String periodo, {
+    String coleccionFirestore = coleccion,
     bool Function(String dni)? excluirDni,
     bool Function(String patente)? excluirPatente,
   }) async {
-    final snap = await db.collection(coleccion).doc(periodo).get();
+    final snap = await db.collection(coleccionFirestore).doc(periodo).get();
     if (!snap.exists) return null;
     final data = snap.data();
     if (data == null) return null;
