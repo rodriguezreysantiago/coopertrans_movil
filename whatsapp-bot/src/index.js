@@ -191,11 +191,16 @@ function matarProcesosChromiumZombi() {
 const colaProcesar = [];
 let procesando = false;
 
-// Para logs LEGIBLES: nombre del destinatario si esta en el cache de empleados,
-// sino el telefono. Nunca toca Firestore (usa el cache ya cargado del
-// message_handler) -> el log dice "a JUAN PEREZ" en vez de un id cryptic.
+// Para logs LEGIBLES: nombre del destinatario si esta en el roster de
+// empleados, sino el telefono. Nunca toca Firestore (usa el cache ya cargado
+// del message_handler) -> el log dice "a JUAN PEREZ" en vez del numero.
+// Usa el roster COMPLETO (cualquier rol) para nombrar tambien a los admin /
+// destinatarios de resumenes (Molina, Emmanuel, Giagante...), que no son
+// choferes y antes salian como numero crudo.
 function _quien(telefono) {
-  return messageHandler.nombrePorTelefono(telefono) || telefono || '?';
+  return messageHandler.nombrePorTelefonoTodos(telefono)
+    || messageHandler.nombrePorTelefono(telefono)
+    || telefono || '?';
 }
 
 function encolar(doc) {

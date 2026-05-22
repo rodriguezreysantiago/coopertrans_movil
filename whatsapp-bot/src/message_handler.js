@@ -50,6 +50,11 @@ const { normalizarTelefonoAWid } = require('./humano');
 const _CACHE_TTL_MS = parseInt(process.env.EMPLEADOS_CACHE_TTL_MS || '60000', 10);
 let _cacheEmpleados = null;
 let _cacheTimestamp = 0;
+// Roster COMPLETO (cualquier rol) — solo para logs legibles: nombrar a los
+// admin / destinatarios de resúmenes (Molina, Emmanuel, Giagante...) que NO
+// son choferes y por eso no entran en `_cacheEmpleados`. Se llena en el mismo
+// refresh (la query ya trae todos los empleados; solo guardamos su data).
+let _rosterTodos = null;
 
 /**
  * Fuerza el descarte del cache de empleados. La próxima llamada va a
@@ -76,6 +81,8 @@ async function _refrescarCacheEmpleados(db) {
       const rol = String(data.ROL || '').toUpperCase().trim();
       return rol === '' || rol === 'CHOFER' || rol === 'USUARIO';
     });
+  // Roster completo (todos los roles) para logs legibles.
+  _rosterTodos = snap.docs.map((doc) => doc.data());
   _cacheTimestamp = Date.now();
   log.info(`[empleados-cache] refresh: ${_cacheEmpleados.length} choferes (de ${todos} empleados, TTL ${_CACHE_TTL_MS}ms)`);
 }
@@ -491,13 +498,13 @@ function crearHandler(fs, wa) {
  * NO estan en este cache -- es solo de CHOFER). Misma normalizacion E.164 que
  * _resolverChofer.
  */
-function nombrePorTelefono(telefono) {
-  if (!_cacheEmpleados || !telefono) return null;
+function _buscarNombreEn(telefono, lista) {
+  if (!lista || !telefono) return null;
   const digits = String(telefono).replace(/\D+/g, '');
   if (!digits) return null;
   const wid = normalizarTelefonoAWid(telefono);
   const canonical = wid ? String(wid).replace(/@c\.us$/, '') : null;
-  for (const { data } of _cacheEmpleados) {
+  for (const data of lista) {
     const tel = String(data.TELEFONO || '').replace(/\D+/g, '');
     if (!tel) continue;
     if (digits === tel) return data.NOMBRE || null;
@@ -511,9 +518,25 @@ function nombrePorTelefono(telefono) {
   return null;
 }
 
+function nombrePorTelefono(telefono) {
+  // Solo choferes (cache filtrado) — para resolver mensajes ENTRANTES.
+  return _buscarNombreEn(
+    telefono, (_cacheEmpleados || []).map((e) => e.data));
+}
+
+/**
+ * Igual que nombrePorTelefono pero contra TODOS los empleados (cualquier rol).
+ * Para logs legibles: nombra a admins / destinatarios de resúmenes (Molina,
+ * Emmanuel, Giagante...) que no son choferes. Sincrónico, sin tocar Firestore.
+ */
+function nombrePorTelefonoTodos(telefono) {
+  return _buscarNombreEn(telefono, _rosterTodos);
+}
+
 module.exports = {
   crearHandler,
   nombrePorTelefono,
+  nombrePorTelefonoTodos,
   invalidarCacheEmpleados,
   // Exportados para tests:
   _resolverChofer,
