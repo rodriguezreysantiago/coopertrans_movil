@@ -40,6 +40,37 @@ class TestFranjaValida(unittest.TestCase):
             self.assertFalse(iturnos.franja_valida(f))
 
 
+class TestOrdenarSlotsPreferidos(unittest.TestCase):
+    def test_ultimo_de_la_franja_primero(self):
+        # Madrugada: 05:30 antes que 05:00 antes que 04:30 (último primero).
+        slots = [
+            {"hora": "04:30", "fecha": "2026-05-23", "iso": "2026-05-23T04:30"},
+            {"hora": "05:30", "fecha": "2026-05-23", "iso": "2026-05-23T05:30"},
+            {"hora": "05:00", "fecha": "2026-05-23", "iso": "2026-05-23T05:00"},
+        ]
+        ord_ = iturnos.ordenar_slots_preferidos(slots)
+        self.assertEqual([s["hora"] for s in ord_], ["05:30", "05:00", "04:30"])
+
+    def test_dia_mas_cercano_gana_sobre_hora_mas_tarde(self):
+        # El día más cercano va primero, aunque un día posterior tenga una hora
+        # más tarde. Dentro del día más cercano, la hora más tarde primero.
+        slots = [
+            {"hora": "05:30", "fecha": "2026-05-24", "iso": "2026-05-24T05:30"},
+            {"hora": "04:00", "fecha": "2026-05-23", "iso": "2026-05-23T04:00"},
+            {"hora": "05:00", "fecha": "2026-05-23", "iso": "2026-05-23T05:00"},
+        ]
+        ord_ = iturnos.ordenar_slots_preferidos(slots)
+        self.assertEqual((ord_[0]["fecha"], ord_[0]["hora"]), ("2026-05-23", "05:00"))
+        self.assertEqual(ord_[1]["hora"], "04:00")
+        self.assertEqual(ord_[2]["fecha"], "2026-05-24")
+
+    def test_defensivo_no_rompe(self):
+        # Campos faltantes / hora no parseable: no debe crashear ni perder slots.
+        slots = [{"hora": "05:00", "fecha": "2026-05-23"}, {}, {"hora": "xx", "fecha": "z"}]
+        ord_ = iturnos.ordenar_slots_preferidos(slots)
+        self.assertEqual(len(ord_), 3)
+
+
 class TestSlotEsFuturo(unittest.TestCase):
     AHORA = datetime(2026, 5, 20, 15, 0)
 

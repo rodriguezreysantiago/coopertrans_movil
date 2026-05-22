@@ -145,6 +145,25 @@ def slots_en_franja(slots: list, franja_key: str) -> list:
     return [s for s in slots if s.get("hora") and hora_en_franja(s["hora"], franja_key)]
 
 
+def ordenar_slots_preferidos(slots: list) -> list:
+    """Ordena los slots por PREFERENCIA de reserva: el DÍA más cercano primero
+    y, dentro del día, la hora MÁS TARDE de la franja primero.
+
+    Santiago (2026-05-22): 'tomá siempre el último turno de cada franja como
+    primera opción y andá bajando' — ej. madrugada (00:00-05:30): intenta 05:30,
+    después 05:00, 04:30... Como el bot reintenta cada ciclo, si el más tarde lo
+    toman, en el próximo barrido agarra el siguiente más tarde (baja solo).
+
+    Clave: (fecha ASC, hora DESC). Defensivo con campos faltantes/no parseables."""
+    def _clave(s):
+        try:
+            min_desc = -_hhmm_a_min(s.get("hora") or "")
+        except Exception:
+            min_desc = 0
+        return (s.get("fecha") or "", min_desc)
+    return sorted(slots, key=_clave)
+
+
 # Meses (es/en, por las primeras 3 letras) -> numero, para parsear el `cuando`
 # legible de iTurnos ("Viernes 22 May 2026 10:00 hs.") a fecha ISO.
 _MESES = {
@@ -413,9 +432,9 @@ class IturnosClient:
         if fecha:
             url += f"?d={fecha}"
         # El calendario trae la semana entera → filtrar por franja + fecha (si se
-        # pidió) + que sea a futuro, y elegir el MÁS TEMPRANO (fecha+hora). Sin el
-        # filtro de fecha el bot reagendaba al día equivocado (ver
-        # parsear_slots_reagendar).
+        # pidió) + que sea a futuro, y elegir el ÚLTIMO de la franja (día más
+        # cercano, hora más tarde — ver ordenar_slots_preferidos). Sin el filtro
+        # de fecha el bot reagendaba al día equivocado (ver parsear_slots_reagendar).
         ahora = datetime.now()
         slots = [s for s in parsear_slots_reagendar(self.s.get(url).text)
                  if hora_en_franja(s["hora"], franja)
@@ -426,7 +445,7 @@ class IturnosClient:
                           and franja_de_hora(s["hora"]) == franja_actual)]
         if not slots:
             return {"ok": False, "motivo": "sin_slot_en_franja"}
-        slots.sort(key=lambda s: s.get("iso") or s["hora"])
+        slots = ordenar_slots_preferidos(slots)
         slot = slots[0]
 
         # Abrir la página /editar del slot → trae el form de confirmación.

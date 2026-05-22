@@ -391,11 +391,14 @@ def _agresivo_async(t: Target, dry: bool):
         return
     fobj = resolver_fecha(t.fecha)
     ahora = datetime.now()
-    slots = sorted(
-        (s for s in iturnos.slots_en_franja(
+    # Preferencia: día más cercano + hora MÁS TARDE de la franja primero
+    # (último turno de la franja como primera opción; va bajando solo cada
+    # ciclo si lo toman). Ver iturnos.ordenar_slots_preferidos.
+    slots = iturnos.ordenar_slots_preferidos([
+        s for s in iturnos.slots_en_franja(
             iturnos.parsear_disponibilidad(html)["slots"], t.franja)
-         if iturnos.slot_es_futuro(s, ahora) and (fobj is None or s["fecha"] == fobj)),
-        key=lambda s: s["iso"])   # el más próximo primero
+        if iturnos.slot_es_futuro(s, ahora) and (fobj is None or s["fecha"] == fobj)
+    ])
     if not slots:
         return
     log("LOG", t.nombre, f"slot LIBRE {slots[0]['fecha']} {slots[0]['hora']} → reservando")
@@ -595,13 +598,14 @@ def ciclo_latente(targets: dict, dry: bool):
             if t.tiene_turno or not t.credenciales_ok or not t.patente:
                 continue
             fobj = resolver_fecha(t.fecha)
-            cand = sorted(
-                (s for s in libres
-                 if s["iso"] not in usados
-                 and (fobj is None or s["fecha"] == fobj)
-                 and iturnos.hora_en_franja(s["hora"], t.franja)
-                 and iturnos.slot_es_futuro(s, ahora)),
-                key=lambda s: s["iso"])   # el más próximo primero
+            # Último turno de la franja primero (ver ordenar_slots_preferidos).
+            cand = iturnos.ordenar_slots_preferidos([
+                s for s in libres
+                if s["iso"] not in usados
+                and (fobj is None or s["fecha"] == fobj)
+                and iturnos.hora_en_franja(s["hora"], t.franja)
+                and iturnos.slot_es_futuro(s, ahora)
+            ])
             if cand:
                 usados.add(cand[0]["iso"])
                 asignaciones.append((t, cand[0]))

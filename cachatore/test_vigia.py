@@ -10,6 +10,7 @@ Correr con el venv del cachatore (trae curl_cffi/bs4 que iturnos importa):
     cachatore\\venv\\Scripts\\python.exe -m unittest test_vigia
 """
 import unittest
+from datetime import datetime, timedelta
 from unittest import mock
 
 import vigia
@@ -75,11 +76,16 @@ class TestCicloLatenteReagendarSinLibres(unittest.TestCase):
         self.assertFalse(t.reagendar_hecho)
 
     def test_reserva_a_pendiente_cuando_el_scanner_ve_un_hueco(self):
-        # El scanner ve un hueco madrugada 22-05; VOGEL (madrugada) lo toma (dry).
+        # El scanner ve un hueco de madrugada A FUTURO; VOGEL (madrugada) lo
+        # toma (dry). Fecha RELATIVA (mañana 05:00) para que slot_es_futuro no
+        # lo descarte según la hora a la que corra el test — antes hardcodeaba
+        # 2026-05-22T02:00, un time-bomb que fallaba pasado ese instante.
+        manana = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+        iso = f"{manana}T05:00"
         self.cli.abrir_agenda.return_value = (
             '<a class="btn btn-outline-success" href="https://agendas.iturnos.com'
-            '/c/x/a/y/reservar/2026-05-22T02:00">02:00</a>')
-        t = _target_pendiente("999", "VOGEL", "2026-05-22", "madrugada")
+            f'/c/x/a/y/reservar/{iso}">05:00</a>')
+        t = _target_pendiente("999", "VOGEL", manana, "madrugada")
         with mock.patch.object(vigia, "asegurar_login", return_value=True):
             vigia.ciclo_latente({t.dni: t}, dry=True)
         # en dry, intentar_reservar marca tiene_turno=True (no postea de verdad).
