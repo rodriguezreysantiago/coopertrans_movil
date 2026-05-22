@@ -37,6 +37,30 @@ _CLAVES = os.path.join(_DIR, "claves.json")
 _STATE = os.path.join(_DIR, "storage_state.json")
 BASE = "https://volvoconnect.com"
 
+# Historial de taller: lo pedimos con fetch DIRECTO al graphql (no esperando
+# que la SPA de /workshop lo dispare). Bajo la Scheduled Task esa SPA no
+# renderiza y el graphql nunca sale -> timeout por unidad (confirmado
+# 2026-05-22). El fetch directo no depende del render — mismo enfoque que
+# sitrack_sync, que nunca falla. Endpoint + query capturados del request real.
+# Auth: reusamos el Bearer del request de /assets (multidomainservices), que SI
+# sale bajo la tarea.
+ECS_WORKSHOP_URL = "https://api.eu.vgcs.volvo.com/ecs-workshophistory/graphql"
+FETCH_PAST_SERVICES_QUERY = (
+    "query FetchPastServices($input: PastServicesInput!, $languageId: ID!, "
+    "$vehicleId: ID, $measurementSystem: MeasurementSystem) {\n"
+    "  pastServices(input: $input, languageId: $languageId, "
+    "vehicleId: $vehicleId, measurementSystem: $measurementSystem) {\n"
+    "    ...PastServiceFields\n  }\n}\n\n"
+    "fragment PastServiceFields on PastService {\n"
+    "  serviceId\n  orderNumber\n  visitDate\n  visitReason\n"
+    "  dealer { id name city countryCode }\n"
+    "  vehicle { chassisId mileage }\n"
+    "  credit\n  source\n  engineHours\n  description\n"
+    "  serviceDetails {\n    sortOrder\n    lineNumber\n    type\n"
+    "    operationCode\n    description\n    quantity\n    functionGroup\n"
+    "    paymentType\n    unit\n  }\n}"
+)
+
 
 def _db():
     if not firebase_admin._apps:
@@ -62,14 +86,15 @@ def _login(page, cfg):
 
 
 def _fetch_flota(page):
-    """Navega a /assets y devuelve la lista de vehículos
-    [{id, registrationNumber, vin}, ...] de multidomainservices.
+    """Navega a /assets y devuelve `(vehicles, auth)`:
+      - vehicles: [{id, registrationNumber, vin}, ...] de multidomainservices.
+      - auth: el header Authorization (Bearer) de ese request — lo REUSAMOS
+        para los fetch directos del taller (mismo token sirve para los dos
+        endpoints de api.eu.vgcs.volvo.com).
 
-    Robusto a PCs lentas (la dedicada vs la de oficina): en vez de un sleep
-    fijo de 9s, pollea hasta ~45s y corta apenas captura la respuesta con
-    `vehicles`. Y lee `r.text()` FUERA del handler de 'response' — llamarlo
-    dentro del handler sync de Playwright puede deadlockear (mismo problema
-    que tuvo el login)."""
+    Robusto a PCs lentas: pollea hasta ~45s y corta apenas captura `vehicles`.
+    Lee `r.text()` FUERA del handler de 'response' (llamarlo dentro del handler
+    sync de Playwright puede deadlockear)."""
     responses = []
 
     def on_resp(r):
@@ -79,6 +104,7 @@ def _fetch_flota(page):
     page.on("response", on_resp)
     page.goto(BASE + "/assets", wait_until="domcontentloaded", timeout=60000)
     vehicles = []
+    auth = ""
     seen = 0
     for _ in range(45):  # hasta ~45s; corta apenas encuentra vehicles
         if vehicles:
@@ -96,25 +122,59 @@ def _fetch_flota(page):
                     data = json.loads(body).get("data") or {}
                     if data.get("vehicles"):
                         vehicles = data["vehicles"]
+                        auth = r.request.headers.get("authorization", "")
                         break
                 except Exception:
                     pass
     page.remove_listener("response", on_resp)
-    return vehicles
+    return vehicles, auth
 
 
-def _fetch_taller(page, vehicle_id):
-    """Navega al historial de taller de una unidad y espera (expect_response) la
-    respuesta de ecs-workshophistory. Rango de fechas amplio para traer todo."""
-    url = (f"{BASE}/workshop/vehicle/{vehicle_id}"
-           "?sort=date-desc&dateRange=2018-01-01--2030-01-01")
+def _fetch_taller(page, vehicle_id, auth):
+    """Pide el historial de taller con fetch DIRECTO al graphql (no navegando a
+    la SPA de /workshop, que no renderiza bajo la tarea). Corre el fetch DENTRO
+    de la página (origin volvoconnect.com) para que CORS/referer sean los que el
+    server espera; reusa el Bearer capturado en _fetch_flota."""
+    if not auth:
+        return []
+    body = {
+        "query": FETCH_PAST_SERVICES_QUERY,
+        "variables": {
+            "input": {
+                "dateFrom": "1970-01-01",
+                "dateTo": "2086-04-20",
+                "vehicleId": vehicle_id,
+            },
+            "languageId": "es-ES",
+            "measurementSystem": "METRIC",
+        },
+    }
+    url = f"{ECS_WORKSHOP_URL}?platformidentifier={vehicle_id}"
     try:
-        with page.expect_response(
-            lambda r: "ecs-workshophistory/graphql" in r.url, timeout=35000
-        ) as info:
-            page.goto(url, wait_until="domcontentloaded", timeout=60000)
-        j = info.value.json()
-        return (j.get("data") or {}).get("pastServices") or []
+        result = page.evaluate(
+            """async ([u, b, auth]) => {
+                // SIN credentials:'include' — el API de Volvo autentica solo con
+                // el Bearer (token-only, cross-origin); mandar cookies rompe el
+                // preflight CORS ("Failed to fetch"). El browser agrega solo
+                // origin/referer/user-agent (lo que el server espera).
+                const r = await fetch(u, {
+                    method: 'POST',
+                    headers: {
+                        'authorization': auth,
+                        'content-type': 'application/json',
+                        'accept': 'application/json',
+                    },
+                    body: JSON.stringify(b),
+                });
+                if (!r.ok) return { __status: r.status };
+                return await r.json();
+            }""",
+            [url, body, auth],
+        )
+        if isinstance(result, dict) and result.get("__status"):
+            print(f"    (taller HTTP {result['__status']})")
+            return []
+        return ((result or {}).get("data") or {}).get("pastServices") or []
     except Exception as e:
         print(f"    (fetch taller err: {str(e)[:90]})")
         return []
@@ -144,11 +204,10 @@ def main():
     print(f"=== sync_taller [{modo}] ===")
 
     with sync_playwright() as p:
-        # Flags para que el chromium headless renderice bien bajo la Scheduled
-        # Task (sesion sin escritorio interactivo). Sin --disable-gpu el headless
-        # intenta usar GPU que no tiene en ese contexto y la SPA del taller no
-        # termina de renderizar -> el graphql nunca dispara -> timeout por unidad
-        # (confirmado 2026-05-22: a mano renderiza, por tarea no).
+        # Flags de estabilidad para chromium headless bajo la Scheduled Task
+        # (sesion sin escritorio interactivo). El fix del timeout del taller NO
+        # es esto sino el fetch directo de _fetch_taller; estos flags quedan por
+        # higiene (evitan que el headless intente GPU que no tiene).
         browser = p.chromium.launch(
             headless=True,
             args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
@@ -166,10 +225,14 @@ def main():
         ctx.storage_state(path=_STATE)
         print("login OK")
 
-        flota = _fetch_flota(page)
+        flota, auth = _fetch_flota(page)
         print(f"flota Volvo: {len(flota)} unidades")
         if not flota:
             print("no se pudo leer la flota — abortando")
+            browser.close()
+            return 1
+        if not auth:
+            print("no capturé el token de auth — abortando (taller necesita Bearer)")
             browser.close()
             return 1
 
@@ -190,7 +253,7 @@ def main():
         actualizados = sin_service = 0
         batch = db.batch()
         for doc_id, vid, etiqueta in objetivos:
-            past = _fetch_taller(page, vid)
+            past = _fetch_taller(page, vid, auth)
             srv = ultimo_service_programado(past)
             if not srv:
                 sin_service += 1
