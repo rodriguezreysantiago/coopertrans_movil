@@ -317,11 +317,14 @@ class _CardCron extends StatelessWidget {
 /// EMPLEADOS para mostrar "29.820.141 — Santiago Rodríguez" en vez del
 /// número crudo. Si el DNI no existe / no tiene registro, cae a "DNI: X".
 ///
-/// Edición: las reglas hoy son hardcoded en el bot (.env vars). Si
-/// Vecchi quiere cambiar el destinatario del resumen diario, hay que
-/// modificar `SERVICE_DESTINATARIO_DNI` o `ALERTAS_RESUMEN_DESTINATARIO_DNI`
-/// en el .env del bot y reiniciar. Una pantalla de edición desde la app
-/// requeriría refactor para que el cron lea de Firestore — postpuesto.
+/// Edición: las reglas hoy son hardcoded en el bot (.env vars). Si Vecchi
+/// quiere cambiar el destinatario del resumen diario de service, hay que
+/// modificar `SERVICE_DESTINATARIO_DNI` en el .env del bot y reiniciar. El
+/// "Parte de mantenimiento" diario a Emmanuel lo manda la Cloud Function
+/// `resumenMantenimientoVehiculosDiario` con destinatario hardcodeado en
+/// `functions/src/comun.ts` (`MANTENIMIENTO_VEHICULOS_DNI`) y por eso no
+/// aparece en esta card. Una pantalla de edición desde la app requeriría
+/// refactor para que el cron lea de Firestore — postpuesto.
 class _CardReglasNotificacion extends StatelessWidget {
   final Map reglas;
   const _CardReglasNotificacion({required this.reglas});
@@ -377,9 +380,9 @@ class _CardReglasNotificacion extends StatelessWidget {
           ...items,
           const SizedBox(height: 8),
           const Text(
-            'Para cambiar destinatarios: editar SERVICE_DESTINATARIO_DNI '
-            'y/o ALERTAS_RESUMEN_DESTINATARIO_DNI en el .env del bot y '
-            'reiniciar (npm restart). El próximo heartbeat refleja el cambio.',
+            'Para cambiar el destinatario del service diario: editar '
+            'SERVICE_DESTINATARIO_DNI en el .env del bot y reiniciar '
+            '(npm restart). El próximo heartbeat refleja el cambio.',
             style: TextStyle(color: Colors.white38, fontSize: 11),
           ),
         ],
@@ -391,8 +394,6 @@ class _CardReglasNotificacion extends StatelessWidget {
     switch (key) {
       case 'serviceDiario':
         return 'Resumen diario de service';
-      case 'alertasVolvoDiario':
-        return 'Resumen diario de alertas Volvo';
       case 'vencimientosChofer':
         return 'Vencimientos del chofer';
       case 'vencimientosVehiculo':

@@ -340,12 +340,12 @@ async function escribirHeartbeat() {
           process.env.SERVICE_DESTINATARIO_DNI || null,
         descripcion: 'Resumen diario de tractores con service próximo o vencido.',
       },
-      alertasVolvoDiario: {
-        destinatarioDni:
-          process.env.ALERTAS_RESUMEN_DESTINATARIO_DNI || null,
-        descripcion:
-          'Resumen diario de eventos HIGH del Vehicle Alerts API.',
-      },
+      // Nota (2026-05-22): la regla `alertasVolvoDiario` se removió. Leía
+      // `ALERTAS_RESUMEN_DESTINATARIO_DNI`, pero esa env var YA NO dispara
+      // ningún envío del bot — el "Parte de mantenimiento" lo manda la CF
+      // `resumenMantenimientoVehiculosDiario` (functions/src/volvo_mantenimiento.ts)
+      // con DNI hardcodeado `MANTENIMIENTO_VEHICULOS_DNI` en functions/src/comun.ts.
+      // Publicar acá esa regla confundía (cambiar la env var no reenrutaba nada).
       vencimientosChofer: {
         destinatarioDni: 'CHOFER_AFECTADO',
         descripcion:
