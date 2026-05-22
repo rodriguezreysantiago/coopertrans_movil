@@ -37,7 +37,10 @@ from firebase_admin import credentials, firestore
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from parser import construir_doc_icm  # noqa: E402
+from parser import (  # noqa: E402
+    construir_doc_icm, _rango_semana_actual, _rango_semana_anterior,
+    _rango_mes_anterior,
+)
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 _SAK = os.path.join(_DIR, "..", "serviceAccountKey.json")
@@ -129,14 +132,6 @@ def _fetch_ranking(page, client_id, scope, grant, desde, hasta):
         return {}
 
 
-def _rango_semana_actual(hoy_art):
-    """(desde, hasta, week_id) de la semana EN CURSO: lunes ART → hoy. El id
-    del doc es la fecha del lunes (YYYY-MM-DD) — simple, sin ambigüedad de
-    numeración ISO; la app calcula el mismo lunes para leerlo."""
-    lunes = hoy_art - dt.timedelta(days=hoy_art.weekday())  # weekday(): lun=0
-    return lunes.isoformat(), hoy_art.isoformat(), lunes.isoformat()
-
-
 def _persistir(raw_driver, raw_holder, periodo, desde, hasta, alcance,
                coleccion, commit, db):
     """Construye el doc ICM y (si commit) lo escribe en coleccion/periodo.
@@ -163,6 +158,52 @@ def _persistir(raw_driver, raw_holder, periodo, desde, hasta, alcance,
     return True
 
 
+def _cerrar_si_falta(page, client_id, grant, db, coleccion, periodo, desde,
+                     hasta, alcance, commit):
+    """Snapshot INMUTABLE de cierre: crea coleccion/periodo UNA sola vez (si no
+    existe) con la data del período ya cerrado. NUNCA sobreescribe → la
+    liquidación de premios se hace sobre un número que no cambia aunque Sitrack
+    reprocese. En dry-run solo reporta qué congelaría."""
+    if commit and db.collection(coleccion).document(periodo).get().exists:
+        return  # ya congelado — no tocar
+    drv = _fetch_ranking(page, client_id, "scopeDriver", grant, desde, hasta)
+    if not (drv or {}).get("rankingItemsByScope"):
+        print(f"  [cierre {coleccion}/{periodo}] sin data ({desde}→{hasta}) — salteado")
+        return
+    hold = _fetch_ranking(page, client_id, "scopeHolder", grant, desde, hasta)
+    doc = construir_doc_icm(drv, hold, periodo, desde, hasta, alcance)
+    print(f"  [cierre {coleccion}/{periodo}] {desde}→{hasta} ICM {doc['icm_general']} "
+          f"activos {doc['choferes_activos']}/{doc['choferes_total']}")
+    if commit:
+        db.collection(coleccion).document(periodo).set({
+            **doc,
+            "sincronizado_en": firestore.SERVER_TIMESTAMP,
+            "congelado": True,
+        })
+        print(f"      CIERRE CONGELADO -> {coleccion}/{periodo}")
+    else:
+        print("      (dry-run: no congela)")
+
+
+def _cerrar_mensual_si_corresponde(page, client_id, grant, db, hoy, commit):
+    """Congela el mes anterior a partir del día 4 (Sitrack ya lo cerró)."""
+    if hoy.day < 4:
+        return
+    desde, hasta, pid = _rango_mes_anterior(hoy)
+    _cerrar_si_falta(page, client_id, grant, db, "ICM_OFICIAL_CIERRE", pid,
+                     desde, hasta, "cierre_mensual", commit)
+
+
+def _cerrar_semanal_si_corresponde(page, client_id, grant, db, hoy, commit):
+    """Congela la semana anterior (lunes→domingo) a partir del MARTES, cuando
+    la data del domingo previo ya está completa. weekday(): lun=0 ... dom=6."""
+    if hoy.weekday() < 1:  # lunes → todavía no
+        return
+    desde, hasta, wid = _rango_semana_anterior(hoy)
+    _cerrar_si_falta(page, client_id, grant, db, "ICM_OFICIAL_CIERRE_SEMANAL",
+                     wid, desde, hasta, "cierre_semanal", commit)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--commit", action="store_true", help="escribe Firestore (sin esto = dry-run)")
@@ -184,6 +225,8 @@ def main():
 
     modo = "COMMIT" if args.commit else "DRY-RUN"
     print(f"=== sync_icm [{modo}] | período {periodo} ({desde} → {hasta}) ===")
+
+    db = _db() if args.commit else None
 
     with sync_playwright() as p:
         # Flags para chromium headless estable bajo la Scheduled Task (sesion
@@ -220,9 +263,14 @@ def main():
                                      sem_desde, sem_hasta)
         raw_hold_sem = _fetch_ranking(page, client_id, "scopeHolder", grant,
                                       sem_desde, sem_hasta)
-        browser.close()
 
-    db = _db() if args.commit else None
+        # Cierres INMUTABLES (mes anterior desde el día 4; semana anterior
+        # desde el martes). Crean el snapshot UNA vez para liquidar premios.
+        _cerrar_mensual_si_corresponde(page, client_id, grant, db, hoy_art,
+                                       args.commit)
+        _cerrar_semanal_si_corresponde(page, client_id, grant, db, hoy_art,
+                                       args.commit)
+        browser.close()
 
     ok = _persistir(raw_driver, raw_holder, periodo, desde, hasta, "mensual",
                     "ICM_OFICIAL", args.commit, db)

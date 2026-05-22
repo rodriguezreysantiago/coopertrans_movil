@@ -21,6 +21,8 @@ Top-level: overallScore (ICM flota), overallDistance (km),
   overallTime (HORAS), low/medium/highInfractionsCount.
 """
 
+import datetime as dt
+
 # Sitrack `severity` → etiqueta en español para la UI.
 SEVERIDAD_ES = {
     "NO": "Sin infracciones",
@@ -138,6 +140,34 @@ def _ordenar_peor_primero(filas: list, clave_sev="severidad", clave_icm="icm"):
         -_num(f.get(clave_icm)),
     ))
     return filas
+
+
+# ── Rangos de fecha (puros, testeables) ──────────────────────────────────
+# `hoy` es un date en hora Argentina (UTC-3). La semana es lunes→domingo.
+
+def _rango_semana_actual(hoy):
+    """(desde, hasta, id) de la semana EN CURSO: lunes → hoy. id = lunes."""
+    lunes = hoy - dt.timedelta(days=hoy.weekday())  # weekday(): lun=0
+    return lunes.isoformat(), hoy.isoformat(), lunes.isoformat()
+
+
+def _rango_semana_anterior(hoy):
+    """(desde, hasta, id) de la semana ANTERIOR COMPLETA (lunes → domingo).
+    id = lunes de esa semana. Se congela desde el martes, cuando Sitrack ya
+    cerró el domingo previo."""
+    lunes_actual = hoy - dt.timedelta(days=hoy.weekday())
+    lunes_prev = lunes_actual - dt.timedelta(days=7)
+    domingo_prev = lunes_actual - dt.timedelta(days=1)
+    return lunes_prev.isoformat(), domingo_prev.isoformat(), lunes_prev.isoformat()
+
+
+def _rango_mes_anterior(hoy):
+    """(desde, hasta, periodo) del mes ANTERIOR completo. periodo = YYYY-MM."""
+    primero_actual = hoy.replace(day=1)
+    ultimo_prev = primero_actual - dt.timedelta(days=1)
+    primero_prev = ultimo_prev.replace(day=1)
+    return (primero_prev.isoformat(), ultimo_prev.isoformat(),
+            primero_prev.strftime("%Y-%m"))
 
 
 def _tendencia_diaria(raw: dict | None) -> list:

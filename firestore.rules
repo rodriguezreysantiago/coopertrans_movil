@@ -322,6 +322,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ICM_OFICIAL_CIERRE / ICM_OFICIAL_CIERRE_SEMANAL — snapshots INMUTABLES
+    // de cierre (mes anterior congelado desde el día 4; semana anterior desde
+    // el martes). Los crea `sync_icm.py` UNA sola vez (create-once, nunca
+    // sobreescribe) para liquidar premios sobre un número que no cambie aunque
+    // Sitrack reprocese. Cliente solo lee; escritura solo Admin SDK.
+    match /ICM_OFICIAL_CIERRE/{periodo} {
+      allow read: if isAdminOrSupervisor() || isSegHigiene();
+      allow write: if false;
+    }
+    match /ICM_OFICIAL_CIERRE_SEMANAL/{semana} {
+      allow read: if isAdminOrSupervisor() || isSegHigiene();
+      allow write: if false;
+    }
+
     // ========================================================================
     // COUNTERS — correlativos atómicos para impresos
     // ========================================================================

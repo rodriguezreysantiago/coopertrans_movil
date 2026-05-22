@@ -7,9 +7,11 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import datetime as _dt  # noqa: E402
 from parser import (  # noqa: E402
     parsear_chofer, parsear_vehiculo, construir_doc_icm,
     _patente_de_scope, SEVERIDAD_ES, _tendencia_diaria, _es_no_chofer,
+    _rango_semana_actual, _rango_semana_anterior, _rango_mes_anterior,
 )
 
 
@@ -181,6 +183,26 @@ def test_filtra_no_choferes():
     assert not _es_no_chofer({"scope": "SIN DNI PERO MANEJO", "document": "",
                               "severity": "HIGH"})
     assert not _es_no_chofer({"scope": "X", "document": "123", "severity": "LOW"})
+
+
+def test_rangos_fecha():
+    v = _dt.date(2026, 5, 22)  # viernes
+    assert _rango_semana_actual(v) == ("2026-05-18", "2026-05-22", "2026-05-18")
+    # semana anterior COMPLETA: lunes 11 → domingo 17
+    assert _rango_semana_anterior(v) == ("2026-05-11", "2026-05-17", "2026-05-11")
+    # mes anterior: abril completo
+    assert _rango_mes_anterior(v) == ("2026-04-01", "2026-04-30", "2026-04")
+    # borde lunes: semana en curso arranca hoy
+    lun = _dt.date(2026, 5, 18)
+    assert _rango_semana_actual(lun) == ("2026-05-18", "2026-05-18", "2026-05-18")
+    assert _rango_semana_anterior(lun) == ("2026-05-11", "2026-05-17",
+                                           "2026-05-11")
+    # borde de año: enero → mes anterior = diciembre del año previo
+    ene = _dt.date(2026, 1, 5)
+    assert _rango_mes_anterior(ene) == ("2025-12-01", "2025-12-31", "2025-12")
+    # borde de año en semana: lunes 2026-01-05 → semana previa cruza el año
+    assert _rango_semana_anterior(_dt.date(2026, 1, 5)) == (
+        "2025-12-29", "2026-01-04", "2025-12-29")
 
 
 def main():
