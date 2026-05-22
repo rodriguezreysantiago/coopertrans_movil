@@ -54,15 +54,19 @@ CF afectadas **deployadas** (toman efecto ya); cambios de app van en el **releas
   web sigue con `PdfViewer.uri`; "Abrir en el navegador" queda solo de último recurso.
   **Validar en TestFlight** con VOGEL.
 
+### Bundle BAJO HECHO (commit `b747407`, mismo día PM)
+Cerrado el bundle de menores. CF `estadoVolvoPoller` deployada con lock-tick.
+- HECHO: estadoVolvoPoller lock; commands.js phone strict canónico; historico.js
+  -15 helpers obsoletos; checklist `_ItemPregunta` Stateful con controller; cuotas
+  docstring honesto; `icm_historico_service.dart` deprecado a stub.
+- SKIPPED con justificación (no son bugs reales): SITRACK_EVENTOS limit (ya tiene
+  warn + volumen << cap); Python TZ -3 (AR no DST); dedup del bot por texto
+  (defensa secundaria, cambiar = behavior change con riesgo).
+
 ### ⚠️ Queda pendiente (NO bloquea el release)
-1. **Bundle BAJO de la auditoría** (no se hizo, por decisión de scope): ICM tendencia con
-   fórmula vieja vs ranking CESVI; cuotas de adelanto no-múltiplo-de-5 con decimales;
-   match de teléfono por sufijo en `commands.js`; `limit()` sobre SITRACK_EVENTOS crudo;
-   `estadoVolvoPoller` sin lock-tick; TZ hardcodeada -3 en Python; TextField uncontrolled
-   del checklist; dedup del bot por texto individual; helpers obsoletos del bot.
-2. **Limpiar `alertasVolvoDiario`** de `health.js` + ayuda en `admin_estado_bot_widgets.dart`
+1. **Limpiar `alertasVolvoDiario`** de `health.js` + ayuda en `admin_estado_bot_widgets.dart`
    (footgun: `ALERTAS_RESUMEN_DESTINATARIO_DNI` ya no reenruta nada).
-3. **(opcional)** Si re-suben el F.931 como PDF más liviano, abre al instante en la app.
+2. **(opcional)** Si re-suben el F.931 como PDF más liviano, abre al instante en la app.
 
 ---
 
