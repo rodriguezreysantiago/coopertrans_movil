@@ -74,6 +74,13 @@ LATIDO_LOG_SEG = 60         # cada cuánto LOGUEAR un latido VISIBLE en la venta
                             # vivo y laburando" sin abrir la app. En latente el
                             # loop barre cada ~5 s pero solo logueaba al CAMBIAR
                             # de modo -> podia quedar mudo horas y daba dudas.
+BUSQUEDA_LOG_SEG = 30       # cada cuánto LOGUEAR la búsqueda latente (reserva):
+                            # cuando hay choferes SIN turno, mostrar que el bot
+                            # está buscando huecos y QUÉ ve (agenda vacía / huecos
+                            # fuera de franja). Más seguido que el latido (60 s)
+                            # porque con el latido solo, entre barridos de ~5 s
+                            # "parecía colgado" (Santiago 2026-05-22). Misma idea
+                            # que el log de reagendar, pero a nivel ciclo.
 BACKOFF_MAX_SEG = 120       # tope del backoff cuando el scanner no puede loguear
 MAX_REFRESH_POR_CICLO = 2    # cuántos mis_turnos refrescar por ciclo (no bloquear)
 HORA_RESUMEN = 8             # hora ART del resumen diario de turnos al encargado
@@ -81,6 +88,7 @@ ESPERA_SIN_CONFIG_SEG = 30   # si falta config / no hay choferes / pausado
 
 _log_lock = threading.Lock()
 _scanner = {"cli": None, "logueado": False, "dni": None}  # escaneo: un chofer SIN turno
+_ultimo_log_busqueda = 0.0   # throttle del log "buscando turno" (reserva latente)
 
 # Seteados en main() según los flags.
 _USAR_NUBE = True            # leer config de Firestore (False = drop.json)
@@ -103,6 +111,26 @@ def _log_reagendar_motivo(t, msg: str):
         return
     t.reagendar_ultimo_log = time.time()
     log("LOG", t.nombre, f"reagendar: {msg}")
+
+
+def _etiqueta_pendientes(pendientes) -> str:
+    """Texto corto de a quién le buscamos turno (para el log de búsqueda)."""
+    if len(pendientes) == 1:
+        t = pendientes[0]
+        return f"{t.nombre} (franja '{t.franja}', {t.fecha or 'cualquier fecha'})"
+    return f"{len(pendientes)} chofer(es) sin turno"
+
+
+def _log_busqueda(msg: str):
+    """Loguea la búsqueda latente (reserva) throttled ~cada BUSQUEDA_LOG_SEG.
+    Muestra que el bot sigue buscando huecos y qué encuentra, para que entre
+    latidos NO parezca colgado. Mismo espíritu que _log_reagendar_motivo, pero
+    a nivel ciclo (no por chofer)."""
+    global _ultimo_log_busqueda
+    if time.time() - _ultimo_log_busqueda < BUSQUEDA_LOG_SEG:
+        return
+    _ultimo_log_busqueda = time.time()
+    log("LOG", "sistema", msg)
 
 
 def resolver_fecha(valor):
@@ -543,6 +571,7 @@ def ciclo_latente(targets: dict, dry: bool):
     # NO cortamos acá: el bloque de reagendar de abajo corre igual (usa OTRA
     # página propia de cada chofer y el auto-cancel es un chequeo en memoria).
     libres = []
+    scanner_ok = False
     cli = ensure_scanner(targets)
     if cli is not None:
         try:
@@ -556,15 +585,19 @@ def ciclo_latente(targets: dict, dry: bool):
             html = None
         if html is not None:
             libres = iturnos.parsear_disponibilidad(html)["slots"]
+            scanner_ok = True
+
+    # choferes que TODAVÍA necesitan turno (a quién/qué le estamos buscando).
+    pendientes = [t for t in targets.values()
+                  if not t.tiene_turno and t.credenciales_ok and t.patente]
 
     # asignar slots LIBRES a los choferes que necesitan turno (uno por slot),
     # respetando la FECHA y la FRANJA de cada chofer.
-    if libres:
+    asignaciones = []
+    if libres and pendientes:
         ahora = datetime.now()
-        usados, asignaciones = set(), []
-        for t in targets.values():
-            if t.tiene_turno or not t.credenciales_ok or not t.patente:
-                continue
+        usados = set()
+        for t in pendientes:
             fobj = resolver_fecha(t.fecha)
             # Último turno de la franja primero (ver ordenar_slots_preferidos).
             cand = iturnos.ordenar_slots_preferidos([
@@ -582,6 +615,22 @@ def ciclo_latente(targets: dict, dry: bool):
                 f"latente: {len(asignaciones)} slot(s) libre(s) en franja → reservando")
             _en_paralelo(asignaciones, lambda a: _reservar_async(a[0], a[1], dry),
                          max_hilos=len(asignaciones), timeout=25)
+
+    # Mostrar la BÚSQUEDA cuando hay alguien esperando turno pero no reservamos
+    # nada: agenda vacía o huecos fuera de su franja/fecha. Throttled (sino el
+    # barrido de ~5 s inundaría). Sin esto, entre latidos parecía colgado.
+    if pendientes and not asignaciones:
+        etiqueta = _etiqueta_pendientes(pendientes)
+        if not scanner_ok:
+            pass  # no logueó la agenda: el "sin login (¿Cloudflare?)" + backoff
+                  # del loop principal ya cubre ese caso (no duplicar acá).
+        elif libres:
+            _log_busqueda(f"buscando turno para {etiqueta}: la agenda tiene "
+                          f"{len(libres)} hueco(s) libre(s), pero ninguno en su "
+                          f"franja/fecha todavía")
+        else:
+            _log_busqueda(f"buscando turno para {etiqueta}: la agenda no tiene "
+                          f"huecos libres ahora (sigo barriendo cada ~5s)")
 
     # reagendar: mover el turno de quien lo pidió a su nueva fecha+franja. La
     # disponibilidad de reagendar está en OTRA página (calendario propio), así

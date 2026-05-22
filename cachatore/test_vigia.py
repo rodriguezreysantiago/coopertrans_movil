@@ -132,5 +132,43 @@ class TestEnsureScannerEligePendiente(unittest.TestCase):
         self.assertEqual(vigia._scanner["dni"], "333")
 
 
+class TestCicloLatenteBusquedaVisible(unittest.TestCase):
+    """Con un chofer SIN turno y la agenda sin huecos, el ciclo tiene que
+    LOGUEAR que sigue buscando — sino entre latidos (60 s) el barrido de ~5 s
+    quedaba mudo y 'parecía colgado'. Lockea el fix 2026-05-22."""
+
+    def setUp(self):
+        self.cli = mock.MagicMock()
+        self.cli.abrir_agenda.return_value = _AGENDA_VACIA
+        self.m_log = mock.patch.object(vigia, "log").start()
+        mock.patch.object(vigia, "ensure_scanner", return_value=self.cli).start()
+        self.addCleanup(mock.patch.stopall)
+        vigia._ultimo_log_busqueda = 0.0  # arrancar sin throttle en cada test
+        self.addCleanup(setattr, vigia, "_ultimo_log_busqueda", 0.0)
+
+    def test_loguea_busqueda_cuando_agenda_vacia(self):
+        t = _target_pendiente("999", "VOGEL", None, "cualquiera")
+        vigia.ciclo_latente({t.dni: t}, dry=True)
+        logs = str(self.m_log.call_args_list)
+        self.assertIn("buscando turno", logs)
+        self.assertIn("VOGEL", logs)
+
+    def test_no_loguea_busqueda_si_todos_tienen_turno(self):
+        # Nadie sin turno -> no hay a quién buscarle -> nada de "buscando".
+        t = _target_pendiente("111", "CON", None, "cualquiera", tiene_turno=True)
+        vigia.ciclo_latente({t.dni: t}, dry=True)
+        self.assertNotIn("buscando turno", str(self.m_log.call_args_list))
+
+    def test_throttle_no_inunda(self):
+        # Dos ciclos seguidos: el throttle deja pasar el primero y corta el 2do.
+        t = _target_pendiente("999", "VOGEL", None, "cualquiera")
+        vigia.ciclo_latente({t.dni: t}, dry=True)
+        n1 = sum("buscando turno" in str(c) for c in self.m_log.call_args_list)
+        vigia.ciclo_latente({t.dni: t}, dry=True)
+        n2 = sum("buscando turno" in str(c) for c in self.m_log.call_args_list)
+        self.assertEqual(n1, 1)
+        self.assertEqual(n2, 1)  # el 2do ciclo NO agregó otra línea (throttled)
+
+
 if __name__ == "__main__":
     unittest.main()
