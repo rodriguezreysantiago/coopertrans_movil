@@ -754,8 +754,10 @@ def main():
             cambio_modo = modo != modo_anterior
             if cambio_modo:
                 pend = sum(1 for t in targets.values() if not t.tiene_turno)
+                rea = sum(1 for t in targets.values()
+                          if t.reagendar and t.tiene_turno and not t.reagendar_hecho)
                 log("LOG", "sistema", f"modo {modo.upper()} — {len(targets)} chofer(es), "
-                    f"{pend} sin turno (fecha/franja por chofer)")
+                    f"{pend} sin turno, {rea} para reagendar (fecha/franja por chofer)")
                 modo_anterior = modo
 
             # 4) actuar según modo
@@ -798,10 +800,12 @@ def main():
             #     loguea su propia línea, así que acá solo throttleamos por tiempo.
             if time.time() - ultimo_latido_log >= LATIDO_LOG_SEG:
                 pend = sum(1 for t in targets.values() if not t.tiene_turno)
+                rea = sum(1 for t in targets.values()
+                          if t.reagendar and t.tiene_turno and not t.reagendar_hecho)
                 con_turno = len(targets) - pend
                 log("LOG", "sistema",
                     f"latido — {modo.upper()} · {len(targets)} chofer(es) "
-                    f"({con_turno} con turno / {pend} sin) · "
+                    f"({con_turno} con turno / {pend} sin / {rea} a reagendar) · "
                     f"barriendo cada ~{int(espera)}s")
                 ultimo_latido_log = time.time()
 
