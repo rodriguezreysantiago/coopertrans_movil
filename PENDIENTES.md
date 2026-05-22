@@ -29,20 +29,24 @@ Sitrack y Volvo (sesiones logueadas).
   Semana/Mes/Mes anterior. Regla deployada. Data real ya en prod (semana
   2026-05-18: ICM 16.66, peor HIDALGO 95.5 ≠ peor mensual LESCANO 61).
 
-### ⚠️ PENDIENTE — fundación para premios
-1. **Snapshot inmutable de cierre** (Santiago dijo SÍ): doc `ICM_OFICIAL_CIERRE/
-   {periodo}` create-once, congelado tras cerrar el período, para liquidar sobre
-   un número que no cambie. **Confirmar cadencia** (mensual día ~4; ¿también
-   cierre semanal para premios semanales?) — se construye junto con el flujo de
-   liquidación (que es "despues decidimos cómo avisar").
-2. **Cargar DNIs faltantes en Sitrack** (acción de Santiago): BUSCIO GUILLERMO y
-   BASTIAS HORACIO son choferes reales SIN DNI cargado → invisibles al match por
-   DNI. (Las otras 5 filas sin DNI son no-choferes: TALLER, LAVADERO, 3 unidades.)
-3. **Mapa de calor** (hoy placeholder): Sitrack tiene Control Conducción /
+### Hecho — snapshot inmutable de cierre (commit `e4f538c`)
+- `ICM_OFICIAL_CIERRE/{YYYY-MM}` (mes anterior, congela día ≥4) +
+  `ICM_OFICIAL_CIERRE_SEMANAL/{lunes}` (semana lun→dom anterior, congela desde el
+  martes). create-once (`congelado:true`, nunca sobreescribe) → la liquidación se
+  hará sobre un número que no cambia. Validado: congeló abril (15.67) + semana
+  2026-05-11 (20.23); 2da corrida confirmó inmutabilidad. Reglas read deployadas.
+- **BUSCIO/no-choferes filtrados** del ranking (commit `b393951`); BASTIAS ya con
+  DNI cargado (Santiago). Docs limpios: 0 sin-DNI, 0 no-choferes.
+
+### ⚠️ PENDIENTE
+1. **Flujo de premios/castigos** (cuando Santiago lo defina): leer los CIERRE,
+   calcular premio/castigo (top 5 mejores/peores semanal+mensual ya disponibles),
+   y decidir "cómo avisar". El respaldo de datos ya está listo.
+2. **Mapa de calor** (hoy placeholder): Sitrack tiene Control Conducción /
    H. Posición / Monitor Eventos con eventos geolocalizados → construible.
-4. **Enriquecer más** (opcional, gratis en la misma respuesta): distancia+tiempo
+3. **Enriquecer más** (opcional, gratis en la misma respuesta): distancia+tiempo
    urbano vs ruta por chofer, excesos/agresiva por vehículo.
-5. **Volvo "Informe de seguridad"**: score de conducta propio de Volvo, candidato
+4. **Volvo "Informe de seguridad"**: score de conducta propio de Volvo, candidato
    a métrica SECUNDARIA interna para premios. Extracción aparte (no es el oficial).
 
 ---
