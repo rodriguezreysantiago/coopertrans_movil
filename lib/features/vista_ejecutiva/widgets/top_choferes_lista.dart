@@ -71,6 +71,8 @@ class TopChoferesLista extends StatelessWidget {
                 puesto: i + 1,
                 chofer: c,
                 onTap: () {
+                  // Defensa: sin DNI no hay detalle al que ir.
+                  if (c.dni.isEmpty) return;
                   Navigator.pushNamed(
                     context,
                     AppRoutes.adminIcmDetalleChofer,

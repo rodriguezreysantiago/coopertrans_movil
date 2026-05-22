@@ -273,17 +273,24 @@ class IcmOficialPeriodo {
     );
   }
 
-  /// Choferes con actividad en el período (excluye "sin actividad").
+  /// Choferes RANKEABLES / premiables: con actividad **y** DNI real. Un
+  /// item sin DNI (unidad sin chofer identificado, o un chofer real cuyo
+  /// DNI no está cargado en Sitrack — confirmado en vivo: BUSCIO, BASTIAS)
+  /// NO puede competir por un premio ni atribuírsele un castigo, así que
+  /// queda fuera del universo de ranking, top5 y conteos. Esto cierra de
+  /// una sola vez el agujero del "fantasma sin chofer" en todos los
+  /// consumidores (ranking, reporte, Excel, tablero ejecutivo).
   List<IcmOficialChofer> get choferesConActividad =>
-      choferes.where((c) => !c.sinActividad).toList();
+      choferes.where((c) => !c.sinActividad && c.tieneDni).toList();
 
-  /// Ranking para mostrar: PEOR primero (ICM más alto), luego los "sin
-  /// actividad" al final (greyed, no rankeables).
+  /// Ranking para mostrar: PEOR primero (ICM más alto), luego el resto
+  /// (sin actividad o sin DNI) al final, greyed y no navegable.
   List<IcmOficialChofer> get choferesParaRanking {
-    final activos = choferesConActividad
+    final rankeables = [...choferesConActividad]
       ..sort((a, b) => b.icm.compareTo(a.icm)); // desc: peor arriba
-    final sinAct = choferes.where((c) => c.sinActividad).toList();
-    return [...activos, ...sinAct];
+    final resto =
+        choferes.where((c) => c.sinActividad || !c.tieneDni).toList();
+    return [...rankeables, ...resto];
   }
 
   /// Los N mejores (ICM más bajo) entre los choferes con actividad.

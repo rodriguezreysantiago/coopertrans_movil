@@ -120,13 +120,17 @@ class ReportIcmService {
       final excluidos = await ExcluidosService.cargar(db: db);
       excluir(String dni) =>
           ExcluidosService.esExcluido(excluidos, dni: dni);
+      excluirPat(String pat) =>
+          ExcluidosService.esExcluido(excluidos, patente: pat);
 
       final idSel = IcmOficialService.periodoId(offsetMeses: offsetMeses);
       final idPrev =
           IcmOficialService.periodoId(offsetMeses: offsetMeses - 1);
       final cargados = await Future.wait([
-        IcmOficialService.cargarPeriodo(db, idSel, excluirDni: excluir),
-        IcmOficialService.cargarPeriodo(db, idPrev, excluirDni: excluir),
+        IcmOficialService.cargarPeriodo(db, idSel,
+            excluirDni: excluir, excluirPatente: excluirPat),
+        IcmOficialService.cargarPeriodo(db, idPrev,
+            excluirDni: excluir, excluirPatente: excluirPat),
       ]);
       final periodo = cargados[0];
       final prev = cargados[1];

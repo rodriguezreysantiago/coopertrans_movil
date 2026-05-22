@@ -189,14 +189,14 @@ class _HeaderFlota extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tieneePrev = prev != null && !prev!.vacio;
-    final delta = tieneePrev ? periodo.icmGeneral - prev!.icmGeneral : 0.0;
+    final tienePrev = prev != null && !prev!.vacio;
+    final delta = tienePrev ? periodo.icmGeneral - prev!.icmGeneral : 0.0;
     final igual = delta.abs() < 0.05;
     final mejoro = delta < 0; // más bajo = mejor
-    final deltaColor = !tieneePrev || igual
+    final deltaColor = !tienePrev || igual
         ? Colors.white54
         : (mejoro ? Colors.greenAccent : Colors.redAccent);
-    final deltaTxt = !tieneePrev
+    final deltaTxt = !tienePrev
         ? 'Sin mes anterior para comparar'
         : igual
             ? 'Sin cambios vs $labelPrev'
@@ -239,6 +239,8 @@ class _HeaderFlota extends StatelessWidget {
                   Text(
                     deltaTxt,
                     textAlign: TextAlign.end,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                         color: deltaColor,
                         fontSize: 12,
@@ -269,8 +271,8 @@ class _KpisRow extends StatelessWidget {
     return Row(
       children: [
         _Kpi(
-          label: 'Choferes activos',
-          valor: '${periodo.choferesActivos}',
+          label: 'Choferes rankeables',
+          valor: '${periodo.choferesConActividad.length}',
         ),
         const SizedBox(width: 8),
         _Kpi(
@@ -332,11 +334,17 @@ class _InfraccionesFlota extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _Kpi(label: 'Altas', valor: '${periodo.infraccionesAltas}'),
+        _Kpi(
+            label: 'Altas',
+            valor: AppFormatters.formatearMiles(periodo.infraccionesAltas)),
         const SizedBox(width: 8),
-        _Kpi(label: 'Medias', valor: '${periodo.infraccionesMedias}'),
+        _Kpi(
+            label: 'Medias',
+            valor: AppFormatters.formatearMiles(periodo.infraccionesMedias)),
         const SizedBox(width: 8),
-        _Kpi(label: 'Leves', valor: '${periodo.infraccionesLeves}'),
+        _Kpi(
+            label: 'Leves',
+            valor: AppFormatters.formatearMiles(periodo.infraccionesLeves)),
       ],
     );
   }

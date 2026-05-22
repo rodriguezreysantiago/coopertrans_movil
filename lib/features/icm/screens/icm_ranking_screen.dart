@@ -211,9 +211,12 @@ class _HeaderFlota extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${periodo.choferesActivos} choferes con actividad · '
+                        '${periodo.choferesConActividad.length} choferes '
+                        'rankeables · '
                         '${AppFormatters.formatearMiles(periodo.distanciaTotalKm)} km',
                         textAlign: TextAlign.end,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
                             color: Colors.white54, fontSize: 11),
                       ),
@@ -223,17 +226,17 @@ class _HeaderFlota extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 8),
-            Row(
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 _ChipSeveridad(
                     label: 'Alto', n: altos, color: Colors.red.shade600),
-                const SizedBox(width: 6),
                 _ChipSeveridad(
                     label: 'Medio', n: medios, color: Colors.amber.shade700),
-                const SizedBox(width: 6),
                 _ChipSeveridad(
                     label: 'Bajo/Sin', n: bajos, color: Colors.green.shade600),
-                const Spacer(),
                 const Text(
                   'más bajo = mejor',
                   style: TextStyle(

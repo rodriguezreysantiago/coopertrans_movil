@@ -108,7 +108,7 @@ class KpiGrandeCard extends StatelessWidget {
       color: AppColors.accentBlue,
       sublabel: sublabel ??
           (kpi.choferesEnPromedio > 0
-              ? '${kpi.choferesEnPromedio} choferes · ICM oficial del mes'
+              ? '${kpi.choferesEnPromedio} choferes · más bajo = mejor'
               : 'sin datos del mes (se sincroniza a diario)'),
       variacion: v,
       variacionTexto: vTexto,

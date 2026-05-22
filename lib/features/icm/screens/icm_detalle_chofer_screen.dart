@@ -59,7 +59,7 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
   }
 
   IcmOficialChofer? _buscar(IcmOficialPeriodo? p, String dni) {
-    if (p == null) return null;
+    if (p == null || dni.isEmpty) return null;
     for (final c in p.choferes) {
       if (c.dni == dni) return c;
     }
@@ -328,6 +328,31 @@ class _ComparativaMeses extends StatelessWidget {
   Widget build(BuildContext context) {
     if (actual == null || anterior == null) {
       return const SizedBox.shrink();
+    }
+    // ⚠ En el ICM oficial, 0 = "sin infracciones" y 0 = "sin actividad" son
+    // indistinguibles numéricamente pero opuestos. Si en alguno de los dos
+    // meses no hubo actividad, NO se puede calcular un delta (sino un chofer
+    // que no manejó figuraría como "mejoró a 0" — plata mal asignada).
+    if (actual!.sinActividad || anterior!.sinActividad) {
+      return AppCard(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              const Icon(Icons.info_outline, color: Colors.white38, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  actual!.sinActividad
+                      ? 'Sin actividad este mes — no comparable con $labelAnterior.'
+                      : 'Sin actividad en $labelAnterior — no hay base de comparación.',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
     final a = actual!.icm;
     final b = anterior!.icm;

@@ -180,6 +180,48 @@ void main() {
     });
   });
 
+  group('chofer con actividad pero SIN DNI (no rankeable/premiable)', () {
+    // Caso real confirmado en Sitrack: BUSCIO/BASTIAS son choferes sin DNI
+    // cargado. Si alguna vez manejan, Sitrack les calcula score con
+    // severidad real — pero sin DNI no se pueden matchear a EMPLEADOS ni
+    // premiar/castigar. Deben quedar FUERA del universo rankeable.
+    final doc = {
+      'periodo': '2026-05',
+      'choferes': [
+        _chofer(
+          dni: '',
+          nombre: 'BUSCIO GUILLERMO',
+          icm: 40.0,
+          severidad: 'MEDIUM',
+          severidadLabel: 'Medio',
+          infMedias: 5,
+        ),
+        _chofer(
+          dni: '30999888',
+          nombre: 'GOMEZ ANA',
+          icm: 3.0,
+          severidad: 'NO',
+          severidadLabel: 'Sin infracciones',
+        ),
+      ],
+    };
+    final p = IcmOficialPeriodo.fromMap(doc);
+
+    test('el sin-DNI con actividad NO entra a choferesConActividad/top5', () {
+      expect(p.choferesConActividad.length, 1);
+      expect(p.choferesConActividad.first.nombre, 'GOMEZ ANA');
+      expect(p.mejores(5).any((c) => c.nombre == 'BUSCIO GUILLERMO'), isFalse);
+      expect(p.peores(5).any((c) => c.nombre == 'BUSCIO GUILLERMO'), isFalse);
+    });
+
+    test('pero SÍ aparece en choferesParaRanking, al final', () {
+      final r = p.choferesParaRanking;
+      expect(r.any((c) => c.nombre == 'BUSCIO GUILLERMO'), isTrue);
+      expect(r.first.nombre, 'GOMEZ ANA'); // rankeable arriba
+      expect(r.last.nombre, 'BUSCIO GUILLERMO'); // resto al final
+    });
+  });
+
   group('helpers de severidad', () {
     test('severidadIcmDesde normaliza los strings de Sitrack', () {
       expect(severidadIcmDesde('HIGH'), SeveridadIcm.alto);
