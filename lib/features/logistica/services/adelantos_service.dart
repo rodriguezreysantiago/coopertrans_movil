@@ -286,10 +286,13 @@ class AdelantosService {
     return lista;
   }
 
-  /// Reparte un monto total en N cuotas. Cada cuota es múltiplo de 5
-  /// (consistente con la regla de redondeo del módulo). Si hay resto
-  /// sin asignar después del reparto exacto, la PRIMERA cuota lleva la
-  /// diferencia para que el total cobrado coincida con el acordado.
+  /// Reparte un monto total en N cuotas. Las cuotas 2..N son SIEMPRE múltiplo
+  /// de 5 — consistente con la regla de redondeo del módulo. La PRIMERA cuota
+  /// lleva la diferencia (resto del floor) para que la suma total cobrada
+  /// coincida EXACTAMENTE con el `montoTotal` acordado. Por eso, si
+  /// `montoTotal` no es múltiplo de 5 (p. ej. tiene decimales o no termina en
+  /// 0/5), la cuota 1 puede no ser múltiplo de 5 — preferimos esa "imperfección
+  /// visual" antes que descuadrar la plata (aclaración auditoría 2026-05-22).
   ///
   /// Visible para tests.
   static List<double> repartirEnCuotas({

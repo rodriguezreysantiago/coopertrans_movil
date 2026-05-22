@@ -348,7 +348,7 @@ class _Seccion extends StatelessWidget {
 // ITEM DEL CHECKLIST
 // =============================================================================
 
-class _ItemPregunta extends StatelessWidget {
+class _ItemPregunta extends StatefulWidget {
   final String item;
   final String? respuesta;
   final String? observacion;
@@ -364,6 +364,32 @@ class _ItemPregunta extends StatelessWidget {
     required this.onEstado,
     required this.onObservacion,
   });
+
+  @override
+  State<_ItemPregunta> createState() => _ItemPreguntaState();
+}
+
+class _ItemPreguntaState extends State<_ItemPregunta> {
+  // Controller propio para preservar el texto cuando AnimatedSize esconde y
+  // vuelve a mostrar el TextField (al alternar BUE↔REG/MAL). Antes era
+  // uncontrolled: el texto seguía guardado en el Map del padre, pero al
+  // re-aparecer el campo se veía VACÍO y confundía al chofer. Como
+  // _ItemPregunta queda en la misma posición de la lista, Flutter conserva
+  // este State al rebuild del padre → el controller sobrevive y reinserta
+  // el texto correcto. Auditoría 2026-05-22.
+  late TextEditingController _obsController;
+
+  @override
+  void initState() {
+    super.initState();
+    _obsController = TextEditingController(text: widget.observacion ?? '');
+  }
+
+  @override
+  void dispose() {
+    _obsController.dispose();
+    super.dispose();
+  }
 
   Color _colorEstado(String estado) {
     switch (estado) {
@@ -381,7 +407,7 @@ class _ItemPregunta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mostrarObservacion =
-        respuesta == 'REG' || respuesta == 'MAL';
+        widget.respuesta == 'REG' || widget.respuesta == 'MAL';
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -391,12 +417,12 @@ class _ItemPregunta extends StatelessWidget {
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: tieneError
+          color: widget.tieneError
               ? AppColors.accentRed
               : Colors.white.withAlpha(15),
-          width: tieneError ? 2 : 1,
+          width: widget.tieneError ? 2 : 1,
         ),
-        boxShadow: tieneError
+        boxShadow: widget.tieneError
             ? [
                 BoxShadow(
                   color: AppColors.accentRed.withAlpha(50),
@@ -410,7 +436,7 @@ class _ItemPregunta extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            item,
+            widget.item,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 15,
@@ -425,7 +451,7 @@ class _ItemPregunta extends StatelessWidget {
             runSpacing: 8,
             alignment: WrapAlignment.spaceEvenly,
             children: ['BUE', 'REG', 'MAL'].map((estado) {
-              final seleccionado = respuesta == estado;
+              final seleccionado = widget.respuesta == estado;
               return ChoiceChip(
                 label: SizedBox(
                   width: 50,
@@ -449,7 +475,7 @@ class _ItemPregunta extends StatelessWidget {
                       ? _colorEstado(estado)
                       : Colors.white24,
                 ),
-                onSelected: (_) => onEstado(estado),
+                onSelected: (_) => widget.onEstado(estado),
               );
             }).toList(),
           ),
@@ -460,6 +486,7 @@ class _ItemPregunta extends StatelessWidget {
                 ? Padding(
                     padding: const EdgeInsets.only(top: 14),
                     child: TextField(
+                      controller: _obsController,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -478,11 +505,11 @@ class _ItemPregunta extends StatelessWidget {
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide(
-                            color: _colorEstado(respuesta!),
+                            color: _colorEstado(widget.respuesta!),
                           ),
                         ),
                       ),
-                      onChanged: onObservacion,
+                      onChanged: widget.onObservacion,
                     ),
                   )
                 : const SizedBox.shrink(),

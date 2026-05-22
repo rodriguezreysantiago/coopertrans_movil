@@ -43,6 +43,22 @@ const MIN_DIGITOS_PARA_MATCH = 10;
  * canónico — ej. "5492914567890,5491159876543". Si carga sin código
  * país (ej. "2914567890"), se le antepone "549" para uniformar.
  */
+/**
+ * Canoniza un teléfono al formato AR `549<10 dígitos>` para poder comparar
+ * con igualdad ESTRICTA (sin sufijos). Heurística:
+ *  - 10 dígitos     → asumimos AR sin código país, anteponemos `549`.
+ *  - 11 dígitos `0...` → legacy `0<área><abonado>`, quitamos el 0 + `549`.
+ *  - resto          → tal cual (ya viene con código país o es no-AR).
+ * Mismo criterio que _adminWhitelist / _esAdmin (que tienen la lógica
+ * inline; acá se centraliza para el resolver de choferes).
+ */
+function _canonicalArPhone(digits) {
+  const d = String(digits).replace(/\D+/g, '');
+  if (d.length === 10) return `549${d}`;
+  if (d.length === 11 && d.startsWith('0')) return `549${d.substring(1)}`;
+  return d;
+}
+
 function _adminWhitelist() {
   const raw = process.env.ADMIN_PHONES || '';
   return raw
@@ -145,26 +161,22 @@ async function _resolverChoferPorTelefono(db, fromNumber, opts = {}) {
     return null;
   }
 
-  // ─── 1. Match por teléfono ───
-  if (fromDigits.length >= MIN_DIGITOS_PARA_MATCH) {
+  // ─── 1. Match por teléfono (igualdad ESTRICTA en canónico AR) ───
+  // Hardening 2026-05-22: antes había un fallback `longer.endsWith(shorter)`
+  // (sufijo de >=10 dígitos). Mismo patrón que el `_esAdmin` viejo, cerrado
+  // por inseguro el 2026-05-17 (un chofer A con sufijo coincidente al de B
+  // podía pasar como B). El riesgo en AR es chico (los últimos 10 dígitos
+  // son casi únicos), pero acá los datos del que reciba el comando son del
+  // CHOFER matcheado — mejor cerrarlo. Igualdad estricta sobre la forma
+  // canónica `549<10>` en ambos lados. El fallback por pushname sigue.
+  const fromCanon = _canonicalArPhone(fromDigits);
+  if (fromCanon.length >= MIN_DIGITOS_PARA_MATCH) {
     for (const d of snap.docs) {
       const data = d.data() || {};
       if (data.ACTIVO === false) continue;
-      const telDigits = String(data.TELEFONO || '').replace(/\D+/g, '');
-      if (telDigits.length < MIN_DIGITOS_PARA_MATCH) continue;
-      if (telDigits === fromDigits) return _mapChofer(d.id, data);
-      const longer = telDigits.length >= fromDigits.length ?
-        telDigits :
-        fromDigits;
-      const shorter = telDigits.length < fromDigits.length ?
-        telDigits :
-        fromDigits;
-      if (
-        shorter.length >= MIN_DIGITOS_PARA_MATCH &&
-        longer.endsWith(shorter)
-      ) {
-        return _mapChofer(d.id, data);
-      }
+      const telCanon = _canonicalArPhone(data.TELEFONO || '');
+      if (telCanon.length < MIN_DIGITOS_PARA_MATCH) continue;
+      if (telCanon === fromCanon) return _mapChofer(d.id, data);
     }
   }
 

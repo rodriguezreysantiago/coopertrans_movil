@@ -26,7 +26,7 @@ import * as logger from "firebase-functions/logger";
 import { FieldValue } from "firebase-admin/firestore";
 
 import { db } from "./setup";
-import { fetchWithTimeout } from "./comun";
+import { adquirirLockTick, fetchWithTimeout } from "./comun";
 import {
   volvoUsername,
   volvoPassword,
@@ -256,136 +256,150 @@ export const estadoVolvoPoller = onSchedule(
     memory: "256MiB",
   },
   async () => {
-    const authHeader =
-      "Basic " +
-      Buffer.from(
-        `${volvoUsername.value()}:${volvoPassword.value()}`
-      ).toString("base64");
-
-    // Consulta 1 — estado general (posición/velocidad/combustible/odo/horas).
-    const qs = new URLSearchParams({
-      latestOnly: "true",
-      contentFilter: "ACCUMULATED,SNAPSHOT,UPTIME",
-      additionalContent: "VOLVOGROUPSNAPSHOT",
-    });
-    const cache = await fetchStatuses(
-      `${VOLVO_BASE}/vehicle/vehiclestatuses?${qs.toString()}`,
-      authHeader,
-      "estado"
+    // Lock tick (auditoría 2026-05-22): el cron es cada 5 min con timeout 120s,
+    // pero estado + UPTIME + ~50 unidades en cold start puede excederse. GCP
+    // at-least-once puede disparar 2 invocaciones que pisan los mismos docs
+    // VOLVO_ESTADO con escrituras redundantes. Lock 4 min evita el solapado
+    // (consistencia con los otros 5 pollers: sitrack, volvo_alertas, etc.).
+    const liberar = await adquirirLockTick(
+      "estado_volvo_poller",
+      4 * 60 * 1000,
     );
+    if (!liberar) return;
+    try {
+      const authHeader =
+        "Basic " +
+        Buffer.from(
+          `${volvoUsername.value()}:${volvoPassword.value()}`
+        ).toString("base64");
 
-    if (cache.length === 0) {
-      logger.warn("[estadoVolvo] flota Volvo vacía, abortando");
-      return;
-    }
+      // Consulta 1 — estado general (posición/velocidad/combustible/odo/horas).
+      const qs = new URLSearchParams({
+        latestOnly: "true",
+        contentFilter: "ACCUMULATED,SNAPSHOT,UPTIME",
+        additionalContent: "VOLVOGROUPSNAPSHOT",
+      });
+      const cache = await fetchStatuses(
+        `${VOLVO_BASE}/vehicle/vehiclestatuses?${qs.toString()}`,
+        authHeader,
+        "estado"
+      );
 
-    // Consulta 2 — SOLO UPTIME (testigos del tablero + serviceDistance + temp).
-    // Con `latestOnly` el record más nuevo por unidad suele ser SNAPSHOT y NO
-    // trae `tellTaleInfo` (sólo 2/53). Pidiendo UPTIME explícito forzamos el
-    // último record de uptime de cada unidad → advertencias EXACTAS de toda la
-    // flota para mantenimiento (#43). Ver project_volvo_estado_fundacion.md.
-    const qsUptime = new URLSearchParams({
-      latestOnly: "true",
-      contentFilter: "UPTIME",
-    });
-    const cacheUptime = await fetchStatuses(
-      `${VOLVO_BASE}/vehicle/vehiclestatuses?${qsUptime.toString()}`,
-      authHeader,
-      "uptime"
-    );
-    // VIN → {tell_tales, service_distance_km, temp_motor_c} del record UPTIME.
-    const uptimePorVin = new Map<
+      if (cache.length === 0) {
+        logger.warn("[estadoVolvo] flota Volvo vacía, abortando");
+        return;
+      }
+
+      // Consulta 2 — SOLO UPTIME (testigos del tablero + serviceDistance + temp).
+      // Con `latestOnly` el record más nuevo por unidad suele ser SNAPSHOT y NO
+      // trae `tellTaleInfo` (sólo 2/53). Pidiendo UPTIME explícito forzamos el
+      // último record de uptime de cada unidad → advertencias EXACTAS de toda la
+      // flota para mantenimiento (#43). Ver project_volvo_estado_fundacion.md.
+      const qsUptime = new URLSearchParams({
+        latestOnly: "true",
+        contentFilter: "UPTIME",
+      });
+      const cacheUptime = await fetchStatuses(
+        `${VOLVO_BASE}/vehicle/vehiclestatuses?${qsUptime.toString()}`,
+        authHeader,
+        "uptime"
+      );
+      // VIN → {tell_tales, service_distance_km, temp_motor_c} del record UPTIME.
+      const uptimePorVin = new Map<
       string,
       Pick<EstadoVolvo, "tell_tales" | "service_distance_km" | "temp_motor_c">
     >();
-    let conTellTales = 0;
-    for (const raw of cacheUptime) {
-      const e = parseEstadoVolvo(raw);
-      if (!e) continue;
-      uptimePorVin.set(e.vin, {
-        tell_tales: e.tell_tales,
-        service_distance_km: e.service_distance_km,
-        temp_motor_c: e.temp_motor_c,
+      let conTellTales = 0;
+      for (const raw of cacheUptime) {
+        const e = parseEstadoVolvo(raw);
+        if (!e) continue;
+        uptimePorVin.set(e.vin, {
+          tell_tales: e.tell_tales,
+          service_distance_km: e.service_distance_km,
+          temp_motor_c: e.temp_motor_c,
+        });
+        if (e.tell_tales.length > 0) conTellTales++;
+      }
+      logger.info("[estadoVolvo] uptime", {
+        recibidosUptime: cacheUptime.length,
+        conTellTales,
       });
-      if (e.tell_tales.length > 0) conTellTales++;
-    }
-    logger.info("[estadoVolvo] uptime", {
-      recibidosUptime: cacheUptime.length,
-      conTellTales,
-    });
 
-    // MUESTRA para verificar la estructura real (se quita tras confirmar paths).
-    try {
-      const s0 = asObj(cache[0]);
-      const snap0 = asObj(s0?.snapshotData);
-      logger.info("[estadoVolvo] muestra estructura", {
-        topKeys: s0 ? Object.keys(s0) : [],
-        snapKeys: snap0 ? Object.keys(snap0) : [],
-        uptimeKeys: asObj(s0?.uptimeData)
-          ? Object.keys(asObj(s0?.uptimeData)!)
-          : [],
-        gnssKeys: asObj(snap0?.gnssPosition)
-          ? Object.keys(asObj(snap0?.gnssPosition)!)
-          : [],
-        parsedSample: parseEstadoVolvo(cache[0]),
-      });
-    } catch {
+      // MUESTRA para verificar la estructura real (se quita tras confirmar paths).
+      try {
+        const s0 = asObj(cache[0]);
+        const snap0 = asObj(s0?.snapshotData);
+        logger.info("[estadoVolvo] muestra estructura", {
+          topKeys: s0 ? Object.keys(s0) : [],
+          snapKeys: snap0 ? Object.keys(snap0) : [],
+          uptimeKeys: asObj(s0?.uptimeData)
+            ? Object.keys(asObj(s0?.uptimeData)!)
+            : [],
+          gnssKeys: asObj(snap0?.gnssPosition)
+            ? Object.keys(asObj(snap0?.gnssPosition)!)
+            : [],
+          parsedSample: parseEstadoVolvo(cache[0]),
+        });
+      } catch {
       // best-effort
-    }
-
-    // VIN → patente
-    const vehiculosSnap = await db.collection("VEHICULOS").limit(5000).get();
-    const vinToPatente = new Map<string, string>();
-    for (const doc of vehiculosSnap.docs) {
-      const vin = (doc.data().VIN ?? "").toString().trim().toUpperCase();
-      if (vin && vin !== "-") vinToPatente.set(vin, doc.id);
-    }
-
-    const batch = db.batch();
-    let escritos = 0;
-    let sinVin = 0;
-    let sinPatente = 0;
-    for (const raw of cache) {
-      const est = parseEstadoVolvo(raw);
-      if (!est) {
-        sinVin++;
-        continue;
       }
-      const patente = vinToPatente.get(est.vin);
-      if (!patente) {
-        sinPatente++;
-        continue;
+
+      // VIN → patente
+      const vehiculosSnap = await db.collection("VEHICULOS").limit(5000).get();
+      const vinToPatente = new Map<string, string>();
+      for (const doc of vehiculosSnap.docs) {
+        const vin = (doc.data().VIN ?? "").toString().trim().toUpperCase();
+        if (vin && vin !== "-") vinToPatente.set(vin, doc.id);
       }
-      // Overlay de la consulta UPTIME: testigos + service + temp del record
-      // de uptime (más fiable que lo que trajo el record de estado, que casi
-      // nunca incluye uptimeData). limpiarNulos + merge preservan lo previo.
-      const up = uptimePorVin.get(est.vin);
-      if (up) {
-        if (up.tell_tales.length > 0) est.tell_tales = up.tell_tales;
-        if (up.service_distance_km != null) {
-          est.service_distance_km = up.service_distance_km;
+
+      const batch = db.batch();
+      let escritos = 0;
+      let sinVin = 0;
+      let sinPatente = 0;
+      for (const raw of cache) {
+        const est = parseEstadoVolvo(raw);
+        if (!est) {
+          sinVin++;
+          continue;
         }
-        if (up.temp_motor_c != null) est.temp_motor_c = up.temp_motor_c;
+        const patente = vinToPatente.get(est.vin);
+        if (!patente) {
+          sinPatente++;
+          continue;
+        }
+        // Overlay de la consulta UPTIME: testigos + service + temp del record
+        // de uptime (más fiable que lo que trajo el record de estado, que casi
+        // nunca incluye uptimeData). limpiarNulos + merge preservan lo previo.
+        const up = uptimePorVin.get(est.vin);
+        if (up) {
+          if (up.tell_tales.length > 0) est.tell_tales = up.tell_tales;
+          if (up.service_distance_km != null) {
+            est.service_distance_km = up.service_distance_km;
+          }
+          if (up.temp_motor_c != null) est.temp_motor_c = up.temp_motor_c;
+        }
+        batch.set(
+          db.collection("VOLVO_ESTADO").doc(patente),
+          {
+            patente,
+            ...limpiarNulos(est as unknown as Record<string, unknown>),
+            consultado_en: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        escritos++;
       }
-      batch.set(
-        db.collection("VOLVO_ESTADO").doc(patente),
-        {
-          patente,
-          ...limpiarNulos(est as unknown as Record<string, unknown>),
-          consultado_en: FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-      escritos++;
-    }
 
-    await batch.commit();
-    logger.info("[estadoVolvo] OK", {
-      recibidos: cache.length,
-      escritos,
-      sinVin,
-      sinPatente,
-      vinesEnFirestore: vinToPatente.size,
-    });
+      await batch.commit();
+      logger.info("[estadoVolvo] OK", {
+        recibidos: cache.length,
+        escritos,
+        sinVin,
+        sinPatente,
+        vinesEnFirestore: vinToPatente.size,
+      });
+    } finally {
+      await liberar();
+    }
   }
 );

@@ -235,176 +235,14 @@ function prepararRegistro(db, params, colaDocId) {
   };
 }
 
-/**
- * Para el aviso DIARIO consolidado de service preventivo (que se manda
- * a un destinatario unico tipo Emmanuel del area de mantenimiento, no
- * a cada chofer): chequea si ya se mando el aviso del dia para este
- * destinatario. Idempotencia por dia + por DNI destinatario.
- *
- * Devuelve true si ya se mando hoy (skip), false si no (proceder).
- */
-async function yaSeEnvioServiceDiario(db, dniDestinatario) {
-  const id = `service_diario_${_fechaHoyIso()}_${dniDestinatario}`;
-  const doc = await db.collection(COLECCION).doc(id).get();
-  return doc.exists;
-}
-
-/**
- * Marca como enviado el aviso DIARIO de service. Guarda metadata
- * (cuantos tractores con urgencia, cuando) para auditoria. Llamar
- * despues de encolar exitosamente el mensaje.
- */
-async function registrarServiceDiario(db, dniDestinatario, meta) {
-  const { ref, data } = prepararRegistroServiceDiario(db, dniDestinatario, meta);
-  await ref.set(data);
-}
-
-function prepararRegistroServiceDiario(db, dniDestinatario, meta) {
-  const id = `service_diario_${_fechaHoyIso()}_${dniDestinatario}`;
-  return {
-    ref: db.collection(COLECCION).doc(id),
-    data: {
-      tipo: 'service_diario',
-      destinatario_dni: dniDestinatario,
-      fecha: _fechaHoyIso(),
-      cantidad_tractores: meta?.cantidadTractores || 0,
-      cola_doc_id: meta?.colaDocId || null,
-      creado_en: admin.firestore.FieldValue.serverTimestamp(),
-    },
-  };
-}
-
-/**
- * Para el resumen DIARIO de Alertas de Volvo (severidad HIGH de las
- * últimas 24h, agrupadas por chofer + patente + tipo). Idempotencia
- * por día y por DNI destinatario (mismo patrón que service diario).
- *
- * Devuelve true si ya se mando hoy (skip), false si no (proceder).
- */
-async function yaSeEnvioAlertasResumen(db, dniDestinatario) {
-  const id = `alertas_resumen_${_fechaHoyIso()}_${dniDestinatario}`;
-  const doc = await db.collection(COLECCION).doc(id).get();
-  return doc.exists;
-}
-
-/**
- * Marca como enviado el aviso DIARIO de Alertas Volvo. Llamar despues
- * de encolar exitosamente el mensaje en COLA_WHATSAPP.
- */
-async function registrarAlertasResumen(db, dniDestinatario, meta) {
-  const { ref, data } = prepararRegistroAlertasResumen(db, dniDestinatario, meta);
-  await ref.set(data);
-}
-
-function prepararRegistroAlertasResumen(db, dniDestinatario, meta) {
-  const id = `alertas_resumen_${_fechaHoyIso()}_${dniDestinatario}`;
-  return {
-    ref: db.collection(COLECCION).doc(id),
-    data: {
-      tipo: 'alertas_volvo_resumen',
-      destinatario_dni: dniDestinatario,
-      fecha: _fechaHoyIso(),
-      cantidad_eventos: meta?.cantidadEventos || 0,
-      cola_doc_id: meta?.colaDocId || null,
-      creado_en: admin.firestore.FieldValue.serverTimestamp(),
-    },
-  };
-}
-
-/**
- * Para el resumen DIARIO de alertas de mantenimiento (FUEL, CATALYST,
- * TELL_TALE, ADBLUELEVEL_LOW, WITHOUT_ADBLUE). Mismo patrón que
- * yaSeEnvioAlertasResumen: idempotencia por día + por DNI destinatario.
- */
-async function yaSeEnvioMantenimientoDiario(db, dniDestinatario) {
-  const id = `mantenimiento_diario_${_fechaHoyIso()}_${dniDestinatario}`;
-  const doc = await db.collection(COLECCION).doc(id).get();
-  return doc.exists;
-}
-
-async function registrarMantenimientoDiario(db, dniDestinatario, meta) {
-  const { ref, data } = prepararRegistroMantenimientoDiario(db, dniDestinatario, meta);
-  await ref.set(data);
-}
-
-function prepararRegistroMantenimientoDiario(db, dniDestinatario, meta) {
-  const id = `mantenimiento_diario_${_fechaHoyIso()}_${dniDestinatario}`;
-  return {
-    ref: db.collection(COLECCION).doc(id),
-    data: {
-      tipo: 'mantenimiento_diario',
-      destinatario_dni: dniDestinatario,
-      fecha: _fechaHoyIso(),
-      cantidad_eventos: meta?.cantidadEventos || 0,
-      cola_doc_id: meta?.colaDocId || null,
-      creado_en: admin.firestore.FieldValue.serverTimestamp(),
-    },
-  };
-}
-
-/**
- * Para el resumen DIARIO de vencimientos próximos (próximos 7 días)
- * que va al encargado de documentación. Cubre choferes, vehículos y
- * docs por empresa empleadora. Idempotencia por día + DNI destinatario.
- */
-async function yaSeEnvioVencimientosProximos(db, dniDestinatario) {
-  const id = `venc_proximos_${_fechaHoyIso()}_${dniDestinatario}`;
-  const doc = await db.collection(COLECCION).doc(id).get();
-  return doc.exists;
-}
-
-async function registrarVencimientosProximos(db, dniDestinatario, meta) {
-  const { ref, data } = prepararRegistroVencimientosProximos(db, dniDestinatario, meta);
-  await ref.set(data);
-}
-
-function prepararRegistroVencimientosProximos(db, dniDestinatario, meta) {
-  const id = `venc_proximos_${_fechaHoyIso()}_${dniDestinatario}`;
-  return {
-    ref: db.collection(COLECCION).doc(id),
-    data: {
-      tipo: 'vencimientos_proximos_diario',
-      destinatario_dni: dniDestinatario,
-      fecha: _fechaHoyIso(),
-      cantidad_items: meta?.cantidadItems || 0,
-      cola_doc_id: meta?.colaDocId || null,
-      creado_en: admin.firestore.FieldValue.serverTimestamp(),
-    },
-  };
-}
-
-/**
- * Para el aviso DIARIO al admin de docs por EMPRESA empleadora que
- * vencen en próximos 30 días. Umbral más amplio que el de
- * vencimientos_proximos (7 días, va a Giagante) — Santiago necesita
- * aviso temprano para coordinar con Giagante antes de que sea urgente.
- * Idempotencia por día + DNI destinatario.
- */
-async function yaSeEnvioVencEmpresasAdmin(db, dniDestinatario) {
-  const id = `venc_empresas_admin_${_fechaHoyIso()}_${dniDestinatario}`;
-  const doc = await db.collection(COLECCION).doc(id).get();
-  return doc.exists;
-}
-
-async function registrarVencEmpresasAdmin(db, dniDestinatario, meta) {
-  const { ref, data } = prepararRegistroVencEmpresasAdmin(db, dniDestinatario, meta);
-  await ref.set(data);
-}
-
-function prepararRegistroVencEmpresasAdmin(db, dniDestinatario, meta) {
-  const id = `venc_empresas_admin_${_fechaHoyIso()}_${dniDestinatario}`;
-  return {
-    ref: db.collection(COLECCION).doc(id),
-    data: {
-      tipo: 'venc_empresas_admin_diario',
-      destinatario_dni: dniDestinatario,
-      fecha: _fechaHoyIso(),
-      cantidad_items: meta?.cantidadItems || 0,
-      cola_doc_id: meta?.colaDocId || null,
-      creado_en: admin.firestore.FieldValue.serverTimestamp(),
-    },
-  };
-}
+// NOTA (auditoría 2026-05-22): se removieron 15 helpers obsoletos (3 por
+// flujo × 5 flujos: service_diario, alertas_resumen, mantenimiento_diario,
+// vencimientos_proximos, venc_empresas_admin). El patrón viejo era marcar
+// idempotencia en AVISOS_AUTOMATICOS_HISTORICO con doc ID determinístico.
+// El refactor 2026-05-18 los reemplazó por doc ID determinístico DIRECTO
+// en COLA_WHATSAPP (cron.js, ver bloques `<cron>_diario_<fecha>_<dni>`),
+// que regenera datos frescos si hay lag entre encolar y entregar. Ningún
+// caller de cron.js los seguía usando — quedaban como código muerto exportado.
 
 /**
  * Limpia docs viejos de AVISOS_AUTOMATICOS_HISTORICO.
@@ -464,24 +302,9 @@ module.exports = {
   buildId,
   yaSeEnvio,
   yaSeEnvioServiceMaxUrgencia,
-  yaSeEnvioServiceDiario,
-  yaSeEnvioAlertasResumen,
-  yaSeEnvioMantenimientoDiario,
-  yaSeEnvioVencimientosProximos,
-  yaSeEnvioVencEmpresasAdmin,
   registrar,
-  registrarServiceDiario,
-  registrarAlertasResumen,
-  registrarMantenimientoDiario,
-  registrarVencimientosProximos,
-  registrarVencEmpresasAdmin,
-  // Variantes batch-friendly: devuelven {ref, data} para sumar a un
+  // Variante batch-friendly: devuelve {ref, data} para sumar a un
   // db.batch() del caller. Útil para atomizar add+registrar.
   prepararRegistro,
-  prepararRegistroServiceDiario,
-  prepararRegistroAlertasResumen,
-  prepararRegistroMantenimientoDiario,
-  prepararRegistroVencimientosProximos,
-  prepararRegistroVencEmpresasAdmin,
   limpiarObsoletos,
 };
