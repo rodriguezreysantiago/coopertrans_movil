@@ -5,11 +5,15 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/services/excluidos_service.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
-import '../services/icm_calculator.dart';
+import '../services/icm_oficial_service.dart';
 
-/// Ranking de choferes ordenado del peor al mejor según ICM. Filtros
-/// rápidos por rango (esta semana / este mes / mes anterior /
-/// personalizado). Click en una fila → drill-down al detalle.
+/// Ranking de choferes según el ICM **oficial de Sitrack** (lo que audita
+/// YPF). Escala MÁS BAJO = MEJOR. Se ordena PEOR arriba (ICM más alto)
+/// para que el admin aborde primero a los de mayor riesgo; los "sin
+/// actividad" quedan grises al final. Click en una fila → detalle.
+///
+/// Reemplaza el ranking CESVI estimado (que daba números optimistas que no
+/// coincidían con el tablero de YPF). Período mensual: mes actual / anterior.
 class IcmRankingScreen extends StatefulWidget {
   const IcmRankingScreen({super.key});
 
@@ -17,11 +21,11 @@ class IcmRankingScreen extends StatefulWidget {
   State<IcmRankingScreen> createState() => _IcmRankingScreenState();
 }
 
-enum _Rango { semana, mes, mesAnterior }
+enum _Periodo { mesActual, mesAnterior }
 
 class _IcmRankingScreenState extends State<IcmRankingScreen> {
-  _Rango _rango = _Rango.mes;
-  Future<List<IcmChofer>>? _futureRanking;
+  _Periodo _periodo = _Periodo.mesActual;
+  Future<IcmOficialPeriodo?>? _future;
 
   @override
   void initState() {
@@ -30,63 +34,23 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
   }
 
   void _recargar() {
-    final (desde, hasta) = _calcularRango(_rango);
-    _futureRanking = _cargarRanking(desde, hasta);
+    _future = _cargar(_periodo);
   }
 
-  /// Devuelve `(desdeMs, hastaMs)` según el rango seleccionado, en ART.
-  (int, int) _calcularRango(_Rango r) {
-    final ahora = DateTime.now();
-    switch (r) {
-      case _Rango.semana:
-        // Últimos 7 días.
-        return (ahora.subtract(const Duration(days: 7)).millisecondsSinceEpoch,
-            ahora.millisecondsSinceEpoch);
-      case _Rango.mes:
-        // Mes calendario actual.
-        final inicio = DateTime(ahora.year, ahora.month, 1);
-        return (inicio.millisecondsSinceEpoch, ahora.millisecondsSinceEpoch);
-      case _Rango.mesAnterior:
-        final inicioMesActual = DateTime(ahora.year, ahora.month, 1);
-        final inicioMesAnterior =
-            DateTime(ahora.year, ahora.month - 1, 1);
-        return (inicioMesAnterior.millisecondsSinceEpoch,
-            inicioMesActual.millisecondsSinceEpoch);
-    }
-  }
+  String _periodoId(_Periodo p) =>
+      IcmOficialService.periodoId(offsetMeses: p == _Periodo.mesActual ? 0 : -1);
 
-  Future<List<IcmChofer>> _cargarRanking(int desdeMs, int hastaMs) async {
+  Future<IcmOficialPeriodo?> _cargar(_Periodo p) async {
     final db = FirebaseFirestore.instance;
-    // Cargar excluidos (tanqueros + testers) ANTES de queryear ranking.
-    // Si están en cache se resuelve sincrónico; sino paga 2 queries
-    // (~60 docs) amortizadas en todas las pantallas de la sesión.
     final excluidos = await ExcluidosService.cargar(db: db);
-    // Lookup de nombres de empleados (1 query a EMPLEADOS, ~60 docs).
-    final empSnap = await db.collection('EMPLEADOS').get();
-    final nombrePorDni = <String, String>{};
-    for (final d in empSnap.docs) {
-      final data = d.data();
-      final dni = (data['DNI'] ?? d.id).toString();
-      final nombre = (data['NOMBRE'] ?? '').toString().trim();
-      if (nombre.isNotEmpty) nombrePorDni[dni] = nombre;
-    }
-    final ranking = await IcmCalculator.calcularRanking(
-      db: db,
-      desdeMs: desdeMs,
-      hastaMs: hastaMs,
-      nombrePorDni: nombrePorDni,
+    return IcmOficialService.cargarPeriodo(
+      db,
+      _periodoId(p),
+      // Sacamos tanqueros + testers del ranking visible (mismo criterio
+      // que el resto de la app). Los totales de cabecera quedan tal cual
+      // los reporta Sitrack porque ESE es el número auditado.
+      excluirDni: (dni) => ExcluidosService.esExcluido(excluidos, dni: dni),
     );
-    // Removemos a los tanqueros y testers del ranking visible. Sus
-    // eventos no son nuestros (tanqueros) o son ficticios (testers),
-    // así que mezclarlos rompe el ranking de los choferes reales.
-    // El CF `recomputeIcmSemanalScheduled` ya hace el mismo filtro
-    // server-side para el reporte semanal a Molina — esto cubre la
-    // vista en vivo del admin.
-    ranking.removeWhere((c) => ExcluidosService.esExcluido(
-          excluidos,
-          dni: c.choferDni,
-        ));
-    return ranking;
   }
 
   @override
@@ -97,52 +61,44 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _BarraFiltros(
-            rangoActual: _rango,
-            onChanged: (r) {
-              setState(() {
-                _rango = r;
-                _recargar();
-              });
-            },
+            periodoActual: _periodo,
+            onChanged: (p) => setState(() {
+              _periodo = p;
+              _recargar();
+            }),
           ),
           Expanded(
-            child: FutureBuilder<List<IcmChofer>>(
-              future: _futureRanking,
+            child: FutureBuilder<IcmOficialPeriodo?>(
+              future: _future,
               builder: (ctx, snap) {
                 if (snap.connectionState != ConnectionState.done) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (snap.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Error cargando ranking: ${snap.error}',
-                        style: const TextStyle(color: Colors.redAccent),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
+                  return _MensajeCentro(
+                    'Error cargando el ranking: ${snap.error}',
+                    color: Colors.redAccent,
                   );
                 }
-                final lista = snap.data ?? const [];
-                if (lista.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        'Sin datos en el rango seleccionado.',
-                        style: TextStyle(color: Colors.white54, fontSize: 14),
-                      ),
-                    ),
+                final periodo = snap.data;
+                if (periodo == null || periodo.vacio) {
+                  return _MensajeCentro(
+                    'Aún no hay datos del ICM oficial de '
+                    '${IcmOficialService.labelPeriodo(_periodoId(_periodo))}.\n\n'
+                    'Se sincroniza una vez al día desde el portal de Sitrack. '
+                    'Si recién arranca el mes, esperá a la próxima madrugada.',
+                    color: Colors.white54,
                   );
                 }
+                final filas = periodo.choferesParaRanking;
                 return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: lista.length,
-                  itemBuilder: (ctx, i) => _FilaChofer(
-                    posicion: i + 1,
-                    chofer: lista[i],
-                  ),
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                  itemCount: filas.length + 1,
+                  itemBuilder: (ctx, i) {
+                    if (i == 0) return _HeaderFlota(periodo: periodo);
+                    final c = filas[i - 1];
+                    return _FilaChofer(posicion: i, chofer: c);
+                  },
                 );
               },
             ),
@@ -153,74 +109,188 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
   }
 }
 
-class _BarraFiltros extends StatelessWidget {
-  final _Rango rangoActual;
-  final ValueChanged<_Rango> onChanged;
+class _MensajeCentro extends StatelessWidget {
+  final String texto;
+  final Color color;
+  const _MensajeCentro(this.texto, {required this.color});
 
-  const _BarraFiltros({required this.rangoActual, required this.onChanged});
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Text(
+          texto,
+          textAlign: TextAlign.center,
+          style: TextStyle(color: color, fontSize: 14, height: 1.4),
+        ),
+      ),
+    );
+  }
+}
+
+class _BarraFiltros extends StatelessWidget {
+  final _Periodo periodoActual;
+  final ValueChanged<_Periodo> onChanged;
+
+  const _BarraFiltros({required this.periodoActual, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
       child: Wrap(
         spacing: 8,
         children: [
-          _ChipRango(
-              label: 'Últimos 7 días',
-              activo: rangoActual == _Rango.semana,
-              onTap: () => onChanged(_Rango.semana)),
-          _ChipRango(
-              label: 'Mes actual',
-              activo: rangoActual == _Rango.mes,
-              onTap: () => onChanged(_Rango.mes)),
-          _ChipRango(
-              label: 'Mes anterior',
-              activo: rangoActual == _Rango.mesAnterior,
-              onTap: () => onChanged(_Rango.mesAnterior)),
+          ChoiceChip(
+            label: const Text('Mes actual'),
+            selected: periodoActual == _Periodo.mesActual,
+            onSelected: (_) => onChanged(_Periodo.mesActual),
+          ),
+          ChoiceChip(
+            label: const Text('Mes anterior'),
+            selected: periodoActual == _Periodo.mesAnterior,
+            onSelected: (_) => onChanged(_Periodo.mesAnterior),
+          ),
         ],
       ),
     );
   }
 }
 
-class _ChipRango extends StatelessWidget {
-  final String label;
-  final bool activo;
-  final VoidCallback onTap;
-
-  const _ChipRango({
-    required this.label,
-    required this.activo,
-    required this.onTap,
-  });
+/// Cabecera con el ICM de la flota (oficial) + cómo leerlo + distribución.
+class _HeaderFlota extends StatelessWidget {
+  final IcmOficialPeriodo periodo;
+  const _HeaderFlota({required this.periodo});
 
   @override
   Widget build(BuildContext context) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: activo,
-      onSelected: (_) => onTap(),
+    final conteo = periodo.conteoPorSeveridad;
+    final altos = conteo[SeveridadIcm.alto] ?? 0;
+    final medios = conteo[SeveridadIcm.medio] ?? 0;
+    final bajos = (conteo[SeveridadIcm.bajo] ?? 0) +
+        (conteo[SeveridadIcm.sinInfracciones] ?? 0);
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      periodo.icmGeneral.toStringAsFixed(1),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 30,
+                        fontWeight: FontWeight.bold,
+                        height: 1.0,
+                      ),
+                    ),
+                    const Text(
+                      'ICM flota (oficial Sitrack)',
+                      style: TextStyle(color: Colors.white60, fontSize: 11),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        IcmOficialService.labelPeriodo(periodo.periodo),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${periodo.choferesActivos} choferes con actividad · '
+                        '${AppFormatters.formatearMiles(periodo.distanciaTotalKm)} km',
+                        textAlign: TextAlign.end,
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _ChipSeveridad(
+                    label: 'Alto', n: altos, color: Colors.red.shade600),
+                const SizedBox(width: 6),
+                _ChipSeveridad(
+                    label: 'Medio', n: medios, color: Colors.amber.shade700),
+                const SizedBox(width: 6),
+                _ChipSeveridad(
+                    label: 'Bajo/Sin', n: bajos, color: Colors.green.shade600),
+                const Spacer(),
+                const Text(
+                  'más bajo = mejor',
+                  style: TextStyle(
+                    color: Colors.white38,
+                    fontSize: 10,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChipSeveridad extends StatelessWidget {
+  final String label;
+  final int n;
+  final Color color;
+  const _ChipSeveridad(
+      {required this.label, required this.n, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.45)),
+      ),
+      child: Text(
+        '$label $n',
+        style: TextStyle(
+            color: color, fontSize: 11, fontWeight: FontWeight.w600),
+      ),
     );
   }
 }
 
 class _FilaChofer extends StatelessWidget {
   final int posicion;
-  final IcmChofer chofer;
+  final IcmOficialChofer chofer;
 
   const _FilaChofer({required this.posicion, required this.chofer});
 
   @override
   Widget build(BuildContext context) {
-    final color = _colorCategoria(chofer.categoria);
-    final icmStr = chofer.categoria == CategoriaIcm.sinDatos
-        ? '—'
-        : chofer.icm.toStringAsFixed(0);
-    final ratioStr =
-        chofer.infraccionesPor100Km.toStringAsFixed(2);
-    final patentePrincipal =
-        chofer.patentes.isNotEmpty ? chofer.patentes.first : '—';
+    final color = colorSeveridadIcm(chofer.severidad);
+    final esNavegable = chofer.tieneDni && !chofer.sinActividad;
+    final icmStr =
+        chofer.sinActividad ? '—' : chofer.icm.toStringAsFixed(1);
+    final dniStr = chofer.tieneDni
+        ? 'DNI ${AppFormatters.formatearDNI(chofer.dni)}'
+        : 'Sin chofer identificado';
     return Card(
       elevation: 1,
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -232,21 +302,18 @@ class _FilaChofer extends StatelessWidget {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         leading: SizedBox(
-          width: 56,
+          width: 58,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
                 '#$posicion',
-                style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 11,
-                ),
+                style: const TextStyle(color: Colors.white60, fontSize: 11),
               ),
               const SizedBox(height: 2),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: color,
                   borderRadius: BorderRadius.circular(6),
@@ -255,7 +322,7 @@ class _FilaChofer extends StatelessWidget {
                   icmStr,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -264,7 +331,7 @@ class _FilaChofer extends StatelessWidget {
           ),
         ),
         title: Text(
-          chofer.choferNombre,
+          chofer.nombre.isEmpty ? '(sin nombre)' : chofer.nombre,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
@@ -276,53 +343,32 @@ class _FilaChofer extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'DNI ${AppFormatters.formatearDNI(chofer.choferDni)} · '
-                'Patente principal: $patentePrincipal',
+                '$dniStr · ${AppFormatters.formatearMiles(chofer.distanciaKm)} km',
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
               ),
               const SizedBox(height: 2),
               Text(
-                '${chofer.totalEventos} eventos · '
-                '$ratioStr cada 100 km · '
-                'Categoría: ${_labelCategoria(chofer.categoria)}',
+                chofer.sinActividad
+                    ? 'Sin actividad en el período'
+                    : '${chofer.severidadLabel} · ${chofer.totalInfracciones} '
+                        'infracciones (${chofer.infAltas}A · '
+                        '${chofer.infMedias}M · ${chofer.infLeves}L)',
                 style: TextStyle(color: color, fontSize: 11),
               ),
             ],
           ),
         ),
-        trailing: const Icon(Icons.chevron_right, color: Colors.white38),
-        onTap: () => Navigator.pushNamed(
-          context,
-          AppRoutes.adminIcmDetalleChofer,
-          arguments: chofer.choferDni,
-        ),
+        trailing: esNavegable
+            ? const Icon(Icons.chevron_right, color: Colors.white38)
+            : null,
+        onTap: esNavegable
+            ? () => Navigator.pushNamed(
+                  context,
+                  AppRoutes.adminIcmDetalleChofer,
+                  arguments: chofer.dni,
+                )
+            : null,
       ),
     );
-  }
-
-  Color _colorCategoria(CategoriaIcm c) {
-    switch (c) {
-      case CategoriaIcm.bajo:
-        return Colors.green.shade600;
-      case CategoriaIcm.medio:
-        return Colors.amber.shade700;
-      case CategoriaIcm.alto:
-        return Colors.red.shade600;
-      case CategoriaIcm.sinDatos:
-        return Colors.blueGrey.shade600;
-    }
-  }
-
-  String _labelCategoria(CategoriaIcm c) {
-    switch (c) {
-      case CategoriaIcm.bajo:
-        return 'BAJO (verde)';
-      case CategoriaIcm.medio:
-        return 'MEDIO (amarillo)';
-      case CategoriaIcm.alto:
-        return 'ALTO (rojo)';
-      case CategoriaIcm.sinDatos:
-        return 'sin datos';
-    }
   }
 }

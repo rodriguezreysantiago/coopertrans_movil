@@ -11,6 +11,9 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/services/excluidos_service.dart';
+import '../../icm/services/icm_oficial_service.dart';
+
 /// Snapshot completo de KPIs para la Vista Ejecutiva. Se carga 1 vez
 /// y se renderiza en pantalla; refresh manual pull-to-refresh.
 class KpisVistaEjecutiva {
@@ -209,7 +212,7 @@ class VistaEjecutivaService {
       _viajesDelMes(db, ahora),
       _icmFlota(db, ahora),
       _statsSnapshot(db),
-      _tendenciaIcm(db, ahora, semanas: 12),
+      _tendenciaIcm(db, ahora, meses: 6),
       _viajesPorSemana(db, ahora, semanas: 8),
       _eficienciaCombustible(db, ahora),
     ]);
@@ -316,80 +319,72 @@ class VistaEjecutivaService {
     }
   }
 
-  /// ICM promedio última semana cerrada vs anterior + top5/peores.
-  /// Lee de `ICM_SEMANAL/{YYYY-WNN}` — debe estar generado por el cron
-  /// `recomputeIcmSemanalScheduled` (lunes 6 AM ART). Si la última
-  /// semana cerrada NO tiene doc todavía, cae a 0 (UI lo refleja con
-  /// "—").
+  /// ICM OFICIAL de la flota del mes en curso vs el mes anterior +
+  /// top5 mejores/peores. Lee de `ICM_OFICIAL/{YYYY-MM}` (ingerido del
+  /// portal Sitrack por el scraper `sync_icm.py`, 1 vez al día). ESE es el
+  /// número que audita YPF. Escala MÁS BAJO = MEJOR.
+  ///
+  /// Reemplaza la lectura de `ICM_SEMANAL` (CESVI estimado, que daba
+  /// números optimistas que no coincidían con YPF). Si el mes en curso aún
+  /// no tiene doc, cae a 0 (UI lo refleja con "—").
   static Future<_IcmDosSemanas> _icmFlota(
     FirebaseFirestore db,
     DateTime ahora,
   ) async {
-    // Semana en curso: lunes 00 → próximo lunes 00.
-    // Lo que queremos es la SEMANA ANTERIOR CERRADA = lunes pasado a hoy.
-    // Y la previa a esa = 2 semanas atrás.
-    final diasDesdeLunes = (ahora.weekday - DateTime.monday) % 7;
-    final lunesActual = DateTime(ahora.year, ahora.month, ahora.day)
-        .subtract(Duration(days: diasDesdeLunes));
-    final lunesSemanaCerrada =
-        lunesActual.subtract(const Duration(days: 7));
-    final lunesPrevia =
-        lunesActual.subtract(const Duration(days: 14));
-
-    final idActual = _isoWeekId(lunesSemanaCerrada);
-    final idAnterior = _isoWeekId(lunesPrevia);
-
-    final snaps = await Future.wait([
-      db.collection('ICM_SEMANAL').doc(idActual).get(),
-      db.collection('ICM_SEMANAL').doc(idAnterior).get(),
+    final excluidos = await ExcluidosService.cargar(db: db);
+    excluir(String dni) => ExcluidosService.esExcluido(excluidos, dni: dni);
+    final cargados = await Future.wait([
+      IcmOficialService.cargarPeriodo(db, IcmOficialService.periodoId(),
+          excluirDni: excluir),
+      IcmOficialService.cargarPeriodo(
+          db, IcmOficialService.periodoId(offsetMeses: -1),
+          excluirDni: excluir),
     ]);
-    final actualData = snaps[0].data();
-    final anteriorData = snaps[1].data();
-
-    final icmAct = (actualData?['icm_promedio'] as num?)?.toDouble() ?? 0.0;
-    final icmAnt = (anteriorData?['icm_promedio'] as num?)?.toDouble() ?? 0.0;
-    final n = (actualData?['choferes_activos'] as num?)?.toInt() ?? 0;
-
-    final mejoresRaw =
-        (actualData?['top_5_mejores'] as List?) ?? const [];
-    final peoresRaw = (actualData?['top_5_peores'] as List?) ?? const [];
-    final mejores = mejoresRaw
-        .whereType<Map>()
-        .map(_topItemToChofer)
-        .toList(growable: false);
-    final peores = peoresRaw
-        .whereType<Map>()
-        .map(_topItemToChofer)
-        .toList(growable: false);
-
+    final actual = cargados[0];
+    final anterior = cargados[1];
+    if (actual == null || actual.vacio) {
+      return const _IcmDosSemanas(
+        actual: 0,
+        anterior: 0,
+        choferesEnPromedio: 0,
+        top5Mejores: [],
+        top5Peores: [],
+      );
+    }
     return _IcmDosSemanas(
-      actual: icmAct,
-      anterior: icmAnt,
-      choferesEnPromedio: n,
-      top5Mejores: mejores,
-      top5Peores: peores,
+      actual: actual.icmGeneral,
+      anterior: anterior?.icmGeneral ?? 0,
+      choferesEnPromedio: actual.choferesActivos,
+      top5Mejores: actual.mejores(5).map(_choferAItem).toList(),
+      top5Peores: actual.peores(5).map(_choferAItem).toList(),
     );
   }
 
-  static ChoferRankingItem _topItemToChofer(Map raw) {
-    final m = raw.cast<String, dynamic>();
-    final dni = (m['dni'] ?? '').toString();
-    final nombre = (m['nombre'] ?? 'DNI $dni').toString();
-    final icm = (m['icm'] as num?)?.toDouble() ?? 0.0;
+  static ChoferRankingItem _choferAItem(IcmOficialChofer c) {
     return ChoferRankingItem(
-      dni: dni,
-      nombre: nombre,
-      icm: icm,
-      categoria: _categorizar(icm),
+      dni: c.dni,
+      nombre: c.nombre.isEmpty ? 'DNI ${c.dni}' : c.nombre,
+      icm: c.icm,
+      categoria: _categoriaDeSeveridad(c.severidad),
     );
   }
 
-  // Umbrales EXACTOS de YPF (Minuta Revisión ICM VECCHI): Bajo 100-91,
-  // Medio 90-71, Alto 70-0. Espejo de categorizarCesvi (icm_cesvi.dart).
-  static String _categorizar(double icm) {
-    if (icm >= 91) return 'verde';
-    if (icm >= 71) return 'amarillo';
-    return 'rojo';
+  /// Severidad oficial Sitrack → etiqueta de color de la UI del tablero
+  /// ('verde'/'amarillo'/'rojo'/'gris'). NO inventamos umbrales: usamos la
+  /// severidad que ya viene calculada por Sitrack.
+  static String _categoriaDeSeveridad(String severidad) {
+    switch (severidadIcmDesde(severidad)) {
+      case SeveridadIcm.alto:
+        return 'rojo';
+      case SeveridadIcm.medio:
+        return 'amarillo';
+      case SeveridadIcm.bajo:
+      case SeveridadIcm.sinInfracciones:
+        return 'verde';
+      case SeveridadIcm.sinActividad:
+      case SeveridadIcm.desconocida:
+        return 'gris';
+    }
   }
 
   /// Lee `STATS/dashboard` (poblado por el cron `recomputeDashboardStats`
@@ -406,36 +401,28 @@ class VistaEjecutivaService {
     }
   }
 
-  /// Serie de N puntos: ICM promedio por semana (las últimas N semanas
-  /// cerradas + actual on-the-fly si está disponible).
+  /// Serie de N puntos: ICM OFICIAL de la flota por mes (últimos N meses).
+  /// Lee `ICM_OFICIAL/{YYYY-MM}.icm_general`. Más bajo = mejor. El gráfico
+  /// pide ≥ 2 meses con dato para dibujar la tendencia (al arrancar la
+  /// ingesta hay 1 solo mes → muestra "histórico en construcción").
   static Future<List<PuntoTendencia>> _tendenciaIcm(
     FirebaseFirestore db,
     DateTime ahora, {
-    required int semanas,
+    required int meses,
   }) async {
-    final diasDesdeLunes = (ahora.weekday - DateTime.monday) % 7;
-    final lunesActual = DateTime(ahora.year, ahora.month, ahora.day)
-        .subtract(Duration(days: diasDesdeLunes));
-    // Lista de lunes desde el más viejo al más nuevo.
-    final lunes = <DateTime>[];
-    for (int i = semanas - 1; i >= 0; i--) {
-      lunes.add(lunesActual.subtract(Duration(days: 7 * i)));
+    final ids = <String>[];
+    for (int i = meses - 1; i >= 0; i--) {
+      ids.add(IcmOficialService.periodoId(offsetMeses: -i));
     }
-    // Una lectura por semana — N reads (default 12). Asumimos que el
-    // cron las dejó pre-calculadas. Si alguna falta, el punto queda
-    // en 0 (no rompe el gráfico).
     final snaps = await Future.wait(
-      lunes.map((l) =>
-          db.collection('ICM_SEMANAL').doc(_isoWeekId(l)).get()),
+      ids.map((id) =>
+          db.collection(IcmOficialService.coleccion).doc(id).get()),
     );
     final result = <PuntoTendencia>[];
-    for (var i = 0; i < lunes.length; i++) {
+    for (var i = 0; i < ids.length; i++) {
       final data = snaps[i].data();
-      final icm = (data?['icm_promedio'] as num?)?.toDouble() ?? 0.0;
-      result.add(PuntoTendencia(
-        label: _labelSemanaCorto(lunes[i]),
-        valor: icm,
-      ));
+      final icm = (data?['icm_general'] as num?)?.toDouble() ?? 0.0;
+      result.add(PuntoTendencia(label: _labelMesCorto(ids[i]), valor: icm));
     }
     return result;
   }
@@ -570,22 +557,16 @@ class VistaEjecutivaService {
   // Helpers
   // ───────────────────────────────────────────────────────────────────
 
-  /// ID semana ISO 8601 ("YYYY-WNN"). Mismo algoritmo que el cron
-  /// server-side y que `icm_historico_service`. Crítico que sean
-  /// idénticos: si un dia se cambia uno, hay que cambiar todos.
-  static String _isoWeekId(DateTime d) {
-    final target = DateTime.utc(d.year, d.month, d.day);
-    final dayNum = (target.weekday + 6) % 7;
-    final thursday = target.add(Duration(days: 3 - dayNum));
-    final firstThursday = DateTime.utc(thursday.year, 1, 4);
-    final firstThursdayDayNum = (firstThursday.weekday + 6) % 7;
-    final week = 1 +
-        ((thursday.difference(firstThursday).inDays -
-                    3 +
-                    firstThursdayDayNum) /
-                7)
-            .round();
-    return '${thursday.year}-W${week.toString().padLeft(2, '0')}';
+  /// Label corto de un período 'YYYY-MM' para el eje X del gráfico de
+  /// tendencia ICM: "May", "Abr"...
+  static String _labelMesCorto(String periodoId) {
+    const meses = [
+      'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+      'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
+    ];
+    final partes = periodoId.split('-');
+    final m = int.tryParse(partes.length > 1 ? partes[1] : '') ?? 0;
+    return (m >= 1 && m <= 12) ? meses[m - 1] : periodoId;
   }
 
   /// Label corto para el eje X de los gráficos: "12 May" (día + mes abrev).

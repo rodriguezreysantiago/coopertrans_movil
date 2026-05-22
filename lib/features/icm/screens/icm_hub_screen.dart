@@ -4,19 +4,21 @@ import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
-/// Hub del módulo ICM (Índice de Conducta de Manejo). 3 sub-pantallas:
+/// Hub del módulo ICM (Índice de Conducta de Manejo). 4 sub-pantallas:
 ///
-/// - **RANKING**: choferes ordenados del mejor al peor según ICM
-///   calculado del rango seleccionado.
-/// - **MAPA DE CALOR**: distribución geográfica + horaria de las
-///   infracciones (placeholder hasta tener data acumulada).
-/// - **DETALLE POR CHOFER**: drill-down con histórico, distribución
-///   por tipo de evento, lugares más conflictivos.
+/// - **RANKING**: choferes del peor al mejor según el ICM OFICIAL de
+///   Sitrack del mes (más bajo = mejor).
+/// - **REPORTE MENSUAL**: ICM de la flota + severidad + top 5.
+/// - **MAPA DE CALOR**: distribución geográfica de infracciones
+///   (placeholder hasta tener data acumulada).
+/// - **DETALLE POR CHOFER**: ICM oficial del mes, urbano/no-urbano,
+///   infracciones y comparativa con el mes anterior.
 ///
-/// Esto es lo que YPF audita en su Tablero ICM (ver doc de norma YPF
-/// NO_0002913 sec 5.6.2). El módulo unifica eventos Sitrack peligrosos
-/// (sobrevelocidad cartográfica, frenadas/aceleraciones bruscas, salida
-/// de carril, etc) que ya nos llegan filtrados por las reglas YPF.
+/// El número que muestra el módulo es EL que audita YPF: lo calcula
+/// Sitrack con su cartografía de segmento vial (urbano/no-urbano), dato
+/// que nosotros no tenemos. Se ingiere a `ICM_OFICIAL/{YYYY-MM}` con el
+/// scraper `sitrack_sync/sync_icm.py` (1 vez al día). Reemplaza el cálculo
+/// CESVI interno, que daba números optimistas que no coincidían con YPF.
 class IcmHubScreen extends StatelessWidget {
   const IcmHubScreen({super.key});
 
@@ -50,8 +52,8 @@ class IcmHubScreen extends StatelessWidget {
                         ruta: AppRoutes.adminIcmRanking,
                       ),
                       _HubTile(
-                        titulo: 'REPORTE SEMANAL',
-                        subtitulo: 'KPIs + gráficos + top 5',
+                        titulo: 'REPORTE MENSUAL',
+                        subtitulo: 'Flota + severidad + top 5',
                         icono: Icons.assessment_outlined,
                         color: AppColors.accentGreen,
                         ruta: AppRoutes.adminIcmReporteSemanal,
@@ -102,9 +104,10 @@ class _BannerInfo extends StatelessWidget {
           SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Mismos eventos que YPF audita en su Tablero ICM '
-              '(reportados por Sitrack). Verde = ICM ≥ 80, '
-              'Amarillo = 60-79, Rojo = < 60.',
+              'ICM oficial de Sitrack — el mismo número que audita YPF. '
+              'Acá MÁS BAJO = MEJOR (la flota ronda ~20). Color por '
+              'severidad: verde sin/pocas infracciones, amarillo medio, '
+              'rojo alto. Se actualiza una vez al día.',
               style: TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ),

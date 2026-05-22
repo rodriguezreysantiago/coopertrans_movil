@@ -415,7 +415,7 @@ class _SeccionesPanorama extends StatelessWidget {
               Expanded(
                 child: TendenciaIcmChart(
                   puntos: kpis.tendenciaIcm,
-                  titulo: 'ICM promedio · últimas 12 semanas',
+                  titulo: 'ICM oficial Sitrack · por mes',
                 ),
               ),
               const SizedBox(width: 10),

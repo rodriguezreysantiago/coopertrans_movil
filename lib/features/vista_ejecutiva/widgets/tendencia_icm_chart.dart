@@ -18,12 +18,15 @@ class TendenciaIcmChart extends StatelessWidget {
   const TendenciaIcmChart({
     super.key,
     required this.puntos,
-    this.titulo = 'ICM promedio · últimas semanas',
+    this.titulo = 'ICM oficial · por mes',
   });
 
   @override
   Widget build(BuildContext context) {
-    final hayDatos = puntos.any((p) => p.valor > 0);
+    // El ICM oficial es mensual: necesitamos ≥ 2 meses con dato para que la
+    // línea tenga sentido. Al arrancar la ingesta hay 1 solo mes.
+    final puntosConDato = puntos.where((p) => p.valor > 0).length;
+    final mostrarChart = puntosConDato >= 2;
     return AppCard(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       child: Column(
@@ -52,11 +55,12 @@ class TendenciaIcmChart extends StatelessWidget {
           const SizedBox(height: 8),
           SizedBox(
             height: 180,
-            child: hayDatos
+            child: mostrarChart
                 ? _buildChart(context)
                 : const Center(
                     child: Text(
-                      'Sin datos de semanas cerradas\n(esperar el cron del lunes 6 AM)',
+                      'Histórico ICM oficial en construcción\n'
+                      '(se acumula 1 punto por mes)',
                       textAlign: TextAlign.center,
                       style:
                           TextStyle(color: Colors.white38, fontSize: 12),
@@ -70,16 +74,21 @@ class TendenciaIcmChart extends StatelessWidget {
 
   Widget _buildChart(BuildContext context) {
     final spots = <FlSpot>[];
+    var maxVal = 0.0;
     for (var i = 0; i < puntos.length; i++) {
       spots.add(FlSpot(i.toDouble(), puntos[i].valor));
+      if (puntos[i].valor > maxVal) maxVal = puntos[i].valor;
     }
+    // Escala dinámica: el ICM oficial de la flota es bajo (~20), no 0-100.
+    final maxY = maxVal <= 0 ? 40.0 : (maxVal * 1.3).ceilToDouble();
+    final intervalo = maxY <= 50 ? 10.0 : 20.0;
     return LineChart(
       LineChartData(
         minY: 0,
-        maxY: 100,
+        maxY: maxY,
         gridData: FlGridData(
           show: true,
-          horizontalInterval: 20,
+          horizontalInterval: intervalo,
           drawVerticalLine: false,
           getDrawingHorizontalLine: (v) => FlLine(
             color: Colors.white.withValues(alpha: 0.05),
@@ -94,7 +103,7 @@ class TendenciaIcmChart extends StatelessWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: 20,
+              interval: intervalo,
               reservedSize: 28,
               getTitlesWidget: (v, m) => Text(
                 v.toInt().toString(),
@@ -106,15 +115,13 @@ class TendenciaIcmChart extends StatelessWidget {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: 2,
+              interval: 1,
               reservedSize: 22,
               getTitlesWidget: (v, m) {
                 final idx = v.toInt();
                 if (idx < 0 || idx >= puntos.length) {
                   return const SizedBox.shrink();
                 }
-                // 1 cada 2 puntos para no saturar (12 puntos → 6 labels).
-                if (idx % 2 != 0) return const SizedBox.shrink();
                 return Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
@@ -144,15 +151,14 @@ class TendenciaIcmChart extends StatelessWidget {
             isStrokeCapRound: true,
             dotData: FlDotData(
               show: true,
-              getDotPainter: (spot, _, __, ___) {
-                final icm = puntos[spot.x.toInt()].valor;
-                return FlDotCirclePainter(
-                  radius: 3.5,
-                  color: _colorIcm(icm),
-                  strokeColor: Colors.white,
-                  strokeWidth: 1,
-                );
-              },
+              getDotPainter: (spot, _, __, ___) => FlDotCirclePainter(
+                radius: 3.5,
+                // Color neutro: la flota no tiene banda de color oficial,
+                // así que no inventamos umbrales (igual que la card).
+                color: AppColors.accentTeal,
+                strokeColor: Colors.white,
+                strokeWidth: 1,
+              ),
             ),
             belowBarData: BarAreaData(
               show: true,
@@ -175,12 +181,5 @@ class TendenciaIcmChart extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  Color _colorIcm(double icm) {
-    if (icm == 0) return Colors.white24;
-    if (icm >= 80) return AppColors.accentGreen;
-    if (icm >= 60) return AppColors.accentAmber;
-    return AppColors.accentRed;
   }
 }

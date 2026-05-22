@@ -77,8 +77,15 @@ class KpiGrandeCard extends StatelessWidget {
     );
   }
 
-  /// Constructor a partir de `KpiIcm` (ICM flota — decimal +
-  /// comparativa en puntos).
+  /// Constructor a partir de `KpiIcm` (ICM OFICIAL de la flota — decimal +
+  /// comparativa en puntos vs el mes anterior).
+  ///
+  /// ⚠ Escala del ICM oficial de Sitrack: **MÁS BAJO = MEJOR** (la flota
+  /// ronda ~20). Por eso `mejorEsSubir: false` (si el ICM sube, empeoró →
+  /// la flecha se pinta roja) y NO coloreamos el número por umbrales
+  /// inventados — la flota no tiene una banda de color oficial, así que el
+  /// número va en azul neutro y el bueno/malo lo dice la flecha de
+  /// variación.
   factory KpiGrandeCard.icm({
     Key? key,
     required String label,
@@ -93,22 +100,20 @@ class KpiGrandeCard extends StatelessWidget {
         : (v >= 0
             ? '+${v.toStringAsFixed(1)} pts'
             : '${v.toStringAsFixed(1)} pts');
-    final colorIcm = kpi.actual >= 80
-        ? AppColors.accentGreen
-        : (kpi.actual >= 60 ? AppColors.accentAmber : AppColors.accentRed);
     return KpiGrandeCard(
       key: key,
       label: label,
       valorTexto: kpi.actual > 0 ? kpi.actual.toStringAsFixed(1) : '—',
       icono: icono,
-      color: colorIcm,
+      color: AppColors.accentBlue,
       sublabel: sublabel ??
           (kpi.choferesEnPromedio > 0
-              ? '${kpi.choferesEnPromedio} choferes · semana cerrada'
-              : 'sin datos de la semana cerrada'),
+              ? '${kpi.choferesEnPromedio} choferes · ICM oficial del mes'
+              : 'sin datos del mes (se sincroniza a diario)'),
       variacion: v,
       variacionTexto: vTexto,
-      mejorEsSubir: true,
+      // ICM oficial: bajar es mejorar → variación negativa se pinta verde.
+      mejorEsSubir: false,
       onTap: onTap,
     );
   }
