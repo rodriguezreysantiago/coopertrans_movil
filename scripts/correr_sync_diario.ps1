@@ -62,6 +62,11 @@ try {
         exit 1
     }
     Set-Location $Dir
+    # UTF-8 forzado: cuando la Scheduled Task corre con la salida redirigida,
+    # Python usa cp1252 por defecto y revienta al imprimir '->' o acentos
+    # (UnicodeEncodeError). PYTHONUTF8=1 lo pone en modo UTF-8 (stdout/stderr).
+    $env:PYTHONUTF8 = '1'
+    $env:PYTHONIOENCODING = 'utf-8'
     Write-Log 'INFO' "Corriendo $($cfg.Script) --commit ..."
 
     # Capturamos stdout+stderr como texto sin abortar (PS 5.1: $EAP local).
