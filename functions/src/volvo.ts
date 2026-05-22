@@ -1636,11 +1636,14 @@ export const onAlertaVolvoMantenimientoCreated = onDocumentCreated(
       etiqueta = ETIQUETAS_TIPO_ALERTA[subType] ?? subType ?? "Evento genérico";
     }
 
-    // No encolamos en COLA_WHATSAPP aquí. El cron del bot lee
-    // VOLVO_ALERTAS una vez por día y manda UN mensaje consolidado con
-    // todos los eventos de mantenimiento de las últimas 24h
-    // (cron_mantenimiento_diario en whatsapp-bot/src/cron.js).
-    // Enviar uno por evento generaba N mensajes separados al admin.
+    // No encolamos en COLA_WHATSAPP aquí. La Cloud Function
+    // `resumenMantenimientoVehiculosDiario` (volvo_mantenimiento.ts) arma
+    // a las 08:00 ART UN "Parte de mantenimiento" consolidado: testigos del
+    // tablero (VOLVO_ESTADO) + eventos de neumáticos/tacógrafo de las
+    // últimas 24h (VOLVO_ALERTAS). Enviar uno por evento generaba N
+    // mensajes separados al admin.
+    // (Hasta 2026-05-22 ese resumen lo armaba el cron del bot —
+    // cron_mantenimiento_diario — pero le llegaba duplicado a Emmanuel.)
     logger.info(
       "[onAlertaVolvoMantenimientoCreated] evento registrado en " +
       "VOLVO_ALERTAS — cron diario lo incluirá en resumen",

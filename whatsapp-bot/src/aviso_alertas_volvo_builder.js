@@ -188,89 +188,14 @@ function buildResumenDiario({ destinatarioNombre, eventos }) {
   );
 }
 
-/**
- * Construye el mensaje resumen diario de alertas de MANTENIMIENTO (FUEL,
- * CATALYST, TELL_TALE, ADBLUELEVEL_LOW, WITHOUT_ADBLUE) de las últimas 24h.
- *
- * @param {object} args
- * @param {string|null} args.destinatarioNombre
- * @param {Array<{
- *   patente: string,
- *   tipo: string,
- *   subTipo: string|null,
- *   choferNombre: string|null,
- *   fechaHora: Date,
- * }>} args.eventos
- * @returns {string|null}
- */
-function buildResumenMantenimientoDiario({ destinatarioNombre, eventos }) {
-  const eventosArr = Array.isArray(eventos) ? eventos : [];
-  const nombre = destinatarioNombre
-    ? String(destinatarioNombre).replace(/\s+/g, ' ').trim().slice(0, 40)
-    : null;
-  const saludo = nombre ? `Hola ${nombre}` : 'Hola';
-  const fecha = aDdMmYyyyLocal(new Date());
-
-  // Sin alertas: mandamos mensaje "todo OK" igual (decisión Santiago
-  // 2026-05-09: silencio = ambiguo; un mensaje confirma que el cron
-  // corrió y no hubo nada para reportar).
-  if (eventosArr.length === 0) {
-    return (
-      `${saludo}.\n\n` +
-      `🔧 Resumen diario — Alertas de mantenimiento (${fecha})\n\n` +
-      `✅ Sin alertas mecánicas en las últimas 24h.\n\n` +
-      `${FIRMA}`
-    );
-  }
-
-  const porPatente = new Map();
-  for (const ev of eventosArr) {
-    const key = String(ev.patente || '—').trim().toUpperCase();
-    if (!porPatente.has(key)) porPatente.set(key, []);
-    porPatente.get(key).push(ev);
-  }
-  const patentesOrd = [...porPatente.keys()].sort();
-
-  const bloques = patentesOrd.map((patente) => {
-    const evs = porPatente.get(patente);
-    const choferNombre = evs.map((e) => e.choferNombre).find((n) => n && String(n).trim());
-    const titulo = choferNombre
-      ? `🔧 *${patente}* (${choferNombre})`
-      : `🔧 *${patente}*`;
-
-    const ordenados = [...evs].sort((a, b) => a.fechaHora.getTime() - b.fechaHora.getTime());
-
-    // Agrupar por tipo mostrado (subTipo para GENERIC, tipo para el resto).
-    const porTipoMost = new Map();
-    for (const ev of ordenados) {
-      const tipoKey = ev.subTipo || ev.tipo;
-      if (!porTipoMost.has(tipoKey)) porTipoMost.set(tipoKey, []);
-      porTipoMost.get(tipoKey).push(ev);
-    }
-
-    const lineas = [...porTipoMost.entries()].map(([tipoKey, evList]) => {
-      const etiqueta = ETIQUETAS_TIPO[tipoKey] || tipoKey;
-      const horas = evList.map((e) => aLocalTime(e.fechaHora)).join(' / ');
-      const prefijo = evList.length > 1 ? `${evList.length}x ` : '';
-      return `   • ${prefijo}${etiqueta} (${horas})`;
-    });
-
-    return `${titulo}\n${lineas.join('\n')}`;
-  });
-
-  const cantidad = eventosArr.length;
-  return (
-    `${saludo}.\n\n` +
-    `🔧 Resumen diario — Alertas de mantenimiento (${fecha})\n\n` +
-    `${cantidad === 1 ? '1 alerta' : `${cantidad} alertas`} de mantenimiento detectadas:\n\n` +
-    `${bloques.join('\n\n')}\n\n` +
-    `${FIRMA}`
-  );
-}
+// NOTA (2026-05-22): `buildResumenMantenimientoDiario` se eliminó. Generaba el
+// "🔧 Resumen diario — Alertas de mantenimiento" que el bot le mandaba a
+// Emmanuel y que estaba DUPLICADO con el "Parte de mantenimiento" de la Cloud
+// Function `resumenMantenimientoVehiculosDiario`. Los eventos de neumáticos /
+// tacógrafo que sólo traía este resumen se mudaron al Parte de la CF.
 
 module.exports = {
   buildResumenDiario,
-  buildResumenMantenimientoDiario,
   ETIQUETAS_TIPO,
   FIRMA,
 };

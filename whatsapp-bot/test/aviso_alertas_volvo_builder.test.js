@@ -10,7 +10,6 @@ const assert = require('node:assert/strict');
 
 const {
   buildResumenDiario,
-  buildResumenMantenimientoDiario,
   ETIQUETAS_TIPO,
 } = require('../src/aviso_alertas_volvo_builder');
 
@@ -135,15 +134,5 @@ describe('ETIQUETAS_TIPO contiene los códigos esperados', () => {
   test('SEATBELT está mapeado (regresión 2026-05-07)', () => {
     assert.ok(ETIQUETAS_TIPO.SEATBELT, 'SEATBELT debe estar en el mapa');
     assert.match(ETIQUETAS_TIPO.SEATBELT, /Cinturón/i);
-  });
-});
-
-describe('buildResumenMantenimientoDiario sigue funcionando (sin regresión)', () => {
-  test('GENERIC con subTipo TELL_TALE → "Luz de tablero encendida"', () => {
-    const msg = buildResumenMantenimientoDiario({
-      destinatarioNombre: 'Santi',
-      eventos: [ev({ tipo: 'GENERIC', subTipo: 'TELL_TALE' })],
-    });
-    assert.match(msg, /Luz de tablero encendida/);
   });
 });

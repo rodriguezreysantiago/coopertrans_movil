@@ -18,7 +18,6 @@ const log = require('./logger');
 const { enHorarioHabil, normalizarTelefonoAWid } = require('./humano');
 const aviso = require('./aviso_builder');
 const avisoService = require('./aviso_service_builder');
-const avisoAlertasVolvo = require('./aviso_alertas_volvo_builder');
 const avisoVencProx = require('./aviso_vencimientos_proximos_builder');
 const hist = require('./historico');
 const health = require('./health');
@@ -750,187 +749,17 @@ async function _runOnce(fs) {
     // recibía Molina (UNSAFE_LANE_CHANGE / LKS / LCS / DISTANCE_ALERT
     // vs Sitrack salida-de-carril 1006 + distancia 444) se eliminaron.
 
-    // ─── Mantenimiento diario consolidado (1 msg/día al Jefe Mant) ───
-    // Eventos mecánicos consolidados en UN solo mensaje al Jefe Mant
-    // (Emmanuel, vía ALERTAS_RESUMEN_DESTINATARIO_DNI).
-    //
-    // Tipos incluidos (decisión Santiago 2026-05-09):
-    // - TELL_TALE — luz de tablero encendida.
-    // - TPM — presión de neumático fuera de rango.
-    // - TTM — temperatura de neumático fuera de rango.
-    // - TACHO_OUT_OF_SCOPE_MODE_CHANGE — tacógrafo fuera de servicio.
-    //
-    // Excluidos a propósito (los manejaba antes este resumen, sacados
-    // por decisión 2026-05-09): FUEL, CATALYST, ADBLUELEVEL_LOW,
-    // WITHOUT_ADBLUE. Esos quedan visibles solo en el tablero de la app
-    // — el Jefe Mant decidió que son ruido para el resumen diario.
-    //
-    // Volvo emite los tipos directamente o como `tipo: GENERIC` con el
-    // subtipo en `detalle_generic.type`. Cubrimos ambos casos sumando
-    // los mismos tipos en SUBTIPOS_MANT_GENERIC.
-    const TIPOS_MANT_DIRECTOS = new Set([
-      'TPM',
-      'TTM',
-      'TACHO_OUT_OF_SCOPE_MODE_CHANGE',
-    ]);
-    const SUBTIPOS_MANT_GENERIC = new Set([
-      'TELL_TALE',
-      'TPM',
-      'TTM',
-      'TACHO_OUT_OF_SCOPE_MODE_CHANGE',
-    ]);
-
-    // REFACTOR 2026-05-18 — datos siempre frescos (ver service_diario arriba).
-    const dniMantenimiento = process.env.ALERTAS_RESUMEN_DESTINATARIO_DNI;
-    if (dniMantenimiento) {
-      const empMant = await _obtenerDestinatarioConsolidado(db, dniMantenimiento, empleadosByDni);
-      if (!empMant) {
-        log.warn(
-          `ALERTAS_RESUMEN_DESTINATARIO_DNI=${dniMantenimiento} no existe en EMPLEADOS. ` +
-          `Mantenimiento diario no se envía hoy.`
-        );
-      } else {
-        const telMantRaw = empMant.data.TELEFONO;
-        const telMant = normalizarTelefonoAWid(telMantRaw)
-          ? String(telMantRaw).trim()
-          : null;
-        if (!telMant) {
-          log.warn(
-            `Destinatario mantenimiento ${dniMantenimiento} sin TELEFONO válido. ` +
-            `Mantenimiento diario no se envía hoy.`
-          );
-        } else {
-          // Doc ID deterministico: idempotencia basada en estado real.
-          const hoyArtIso = _fechaArtIso();
-          const idCola = `mantenimiento_diario_${hoyArtIso}_${dniMantenimiento}`;
-          const colaRef = db.collection(fs.COLECCION).doc(idCola);
-
-          try {
-            const existing = await colaRef.get();
-            if (existing.exists && existing.data().estado === fs.ESTADO.enviado) {
-              log.debug(
-                `Mantenimiento diario ya ENTREGADO hoy a ${dniMantenimiento}, skip.`
-              );
-            } else {
-              // Computar eventos frescos solo cuando vamos a generar.
-              const desdeMant = admin.firestore.Timestamp.fromMillis(
-                Date.now() - 24 * 60 * 60 * 1000
-              );
-              const mantSnap = await db
-                .collection('VOLVO_ALERTAS')
-                .where('creado_en', '>=', desdeMant)
-                .get();
-
-              const eventosMant = [];
-              for (const d of mantSnap.docs) {
-                const data = d.data();
-                // Excluidos: alertas de tractores tanqueros no entran
-                // al resumen de Emma (no controlamos esas unidades).
-                const patenteEvento = String(data.patente || '').toUpperCase();
-                if (patenteEvento && excluidos.patentes.has(patenteEvento)) {
-                  continue;
-                }
-                const tipo = String(data.tipo || '').toUpperCase();
-                let esMant = TIPOS_MANT_DIRECTOS.has(tipo);
-                let subTipo = null;
-                if (!esMant && tipo === 'GENERIC') {
-                  // Volvo entrega los GENERIC con subtipo en
-                  // `detalle_generic.triggerType` (alertas HIGH como
-                  // TELL_TALE) o en `detalle_generic.type` (alertas de
-                  // mantenimiento). Leemos ambos defensivamente — sin
-                  // esto el cron pierde TELL_TALE: Volvo lo manda en
-                  // triggerType y este loop solo miraba type (bug
-                  // detectado 2026-05-09: el resumen de Emma nunca
-                  // incluía las luces de tablero).
-                  const subType =
-                    String(data.detalle_generic?.triggerType ?? '').toUpperCase() ||
-                    String(data.detalle_generic?.type ?? '').toUpperCase() ||
-                    '';
-                  if (SUBTIPOS_MANT_GENERIC.has(subType)) {
-                    esMant = true;
-                    subTipo = subType;
-                  }
-                }
-                if (!esMant) continue;
-
-                const creadoEn = data.creado_en;
-                const fechaHora =
-                  creadoEn && typeof creadoEn.toDate === 'function'
-                    ? creadoEn.toDate()
-                    : new Date();
-                eventosMant.push({
-                  patente: String(data.patente || '—').trim(),
-                  tipo,
-                  subTipo,
-                  choferNombre: data.chofer_nombre
-                    ? String(data.chofer_nombre).trim()
-                    : null,
-                  fechaHora,
-                });
-              }
-
-              const mensajeMant = avisoAlertasVolvo.buildResumenMantenimientoDiario({
-                destinatarioNombre: aviso.resolverNombreSaludo(empMant.data),
-                eventos: eventosMant,
-              });
-
-              // Encolamos SIEMPRE — el builder devuelve mensaje
-              // "sin novedades" si eventosMant.length === 0 (decisión
-              // Santiago 2026-05-09: silencio es ambiguo).
-              if (!mensajeMant) {
-                // Defensivo: el builder siempre debería devolver string.
-                log.warn(
-                  `Builder mantenimiento devolvio null inesperadamente. Skip.`
-                );
-              } else {
-                const accion = existing.exists ? 'REGENERADO' : 'ENCOLADO';
-                await colaRef.set({
-                  telefono: telMant,
-                  mensaje: mensajeMant,
-                  estado: fs.ESTADO.pendiente,
-                  encolado_en: admin.firestore.FieldValue.serverTimestamp(),
-                  // TTL 36h — mismo razonamiento que service_diario arriba.
-                  expira_en: admin.firestore.Timestamp.fromMillis(
-                    Date.now() + 36 * 60 * 60 * 1000
-                  ),
-                  enviado_en: null,
-                  error: null,
-                  intentos: 0,
-                  origen: 'cron_mantenimiento_diario',
-                  destinatario_coleccion: 'EMPLEADOS',
-                  destinatario_id: dniMantenimiento,
-                  campo_base: 'MANTENIMIENTO_DIARIO',
-                  admin_dni: 'BOT',
-                  admin_nombre: 'Bot automatico',
-                  items_agrupados: eventosMant.map((e) => ({
-                    tipoDoc: e.subTipo || e.tipo,
-                    campoBase: 'VOLVO_ALERT_MANTENIMIENTO',
-                    coleccion: 'VOLVO_ALERTAS',
-                    docId: `${e.patente}_${e.tipo}`,
-                    fecha: e.fechaHora.toISOString(),
-                    tipo: e.tipo,
-                    subTipo: e.subTipo,
-                    chofer: e.choferNombre,
-                  })),
-                });
-                stats.encolados++;
-                log.info(
-                  `+ ${accion} MANTENIMIENTO DIARIO: ${dniMantenimiento} ` +
-                  `(${eventosMant.length} eventos) -> ${idCola}`
-                );
-              }
-            }
-          } catch (e) {
-            stats.errores++;
-            log.error(`No se pudo encolar mantenimiento diario: ${e.message}`);
-          }
-        }
-      }
-    } else {
-      log.debug(
-        'ALERTAS_RESUMEN_DESTINATARIO_DNI no configurado. Skip mantenimiento diario.'
-      );
-    }
+    // ─── Mantenimiento de tablero Volvo → MOVIDO a Cloud Function ───
+    // Hasta 2026-05-22 el bot encolaba acá un "Resumen diario — Alertas de
+    // mantenimiento" (origen cron_mantenimiento_diario) leyendo eventos
+    // TELL_TALE / TPM / TTM / TACHO de VOLVO_ALERTAS. A Emmanuel le llegaba
+    // DUPLICADO con el "Parte de mantenimiento" de la Cloud Function
+    // `resumenMantenimientoVehiculosDiario` (functions/src/volvo_mantenimiento.ts):
+    // ambos reportaban las luces del tablero, el Parte con el testigo EXACTO
+    // y la severidad, este resumen con un genérico "Luz de tablero encendida".
+    // Se eliminó este resumen; lo único que el Parte no traía (presión/temp de
+    // neumático y tacógrafo) se sumó al Parte de la CF. La env var
+    // ALERTAS_RESUMEN_DESTINATARIO_DNI queda obsoleta para este flujo.
 
     // ─── Vencimientos próximos (≤7 días) — al encargado de documentación ─
     // 1 mensaje por día consolidado con TODO lo que vence en los

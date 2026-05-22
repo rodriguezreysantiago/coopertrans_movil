@@ -236,9 +236,10 @@ describe('planificarEnvioAgrupado — agrupación volvo_alert_high', () => {
 });
 
 describe('planificarEnvioAgrupado — volvo_alert_mantenimiento NO se agrupa', () => {
-  // Desde commit b587822 (2026-05-05) la consolidación de mantenimiento
-  // se hace en cron_mantenimiento_diario (1 mensaje/día al jefe de mant).
-  // Si por defensa llega un doc con origen='volvo_alert_mantenimiento' a
+  // La consolidación de mantenimiento la hace la Cloud Function
+  // resumenMantenimientoVehiculosDiario (1 "Parte" por día al jefe de mant;
+  // desde 2026-05-22 reemplazó al cron_mantenimiento_diario del bot). Si por
+  // defensa llega un doc con origen='volvo_alert_mantenimiento' a
   // COLA_WHATSAPP, el agrupador lo ignora y se envía individual.
   test('origen volvo_alert_mantenimiento → null (envío individual)', async () => {
     const docActual = fakeDoc({

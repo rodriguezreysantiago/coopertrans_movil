@@ -421,9 +421,9 @@ re-generación dentro del mismo día.
 ```powershell
 # 1) Identificar el lock a borrar segun cron:
 #    - cron_service_diario:           service_diario_<fecha>_<dni>
-#    - cron_mantenimiento_diario:     ya no usa AVISOS_AUTOMATICOS_HISTORICO
-#                                      (refactor 2026-05-18, doc deterministico
-#                                      directo en COLA_WHATSAPP)
+#    - resumen_mantenimiento_vehiculos (CF "Parte de mantenimiento", reemplazó
+#                                      al cron_mantenimiento_diario el 2026-05-22):
+#                                      mantenimiento_vehiculos_<DD-MM-YYYY>
 #    - cron_vencimientos_proximos_diario: ya no usa AAH (idem)
 #    - resumen_jornadas_v2:           excesos_jornada_<fecha>
 #    - resumen_conducta_manejo_diario: conducta_manejo_<fecha>

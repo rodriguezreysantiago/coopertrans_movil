@@ -27,8 +27,10 @@ const BANNER_TESTING = '';
 /** Origenes que disparan agrupación al envío. */
 const ORIGENES_AGRUPABLES = new Set([
   'volvo_alert_high',
-  // volvo_alert_mantenimiento ya no se encola individualmente — el cron
-  // genera un único mensaje diario (cron_mantenimiento_diario).
+  // volvo_alert_mantenimiento ya no se encola individualmente — el "Parte
+  // de mantenimiento" lo arma la Cloud Function resumenMantenimientoVehiculos
+  // Diario (1 mensaje/día). (Hasta 2026-05-22 lo armaba cron_mantenimiento_
+  // diario en el bot, pero le llegaba duplicado a Emmanuel.)
   // sitrack_chofer_no_identificado: el cron Sitrack encola un aviso
   // cada 5 min mientras el chofer maneje sin pasar el iButton (sin
   // dedup, decisión Vecchi 2026-05-07). El agrupador junta los
