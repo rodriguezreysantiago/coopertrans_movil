@@ -67,6 +67,11 @@ try {
     # (UnicodeEncodeError). PYTHONUTF8=1 lo pone en modo UTF-8 (stdout/stderr).
     $env:PYTHONUTF8 = '1'
     $env:PYTHONIOENCODING = 'utf-8'
+    # PS 5.1 captura la salida nativa con [Console]::OutputEncoding (cp1252 por
+    # defecto) -> los acentos/flechas que emite python en UTF-8 quedan mojibake
+    # en el log. Lo ponemos en UTF-8 para que el log se lea bien. (Es solo
+    # cosmetico: lo que se escribe a Firestore lo hace python aparte, ya UTF-8.)
+    try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
     Write-Log 'INFO' "Corriendo $($cfg.Script) --commit ..."
 
     # Capturamos stdout+stderr como texto sin abortar (PS 5.1: $EAP local).
