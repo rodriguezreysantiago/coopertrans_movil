@@ -116,10 +116,15 @@ class _TractorCard extends StatelessWidget {
 
     return AppCard(
       onTap: () {
-        // Abre directo la ficha del tractor en un sheet (mismo flujo
-        // que la lista de Flota). Reusamos el helper público
-        // `abrirDetalleVehiculo` para no duplicar la lógica del sheet.
-        abrirDetalleVehiculo(context, patente, data);
+        // Abre el detalle de mantenimiento UNIFICADO de la unidad: service +
+        // advertencias del tablero + telemetría + historial de taller completo.
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                AdminMantenimientoDetalleScreen(patente: patente),
+          ),
+        );
       },
       child: Row(
         children: [
@@ -210,202 +215,12 @@ class _TractorCard extends StatelessWidget {
             children: [
               MantenimientoBadge(serviceDistanceKm: serviceDistanceKm),
               const SizedBox(height: 6),
-              // Botón "Service hecho" — abre dialog que pre-carga el
-              // odómetro actual y permite ajustar la fecha si el service
-              // fue ayer/anteayer. Lo dejamos visible siempre (incluso
-              // en estado OK) por si se hace un service preventivo o
-              // intermedio antes del momento exacto.
-              InkWell(
-                borderRadius: BorderRadius.circular(6),
-                onTap: () => _confirmarServiceHecho(
-                  context,
-                  patente: patente,
-                  marca: marca,
-                  modelo: modelo,
-                  kmActual: kmActual,
-                ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentGreen.withAlpha(20),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(
-                        color: AppColors.accentGreen.withAlpha(60)),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.check_circle_outline,
-                          size: 12, color: AppColors.accentGreen),
-                      SizedBox(width: 4),
-                      Text(
-                        'Service hecho',
-                        style: TextStyle(
-                          color: AppColors.accentGreen,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              const Icon(Icons.chevron_right, color: Colors.white24, size: 20),
             ],
           ),
         ],
       ),
     );
-  }
-
-  /// Dialog que registra "service hecho hoy" para un tractor.
-  ///
-  /// Pre-carga el odómetro actual desde Volvo. El admin puede confirmar
-  /// con la fecha de hoy o ajustar (si el service fue ayer/anteayer).
-  /// Si el odómetro no está disponible (raro), avisa al admin que cargue
-  /// el dato manualmente desde la ficha.
-  static Future<void> _confirmarServiceHecho(
-    BuildContext context, {
-    required String patente,
-    required String marca,
-    required String modelo,
-    required double? kmActual,
-  }) async {
-    final messenger = ScaffoldMessenger.of(context);
-
-    if (kmActual == null) {
-      AppFeedback.warningOn(messenger,
-          'Sin KM_ACTUAL para $patente. Cargá el último service desde la ficha.');
-      return;
-    }
-
-    DateTime fechaElegida = DateTime.now();
-
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (dCtx) => StatefulBuilder(
-        builder: (sbCtx, setStateDialog) => AlertDialog(
-          title: Text('Marcar service hecho — $patente'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$marca $modelo'.trim().isEmpty
-                    ? 'Tractor $patente'
-                    : '$marca $modelo · $patente',
-                style: const TextStyle(
-                    color: Colors.white70, fontSize: 12),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Odómetro actual: ${kmActual.round()} km',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Próximo service quedará a ${(kmActual + AppMantenimiento.intervaloServiceKm).round()} km.',
-                style: const TextStyle(
-                    color: Colors.white54, fontSize: 11),
-              ),
-              const SizedBox(height: 16),
-              InkWell(
-                borderRadius: BorderRadius.circular(6),
-                onTap: () async {
-                  final picked = await pickFecha(
-                    sbCtx,
-                    initial: fechaElegida,
-                    titulo: 'Fecha del service',
-                  );
-                  if (picked != null) {
-                    setStateDialog(() => fechaElegida = picked);
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(8),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white24),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.event,
-                          color: AppColors.accentGreen, size: 18),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Fecha: ${AppFormatters.formatearFecha(fechaElegida)}',
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      const Spacer(),
-                      const Icon(Icons.edit_calendar,
-                          color: Colors.white24, size: 16),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dCtx, false),
-              child: const Text('CANCELAR'),
-            ),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pop(dCtx, true),
-              icon: const Icon(Icons.check_circle),
-              label: const Text('REGISTRAR'),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (ok != true) return;
-
-    try {
-      final db = FirebaseFirestore.instance;
-
-      // Hacemos los dos updates en paralelo: VEHICULOS (campo manual del
-      // último service) y MANTENIMIENTOS_AVISADOS (estado del badge).
-      // Sin el segundo, el badge del shell sigue mostrando VENCIDO hasta
-      // el próximo ciclo del AutoSync (60s). Bug C4 del code review.
-      const intervaloKm = AppMantenimiento.intervaloServiceKm;
-      await Future.wait([
-        db.collection(AppCollections.vehiculos).doc(patente).update({
-          'ULTIMO_SERVICE_KM': kmActual,
-          'ULTIMO_SERVICE_FECHA': AppFormatters.aIsoFechaLocal(fechaElegida),
-          'fecha_ultima_actualizacion': FieldValue.serverTimestamp(),
-        }),
-        // Reset del estado: el tractor acaba de salir del taller. El
-        // próximo ciclo del AutoSync va a recalcular el estado real
-        // (que debería ser "OK" porque arranca un ciclo nuevo de 50.000 km).
-        db.collection(AppCollections.mantenimientosAvisados).doc(patente).set({
-          'patente': patente,
-          'ultimo_estado': 'OK',
-          'ultimo_service_distance_km': intervaloKm,
-          'service_registrado_at': FieldValue.serverTimestamp(),
-          'ultima_evaluacion_at': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true)),
-      ]);
-
-      AppFeedback.successOn(
-        messenger,
-        'Service registrado para $patente. Próximo a ${(kmActual + intervaloKm).round()} km.',
-      );
-    } catch (e, s) {
-      AppFeedback.errorTecnicoOn(
-        messenger,
-        usuario: 'No se pudo registrar el service. Probá de nuevo.',
-        tecnico: e,
-        stack: s,
-      );
-    }
   }
 
   /// Formatea "Último service: ~342.000 km · 38.000 km recorridos".

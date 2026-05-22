@@ -3,12 +3,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
-import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
-import '../../../shared/widgets/fecha_dialog.dart';
 import '../widgets/mantenimiento_badge.dart';
-import 'admin_vehiculos_lista_screen.dart' show abrirDetalleVehiculo;
+import 'admin_mantenimiento_detalle_screen.dart';
 
 // Modelos privados (_FuenteServiceDistance enum, _ResolucionServiceDistance,
 // _Resumen) y widgets (_TractorCard, _BarraResumen, _Chip) extraidos para
