@@ -63,10 +63,16 @@ Cerrado el bundle de menores. CF `estadoVolvoPoller` deployada con lock-tick.
   warn + volumen << cap); Python TZ -3 (AR no DST); dedup del bot por texto
   (defensa secundaria, cambiar = behavior change con riesgo).
 
-### ⚠️ Queda pendiente (NO bloquea el release)
-1. **Limpiar `alertasVolvoDiario`** de `health.js` + ayuda en `admin_estado_bot_widgets.dart`
-   (footgun: `ALERTAS_RESUMEN_DESTINATARIO_DNI` ya no reenruta nada).
-2. **(opcional)** Si re-suben el F.931 como PDF más liviano, abre al instante en la app.
+### Limpieza alertasVolvoDiario HECHA (commit `1c2da83`, mismo día PM)
+Removida la regla obsoleta de `health.js` + texto de ayuda + `_etiquetaTipo` del
+card "Reglas de notificación" — `ALERTAS_RESUMEN_DESTINATARIO_DNI` ya no aparece
+en la app y no engaña a quien intente cambiarla. El card pasa de 4 a 3 reglas.
+
+### ⚠️ Lo único que queda
+**(opcional, no es código)** Re-subir el F.931 como PDF más liviano para que abra
+al instante en la app (hoy son 18 MB; ya funciona, pero la primera carga toma
+varios segundos en datos móviles). Es del lado de Vecchi (admin que sube), no
+del lado de la app.
 
 ---
 
