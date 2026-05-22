@@ -179,7 +179,8 @@ def encolar_whatsapp(telefono, mensaje):
 
 def avisar_turno(chofer_dni, chofer_nombre, cuando, evento):
     """Avisa por WhatsApp al chofer + al encargado de logística cuando el bot
-    consigue (`evento='reservado'`) o reprograma (`'reagendado'`) un turno."""
+    consigue (`evento='reservado'`), reprograma (`'reagendado'`) o CANCELA
+    (`'cancelado'`) un turno."""
     db = choferes._db()
     cuando = cuando or "(ver en iTurnos)"
     nombre = (chofer_nombre or chofer_dni)
@@ -189,6 +190,11 @@ def avisar_turno(chofer_dni, chofer_nombre, cuando, evento):
         msg_chofer = (f"{hola}te reprogramamos el turno de carga YPF: "
                       f"ahora es *{cuando}*.\n\n_Coopertrans Móvil_")
         msg_enc = (f"Turno YPF REPROGRAMADO — {nombre} (DNI {chofer_dni}): "
+                   f"{cuando}.")
+    elif evento == "cancelado":
+        msg_chofer = (f"{hola}te avisamos que tu turno de carga YPF "
+                      f"(*{cuando}*) fue CANCELADO.\n\n_Coopertrans Móvil_")
+        msg_enc = (f"Turno YPF CANCELADO — {nombre} (DNI {chofer_dni}): "
                    f"{cuando}.")
     else:
         msg_chofer = (f"{hola}te conseguimos turno de carga YPF para "

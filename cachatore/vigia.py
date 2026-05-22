@@ -780,11 +780,24 @@ def main():
                     ok = False
                 else:
                     try:
+                        # Capturar el turno ANTES de cancelarlo, para avisar.
+                        cuando_cancelado = t.turno_cuando
                         r = t.cli.cancelar(t.uuid)
                         ok = bool(r.get("ok"))
                         if ok:
                             log("EXITO", t.nombre,
                                 "turno CANCELADO en iTurnos (pedido de la app)")
+                            # Avisar por WhatsApp al chofer + encargado de
+                            # logística que el turno quedó cancelado (mismo
+                            # canal que reservar/reagendar). Solo en cancelación
+                            # REAL (no dry, no "sin turno"). 2026-05-22.
+                            if _ESCRIBIR_ESTADO:
+                                try:
+                                    nube.avisar_turno(t.dni, t.nombre,
+                                                      cuando_cancelado, "cancelado")
+                                except Exception as e:
+                                    log("LOG", t.nombre,
+                                        f"no pude avisar la cancelación: {e}")
                         else:
                             log("LOG", t.nombre, "cancelación no confirmada "
                                 f"({r.get('motivo') or r.get('status')}); reintento luego")
