@@ -94,6 +94,16 @@ def log(tag: str, quien: str, msg: str):
         print(f"[{datetime.now():%d/%m %H:%M:%S}] {tag} [{quien}] {msg}", flush=True)
 
 
+def _log_reagendar_motivo(t, msg: str):
+    """Loguea POR QUÉ el reagendar de `t` no avanza, throttled ~cada 2 min por
+    chofer (con el barrido de ~5 s, sin throttle inundaría la ventana). Antes
+    estos casos eran SILENCIOSOS → 'no hizo nada' sin explicación."""
+    if time.time() - t.reagendar_ultimo_log < 120:
+        return
+    t.reagendar_ultimo_log = time.time()
+    log("LOG", t.nombre, f"reagendar: {msg}")
+
+
 def resolver_fecha(valor):
     """`fecha`: null=cualquier fecha en la franja; 'hoy'/'manana' se re-resuelven
     cada día (útil 24/7); o una fecha puntual 'AAAA-MM-DD'."""
@@ -138,7 +148,7 @@ class Target:
                  "franja", "reagendar", "cli", "logueado", "tiene_turno", "uuid",
                  "reagendar_hecho", "ultimo_check", "estado_reportado", "notificar",
                  "turno_hora", "turno_cuando", "turno_conseguido", "vacios_seguidos",
-                 "ciclo_completo", "cancelar_pedido")
+                 "ciclo_completo", "cancelar_pedido", "reagendar_ultimo_log")
 
     def __init__(self, ch: dict, fecha, franja: str, reagendar: bool):
         self.dni = ch["dni"]
@@ -163,6 +173,7 @@ class Target:
         self.vacios_seguidos = 0       # lecturas de mis_turnos vacías seguidas
         self.ciclo_completo = False    # turno usado/finalizado → sacarlo del ciclo
         self.cancelar_pedido = False   # la app pidió cancelar el turno (+ iTurnos)
+        self.reagendar_ultimo_log = 0.0  # throttle del log "por qué no reagenda"
 
     @property
     def credenciales_ok(self) -> bool:
@@ -575,7 +586,18 @@ def ciclo_latente(targets: dict, dry: bool):
     # disponibilidad de reagendar está en OTRA página (calendario propio), así
     # que se consulta directo (no contra el `libres` de arriba).
     for t in targets.values():
-        if not (t.reagendar and t.tiene_turno and t.uuid and not t.reagendar_hecho):
+        if not t.reagendar or t.reagendar_hecho:
+            continue   # no pidió reagendar / ya se movió → ni lo miramos
+        # Pidió reagendar pero falta algo para poder hacerlo → AVISAR (antes era
+        # un skip silencioso que se veía como "no hace nada").
+        if not t.tiene_turno:
+            _log_reagendar_motivo(t, "todavía sin turno (primero hay que "
+                                  "conseguir uno para poder moverlo)")
+            continue
+        if not t.uuid:
+            _log_reagendar_motivo(t, "todavía no tengo el id del turno (se carga "
+                                  "al chequear mis_turnos; si el bot recién "
+                                  "arrancó, esperá un toque)")
             continue
         # ¿El turno actual YA cae en la franja/fecha pedida? Entonces no hay nada
         # que mover -> cancelamos solo el reagendar (y la UI deja de mostrar
@@ -621,7 +643,13 @@ def ciclo_latente(targets: dict, dry: bool):
             t.ultimo_check = 0.0   # refrescar_estado publica el turno nuevo + avisa
         elif r.get("motivo") == "tomado":
             log("LOG", t.nombre, f"{r.get('hora')} lo tomaron al reagendar, sigo")
-        elif r.get("motivo") != "sin_slot_en_franja":
+        elif r.get("motivo") == "sin_slot_en_franja":
+            _log_reagendar_motivo(
+                t, f"el calendario de reagendar NO ofrece slot en franja "
+                   f"'{t.franja}'{(' / ' + t.fecha) if t.fecha else ''} "
+                   "(ojo: la página de reagendar puede mostrar menos huecos que "
+                   "la agenda general). Sigo mirando.")
+        else:
             log("LOG", t.nombre, f"reagendar sin confirmar ({r.get('motivo')})")
 
 
