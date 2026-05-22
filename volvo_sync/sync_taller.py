@@ -63,27 +63,44 @@ def _login(page, cfg):
 
 def _fetch_flota(page):
     """Navega a /assets y devuelve la lista de vehículos
-    [{id, registrationNumber, vin}, ...] de multidomainservices."""
-    capturas = []
+    [{id, registrationNumber, vin}, ...] de multidomainservices.
+
+    Robusto a PCs lentas (la dedicada vs la de oficina): en vez de un sleep
+    fijo de 9s, pollea hasta ~45s y corta apenas captura la respuesta con
+    `vehicles`. Y lee `r.text()` FUERA del handler de 'response' — llamarlo
+    dentro del handler sync de Playwright puede deadlockear (mismo problema
+    que tuvo el login)."""
+    responses = []
 
     def on_resp(r):
-        try:
-            if r.request.method == "POST" and "multidomainservices/graphql" in r.url:
-                body = r.text()
-                if '"vehicles"' in body and len(body) > 500:
-                    capturas.append(body)
-        except Exception:
-            pass
+        if r.request.method == "POST" and "multidomainservices/graphql" in r.url:
+            responses.append(r)
 
     page.on("response", on_resp)
     page.goto(BASE + "/assets", wait_until="domcontentloaded", timeout=60000)
-    page.wait_for_timeout(9000)
+    vehicles = []
+    seen = 0
+    for _ in range(45):  # hasta ~45s; corta apenas encuentra vehicles
+        if vehicles:
+            break
+        page.wait_for_timeout(1000)
+        while seen < len(responses):
+            r = responses[seen]
+            seen += 1
+            try:
+                body = r.text()
+            except Exception:
+                continue
+            if '"vehicles"' in body and len(body) > 500:
+                try:
+                    data = json.loads(body).get("data") or {}
+                    if data.get("vehicles"):
+                        vehicles = data["vehicles"]
+                        break
+                except Exception:
+                    pass
     page.remove_listener("response", on_resp)
-    if not capturas:
-        return []
-    big = max(capturas, key=len)
-    data = json.loads(big).get("data") or {}
-    return data.get("vehicles") or []
+    return vehicles
 
 
 def _fetch_taller(page, vehicle_id):
