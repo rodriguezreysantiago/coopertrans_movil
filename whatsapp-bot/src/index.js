@@ -875,6 +875,17 @@ async function pollearCola(db) {
   }
   _polleando = true;
   try {
+    // Mantener CALIENTE el cache de empleados para que los logs de envío
+    // muestren NOMBRES (En cola / Enviando / Enviado vía `_quien`). El camino
+    // de envío no dispara `_resolverChofer`, así que sin esto el roster queda
+    // en null en un bot que solo envía y los logs salen con el número crudo.
+    // Best-effort: respeta el TTL (~1 read/min) y nunca rompe el polling.
+    try {
+      await messageHandler.asegurarCacheEmpleados(db);
+    } catch (e) {
+      log.debug(`No pude precargar cache de empleados: ${e.message}`);
+    }
+
     // Sweeper de docs stale en PROCESANDO: si el bot crasheo durante
     // un envio anterior (entre marcarProcesando y marcarEnviado), el
     // doc quedo PROCESANDO y nadie lo repesca. Lo devolvemos a

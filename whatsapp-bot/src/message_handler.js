@@ -87,14 +87,27 @@ async function _refrescarCacheEmpleados(db) {
   log.info(`[empleados-cache] refresh: ${_cacheEmpleados.length} choferes (de ${todos} empleados, TTL ${_CACHE_TTL_MS}ms)`);
 }
 
+/**
+ * Asegura que el cache de empleados (choferes + roster completo) esté cargado
+ * y fresco (respeta el TTL). Pensado para llamarse desde el loop de polling del
+ * bot, así el roster está SIEMPRE caliente para los logs de envío legibles
+ * (`_quien`/`nombrePorTelefono*`). El camino de ENVÍO no dispara
+ * `_resolverChofer` (que es solo para mensajes ENTRANTES), por eso sin esto el
+ * cache quedaba en null en un bot que solo envía y los logs salían con el
+ * número crudo (bug reportado 2026-05-22).
+ */
+async function asegurarCacheEmpleados(db) {
+  if (!_cacheEmpleados || (Date.now() - _cacheTimestamp) > _CACHE_TTL_MS) {
+    await _refrescarCacheEmpleados(db);
+  }
+}
+
 async function _resolverChofer(db, fromNumber) {
   const fromDigits = String(fromNumber).replace(/\D+/g, '');
   if (!fromDigits) return null;
 
   // Refresh cache si nunca se cargo o si expiro el TTL.
-  if (!_cacheEmpleados || (Date.now() - _cacheTimestamp) > _CACHE_TTL_MS) {
-    await _refrescarCacheEmpleados(db);
-  }
+  await asegurarCacheEmpleados(db);
 
   // Fix M3 (auditoria 24/7 2026-05-18): match ESTRICTO por
   // normalizacion E.164, no por sufijo. El match por sufijo de 10
@@ -537,6 +550,7 @@ module.exports = {
   crearHandler,
   nombrePorTelefono,
   nombrePorTelefonoTodos,
+  asegurarCacheEmpleados,
   invalidarCacheEmpleados,
   // Exportados para tests:
   _resolverChofer,
