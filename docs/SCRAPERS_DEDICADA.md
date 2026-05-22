@@ -38,6 +38,12 @@ C:\coopertrans_movil\sync_venv\Scripts\playwright install chromium
 ```
 (Un solo venv para los dos scrapers → un solo chromium descargado.)
 
+> **Si al importar Playwright sale `ImportError: DLL load failed while
+> importing _greenlet`**: falta el **Visual C++ Redistributable** (greenlet
+> linkea contra el runtime de MSVC). Instalalo una vez:
+> `https://aka.ms/vs/17/release/vc_redist.x64.exe` → reabrí PowerShell.
+> Verificá con: `C:\coopertrans_movil\sync_venv\Scripts\python.exe -c "import greenlet, playwright; print('ok')"`
+
 ### 3. Credenciales (gitignoreadas, a mano)
 - `C:\coopertrans_movil\serviceAccountKey.json` — clave del service account de
   Firebase en la raíz del repo. **Probablemente ya está** (la usan el bot y
