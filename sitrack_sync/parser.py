@@ -109,6 +109,29 @@ def _ordenar_peor_primero(filas: list, clave_sev="severidad", clave_icm="icm"):
     return filas
 
 
+def _tendencia_diaria(raw: dict | None) -> list:
+    """ICM de la flota DÍA por DÍA (`rankingItemsByDay` del endpoint), para el
+    gráfico de tendencia de la app. Cada item es el agregado de TODA la flota
+    ese día (no por chofer). Excluimos días sin actividad (distancia 0 — entre
+    ellos el día en curso, que Sitrack todavía no cerró y vendría en 0)."""
+    by_day = (raw or {}).get("rankingItemsByDay", {}) or {}
+    filas = []
+    for v in by_day.values():
+        dist = _num(v.get("distance"))
+        if dist <= 0:
+            continue
+        filas.append({
+            "fecha": (v.get("scope") or "").strip(),  # "YYYY-MM-DD"
+            "icm": _r(v.get("score")),
+            "km": _r(dist, 1),
+            "infracciones": int(_num(v.get("lowInfractionsCount")))
+            + int(_num(v.get("mediumInfractionsCount")))
+            + int(_num(v.get("highInfractionsCount"))),
+        })
+    filas.sort(key=lambda f: f["fecha"])
+    return filas
+
+
 def construir_doc_icm(raw_driver: dict, raw_holder: dict | None,
                       periodo: str, desde: str, hasta: str,
                       alcance: str = "mensual") -> dict:
@@ -142,5 +165,7 @@ def construir_doc_icm(raw_driver: dict, raw_holder: dict | None,
         "choferes_activos": len(activos),
         "choferes": choferes,
         "vehiculos": vehiculos,
+        # ICM de la flota día por día (para el gráfico de tendencia de la app).
+        "tendencia_diaria": _tendencia_diaria(raw_driver),
         "fuente": "sitrack_icm_oficial",
     }

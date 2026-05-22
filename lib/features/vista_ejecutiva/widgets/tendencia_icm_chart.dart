@@ -18,15 +18,16 @@ class TendenciaIcmChart extends StatelessWidget {
   const TendenciaIcmChart({
     super.key,
     required this.puntos,
-    this.titulo = 'ICM oficial · por mes',
+    this.titulo = 'ICM oficial · por día',
   });
 
   @override
   Widget build(BuildContext context) {
-    // El ICM oficial es mensual: necesitamos ≥ 2 meses con dato para que la
-    // línea tenga sentido. Al arrancar la ingesta hay 1 solo mes.
-    final puntosConDato = puntos.where((p) => p.valor > 0).length;
-    final mostrarChart = puntosConDato >= 2;
+    // ICM oficial de la flota día por día (más bajo = mejor). Necesitamos ≥ 2
+    // días con dato para que la línea tenga sentido (al arrancar el mes puede
+    // haber 0-1). Nota: un día perfecto da ICM 0 legítimamente, así que
+    // contamos puntos, no valor > 0.
+    final mostrarChart = puntos.length >= 2;
     return AppCard(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
       child: Column(
@@ -59,8 +60,8 @@ class TendenciaIcmChart extends StatelessWidget {
                 ? _buildChart(context)
                 : const Center(
                     child: Text(
-                      'Histórico ICM oficial en construcción\n'
-                      '(se acumula 1 punto por mes)',
+                      'Tendencia diaria en construcción\n'
+                      '(aún no hay días con actividad este mes)',
                       textAlign: TextAlign.center,
                       style:
                           TextStyle(color: Colors.white38, fontSize: 12),
@@ -122,6 +123,14 @@ class TendenciaIcmChart extends StatelessWidget {
                 if (idx < 0 || idx >= puntos.length) {
                   return const SizedBox.shrink();
                 }
+                // Con muchos puntos (días del mes) no saturar el eje: ~6
+                // labels máximo + siempre el último.
+                final cada = (puntos.length / 6).ceil();
+                if (cada > 1 &&
+                    idx % cada != 0 &&
+                    idx != puntos.length - 1) {
+                  return const SizedBox.shrink();
+                }
                 return Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
@@ -173,7 +182,7 @@ class TendenciaIcmChart extends StatelessWidget {
             getTooltipItems: (touches) => touches.map((s) {
               final p = puntos[s.x.toInt()];
               return LineTooltipItem(
-                '${p.label}\nICM ${p.valor.toStringAsFixed(1)}',
+                'Día ${p.label}\nICM ${p.valor.toStringAsFixed(1)}',
                 const TextStyle(color: Colors.white, fontSize: 11),
               );
             }).toList(),

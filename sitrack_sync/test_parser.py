@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from parser import (  # noqa: E402
     parsear_chofer, parsear_vehiculo, construir_doc_icm,
-    _patente_de_scope, SEVERIDAD_ES,
+    _patente_de_scope, SEVERIDAD_ES, _tendencia_diaria,
 )
 
 
@@ -122,6 +122,34 @@ def test_defensivo_campos_faltantes():
                             "2026-05", "2026-05-01", "2026-05-22")
     assert doc["choferes"] == [] and doc["choferes_activos"] == 0
     assert doc["icm_general"] == 0.0
+
+
+def test_tendencia_diaria():
+    raw = {
+        "rankingItemsByScope": {},
+        "rankingItemsByDay": {
+            # desordenados a propósito para verificar el sort por fecha
+            "1777680000000": {"scope": "2026-05-02", "score": 11.81,
+                              "distance": 11494.6, "lowInfractionsCount": 10,
+                              "mediumInfractionsCount": 10,
+                              "highInfractionsCount": 10},
+            "1777593600000": {"scope": "2026-05-01", "score": 26.14,
+                              "distance": 18050.17, "lowInfractionsCount": 34,
+                              "mediumInfractionsCount": 20,
+                              "highInfractionsCount": 23},
+            # día en curso sin actividad (Sitrack lo da en 0) → se excluye
+            "1779408000000": {"scope": "2026-05-22", "score": 0, "distance": 0},
+        },
+    }
+    t = _tendencia_diaria(raw)
+    assert len(t) == 2, t  # el día sin actividad queda fuera
+    assert t[0]["fecha"] == "2026-05-01", t  # ordenado ascendente
+    assert t[0]["icm"] == 26.14 and t[0]["km"] == 18050.2
+    assert t[0]["infracciones"] == 77, t[0]
+    assert t[1]["fecha"] == "2026-05-02"
+    # También sale dentro del doc completo.
+    doc = construir_doc_icm(raw, None, "2026-05", "2026-05-01", "2026-05-22")
+    assert len(doc["tendencia_diaria"]) == 2
 
 
 def main():

@@ -212,7 +212,7 @@ class VistaEjecutivaService {
       _viajesDelMes(db, ahora),
       _icmFlota(db, ahora),
       _statsSnapshot(db),
-      _tendenciaIcm(db, ahora, meses: 6),
+      _tendenciaIcm(db, ahora),
       _viajesPorSemana(db, ahora, semanas: 8),
       _eficienciaCombustible(db, ahora),
     ]);
@@ -401,30 +401,42 @@ class VistaEjecutivaService {
     }
   }
 
-  /// Serie de N puntos: ICM OFICIAL de la flota por mes (últimos N meses).
-  /// Lee `ICM_OFICIAL/{YYYY-MM}.icm_general`. Más bajo = mejor. El gráfico
-  /// pide ≥ 2 meses con dato para dibujar la tendencia (al arrancar la
-  /// ingesta hay 1 solo mes → muestra "histórico en construcción").
+  /// Serie de la tendencia: ICM OFICIAL de la flota DÍA por DÍA del mes en
+  /// curso (campo `tendencia_diaria` del doc `ICM_OFICIAL/{YYYY-MM}`, que
+  /// Sitrack expone en `rankingItemsByDay`). Más bajo = mejor. Es el mismo
+  /// número que YPF audita, desglosado por día — mucho más útil que una
+  /// tendencia mensual que tardaría meses en poblarse.
+  ///
+  /// Si el mes recién arranca y todavía no hay ≥2 días, cae al mes anterior
+  /// para no mostrar un gráfico vacío.
   static Future<List<PuntoTendencia>> _tendenciaIcm(
     FirebaseFirestore db,
-    DateTime ahora, {
-    required int meses,
-  }) async {
-    final ids = <String>[];
-    for (int i = meses - 1; i >= 0; i--) {
-      ids.add(IcmOficialService.periodoId(offsetMeses: -i));
+    DateTime ahora,
+  ) async {
+    Future<List<PuntoTendencia>> leer(String periodoId) async {
+      final snap =
+          await db.collection(IcmOficialService.coleccion).doc(periodoId).get();
+      final raw = (snap.data()?['tendencia_diaria'] as List?) ?? const [];
+      final pts = <PuntoTendencia>[];
+      for (final e in raw) {
+        if (e is! Map) continue;
+        final fecha = (e['fecha'] ?? '').toString(); // "YYYY-MM-DD"
+        final icm = (e['icm'] as num?)?.toDouble();
+        if (icm == null) continue;
+        // Label = día del mes ("1".."31"), compacto para el eje X.
+        final dia = fecha.length >= 10
+            ? int.tryParse(fecha.substring(8, 10))?.toString() ?? fecha
+            : fecha;
+        pts.add(PuntoTendencia(label: dia, valor: icm));
+      }
+      return pts;
     }
-    final snaps = await Future.wait(
-      ids.map((id) =>
-          db.collection(IcmOficialService.coleccion).doc(id).get()),
-    );
-    final result = <PuntoTendencia>[];
-    for (var i = 0; i < ids.length; i++) {
-      final data = snaps[i].data();
-      final icm = (data?['icm_general'] as num?)?.toDouble() ?? 0.0;
-      result.add(PuntoTendencia(label: _labelMesCorto(ids[i]), valor: icm));
+
+    var pts = await leer(IcmOficialService.periodoId());
+    if (pts.length < 2) {
+      pts = await leer(IcmOficialService.periodoId(offsetMeses: -1));
     }
-    return result;
+    return pts;
   }
 
   /// Serie de N puntos: cantidad de viajes por semana (count) las
@@ -556,18 +568,6 @@ class VistaEjecutivaService {
   // ───────────────────────────────────────────────────────────────────
   // Helpers
   // ───────────────────────────────────────────────────────────────────
-
-  /// Label corto de un período 'YYYY-MM' para el eje X del gráfico de
-  /// tendencia ICM: "May", "Abr"...
-  static String _labelMesCorto(String periodoId) {
-    const meses = [
-      'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-      'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
-    ];
-    final partes = periodoId.split('-');
-    final m = int.tryParse(partes.length > 1 ? partes[1] : '') ?? 0;
-    return (m >= 1 && m <= 12) ? meses[m - 1] : periodoId;
-  }
 
   /// Label corto para el eje X de los gráficos: "12 May" (día + mes abrev).
   /// Más legible que "S 12-18 May" para muchos puntos juntos.
