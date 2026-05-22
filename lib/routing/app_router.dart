@@ -72,14 +72,18 @@ class AppRouter {
     return AuthGuard(child: child);
   }
 
-  static Widget _protegerAdmin(Widget child) {
-    // Cambio: antes pedíamos rol literal ADMIN. Ahora pedimos la
-    // capability `verPanelAdmin` — la tienen ADMIN y SUPERVISOR. Cada
-    // pantalla del panel oculta los tiles que el rol no puede usar
-    // (ver admin_panel_screen).
+  /// Protege una ruta del panel admin pidiendo una capability ESPECÍFICA.
+  /// Por defecto `verPanelAdmin` (la tienen ADMIN/SUPERVISOR + GOMERIA y
+  /// SEG_HIGIENE, que entran al shell), pero CADA pantalla debe pasar su
+  /// capability fina. Sin esto, GOMERIA/SEG_HIGIENE podían ABRIR por
+  /// deep-link / Ctrl+K pantallas que el menú les oculta (personal,
+  /// vencimientos, reportes, etc.) — auditoría 2026-05-22. Las rules de
+  /// Firestore son la defensa real de datos; esto cierra el gating de UI.
+  static Widget _protegerAdmin(Widget child,
+      [Capability cap = Capability.verPanelAdmin]) {
     return AuthGuard(
       child: RoleGuard(
-        requiredCapability: Capability.verPanelAdmin,
+        requiredCapability: cap,
         child: child,
       ),
     );
@@ -167,61 +171,71 @@ class AppRouter {
 
       case AppRoutes.adminPersonalLista:
         return _buildRoute(
-          _protegerAdmin(const AdminPersonalListaScreen()),
+          _protegerAdmin(const AdminPersonalListaScreen(),
+              Capability.verListaPersonal),
           settings,
         );
 
       case AppRoutes.adminVehiculosLista:
         return _buildRoute(
-          _protegerAdmin(const AdminVehiculosListaScreen()),
+          _protegerAdmin(const AdminVehiculosListaScreen(),
+              Capability.verListaFlota),
           settings,
         );
 
       case AppRoutes.adminVencimientosMenu:
         return _buildRoute(
-          _protegerAdmin(const AdminVencimientosMenuScreen()),
+          _protegerAdmin(const AdminVencimientosMenuScreen(),
+              Capability.verVencimientos),
           settings,
         );
 
       case AppRoutes.adminEmpresasEmpleadoras:
         return _buildRoute(
-          _protegerAdmin(const AdminEmpresasEmpleadorasScreen()),
+          _protegerAdmin(const AdminEmpresasEmpleadorasScreen(),
+              Capability.verVencimientos),
           settings,
         );
 
       case AppRoutes.adminRevisiones:
         return _buildRoute(
-          _protegerAdmin(const AdminRevisionesScreen()),
+          _protegerAdmin(const AdminRevisionesScreen(),
+              Capability.verRevisiones),
           settings,
         );
 
       case AppRoutes.adminReportes:
         return _buildRoute(
-          _protegerAdmin(const AdminReportsScreen()),
+          _protegerAdmin(const AdminReportsScreen(),
+              Capability.verReportes),
           settings,
         );
 
       case AppRoutes.vencimientosChoferes:
         return _buildRoute(
-          _protegerAdmin(const AdminVencimientosChoferesScreen()),
+          _protegerAdmin(const AdminVencimientosChoferesScreen(),
+              Capability.verVencimientos),
           settings,
         );
 
       case AppRoutes.vencimientosChasis:
         return _buildRoute(
-          _protegerAdmin(const AdminVencimientosChasisScreen()),
+          _protegerAdmin(const AdminVencimientosChasisScreen(),
+              Capability.verVencimientos),
           settings,
         );
 
       case AppRoutes.vencimientosAcoplados:
         return _buildRoute(
-          _protegerAdmin(const AdminVencimientosAcopladosScreen()),
+          _protegerAdmin(const AdminVencimientosAcopladosScreen(),
+              Capability.verVencimientos),
           settings,
         );
 
       case AppRoutes.vencimientosCalendario:
         return _buildRoute(
-          _protegerAdmin(const AdminVencimientosCalendarioScreen()),
+          _protegerAdmin(const AdminVencimientosCalendarioScreen(),
+              Capability.verVencimientos),
           settings,
         );
 
@@ -240,7 +254,8 @@ class AppRouter {
       // (basado en `serviceDistance` que viene del API Volvo).
       case AppRoutes.adminMantenimiento:
         return _buildRoute(
-          _protegerAdmin(const AdminMantenimientoScreen()),
+          _protegerAdmin(const AdminMantenimientoScreen(),
+              Capability.verMantenimiento),
           settings,
         );
 
@@ -264,27 +279,27 @@ class AppRouter {
       // consolidadas vía WhatsApp diario entre Molina y Emmanuel).
       case AppRoutes.adminIcmHub:
         return _buildRoute(
-          _protegerAdmin(const IcmHubScreen()),
+          _protegerAdmin(const IcmHubScreen(), Capability.verIcm),
           settings,
         );
       case AppRoutes.adminIcmRanking:
         return _buildRoute(
-          _protegerAdmin(const IcmRankingScreen()),
+          _protegerAdmin(const IcmRankingScreen(), Capability.verIcm),
           settings,
         );
       case AppRoutes.adminIcmReporteSemanal:
         return _buildRoute(
-          _protegerAdmin(const IcmReporteSemanalScreen()),
+          _protegerAdmin(const IcmReporteSemanalScreen(), Capability.verIcm),
           settings,
         );
       case AppRoutes.adminIcmMapaCalor:
         return _buildRoute(
-          _protegerAdmin(const IcmMapaCalorScreen()),
+          _protegerAdmin(const IcmMapaCalorScreen(), Capability.verIcm),
           settings,
         );
       case AppRoutes.adminIcmDetalleChofer:
         return _buildRoute(
-          _protegerAdmin(const IcmDetalleChoferScreen()),
+          _protegerAdmin(const IcmDetalleChoferScreen(), Capability.verIcm),
           settings,
         );
 
@@ -293,7 +308,8 @@ class AppRouter {
       // admin desde 2026-05-15. Quitar en limpieza posterior.
       case AppRoutes.adminVolvoAlertas:
         return _buildRoute(
-          _protegerAdmin(const AdminVolvoAlertasScreen()),
+          _protegerAdmin(const AdminVolvoAlertasScreen(),
+              Capability.verAlertasVolvo),
           settings,
         );
 
@@ -302,7 +318,8 @@ class AppRouter {
       // admin desde 2026-05-15. Quitar en limpieza posterior.
       case AppRoutes.adminEcoDriving:
         return _buildRoute(
-          _protegerAdmin(const AdminEcoDrivingScreen()),
+          _protegerAdmin(const AdminEcoDrivingScreen(),
+              Capability.verAlertasVolvo),
           settings,
         );
 
@@ -313,7 +330,8 @@ class AppRouter {
       // de viajes futuro.
       case AppRoutes.adminDescargasPto:
         return _buildRoute(
-          _protegerAdmin(const AdminDescargasPtoScreen()),
+          _protegerAdmin(const AdminDescargasPtoScreen(),
+              Capability.verAlertasVolvo),
           settings,
         );
 
@@ -324,7 +342,8 @@ class AppRouter {
       // DISTANCE_ALERT recurrentes, descargas PTO en lugares raros.
       case AppRoutes.adminMapaVolvo:
         return _buildRoute(
-          _protegerAdmin(const AdminMapaVolvoScreen()),
+          _protegerAdmin(const AdminMapaVolvoScreen(),
+              Capability.verAlertasVolvo),
           settings,
         );
 
@@ -335,7 +354,8 @@ class AppRouter {
       // `sitrackPosicionPoller` actualiza cada 5 min.
       case AppRoutes.adminMapaFlota:
         return _buildRoute(
-          _protegerAdmin(const AdminMapaFlotaScreen()),
+          _protegerAdmin(const AdminMapaFlotaScreen(),
+              Capability.verAlertasVolvo),
           settings,
         );
 
@@ -344,7 +364,8 @@ class AppRouter {
       // BOT_HEALTH/main que el bot escribe cada 60s.
       case AppRoutes.adminEstadoBot:
         return _buildRoute(
-          _protegerAdmin(const AdminEstadoBotScreen()),
+          _protegerAdmin(const AdminEstadoBotScreen(),
+              Capability.verEstadoBot),
           settings,
         );
 
@@ -356,12 +377,13 @@ class AppRouter {
       // ADMIN, CUBIERTAS y CUBIERTAS_INSTALADAS supervisor también, etc).
       case AppRoutes.adminGomeriaHub:
         return _buildRoute(
-          _protegerAdmin(const GomeriaHubScreen()),
+          _protegerAdmin(const GomeriaHubScreen(), Capability.verGomeria),
           settings,
         );
       case AppRoutes.adminGomeriaUnidades:
         return _buildRoute(
-          _protegerAdmin(const GomeriaUnidadesListaScreen()),
+          _protegerAdmin(const GomeriaUnidadesListaScreen(),
+              Capability.verGomeria),
           settings,
         );
       case AppRoutes.adminGomeriaUnidad:
@@ -377,24 +399,26 @@ class AppRouter {
             unidadTipo: unidadTipo,
             tipoVehiculo: tipoVehiculo,
             modelo: modelo,
-          )),
+          ), Capability.verGomeria),
           settings,
         );
       case AppRoutes.adminGomeriaStock:
         return _buildRoute(
-          _protegerAdmin(const GomeriaStockScreen()),
+          _protegerAdmin(const GomeriaStockScreen(), Capability.verGomeria),
           settings,
         );
       case AppRoutes.adminGomeriaRecapados:
         return _buildRoute(
-          _protegerAdmin(const GomeriaRecapadosScreen()),
+          _protegerAdmin(const GomeriaRecapadosScreen(),
+              Capability.verGomeria),
           settings,
         );
       case AppRoutes.adminGomeriaCubierta:
         final args = settings.arguments as Map<String, dynamic>?;
         final cubiertaId = (args?['cubiertaId'] ?? '').toString();
         return _buildRoute(
-          _protegerAdmin(GomeriaCubiertaDetalleScreen(cubiertaId: cubiertaId)),
+          _protegerAdmin(GomeriaCubiertaDetalleScreen(cubiertaId: cubiertaId),
+              Capability.verGomeria),
           settings,
         );
       case AppRoutes.adminGomeriaMarcasModelos:
@@ -409,7 +433,7 @@ class AppRouter {
       // (cap verCachatore). La app escribe la selección en Firestore.
       case AppRoutes.adminCachatoreHub:
         return _buildRoute(
-          _protegerAdmin(const CachatoreHubScreen()),
+          _protegerAdmin(const CachatoreHubScreen(), Capability.verCachatore),
           settings,
         );
 
@@ -418,63 +442,73 @@ class AppRouter {
       // Acceso ADMIN + SUPERVISOR (cap verLogistica).
       case AppRoutes.adminLogisticaHub:
         return _buildRoute(
-          _protegerAdmin(const LogisticaHubScreen()),
+          _protegerAdmin(const LogisticaHubScreen(), Capability.verLogistica),
           settings,
         );
       case AppRoutes.adminLogisticaEmpresas:
         return _buildRoute(
-          _protegerAdmin(const LogisticaEmpresasScreen()),
+          _protegerAdmin(const LogisticaEmpresasScreen(),
+              Capability.verLogistica),
           settings,
         );
       case AppRoutes.adminLogisticaUbicaciones:
         return _buildRoute(
-          _protegerAdmin(const LogisticaUbicacionesScreen()),
+          _protegerAdmin(const LogisticaUbicacionesScreen(),
+              Capability.verLogistica),
           settings,
         );
       case AppRoutes.adminLogisticaTarifas:
         return _buildRoute(
-          _protegerAdmin(const LogisticaTarifasScreen()),
+          _protegerAdmin(const LogisticaTarifasScreen(),
+              Capability.verLogistica),
           settings,
         );
       case AppRoutes.adminLogisticaTarifaForm:
         final args = settings.arguments as Map<String, dynamic>?;
         final tarifaId = args?['tarifaId'] as String?;
         return _buildRoute(
-          _protegerAdmin(LogisticaTarifaFormScreen(tarifaId: tarifaId)),
+          _protegerAdmin(LogisticaTarifaFormScreen(tarifaId: tarifaId),
+              Capability.verLogistica),
           settings,
         );
       case AppRoutes.adminLogisticaMapaTarifas:
         return _buildRoute(
-          _protegerAdmin(const LogisticaMapaTarifasScreen()),
+          _protegerAdmin(const LogisticaMapaTarifasScreen(),
+              Capability.verLogistica),
           settings,
         );
       case AppRoutes.adminLogisticaViajes:
         return _buildRoute(
-          _protegerAdmin(const LogisticaViajesListaScreen()),
+          _protegerAdmin(const LogisticaViajesListaScreen(),
+              Capability.verLogistica),
           settings,
         );
       case AppRoutes.adminLogisticaViajeForm:
         final args = settings.arguments as Map<String, dynamic>?;
         final viajeId = args?['viajeId'] as String?;
         return _buildRoute(
-          _protegerAdmin(LogisticaViajeFormScreen(viajeId: viajeId)),
+          _protegerAdmin(LogisticaViajeFormScreen(viajeId: viajeId),
+              Capability.verLogistica),
           settings,
         );
       case AppRoutes.adminLogisticaViajeDetalle:
         final args = settings.arguments as Map<String, dynamic>?;
         final viajeId = args?['viajeId'] as String? ?? '';
         return _buildRoute(
-          _protegerAdmin(LogisticaViajeDetalleScreen(viajeId: viajeId)),
+          _protegerAdmin(LogisticaViajeDetalleScreen(viajeId: viajeId),
+              Capability.verLogistica),
           settings,
         );
       case AppRoutes.adminLogisticaLiquidacion:
         return _buildRoute(
-          _protegerAdmin(const LogisticaLiquidacionScreen()),
+          _protegerAdmin(const LogisticaLiquidacionScreen(),
+              Capability.verLogistica),
           settings,
         );
       case AppRoutes.adminLogisticaAdelantos:
         return _buildRoute(
-          _protegerAdmin(const LogisticaAdelantosScreen()),
+          _protegerAdmin(const LogisticaAdelantosScreen(),
+              Capability.verLogistica),
           settings,
         );
 

@@ -773,9 +773,22 @@ class _WizardSheetState extends State<_WizardSheet> {
 
   Future<void> _confirmar(FranjaCarga franja) async {
     if (_dni == null || _guardando) return;
+    // Capturar antes del await (no usar context tras async gap).
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
     setState(() => _guardando = true);
-    await widget.onConfirm(_dni!, _nombre ?? _dni!, _fecha, franja);
-    if (mounted) Navigator.pop(context);
+    try {
+      await widget.onConfirm(_dni!, _nombre ?? _dni!, _fecha, franja);
+      if (mounted) navigator.pop();
+    } catch (e) {
+      // Sin esto, si onConfirm (escritura a Firestore) fallaba, _guardando
+      // quedaba en true para siempre: spinner infinito + botones
+      // deshabilitados, y el operador no sabía qué pasó. Auditoría 2026-05-22.
+      if (mounted) setState(() => _guardando = false);
+      messenger.showSnackBar(
+        SnackBar(content: Text('No se pudo guardar: $e')),
+      );
+    }
   }
 
   @override

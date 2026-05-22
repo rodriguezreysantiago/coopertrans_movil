@@ -243,6 +243,13 @@ class _AdminShellState extends State<AdminShell> {
         .snapshots()
         .listen(
       (snapshot) {
+        // Ignorar snapshots servidos desde CACHE: con persistencia de
+        // Firestore el primer snapshot suele venir de cache (vacío/parcial)
+        // y consumía el flag _esPrimeraCarga; al llegar el del SERVER, todos
+        // los docs entraban como 'added' y disparaban avisos de revisiones
+        // VIEJAS al abrir el shell. Esperamos el 1er snapshot del server.
+        // Auditoría 2026-05-22.
+        if (snapshot.metadata.isFromCache) return;
         if (_esPrimeraCarga) {
           _esPrimeraCarga = false;
           return;

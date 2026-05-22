@@ -1,5 +1,5 @@
 import 'package:excel/excel.dart' as ex;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 
 import '../../../shared/utils/app_feedback.dart';
@@ -86,9 +86,9 @@ class ReportLiquidacionService {
       final sufijos = <String>[];
       if (choferDniFiltro != null) {
         final nombre = empleados[choferDniFiltro]?.nombre ?? choferDniFiltro;
-        sufijos.add(_slugSeguro(nombre));
+        sufijos.add(slugSeguro(nombre));
       } else if (empresaCuit != null) {
-        sufijos.add(_slugSeguro(empresaCuit));
+        sufijos.add(slugSeguro(empresaCuit));
       }
       final sufijo = sufijos.isEmpty ? null : sufijos.join('_');
       final nombreArchivo = ReportSaveHelper.nombreUnico(
@@ -369,8 +369,9 @@ class ReportLiquidacionService {
   // OTROS
   // ===========================================================================
 
-  static String _slugSeguro(String raw) {
-    return raw
+  @visibleForTesting
+  static String slugSeguro(String raw) {
+    final s = raw
         .toLowerCase()
         .replaceAll(RegExp(r'[áä]'), 'a')
         .replaceAll(RegExp(r'[éë]'), 'e')
@@ -379,8 +380,13 @@ class ReportLiquidacionService {
         .replaceAll(RegExp(r'[úü]'), 'u')
         .replaceAll('ñ', 'n')
         .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_+|_+$'), '')
-        .substring(0, 0 + (raw.length > 32 ? 32 : raw.length).clamp(0, 32));
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    // Recortar sobre la longitud del string YA transformado (NO raw.length):
+    // los replaceAll colapsan runs y recortan puntas, así que el slug puede
+    // quedar más corto que el original. Usar raw.length pedía más caracteres
+    // de los que quedaron → RangeError y la liquidación NO se generaba.
+    // Ej: "Vecchi S.R.L." (13) → "vecchi_s_r_l" (12). Auditoría 2026-05-22.
+    return s.length > 32 ? s.substring(0, 32) : s;
   }
 
   static void _notificarProgreso(ScaffoldMessengerState messenger) {
