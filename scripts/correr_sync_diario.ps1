@@ -61,34 +61,45 @@ try {
         Write-Log 'ERROR' "No existe el venv: $VenvPy (ver docs/SCRAPERS_DEDICADA.md)"
         exit 1
     }
-    Set-Location $Dir
-    # UTF-8 forzado: cuando la Scheduled Task corre con la salida redirigida,
-    # Python usa cp1252 por defecto y revienta al imprimir '->' o acentos
-    # (UnicodeEncodeError). PYTHONUTF8=1 lo pone en modo UTF-8 (stdout/stderr).
+    # UTF-8 forzado: con la salida redirigida, Python usa cp1252 por defecto y
+    # revienta al imprimir '->' o acentos (UnicodeEncodeError). PYTHONUTF8=1 lo
+    # pone en modo UTF-8. Start-Process hereda estas env vars.
     $env:PYTHONUTF8 = '1'
     $env:PYTHONIOENCODING = 'utf-8'
-    # PS 5.1 captura la salida nativa con [Console]::OutputEncoding (cp1252 por
-    # defecto) -> los acentos/flechas que emite python en UTF-8 quedan mojibake
-    # en el log. Lo ponemos en UTF-8 para que el log se lea bien. (Es solo
-    # cosmetico: lo que se escribe a Firestore lo hace python aparte, ya UTF-8.)
-    try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
     Write-Log 'INFO' "Corriendo $($cfg.Script) --commit ..."
 
-    # Capturamos stdout+stderr como texto sin abortar (PS 5.1: $EAP local).
-    $out = & {
-        $ErrorActionPreference = 'Continue'
-        & $VenvPy '-u' $cfg.Script '--commit' 2>&1
-    }
-    $code = $LASTEXITCODE
+    # Redirigimos la salida de python a ARCHIVOS via Start-Process (el SO maneja
+    # la redireccion). NO capturamos por pipe de PowerShell: con salida grande
+    # (Volvo imprime 57 unidades) el pipe se llena y python se cuelga esperando
+    # que PS lo drene -> CPU 0 (bug confirmado 2026-05-22). A archivo no pasa.
+    $scriptPath = Join-Path $Dir $cfg.Script
+    $outF = Join-Path $LogDir 'sync_diario.out.txt'
+    $errF = Join-Path $LogDir 'sync_diario.err.txt'
+    $proc = Start-Process -FilePath $VenvPy `
+        -ArgumentList @('-u', $scriptPath, '--commit') `
+        -WorkingDirectory $Dir `
+        -RedirectStandardOutput $outF `
+        -RedirectStandardError $errF `
+        -NoNewWindow -PassThru -Wait
+    $code = $proc.ExitCode
 
-    # Logueamos solo las ultimas lineas (el resumen). Sin volcar todo el detalle.
-    # Por las dudas, filtramos cualquier linea que parezca traer credenciales.
-    $tail = ($out | Where-Object { $_ -notmatch 'password' } |
-        Select-Object -Last 12) -join ' || '
+    # Tail del resumen (leido como UTF-8 para no quedar mojibake). Filtramos
+    # lineas con 'password' por las dudas.
+    $tailOut = ''
+    if (Test-Path $outF) {
+        $tailOut = ((Get-Content $outF -Tail 12 -Encoding UTF8) |
+            Where-Object { $_ -notmatch 'password' }) -join ' || '
+    }
+    $tailErr = ''
+    if (Test-Path $errF) {
+        $tailErr = ((Get-Content $errF -Tail 6 -Encoding UTF8) |
+            Where-Object { $_ -notmatch 'password' -and $_.Trim() }) -join ' || '
+    }
     if ($code -eq 0) {
-        Write-Log 'INFO' "OK (exit 0). $tail"
+        Write-Log 'INFO' "OK (exit 0). $tailOut"
     } else {
-        Write-Log 'ERROR' "FALLO (exit $code). $tail"
+        $extra = if ($tailErr) { " || ERR: $tailErr" } else { '' }
+        Write-Log 'ERROR' "FALLO (exit $code). $tailOut$extra"
     }
 } catch {
     Write-Log 'ERROR' "Excepcion: $($_.Exception.Message)"
