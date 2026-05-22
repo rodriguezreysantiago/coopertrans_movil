@@ -74,6 +74,12 @@ HEARTBEAT_SEG = 5            # sleep base del loop en idle/pausado
 LATIDO_SEG = 30             # cada cuánto ESCRIBIR el latido a Firestore. La UI
                             # considera vivo si latió hace <120 s, asi que no
                             # hace falta cada ciclo (serian ~17k writes/dia).
+LATIDO_LOG_SEG = 120        # cada cuánto LOGUEAR un latido VISIBLE en la ventana
+                            # en vivo. El de arriba es para la app; este es para
+                            # que un humano que mira los logs vea "sigo vivo y
+                            # laburando" sin abrir la app. En latente el loop
+                            # barre cada ~5 s pero solo logueaba al CAMBIAR de
+                            # modo -> podia quedar mudo horas y daba dudas.
 BACKOFF_MAX_SEG = 120       # tope del backoff cuando el scanner no puede loguear
 MAX_REFRESH_POR_CICLO = 2    # cuántos mis_turnos refrescar por ciclo (no bloquear)
 HORA_RESUMEN = 8             # hora ART del resumen diario de turnos al encargado
@@ -679,6 +685,7 @@ def main():
     ultimo_resumen = None     # 'YYYY-MM-DD' del último resumen diario al encargado
     modo_anterior = None
     ultimo_latido = 0.0       # último latido escrito (para throttlear el heartbeat)
+    ultimo_latido_log = time.time()  # último latido LOGUEADO (visible en la ventana)
     fallos_scanner = 0        # logins fallidos seguidos del scanner (para backoff)
     reconciliado = False      # limpieza one-shot de turnos viejos de no-vigilados
 
@@ -844,6 +851,19 @@ def main():
             if cambio_modo or time.time() - ultimo_latido >= LATIDO_SEG:
                 _heartbeat(modo, targets)
                 ultimo_latido = time.time()
+
+            # 5.b) latido VISIBLE en el log (throttled ~cada LATIDO_LOG_SEG): para
+            #     que mirando la ventana en vivo se vea que el vigía sigue
+            #     laburando, sin tener que abrir la app. El cambio de modo ya
+            #     loguea su propia línea, así que acá solo throttleamos por tiempo.
+            if time.time() - ultimo_latido_log >= LATIDO_LOG_SEG:
+                pend = sum(1 for t in targets.values() if not t.tiene_turno)
+                con_turno = len(targets) - pend
+                log("LOG", "sistema",
+                    f"latido — {modo.upper()} · {len(targets)} chofer(es) "
+                    f"({con_turno} con turno / {pend} sin) · "
+                    f"barriendo cada ~{int(espera)}s")
+                ultimo_latido_log = time.time()
 
             # 6) resumen diario de turnos al encargado de logística (~8 AM ART).
             #    Idempotente por día (nube chequea doc determinístico) → un
