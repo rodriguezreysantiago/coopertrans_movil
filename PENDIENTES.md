@@ -26,11 +26,25 @@ vial que nosotros NO tenemos → ingerimos SU número en vez de estimar.
 - **Bot**: `BOT_PC_ID` de la dedicada corregido a `dedicada` (era `oficina`);
   log nombra admins/destinatarios de resúmenes (no solo choferes). Tests 129/129.
 
+### Fase B — rework del módulo a la escala oficial ✅ HECHO
+- Módulo ICM (ranking / reporte mensual / detalle), card de inicio del tablero
+  ejecutivo y Excel de auditoría ahora leen `ICM_OFICIAL` (más bajo = mejor,
+  severidad de Sitrack NO/LOW/MEDIUM/HIGH). Service nuevo
+  `icm_oficial_service.dart` (modelos + helper de color + derivaciones) con 12
+  tests puros. `flutter analyze` limpio + 405 tests verdes. Commits `2ddc903`
+  (módulo + card) y `56ea03c` (Excel). Validado contra la data real de 2026-05.
+- El CESVI propio (cliente `icm_calculator`/`icm_historico_service` + server
+  `recomputeIcmSemanalScheduled` → `ICM_SEMANAL`) queda VIVO pero
+  **desconectado de la UI**. Esto vuelve MOOT el ítem "framing" de abajo.
+
 ### ⚠️ PENDIENTE
-- **Fase B — rework del módulo ICM de la app a la escala oficial de Sitrack**
-  (más-bajo-mejor + severidad NO/LOW/MEDIUM/HIGH + leer `ICM_OFICIAL`). Reemplaza
-  el CESVI propio (que queda como referencia interna). **Necesita release.**
-  Esto vuelve MOOT el ítem "framing" de abajo (ya mostramos el número oficial).
+- **Release de la app** (lo larga Santiago): sin release los usuarios siguen
+  viendo el módulo viejo (CESVI ~94). El número oficial ya está en Firestore;
+  la card de inicio se actualizará al reabrirse SOLO tras el release (cambió el
+  código que la arma, no solo el dato).
+- **Decisión futura (no urgente)**: si nadie consume `ICM_SEMANAL` ni el CESVI
+  semanal, retirar el cron `recomputeIcmSemanalScheduled` + el path cliente
+  CESVI. Hoy quedan como oráculo de los tests de paridad — no tocar sin decidir.
 
 ---
 
@@ -56,19 +70,12 @@ todo → ICM_SEMANAL/W20 = **99.59 todo verde**.
 - La card de inicio lee el doc del server → ya muestra el número nuevo
   **sin release** (se actualiza al reabrir la pantalla).
 
-### ⚠️ PENDIENTE
-1. **Release de la app** (Windows/Android/iOS): propaga el cálculo
-   on-the-fly del cliente para la **semana en curso** (pantallas del
-   módulo ICM: ranking / reporte / detalle) + los colores 91/71 en la UI.
-   Sin release, las semanas cerradas ya salen bien (las lee del server),
-   pero la semana actual y los colores usan el código viejo.
-2. **Decisión de framing (avisar a Santiago)**: nuestro número es una
-   **estimación INTERNA** (~94), NO el ICM oficial de YPF (cerró nov en
-   79). No replicamos la ponderación por **segmento vial** (autopista/
-   ruta/calle, proveedor "LW") que hace dominante la sobrevelocidad
-   (68.51% de las infracciones YPF) ni la fatiga — datos que no tenemos.
-   Sirve para ranking/tendencia interna. Si se quiere acercar al oficial
-   habría que pedirle a Sitrack/Carsync el sub-tipo de segmento vial.
+### ⚠️ SUPERSEDED por la Fase B (ICM oficial, arriba)
+El rediseño CESVI se hizo y deployó, pero la **Fase B lo reemplazó en la UI**:
+en vez de estimar internamente (no teníamos segmento vial), ahora ingerimos el
+ICM oficial de Sitrack y lo mostramos tal cual (es el que audita YPF). El CESVI
+queda vivo en el server pero desconectado de pantallas. Único pendiente real:
+el **release** (ver arriba).
 
 ---
 
