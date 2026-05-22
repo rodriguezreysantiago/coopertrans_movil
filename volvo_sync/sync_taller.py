@@ -29,7 +29,7 @@ from firebase_admin import credentials, firestore
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from parser import ultimo_service_programado  # noqa: E402
+from parser import ultimo_service_programado, normalizar_servicios  # noqa: E402
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 _SAK = os.path.join(_DIR, "..", "serviceAccountKey.json")
@@ -180,7 +180,17 @@ def main():
                     "ULTIMO_SERVICE_FUENTE": "volvo_taller",
                     "ULTIMO_SERVICE_SYNC_EN": firestore.SERVER_TIMESTAMP,
                 }, merge=True)
+                # Historial COMPLETO de taller (services + reparaciones) para la
+                # pantalla de mantenimiento. Doc por unidad con array `servicios`.
+                batch.set(db.collection("VEHICULOS_TALLER").document(doc_id), {
+                    "patente": doc_id,
+                    "actualizado_en": firestore.SERVER_TIMESTAMP,
+                    "servicios": normalizar_servicios(past),
+                })
                 actualizados += 1
+                if actualizados % 100 == 0:  # Firestore: máx 500 ops/batch.
+                    batch.commit()
+                    batch = db.batch()
         if args.commit and actualizados:
             batch.commit()
         browser.close()

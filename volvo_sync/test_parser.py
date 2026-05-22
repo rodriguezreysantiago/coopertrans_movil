@@ -6,6 +6,7 @@ from parser import (
     ultimo_service_programado,
     es_visita_de_service,
     parse_km,
+    normalizar_servicios,
 )
 
 # Datos reales de AB927WN (las 4 visitas más recientes). Las 3 primeras son
@@ -91,6 +92,25 @@ def test_sin_services_devuelve_none():
 def test_lista_vacia():
     assert ultimo_service_programado([]) is None
     assert ultimo_service_programado(None) is None
+
+
+def test_normalizar_servicios_completo():
+    norm = normalizar_servicios(FIXTURE_AB927WN)
+    # 5 visitas, ordenadas por fecha desc.
+    assert len(norm) == 5
+    assert norm[0]["fecha"] == "2026-03-09"  # la más reciente primero
+    # La visita de service (13-feb) marcada es_service; las reparaciones no.
+    porfecha = {v["fecha"]: v for v in norm}
+    assert porfecha["2026-02-13"]["es_service"] is True
+    assert porfecha["2026-03-09"]["es_service"] is False
+    # km parseado a int, taller presente, operaciones normalizadas.
+    assert porfecha["2026-02-13"]["km"] == 1178204
+    assert porfecha["2026-02-13"]["operaciones"][0]["grupo"].startswith("Servicio de mantenimiento")
+
+
+def test_normalizar_lista_vacia():
+    assert normalizar_servicios([]) == []
+    assert normalizar_servicios(None) == []
 
 
 if __name__ == "__main__":

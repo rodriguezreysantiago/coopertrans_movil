@@ -449,6 +449,18 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // VEHICULOS_TALLER — historial completo de taller por unidad (Volvo Connect)
+    // ========================================================================
+    // Doc id = patente. Lo escribe el scraper `volvo_sync/sync_taller.py`
+    // (Admin SDK, saltea rules) con el array `servicios` (fecha, km, taller,
+    // operaciones). Lo lee la pantalla de Mantenimiento. Cliente solo lee.
+
+    match /VEHICULOS_TALLER/{patente} {
+      allow read: if puedeVerVolvoTableros();
+      allow create, update, delete: if false;
+    }
+
+    // ========================================================================
     // JORNADAS_CHOFER — tracking de horas de manejo por chofer y día
     // ========================================================================
     // Doc id: `{dni}_{YYYY-MM-DD}`. Lo escribe el cron

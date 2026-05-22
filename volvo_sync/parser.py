@@ -70,3 +70,36 @@ def ultimo_service_programado(past_services: list) -> dict | None:
     # fecha ISO YYYY-MM-DD → orden lexicográfico = cronológico. Más reciente 1°.
     candidatos.sort(key=lambda c: c["fecha"], reverse=True)
     return candidatos[0]
+
+
+def normalizar_servicios(past_services: list) -> list:
+    """Normaliza TODO el historial de taller (services + reparaciones) para
+    persistir en Firestore y mostrar en la app. Cada visita:
+        {fecha, km, taller, order, es_service, operaciones:[{codigo,desc,grupo,cant}]}
+    Ordenado por fecha desc. Cap defensivo de operaciones/visitas para no pasar
+    el límite de 1 MB por documento de Firestore.
+    """
+    out = []
+    for s in past_services or []:
+        fecha = s.get("visitDate")
+        if not fecha:
+            continue
+        ops = []
+        for d in (s.get("serviceDetails") or [])[:40]:
+            ops.append({
+                "codigo": (d.get("operationCode") or "").strip(),
+                "desc": (d.get("description") or "").strip(),
+                "grupo": (d.get("functionGroup") or "").strip(),
+                "cant": d.get("quantity"),
+            })
+        dealer = s.get("dealer") or {}
+        out.append({
+            "fecha": fecha,
+            "km": parse_km(s),
+            "taller": (dealer.get("name") or "").strip(),
+            "order": (s.get("orderNumber") or "").strip(),
+            "es_service": es_visita_de_service(s),
+            "operaciones": ops,
+        })
+    out.sort(key=lambda x: x["fecha"], reverse=True)
+    return out[:150]
