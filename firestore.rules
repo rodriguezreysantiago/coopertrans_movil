@@ -299,6 +299,21 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // ICM_OFICIAL — ICM oficial de Sitrack (el que audita YPF) por período
+    // ========================================================================
+    //
+    // Doc id = período (YYYY-MM). Lo escribe el ingestor `sitrack_sync/
+    // sync_icm.py` (Admin SDK, saltea rules) una vez al día desde el portal
+    // site5 de Sitrack. Reemplaza al cálculo CESVI propio: trae el número
+    // oficial con la ponderación por segmento vial que Sitrack tiene y
+    // nosotros no. Escala invertida (más bajo = mejor). Lectura: los mismos
+    // roles que ven el módulo ICM. Cliente solo lee.
+    match /ICM_OFICIAL/{periodo} {
+      allow read: if isAdminOrSupervisor() || isSegHigiene();
+      allow write: if false;
+    }
+
+    // ========================================================================
     // COUNTERS — correlativos atómicos para impresos
     // ========================================================================
     //

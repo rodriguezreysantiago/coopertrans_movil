@@ -1,0 +1,11 @@
+# Credenciales del portal Sitrack — NUNCA se commitean. Las pone Santiago a
+# mano (mismo patrón que volvo_sync/claves.json y cachatore/claves.json).
+claves.json
+
+# Estado de sesión de Playwright (cookies del login persistido).
+storage_state.json
+.auth/
+
+# Playwright / Python
+__pycache__/
+*.pyc
