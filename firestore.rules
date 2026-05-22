@@ -449,6 +449,20 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // VOLVO_ESTADO — snapshot rFMS por unidad (poller estadoVolvoPoller)
+    // ========================================================================
+    // Doc id = patente. Lo escribe `estadoVolvoPoller` cada 5 min (Admin SDK,
+    // saltea rules): posición, velocidad, tacógrafo, odo, horas_motor,
+    // fuel/adblue, tell_tales del tablero. Lo leen la pantalla de
+    // Mantenimiento (advertencias + telemetría) y la telemetría en vivo.
+    // Mismos roles que el resto de tableros Volvo. Cliente solo lee.
+
+    match /VOLVO_ESTADO/{patente} {
+      allow read: if puedeVerVolvoTableros();
+      allow create, update, delete: if false;
+    }
+
+    // ========================================================================
     // VEHICULOS_TALLER — historial completo de taller por unidad (Volvo Connect)
     // ========================================================================
     // Doc id = patente. Lo escribe el scraper `volvo_sync/sync_taller.py`
