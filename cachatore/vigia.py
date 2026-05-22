@@ -7,10 +7,6 @@ este proceso queda **LATENTE las 24 hs** en la PC dedicada del bot:
   los que no tienen turno como reagendar a los marcados. Si alguien CANCELA y se
   libera un turno en la franja de un chofer que lo necesita, lo agarra al toque
   — sin esperar al drop de las 10:30.
-- **Agresivo** (botón "Barrido agresivo" de la app): mientras está activo
-  (`agresivo_hasta` futuro, ~10 min), el barrido latente corre MÁS RÁPIDO
-  (~poll_agresivo_seg) para ganar la pulseada del drop; vuelve solo a latente al
-  expirar. (`--agresivo` por CLI usa el barrido per-chofer, para testeo.)
 - **Reagendar**: si un chofer tiene `reagendar:true`, mueve su turno a un slot
   de su franja apenas se libere uno (sin formulario, lo reasigna directo).
 
@@ -31,8 +27,6 @@ Uso:
     python vigia.py                 # daemon 24/7 (config de Firestore / UI)
     python vigia.py --archivo       # config de drop.json local (no toca Firestore)
     python vigia.py --dry           # no reserva/reagenda ni escribe estado
-    python vigia.py --latente       # fuerza modo latente (ignora ventana drop)
-    python vigia.py --agresivo      # fuerza modo agresivo (testeo)
 
 Logs con formato "[dd/mm HH:MM:SS] TAG [quien] msg" (TAG = LOG/EXITO/ERROR,
 lo colorea el visor). Mismo arranque que el auto-update (fecha primero).
@@ -44,7 +38,7 @@ import random
 import sys
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 import iturnos
 import choferes
@@ -62,8 +56,7 @@ _DIR = os.path.dirname(os.path.abspath(__file__))
 DROP_CONFIG = os.path.join(_DIR, "drop.json")
 
 # Cadencias (se pueden pisar desde la config).
-POLL_AGRESIVO_SEG = 1.5      # en la ventana del drop: re-escaneo rápido por chofer
-POLL_LATENTE_SEG = 5.0       # resto del día: barre la worklist cada ~5 s
+POLL_LATENTE_SEG = 5.0       # barre la worklist cada ~5 s (único ritmo del bot)
 JITTER_LATENTE_SEG = 1.0     # + ruido chico (para no pegar siempre al mismo seg)
 
 LOGIN_REINTENTOS = 3
@@ -377,35 +370,6 @@ def _reservar_async(t: Target, slot: dict, dry: bool):
         t.reagendar_hecho = True   # ya quedó en franja al reservar; no hay que mover
 
 
-def _agresivo_async(t: Target, dry: bool):
-    if not asegurar_login(t):
-        _reportar_estado(t, "login_fallo")
-        return
-    try:
-        html = t.cli.abrir_agenda()
-    except Exception as e:
-        log("LOG", t.nombre, f"error leyendo agenda: {e}")
-        return
-    if 'id="login-form"' in html:
-        t.logueado = False
-        return
-    fobj = resolver_fecha(t.fecha)
-    ahora = datetime.now()
-    # Preferencia: día más cercano + hora MÁS TARDE de la franja primero
-    # (último turno de la franja como primera opción; va bajando solo cada
-    # ciclo si lo toman). Ver iturnos.ordenar_slots_preferidos.
-    slots = iturnos.ordenar_slots_preferidos([
-        s for s in iturnos.slots_en_franja(
-            iturnos.parsear_disponibilidad(html)["slots"], t.franja)
-        if iturnos.slot_es_futuro(s, ahora) and (fobj is None or s["fecha"] == fobj)
-    ])
-    if not slots:
-        return
-    log("LOG", t.nombre, f"slot LIBRE {slots[0]['fecha']} {slots[0]['hora']} → reservando")
-    if intentar_reservar(t, slots[0], dry) and t.reagendar:
-        t.reagendar_hecho = True
-
-
 def _en_paralelo(items, func, max_hilos=10, timeout=30):
     items = list(items)
     for i in range(0, len(items), max_hilos):
@@ -559,14 +523,6 @@ def sincronizar_targets(cfg: dict, targets: dict):
 
 
 # ---- ciclos ---------------------------------------------------------------
-def ciclo_agresivo(targets: dict, dry: bool):
-    necesitan = [t for t in targets.values()
-                 if not t.tiene_turno and t.credenciales_ok and t.patente]
-    if necesitan:
-        _en_paralelo(necesitan, lambda t: _agresivo_async(t, dry),
-                     max_hilos=len(necesitan), timeout=15)
-
-
 def ciclo_latente(targets: dict, dry: bool):
     # --- RESERVA: escanear la agenda y asignar huecos a los que NO tienen turno.
     # El scanner se loguea como un chofer SIN turno (ensure_scanner): iTurnos
@@ -673,8 +629,6 @@ def ciclo_latente(targets: dict, dry: bool):
 def main():
     global _USAR_NUBE, _ESCRIBIR_ESTADO
     dry = "--dry" in sys.argv
-    forzar_latente = "--latente" in sys.argv
-    forzar_agresivo = "--agresivo" in sys.argv
     _USAR_NUBE = "--archivo" not in sys.argv
     _ESCRIBIR_ESTADO = _USAR_NUBE and not dry
 
@@ -785,23 +739,15 @@ def main():
 
             activo = bool(cfg.get("activo", True)) if cfg else False
 
-            # "Barrido agresivo": el boton de la app setea `agresivo_hasta`
-            # (timestamp UTC = now + ~10 min). Mientras no expira, el bot barre
-            # RAPIDO (cada ~poll_agresivo_seg) con el scanner UNICO -> no
-            # multiplica requests por chofer (eso irritaria a Cloudflare y nos
-            # cortaria justo en el drop). Se evalua cada ciclo y vuelve solo a
-            # latente al expirar. `--agresivo` (CLI, testeo) usa el barrido
-            # per-chofer. Fecha/franja son POR CHOFER.
-            ag_hasta = cfg.get("agresivo_hasta") if cfg else None
-            boton_agresivo = (ag_hasta is not None
-                              and datetime.now(timezone.utc) < ag_hasta)
-
+            # Modo simple: idle (sin choferes), pausado (apagado desde la app) o
+            # latente. El latente barre cada ~5 s TODA la worklist y caza huecos
+            # apenas se liberan — alcanza para el drop sin un modo "agresivo"
+            # aparte (Santiago 2026-05-22: sacamos el barrido agresivo, el
+            # latente saca bien los turnos).
             if not targets:
                 modo = "idle"
             elif not activo:
                 modo = "pausado"
-            elif (forzar_agresivo or boton_agresivo) and not forzar_latente:
-                modo = "agresivo"
             else:
                 modo = "latente"
 
@@ -813,16 +759,7 @@ def main():
                 modo_anterior = modo
 
             # 4) actuar según modo
-            if modo == "agresivo":
-                # boton de la app -> barrido RAPIDO con el scanner unico.
-                # --agresivo (CLI, testeo) -> barrido per-chofer.
-                if forzar_agresivo:
-                    ciclo_agresivo(targets, dry)
-                else:
-                    ciclo_latente(targets, dry)
-                espera = cfg.get("poll_agresivo_seg", POLL_AGRESIVO_SEG) \
-                    + random.uniform(0, JITTER_LATENTE_SEG)
-            elif modo == "latente":
+            if modo == "latente":
                 ciclo_latente(targets, dry)
                 espera = cfg.get("poll_latente_seg", POLL_LATENTE_SEG) \
                     + random.uniform(0, JITTER_LATENTE_SEG)
@@ -837,8 +774,7 @@ def main():
             # (no hay a quién reservarle) → no disparar el backoff de Cloudflare.
             hay_pendientes = any(not t.tiene_turno and t.credenciales_ok
                                  for t in targets.values())
-            usa_scanner = (hay_pendientes and modo in ("latente", "agresivo")
-                           and not forzar_agresivo)
+            usa_scanner = hay_pendientes and modo == "latente"
             if usa_scanner and not _scanner["logueado"]:
                 fallos_scanner += 1
                 espera = min(espera * (2 ** min(fallos_scanner, 5)), BACKOFF_MAX_SEG)

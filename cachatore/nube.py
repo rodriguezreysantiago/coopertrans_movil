@@ -71,11 +71,6 @@ def leer_config_nube() -> dict:
         "hora_inicio": cfg.get("hora_inicio"),
         "duracion_min": cfg.get("duracion_min", 20),
         "poll_latente_seg": cfg.get("poll_latente_seg", 5),
-        "poll_agresivo_seg": cfg.get("poll_agresivo_seg", 1.5),
-        # Boton "barrido agresivo" de la app: timestamp (UTC) hasta cuando
-        # barrer rapido. La app lo setea a now+10min; el bot lo evalua cada
-        # ciclo y vuelve a latente al expirar.
-        "agresivo_hasta": cfg.get("agresivo_hasta"),
         "choferes": objetivos,
     }
 

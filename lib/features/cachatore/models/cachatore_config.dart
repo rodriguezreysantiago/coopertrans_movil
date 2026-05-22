@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 /// Config global del bot cachatore (doc `CACHATORE_CONFIG/global`).
 ///
 /// La escribe la app; el bot Python la lee (throttle ~30 s — no en cada
@@ -24,17 +22,12 @@ class CachatoreConfig {
   /// liberados el resto del día.
   final num pollLatenteSeg;
 
-  /// Hasta cuándo el bot hace "barrido agresivo" (barre rápido para ganar el
-  /// drop). Lo setea el botón de la app a now+10min; null o pasado = normal.
-  final DateTime? agresivoHasta;
-
   const CachatoreConfig({
     this.activo = false,
     this.fecha,
     this.horaInicio = '10:29',
     this.duracionMin = 20,
     this.pollLatenteSeg = 5,
-    this.agresivoHasta,
   });
 
   /// Lee del doc. Si el doc no existe (data == null) devuelve los defaults
@@ -47,7 +40,6 @@ class CachatoreConfig {
       horaInicio: (d['hora_inicio'] ?? '10:29').toString(),
       duracionMin: (d['duracion_min'] as num?)?.toInt() ?? 20,
       pollLatenteSeg: (d['poll_latente_seg'] as num?) ?? 5,
-      agresivoHasta: (d['agresivo_hasta'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -78,13 +70,4 @@ class CachatoreConfig {
     final d = fechaComoDate;
     return d != null ? _fmt(d) : fecha!;
   }
-
-  /// `true` si el barrido agresivo está activo ahora (agresivo_hasta futuro).
-  bool get agresivoActivo =>
-      agresivoHasta != null && agresivoHasta!.isAfter(DateTime.now());
-
-  /// Segundos que faltan para que se apague el barrido agresivo (0 si no).
-  int get agresivoSegundosRestantes => agresivoActivo
-      ? agresivoHasta!.difference(DateTime.now()).inSeconds
-      : 0;
 }
