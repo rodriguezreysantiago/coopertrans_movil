@@ -67,12 +67,13 @@ HEARTBEAT_SEG = 5            # sleep base del loop en idle/pausado
 LATIDO_SEG = 30             # cada cuánto ESCRIBIR el latido a Firestore. La UI
                             # considera vivo si latió hace <120 s, asi que no
                             # hace falta cada ciclo (serian ~17k writes/dia).
-LATIDO_LOG_SEG = 120        # cada cuánto LOGUEAR un latido VISIBLE en la ventana
-                            # en vivo. El de arriba es para la app; este es para
-                            # que un humano que mira los logs vea "sigo vivo y
-                            # laburando" sin abrir la app. En latente el loop
-                            # barre cada ~5 s pero solo logueaba al CAMBIAR de
-                            # modo -> podia quedar mudo horas y daba dudas.
+LATIDO_LOG_SEG = 60         # cada cuánto LOGUEAR un latido VISIBLE en la ventana
+                            # (1 por minuto, igual que el heartbeat del bot de
+                            # WhatsApp). El de arriba (30 s) es para la app; este
+                            # es para que un humano que mira los logs vea "sigo
+                            # vivo y laburando" sin abrir la app. En latente el
+                            # loop barre cada ~5 s pero solo logueaba al CAMBIAR
+                            # de modo -> podia quedar mudo horas y daba dudas.
 BACKOFF_MAX_SEG = 120       # tope del backoff cuando el scanner no puede loguear
 MAX_REFRESH_POR_CICLO = 2    # cuántos mis_turnos refrescar por ciclo (no bloquear)
 HORA_RESUMEN = 8             # hora ART del resumen diario de turnos al encargado
