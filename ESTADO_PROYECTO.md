@@ -1617,11 +1617,40 @@ con PDFs pesados en iOS. **Fix** en `PreviewScreen`: en móvil se descarga el PD
 - **Aviso de cancelación**: al cancelar un turno, WhatsApp al chofer + al encargado de
   logística (Errazu, 25022800), igual que reservar/reagendar.
 
-### 18.5 Pendiente operativo
-- **Release de la app** (hoy): liquidación slug, RBAC fino, cachatore wizard, admin_shell,
-  F.931 in-app. Validar el 931 en iOS con VOGEL.
-- **Limpiar** la regla `alertasVolvoDiario` de `health.js` + ayuda en
-  `admin_estado_bot_widgets.dart` (tarea aparte). Ver PENDIENTES.
+### 18.5 Bundle BAJO de la auditoría — CERRADO (commit `b747407`, CF deployada)
+Bundle de hallazgos menores cerrado el mismo PM. Validado: functions 197/197 + eslint
+limpio + flutter analyze + flutter test 416/416 + bot 128/128. Net **−521 líneas**.
+
+- **CF (deployada)**: `estadoVolvoPoller` con `adquirirLockTick("estado_volvo_poller", 4min)`
+  + try/finally — consistencia con los otros 5 pollers; evita doble-tick de GCP
+  at-least-once.
+- **App (ship en el release)**: `icm_historico_service.dart` → stub deprecado (−170 LOC
+  sin usos vivos tras el pivot a `IcmOficialService`); `repartirEnCuotas` docstring honesto
+  sobre la cuota 1 (lleva el resto del floor); checklist `_ItemPregunta` Stateless →
+  Stateful con `TextEditingController` (el texto de observación ya no "se vacía" al alternar
+  BUE↔REG/MAL).
+- **Bot (auto-update PC dedicada)**: `commands._resolverChoferPorTelefono` con igualdad
+  ESTRICTA canónica AR (sale el `endsWith` heredado del `_esAdmin` viejo); `historico.js`
+  −15 helpers obsoletos.
+- **Skipped con justificación**: SITRACK_EVENTOS limit cap (ya tiene `logger.warn`), Python
+  TZ -3 (AR no DST), dedup del bot por texto (behavior change con riesgo).
+
+### 18.6 Footgun `alertasVolvoDiario` — CERRADO (commit `1c2da83`)
+La env var `ALERTAS_RESUMEN_DESTINATARIO_DNI` hace tiempo que no dispara nada (el "Parte
+de mantenimiento" lo manda la CF con DNI hardcodeado), pero `health.js` seguía publicando
+una regla `alertasVolvoDiario` y la card "Reglas de notificación" del admin la mostraba
+como activa — cambiar la env var no reenrutaba nada.
+
+- `health.js`: removida la regla del `reglasNotificacion`. El card pasa de 4 reglas a 3.
+- `admin_estado_bot_widgets.dart`: texto de ayuda + doc comment + case de `_etiquetaTipo`
+  para `alertasVolvoDiario` — todo eliminado.
+
+### 18.7 Pendiente operativo (no es código)
+- **Release de la app** (Santiago): liquidación slug, RBAC fino, cachatore wizard,
+  admin_shell, F.931 in-app, checklist controller, doc cleanup. Validar el F.931 en iOS
+  con VOGEL post-release.
+- **(opcional, lado admin)** Re-subir el F.931 como PDF más liviano para que abra al
+  instante; ya funciona pesado.
 
 ---
 
