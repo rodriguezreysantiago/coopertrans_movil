@@ -1518,187 +1518,31 @@ class _ResumenService extends StatelessWidget {
               ],
             ),
           ),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton.icon(
-            onPressed: () => _abrirEdicion(context),
-            icon: const Icon(Icons.edit_calendar_outlined, size: 16),
-            label: Text(sinDatos ? 'Cargar último service' : 'Editar último service'),
-            style: TextButton.styleFrom(
-                foregroundColor: AppColors.accentGreen),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _abrirEdicion(BuildContext context) async {
-    final fechaRaw = data['ULTIMO_SERVICE_FECHA']?.toString();
-    final ultimoKm = (data['ULTIMO_SERVICE_KM'] as num?)?.toDouble();
-    await showDialog(
-      context: context,
-      builder: (_) => _EditarServiceDialog(
-        patente: patente,
-        fechaInicial: (fechaRaw != null && fechaRaw.isNotEmpty)
-            ? AppFormatters.tryParseFecha(fechaRaw)
-            : null,
-        kmInicial: ultimoKm?.toInt(),
-      ),
-    );
-  }
-}
-
-/// Dialog para editar fecha + km del último service en un solo paso.
-/// Persiste ambos campos juntos; un campo vacío se guarda como null
-/// (limpia el dato). Si la fecha elegida es futura la rechaza
-/// — un service no puede estar en el futuro.
-class _EditarServiceDialog extends StatefulWidget {
-  final String patente;
-  final DateTime? fechaInicial;
-  final int? kmInicial;
-
-  const _EditarServiceDialog({
-    required this.patente,
-    required this.fechaInicial,
-    required this.kmInicial,
-  });
-
-  @override
-  State<_EditarServiceDialog> createState() => _EditarServiceDialogState();
-}
-
-class _EditarServiceDialogState extends State<_EditarServiceDialog> {
-  late DateTime? _fecha;
-  late TextEditingController _kmCtrl;
-  bool _guardando = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _fecha = widget.fechaInicial;
-    _kmCtrl = TextEditingController(
-      text: widget.kmInicial != null
-          ? AppFormatters.formatearMiles(widget.kmInicial)
-          : '',
-    );
-  }
-
-  @override
-  void dispose() {
-    _kmCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _elegirFecha() async {
-    final picked = await pickFecha(
-      context,
-      initial: _fecha ?? DateTime.now(),
-      titulo: 'Fecha del último service',
-    );
-    if (picked == null) return;
-    final hoy = DateTime.now();
-    final hoyTrunc = DateTime(hoy.year, hoy.month, hoy.day);
-    if (DateTime(picked.year, picked.month, picked.day).isAfter(hoyTrunc)) {
-      if (mounted) {
-        AppFeedback.warning(context,
-            'La fecha del último service no puede estar en el futuro.');
-      }
-      return;
-    }
-    setState(() => _fecha = picked);
-  }
-
-  Future<void> _guardar() async {
-    if (_guardando) return;
-    setState(() => _guardando = true);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final km = AppFormatters.parsearMiles(_kmCtrl.text);
-      await FirebaseFirestore.instance
-          .collection(AppCollections.vehiculos)
-          .doc(widget.patente)
-          .update({
-        'ULTIMO_SERVICE_FECHA':
-            _fecha == null ? null : AppFormatters.aIsoFechaLocal(_fecha!),
-        'ULTIMO_SERVICE_KM': km?.toDouble(),
-        'fecha_ultima_actualizacion': FieldValue.serverTimestamp(),
-      });
-      if (mounted) {
-        Navigator.pop(context);
-        AppFeedback.successOn(messenger, 'Service actualizado.');
-      }
-    } catch (e, s) {
-      if (mounted) {
-        setState(() => _guardando = false);
-        AppFeedback.errorTecnicoOn(
-          messenger,
-          usuario: 'No se pudo guardar el service. Probá de nuevo.',
-          tecnico: e,
-          stack: s,
-        );
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final fechaTxt = _fecha == null
-        ? 'Sin fecha'
-        : '${_fecha!.day.toString().padLeft(2, '0')}/'
-            '${_fecha!.month.toString().padLeft(2, '0')}/${_fecha!.year}';
-    return AlertDialog(
-      title: const Text('Último service'),
-      content: SizedBox(
-        width: 320,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.event,
-                  color: AppColors.accentGreen, size: 20),
-              title: const Text('Fecha',
-                  style: TextStyle(fontSize: 11, color: Colors.white38)),
-              subtitle: Text(
-                fechaTxt,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+        // El último service se sincroniza AUTOMÁTICO desde el historial de
+        // taller de Volvo Connect (volvo_sync → ULTIMO_SERVICE_KM/FECHA). Ya no
+        // se carga a mano: tener dato manual + automático generaba confusión
+        // (decisión Santiago 2026-05-22). Solo lectura.
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Row(
+            children: [
+              const Icon(Icons.cloud_done_outlined,
+                  size: 14, color: Colors.white38),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  sinDatos
+                      ? 'Se actualiza solo desde Volvo Connect.'
+                      : 'Dato automático desde Volvo Connect.',
+                  style: const TextStyle(
+                    color: Colors.white38,
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ),
-              trailing: TextButton(
-                onPressed: _guardando ? null : _elegirFecha,
-                child: const Text('CAMBIAR'),
-              ),
-              onTap: _guardando ? null : _elegirFecha,
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _kmCtrl,
-              keyboardType: TextInputType.number,
-              inputFormatters: [AppFormatters.inputMiles],
-              enabled: !_guardando,
-              decoration: const InputDecoration(
-                labelText: 'KM al momento del service',
-                hintText: 'Ej. 350.000',
-                suffixText: 'km',
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _guardando ? null : () => Navigator.pop(context),
-          child: const Text('CANCELAR'),
-        ),
-        ElevatedButton(
-          onPressed: _guardando ? null : _guardar,
-          child: _guardando
-              ? const SizedBox(
-                  width: 18, height: 18, child: CircularProgressIndicator())
-              : const Text('GUARDAR'),
+            ],
+          ),
         ),
       ],
     );
