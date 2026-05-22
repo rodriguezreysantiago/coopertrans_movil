@@ -7,6 +7,44 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-05-22 — Rediseño del ICM (#49): "todo marca ~100"
+
+Santiago: "estamos haciendo mal los cálculos, los rankings no me parecen
+acordes, las cards marcan todo 100". Diagnóstico contra datos reales lo
+explicó: el ICM se calculaba sobre las **JORNADAS del vigilador** (rotas:
+ventanas 10-22h con 1.3h de manejo) → el **41% de las infracciones caía
+fuera de toda ventana**; y el km salía del odómetro **por evento** (los
+eventos bruscos no traen odómetro) → el filtro km>=10 descartaba casi
+todo → ICM_SEMANAL/W20 = **99.59 todo verde**.
+
+### Hecho + deployado + validado en vivo
+- Unidad: **(chofer, día ART)** en vez de jornada (no pierde eventos).
+- **km POR PATENTE** (odómetro de eventos de movimiento 98%) prorrateado
+  al chofer. Sin fatiga (no hay señal real). Umbrales **YPF 91/71** (era
+  80/60) en los 4 lugares. `combinarJornadas` peso=max(km,1). Flota =
+  media simple. Detalle en memoria `project_modulo_icm.md`.
+- Server deployado + **W20 recomputado**: pasó de **99.59 → 93.92**, con
+  28 verdes / **13 amarillos** / 0 rojos sobre 41 choferes (antes todo
+  verde). Tests flutter 74/74 + functions 188/188. Commit `8eb6502`.
+- La card de inicio lee el doc del server → ya muestra el número nuevo
+  **sin release** (se actualiza al reabrir la pantalla).
+
+### ⚠️ PENDIENTE
+1. **Release de la app** (Windows/Android/iOS): propaga el cálculo
+   on-the-fly del cliente para la **semana en curso** (pantallas del
+   módulo ICM: ranking / reporte / detalle) + los colores 91/71 en la UI.
+   Sin release, las semanas cerradas ya salen bien (las lee del server),
+   pero la semana actual y los colores usan el código viejo.
+2. **Decisión de framing (avisar a Santiago)**: nuestro número es una
+   **estimación INTERNA** (~94), NO el ICM oficial de YPF (cerró nov en
+   79). No replicamos la ponderación por **segmento vial** (autopista/
+   ruta/calle, proveedor "LW") que hace dominante la sobrevelocidad
+   (68.51% de las infracciones YPF) ni la fatiga — datos que no tenemos.
+   Sirve para ranking/tendencia interna. Si se quiere acercar al oficial
+   habría que pedirle a Sitrack/Carsync el sub-tipo de segmento vial.
+
+---
+
 ## 📅 2026-05-21 EOD — Arco Volvo: jornada + mantenimiento de punta a punta
 
 Sesión gigante. Plan "todo desde Volvo, ICM queda en Sitrack". Ver memoria
