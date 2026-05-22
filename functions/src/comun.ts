@@ -31,9 +31,18 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
 
-// DNI del jefe de Mantenimiento (EMMANUEL). Recibe el resumen diario de
-// alertas de mantenimiento Volvo (TPM/TTM/TELL_TALE) + service preventivo.
+// DNI del ADMIN que mantiene la app/bot (SANTIAGO). Recibe los resúmenes
+// OPERATIVOS del sistema: caídas del bot + drifts de asignación.
+// OJO: pese al nombre, NO es el jefe de mantenimiento de vehículos — ese es
+// Emmanuel (ver MANTENIMIENTO_VEHICULOS_DNI). Nombre histórico, no renombrado
+// por compat con resumenes_diarios.ts.
 export const MANTENIMIENTO_DESTINATARIO_DNI = "35244439";
+
+// DNI del jefe de mantenimiento de la FLOTA (CORCHETE EMMANUEL). Recibe el
+// parte diario de advertencias exactas de los camiones Volvo (tell-tales en
+// rojo/amarillo) + service preventivo por horas de motor. Ver
+// volvo_mantenimiento.ts y project_volvo_estado_fundacion.md.
+export const MANTENIMIENTO_VEHICULOS_DNI = "29820141";
 
 // DNI del jefe de Seguridad e Higiene (MOLINA ALEJANDRA). Recibe el
 // resumen diario de excesos de jornada (choferes que cruzaron 4h
