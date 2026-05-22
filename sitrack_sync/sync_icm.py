@@ -152,7 +152,12 @@ def main():
     print(f"=== sync_icm [{modo}] | período {periodo} ({desde} → {hasta}) ===")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        # Flags para chromium headless estable bajo la Scheduled Task (sesion
+        # sin escritorio interactivo) — mismo motivo que volvo_sync.
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+        )
         ctx_kwargs = {"locale": "es-ES"}
         if os.path.exists(_STATE):
             ctx_kwargs["storage_state"] = _STATE

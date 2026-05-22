@@ -144,7 +144,15 @@ def main():
     print(f"=== sync_taller [{modo}] ===")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        # Flags para que el chromium headless renderice bien bajo la Scheduled
+        # Task (sesion sin escritorio interactivo). Sin --disable-gpu el headless
+        # intenta usar GPU que no tiene en ese contexto y la SPA del taller no
+        # termina de renderizar -> el graphql nunca dispara -> timeout por unidad
+        # (confirmado 2026-05-22: a mano renderiza, por tarea no).
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+        )
         ctx_kwargs = {"locale": "es-ES"}
         if os.path.exists(_STATE):
             ctx_kwargs["storage_state"] = _STATE
