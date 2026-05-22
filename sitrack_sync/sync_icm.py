@@ -54,46 +54,46 @@ def _db():
     return firestore.client()
 
 
-def _login(page, cfg):
-    """Asegura sesión iniciada en el portal site5. Devuelve True si quedó
-    logueado. El login es cross-origin (host aparte) — usamos selectores
-    resilientes en vez de hardcodear la URL."""
-    page.goto(ICM_URL, wait_until="domcontentloaded", timeout=60000)
-    page.wait_for_timeout(3500)
-    # Si ya hay sesión (storage_state), el tablero carga directo.
-    if "/rankings/ICM" in page.url and page.query_selector("input[type=password]") is None:
-        return True
-    # Login: esperar el campo de contraseña (esté donde esté el form).
+def _ruta(url: str) -> str:
+    """Solo el path de una URL (NUNCA loguear el query — el form de login es
+    GET y mete usuario/contraseña en la query string)."""
     try:
-        page.wait_for_selector("input[type=password]", timeout=25000)
+        return urlparse(url).path
     except Exception:
-        print(f"    (no encontré form de login. url={page.url} title={page.title()!r})")
-        return False
-    # Usuario: primer input de texto/email visible.
-    usuario_sel = ("input[type=email]:visible, input[type=text]:visible, "
-                   "input[name*=user i]:visible, input[id*=user i]:visible")
-    u = page.query_selector(usuario_sel)
-    p = page.query_selector("input[type=password]")
-    if not u or not p:
-        print(f"    (faltan campos de login. url={page.url})")
-        return False
-    u.fill(cfg["usuario"])
-    p.fill(cfg["password"])
-    # Submit: botón submit, o Enter en el password.
-    btn = page.query_selector("button[type=submit], input[type=submit], "
-                              "button:has-text('Ingresar'), button:has-text('Iniciar')")
-    if btn:
-        btn.click()
-    else:
-        p.press("Enter")
+        return "?"
+
+
+def _login(page, cfg):
+    """Asegura sesión iniciada en el portal site5 (login en /site5/login/,
+    campos #userName / #password, botón INGRESAR, form GET). Hace UN intento
+    de login normal: llena credenciales y manda. NO interactúa con el
+    reCAPTCHA — si el portal lo exige, el login falla y devolvemos False
+    (no se intenta resolver/saltear el CAPTCHA)."""
+    page.goto(ICM_URL, wait_until="domcontentloaded", timeout=45000)
+    page.wait_for_timeout(2500)
+    # Si ya hay sesión válida (storage_state reusado), no redirige a /login.
+    if "/login" not in page.url:
+        return True
     try:
-        page.wait_for_url(lambda url: "/rankings/ICM" in url
-                          or page.query_selector("input[type=password]") is None,
-                          timeout=35000)
+        page.wait_for_selector("#password", timeout=20000)
+    except Exception:
+        print(f"    (no encontré form de login en {_ruta(page.url)})")
+        return False
+    page.fill("#userName", cfg["usuario"])
+    page.fill("#password", cfg["password"])
+    # Submit normal (botón INGRESAR). Esperamos la navegación resultante.
+    try:
+        with page.expect_navigation(wait_until="domcontentloaded", timeout=30000):
+            page.click("button:has-text('INGRESAR'), input[type=submit], "
+                       "button[type=submit]")
     except Exception:
         pass
-    page.wait_for_timeout(4000)
-    return page.query_selector("input[type=password]") is None
+    page.wait_for_timeout(3000)
+    ok = "/login" not in page.url
+    if not ok:
+        # Quedó en /login → credenciales rechazadas o reCAPTCHA exigido.
+        print(f"    (sigue en login: {_ruta(page.url)} — ¿reCAPTCHA o credenciales?)")
+    return ok
 
 
 def _extraer_client_grant(page):
