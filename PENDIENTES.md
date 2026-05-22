@@ -7,6 +7,52 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-05-21 EOD — Arco Volvo: jornada + mantenimiento de punta a punta
+
+Sesión gigante. Plan "todo desde Volvo, ICM queda en Sitrack". Ver memoria
+`project_volvo_estado_fundacion.md` (detalle completo) y `project_modulo_icm.md`.
+
+### Hecho y deployado (Cloud Functions — auto-deploy ON, ya están en vivo)
+- **Fundación `estadoVolvoPoller`** verificada con los 53 camiones reales. Fix
+  `limpiarNulos` (no borrar tell-tales por contenido) + `conductor_estado` + 2ª
+  consulta UPTIME para testigos (commits `0350b0c` `6396c90` `72008f6`).
+- **Jornada #36 → Volvo** (`d015e80`): el bug de paradas no detectadas era medir
+  staleness sobre `consultado_en` (siempre fresco). Ahora `decidirManejando` gana
+  la fuente MÁS FRESCA (Volvo `posicion_ts` real + speed; fallback SITRACK
+  `report_date`). Verificado en vivo. Suite functions 186/186.
+- **Parte de mantenimiento a Emmanuel #43** (`130453d` `8826257`): cron
+  `resumenMantenimientoVehiculosDiario` 08:00 ART → WhatsApp con advertencias
+  exactas (tell-tales en español) + declara cobertura honesta (hoy 20/53).
+
+### Hecho — Mantenimiento por km #44 + #45 (componente NUEVO `volvo_sync/`)
+- Scraper Playwright de Volvo Connect (login `logistica@cooper-trans.com.ar`,
+  HTML estándar SIN MFA/CAPTCHA, sesión reusable). Trae historial de taller
+  (`ecs-workshophistory` GraphQL) → `ULTIMO_SERVICE_KM/FECHA` + historial completo
+  a `VEHICULOS_TALLER`. Parser PURO (último service por functionGroup, NO
+  visitReason ni última visita). Reglas deployadas. Commits `a4b3945` `208e563`
+  `cfdcd19`. **Flota sincronizada 1 vez (53 unidades).**
+- App: campo de service **read-only** ("automático desde Volvo", `fb0f1f3`) +
+  **pantalla de Mantenimiento unificada** (`9505e27`): lista → detalle por unidad
+  con Service + Advertencias + Telemetría + Historial de taller completo.
+
+### ⚠️ PENDIENTE para que quede 100% automático y visible
+1. **Deploy `volvo_sync` en la PC dedicada** (cierra #44/#45 al 100% auto):
+   `pip install playwright` + `playwright install chromium` + copiar
+   `volvo_sync/claves.json` (creds, gitignoreado) + tarea programada DIARIA
+   `python sync_taller.py --commit`. Hoy corrió 1 vez a mano desde la PC oficina.
+2. **Release de la app** (Windows/Android/iOS) — propaga: jornada (transparente),
+   campo service read-only, pantalla Mantenimiento unificada.
+3. **Avisarle a Emmanuel** que desde mañana 8 AM le llega un WhatsApp diario con
+   las advertencias de los camiones (que no le caiga de sorpresa).
+
+### Hallazgos que cierran ideas
+- **Testigos del tablero = límite de GENERACIÓN del camión**, NO de la API ni de
+  acceso: los ~33 camiones viejos (2017-18) no transmiten "Estado actual" a NINGÚN
+  lado (confirmado en la web). #43 techo real ~20/53. NO es activable.
+- **Peso por eje (#46): 0/53 — descartado.** La flota no lo transmite.
+
+---
+
 ## 📅 2026-05-20 EOD — Web institucional VAVG + acceso web a la app (proyecto nuevo)
 
 Remodelación completa de la web pública del cliente + se le agregó el acceso web a la

@@ -1527,4 +1527,46 @@ Detalle completo en la memoria `project_web_institucional.md`.
 
 ---
 
+## 17. Sesión 2026-05-21 — Arco Volvo: jornada + módulo de mantenimiento
+
+Plan "todo desde Volvo, ICM se queda en Sitrack". Detalle completo en memoria
+`project_volvo_estado_fundacion.md`. Cloud Functions con auto-deploy → ya en vivo.
+
+### 17.1 Jornada → Volvo (fix del bug de paradas no detectadas) — DEPLOYADO
+El vigilador medía staleness sobre `consultado_en` (cuándo consultábamos SITRACK,
+siempre fresco) → un camión PARADO cuyo último reporte de hace 30 min decía 74 km/h
+se contaba como "manejando" y la parada no cerraba el bloque (AG218ZD, AF869ZU).
+Fix: función PURA `decidirManejando` (jornadas_v2.ts) que gana la fuente MÁS FRESCA
+— Volvo `posicion_ts` real + speed (primario) / SITRACK `report_date` (fallback).
+Verificado en vivo. Suite functions 186/186. Commits `0e41465` `d015e80`.
+
+### 17.2 Mantenimiento — parte Emmanuel + service por km + pantalla unificada
+- **Parte diario a Emmanuel (#43)**: cron `resumenMantenimientoVehiculosDiario`
+  08:00 ART → WhatsApp con advertencias EXACTAS (tell-tales en español, diccionario
+  `volvo_telltales.ts`), declara cobertura honesta. DEPLOYADO. Commits `130453d` `8826257`.
+- **Service por KM (#44) + historial de taller (#45)**: el dato vive detrás del
+  login web de Volvo Connect (no en la API rFMS). Componente NUEVO `volvo_sync/`
+  (Python + Playwright, patrón cachatore): login → historial de taller
+  (`ecs-workshophistory` GraphQL) → escribe `ULTIMO_SERVICE_KM/FECHA` + historial
+  completo en `VEHICULOS_TALLER`. El módulo de mantenimiento ya existente (intervalo
+  50k) lo consume. Edición manual del service ELIMINADA (fuente única Volvo).
+- **Pantalla de Mantenimiento UNIFICADA**: lista por urgencia → detalle por unidad
+  con Service + Advertencias + Telemetría + Historial de taller completo (expandible
+  a operaciones). Commits app `fb0f1f3` `9505e27`; backend `a4b3945` `208e563` `cfdcd19`.
+
+### 17.3 Hallazgos que cierran ideas
+- **Testigos del tablero = límite de GENERACIÓN del camión**, no de la API/acceso:
+  los ~33 camiones viejos (2017-18) no transmiten "Estado actual" a NINGÚN lado
+  (confirmado en la web). #43 techo real ~20/53. No es activable.
+- **Peso por eje (#46): 0/53 — descartado.**
+
+### 17.4 Pendiente operativo
+- **Deploy `volvo_sync` en la PC dedicada** (Playwright + chromium + `claves.json` +
+  tarea diaria `python sync_taller.py --commit`) → cierra #44/#45 al 100% automático.
+  Hoy corrió 1 vez a mano. Ver PENDIENTES.md.
+- **Release de la app** (read-only service + pantalla Mantenimiento unificada).
+- **Avisar a Emmanuel** del WhatsApp diario (arranca mañana 8 AM).
+
+---
+
 **Cómo retomar (sesión vieja)**: leer secciones 6.9 (cleanup + RBAC del 30-abril), 6.10 (sesión grande del 1-mayo: imports bulk + fixes UI + auditoría profunda + plan 4 fases ejecutado) y 13 (anotaciones del 30-abril noche). El estado del repo es el commit más reciente — `git log --oneline -10`.
