@@ -1,15 +1,18 @@
 // Reporte Excel del módulo ICM — pensado para presentar en auditorías
 // YPF y para análisis interno de Vecchi.
 //
-// 3 hojas:
-//   1. RESUMEN FLOTA — una fila por semana (ICM promedio + distribución).
-//   2. DETALLE CHOFERES — chofer × semana con ICM, categoría, eventos.
-//   3. TOP — top 5 mejores y top 5 peores de la última semana cerrada.
+// Usa el ICM **oficial de Sitrack** (`ICM_OFICIAL/{YYYY-MM}`, ingerido a
+// diario por `sitrack_sync/sync_icm.py`) — el MISMO número que YPF audita
+// en su tablero. Escala: MÁS BAJO = MEJOR. Antes este reporte calculaba el
+// CESVI interno (semanal), que daba números optimistas que no coincidían
+// con el tablero de YPF — peligroso justo en una auditoría.
 //
-// Lee de `ICM_SEMANAL/{YYYY-WW}` (poblado por la scheduled function
-// `recomputeIcmSemanalScheduled` cada lunes 6 AM ART). Para semanas
-// que aún no tienen agregado pre-calculado, hace fallback al cálculo
-// on-the-fly desde SITRACK_EVENTOS (mismo path que el cliente).
+// 3 hojas:
+//   1. RESUMEN — flota: ICM general, distancia/tiempo, infracciones,
+//      distribución por severidad + comparativa con el mes anterior.
+//   2. CHOFERES — una fila por chofer (peor→mejor): ICM, urbano/no-urbano,
+//      severidad, infracciones, excesos, conducción agresiva, km, horas.
+//   3. UNIDADES — una fila por patente.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as ex;
@@ -20,8 +23,7 @@ import 'package:intl/intl.dart' as intl;
 import '../../../core/services/excluidos_service.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
-import '../../icm/services/icm_calculator.dart';
-import '../../icm/services/icm_historico_service.dart';
+import '../../icm/services/icm_oficial_service.dart';
 import 'excel_utils.dart' as xu;
 import 'report_save_helper.dart';
 
@@ -37,29 +39,26 @@ class ReportIcmService {
       return;
     }
 
-    final cantSemanas = await _mostrarDialogoSemanas(context);
-    if (cantSemanas == null || !context.mounted) return;
+    final offset = await _mostrarDialogoMes(context);
+    if (offset == null || !context.mounted) return;
 
     _notificarProgreso(messenger);
-    await _ejecutarGeneracion(
-      cantidadSemanas: cantSemanas,
-      messenger: messenger,
-    );
+    await _ejecutarGeneracion(offsetMeses: offset, messenger: messenger);
   }
 
   // ---------------------------------------------------------------------------
   // DIALOG DE OPCIONES
   // ---------------------------------------------------------------------------
 
-  static Future<int?> _mostrarDialogoSemanas(BuildContext context) {
+  static Future<int?> _mostrarDialogoMes(BuildContext context) {
     return showDialog<int>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Theme.of(ctx).colorScheme.surface,
-        title: const Text('Reporte ICM — Cantidad de semanas'),
+        title: const Text('Reporte ICM oficial — Mes'),
         content: const Text(
-          'Cuántas semanas hacia atrás incluir en el reporte. La semana '
-          'actual (aún en curso) entra siempre como última fila.',
+          'El ICM oficial de Sitrack se cierra por mes. Elegí qué mes '
+          'exportar. El mes en curso se va completando día a día.',
           style: TextStyle(color: Colors.white70, fontSize: 13),
         ),
         actions: [
@@ -68,20 +67,16 @@ class ReportIcmService {
             child: const Text('Cancelar'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(ctx, 4),
-            child: const Text('4 semanas'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 8),
-            child: const Text('8 semanas'),
+            onPressed: () => Navigator.pop(ctx, -1),
+            child: const Text('Mes anterior'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentRed,
+              backgroundColor: AppColors.accentBlue,
               foregroundColor: Colors.white,
             ),
-            onPressed: () => Navigator.pop(ctx, 12),
-            child: const Text('12 semanas'),
+            onPressed: () => Navigator.pop(ctx, 0),
+            child: const Text('Mes actual'),
           ),
         ],
       ),
@@ -101,7 +96,7 @@ class ReportIcmService {
               width: 20,
               height: 20,
               child: CircularProgressIndicator(
-                color: Colors.white, strokeWidth: 2),
+                  color: Colors.white, strokeWidth: 2),
             ),
             SizedBox(width: 15),
             Text('Generando reporte ICM...'),
@@ -114,101 +109,43 @@ class ReportIcmService {
   }
 
   static Future<void> _ejecutarGeneracion({
-    required int cantidadSemanas,
+    required int offsetMeses,
     required ScaffoldMessengerState messenger,
   }) async {
     try {
       final db = FirebaseFirestore.instance;
 
-      // Cargar set de exclusión (tanqueros + testers). El reporte va
-      // a auditoría YPF, no podemos incluir tractores que no
-      // controlamos ni cuentas demo.
+      // Excluir tanqueros + testers de las listas (no de los totales
+      // auditados de Sitrack, que se muestran tal cual).
       final excluidos = await ExcluidosService.cargar(db: db);
+      excluir(String dni) =>
+          ExcluidosService.esExcluido(excluidos, dni: dni);
 
-      // Lookup nombres de empleados (para fallback on-the-fly)
-      final empSnap = await db.collection('EMPLEADOS').get();
-      final nombrePorDni = <String, String>{};
-      for (final d in empSnap.docs) {
-        final data = d.data();
-        final dni = (data['DNI'] ?? d.id).toString();
-        if (ExcluidosService.esExcluido(excluidos, dni: dni)) continue;
-        final nombre = (data['NOMBRE'] ?? '').toString().trim();
-        if (nombre.isNotEmpty) nombrePorDni[dni] = nombre;
-      }
+      final idSel = IcmOficialService.periodoId(offsetMeses: offsetMeses);
+      final idPrev =
+          IcmOficialService.periodoId(offsetMeses: offsetMeses - 1);
+      final cargados = await Future.wait([
+        IcmOficialService.cargarPeriodo(db, idSel, excluirDni: excluir),
+        IcmOficialService.cargarPeriodo(db, idPrev, excluirDni: excluir),
+      ]);
+      final periodo = cargados[0];
+      final prev = cargados[1];
 
-      // Cargar histórico de la flota
-      final historico = await IcmHistoricoService.historicoFlota(
-        db: db,
-        nombrePorDni: nombrePorDni,
-        cantidadSemanas: cantidadSemanas,
-      );
-      if (historico.isEmpty) {
+      if (periodo == null || periodo.vacio) {
         messenger.hideCurrentSnackBar();
-        AppFeedback.warningOn(messenger,
-            'No hay datos suficientes para generar el reporte.');
+        AppFeedback.warningOn(
+          messenger,
+          'Aún no hay datos del ICM oficial de '
+          '${IcmOficialService.labelPeriodo(idSel)}. Se sincroniza a diario.',
+        );
         return;
       }
 
-      // Cargar detalle por chofer de TODAS las semanas (queremos el
-      // detalle completo en la hoja 2). Para cada semana, traemos los
-      // choferes desde ICM_SEMANAL/{YYYY-WW}.choferes[]. Si no existe
-      // (semana actual), hacemos ranking on-the-fly.
-      final detallePorSemana = <String, List<Map<String, dynamic>>>{};
-      for (final s in historico) {
-        final id = _isoWeekId(s.semanaInicio);
-        final snap = await db.collection('ICM_SEMANAL').doc(id).get();
-        if (snap.exists && (snap.data()?['choferes'] as List?) != null) {
-          // Filtramos defensivamente los docs preexistentes — los
-          // nuevos ya vienen filtrados desde la Cloud Function
-          // `recomputeIcmSemanalScheduled` (Fase 1), pero las semanas
-          // calculadas antes del 2026-05-19 pueden tener residuos.
-          detallePorSemana[id] = ((snap.data()!['choferes'] as List)
-                  .cast<Map<String, dynamic>>())
-              .where((c) => !ExcluidosService.esExcluido(
-                    excluidos,
-                    dni: (c['dni'] ?? '').toString(),
-                  ))
-              .toList();
-        } else {
-          // Fallback: calculator on-the-fly (mismas semanas, mismos
-          // choferes que aparecerían en el resumen)
-          final inicio = s.semanaInicio.millisecondsSinceEpoch;
-          final fin = inicio + 7 * 24 * 60 * 60 * 1000;
-          final ranking = await IcmCalculator.calcularRanking(
-            db: db,
-            desdeMs: inicio,
-            hastaMs: fin,
-            nombrePorDni: nombrePorDni,
-          );
-          // Defensivo: el calculator puede generar entries para DNIs
-          // que están en eventos crudos pero no en nombrePorDni
-          // (excluidos). Filtramos explícito.
-          ranking.removeWhere((c) => ExcluidosService.esExcluido(
-                excluidos,
-                dni: c.choferDni,
-              ));
-          detallePorSemana[id] = ranking
-              .map((c) => {
-                    'dni': c.choferDni,
-                    'nombre': c.choferNombre,
-                    'icm': c.icm,
-                    'total_eventos': c.totalEventos,
-                    'ratio_100km': c.infraccionesPor100Km,
-                    'categoria': _catLabel(c.categoria),
-                  })
-              .toList();
-        }
-      }
-
-      final bytes = _construirExcel(
-        historico: historico,
-        detallePorSemana: detallePorSemana,
-      );
+      final bytes = _construirExcel(periodo: periodo, prev: prev);
 
       messenger.hideCurrentSnackBar();
-      final ts = DateTime.now();
-      final nombre =
-          'ICM_Coopertrans_${intl.DateFormat('yyyy-MM-dd_HHmm').format(ts)}.xlsx';
+      final nombre = 'ICM_Oficial_${periodo.periodo}_'
+          '${intl.DateFormat('yyyy-MM-dd_HHmm').format(DateTime.now())}.xlsx';
       await ReportSaveHelper.guardarYAbrir(
         bytes: bytes,
         nombreDefault: nombre,
@@ -230,15 +167,14 @@ class ReportIcmService {
   // ---------------------------------------------------------------------------
 
   static List<int> _construirExcel({
-    required List<IcmSemanaFlota> historico,
-    required Map<String, List<Map<String, dynamic>>> detallePorSemana,
+    required IcmOficialPeriodo periodo,
+    required IcmOficialPeriodo? prev,
   }) {
     final excel = ex.Excel.createExcel();
-    // La hoja default "Sheet1" la borramos al final.
 
-    _hojaResumenFlota(excel, historico);
-    _hojaDetalleChoferes(excel, historico, detallePorSemana);
-    _hojaTopMejoresPeores(excel, historico.last);
+    _hojaResumen(excel, periodo, prev);
+    _hojaChoferes(excel, periodo);
+    _hojaUnidades(excel, periodo);
 
     excel.delete('Sheet1');
 
@@ -249,213 +185,175 @@ class ReportIcmService {
     return xu.aplicarAutoFilterAlXlsx(bytes);
   }
 
-  static void _hojaResumenFlota(
-    ex.Excel excel,
-    List<IcmSemanaFlota> historico,
-  ) {
-    final hoja = excel['RESUMEN FLOTA'];
-    final headers = [
-      'SEMANA',
-      'ICM PROMEDIO',
-      'CHOFERES ACTIVOS',
-      'TOTAL EVENTOS',
-      'VERDES (>=80)',
-      'AMARILLOS (60-79)',
-      'ROJOS (<60)',
-    ];
-    for (var i = 0; i < headers.length; i++) {
-      final cell = hoja.cell(ex.CellIndex.indexByColumnRow(
-          columnIndex: i, rowIndex: 0));
-      cell.value = ex.TextCellValue(headers[i]);
-      cell.cellStyle = ex.CellStyle(
-        bold: true,
-        backgroundColorHex: ex.ExcelColor.fromHexString('#0EA5E9'),
-        fontColorHex: ex.ExcelColor.white,
-      );
-    }
-    for (var r = 0; r < historico.length; r++) {
-      final s = historico[r];
-      final row = r + 1;
-      hoja
-          .cell(ex.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
-          .value = ex.TextCellValue(s.labelSemana);
-      hoja
-          .cell(ex.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row))
-          .value = ex.DoubleCellValue(double.parse(s.icmPromedio.toStringAsFixed(1)));
-      hoja
-          .cell(ex.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row))
-          .value = ex.IntCellValue(s.choferesActivos);
-      hoja
-          .cell(ex.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row))
-          .value = ex.IntCellValue(s.totalEventos);
-      hoja
-          .cell(ex.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row))
-          .value = ex.IntCellValue(s.choferesVerdes);
-      hoja
-          .cell(ex.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row))
-          .value = ex.IntCellValue(s.choferesAmarillos);
-      hoja
-          .cell(ex.CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row))
-          .value = ex.IntCellValue(s.choferesRojos);
-    }
-    xu.autoFitColumnas(hoja, headers.length, historico.length + 1);
+  static final _headerStyle = ex.CellStyle(
+    bold: true,
+    backgroundColorHex: ex.ExcelColor.fromHexString('#0EA5E9'),
+    fontColorHex: ex.ExcelColor.white,
+  );
+
+  static void _setHeader(ex.Sheet hoja, int col, int row, String txt) {
+    hoja.cell(ex.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row))
+      ..value = ex.TextCellValue(txt)
+      ..cellStyle = _headerStyle;
   }
 
-  static void _hojaDetalleChoferes(
+  static void _setTxt(ex.Sheet hoja, int col, int row, String txt) {
+    hoja
+        .cell(ex.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row))
+        .value = ex.TextCellValue(txt);
+  }
+
+  static void _setNum(ex.Sheet hoja, int col, int row, double v,
+      {ex.CellStyle? style}) {
+    final cell = hoja
+        .cell(ex.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row));
+    cell.value = ex.DoubleCellValue(v);
+    if (style != null) cell.cellStyle = style;
+  }
+
+  static void _setInt(ex.Sheet hoja, int col, int row, int v) {
+    hoja
+        .cell(ex.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row))
+        .value = ex.IntCellValue(v);
+  }
+
+  static final _styleKm =
+      ex.CellStyle(numberFormat: xu.formatoARSinDecimales);
+
+  // ── Hoja 1: RESUMEN ────────────────────────────────────────────────
+  static void _hojaResumen(
     ex.Excel excel,
-    List<IcmSemanaFlota> historico,
-    Map<String, List<Map<String, dynamic>>> detallePorSemana,
+    IcmOficialPeriodo p,
+    IcmOficialPeriodo? prev,
   ) {
-    final hoja = excel['DETALLE CHOFERES'];
-    final headers = [
-      'SEMANA',
-      'CHOFER',
-      'DNI',
-      'ICM',
-      'CATEGORÍA',
-      'TOTAL EVENTOS',
-      'INFRACCIONES / 100 KM',
+    final hoja = excel['RESUMEN'];
+    _setHeader(hoja, 0, 0, 'CAMPO');
+    _setHeader(hoja, 1, 0, 'VALOR');
+
+    final c = p.conteoPorSeveridad;
+    final altos = c[SeveridadIcm.alto] ?? 0;
+    final medios = c[SeveridadIcm.medio] ?? 0;
+    final bajos = (c[SeveridadIcm.bajo] ?? 0) +
+        (c[SeveridadIcm.sinInfracciones] ?? 0);
+
+    final filas = <List<dynamic>>[
+      ['Período', IcmOficialService.labelPeriodo(p.periodo)],
+      ['Rango', '${p.fechaDesde} a ${p.fechaHasta}'],
+      ['ICM flota (oficial Sitrack) — más bajo = mejor', p.icmGeneral],
+      if (prev != null && !prev.vacio) ...[
+        ['ICM mes anterior', prev.icmGeneral],
+        [
+          'Variación vs mes anterior',
+          '${p.icmGeneral - prev.icmGeneral >= 0 ? '+' : ''}'
+              '${(p.icmGeneral - prev.icmGeneral).toStringAsFixed(1)} pts '
+              '(${p.icmGeneral < prev.icmGeneral ? 'mejoró' : p.icmGeneral > prev.icmGeneral ? 'empeoró' : 'sin cambios'})',
+        ],
+      ],
+      ['Choferes activos / total', '${p.choferesActivos} / ${p.choferesTotal}'],
+      ['Distancia total (km)', p.distanciaTotalKm],
+      ['Tiempo total (h)', p.tiempoTotalH],
+      ['Infracciones altas', p.infraccionesAltas],
+      ['Infracciones medias', p.infraccionesMedias],
+      ['Infracciones leves', p.infraccionesLeves],
+      ['Choferes severidad ALTA', altos],
+      ['Choferes severidad MEDIA', medios],
+      ['Choferes severidad BAJA / sin infracciones', bajos],
+      ['Fuente', 'Tablero ICM oficial de Sitrack (auditado por YPF)'],
     ];
-    for (var i = 0; i < headers.length; i++) {
-      final cell = hoja.cell(ex.CellIndex.indexByColumnRow(
-          columnIndex: i, rowIndex: 0));
-      cell.value = ex.TextCellValue(headers[i]);
-      cell.cellStyle = ex.CellStyle(
-        bold: true,
-        backgroundColorHex: ex.ExcelColor.fromHexString('#0EA5E9'),
-        fontColorHex: ex.ExcelColor.white,
-      );
-    }
-    var row = 1;
-    for (final s in historico) {
-      final id = _isoWeekId(s.semanaInicio);
-      final choferes = detallePorSemana[id] ?? const [];
-      // Ordenar por ICM ascendente (peor primero) para que Molina vea
-      // primero los choferes a abordar.
-      final sorted = [...choferes]
-        ..sort((a, b) {
-          final aIcm = (a['icm'] as num?)?.toDouble() ?? 0;
-          final bIcm = (b['icm'] as num?)?.toDouble() ?? 0;
-          return aIcm.compareTo(bIcm);
-        });
-      for (final c in sorted) {
-        hoja
-            .cell(ex.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
-            .value = ex.TextCellValue(s.labelSemana);
-        hoja
-            .cell(ex.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row))
-            .value = ex.TextCellValue((c['nombre'] ?? '').toString());
-        hoja
-            .cell(ex.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row))
-            .value = ex.TextCellValue((c['dni'] ?? '').toString());
-        hoja
-            .cell(ex.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row))
-            .value = ex.DoubleCellValue(
-                ((c['icm'] as num?)?.toDouble() ?? 0).roundToDouble());
-        hoja
-            .cell(ex.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: row))
-            .value = ex.TextCellValue((c['categoria'] ?? '').toString());
-        hoja
-            .cell(ex.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: row))
-            .value = ex.IntCellValue(
-                (c['total_eventos'] as num?)?.toInt() ?? 0);
-        hoja
-            .cell(ex.CellIndex.indexByColumnRow(columnIndex: 6, rowIndex: row))
-            .value = ex.DoubleCellValue(
-                ((c['ratio_100km'] as num?)?.toDouble() ?? 0));
-        row++;
+
+    for (var i = 0; i < filas.length; i++) {
+      final row = i + 1;
+      _setTxt(hoja, 0, row, filas[i][0].toString());
+      final val = filas[i][1];
+      if (val is int) {
+        _setInt(hoja, 1, row, val);
+      } else if (val is double) {
+        _setNum(hoja, 1, row, val,
+            style: filas[i][0].toString().contains('km')
+                ? _styleKm
+                : null);
+      } else {
+        _setTxt(hoja, 1, row, val.toString());
       }
     }
-    xu.autoFitColumnas(hoja, headers.length, row);
+    xu.autoFitColumnas(hoja, 2, filas.length + 1);
   }
 
-  static void _hojaTopMejoresPeores(
-    ex.Excel excel,
-    IcmSemanaFlota ultima,
-  ) {
-    final hoja = excel['TOP'];
-    // Header sección "Mejores"
-    hoja.cell(ex.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0))
-      ..value = ex.TextCellValue('TOP 5 MEJORES — ${ultima.labelSemana}')
-      ..cellStyle = ex.CellStyle(
-        bold: true,
-        backgroundColorHex: ex.ExcelColor.fromHexString('#16A34A'),
-        fontColorHex: ex.ExcelColor.white,
-      );
-    _escribirHeadersTop(hoja, 1);
-    for (var i = 0; i < ultima.top5Mejores.length; i++) {
-      _escribirFilaTop(hoja, 2 + i, i + 1, ultima.top5Mejores[i]);
-    }
-    final filaSep = 2 + ultima.top5Mejores.length + 2;
-    hoja.cell(ex.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: filaSep))
-      ..value = ex.TextCellValue('TOP 5 PEORES — ${ultima.labelSemana}')
-      ..cellStyle = ex.CellStyle(
-        bold: true,
-        backgroundColorHex: ex.ExcelColor.fromHexString('#DC2626'),
-        fontColorHex: ex.ExcelColor.white,
-      );
-    _escribirHeadersTop(hoja, filaSep + 1);
-    for (var i = 0; i < ultima.top5Peores.length; i++) {
-      _escribirFilaTop(hoja, filaSep + 2 + i, i + 1, ultima.top5Peores[i]);
-    }
-    xu.autoFitColumnas(
-        hoja, 4, filaSep + 2 + ultima.top5Peores.length + 1);
-  }
-
-  static void _escribirHeadersTop(ex.Sheet hoja, int row) {
-    const headers = ['POSICIÓN', 'CHOFER', 'DNI', 'ICM'];
+  // ── Hoja 2: CHOFERES ───────────────────────────────────────────────
+  static void _hojaChoferes(ex.Excel excel, IcmOficialPeriodo p) {
+    final hoja = excel['CHOFERES'];
+    const headers = [
+      'ICM',
+      'SEVERIDAD',
+      'CHOFER',
+      'DNI',
+      'ICM URBANO',
+      'ICM NO URBANO',
+      'INF. ALTAS',
+      'INF. MEDIAS',
+      'INF. LEVES',
+      'EXCESOS VEL.',
+      'COND. AGRESIVA',
+      'DISTANCIA (KM)',
+      'TIEMPO (H)',
+    ];
     for (var i = 0; i < headers.length; i++) {
-      hoja.cell(ex.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: row))
-        ..value = ex.TextCellValue(headers[i])
-        ..cellStyle = ex.CellStyle(bold: true);
+      _setHeader(hoja, i, 0, headers[i]);
     }
-  }
-
-  static void _escribirFilaTop(
-    ex.Sheet hoja,
-    int row,
-    int posicion,
-    IcmChofer c,
-  ) {
-    hoja.cell(ex.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
-        .value = ex.IntCellValue(posicion);
-    hoja.cell(ex.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: row))
-        .value = ex.TextCellValue(c.choferNombre);
-    hoja.cell(ex.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: row))
-        .value = ex.TextCellValue(c.choferDni);
-    hoja.cell(ex.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: row))
-        .value = ex.DoubleCellValue(c.icm.roundToDouble());
-  }
-
-  // ---------------------------------------------------------------------------
-  // HELPERS
-  // ---------------------------------------------------------------------------
-
-  /// ID semana ISO 8601 ("YYYY-WNN"). Mismo algoritmo que el cron
-  /// server-side y que `IcmHistoricoService._isoWeekId`.
-  static String _isoWeekId(DateTime d) {
-    final target = DateTime.utc(d.year, d.month, d.day);
-    final dayNum = (target.weekday + 6) % 7;
-    final thursday = target.add(Duration(days: 3 - dayNum));
-    final firstThursday = DateTime.utc(thursday.year, 1, 4);
-    final firstThursdayDayNum = (firstThursday.weekday + 6) % 7;
-    final week = 1 +
-        ((thursday.difference(firstThursday).inDays - 3 + firstThursdayDayNum) /
-                7)
-            .round();
-    return '${thursday.year}-W${week.toString().padLeft(2, '0')}';
-  }
-
-  static String _catLabel(CategoriaIcm c) {
-    switch (c) {
-      case CategoriaIcm.bajo:
-        return 'BAJO';
-      case CategoriaIcm.medio:
-        return 'MEDIO';
-      case CategoriaIcm.alto:
-        return 'ALTO';
-      case CategoriaIcm.sinDatos:
-        return 'sin datos';
+    // Peor→mejor (incluye los "sin actividad" al final).
+    final filas = p.choferesParaRanking;
+    for (var r = 0; r < filas.length; r++) {
+      final c = filas[r];
+      final row = r + 1;
+      _setNum(hoja, 0, row, c.icm);
+      _setTxt(hoja, 1, row, c.severidadLabel);
+      _setTxt(hoja, 2, row, c.nombre);
+      _setTxt(hoja, 3, row, c.dni);
+      _setNum(hoja, 4, row, c.icmUrbano);
+      _setNum(hoja, 5, row, c.icmNoUrbano);
+      _setInt(hoja, 6, row, c.infAltas);
+      _setInt(hoja, 7, row, c.infMedias);
+      _setInt(hoja, 8, row, c.infLeves);
+      _setInt(hoja, 9, row, c.excesosVelocidad);
+      _setInt(hoja, 10, row, c.conduccionAgresiva);
+      _setNum(hoja, 11, row, c.distanciaKm, style: _styleKm);
+      _setNum(hoja, 12, row, c.tiempoH);
     }
+    xu.autoFitColumnas(hoja, headers.length, filas.length + 1);
+  }
+
+  // ── Hoja 3: UNIDADES ───────────────────────────────────────────────
+  static void _hojaUnidades(ex.Excel excel, IcmOficialPeriodo p) {
+    final hoja = excel['UNIDADES'];
+    const headers = [
+      'ICM',
+      'SEVERIDAD',
+      'PATENTE',
+      'ICM URBANO',
+      'ICM NO URBANO',
+      'INF. ALTAS',
+      'INF. MEDIAS',
+      'INF. LEVES',
+      'DISTANCIA (KM)',
+      'TIEMPO (H)',
+    ];
+    for (var i = 0; i < headers.length; i++) {
+      _setHeader(hoja, i, 0, headers[i]);
+    }
+    for (var r = 0; r < p.vehiculos.length; r++) {
+      final v = p.vehiculos[r];
+      final row = r + 1;
+      _setNum(hoja, 0, row, v.icm);
+      _setTxt(hoja, 1, row, v.severidadLabel);
+      _setTxt(hoja, 2, row, v.patente);
+      _setNum(hoja, 3, row, v.icmUrbano);
+      _setNum(hoja, 4, row, v.icmNoUrbano);
+      _setInt(hoja, 5, row, v.infAltas);
+      _setInt(hoja, 6, row, v.infMedias);
+      _setInt(hoja, 7, row, v.infLeves);
+      _setNum(hoja, 8, row, v.distanciaKm, style: _styleKm);
+      _setNum(hoja, 9, row, v.tiempoH);
+    }
+    xu.autoFitColumnas(hoja, headers.length, p.vehiculos.length + 1);
   }
 }
