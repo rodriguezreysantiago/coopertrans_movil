@@ -79,6 +79,12 @@ $settings = New-ScheduledTaskSettingsSet `
     -ExecutionTimeLimit (New-TimeSpan -Minutes 30) `
     -RestartCount 0 `
     -MultipleInstances IgnoreNew
+# Prioridad de CPU NORMAL (5). Por defecto las Scheduled Tasks corren en 7
+# (below-normal) -> el chromium de Playwright queda hambreado compitiendo con
+# el Chrome del bot (prioridad normal) y las paginas no cargan a tiempo
+# (timeouts de 35s/unidad en Volvo). Con 5 compite parejo. (Confirmado el
+# 2026-05-22: a mano andaba, por tarea timeouteaba.)
+$settings.Priority = 5
 
 foreach ($t in $tasks) {
     $existing = Get-ScheduledTask -TaskName $t.Name -ErrorAction SilentlyContinue
