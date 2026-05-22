@@ -7,6 +7,40 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-05-22 PM (2) — Revisión profunda ICM + preparación para PREMIOS/CASTIGOS
+
+Santiago: "revisión profunda del ICM archivo por archivo, card por card... quiero
+que quede perfecto porque vamos a empezar con el sistema de premios y
+penalizaciones". 2 agentes de auditoría (UI + pipeline) + exploración EN VIVO de
+Sitrack y Volvo (sesiones logueadas).
+
+### Hecho — blindaje de correctitud (commit `5651843`, en main, necesita release)
+- Universo rankeable = actividad **Y** DNI real (cierra el "fantasma sin chofer"
+  en top5/Excel/tablero). Comparativa mes-a-mes ya no confunde 0=sin-infracciones
+  con 0=sin-actividad. Conteos del header coherentes con las filas. Excel UNIDADES
+  respeta excluirPatente. Formato AR en infracciones. + tests de regresión.
+
+### ⚠️ PENDIENTE — fundación para premios (decisiones de Santiago)
+1. **Snapshot inmutable de cierre de mes** (CRÍTICO si hay plata): hoy
+   `ICM_OFICIAL/{YYYY-MM}` se SOBREESCRIBE a diario y Sitrack recalcula días
+   pasados → no hay evidencia de sobre qué número se liquidó. Propuesta: doc
+   `ICM_OFICIAL_CIERRE/{YYYY-MM}` inmutable (create-once, update:false), congelado
+   el ~día 4 del mes siguiente; la liquidación lee ESE.
+2. **Enriquecer la ingesta** (todo viene en la MISMA respuesta de Sitrack, gratis):
+   distancia+tiempo **urbano vs ruta** por chofer; `rankingItemsByDay` = ICM de
+   flota DÍA por DÍA (tendencia diaria real, sin esperar meses); excesos/agresiva
+   por vehículo; conteos de severidad top-level. Historia por chofer = se acumula
+   sola con los CIERRE mensuales.
+3. **Cargar DNIs faltantes en Sitrack** (acción de Santiago): BUSCIO GUILLERMO y
+   BASTIAS HORACIO son choferes reales SIN DNI cargado → invisibles al match por
+   DNI. (Las otras 5 filas sin DNI son no-choferes: TALLER, LAVADERO, 3 unidades.)
+4. **Mapa de calor** (hoy placeholder): Sitrack tiene Control Conducción /
+   H. Posición / Monitor Eventos con eventos geolocalizados → construible.
+5. **Volvo "Informe de seguridad"**: score de conducta propio de Volvo, candidato
+   a métrica SECUNDARIA interna para premios. Extracción aparte (no es el oficial).
+
+---
+
 ## 📅 2026-05-22 PM — ICM OFICIAL de Sitrack ingerido + automatización dedicada
 
 Santiago: "esa página de Sitrack es de donde saca YPF el ICM, ¿no podemos
