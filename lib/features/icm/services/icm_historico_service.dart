@@ -216,12 +216,10 @@ class IcmHistoricoService {
       if (!snap.exists) return null;
       final d = snap.data()!;
       final mejores = ((d['top_5_mejores'] as List?) ?? const [])
-          .map((e) => _topItemAIcmChofer(
-              e as Map<String, dynamic>, CategoriaIcm.bajo))
+          .map((e) => _topItemAIcmChofer(e as Map<String, dynamic>))
           .toList();
       final peores = ((d['top_5_peores'] as List?) ?? const [])
-          .map((e) => _topItemAIcmChofer(
-              e as Map<String, dynamic>, CategoriaIcm.alto))
+          .map((e) => _topItemAIcmChofer(e as Map<String, dynamic>))
           .toList();
       return IcmSemanaFlota(
         semanaInicio: s.inicio,
@@ -240,9 +238,7 @@ class IcmHistoricoService {
     }
   }
 
-  static IcmChofer _topItemAIcmChofer(
-    Map<String, dynamic> e, CategoriaIcm catFallback,
-  ) {
+  static IcmChofer _topItemAIcmChofer(Map<String, dynamic> e) {
     final dni = (e['dni'] ?? '').toString();
     final nombre = (e['nombre'] ?? 'DNI $dni').toString();
     final icm = (e['icm'] as num?)?.toDouble() ?? 0.0;
@@ -253,9 +249,8 @@ class IcmHistoricoService {
       kmRecorridos: 0,
       infraccionesPor100Km: 0,
       icm: icm,
-      categoria: icm >= 80
-          ? CategoriaIcm.bajo
-          : (icm >= 60 ? CategoriaIcm.medio : CategoriaIcm.alto),
+      // Delega a categorizarIcm (umbrales YPF 91/71) — no duplicar.
+      categoria: categorizarIcm(icm),
       eventosPorTipo: const {},
       patentes: const [],
     );

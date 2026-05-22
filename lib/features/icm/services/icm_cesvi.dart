@@ -7,16 +7,24 @@
 // para garantizar paridad.
 //
 // Modelo:
-//   - Cada UNIDAD (en CESVI: "viaje"; en Vecchi: "jornada del vigilador")
-//     arranca con 100 puntos.
+//   - Cada UNIDAD (en CESVI: "viaje"; en Vecchi: "día de manejo del
+//     chofer") arranca con 100 puntos.
 //   - Cada infracción descuenta puntos según tipo y gravedad.
 //   - ICM = max(0, 100 − sumaPuntosDescontados).
-//   - Categorías: 100-80 = Bajo (verde), 80-60 = Medio (amarillo),
-//     60-0 = Alto (rojo).
-//   - ICM del chofer en rango = promedio PONDERADO POR KM.
+//   - Categorías YPF/CESVI: Bajo (verde) 100-91, Medio (amarillo) 90-71,
+//     Alto (rojo) 70-0.
+//   - ICM del chofer en rango = promedio PONDERADO POR KM de sus días.
 //
-// Decisión Santiago 2026-05-19: jornadas del vigilador como unidad
-// (más simple, aprovecha infra existente). Ver header TS para detalles.
+// **Rediseño 2026-05-22 (Santiago, "estamos haciendo mal los cálculos"):**
+// la unidad pasó de "jornada del vigilador" a "(chofer, día)" porque las
+// jornadas del vigilador estaban rotas (ventanas de 10-22h con manejo
+// de 1.3h, bloques inconsistentes) y dejaban el 41% de las infracciones
+// FUERA de toda ventana → ICM espurio ~100. El día ART es un proxy
+// robusto del "viaje" de Carsync, no pierde eventos y no depende del
+// vigilador. La fatiga (tiempo recorrido) NO se computa hoy: no hay
+// señal directa en el feed Sitrack y los bloques del vigilador eran
+// basura. `puntajeFatigaPorBloque` se conserva para cuando llegue una
+// señal real. Ver header TS para detalles.
 
 /// Categoría de gravedad de un exceso de velocidad CESVI.
 enum GravedadExceso { baja, media, alta }
@@ -121,10 +129,14 @@ double puntajeFatigaPorBloque(double manejoSegEnBloque) {
   return 15;
 }
 
-/// Categoriza un puntaje ICM final en Bajo/Medio/Alto según CESVI.
+/// Categoriza un puntaje ICM final en Bajo/Medio/Alto según los umbrales
+/// EXACTOS de YPF (Minuta de Revisión ICM VECCHI):
+///   - Riesgo Bajo:  100 a 91 puntos (verde)
+///   - Riesgo Medio:  90 a 71 puntos (amarillo)
+///   - Riesgo Alto:   70 a 0  puntos (rojo)
 CategoriaCesvi categorizarCesvi(double icm) {
-  if (icm >= 80) return CategoriaCesvi.bajo;
-  if (icm >= 60) return CategoriaCesvi.medio;
+  if (icm >= 91) return CategoriaCesvi.bajo;
+  if (icm >= 71) return CategoriaCesvi.medio;
   return CategoriaCesvi.alto;
 }
 
@@ -356,26 +368,36 @@ class IcmAgregado {
   });
 }
 
-/// Combina N jornadas en un ICM agregado del chofer.
-/// **Promedio ponderado por km** — una jornada larga pesa más.
+/// Combina N días (o unidades) en un ICM agregado del chofer.
+/// **Promedio ponderado por km** — un día largo pesa más (igual que
+/// Carsync pondera viajes por km).
+///
+/// Peso de cada día = `max(km, 1)`: así un día con infracciones pero SIN
+/// odómetro linkeable (km=0) NO se pierde — entra con peso mínimo en vez
+/// de descartarse. Si TODOS los días tienen km=0, todos pesan 1 → el
+/// resultado es el promedio aritmético simple (en vez del viejo
+/// SIN_DATOS, que escondía choferes con infracciones reales pero sin
+/// odómetro). `kmTotales` reporta el km REAL (suma de km>0) para el
+/// ratio de infracciones/100km. SIN_DATOS sólo si no hay días.
 IcmAgregado combinarJornadas(List<JornadaConIcm> jornadas) {
-  double kmTotales = 0;
+  double kmReales = 0;
+  double pesoTotal = 0;
   double icmPonderado = 0;
   int totalAcel = 0;
   int totalFren = 0;
   int totalGiro = 0;
   int totalSv = 0;
   for (final j in jornadas) {
-    if (j.km > 0) {
-      kmTotales += j.km;
-      icmPonderado += j.icm * j.km;
-    }
+    final peso = j.km > 1.0 ? j.km : 1.0;
+    pesoTotal += peso;
+    icmPonderado += j.icm * peso;
+    if (j.km > 0) kmReales += j.km;
     totalAcel += j.desglose.aceleracionesBruscas;
     totalFren += j.desglose.frenadasBruscas;
     totalGiro += j.desglose.girosBruscos;
     totalSv += j.desglose.sobrevelocidades;
   }
-  if (kmTotales == 0) {
+  if (jornadas.isEmpty || pesoTotal == 0) {
     return IcmAgregado(
       icm: 0,
       categoria: CategoriaCesvi.sinDatos,
@@ -387,11 +409,11 @@ IcmAgregado combinarJornadas(List<JornadaConIcm> jornadas) {
       totalSobrevelocidades: totalSv,
     );
   }
-  final icm = icmPonderado / kmTotales;
+  final icm = icmPonderado / pesoTotal;
   return IcmAgregado(
     icm: icm,
     categoria: categorizarCesvi(icm),
-    kmTotales: kmTotales,
+    kmTotales: kmReales,
     jornadas: jornadas.length,
     totalAceleraciones: totalAcel,
     totalFrenadas: totalFren,

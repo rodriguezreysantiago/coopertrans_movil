@@ -225,18 +225,19 @@ void main() {
     });
   });
 
-  group('categorizarCesvi (umbrales 80/60)', () {
-    test('>= 80 → bajo', () {
-      expect(categorizarCesvi(80), CategoriaCesvi.bajo);
+  group('categorizarCesvi (umbrales YPF 91/71)', () {
+    test('>= 91 → bajo', () {
+      expect(categorizarCesvi(91), CategoriaCesvi.bajo);
       expect(categorizarCesvi(100), CategoriaCesvi.bajo);
     });
-    test('60-79 → medio', () {
-      expect(categorizarCesvi(60), CategoriaCesvi.medio);
-      expect(categorizarCesvi(79.99), CategoriaCesvi.medio);
+    test('71-90 → medio', () {
+      expect(categorizarCesvi(71), CategoriaCesvi.medio);
+      expect(categorizarCesvi(90.99), CategoriaCesvi.medio);
+      expect(categorizarCesvi(79), CategoriaCesvi.medio);
     });
-    test('< 60 → alto', () {
+    test('< 71 → alto', () {
       expect(categorizarCesvi(0), CategoriaCesvi.alto);
-      expect(categorizarCesvi(59.99), CategoriaCesvi.alto);
+      expect(categorizarCesvi(70.99), CategoriaCesvi.alto);
     });
   });
 
@@ -365,7 +366,8 @@ void main() {
       expect(r.sobrevelocidades, 1);
       expect(r.puntosTotales, closeTo(38.8, 0.01));
       expect(r.icm, closeTo(61.2, 0.01));
-      expect(r.categoria, CategoriaCesvi.medio);
+      // 61.2 < 71 → ALTO con umbrales YPF (antes era medio con 80/60).
+      expect(r.categoria, CategoriaCesvi.alto);
     });
 
     test('infracciones extremas → ICM clampea a 0', () {
@@ -407,12 +409,33 @@ void main() {
       expect(r.kmTotales, 1100);
     });
 
-    test('todas con km=0 → SIN_DATOS', () {
-      final r = combinarJornadas([
-        const JornadaConIcm(icm: 80, km: 0, desglose: desgloseVacio),
-      ]);
+    test('lista vacía → SIN_DATOS', () {
+      final r = combinarJornadas([]);
       expect(r.icm, 0);
       expect(r.categoria, CategoriaCesvi.sinDatos);
+    });
+
+    test('todas con km=0 → promedio simple (peso=max(km,1)), NO SIN_DATOS', () {
+      // Antes devolvía SIN_DATOS y escondía choferes con infracciones
+      // reales sin odómetro. Ahora pesa 1 cada día → promedio simple.
+      final r = combinarJornadas([
+        const JornadaConIcm(icm: 80, km: 0, desglose: desgloseVacio),
+        const JornadaConIcm(icm: 60, km: 0, desglose: desgloseVacio),
+      ]);
+      expect(r.icm, 70); // (80+60)/2
+      expect(r.kmTotales, 0); // km real reportado sigue siendo 0
+      expect(r.categoria, CategoriaCesvi.alto);
+    });
+
+    test('día con km domina; día con infracción sin km NO se pierde', () {
+      // 600km @ 100 (limpio) + 0km @ 40 (infracción sin odómetro):
+      // pesos 600 y 1 → (100*600 + 40*1)/601 = 99.9.
+      final r = combinarJornadas([
+        const JornadaConIcm(icm: 100, km: 600, desglose: desgloseVacio),
+        const JornadaConIcm(icm: 40, km: 0, desglose: desgloseVacio),
+      ]);
+      expect(r.icm, closeTo(99.9, 0.05));
+      expect(r.kmTotales, 600);
     });
 
     test('suma totales across jornadas', () {

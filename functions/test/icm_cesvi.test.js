@@ -253,19 +253,20 @@ describe('tiempo de activación (slide 6) — filtro de infracción CESVI', () =
   });
 });
 
-describe('categorizar (umbrales CESVI 80/60)', () => {
-  test('ICM ≥ 80 → BAJO (verde)', () => {
-    assert.strictEqual(categorizar(80), 'BAJO');
+describe('categorizar (umbrales YPF 91/71)', () => {
+  test('ICM ≥ 91 → BAJO (verde)', () => {
+    assert.strictEqual(categorizar(91), 'BAJO');
     assert.strictEqual(categorizar(95), 'BAJO');
     assert.strictEqual(categorizar(100), 'BAJO');
   });
-  test('60 ≤ ICM < 80 → MEDIO (amarillo)', () => {
-    assert.strictEqual(categorizar(60), 'MEDIO');
-    assert.strictEqual(categorizar(79.99), 'MEDIO');
+  test('71 ≤ ICM < 91 → MEDIO (amarillo)', () => {
+    assert.strictEqual(categorizar(71), 'MEDIO');
+    assert.strictEqual(categorizar(79), 'MEDIO');
+    assert.strictEqual(categorizar(90.99), 'MEDIO');
   });
-  test('ICM < 60 → ALTO (rojo)', () => {
+  test('ICM < 71 → ALTO (rojo)', () => {
     assert.strictEqual(categorizar(0), 'ALTO');
-    assert.strictEqual(categorizar(59.99), 'ALTO');
+    assert.strictEqual(categorizar(70.99), 'ALTO');
   });
 });
 
@@ -359,7 +360,8 @@ describe('calcularIcmJornada (integración fórmula completa)', () => {
     const r = calcularIcmJornada([], [4.5 * 3600]);
     assert.strictEqual(r.desglose.puntosFatiga, 15);
     assert.strictEqual(r.icm, 85);
-    assert.strictEqual(r.categoria, 'BAJO');
+    // 85 < 91 → MEDIO con umbrales YPF (antes era BAJO con 80/60).
+    assert.strictEqual(r.categoria, 'MEDIO');
   });
 
   test('mezcla CESVI completa (sobrevelocidad supera tiempo activación)', () => {
@@ -391,7 +393,8 @@ describe('calcularIcmJornada (integración fórmula completa)', () => {
     assert.strictEqual(r.desglose.sobrevelocidades, 1);
     assert.ok(Math.abs(r.puntosTotales - 38.8) < 0.01);
     assert.ok(Math.abs(r.icm - 61.2) < 0.01);
-    assert.strictEqual(r.categoria, 'MEDIO');
+    // 61.2 < 71 → ALTO con umbrales YPF (antes era MEDIO con 80/60).
+    assert.strictEqual(r.categoria, 'ALTO');
   });
 
   test('infracciones extremas → ICM clampea a 0 (no negativo)', () => {
@@ -433,12 +436,32 @@ describe('combinarJornadas (promedio ponderado por km)', () => {
     assert.strictEqual(r.kmTotales, 1100);
   });
 
-  test('todas las jornadas km=0 → SIN_DATOS', () => {
-    const r = combinarJornadas([
-      { icm: 80, km: 0, desglose: desgloseVacio },
-    ]);
+  test('lista vacía → SIN_DATOS', () => {
+    const r = combinarJornadas([]);
     assert.strictEqual(r.icm, 0);
     assert.strictEqual(r.categoria, 'SIN_DATOS');
+  });
+
+  test('todos km=0 → promedio simple (peso=max(km,1)), NO SIN_DATOS', () => {
+    // Antes devolvía SIN_DATOS y escondía choferes con infracciones
+    // reales sin odómetro. Ahora pesa 1 cada día → promedio simple.
+    const r = combinarJornadas([
+      { icm: 80, km: 0, desglose: desgloseVacio },
+      { icm: 60, km: 0, desglose: desgloseVacio },
+    ]);
+    assert.strictEqual(r.icm, 70); // (80+60)/2
+    assert.strictEqual(r.kmTotales, 0);
+    assert.strictEqual(r.categoria, 'ALTO');
+  });
+
+  test('día con km domina; día con infracción sin km NO se pierde', () => {
+    // 600km @ 100 + 0km @ 40 → pesos 600 y 1 → (100*600+40)/601 ≈ 99.9
+    const r = combinarJornadas([
+      { icm: 100, km: 600, desglose: desgloseVacio },
+      { icm: 40, km: 0, desglose: desgloseVacio },
+    ]);
+    assert.ok(Math.abs(r.icm - 99.9) < 0.05);
+    assert.strictEqual(r.kmTotales, 600);
   });
 
   test('suma desgloses across jornadas', () => {

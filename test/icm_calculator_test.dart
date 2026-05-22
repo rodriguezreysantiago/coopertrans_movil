@@ -1,49 +1,50 @@
 // Tests del calculator del ICM (Índice de Conducta de Manejo).
 //
 // Foco: `categorizarIcm` (función pública top-level) y la lógica de
-// umbrales 80/60 que decide si un chofer es BAJO / MEDIO / ALTO riesgo
-// según el modelo YPF.
+// umbrales YPF 91/71 que decide si un chofer es BAJO / MEDIO / ALTO
+// riesgo según la Minuta de Revisión ICM VECCHI (Bajo 100-91, Medio
+// 90-71, Alto 70-0).
 //
-// Los umbrales están DUPLICADOS en 3 lugares (icm_calculator.dart,
-// icm_historico_service.dart, vista_ejecutiva_service.dart, e
-// functions/src/icm.ts server-side). Este test es la red de seguridad
-// que detecta drift si alguien cambia uno y olvida los otros — si los
-// thresholds 80/60 cambian acá, este test ROMPE y obliga a revisar
-// todos los call sites.
+// Los umbrales están DUPLICADOS en 4 lugares (icm_cesvi.dart,
+// icm_historico_service.dart [delega], vista_ejecutiva_service.dart, e
+// functions/src/icm_cesvi.ts server-side). Este test es la red de
+// seguridad que detecta drift si alguien cambia uno y olvida los otros —
+// si los thresholds 91/71 cambian acá, este test ROMPE y obliga a
+// revisar todos los call sites.
 //
-// Tests del flujo completo `IcmCalculator.calcularRanking` requieren
-// fake_cloud_firestore o emulator — pendiente para sesión dedicada.
+// El flujo completo `IcmCalculator.calcularRanking` (bucketing por día +
+// km por patente) se testea en `icm_calculator_flujo_test.dart`.
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:coopertrans_movil/features/icm/services/icm_calculator.dart';
 
 void main() {
-  group('categorizarIcm — umbrales YPF 80/60', () {
+  group('categorizarIcm — umbrales YPF 91/71', () {
     test('ICM 100 (perfecto) → BAJO riesgo', () {
       expect(categorizarIcm(100), CategoriaIcm.bajo);
     });
 
-    test('ICM 80 (límite verde) → BAJO (inclusivo)', () {
-      // Crítico: 80 cae en BAJO, no en MEDIO. Si se cambia este
+    test('ICM 91 (límite verde) → BAJO (inclusivo)', () {
+      // Crítico: 91 cae en BAJO, no en MEDIO. Si se cambia este
       // umbral, hay que cambiarlo TAMBIÉN en:
-      //   - functions/src/icm.ts (server)
-      //   - icm_historico_service.dart
+      //   - functions/src/icm_cesvi.ts (server)
+      //   - icm_cesvi.dart
       //   - vista_ejecutiva_service.dart
-      expect(categorizarIcm(80), CategoriaIcm.bajo);
+      expect(categorizarIcm(91), CategoriaIcm.bajo);
     });
 
-    test('ICM 79.99 (justo abajo del verde) → MEDIO', () {
-      expect(categorizarIcm(79.99), CategoriaIcm.medio);
+    test('ICM 90.99 (justo abajo del verde) → MEDIO', () {
+      expect(categorizarIcm(90.99), CategoriaIcm.medio);
     });
 
-    test('ICM 60 (límite amarillo) → MEDIO (inclusivo)', () {
-      // Mismo argumento que 80 — cambio acá obliga a cambiar en los
+    test('ICM 71 (límite amarillo) → MEDIO (inclusivo)', () {
+      // Mismo argumento que 91 — cambio acá obliga a cambiar en los
       // 4 lugares listados arriba.
-      expect(categorizarIcm(60), CategoriaIcm.medio);
+      expect(categorizarIcm(71), CategoriaIcm.medio);
     });
 
-    test('ICM 59.99 (justo abajo del amarillo) → ALTO', () {
-      expect(categorizarIcm(59.99), CategoriaIcm.alto);
+    test('ICM 70.99 (justo abajo del amarillo) → ALTO', () {
+      expect(categorizarIcm(70.99), CategoriaIcm.alto);
     });
 
     test('ICM 0 (peor caso) → ALTO', () {
@@ -54,12 +55,12 @@ void main() {
       expect(categorizarIcm(50), CategoriaIcm.alto);
     });
 
-    test('ICM 70 (medio del rango MEDIO) → MEDIO', () {
-      expect(categorizarIcm(70), CategoriaIcm.medio);
+    test('ICM 79 (medio del rango MEDIO) → MEDIO', () {
+      expect(categorizarIcm(79), CategoriaIcm.medio);
     });
 
-    test('ICM 90 (medio del rango BAJO) → BAJO', () {
-      expect(categorizarIcm(90), CategoriaIcm.bajo);
+    test('ICM 95 (medio del rango BAJO) → BAJO', () {
+      expect(categorizarIcm(95), CategoriaIcm.bajo);
     });
   });
 
@@ -85,8 +86,8 @@ void main() {
       // Si alguien refactorea y olvida pasar el flag, queremos que
       // el comportamiento default sea "categorizar normal" (no
       // sinDatos como fallback silencioso).
-      expect(categorizarIcm(85), CategoriaIcm.bajo);
-      expect(categorizarIcm(70), CategoriaIcm.medio);
+      expect(categorizarIcm(95), CategoriaIcm.bajo);
+      expect(categorizarIcm(80), CategoriaIcm.medio);
       expect(categorizarIcm(40), CategoriaIcm.alto);
     });
   });
@@ -104,13 +105,13 @@ void main() {
       expect(categorizarIcm(-10), CategoriaIcm.alto);
     });
 
-    test('ICM con decimales en el borde — 79.5 → MEDIO', () {
-      expect(categorizarIcm(79.5), CategoriaIcm.medio);
+    test('ICM con decimales en el borde — 90.5 → MEDIO', () {
+      expect(categorizarIcm(90.5), CategoriaIcm.medio);
     });
 
-    test('ICM con decimales en el borde — 80.000001 → BAJO', () {
+    test('ICM con decimales en el borde — 91.000001 → BAJO', () {
       // Verifica que el >= es estricto (no margen de tolerancia).
-      expect(categorizarIcm(80.000001), CategoriaIcm.bajo);
+      expect(categorizarIcm(91.000001), CategoriaIcm.bajo);
     });
   });
 

@@ -9,18 +9,22 @@
 //
 // Modelo:
 //   - Cada UNIDAD (en CESVI: "viaje"; en nuestra implementación:
-//     "jornada del vigilador") arranca con 100 puntos.
+//     "día de manejo del chofer") arranca con 100 puntos.
 //   - Cada infracción descuenta puntos según su tipo y gravedad.
 //   - ICM = max(0, 100 − sumaPuntosDescontados).
-//   - Categorías: 100-80 = Bajo (verde), 80-60 = Medio (amarillo),
-//     60-0 = Alto (rojo).
-//   - ICM del chofer en un rango = promedio PONDERADO POR KM de las
-//     jornadas individuales.
+//   - Categorías YPF/CESVI: Bajo (verde) 100-91, Medio (amarillo) 90-71,
+//     Alto (rojo) 70-0.
+//   - ICM del chofer en un rango = promedio PONDERADO POR KM de sus días.
 //
-// **Decisión Santiago 2026-05-19**: en lugar de "viaje" CESVI estricto
-// (motor ON/OFF), usamos las JORNADAS del vigilador v2 como unidad.
-// El error vs CESVI estricto es pequeño y aprovechamos infraestructura
-// existente. Si YPF auditara y exigiera viaje literal, refactorizamos.
+// **Rediseño Santiago 2026-05-22** ("estamos haciendo mal los cálculos,
+// todo marca ~100"): la unidad pasó de "jornada del vigilador" a
+// "(chofer, día)". Las jornadas del vigilador estaban rotas (ventanas
+// 10-22h con manejo 1.3h, bloques inconsistentes) y dejaban el 41% de
+// las infracciones FUERA de toda ventana → ICM espurio ~100. El día ART
+// es proxy robusto del "viaje" de Carsync, no pierde eventos. La fatiga
+// (tiempo recorrido) NO se computa hoy: no hay señal en el feed Sitrack
+// y los bloques eran basura. `puntajeFatigaPorBloque` se conserva para
+// cuando llegue una señal real.
 //
 // **Pesos por tipo** (presentación Carsync, slide 3):
 //   - Frenado brusco   (event 67): −5.8 por evento
@@ -176,10 +180,16 @@ export function puntajeFatigaPorBloque(manejoSegEnBloque: number): number {
   return 15;
 }
 
-/** Categoriza un puntaje ICM final en Bajo/Medio/Alto según CESVI. */
+/**
+ * Categoriza un puntaje ICM final en Bajo/Medio/Alto según los umbrales
+ * EXACTOS de YPF (Minuta de Revisión ICM VECCHI):
+ *   - Riesgo Bajo:  100 a 91 puntos (verde)
+ *   - Riesgo Medio:  90 a 71 puntos (amarillo)
+ *   - Riesgo Alto:   70 a 0  puntos (rojo)
+ */
 export function categorizar(icm: number): CategoriaIcm {
-  if (icm >= 80) return "BAJO";
-  if (icm >= 60) return "MEDIO";
+  if (icm >= 91) return "BAJO";
+  if (icm >= 71) return "MEDIO";
   return "ALTO";
 }
 
@@ -369,11 +379,17 @@ export function calcularIcmJornada(
 }
 
 /**
- * Combina N jornadas en un ICM agregado del chofer en un rango.
- * **Promedio ponderado por km** de cada jornada (no aritmético — una
- * jornada de 1000km pesa más que una de 100km).
+ * Combina N días (unidades) en un ICM agregado del chofer en un rango.
+ * **Promedio ponderado por km** de cada día (igual que Carsync pondera
+ * viajes por km — un día de 1000km pesa más que uno de 100km).
  *
- * Si ninguna jornada tiene km > 0, devuelve ICM 0 y categoría SIN_DATOS.
+ * Peso de cada día = `max(km, 1)`: un día con infracciones pero SIN
+ * odómetro linkeable (km=0) NO se descarta — entra con peso mínimo. Si
+ * TODOS los días tienen km=0, todos pesan 1 → promedio aritmético
+ * simple (en vez del viejo SIN_DATOS que escondía choferes con
+ * infracciones reales sin odómetro). `kmTotales` reporta el km REAL
+ * (suma de km>0) para el ratio infracciones/100km. SIN_DATOS sólo si no
+ * hay días.
  */
 export interface JornadaConIcm {
   icm: number;
@@ -390,7 +406,8 @@ export interface IcmAgregado {
 }
 
 export function combinarJornadas(jornadas: JornadaConIcm[]): IcmAgregado {
-  let kmTotales = 0;
+  let kmReales = 0;
+  let pesoTotal = 0;
   let icmPonderado = 0;
   const sumado = {
     aceleracionesBruscas: 0,
@@ -404,10 +421,10 @@ export function combinarJornadas(jornadas: JornadaConIcm[]): IcmAgregado {
     puntosFatiga: 0,
   };
   for (const j of jornadas) {
-    if (j.km > 0) {
-      kmTotales += j.km;
-      icmPonderado += j.icm * j.km;
-    }
+    const peso = j.km > 1 ? j.km : 1;
+    pesoTotal += peso;
+    icmPonderado += j.icm * peso;
+    if (j.km > 0) kmReales += j.km;
     sumado.aceleracionesBruscas += j.desglose.aceleracionesBruscas;
     sumado.frenadasBruscas += j.desglose.frenadasBruscas;
     sumado.girosBruscos += j.desglose.girosBruscos;
@@ -418,7 +435,7 @@ export function combinarJornadas(jornadas: JornadaConIcm[]): IcmAgregado {
     sumado.puntosSobrevelocidad += j.desglose.puntosSobrevelocidad;
     sumado.puntosFatiga += j.desglose.puntosFatiga;
   }
-  if (kmTotales === 0) {
+  if (jornadas.length === 0 || pesoTotal === 0) {
     return {
       icm: 0,
       categoria: "SIN_DATOS",
@@ -427,11 +444,11 @@ export function combinarJornadas(jornadas: JornadaConIcm[]): IcmAgregado {
       desgloseSumado: sumado,
     };
   }
-  const icm = icmPonderado / kmTotales;
+  const icm = icmPonderado / pesoTotal;
   return {
     icm,
     categoria: categorizar(icm),
-    kmTotales,
+    kmTotales: kmReales,
     jornadas: jornadas.length,
     desgloseSumado: sumado,
   };

@@ -1,14 +1,14 @@
 // Tests de integración del flujo CESVI completo de
-// IcmCalculator.calcularRanking — lee JORNADAS + SITRACK_EVENTOS de
-// Firestore (fake), aplica fórmula CESVI por jornada, combina por
-// chofer.
+// IcmCalculator.calcularRanking — lee SITRACK_EVENTOS de Firestore
+// (fake), agrupa por (chofer, día ART), calcula km por patente y
+// combina por chofer.
 //
-// Refactor 2026-05-19: la versión anterior (500 LOC) testeaba el
-// modelo lineal `100 − ratio×5` con solo eventos. Reemplazada al
-// migrar a CESVI homologado por bloques de jornada del vigilador v2.
-// La FÓRMULA pura (pesos, agrupación 8+9, fatiga por bloque,
-// promedio ponderado) está cubierta por `icm_cesvi_test.dart`
-// (38 tests). Acá testeamos solo el wiring de Firestore.
+// **Rediseño 2026-05-22**: la unidad ya NO es la jornada del vigilador
+// (estaba rota). Ahora bucket por día, km POR PATENTE (odómetro de
+// eventos de movimiento) y SIN fatiga (no hay señal real). La FÓRMULA
+// pura (pesos, agrupación 8+9, promedio ponderado km) está cubierta por
+// `icm_cesvi_test.dart`. Acá testeamos el wiring de Firestore + el
+// bucketing por día + la atribución de km por patente.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
@@ -42,110 +42,77 @@ void main() {
     });
   }
 
-  /// Inserta una jornada cerrada del vigilador v2.
-  Future<void> insertarJornada(
-    FakeFirebaseFirestore db, {
-    required String choferDni,
-    required DateTime inicio,
-    required DateTime fin,
-    int bloquesCompletos = 1,
-    double bloqueActualSeg = 0,
-    double totalManejoSeg = 4 * 3600.0,
-  }) async {
-    await db.collection('JORNADAS').add({
-      'chofer_dni': choferDni,
-      'jornada_inicio_ts': Timestamp.fromDate(inicio),
-      'jornada_fin_ts': Timestamp.fromDate(fin),
-      'bloques_completos': bloquesCompletos,
-      'bloque_actual_manejo_seg': bloqueActualSeg,
-      'total_manejo_seg': totalManejoSeg,
-    });
-  }
+  // Rango que cubre el día 2026-05-10 con margen ART (UTC-3): tomamos
+  // un día antes y uno después para que el bucketing por día ART caiga
+  // siempre dentro del rango independientemente del TZ del runner.
+  final desdeMs = DateTime.utc(2026, 5, 9).millisecondsSinceEpoch;
+  final hastaMs = DateTime.utc(2026, 5, 12).millisecondsSinceEpoch;
 
-  group('IcmCalculator.calcularRanking — flujo CESVI con JORNADAS', () {
-    test('1 chofer con 1 jornada limpia + km suficientes → ICM ~100', () async {
+  group('IcmCalculator.calcularRanking — flujo por (chofer, día)', () {
+    test('1 chofer limpio con km → ICM 100 (sin fatiga)', () async {
       final db = FakeFirebaseFirestore();
-      final inicio = DateTime(2026, 5, 10, 8, 0);
-      final fin = DateTime(2026, 5, 10, 12, 0); // 4h jornada
-      // Eventos solo para inflar odómetro (no infracciones CESVI)
+      final t = DateTime.utc(2026, 5, 10, 12, 0);
+      // 2 eventos de movimiento (no CESVI) → dan el km de la patente.
       await insertarEvento(db,
-          driverDni: '111', patente: 'AB1', eventId: 2,
-          odometer: 100, reportDate: inicio.add(const Duration(minutes: 5)));
+          driverDni: '111', patente: 'AB1', eventId: 283,
+          odometer: 100, reportDate: t);
       await insertarEvento(db,
-          driverDni: '111', patente: 'AB1', eventId: 2,
-          odometer: 350, reportDate: fin.subtract(const Duration(minutes: 5)));
-      // Jornada de 3.5h (no llega a 4h → fatiga -10)
-      await insertarJornada(db,
-          choferDni: '111', inicio: inicio, fin: fin,
-          bloquesCompletos: 0,
-          bloqueActualSeg: 3.5 * 3600,
-          totalManejoSeg: 3.5 * 3600);
+          driverDni: '111', patente: 'AB1', eventId: 283,
+          odometer: 350, reportDate: t.add(const Duration(hours: 2)));
       final r = await IcmCalculator.calcularRanking(
         db: db,
-        desdeMs: DateTime(2026, 5, 10).millisecondsSinceEpoch,
-        hastaMs: DateTime(2026, 5, 11).millisecondsSinceEpoch,
+        desdeMs: desdeMs,
+        hastaMs: hastaMs,
         nombrePorDni: {'111': 'TEST CHOFER'},
       );
       expect(r.length, 1);
       expect(r[0].choferDni, '111');
       expect(r[0].choferNombre, 'TEST CHOFER');
-      expect(r[0].kmRecorridos, 250);
-      // ICM = 100 - 10 (fatiga 3-4h) = 90 → BAJO
-      expect(r[0].icm, 90);
+      expect(r[0].kmRecorridos, 250); // 350 - 100
+      // Sin infracciones y sin fatiga → ICM 100.
+      expect(r[0].icm, 100);
       expect(r[0].categoria, CategoriaIcm.bajo);
     });
 
-    test('chofer con frenadas/aceleraciones bajan el ICM (CESVI puro)', () async {
+    test('frenadas/aceleraciones bajan el ICM (CESVI puro)', () async {
       final db = FakeFirebaseFirestore();
-      final inicio = DateTime(2026, 5, 10, 8, 0);
-      final fin = DateTime(2026, 5, 10, 9, 0); // jornada corta, no fatiga
+      final t = DateTime.utc(2026, 5, 10, 12, 0);
       // 2 frenadas (-5.8×2 = -11.6) + 1 aceleración (-2.8) = -14.4
       await insertarEvento(db,
           driverDni: '111', patente: 'AB1', eventId: 67,
-          odometer: 100, reportDate: inicio.add(const Duration(minutes: 10)));
+          odometer: 100, reportDate: t.add(const Duration(minutes: 10)));
       await insertarEvento(db,
           driverDni: '111', patente: 'AB1', eventId: 67,
-          odometer: 105, reportDate: inicio.add(const Duration(minutes: 20)));
+          odometer: 105, reportDate: t.add(const Duration(minutes: 20)));
       await insertarEvento(db,
           driverDni: '111', patente: 'AB1', eventId: 66,
-          odometer: 150, reportDate: inicio.add(const Duration(minutes: 30)));
-      await insertarJornada(db,
-          choferDni: '111', inicio: inicio, fin: fin,
-          bloquesCompletos: 0,
-          bloqueActualSeg: 3600,
-          totalManejoSeg: 3600);
+          odometer: 150, reportDate: t.add(const Duration(minutes: 30)));
       final r = await IcmCalculator.calcularRanking(
         db: db,
-        desdeMs: DateTime(2026, 5, 10).millisecondsSinceEpoch,
-        hastaMs: DateTime(2026, 5, 11).millisecondsSinceEpoch,
+        desdeMs: desdeMs,
+        hastaMs: hastaMs,
         nombrePorDni: const {},
       );
       expect(r.length, 1);
       expect(r[0].totalEventos, 3); // 2 frenadas + 1 aceleración
       expect(r[0].icm, closeTo(85.6, 0.01)); // 100 - 14.4
-      expect(r[0].categoria, CategoriaIcm.bajo);
+      // 85.6 < 91 → MEDIO con umbrales YPF.
+      expect(r[0].categoria, CategoriaIcm.medio);
     });
 
     test('eventos NO CESVI (1006 salida carril) NO descuentan ICM', () async {
       final db = FakeFirebaseFirestore();
-      final inicio = DateTime(2026, 5, 10, 8, 0);
-      final fin = DateTime(2026, 5, 10, 9, 0);
-      // 10 eventos de salida de carril (NO CESVI) — el ICM debe ser 100.
+      final t = DateTime.utc(2026, 5, 10, 12, 0);
       for (var i = 0; i < 10; i++) {
         await insertarEvento(db,
             driverDni: '111', patente: 'AB1', eventId: 1006,
             odometer: 100.0 + i * 5,
-            reportDate: inicio.add(Duration(minutes: 10 + i)));
+            reportDate: t.add(Duration(minutes: 10 + i)));
       }
-      await insertarJornada(db,
-          choferDni: '111', inicio: inicio, fin: fin,
-          bloquesCompletos: 0,
-          bloqueActualSeg: 3600,
-          totalManejoSeg: 3600);
       final r = await IcmCalculator.calcularRanking(
         db: db,
-        desdeMs: DateTime(2026, 5, 10).millisecondsSinceEpoch,
-        hastaMs: DateTime(2026, 5, 11).millisecondsSinceEpoch,
+        desdeMs: desdeMs,
+        hastaMs: hastaMs,
         nombrePorDni: const {},
       );
       expect(r.length, 1);
@@ -153,95 +120,119 @@ void main() {
       expect(r[0].icm, 100);
     });
 
-    test('jornada sin km mínimos → descartada', () async {
+    test('chofer con poco km igual aparece (no hay filtro km mínimo)', () async {
       final db = FakeFirebaseFirestore();
-      final inicio = DateTime(2026, 5, 10, 8, 0);
-      final fin = DateTime(2026, 5, 10, 9, 0);
-      // Eventos con odómetro casi igual (menos de 10 km recorridos)
+      final t = DateTime.utc(2026, 5, 10, 12, 0);
+      // Solo 5 km recorridos — antes se descartaba, ahora cuenta.
       await insertarEvento(db,
-          driverDni: '111', patente: 'AB1', eventId: 2,
-          odometer: 100, reportDate: inicio.add(const Duration(minutes: 5)));
+          driverDni: '111', patente: 'AB1', eventId: 283,
+          odometer: 100, reportDate: t);
       await insertarEvento(db,
-          driverDni: '111', patente: 'AB1', eventId: 2,
-          odometer: 105, reportDate: fin.subtract(const Duration(minutes: 5)));
-      await insertarJornada(db,
-          choferDni: '111', inicio: inicio, fin: fin);
+          driverDni: '111', patente: 'AB1', eventId: 283,
+          odometer: 105, reportDate: t.add(const Duration(minutes: 30)));
       final r = await IcmCalculator.calcularRanking(
         db: db,
-        desdeMs: DateTime(2026, 5, 10).millisecondsSinceEpoch,
-        hastaMs: DateTime(2026, 5, 11).millisecondsSinceEpoch,
+        desdeMs: desdeMs,
+        hastaMs: hastaMs,
         nombrePorDni: const {},
       );
-      // Jornada con <10km descartada → chofer no aparece en ranking
-      expect(r.length, 0);
+      expect(r.length, 1);
+      expect(r[0].kmRecorridos, 5);
+      expect(r[0].icm, 100); // sin infracciones
+    });
+
+    test('km se reparte entre choferes que comparten patente el mismo día',
+        () async {
+      final db = FakeFirebaseFirestore();
+      final t = DateTime.utc(2026, 5, 10, 6, 0);
+      // Patente CC1 recorre 100→300 (200 km) en el día. Chofer X tiene 3
+      // eventos, chofer Y tiene 1 → X se lleva 150 km, Y 50 km (prorrateo).
+      await insertarEvento(db,
+          driverDni: 'X', patente: 'CC1', eventId: 283,
+          odometer: 100, reportDate: t);
+      await insertarEvento(db,
+          driverDni: 'X', patente: 'CC1', eventId: 283,
+          odometer: 180, reportDate: t.add(const Duration(hours: 1)));
+      await insertarEvento(db,
+          driverDni: 'X', patente: 'CC1', eventId: 283,
+          odometer: 220, reportDate: t.add(const Duration(hours: 2)));
+      await insertarEvento(db,
+          driverDni: 'Y', patente: 'CC1', eventId: 283,
+          odometer: 300, reportDate: t.add(const Duration(hours: 4)));
+      final r = await IcmCalculator.calcularRanking(
+        db: db,
+        desdeMs: desdeMs,
+        hastaMs: hastaMs,
+        nombrePorDni: const {},
+      );
+      final x = r.firstWhere((c) => c.choferDni == 'X');
+      final y = r.firstWhere((c) => c.choferDni == 'Y');
+      expect(x.kmRecorridos, closeTo(150, 0.01)); // 200 * 3/4
+      expect(y.kmRecorridos, closeTo(50, 0.01)); // 200 * 1/4
     });
 
     test('múltiples choferes ordenados peor primero', () async {
       final db = FakeFirebaseFirestore();
-      final inicio = DateTime(2026, 5, 10, 8, 0);
-      final fin = DateTime(2026, 5, 10, 12, 0);
-      // Chofer A: limpio (4h jornada → ICM 85)
+      final t = DateTime.utc(2026, 5, 10, 12, 0);
+      // Chofer A: limpio → ICM 100
       await insertarEvento(db,
-          driverDni: 'A', patente: 'AA1', eventId: 2,
-          odometer: 100, reportDate: inicio.add(const Duration(minutes: 5)));
+          driverDni: 'A', patente: 'AA1', eventId: 283,
+          odometer: 100, reportDate: t);
       await insertarEvento(db,
-          driverDni: 'A', patente: 'AA1', eventId: 2,
-          odometer: 400, reportDate: fin.subtract(const Duration(minutes: 5)));
-      await insertarJornada(db,
-          choferDni: 'A', inicio: inicio, fin: fin,
-          bloquesCompletos: 1,
-          totalManejoSeg: 4 * 3600);
-      // Chofer B: 3 frenadas en 4h (ICM mucho menor)
+          driverDni: 'A', patente: 'AA1', eventId: 283,
+          odometer: 400, reportDate: t.add(const Duration(hours: 2)));
+      // Chofer B: 3 frenadas (-17.4) → ICM 82.6
       for (var i = 0; i < 3; i++) {
         await insertarEvento(db,
             driverDni: 'B', patente: 'BB1', eventId: 67,
             odometer: 200.0 + i * 10,
-            reportDate: inicio.add(Duration(minutes: 30 + i * 10)),
+            reportDate: t.add(Duration(minutes: 30 + i * 10)),
             speed: 60, cartLimit: 80, areaType: 'urban');
       }
       await insertarEvento(db,
-          driverDni: 'B', patente: 'BB1', eventId: 2,
-          odometer: 500, reportDate: fin.subtract(const Duration(minutes: 5)));
-      await insertarJornada(db,
-          choferDni: 'B', inicio: inicio, fin: fin,
-          bloquesCompletos: 1,
-          totalManejoSeg: 4 * 3600);
+          driverDni: 'B', patente: 'BB1', eventId: 283,
+          odometer: 500, reportDate: t.add(const Duration(hours: 2)));
       final r = await IcmCalculator.calcularRanking(
         db: db,
-        desdeMs: DateTime(2026, 5, 10).millisecondsSinceEpoch,
-        hastaMs: DateTime(2026, 5, 11).millisecondsSinceEpoch,
+        desdeMs: desdeMs,
+        hastaMs: hastaMs,
         nombrePorDni: const {'A': 'Alfa', 'B': 'Beta'},
       );
       expect(r.length, 2);
-      // Peor ICM primero: B (-15 fatiga -17.4 frenadas = -32.4 → 67.6)
+      // Peor ICM primero: B (-17.4 → 82.6)
       expect(r[0].choferDni, 'B');
+      expect(r[0].icm, closeTo(82.6, 0.01));
       expect(r[0].icm, lessThan(r[1].icm));
-      // A: solo -15 fatiga → ICM 85
+      // A: limpio → ICM 100
       expect(r[1].choferDni, 'A');
-      expect(r[1].icm, 85);
+      expect(r[1].icm, 100);
     });
 
-    test('chofer sin jornada en el rango → NO aparece', () async {
+    test('chofer con evento CESVI aparece aunque km=0', () async {
       final db = FakeFirebaseFirestore();
-      // Evento sin jornada asociada
+      // Una sola frenada, odómetro estático → km 0 pero la infracción
+      // NO se pierde (peso mínimo 1 en la combinación).
       await insertarEvento(db,
           driverDni: '111', patente: 'AB1', eventId: 67,
-          odometer: 100, reportDate: DateTime(2026, 5, 10, 10, 0));
+          odometer: 100, reportDate: DateTime.utc(2026, 5, 10, 12, 0),
+          speed: 60, cartLimit: 80, areaType: 'urban');
       final r = await IcmCalculator.calcularRanking(
         db: db,
-        desdeMs: DateTime(2026, 5, 10).millisecondsSinceEpoch,
-        hastaMs: DateTime(2026, 5, 11).millisecondsSinceEpoch,
+        desdeMs: desdeMs,
+        hastaMs: hastaMs,
         nombrePorDni: const {},
       );
-      expect(r.length, 0);
+      expect(r.length, 1);
+      expect(r[0].totalEventos, 1);
+      expect(r[0].icm, closeTo(94.2, 0.01)); // 100 - 5.8
     });
 
     test('rango vacío → ranking vacío', () async {
       final db = FakeFirebaseFirestore();
       final r = await IcmCalculator.calcularRanking(
         db: db,
-        desdeMs: DateTime(2026, 5, 10).millisecondsSinceEpoch,
-        hastaMs: DateTime(2026, 5, 11).millisecondsSinceEpoch,
+        desdeMs: desdeMs,
+        hastaMs: hastaMs,
         nombrePorDni: const {},
       );
       expect(r, isEmpty);
@@ -249,20 +240,17 @@ void main() {
 
     test('fallback de nombre cuando DNI no está en map', () async {
       final db = FakeFirebaseFirestore();
-      final inicio = DateTime(2026, 5, 10, 8, 0);
-      final fin = DateTime(2026, 5, 10, 9, 0);
+      final t = DateTime.utc(2026, 5, 10, 12, 0);
       await insertarEvento(db,
-          driverDni: '999', patente: 'AB1', eventId: 2,
-          odometer: 100, reportDate: inicio.add(const Duration(minutes: 5)));
+          driverDni: '999', patente: 'AB1', eventId: 283,
+          odometer: 100, reportDate: t);
       await insertarEvento(db,
-          driverDni: '999', patente: 'AB1', eventId: 2,
-          odometer: 200, reportDate: fin.subtract(const Duration(minutes: 5)));
-      await insertarJornada(db,
-          choferDni: '999', inicio: inicio, fin: fin);
+          driverDni: '999', patente: 'AB1', eventId: 283,
+          odometer: 200, reportDate: t.add(const Duration(hours: 1)));
       final r = await IcmCalculator.calcularRanking(
         db: db,
-        desdeMs: DateTime(2026, 5, 10).millisecondsSinceEpoch,
-        hastaMs: DateTime(2026, 5, 11).millisecondsSinceEpoch,
+        desdeMs: desdeMs,
+        hastaMs: hastaMs,
         nombrePorDni: const {}, // sin mapping
       );
       expect(r.length, 1);

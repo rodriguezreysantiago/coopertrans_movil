@@ -3,9 +3,16 @@
 // =============================================================================
 // Refactor mayor 2026-05-19: implementación EXACTA CESVI homologada
 // (presentación Carsync). Ver `icm_cesvi.ts` para las funciones puras
-// y los pesos por tipo. Decisión Santiago: usar las JORNADAS del
-// vigilador v2 como unidad del cálculo (no "viaje" CESVI estricto
-// motor ON/OFF), promediado por km.
+// y los pesos por tipo.
+//
+// **Rediseño 2026-05-22 (Santiago, "todo marca ~100"): unidad = (chofer,
+// día ART), NO las jornadas del vigilador** (estaban rotas y dejaban el
+// 41% de las infracciones fuera de ventana; el km salía de odómetro por
+// evento y los eventos bruscos no traen odómetro → casi todo se
+// descartaba). Ahora: bucket por día, km POR PATENTE (eventos de
+// movimiento traen odómetro), sin fatiga. Es una ESTIMACIÓN INTERNA — no
+// el ICM oficial homologado de YPF/Carsync (que pondera por segmento
+// vial, dato que no tenemos).
 //
 // Cada lunes 6 AM ART calcula los agregados de la SEMANA ANTERIOR
 // (lun-dom que acaba de cerrar) y los persiste en `ICM_SEMANAL/{YYYY-WW}`.
@@ -21,12 +28,12 @@
 //     semana_inicio_ts: Timestamp (lunes 00:00 ART),
 //     semana_fin_ts: Timestamp (siguiente lunes 00:00 ART),
 //     semana_label: string ("12-18 May"),
-//     icm_promedio: number (0-100, ponderado por km flota),
+//     icm_promedio: number (0-100, media simple de ICM por chofer),
 //     total_eventos: number (count de eventos CESVI puros),
 //     choferes_activos: number,
-//     choferes_verdes: number,    // ICM >= 80
-//     choferes_amarillos: number, // 60 <= ICM < 80
-//     choferes_rojos: number,     // ICM < 60
+//     choferes_verdes: number,    // ICM >= 91 (Bajo)
+//     choferes_amarillos: number, // 71 <= ICM < 91 (Medio)
+//     choferes_rojos: number,     // ICM < 71 (Alto)
 //     choferes: [{ dni, nombre, icm, total_eventos, ratio_100km,
 //                  categoria, eventos_por_tipo, km_recorridos,
 //                  jornadas_contadas }],
@@ -40,7 +47,7 @@ import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
-import { hashId, TIPOS_CESVI_PUROS } from "./index";
+import { TIPOS_CESVI_PUROS } from "./index";
 import { cargarExcluidos } from "./excluidos";
 import {
   EventoSitrackICM,
@@ -49,14 +56,20 @@ import {
   categorizar,
 } from "./icm_cesvi";
 
-/** Mínimo de km en una jornada para considerarla "con datos". Debajo de
- * esto el ICM no es estadísticamente útil. */
-const KM_MIN_JORNADA = 10;
+/** Cap defensivo: una patente no recorre > 2000 km en un día. Si el
+ * delta de odómetro de la patente en el día lo supera, es casi seguro un
+ * reset de odómetro Sitrack — ese día de esa patente no aporta km. */
+const KM_MAX_PATENTE_DIA = 2000;
 
-/** Cap defensivo: una jornada no puede recorrer más de 2000 km
- * (auditoria operativa Vecchi). Si max-min de odómetro supera esto, es
- * casi seguro un reset de odómetro Sitrack y descartamos la jornada. */
-const KM_MAX_JORNADA = 2000;
+/** Día calendario ART (UTC-3, sin DST) de un timestamp en ms →
+ * 'YYYY-MM-DD'. Mismo criterio que el cliente (icm_calculator.dart). */
+function diaArt(ms: number): string {
+  const art = new Date(ms - 3 * 3600 * 1000);
+  const y = art.getUTCFullYear();
+  const m = (art.getUTCMonth() + 1).toString().padStart(2, "0");
+  const d = art.getUTCDate().toString().padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 export const recomputeIcmSemanalScheduled = onSchedule(
   {
@@ -103,21 +116,8 @@ export const recomputeIcmSemanalScheduled = onSchedule(
     // ─── 3. Cargar excluidos (3 choferes tanqueros + testers) ────
     const excluidos = await cargarExcluidos(db);
 
-    // ─── 4. Cargar JORNADAS cerradas en el rango ──────────────────
-    // Filtramos por `jornada_fin_ts` (jornadas cerradas) en la semana.
-    // Una jornada cuya cierre cayó dentro de la semana se cuenta acá,
-    // aunque su inicio haya sido el lunes a las 23:50 (caso borde).
-    const jornSnap = await db
-      .collection("JORNADAS")
-      .where("jornada_fin_ts", ">=", Timestamp.fromMillis(lunesAnteriorMs))
-      .where("jornada_fin_ts", "<", Timestamp.fromMillis(lunesActualMs))
-      .limit(5000)
-      .get();
-    logger.info("[recomputeIcmSemanalScheduled] jornadas cargadas",
-      { count: jornSnap.size });
-
-    // ─── 5. Cargar eventos Sitrack del rango (CESVI puros + otros
-    // para tracking de odómetro/km) ────────────────────────────────
+    // ─── 4. Cargar eventos Sitrack del rango (CESVI puros + eventos
+    // de movimiento para km por patente) ───────────────────────────
     const LIMIT_SITRACK = 200000;
     const evSnap = await db
       .collection("SITRACK_EVENTOS")
@@ -132,155 +132,140 @@ export const recomputeIcmSemanalScheduled = onSchedule(
       );
     }
 
-    // Indexar eventos por (dni, tsMs) para asignarlos a jornadas.
-    // Estructura: dni → array ordenado por timestamp.
-    interface EventoRaw {
-      eventId: number;
-      reportDateMs: number;
-      assetId: string;
-      driverDni: string;
-      eventName: string;
-      speed: number | null;
-      cartographyLimitSpeed: number | null;
-      areaType: string;
-      odometer: number | null;
-    }
-    const eventosPorDni = new Map<string, EventoRaw[]>();
-    for (const d of evSnap.docs) {
-      const data = d.data();
-      const dni = (data.driver_dni ?? "").toString().trim();
-      if (!dni) continue;
-      if (excluidos.dnis.has(dni)) continue;
-      const patente = (data.asset_id ?? "").toString().trim().toUpperCase();
-      if (patente && excluidos.patentes.has(patente)) continue;
+    // Indexar UNA sola pasada. Claves compuestas con `|`:
+    // 'dni|dia' y 'patente|dia'.
+    interface MinMax { min: number; max: number }
+    // Eventos CESVI (66/67/383/8/9) por (dni, día).
+    const cesviPorDniDia = new Map<string, EventoSitrackICM[]>();
+    // Odómetro min/max por (patente, día) — de cada evento con odómetro.
+    const odoPatDia = new Map<string, MinMax>();
+    // Patentes que tocó cada (dni, día).
+    const patentesPorDniDia = new Map<string, Set<string>>();
+    // Conteo de eventos por (patente, día) → {dni: count} para prorratear
+    // km cuando varios choferes usaron la patente el mismo día (turnos).
+    const eventosPatDiaDni = new Map<string, Map<string, number>>();
+    // Para el detalle del chofer.
+    const patentesPorChofer = new Map<string, Map<string, number>>();
+    const eventosNombrePorChofer = new Map<string, Map<string, number>>();
+    for (const docu of evSnap.docs) {
+      const data = docu.data();
       const tsMs = (data.report_date as Timestamp | undefined)?.toMillis?.();
       if (!tsMs) continue;
-      const e: EventoRaw = {
-        eventId: typeof data.event_id === "number" ? data.event_id : -1,
+      const dia = diaArt(tsMs);
+      const pat = (data.asset_id ?? "").toString().trim().toUpperCase();
+      if (pat && excluidos.patentes.has(pat)) continue;
+      const odo = typeof data.odometer === "number" ? data.odometer :
+        (typeof data.gps_odometer === "number" ? data.gps_odometer : null);
+      if (pat && odo !== null && odo > 0) {
+        const k = `${pat}|${dia}`;
+        const mm = odoPatDia.get(k) ?? { min: Infinity, max: -Infinity };
+        if (odo < mm.min) mm.min = odo;
+        if (odo > mm.max) mm.max = odo;
+        odoPatDia.set(k, mm);
+      }
+      const dni = (data.driver_dni ?? "").toString().trim();
+      if (!dni || excluidos.dnis.has(dni)) continue;
+      const claveDD = `${dni}|${dia}`;
+      if (pat) {
+        let s = patentesPorDniDia.get(claveDD);
+        if (!s) { s = new Set<string>(); patentesPorDniDia.set(claveDD, s); }
+        s.add(pat);
+        const kp = `${pat}|${dia}`;
+        let m = eventosPatDiaDni.get(kp);
+        if (!m) { m = new Map<string, number>(); eventosPatDiaDni.set(kp, m); }
+        m.set(dni, (m.get(dni) ?? 0) + 1);
+      }
+      const eId = typeof data.event_id === "number" ? data.event_id : -1;
+      if (!TIPOS_CESVI_PUROS.has(eId)) continue;
+      const ev: EventoSitrackICM = {
+        eventId: eId,
         reportDateMs: tsMs,
-        assetId: patente,
+        assetId: pat,
         driverDni: dni,
-        eventName: (data.event_name ?? "").toString(),
         speed: typeof data.speed === "number" ? data.speed :
           (typeof data.gps_speed === "number" ? data.gps_speed : null),
         cartographyLimitSpeed:
           typeof data.cartography_limit_speed === "number" ?
             data.cartography_limit_speed : null,
         areaType: (data.area_type ?? "unknown").toString(),
-        odometer: typeof data.odometer === "number" ? data.odometer :
-          (typeof data.gps_odometer === "number" ? data.gps_odometer : null),
+        odometer: odo,
       };
-      const arr = eventosPorDni.get(dni) ?? [];
-      arr.push(e);
-      eventosPorDni.set(dni, arr);
-    }
-    // Ordenar cada array por timestamp ascendente (binary search ready)
-    for (const arr of eventosPorDni.values()) {
-      arr.sort((a, b) => a.reportDateMs - b.reportDateMs);
+      const arr = cesviPorDniDia.get(claveDD) ?? [];
+      arr.push(ev);
+      cesviPorDniDia.set(claveDD, arr);
+      const nombre = (data.event_name ?? `Evento ${eId}`).toString();
+      let mn = eventosNombrePorChofer.get(dni);
+      if (!mn) { mn = new Map<string, number>(); eventosNombrePorChofer.set(dni, mn); }
+      mn.set(nombre, (mn.get(nombre) ?? 0) + 1);
+      if (pat) {
+        let mp = patentesPorChofer.get(dni);
+        if (!mp) { mp = new Map<string, number>(); patentesPorChofer.set(dni, mp); }
+        mp.set(pat, (mp.get(pat) ?? 0) + 1);
+      }
     }
 
-    // ─── 6. Por cada jornada, calcular ICM CESVI ──────────────────
-    interface JornadaCalculada {
+    // km de un (dni, día) = Σ por patente que tocó del delta de odómetro
+    // de esa patente ese día, prorrateado por la porción de eventos del
+    // chofer (cambio de turno). Cap KM_MAX_PATENTE_DIA por reset.
+    const kmDniDia = (claveDD: string): number => {
+      const pats = patentesPorDniDia.get(claveDD);
+      if (!pats || pats.size === 0) return 0;
+      const sep = claveDD.indexOf("|");
+      const dni = claveDD.substring(0, sep);
+      const dia = claveDD.substring(sep + 1);
+      let km = 0;
+      for (const pat of pats) {
+        const kp = `${pat}|${dia}`;
+        const mm = odoPatDia.get(kp);
+        if (!mm || !(mm.max > mm.min) || mm.min === Infinity) continue;
+        const delta = mm.max - mm.min;
+        if (delta <= 0 || delta > KM_MAX_PATENTE_DIA) continue;
+        const conteo = eventosPatDiaDni.get(kp);
+        if (!conteo || conteo.size === 0) continue;
+        let total = 0;
+        for (const v of conteo.values()) total += v;
+        const mio = conteo.get(dni) ?? 0;
+        if (total <= 0 || mio <= 0) continue;
+        km += delta * (mio / total);
+      }
+      return km;
+    };
+
+    // ─── 5. Buckets (dni, día) → ICM CESVI ────────────────────────
+    // El set de buckets es la unión de los que tienen eventos CESVI y
+    // los que tienen patente con km — así un chofer que manejó limpio
+    // (solo eventos de movimiento) entra en ICM 100, y uno con
+    // infracciones pero sin odómetro no se pierde. SIN fatiga (no hay
+    // señal real de tiempo recorrido en el feed → bloque vacío).
+    interface DiaCalc {
       dni: string;
       icm: number;
       km: number;
       desglose: ReturnType<typeof calcularIcmJornada>["desglose"];
     }
-    const porChofer = new Map<string, JornadaCalculada[]>();
-    let jornadasDescartadasPorKm = 0;
-    let jornadasDescartadasPorCap = 0;
-    for (const jDoc of jornSnap.docs) {
-      const j = jDoc.data();
-      const dni = (j.chofer_dni ?? "").toString().trim();
-      if (!dni) continue;
-      if (excluidos.dnis.has(dni)) continue;
-      const iniMs = (j.jornada_inicio_ts as Timestamp | undefined)?.toMillis?.();
-      const finMs = (j.jornada_fin_ts as Timestamp | undefined)?.toMillis?.();
-      if (!iniMs || !finMs || finMs <= iniMs) continue;
-      // Eventos del chofer en la ventana de la jornada
-      const todosDelDni = eventosPorDni.get(dni) ?? [];
-      const eventosEnVentana: EventoSitrackICM[] = [];
-      let odMin = Infinity;
-      let odMax = -Infinity;
-      for (const e of todosDelDni) {
-        if (e.reportDateMs < iniMs) continue;
-        if (e.reportDateMs > finMs) break; // ordenado, podemos cortar
-        if (e.assetId && excluidos.patentes.has(e.assetId)) continue;
-        // Solo aporta al cálculo CESVI si el evento es de tipo CESVI puro.
-        if (TIPOS_CESVI_PUROS.has(e.eventId)) {
-          eventosEnVentana.push({
-            eventId: e.eventId,
-            reportDateMs: e.reportDateMs,
-            assetId: e.assetId,
-            driverDni: e.driverDni,
-            speed: e.speed,
-            cartographyLimitSpeed: e.cartographyLimitSpeed,
-            areaType: e.areaType,
-            odometer: e.odometer,
-          });
-        }
-        // Pero TODOS los eventos con odómetro válido aportan al cálculo
-        // de km de la jornada (no solo los CESVI).
-        if (e.odometer !== null && e.odometer > 0) {
-          if (e.odometer < odMin) odMin = e.odometer;
-          if (e.odometer > odMax) odMax = e.odometer;
-        }
-      }
-      // Km de la jornada
-      let km = 0;
-      if (odMax > odMin && odMin !== Infinity) {
-        const delta = odMax - odMin;
-        if (delta > KM_MAX_JORNADA) {
-          jornadasDescartadasPorCap++;
-          logger.warn(
-            "[recomputeIcmSemanal] jornada descartada por reset odómetro",
-            { dniHash: hashId(dni), deltaKm: Math.round(delta) },
-          );
-          continue;
-        }
-        km = delta;
-      }
-      if (km < KM_MIN_JORNADA) {
-        jornadasDescartadasPorKm++;
-        continue;
-      }
-      // Bloques de manejo del vigilador para fatiga
-      const bloquesCompletos = typeof j.bloques_completos === "number" ?
-        j.bloques_completos : 0;
-      const bloqueActualSeg = typeof j.bloque_actual_manejo_seg === "number" ?
-        j.bloque_actual_manejo_seg : 0;
-      const totalManejoSeg = typeof j.total_manejo_seg === "number" ?
-        j.total_manejo_seg : (bloquesCompletos * 4 * 3600 + bloqueActualSeg);
-      // Asumimos bloques cerrados de ~4h cada uno + el bloque actual con
-      // su tiempo parcial. Si tenemos más detalle en el futuro, refinar.
-      const manejoSegPorBloque: number[] = [];
-      for (let i = 0; i < bloquesCompletos; i++) {
-        manejoSegPorBloque.push(4 * 3600);
-      }
-      if (bloqueActualSeg > 0) manejoSegPorBloque.push(bloqueActualSeg);
-      // Defensivo: si no hay bloques pero hay manejo total, lo asignamos
-      // a un único bloque (puede pasar con jornadas viejas pre-vigilador).
-      if (manejoSegPorBloque.length === 0 && totalManejoSeg > 0) {
-        manejoSegPorBloque.push(totalManejoSeg);
-      }
-      const resultado = calcularIcmJornada(eventosEnVentana, manejoSegPorBloque);
+    const porChofer = new Map<string, DiaCalc[]>();
+    const claves = new Set<string>([
+      ...cesviPorDniDia.keys(),
+      ...patentesPorDniDia.keys(),
+    ]);
+    for (const clave of claves) {
+      const sep = clave.indexOf("|");
+      const dni = clave.substring(0, sep);
+      const eventos = cesviPorDniDia.get(clave) ?? [];
+      const km = kmDniDia(clave);
+      if (eventos.length === 0 && km <= 0) continue;
+      const resultado = calcularIcmJornada(eventos, []);
       const lista = porChofer.get(dni) ?? [];
-      lista.push({
-        dni,
-        icm: resultado.icm,
-        km,
-        desglose: resultado.desglose,
-      });
+      lista.push({ dni, icm: resultado.icm, km, desglose: resultado.desglose });
       porChofer.set(dni, lista);
     }
-    logger.info("[recomputeIcmSemanalScheduled] jornadas procesadas", {
-      total: jornSnap.size,
-      descartadasPorKm: jornadasDescartadasPorKm,
-      descartadasPorCap: jornadasDescartadasPorCap,
-      choferesConJornadas: porChofer.size,
+    logger.info("[recomputeIcmSemanalScheduled] buckets (dni,día) procesados", {
+      eventosCargados: evSnap.size,
+      bucketsConActividad: claves.size,
+      choferesConActividad: porChofer.size,
     });
 
-    // ─── 7. Combinar jornadas en ICM agregado por chofer ──────────
+    // ─── 6. Combinar días en ICM agregado por chofer (km-weighted) ─
     interface ChoferAgg {
       dni: string;
       nombre: string;
@@ -323,13 +308,16 @@ export const recomputeIcmSemanalScheduled = onSchedule(
     // ─── 8. Agregados flota ───────────────────────────────────────
     const choferesConDatos = choferes.filter((c) => c.categoria !== "SIN_DATOS");
     const totalEventos = choferes.reduce((acc, c) => acc + c.total_eventos, 0);
-    // ICM promedio ponderado por km (no aritmético) — consistente con
-    // cómo CESVI presenta el ICM del contratista.
-    const sumKm = choferesConDatos.reduce((acc, c) => acc + c.km_recorridos, 0);
-    const sumIcmKm = choferesConDatos.reduce(
-      (acc, c) => acc + c.icm * c.km_recorridos, 0);
-    const icmPromedio = sumKm > 0 ?
-      Number((sumIcmKm / sumKm).toFixed(2)) : 0;
+    // ICM promedio = media simple de los ICM por chofer (cada chofer
+    // cuenta igual). NO km-weighted a nivel flota: nuestro odómetro es
+    // disperso y su disponibilidad correlaciona con unidades nuevas (más
+    // limpias), lo que sesgaría el promedio hacia arriba escondiendo a
+    // los peores choferes (km=0). El ICM de CADA chofer ya viene
+    // km-weighted por sus días. Consistente con el cálculo on-the-fly
+    // del cliente (icm_historico_service).
+    const icmPromedio = choferesConDatos.length > 0 ?
+      Number((choferesConDatos.reduce((acc, c) => acc + c.icm, 0) /
+        choferesConDatos.length).toFixed(2)) : 0;
     const verdes = choferesConDatos.filter((c) => c.categoria === "BAJO").length;
     const amarillos = choferesConDatos.filter((c) => c.categoria === "MEDIO").length;
     const rojos = choferesConDatos.filter((c) => c.categoria === "ALTO").length;

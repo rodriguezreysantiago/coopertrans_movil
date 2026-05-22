@@ -384,9 +384,11 @@ class VistaEjecutivaService {
     );
   }
 
+  // Umbrales EXACTOS de YPF (Minuta Revisión ICM VECCHI): Bajo 100-91,
+  // Medio 90-71, Alto 70-0. Espejo de categorizarCesvi (icm_cesvi.dart).
   static String _categorizar(double icm) {
-    if (icm >= 80) return 'verde';
-    if (icm >= 60) return 'amarillo';
+    if (icm >= 91) return 'verde';
+    if (icm >= 71) return 'amarillo';
     return 'rojo';
   }
 
