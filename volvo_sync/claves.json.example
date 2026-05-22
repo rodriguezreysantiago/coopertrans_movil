@@ -1,0 +1,5 @@
+{
+  "_comentario": "Copiá este archivo a claves.json (gitignoreado) y completá con las credenciales de Volvo Connect de Santiago. NUNCA se commitea.",
+  "usuario": "TU_USUARIO_VOLVO_CONNECT",
+  "password": "TU_CONTRASEÑA"
+}

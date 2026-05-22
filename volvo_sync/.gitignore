@@ -1,0 +1,11 @@
+# Credenciales de Volvo Connect — NUNCA se commitean. Las pone Santiago a mano
+# en la PC dedicada (mismo patrón que cachatore/claves.json).
+claves.json
+
+# Estado de sesión de Playwright (cookies del login persistido).
+storage_state.json
+.auth/
+
+# Playwright / Python
+__pycache__/
+*.pyc
