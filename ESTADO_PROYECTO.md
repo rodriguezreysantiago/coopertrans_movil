@@ -1569,4 +1569,60 @@ Verificado en vivo. Suite functions 186/186. Commits `0e41465` `d015e80`.
 
 ---
 
+## 18. Sesión 2026-05-22 (PM) — dedup Emmanuel + auditoría general + F.931 iOS + cachatore
+
+(El mismo día, más temprano, fue el arco ICM OFICIAL de Sitrack + premios/castigos —
+ver PENDIENTES.md "2026-05-22 PM (1)/(2)".) Esta sesión: 7 commits `f334604`→`46626c6`.
+CF afectadas **deployadas**; los cambios de app van en el **release de hoy**.
+
+### 18.1 Dedup del parte de mantenimiento a Emmanuel (`f334604`, CF deployada)
+Emmanuel recibía 2 informes con lo mismo (luces de tablero Volvo). Se **eliminó** el
+"Resumen diario — Alertas de mantenimiento" del bot (`cron_mantenimiento_diario` +
+builder muerto). El **Parte** de la CF `resumenMantenimientoVehiculosDiario` ahora suma
+lo único exclusivo del otro: eventos TPM/TTM/tacógrafo (24 h, con horario).
+`ALERTAS_RESUMEN_DESTINATARIO_DNI` quedó obsoleta (el destinatario del Parte es el
+constante `MANTENIMIENTO_VEHICULOS_DNI`). functions 196/196 → 197/197 tras la auditoría.
+
+### 18.2 Auditoría general profunda (agentes por subsistema; hallazgos verificados a mano)
+1 ALTO + 6 MEDIO arreglados (commits `d1e79ae` CF + `eb3dcb9` app), con tests:
+- **[ALTO]** `report_liquidacion.slugSeguro`: `substring(0, raw.length)` sobre el slug ya
+  acortado → RangeError, no salía la liquidación (ej. "Vecchi S.R.L."). +7 tests.
+- **[MEDIO]** `jornadas_v2`: `bloque_excedido` no se reseteaba por bloque (aviso 4h salía
+  1×/jornada). +test regresión. **(CF deployada)**
+- **[MEDIO]** RBAC `app_router`: cada ruta admin pide su capability fina (antes
+  `verPanelAdmin` genérica → GOMERIA/SEG_HIGIENE abrían pantallas ajenas por deep-link).
+- **[MEDIO]** `mantenimiento.ts`: doble "notificaciones reanudadas" si fallaba el delete →
+  flag `reanudacion_encolada`. **(CF deployada)**
+- **[MEDIO]** `volvo.ts`: `_esAlertaMantenimiento` leía solo `.type` (vacío en 100% de la
+  data real; el subtipo GENERIC viene en `triggerType`) → `triggerType ?? type`. **(CF deployada)**
+- **[MEDIO]** `cachatore_hub._confirmar` sin try/catch → spinner infinito si fallaba
+  Firestore.
+- **[MEDIO]** `admin_shell`: ráfaga de avisos de revisiones viejas al abrir (consumía el
+  flag con el snapshot de cache) → ignora `isFromCache`.
+- **Lo sólido (verificado)**: cálculo de plata (floor5 por tramo + anti-drift), escala ICM
+  oficial (menor=mejor), 0 `runTransaction` en lib/, reglas Firestore muy hardened,
+  idempotencia de los 5 resúmenes CF, dispose/mounted en UI, secretos Python protegidos.
+- **BAJO**: bundle de menores NO hecho (decisión de scope) — ver PENDIENTES.
+
+### 18.3 F.931 no se veía en iOS (`9872c41` → `46626c6`)
+"Cartel azul con código" = banner de pdfrx `FPDF_GetLastError=3`. Verificado: data/permiso/
+URL OK (el 931 es un PDF real de **18 MB**). pdfrx `PdfViewer.uri` streamea/cachea y falla
+con PDFs pesados en iOS. **Fix** en `PreviewScreen`: en móvil se descarga el PDF completo
+(dio) y se renderiza in-app desde bytes (`PdfViewer.data`) con spinner de %; web sigue con
+`PdfViewer.uri`; "Abrir en el navegador" queda de último recurso. **Validar en TestFlight.**
+
+### 18.4 Cachatore (`1babce3` + `8d9d970`, deploy por auto-update de la PC dedicada)
+- **Búsqueda visible** en los logs (throttle 30 s): el barrido latente muestra qué busca y
+  qué ve, para que entre latidos no parezca colgado.
+- **Aviso de cancelación**: al cancelar un turno, WhatsApp al chofer + al encargado de
+  logística (Errazu, 25022800), igual que reservar/reagendar.
+
+### 18.5 Pendiente operativo
+- **Release de la app** (hoy): liquidación slug, RBAC fino, cachatore wizard, admin_shell,
+  F.931 in-app. Validar el 931 en iOS con VOGEL.
+- **Limpiar** la regla `alertasVolvoDiario` de `health.js` + ayuda en
+  `admin_estado_bot_widgets.dart` (tarea aparte). Ver PENDIENTES.
+
+---
+
 **Cómo retomar (sesión vieja)**: leer secciones 6.9 (cleanup + RBAC del 30-abril), 6.10 (sesión grande del 1-mayo: imports bulk + fixes UI + auditoría profunda + plan 4 fases ejecutado) y 13 (anotaciones del 30-abril noche). El estado del repo es el commit más reciente — `git log --oneline -10`.

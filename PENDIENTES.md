@@ -7,6 +7,65 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-05-22 PM (3) — Auditoría general + dedup Emmanuel + F.931 iOS + cachatore
+
+Sesión grande de cierre. 7 commits (`f334604` → `46626c6`), todo en main + pusheado.
+CF afectadas **deployadas** (toman efecto ya); cambios de app van en el **release de hoy**.
+
+### Hecho — dedup del parte de mantenimiento a Emmanuel (`f334604`, CF deployada)
+- Emmanuel recibía 2 informes con lo MISMO (luces de tablero Volvo). Se **eliminó** el
+  "Resumen diario — Alertas de mantenimiento" del bot (`cron_mantenimiento_diario` +
+  builder `buildResumenMantenimientoDiario`). El **Parte de mantenimiento** de la CF
+  (`resumenMantenimientoVehiculosDiario`) ahora suma lo único exclusivo del otro:
+  eventos TPM/TTM/tacógrafo (24 h, con horario). `ALERTAS_RESUMEN_DESTINATARIO_DNI`
+  quedó **obsoleta** (sin efecto). Pendiente menor: limpiar la regla `alertasVolvoDiario`
+  de `health.js` + el texto de ayuda en `admin_estado_bot_widgets.dart` (tarea spawneada).
+
+### Hecho — cachatore (`1babce3` + `8d9d970`, deploy por auto-update PC dedicada)
+- **Búsqueda visible en los logs**: el barrido latente ahora loguea (throttle 30 s) qué
+  está buscando y qué ve ("la agenda no tiene huecos…") para que entre latidos no
+  parezca colgado.
+- **Aviso de cancelación**: al cancelar un turno, manda WhatsApp al **chofer** + al
+  **encargado de logística (Errazu, 25022800)**, igual que reservar/reagendar.
+
+### Hecho — auditoría general profunda (agentes por subsistema, hallazgos VERIFICADOS)
+1 ALTO + 6 MEDIO, todos arreglados con tests donde aplica:
+- **[ALTO]** `report_liquidacion.dart`: `slugSeguro` hacía `substring(0, raw.length)` sobre
+  el string ya saneado → **RangeError** y NO salía la liquidación (ej. "Vecchi S.R.L."). `eb3dcb9` +7 tests.
+- **[MEDIO]** `jornadas_v2`: `bloque_excedido` no se reseteaba por bloque → aviso de "4h
+  continuas" salía 1 vez por jornada. `d1e79ae` (CF deployada) +test.
+- **[MEDIO]** RBAC `app_router`: cada ruta admin ahora pide su capability **fina** (antes
+  todas pedían `verPanelAdmin` que GOMERIA/SEG_HIGIENE tienen → podían abrir pantallas
+  ajenas por deep-link). `eb3dcb9`.
+- **[MEDIO]** `mantenimiento.ts`: doble "notificaciones reanudadas" si fallaba el delete →
+  flag `reanudacion_encolada`. `d1e79ae` (CF deployada).
+- **[MEDIO]** `volvo.ts`: `_esAlertaMantenimiento` leía solo `.type` (vacío en el 100% de
+  la data real; el subtipo viene en `triggerType`) → ahora `triggerType ?? type`. `d1e79ae` (CF deployada).
+- **[MEDIO]** `cachatore_hub`: `_confirmar` sin try/catch → spinner infinito si fallaba
+  Firestore. `eb3dcb9`.
+- **[MEDIO]** `admin_shell`: ráfaga de avisos de revisiones viejas al abrir (consumía el
+  flag con el snapshot de cache) → ignora `isFromCache`. `eb3dcb9`.
+
+### Hecho — F.931 no se veía en iOS (`9872c41` → `46626c6`)
+- Síntoma "cartel azul con código" = banner de pdfrx `FPDF_GetLastError=3`. Verificado:
+  data/permisos/URL OK (el 931 es un PDF real de **18 MB**). pdfrx `PdfViewer.uri`
+  streamea/cachea y falla con PDFs pesados en iOS. **Fix**: en móvil descargamos el PDF
+  completo (dio) y lo renderizamos in-app desde bytes (`PdfViewer.data`) con spinner de %;
+  web sigue con `PdfViewer.uri`; "Abrir en el navegador" queda solo de último recurso.
+  **Validar en TestFlight** con VOGEL.
+
+### ⚠️ Queda pendiente (NO bloquea el release)
+1. **Bundle BAJO de la auditoría** (no se hizo, por decisión de scope): ICM tendencia con
+   fórmula vieja vs ranking CESVI; cuotas de adelanto no-múltiplo-de-5 con decimales;
+   match de teléfono por sufijo en `commands.js`; `limit()` sobre SITRACK_EVENTOS crudo;
+   `estadoVolvoPoller` sin lock-tick; TZ hardcodeada -3 en Python; TextField uncontrolled
+   del checklist; dedup del bot por texto individual; helpers obsoletos del bot.
+2. **Limpiar `alertasVolvoDiario`** de `health.js` + ayuda en `admin_estado_bot_widgets.dart`
+   (footgun: `ALERTAS_RESUMEN_DESTINATARIO_DNI` ya no reenruta nada).
+3. **(opcional)** Si re-suben el F.931 como PDF más liviano, abre al instante en la app.
+
+---
+
 ## 📅 2026-05-22 PM (2) — Revisión profunda ICM + preparación para PREMIOS/CASTIGOS
 
 Santiago: "revisión profunda del ICM archivo por archivo, card por card... quiero
