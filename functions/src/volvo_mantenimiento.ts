@@ -38,6 +38,17 @@ export interface UnidadAdvertencias {
   advertencias: Advertencia[];
 }
 
+/**
+ * Cobertura de testigos: cuántas unidades transmiten el bloque UPTIME (y por
+ * ende podemos vigilarles el tablero) sobre el total operativo. CLAVE para no
+ * darle a Emmanuel falsa tranquilidad: "4 con advertencias" sin aclarar que
+ * sólo vemos 20/53 haría parecer sano a un camión que en realidad está mudo.
+ */
+export interface CoberturaFlota {
+  monitoreadas: number;
+  total: number;
+}
+
 const EMOJI_SEVERIDAD: Record<SeveridadAdvertencia, string> = {
   critico: "🔴",
   alto: "🟠",
@@ -66,14 +77,33 @@ function rankUnidad(u: UnidadAdvertencias): number {
 export function construirParteMantenimiento(
   unidades: UnidadAdvertencias[],
   saludo: string,
-  fmtFecha: string
+  fmtFecha: string,
+  cobertura?: CoberturaFlota
 ): string {
+  // Nota de cobertura: si NO vemos todas las unidades, lo decimos explícito.
+  let notaCobertura = "";
+  if (cobertura && cobertura.total > 0) {
+    const sinDatos = cobertura.total - cobertura.monitoreadas;
+    if (sinDatos > 0) {
+      notaCobertura =
+        `\n_⚠️ Monitoreados ${cobertura.monitoreadas}/${cobertura.total} ` +
+        `camiones. ${sinDatos} todavía no transmiten los testigos del tablero ` +
+        "— no podemos ver su estado (hay que activarlo en Volvo)._\n";
+    } else {
+      notaCobertura =
+        `\n_Monitoreados ${cobertura.monitoreadas}/${cobertura.total} ` +
+        "camiones._\n";
+    }
+  }
+
   if (unidades.length === 0) {
     return (
       `${saludo},\n\n` +
       `🔧 *Parte de mantenimiento — ${fmtFecha}*\n\n` +
-      "✅ Sin advertencias activas en la flota Volvo. Ningún camión reporta " +
-      "testigos en rojo o amarillo.\n\n" +
+      "✅ Sin advertencias en los camiones monitoreados. Ninguno reporta " +
+      "testigos en rojo o amarillo.\n" +
+      notaCobertura +
+      "\n" +
       BANNER_TESTING +
       "_Bot-On — Coopertrans Móvil_"
     );
@@ -110,7 +140,9 @@ export function construirParteMantenimiento(
     bloques.join("\n\n") +
     "\n\n" +
     "_🔴 crítico · 🟠 importante · 🟡 medio · ⚪ menor. Testigos exactos del " +
-    "tablero del camión (Volvo Connect)._\n\n" +
+    "tablero del camión (Volvo Connect)._\n" +
+    notaCobertura +
+    "\n" +
     BANNER_TESTING +
     "_Bot-On — Coopertrans Móvil_"
   );
@@ -144,11 +176,15 @@ export const resumenMantenimientoVehiculosDiario = onSchedule(
 
       const snap = await db.collection("VOLVO_ESTADO").limit(5000).get();
       const unidades: UnidadAdvertencias[] = [];
+      let totalOperativas = 0;
+      let monitoreadas = 0; // transmiten testigos (tienen tell_tales)
       for (const d of snap.docs) {
         const patente = d.id;
         if (excluidos.patentes.has(patente.toUpperCase())) continue;
+        totalOperativas++;
         const data = d.data();
         const tt = Array.isArray(data.tell_tales) ? data.tell_tales : [];
+        if (tt.length > 0) monitoreadas++;
         const advertencias = clasificarAdvertencias(
           tt as Array<{ id: string; estado: string }>
         );
@@ -178,7 +214,10 @@ export const resumenMantenimientoVehiculosDiario = onSchedule(
       const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
       const fmtFecha = formatFechaArg(Date.now());
 
-      const mensaje = construirParteMantenimiento(unidades, saludo, fmtFecha);
+      const mensaje = construirParteMantenimiento(unidades, saludo, fmtFecha, {
+        monitoreadas,
+        total: totalOperativas,
+      });
 
       await db.collection("COLA_WHATSAPP").add({
         telefono: tel,
@@ -200,6 +239,8 @@ export const resumenMantenimientoVehiculosDiario = onSchedule(
       exitoCron = true;
       logger.info("[resumenMantenimientoVehiculos] OK", {
         unidadesConAdvertencias: unidades.length,
+        monitoreadas,
+        totalOperativas,
         destinatario: MANTENIMIENTO_VEHICULOS_DNI,
       });
     } finally {

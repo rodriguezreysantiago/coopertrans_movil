@@ -15,7 +15,7 @@ const adv = (id, nombre, categoria, estado, severidad) => ({
 describe('construirParteMantenimiento', () => {
   test('sin unidades → mensaje "sin advertencias"', () => {
     const m = construirParteMantenimiento([], 'Hola Emmanuel', '21/05/2026');
-    assert.match(m, /Sin advertencias activas/);
+    assert.match(m, /Sin advertencias/);
     assert.match(m, /Hola Emmanuel/);
     assert.match(m, /21\/05\/2026/);
   });
@@ -67,5 +67,44 @@ describe('construirParteMantenimiento', () => {
     ];
     const m = construirParteMantenimiento(unidades, 'Hola', '21/05/2026');
     assert.ok(m.includes('🔴'), 'debe incluir el emoji crítico');
+  });
+
+  test('cobertura parcial → avisa cuántos camiones NO transmiten testigos', () => {
+    // Caso real: 20 de 53 monitoreados → no dar falsa tranquilidad.
+    const unidades = [
+      {
+        patente: 'AF869ZU',
+        advertencias: [adv('ABS_TRAILER', 'ABS del acoplado', 'frenos', 'YELLOW', 'alto')],
+      },
+    ];
+    const m = construirParteMantenimiento(unidades, 'Hola', '21/05/2026', {
+      monitoreadas: 20,
+      total: 53,
+    });
+    assert.match(m, /Monitoreados 20\/53/);
+    assert.match(m, /33 todavía no transmiten/);
+  });
+
+  test('cobertura parcial sin advertencias → igual avisa el gap', () => {
+    const m = construirParteMantenimiento([], 'Hola', '21/05/2026', {
+      monitoreadas: 20,
+      total: 53,
+    });
+    assert.match(m, /Sin advertencias/);
+    assert.match(m, /33 todavía no transmiten/);
+  });
+
+  test('cobertura total → nota simple sin alarma', () => {
+    const m = construirParteMantenimiento([], 'Hola', '21/05/2026', {
+      monitoreadas: 53,
+      total: 53,
+    });
+    assert.match(m, /Monitoreados 53\/53/);
+    assert.doesNotMatch(m, /no transmiten/);
+  });
+
+  test('sin cobertura (undefined) → no rompe (compat)', () => {
+    const m = construirParteMantenimiento([], 'Hola', '21/05/2026');
+    assert.match(m, /Sin advertencias/);
   });
 });
