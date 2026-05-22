@@ -202,8 +202,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               ),
             if (Capabilities.can(PrefsService.rol, Capability.verMantenimiento))
               const _AdminTile(
-                titulo: 'SERVICE',
-                subtitulo: 'Próximos services de la flota Volvo',
+                titulo: 'MANTENIMIENTO',
+                subtitulo: 'Service, advertencias e historial de la flota Volvo',
                 icono: Icons.build_circle_outlined,
                 color: AppColors.accentDeepOrange,
                 ruta: AppRoutes.adminMantenimiento,

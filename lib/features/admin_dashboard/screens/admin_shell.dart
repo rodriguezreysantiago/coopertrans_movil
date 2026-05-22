@@ -135,7 +135,7 @@ class _AdminShellState extends State<AdminShell> {
       build: () => const GomeriaHubScreen(),
     ),
     _ShellSection(
-      label: 'Service',
+      label: 'Mantenimiento',
       icon: Icons.build_circle_outlined,
       iconActive: Icons.build_circle,
       requiredCapability: Capability.verMantenimiento,
