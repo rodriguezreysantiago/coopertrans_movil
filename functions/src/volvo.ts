@@ -856,11 +856,13 @@ export const onAlertaVolvoCreated = onDocumentCreated(
     // Resolver el "tipo efectivo" para los GENERIC con subtipo.
     let tipoEfectivo = tipo.toUpperCase();
     if (tipo === "GENERIC") {
-      const triggerType = (
-        (data.detalle_generic as Record<string, unknown> | undefined)
-          ?.triggerType ?? ""
-      ).toString().toUpperCase();
-      if (triggerType) tipoEfectivo = triggerType;
+      // El subtipo viene en `triggerType` (en la data real es SIEMPRE ese
+      // campo) o, defensivamente, en `type`. Leemos ambos para no perder el
+      // subtipo si Volvo cambia el campo. Igual criterio que
+      // volvo_mantenimiento.ts y resumenes_diarios.ts.
+      const dg = data.detalle_generic as Record<string, unknown> | undefined;
+      const sub = (dg?.triggerType ?? dg?.type ?? "").toString().toUpperCase();
+      if (sub) tipoEfectivo = sub;
     }
 
     if (TIPOS_BLACKLIST_CHOFER.has(tipoEfectivo)) {
@@ -1600,7 +1602,14 @@ function _esAlertaMantenimiento(
   const detalleGeneric = data.detalle_generic as
     | Record<string, unknown>
     | undefined;
-  const subType = (detalleGeneric?.type ?? "").toString().toUpperCase();
+  // BUG (auditoría 2026-05-22, verificado con data real): Volvo pone el
+  // subtipo de los GENERIC en `triggerType`, NO en `type` (que viene vacío
+  // en el 100% de los eventos). Leer solo `type` hacía que esta función
+  // NUNCA reconociera un mantenimiento GENERIC (TELL_TALE, etc.). Leemos
+  // `triggerType ?? type` (mismo criterio que el resto del código).
+  const subType = (
+    detalleGeneric?.triggerType ?? detalleGeneric?.type ?? ""
+  ).toString().toUpperCase();
   return SUBTIPOS_GENERIC_MANTENIMIENTO.has(subType);
 }
 

@@ -880,6 +880,12 @@ export function evaluarTickJornada(
         j.total_manejo_seg += j.bloque_actual_manejo_seg;
         j.bloque_actual_manejo_seg = 0;
         j.alerta_3_30_enviada = false; // reset alerta del bloque
+        // Reset de la infracción de 4h POR BLOQUE: sin esto, el flag se
+        // seteaba 1 vez y nunca volvía → el aviso "excediste 4h continuas"
+        // salía 1 vez por JORNADA en lugar de 1 vez por bloque, y un chofer
+        // que cruzaba las 4h en un 2º bloque de la misma jornada NO recibía
+        // el aviso (horas legales de conducción). Fix auditoría 2026-05-22.
+        j.bloque_excedido = false;
         j.estado = "descanso_post_bloque";
       }
     }

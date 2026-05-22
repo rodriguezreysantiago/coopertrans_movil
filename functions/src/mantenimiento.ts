@@ -437,10 +437,31 @@ export const procesarSilenciadosExpirados = onSchedule(
     for (const d of snap.docs) {
       const data = d.data();
       const dni = (data.chofer_dni || d.id).toString();
+
+      // Idempotencia (auditoría 2026-05-22): si en un tick anterior YA
+      // encolamos la reanudación pero el delete falló, el doc sigue
+      // matcheando (silenciado_hasta <= ahora). En ese caso NO reencolamos
+      // (evita un 2º "notificaciones reanudadas" al chofer) — solo
+      // reintentamos el borrado.
+      if (data.reanudacion_encolada === true) {
+        try {
+          await d.ref.delete();
+        } catch (e) {
+          logger.warn(
+            "[procesarSilenciadosExpirados] retry de borrado falló",
+            { dni, error: (e as Error).message }
+          );
+          conservados++;
+        }
+        continue;
+      }
+
       let errorPermanente = false;
+      let encolado = false;
       try {
         await _encolarAvisoSilencioReanudado(dni);
         notificados++;
+        encolado = true;
       } catch (e) {
         const msg = (e as Error).message || "";
         // Errores PERMANENTES (no vale reintentar) → borrar igual.
@@ -467,6 +488,19 @@ export const procesarSilenciadosExpirados = onSchedule(
           );
           conservados++;
           continue; // skip el delete de abajo
+        }
+      }
+
+      // Encolado OK → marcar el flag ANTES de borrar (best-effort): si el
+      // delete de abajo falla, el próximo tick ve el flag y NO reencola.
+      if (encolado) {
+        try {
+          await d.ref.update({ reanudacion_encolada: true });
+        } catch (e) {
+          logger.warn(
+            "[procesarSilenciadosExpirados] no marqué reanudacion_encolada",
+            { dni, error: (e as Error).message }
+          );
         }
       }
 

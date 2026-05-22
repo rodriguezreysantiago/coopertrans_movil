@@ -157,6 +157,32 @@ describe('evaluarTickJornada — aviso 4h (bloque excedido)', () => {
     const { avisos } = tickManejando(j, 200);
     assert.ok(!avisos.includes('bloque_excedido'));
   });
+
+  // Regresión 2026-05-22: el flag se seteaba 1 vez y nunca se reseteaba al
+  // cerrar bloque → el aviso de 4h salía 1 vez por JORNADA, no por bloque.
+  test('reset por bloque: 4h en un 2º bloque de la misma jornada re-avisa', () => {
+    // Bloque 1: cruza 4h → bloque_excedido.
+    const j = nuevaJornadaTest({
+      bloque_actual_manejo_seg: BLOQUE_EXCEDIDO_SEGUNDOS - 100,
+    });
+    const r1 = tickManejando(j, 200);
+    assert.ok(r1.avisos.includes('bloque_excedido'));
+    assert.strictEqual(j.bloque_excedido, true);
+
+    // Pausa >= 15 min: cierra el bloque y DEBE resetear bloque_excedido.
+    tickParado(j, PAUSA_BLOQUE_SEGUNDOS);
+    assert.strictEqual(
+      j.bloque_excedido, false,
+      'al cerrar el bloque, bloque_excedido vuelve a false'
+    );
+
+    // Bloque 2: vuelve a cruzar 4h continuas → DEBE re-avisar.
+    const r2 = tickManejando(j, BLOQUE_EXCEDIDO_SEGUNDOS + 100);
+    assert.ok(
+      r2.avisos.includes('bloque_excedido'),
+      'la 2ª infracción de 4h en la misma jornada también avisa'
+    );
+  });
 });
 
 // ── Jornada por MANEJO NETO (el fix de 2026-05-19) ──────────────────
