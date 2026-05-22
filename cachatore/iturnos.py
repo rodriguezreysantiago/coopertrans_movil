@@ -436,7 +436,8 @@ class IturnosClient:
         # cercano, hora más tarde — ver ordenar_slots_preferidos). Sin el filtro
         # de fecha el bot reagendaba al día equivocado (ver parsear_slots_reagendar).
         ahora = datetime.now()
-        slots = [s for s in parsear_slots_reagendar(self.s.get(url).text)
+        crudos = parsear_slots_reagendar(self.s.get(url).text)
+        slots = [s for s in crudos
                  if hora_en_franja(s["hora"], franja)
                  and (not fecha or s.get("fecha") == fecha)
                  and slot_es_futuro(s, ahora)
@@ -444,7 +445,13 @@ class IturnosClient:
                  and not (franja == CUALQUIERA and franja_actual
                           and franja_de_hora(s["hora"]) == franja_actual)]
         if not slots:
-            return {"ok": False, "motivo": "sin_slot_en_franja"}
+            # Diag: qué SÍ ofrece el calendario de reagendar, para distinguir
+            # "iTurnos no lo ofrece para reagendar" de "nuestro filtro/parseo lo
+            # descartó". Lo loguea el caller en vigia.
+            ofrece = sorted({(s.get("fecha") or "?", s.get("hora"))
+                             for s in crudos if s.get("hora")})
+            return {"ok": False, "motivo": "sin_slot_en_franja",
+                    "ofrece": [f"{f} {h}" for f, h in ofrece[:30]]}
         slots = ordenar_slots_preferidos(slots)
         slot = slots[0]
 

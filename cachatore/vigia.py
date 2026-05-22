@@ -645,11 +645,13 @@ def ciclo_latente(targets: dict, dry: bool):
         elif r.get("motivo") == "tomado":
             log("LOG", t.nombre, f"{r.get('hora')} lo tomaron al reagendar, sigo")
         elif r.get("motivo") == "sin_slot_en_franja":
+            ofrece = r.get("ofrece") or []
+            detalle = ("  El calendario de reagendar SÍ ofrece: "
+                       + "; ".join(ofrece)) if ofrece else \
+                "  El calendario de reagendar vino VACÍO (0 huecos para mover)."
             _log_reagendar_motivo(
-                t, f"el calendario de reagendar NO ofrece slot en franja "
-                   f"'{t.franja}'{(' / ' + t.fecha) if t.fecha else ''} "
-                   "(ojo: la página de reagendar puede mostrar menos huecos que "
-                   "la agenda general). Sigo mirando.")
+                t, f"el calendario de reagendar NO tiene slot en franja "
+                   f"'{t.franja}'{(' / ' + t.fecha) if t.fecha else ''}.{detalle}")
         else:
             log("LOG", t.nombre, f"reagendar sin confirmar ({r.get('motivo')})")
 
