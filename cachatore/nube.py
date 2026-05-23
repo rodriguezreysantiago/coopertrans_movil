@@ -23,6 +23,13 @@ COL_OBJETIVOS = "CACHATORE_OBJETIVOS"
 COL_ESTADO = "CACHATORE_ESTADO"
 DOC_ESTADO = "bot"
 COL_TURNOS = "CACHATORE_TURNOS"
+# Pedidos one-shot del operador para verificar si un chofer (que NO está en
+# CACHATORE_OBJETIVOS) ya tiene turno sacado por la web de iTurnos. La app
+# escribe el doc cuando el operador tappea "Verificar" en el wizard Agregar;
+# el bot lo procesa y escribe el resultado de vuelta para que la UI reaccione.
+# Vida corta: tras devolver resultado el bot borra el doc cuando hayan pasado
+# CHEQUEO_TTL_SEG (no más persistencia).
+COL_CHEQUEOS = "CACHATORE_CHEQUEOS"
 
 FRANJAS_VALIDAS = {"madrugada", "manana", "tarde", "noche", "cualquiera"}
 
@@ -147,6 +154,91 @@ def eliminar_objetivo(dni: str):
     cíclica, se re-agrega a mano para el próximo turno."""
     db = choferes._db()
     db.collection(COL_OBJETIVOS).document(str(dni)).delete()
+
+
+# ---- chequeos one-shot (¿el chofer ya tiene turno sacado por la web?) -----
+def leer_chequeos_pendientes() -> list:
+    """Devuelve los chequeos PENDIENTES (sin `resultado` aún). Cada item:
+    `{dni, nombre, pedido_en}`. Si no hay, devuelve []. El bot procesa cada
+    uno y llama a `escribir_resultado_chequeo` para que la UI reaccione."""
+    db = choferes._db()
+    pendientes = []
+    for d in db.collection(COL_CHEQUEOS).stream():
+        x = d.to_dict() or {}
+        # Si ya tiene `resultado`, el bot ya lo procesó (la UI debería haberlo
+        # borrado; si quedó huérfano, lo limpia el TTL del propio bot).
+        if x.get("resultado"):
+            continue
+        pendientes.append({
+            "dni": str(x.get("dni") or d.id),
+            "nombre": x.get("nombre"),
+        })
+    return pendientes
+
+
+def escribir_resultado_chequeo(dni: str, resultado: str, detalle: str = None):
+    """Escribe el resultado del chequeo para que la UI lo lea.
+    `resultado` ∈ {'con_turno', 'sin_turno', 'error'}. `detalle` opcional
+    (texto del turno si hay, o motivo del error)."""
+    data = {
+        "resultado": resultado,
+        "resuelto_en": firestore.SERVER_TIMESTAMP,
+    }
+    if detalle is not None:
+        data["detalle"] = detalle
+    db = choferes._db()
+    db.collection(COL_CHEQUEOS).document(str(dni)).set(data, merge=True)
+
+
+def borrar_chequeo(dni: str):
+    """Limpia el doc del chequeo. Lo llama el bot tras N segundos del resuelto
+    (TTL) o la UI tras mostrar el resultado al operador."""
+    db = choferes._db()
+    db.collection(COL_CHEQUEOS).document(str(dni)).delete()
+
+
+def crear_objetivo_externo(dni: str, nombre: str, patente: str = None):
+    """Da de alta al chofer en CACHATORE_OBJETIVOS marcándolo como detectado
+    externamente (turno preexistente sacado por la web). `franja='cualquiera'`
+    + `reagendar=False` para que el bot NO le busque nuevos turnos pero SÍ lo
+    siga refrescando cada 10 min (así si lo cancelan por web, la UI se entera).
+    Los botones Reagendar/Cancelar de la card de Concretados necesitan que
+    exista el OBJETIVO, no solo el TURNO."""
+    db = choferes._db()
+    data = {
+        "dni": str(dni),
+        "nombre": nombre,
+        "fecha": None,
+        "franja": "cualquiera",
+        "reagendar": False,
+        "activo": True,
+        "origen": "detectado_externo",
+        "creado_en": firestore.SERVER_TIMESTAMP,
+        "actualizado_en": firestore.SERVER_TIMESTAMP,
+    }
+    if patente:
+        data["patente"] = patente
+    db.collection(COL_OBJETIVOS).document(str(dni)).set(data, merge=True)
+
+
+def listar_chequeos_resueltos_viejos(antes_de_ts) -> list:
+    """DNIs de chequeos con `resultado` cuyo `resuelto_en` < antes_de_ts.
+    Para que el bot los limpie (TTL) si la UI no llegó a borrarlos
+    (ej. operador cerró la app sin esperar el resultado)."""
+    db = choferes._db()
+    viejos = []
+    for d in db.collection(COL_CHEQUEOS).stream():
+        x = d.to_dict() or {}
+        ts = x.get("resuelto_en")
+        if not x.get("resultado") or ts is None:
+            continue
+        try:
+            if ts < antes_de_ts:
+                viejos.append(d.id)
+        except TypeError:
+            # ts viene como DatetimeWithNanoseconds; comparar con datetime tz-aware
+            continue
+    return viejos
 
 
 # ---- avisos por WhatsApp (vía COLA_WHATSAPP, la consume el bot) ------------

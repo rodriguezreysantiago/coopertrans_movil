@@ -38,7 +38,7 @@ import random
 import sys
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import iturnos
 import choferes
@@ -83,6 +83,11 @@ BUSQUEDA_LOG_SEG = 30       # cada cuánto LOGUEAR la búsqueda latente (reserva
                             # que el log de reagendar, pero a nivel ciclo.
 BACKOFF_MAX_SEG = 120       # tope del backoff cuando el scanner no puede loguear
 MAX_REFRESH_POR_CICLO = 2    # cuántos mis_turnos refrescar por ciclo (no bloquear)
+MAX_CHEQUEOS_POR_CICLO = 3   # cuántos chequeos one-shot procesar por ciclo (no
+                             # bloquear el latente: cada chequeo es 1 login +
+                             # 1 mis_turnos, ~3-8 s contra Cloudflare).
+CHEQUEO_TTL_SEG = 120        # tras resolver un chequeo, la UI tiene 2 min para
+                             # leerlo y borrarlo; si no, lo limpia el bot.
 HORA_RESUMEN = 8             # hora ART del resumen diario de turnos al encargado
 ESPERA_SIN_CONFIG_SEG = 30   # si falta config / no hay choferes / pausado
 
@@ -562,6 +567,96 @@ def sincronizar_targets(cfg: dict, targets: dict):
         _en_paralelo(sin_chequear, refrescar_estado, max_hilos=10)
 
 
+# ---- chequeos one-shot ----------------------------------------------------
+def _procesar_chequeo(ch: dict, dry: bool):
+    """Procesa un pedido manual de la app: ¿este chofer (que NO está en la
+    lista del cachatore) tiene un turno preexistente sacado por la web?
+    Caso real: un compañero del chofer reserva turno desde iTurnos sin pasar
+    por el bot — sin esto, el operador no puede reagendar/cancelar ese turno
+    desde la app porque no aparece en ningún lado.
+
+    Login + mis_turnos one-shot (cliente nuevo, sin tocar scanner ni targets
+    vivos). Si tiene turno: publica TURNO + crea OBJETIVO 'detectado_externo';
+    si no: solo escribe `resultado='sin_turno'`. En ambos casos la UI escucha
+    el doc CACHATORE_CHEQUEOS/{dni} y le muestra el resultado al operador."""
+    dni = ch["dni"]
+    nombre = ch.get("nombre") or dni
+    log("LOG", nombre, "chequeo manual pedido desde la app (one-shot)")
+    # Traer credenciales del chofer (mismo helper que para los targets vivos).
+    try:
+        datos = next(iter(choferes.cargar_choferes(solo_dnis=[dni])), None)
+    except Exception as e:
+        log("ERROR", nombre, f"chequeo: no pude traer datos del chofer: {e}")
+        nube.escribir_resultado_chequeo(
+            dni, "error", detalle=f"no pude traer datos del chofer: {e}")
+        return
+    if not datos:
+        log("ERROR", nombre,
+            "chequeo: chofer no está en la base (tanque/excluido/inactivo)")
+        nube.escribir_resultado_chequeo(
+            dni, "error",
+            detalle="el chofer no está en la base (tanque/excluido/inactivo)")
+        return
+    email = datos.get("email")
+    clave = datos.get("clave")
+    patente = datos.get("patente")
+    if not email or not clave:
+        nube.escribir_resultado_chequeo(
+            dni, "error", detalle="el chofer no tiene mail/clave cargada")
+        return
+    if dry:
+        log("EXITO", nombre, "[DRY] chequearía sin tocar iTurnos")
+        nube.escribir_resultado_chequeo(dni, "sin_turno", detalle="[DRY]")
+        return
+    # Cliente one-shot: NO usa la sesión cacheada del scanner ni la de ningún
+    # target vivo. Es 1 login extra a iTurnos por chequeo manual (frecuencia
+    # baja); a cambio no enredamos el cache del bot ni rompemos al scanner.
+    cli = iturnos.IturnosClient()
+    logueado = False
+    for _ in range(LOGIN_REINTENTOS):
+        try:
+            if cli.login(email, clave):
+                logueado = True
+                break
+        except Exception as e:
+            log("LOG", nombre, f"chequeo: login error transitorio: {e}")
+        time.sleep(1.5)
+    if not logueado:
+        nube.escribir_resultado_chequeo(
+            dni, "error",
+            detalle="no pude loguear en iTurnos (¿Cloudflare bloqueando?)")
+        return
+    try:
+        turnos = cli.mis_turnos()
+    except Exception as e:
+        nube.escribir_resultado_chequeo(
+            dni, "error", detalle=f"error leyendo mis_turnos: {e}")
+        return
+    if turnos:
+        turno = turnos[0]
+        cuando = turno.get("cuando")
+        # Publicar el turno y dar de alta al chofer en OBJETIVOS marcándolo
+        # como detectado externo. Sin el OBJETIVO los botones Reagendar/
+        # Cancelar de la card de Concretados no funcionan (escriben al
+        # OBJETIVO). El bot, en el próximo refresh de config, lo va a ver y
+        # como ya tiene turno NO le busca otro (refrescar_estado marca
+        # tieneTurno=True y ciclo_latente solo procesa pendientes).
+        try:
+            nube.escribir_turno(dni, nombre, cuando, turno.get("hora"),
+                                turno.get("uuid"))
+        except Exception as e:
+            log("LOG", nombre, f"chequeo: no pude publicar turno: {e}")
+        try:
+            nube.crear_objetivo_externo(dni, nombre, patente=patente)
+        except Exception as e:
+            log("LOG", nombre, f"chequeo: no pude crear objetivo externo: {e}")
+        log("EXITO", nombre, f"chequeo: YA TIENE TURNO → {cuando}")
+        nube.escribir_resultado_chequeo(dni, "con_turno", detalle=cuando)
+    else:
+        log("LOG", nombre, "chequeo: SIN TURNOS preexistentes en iTurnos")
+        nube.escribir_resultado_chequeo(dni, "sin_turno")
+
+
 # ---- ciclos ---------------------------------------------------------------
 def ciclo_latente(targets: dict, dry: bool):
     # --- RESERVA: escanear la agenda y asignar huecos a los que NO tienen turno.
@@ -829,6 +924,41 @@ def main():
                         nube.eliminar_objetivo(dni)
                     except Exception as e:
                         log("LOG", "sistema", f"no pude sacar objetivo {dni}: {e}")
+
+            # 3.c) CHEQUEOS one-shot pedidos desde el wizard "Agregar" de la
+            #      app: ¿este chofer (que NO está en CACHATORE_OBJETIVOS) tiene
+            #      un turno preexistente sacado por la web? Procesamos pocos
+            #      por ciclo (cada uno hace 1 login + 1 mis_turnos contra
+            #      Cloudflare, ~3-8 s). El cleanup TTL borra los resueltos que
+            #      la UI no llegó a borrar (operador cerró la app antes).
+            if _ESCRIBIR_ESTADO:
+                try:
+                    pendientes_chequeo = nube.leer_chequeos_pendientes()
+                except Exception as e:
+                    log("LOG", "sistema", f"no pude leer chequeos: {e}")
+                    pendientes_chequeo = []
+                for ch in pendientes_chequeo[:MAX_CHEQUEOS_POR_CICLO]:
+                    try:
+                        _procesar_chequeo(ch, dry)
+                    except Exception as e:
+                        log("ERROR", ch.get("nombre") or ch.get("dni"),
+                            f"chequeo: error inesperado: {e}")
+                        try:
+                            nube.escribir_resultado_chequeo(
+                                ch["dni"], "error",
+                                detalle=f"error inesperado: {e}")
+                        except Exception:
+                            pass
+                # Cleanup TTL: si la UI no borró un chequeo ya resuelto en
+                # CHEQUEO_TTL_SEG, lo limpia el bot para que no se acumulen.
+                try:
+                    limite = (datetime.now(timezone.utc)
+                              - timedelta(seconds=CHEQUEO_TTL_SEG))
+                    for dni_viejo in nube.listar_chequeos_resueltos_viejos(limite):
+                        nube.borrar_chequeo(dni_viejo)
+                except Exception as e:
+                    log("LOG", "sistema",
+                        f"no pude limpiar chequeos viejos: {e}")
 
             activo = bool(cfg.get("activo", True)) if cfg else False
 
