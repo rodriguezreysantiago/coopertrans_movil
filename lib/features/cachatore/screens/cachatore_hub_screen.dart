@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../models/cachatore_chequeo.dart';
 import '../models/cachatore_config.dart';
 import '../models/cachatore_estado_bot.dart';
 import '../models/cachatore_objetivo.dart';
@@ -791,6 +792,92 @@ class _WizardSheetState extends State<_WizardSheet> {
     }
   }
 
+  /// Pide al bot que verifique si el chofer (que NO está en CACHATORE_OBJETIVOS)
+  /// tiene un turno preexistente sacado por la web de iTurnos. Muestra dialog
+  /// con spinner mientras el bot procesa (~3-10 s típico, hasta 30 s timeout).
+  ///
+  /// Si tiene turno → cierra el wizard (el chofer va a aparecer solo en
+  /// "Turnos concretados" por el StreamBuilder de TURNOS).
+  /// Si no tiene → cierra el dialog (queda el wizard abierto para que el
+  /// operador siga con el flujo normal de "vigilar" si quiere).
+  /// Si error → snackbar con el detalle del bot.
+  Future<void> _verificarTurnoExistente(String dni, String nombre) async {
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+
+    // 1) Pedir el chequeo (escribe el doc en CACHATORE_CHEQUEOS).
+    try {
+      await CachatoreService.pedirChequeo(dni: dni, nombre: nombre);
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+          content: Text('No se pudo pedir el chequeo: $e')));
+      return;
+    }
+    if (!mounted) return;
+
+    // 2) Abrir dialog con spinner; suscribe al stream del doc; cuando llega
+    //    `resultado`, lo procesa y cierra el dialog devolviendo el resultado.
+    final res = await showDialog<CachatoreChequeo>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        return _ChequeoDialog(dni: dni, nombre: nombre);
+      },
+    );
+
+    if (!mounted || res == null) {
+      // Operador canceló desde el dialog → borrar el chequeo para no dejar
+      // huérfano (el bot lo limpia igual tras 120 s, pero mejor proactivo).
+      // Si la cancelación fue por timeout, _ChequeoDialog ya devolvió un
+      // resultado de error y NO entra acá.
+      unawaited(CachatoreService.borrarChequeo(dni));
+      return;
+    }
+
+    // 3) Limpiar el doc (el resultado ya lo leímos).
+    unawaited(CachatoreService.borrarChequeo(dni));
+
+    // 4) Reaccionar según el resultado.
+    switch (res.resultado) {
+      case CachatoreChequeoResultado.conTurno:
+        // El bot publicó el TURNO en CACHATORE_TURNOS + creó OBJETIVO
+        // 'detectado_externo'. Cierra el wizard — el chofer va a aparecer
+        // automáticamente en "Turnos concretados" via StreamBuilder.
+        navigator.pop();
+        final cuando = (res.detalle ?? '').isNotEmpty
+            ? res.detalle!
+            : 'un turno preexistente';
+        messenger.showSnackBar(SnackBar(
+          backgroundColor: AppColors.accentGreen,
+          content: Text('$nombre ya tenía $cuando. '
+              'Lo dejé en "Turnos concretados".'),
+          duration: const Duration(seconds: 5),
+        ));
+        break;
+      case CachatoreChequeoResultado.sinTurno:
+        // Queda el wizard abierto en paso 0: si el operador quiere igual
+        // que el bot le busque turno, tappea el chofer y sigue el flujo.
+        messenger.showSnackBar(SnackBar(
+          content: Text(
+              '$nombre no tiene turnos en iTurnos. Si querés que el bot le '
+              'busque uno, tappealo y seguí los pasos.'),
+          duration: const Duration(seconds: 5),
+        ));
+        break;
+      case CachatoreChequeoResultado.error:
+        messenger.showSnackBar(SnackBar(
+          backgroundColor: AppColors.accentRed,
+          content: Text(
+              'No pude verificar a $nombre: ${res.detalle ?? "error desconocido"}'),
+          duration: const Duration(seconds: 6),
+        ));
+        break;
+      case null:
+        // No debería llegar acá (el dialog espera a resultado != null).
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
@@ -932,8 +1019,30 @@ class _WizardSheetState extends State<_WizardSheet> {
                               yaEsta ? AppColors.accentAmber : Colors.white38,
                           fontSize: 11),
                     ),
-                    trailing: const Icon(Icons.chevron_right,
-                        color: Colors.white24),
+                    // 🔍 = chequear iTurnos por turno preexistente sacado por
+                    // la web (caso: un compañero sacó turno sin pasar por el
+                    // bot). Chevron = elegir y seguir el wizard normal
+                    // (fecha → franja → vigilar).
+                    trailing: yaEsta
+                        ? const Icon(Icons.chevron_right,
+                            color: Colors.white24)
+                        : Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                tooltip:
+                                    'Verificar si ya tiene turno en iTurnos',
+                                visualDensity: VisualDensity.compact,
+                                splashRadius: 18,
+                                icon: const Icon(Icons.manage_search,
+                                    color: AppColors.accentCyan, size: 22),
+                                onPressed: () =>
+                                    _verificarTurnoExistente(dni, nombre),
+                              ),
+                              const Icon(Icons.chevron_right,
+                                  color: Colors.white24),
+                            ],
+                          ),
                     onTap: () => setState(() {
                       _dni = dni;
                       _nombre = nombre;
@@ -1071,6 +1180,96 @@ class _WizardSheetState extends State<_WizardSheet> {
             ),
           );
         }),
+      ],
+    );
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Dialog del chequeo one-shot (¿el chofer ya tiene turno por la web?)
+// ───────────────────────────────────────────────────────────────────────
+/// Spinner bloqueante mientras el bot procesa el pedido en CACHATORE_CHEQUEOS.
+/// Se cierra solo cuando llega el `resultado` (Navigator.pop con el CachatoreChequeo),
+/// o se autocierra con resultado de error si pasan 30 s sin respuesta (timeout
+/// = bot caído / lento). El operador también puede cancelar con un botón.
+class _ChequeoDialog extends StatefulWidget {
+  final String dni;
+  final String nombre;
+
+  const _ChequeoDialog({required this.dni, required this.nombre});
+
+  @override
+  State<_ChequeoDialog> createState() => _ChequeoDialogState();
+}
+
+class _ChequeoDialogState extends State<_ChequeoDialog> {
+  StreamSubscription<CachatoreChequeo>? _sub;
+  Timer? _timeout;
+
+  // Timeout largo (~30 s): el bot procesa cada chequeo en ~3-10 s contra
+  // iTurnos, pero si en el ciclo del bot hay otros chequeos delante puede
+  // demorar un poco más (MAX_CHEQUEOS_POR_CICLO=3 × ~8 s ≈ 24 s peor caso).
+  static const _timeoutSeg = 30;
+
+  @override
+  void initState() {
+    super.initState();
+    _sub = CachatoreService.streamChequeo(widget.dni).listen((ch) {
+      if (!mounted || ch.pendiente) return;
+      // Resultado llegó: cerrar dialog devolviéndolo.
+      Navigator.of(context).pop(ch);
+    }, onError: (e) {
+      if (!mounted) return;
+      Navigator.of(context).pop(CachatoreChequeo(
+        resultado: CachatoreChequeoResultado.error,
+        detalle: 'error leyendo el resultado: $e',
+      ));
+    });
+    _timeout = Timer(const Duration(seconds: _timeoutSeg), () {
+      if (!mounted) return;
+      Navigator.of(context).pop(const CachatoreChequeo(
+        resultado: CachatoreChequeoResultado.error,
+        detalle: 'el bot no respondió en 30 s '
+            '(verificá que esté prendido en la PC dedicada)',
+      ));
+    });
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    _timeout?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.surface,
+      title: const Row(
+        children: [
+          SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2)),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text('Verificando…',
+                style: TextStyle(color: Colors.white, fontSize: 16)),
+          ),
+        ],
+      ),
+      content: Text(
+        'Consultando iTurnos para ${widget.nombre} '
+        '(si ya tiene turno sacado, lo agarro y lo paso a Concretados).',
+        style: const TextStyle(color: Colors.white70, fontSize: 13),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancelar',
+              style: TextStyle(color: Colors.white54)),
+        ),
       ],
     );
   }

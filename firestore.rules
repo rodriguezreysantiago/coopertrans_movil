@@ -784,6 +784,18 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Pedidos one-shot del operador: "¿este chofer (que NO está en CACHATORE_
+    // OBJETIVOS) tiene un turno preexistente sacado por la web?". La app crea
+    // el doc al tappear "Verificar" en el wizard Agregar; el bot lo procesa,
+    // escribe el resultado, y la app lee el resultado + borra el doc. Si la
+    // app no llega a borrarlo, el bot lo limpia tras 120 s (TTL).
+    //
+    // Lectura/escritura: admin/supervisor (mismos roles que operan el resto
+    // del módulo cachatore). El bot (Admin SDK) bypassea las rules.
+    match /CACHATORE_CHEQUEOS/{dni} {
+      allow read, create, update, delete: if isAdminOrSupervisor();
+    }
+
     // ========================================================================
     // EMPRESAS_EMPLEADORAS — Póliza ART y F.931 a nivel empresa
     // ========================================================================

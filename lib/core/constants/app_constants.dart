@@ -397,6 +397,27 @@ class AppCollections {
   /// La pantalla "Turnos concretados" lee de acá. Si un chofer no tiene turno,
   /// el bot borra su doc. Solo lo escribe el bot (Admin SDK).
   static const String cachatoreTurnos = 'CACHATORE_TURNOS';
+
+  /// Pedidos one-shot del operador para verificar si un chofer (que NO está
+  /// en CACHATORE_OBJETIVOS) tiene un turno preexistente sacado por la web
+  /// de iTurnos. DocId = DNI. Caso real: un compañero del chofer saca turno
+  /// sin pasar por el bot — sin esto, el operador no podía reagendar/cancelar
+  /// ese turno desde la app porque no aparecía en ningún lado.
+  ///
+  /// La app escribe `{dni, nombre, pedido_en, pedido_por_dni}` al tappear
+  /// "Verificar" en el wizard Agregar. El bot (vigia.py) procesa cada doc
+  /// en su loop principal: hace login + mis_turnos one-shot a iTurnos y
+  /// escribe el resultado de vuelta:
+  ///   - `con_turno` + detalle (texto del turno): el bot publicó el TURNO
+  ///     en CACHATORE_TURNOS y creó el OBJETIVO marcándolo como
+  ///     `origen='detectado_externo'` para que los botones Reagendar/
+  ///     Cancelar funcionen.
+  ///   - `sin_turno`: el chofer no tiene turnos preexistentes.
+  ///   - `error` + detalle (motivo): no pudo loguear, sin mail/clave, etc.
+  ///
+  /// Vida corta: tras leer el resultado la app borra el doc; si no llega a
+  /// borrarlo, el bot lo limpia tras 120 s (CHEQUEO_TTL_SEG en vigia.py).
+  static const String cachatoreChequeos = 'CACHATORE_CHEQUEOS';
 }
 
 /// Documentos laborales que viven a NIVEL EMPRESA (no por empleado).

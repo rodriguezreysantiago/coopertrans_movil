@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/prefs_service.dart';
+import '../models/cachatore_chequeo.dart';
 import '../models/cachatore_config.dart';
 import '../models/cachatore_estado_bot.dart';
 import '../models/cachatore_objetivo.dart';
@@ -27,6 +28,9 @@ class CachatoreService {
 
   static CollectionReference<Map<String, dynamic>> get turnosCol =>
       _db.collection(AppCollections.cachatoreTurnos);
+
+  static CollectionReference<Map<String, dynamic>> get _chequeosCol =>
+      _db.collection(AppCollections.cachatoreChequeos);
 
   // ─── Streams ───────────────────────────────────────────────────────
   static Stream<CachatoreConfig> streamConfig() =>
@@ -130,4 +134,39 @@ class CachatoreService {
 
   static Future<void> eliminarObjetivo(String dni) =>
       objetivosCol.doc(dni).delete();
+
+  // ─── Chequeos one-shot (wizard Agregar: ¿ya tiene turno por web?) ──────
+  /// Pide al bot que verifique si `dni` tiene un turno preexistente sacado
+  /// por la web de iTurnos. Si ya existe un chequeo pendiente o resuelto
+  /// previo para el mismo DNI, lo PISA (set sin merge) para limpiar el
+  /// resultado viejo y empezar de cero — el bot procesa el nuevo en su
+  /// próximo tick (~5 s).
+  static Future<void> pedirChequeo({
+    required String dni,
+    required String nombre,
+  }) =>
+      _chequeosCol.doc(dni).set({
+        'dni': dni,
+        'nombre': nombre,
+        'pedido_en': FieldValue.serverTimestamp(),
+        'pedido_por_dni': PrefsService.dni,
+        // Reseteamos explícitamente para que un chequeo anterior no
+        // confunda al stream (el bot lo va a procesar y sobreescribir).
+        'resultado': null,
+        'detalle': null,
+        'resuelto_en': null,
+      });
+
+  /// Stream del doc del chequeo. Mientras `resultado == null` la UI muestra
+  /// spinner; cuando el bot lo procesa, el `resultado` cae y la UI reacciona
+  /// (cierra dialog + snackbar / cierra wizard).
+  static Stream<CachatoreChequeo> streamChequeo(String dni) =>
+      _chequeosCol.doc(dni).snapshots().map(
+          (d) => CachatoreChequeo.fromMap(d.data()));
+
+  /// Borra el doc del chequeo tras mostrarle el resultado al operador. Best-
+  /// effort: si falla (offline, perm denied transitorio) el bot lo limpia
+  /// igual tras CHEQUEO_TTL_SEG (120 s).
+  static Future<void> borrarChequeo(String dni) =>
+      _chequeosCol.doc(dni).delete();
 }
