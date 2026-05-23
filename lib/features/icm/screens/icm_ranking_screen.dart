@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/app_constants.dart';
+import '../../../core/services/choferes_service.dart';
 import '../../../core/services/excluidos_service.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
@@ -91,15 +93,22 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
   Future<IcmOficialPeriodo?> _cargar(_Periodo p) async {
     final db = FirebaseFirestore.instance;
     final excluidos = await ExcluidosService.cargar(db: db);
+    final dnisChofer = await ChoferesService.cargarDnisChofer(db: db);
     final r = _ref(p);
     return IcmOficialService.cargarPeriodo(
       db,
       r.id,
       coleccionFirestore: r.coleccion,
-      // Sacamos tanqueros + testers del ranking visible (mismo criterio
-      // que el resto de la app). Los totales de cabecera quedan tal cual
-      // los reporta Sitrack porque ESE es el número auditado.
-      excluirDni: (dni) => ExcluidosService.esExcluido(excluidos, dni: dni),
+      // Excluye: (a) tanqueros + testers (ExcluidosService) y (b) DNIs con
+      // ROL distinto de CHOFER en EMPLEADOS (Santiago 2026-05-23: PLANTA /
+      // ADMIN / etc. no deben aparecer en el ranking ICM). Los totales de
+      // cabecera quedan tal cual los reporta Sitrack porque ESE es el
+      // número auditado por YPF.
+      // Si dnisChofer es null (query falló), NO filtramos por rol —
+      // fail-safe: mejor mostrar uno indebido 100ms que vaciar el ranking.
+      excluirDni: (dni) =>
+          ExcluidosService.esExcluido(excluidos, dni: dni) ||
+          (dnisChofer != null && !dnisChofer.contains(dni)),
     );
   }
 
@@ -449,8 +458,12 @@ class _FilaChofer extends StatelessWidget {
     final dniStr = chofer.tieneDni
         ? 'DNI ${AppFormatters.formatearDNI(chofer.dni)}'
         : 'Sin chofer identificado';
-    final posStr =
-        posicion == null ? '—' : '#$posicion${totalRankeables > 0 ? '/$totalRankeables' : ''}';
+    final posStr = posicion == null
+        ? '—'
+        : '#$posicion${totalRankeables > 0 ? '/$totalRankeables' : ''}';
+    // Drill-down disponible solo si hay DNI real (Sitrack a veces tiene
+    // unidades sin chofer asignado, esos no entran al detalle).
+    final esNavegable = chofer.tieneDni && !chofer.sinActividad;
     return Card(
       elevation: 1,
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -518,6 +531,16 @@ class _FilaChofer extends StatelessWidget {
             ],
           ),
         ),
+        trailing: esNavegable
+            ? const Icon(Icons.chevron_right, color: Colors.white38)
+            : null,
+        onTap: esNavegable
+            ? () => Navigator.pushNamed(
+                  context,
+                  AppRoutes.adminIcmDetalleChofer,
+                  arguments: chofer.dni,
+                )
+            : null,
       ),
     );
   }

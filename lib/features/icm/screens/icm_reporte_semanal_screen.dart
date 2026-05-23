@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/app_constants.dart';
+import '../../../core/services/choferes_service.dart';
 import '../../../core/services/excluidos_service.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
@@ -44,7 +46,10 @@ class _IcmReporteSemanalScreenState extends State<IcmReporteSemanalScreen> {
   Future<_ReporteData> _cargar(_Periodo p) async {
     final db = FirebaseFirestore.instance;
     final excluidos = await ExcluidosService.cargar(db: db);
-    excluir(String dni) => ExcluidosService.esExcluido(excluidos, dni: dni);
+    final dnisChofer = await ChoferesService.cargarDnisChofer(db: db);
+    excluir(String dni) =>
+        ExcluidosService.esExcluido(excluidos, dni: dni) ||
+        (dnisChofer != null && !dnisChofer.contains(dni));
     final idSel = IcmOficialService.periodoId(offsetMeses: _offset);
     final idPrev = IcmOficialService.periodoId(offsetMeses: _offset - 1);
     final cargados = await Future.wait([
@@ -534,6 +539,13 @@ class _ListaChoferes extends StatelessWidget {
                     fontWeight: FontWeight.bold),
               ),
             ),
+            onTap: c.tieneDni
+                ? () => Navigator.pushNamed(
+                      context,
+                      AppRoutes.adminIcmDetalleChofer,
+                      arguments: c.dni,
+                    )
+                : null,
           ),
         );
       }).toList(),

@@ -14,6 +14,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/services/choferes_service.dart';
 import '../../../core/services/excluidos_service.dart';
 import '../../vista_ejecutiva/services/vista_ejecutiva_service.dart'
     show ChoferRankingItem, KpiIcm, PuntoTendencia;
@@ -84,11 +85,15 @@ class IcmHubService {
 
   /// ICM OFICIAL de la flota del mes en curso vs el mes anterior + top 5
   /// mejores/peores. Filtra los DNIs excluidos (testers/tanques) con
-  /// `ExcluidosService`. Si el mes en curso no tiene doc aún, cae a 0
-  /// (la UI lo refleja con "—").
+  /// `ExcluidosService` + DNIs cuyo rol en EMPLEADOS no sea CHOFER
+  /// (PLANTA / ADMIN / etc. quedan fuera del ranking ICM). Si el mes en
+  /// curso no tiene doc aún, cae a 0 (la UI lo refleja con "—").
   static Future<_IcmFlotaYTops> _icmFlotaConTops(FirebaseFirestore db) async {
     final excluidos = await ExcluidosService.cargar(db: db);
-    excluir(String dni) => ExcluidosService.esExcluido(excluidos, dni: dni);
+    final dnisChofer = await ChoferesService.cargarDnisChofer(db: db);
+    excluir(String dni) =>
+        ExcluidosService.esExcluido(excluidos, dni: dni) ||
+        (dnisChofer != null && !dnisChofer.contains(dni));
     final cargados = await Future.wait([
       IcmOficialService.cargarPeriodo(
         db,

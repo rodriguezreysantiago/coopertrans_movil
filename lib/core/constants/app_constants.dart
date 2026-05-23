@@ -38,7 +38,12 @@ class AppRoutes {
   static const String adminIcmRanking = '/admin_icm_ranking';
   static const String adminIcmReporteSemanal = '/admin_icm_reporte_semanal';
   static const String adminIcmMapaCalor = '/admin_icm_mapa_calor';
-  // adminIcmDetalleChofer eliminado 2026-05-23 — baja utilidad.
+  /// Detalle individual de un chofer en ICM (ICM mes + comparativa vs mes
+  /// anterior + urbano/no-urbano + infracciones). El tile directo del hub
+  /// quedó eliminado 2026-05-23 (baja utilidad como entry point general),
+  /// pero la pantalla se mantiene como destino de los tap → detalle desde
+  /// el ranking + top 5 mejores/peores del hub + top 5 del reporte mensual.
+  static const String adminIcmDetalleChofer = '/admin_icm_detalle_chofer';
   // Pantallas Volvo restantes (mantienen `verAlertasVolvo` por ahora):
   static const String adminDescargasPto = '/admin_descargas_pto';
   static const String adminMapaVolvo = '/admin_mapa_volvo';

@@ -20,6 +20,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' as intl;
 
+import '../../../core/services/choferes_service.dart';
 import '../../../core/services/excluidos_service.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
@@ -115,11 +116,16 @@ class ReportIcmService {
     try {
       final db = FirebaseFirestore.instance;
 
-      // Excluir tanqueros + testers de las listas (no de los totales
-      // auditados de Sitrack, que se muestran tal cual).
+      // Excluir tanqueros + testers de las listas + DNIs cuyo rol en
+      // EMPLEADOS no sea CHOFER (PLANTA / ADMIN / etc. quedan fuera del
+      // ranking ICM, Santiago 2026-05-23). Los totales auditados de
+      // Sitrack van tal cual los reporta (la cabecera del Excel los
+      // muestra sin filtrar).
       final excluidos = await ExcluidosService.cargar(db: db);
+      final dnisChofer = await ChoferesService.cargarDnisChofer(db: db);
       excluir(String dni) =>
-          ExcluidosService.esExcluido(excluidos, dni: dni);
+          ExcluidosService.esExcluido(excluidos, dni: dni) ||
+          (dnisChofer != null && !dnisChofer.contains(dni));
       excluirPat(String pat) =>
           ExcluidosService.esExcluido(excluidos, patente: pat);
 
