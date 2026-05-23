@@ -287,6 +287,7 @@ class ReportIcmService {
   static void _hojaChoferes(ex.Excel excel, IcmOficialPeriodo p) {
     final hoja = excel['CHOFERES'];
     const headers = [
+      'PUESTO',
       'ICM',
       'SEVERIDAD',
       'CHOFER',
@@ -304,24 +305,32 @@ class ReportIcmService {
     for (var i = 0; i < headers.length; i++) {
       _setHeader(hoja, i, 0, headers[i]);
     }
-    // Peor→mejor (incluye los "sin actividad" al final).
+    // Mejor→peor (#1 = mejor chofer del período), igual orden que la app.
+    // Los "sin actividad / sin DNI" van al final, SIN puesto (no compiten).
     final filas = p.choferesParaRanking;
+    final totalRankeables = p.choferesConActividad.length;
     for (var r = 0; r < filas.length; r++) {
       final c = filas[r];
       final row = r + 1;
-      _setNum(hoja, 0, row, c.icm);
-      _setTxt(hoja, 1, row, c.severidadLabel);
-      _setTxt(hoja, 2, row, c.nombre);
-      _setTxt(hoja, 3, row, c.dni);
-      _setNum(hoja, 4, row, c.icmUrbano);
-      _setNum(hoja, 5, row, c.icmNoUrbano);
-      _setInt(hoja, 6, row, c.infAltas);
-      _setInt(hoja, 7, row, c.infMedias);
-      _setInt(hoja, 8, row, c.infLeves);
-      _setInt(hoja, 9, row, c.excesosVelocidad);
-      _setInt(hoja, 10, row, c.conduccionAgresiva);
-      _setNum(hoja, 11, row, c.distanciaKm, style: _styleKm);
-      _setNum(hoja, 12, row, c.tiempoH);
+      final esRankeable = !c.sinActividad && c.tieneDni;
+      if (esRankeable) {
+        _setTxt(hoja, 0, row, '#${r + 1} / $totalRankeables');
+      } else {
+        _setTxt(hoja, 0, row, '—');
+      }
+      _setNum(hoja, 1, row, c.icm);
+      _setTxt(hoja, 2, row, c.severidadLabel);
+      _setTxt(hoja, 3, row, c.nombre);
+      _setTxt(hoja, 4, row, c.dni);
+      _setNum(hoja, 5, row, c.icmUrbano);
+      _setNum(hoja, 6, row, c.icmNoUrbano);
+      _setInt(hoja, 7, row, c.infAltas);
+      _setInt(hoja, 8, row, c.infMedias);
+      _setInt(hoja, 9, row, c.infLeves);
+      _setInt(hoja, 10, row, c.excesosVelocidad);
+      _setInt(hoja, 11, row, c.conduccionAgresiva);
+      _setNum(hoja, 12, row, c.distanciaKm, style: _styleKm);
+      _setNum(hoja, 13, row, c.tiempoH);
     }
     xu.autoFitColumnas(hoja, headers.length, filas.length + 1);
   }

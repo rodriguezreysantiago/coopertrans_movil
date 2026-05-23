@@ -151,10 +151,14 @@ void main() {
       expect(peores.last.nombre, 'GOMEZ ANA');
     });
 
-    test('choferesParaRanking: peor arriba, sin actividad al final', () {
+    test('choferesParaRanking: mejor arriba, sin actividad al final', () {
+      // Santiago 2026-05-23: #1 = mejor (gamification estilo podio).
+      // Antes era "peor arriba" para enfoque operativo.
       final r = p.choferesParaRanking;
-      expect(r.first.nombre, 'LESCANO GASTON'); // peor (icm 61.1)
-      expect(r.last.sinActividad, isTrue); // la unidad sin chofer
+      expect(r.first.nombre, 'GOMEZ ANA'); // mejor (icm 3.0)
+      expect(r[1].nombre, 'PEREZ JUAN'); // medio (icm 25.0)
+      expect(r[2].nombre, 'LESCANO GASTON'); // peor rankeable (icm 61.1)
+      expect(r.last.sinActividad, isTrue); // la unidad sin chofer, al final
     });
 
     test('conteoPorSeveridad cuenta solo los activos', () {
@@ -175,8 +179,9 @@ void main() {
       expect(p.choferes.any((c) => c.dni == '37389867'), isFalse);
       // El de dni vacío (unidad sin chofer) NO se filtra por DNI.
       expect(p.choferes.any((c) => c.nombre.contains('Vecchi Ariel')), isTrue);
-      // El peor visible ahora es PEREZ (icm 25).
-      expect(p.choferesParaRanking.first.nombre, 'PEREZ JUAN');
+      // Con orden "mejor arriba", el primer rankeable visible (con LESCANO
+      // excluido) sigue siendo GOMEZ ANA (icm 3.0 < PEREZ icm 25.0).
+      expect(p.choferesParaRanking.first.nombre, 'GOMEZ ANA');
     });
   });
 

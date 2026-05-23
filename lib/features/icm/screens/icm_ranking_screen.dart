@@ -144,7 +144,7 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
                 }
                 // ORDEN: mejor arriba (#1 = mejor chofer del período).
                 // Los sin actividad/DNI quedan al final (no compiten).
-                final orden = periodo.choferesOrdenadosMejorPrimero;
+                final orden = periodo.choferesParaRanking;
                 // Posición numerada: solo cuenta a los rankeables (con
                 // actividad y DNI). Los grises de abajo van sin posición
                 // para no confundir "está en el puesto N" con "no compite".

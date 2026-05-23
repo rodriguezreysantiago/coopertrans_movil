@@ -283,24 +283,17 @@ class IcmOficialPeriodo {
   List<IcmOficialChofer> get choferesConActividad =>
       choferes.where((c) => !c.sinActividad && c.tieneDni).toList();
 
-  /// Ranking para mostrar PEOR primero (ICM más alto), luego el resto
-  /// (sin actividad o sin DNI) al final, greyed y no navegable.
-  /// Usado por el reporte Excel (`report_icm.dart`) — el operador atiende
-  /// primero a los de mayor riesgo.
+  /// Ranking para mostrar MEJOR primero (ICM más bajo = posición #1),
+  /// luego el resto (sin actividad o sin DNI) al final, greyed y sin
+  /// puesto numérico. Lectura tipo podio (gamification) — pedido por
+  /// Santiago 2026-05-23 para la pantalla y el Excel.
+  ///
+  /// Antes ordenaba PEOR arriba (el operador "atendía primero" a los de
+  /// mayor riesgo). El cambio simplifica el modelo: un solo orden en
+  /// toda la app + el reporte. Si en algún momento se necesita el listado
+  /// peor-arriba para foco operativo, conviene crear un getter aparte o
+  /// invertir esta lista en el caller.
   List<IcmOficialChofer> get choferesParaRanking {
-    final rankeables = [...choferesConActividad]
-      ..sort((a, b) => b.icm.compareTo(a.icm)); // desc: peor arriba
-    final resto =
-        choferes.where((c) => c.sinActividad || !c.tieneDni).toList();
-    return [...rankeables, ...resto];
-  }
-
-  /// Ranking MEJOR primero (ICM más bajo, gamification: posición #1 = mejor
-  /// chofer). Los sin actividad/DNI al final, igual que `choferesParaRanking`.
-  /// Usado por la pantalla `IcmRankingScreen` desde 2026-05-23 — Santiago
-  /// pidió invertirla para que sea legible como un podio (#1 arriba = mejor).
-  /// El Excel sigue con peor arriba para enfoque operativo.
-  List<IcmOficialChofer> get choferesOrdenadosMejorPrimero {
     final rankeables = [...choferesConActividad]
       ..sort((a, b) => a.icm.compareTo(b.icm)); // asc: mejor arriba
     final resto =
