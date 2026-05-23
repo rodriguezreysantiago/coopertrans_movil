@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/icm_oficial_service.dart';
+import '../services/sitrack_eventos_service.dart';
 
 /// Detalle ICM individual de un chofer, con el número **oficial de Sitrack**
 /// (lo que audita YPF, MÁS BAJO = MEJOR):
@@ -12,6 +13,9 @@ import '../services/icm_oficial_service.dart';
 ///   - ICM urbano vs no-urbano (dónde maneja peor).
 ///   - Desglose de infracciones (altas / medias / leves) + excesos de
 ///     velocidad + conducción agresiva.
+///   - **Detalle de eventos** (desde SITRACK_EVENTOS): qué tipo, cuándo,
+///     dónde, a qué velocidad y con qué límite. Para que el operador
+///     entienda QUÉ disparó los counters de infracciones.
 ///
 /// Se llega desde el ranking / reporte / card de inicio con el DNI como
 /// argumento de ruta.
@@ -49,12 +53,36 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
     // distinto / vacío).
     final empSnap = await db.collection('EMPLEADOS').doc(dni).get();
     final nombreEmp = (empSnap.data()?['NOMBRE'] ?? '').toString().trim();
+    // Eventos individuales del período actual desde SITRACK_EVENTOS.
+    // Si el actual está vacío, caemos al anterior para no mostrar lista
+    // vacía si el chofer no manejó este mes (mismo patrón de fallback
+    // que la tendencia ICM en el hub).
+    final periodoConDatos =
+        periodos[0] != null && !periodos[0]!.vacio ? periodos[0] : periodos[1];
+    List<SitrackEventoChofer> eventos = const [];
+    if (periodoConDatos != null) {
+      final desde = DateTime.tryParse(periodoConDatos.fechaDesde);
+      final hastaBase = DateTime.tryParse(periodoConDatos.fechaHasta);
+      // El doc oficial trae `fecha_hasta` como YYYY-MM-DD (00:00 ART).
+      // Sumamos casi un día para incluir TODOS los eventos de la fecha hasta.
+      final hasta = hastaBase?.add(
+          const Duration(hours: 23, minutes: 59, seconds: 59));
+      if (desde != null && hasta != null) {
+        eventos = await SitrackEventosService.cargarEventosChofer(
+          db: db,
+          dni: dni,
+          desde: desde,
+          hasta: hasta,
+        );
+      }
+    }
     return _DetalleData(
       actual: _buscar(periodos[0], dni),
       anterior: _buscar(periodos[1], dni),
       idActual: idActual,
       idAnterior: idAnterior,
       nombreEmpleado: nombreEmp,
+      eventos: eventos,
     );
   }
 
@@ -196,6 +224,10 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
                     ),
                   ],
                 ),
+                const SizedBox(height: 18),
+                const _SeccionTitulo('Detalle de eventos'),
+                const SizedBox(height: 8),
+                _ListaEventos(eventos: data.eventos),
                 const SizedBox(height: 20),
                 const _NotaFuente(),
               ],
@@ -213,6 +245,7 @@ class _DetalleData {
   final String idActual;
   final String idAnterior;
   final String nombreEmpleado;
+  final List<SitrackEventoChofer> eventos;
 
   const _DetalleData({
     required this.actual,
@@ -220,6 +253,7 @@ class _DetalleData {
     required this.idActual,
     required this.idAnterior,
     required this.nombreEmpleado,
+    this.eventos = const [],
   });
 }
 
@@ -481,6 +515,268 @@ class _SeccionTitulo extends StatelessWidget {
   }
 }
 
+/// Lista de eventos individuales del período (desde SITRACK_EVENTOS).
+/// Stateful porque mantiene el filtro por tipo seleccionado.
+class _ListaEventos extends StatefulWidget {
+  final List<SitrackEventoChofer> eventos;
+  const _ListaEventos({required this.eventos});
+
+  @override
+  State<_ListaEventos> createState() => _ListaEventosState();
+}
+
+class _ListaEventosState extends State<_ListaEventos> {
+  /// `null` = "todos". Si está seteado, filtra por `event_name`.
+  String? _filtroTipo;
+
+  /// Máximo a mostrar de entrada — la mayoría de los choferes
+  /// tienen >100 eventos por mes, lista gigante ahoga al operador.
+  /// El botón "Mostrar más" levanta el tope.
+  int _maxVisibles = 30;
+
+  @override
+  Widget build(BuildContext context) {
+    final eventos = widget.eventos;
+    if (eventos.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Center(
+          child: Text(
+            'Sin eventos individuales para este período.\n'
+            'Si el chofer manejó, puede que Sitrack todavía no haya enviado '
+            'los detalles (se sincroniza cada 5 min).',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.45),
+              fontSize: 12,
+              height: 1.4,
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Cuento por tipo para los chips de filtro (top 8 más frecuentes).
+    final conteoPorTipo = <String, int>{};
+    for (final e in eventos) {
+      conteoPorTipo[e.eventName] = (conteoPorTipo[e.eventName] ?? 0) + 1;
+    }
+    final tiposFrecuentes = conteoPorTipo.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    final filtrados = _filtroTipo == null
+        ? eventos
+        : eventos.where((e) => e.eventName == _filtroTipo).toList();
+    final visibles = filtrados.take(_maxVisibles).toList();
+    final hayMas = filtrados.length > visibles.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Resumen + chips
+        Text(
+          '${eventos.length} evento${eventos.length == 1 ? "" : "s"} '
+          'en el período',
+          style: const TextStyle(color: Colors.white60, fontSize: 11),
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: 36,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              _ChipFiltro(
+                label: 'Todos (${eventos.length})',
+                selected: _filtroTipo == null,
+                onTap: () => setState(() {
+                  _filtroTipo = null;
+                  _maxVisibles = 30;
+                }),
+              ),
+              for (final t in tiposFrecuentes.take(8))
+                Padding(
+                  padding: const EdgeInsets.only(left: 6),
+                  child: _ChipFiltro(
+                    label: '${t.key} (${t.value})',
+                    selected: _filtroTipo == t.key,
+                    onTap: () => setState(() {
+                      _filtroTipo = t.key;
+                      _maxVisibles = 30;
+                    }),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        // Lista
+        ...visibles.map((e) => _EventoCard(evento: e)),
+        if (hayMas) ...[
+          const SizedBox(height: 8),
+          Center(
+            child: TextButton.icon(
+              onPressed: () => setState(() => _maxVisibles += 50),
+              icon: const Icon(Icons.expand_more, size: 18),
+              label: Text('Mostrar más '
+                  '(${filtrados.length - visibles.length} restantes)'),
+            ),
+          ),
+        ],
+        if (eventos.length >= 500) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Mostrando los 500 eventos más recientes del período.',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.4),
+              fontSize: 11,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _ChipFiltro extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ChipFiltro({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          color: selected ? Colors.black : Colors.white70,
+        ),
+      ),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      visualDensity: VisualDensity.compact,
+    );
+  }
+}
+
+/// Card compacta de un evento: tipo + timestamp ART + ubicación +
+/// velocidad si aplica. Si fue exceso cartográfico, fondo rojo claro.
+class _EventoCard extends StatelessWidget {
+  final SitrackEventoChofer evento;
+  const _EventoCard({required this.evento});
+
+  @override
+  Widget build(BuildContext context) {
+    final exceso = evento.esExcesoCartografico;
+    final tieneVel = evento.speed != null;
+    return Card(
+      elevation: 0,
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      color: exceso
+          ? Colors.red.shade900.withValues(alpha: 0.18)
+          : Colors.white.withValues(alpha: 0.04),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(6),
+        side: BorderSide(
+          color: exceso
+              ? Colors.redAccent.withValues(alpha: 0.5)
+              : Colors.white12,
+          width: 1,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    evento.eventName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: exceso ? Colors.redAccent : Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  AppFormatters.formatearFechaHoraSinSegundos(
+                      evento.reportDate),
+                  style: const TextStyle(
+                    color: Colors.white60,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+            if ((evento.location ?? '').isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(Icons.place,
+                      size: 12, color: Colors.white38),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      evento.location!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (tieneVel || evento.assetName != null) ...[
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 12,
+                runSpacing: 2,
+                children: [
+                  if (tieneVel)
+                    Text(
+                      evento.cartographyLimitSpeed != null
+                          ? '${evento.speed!.toStringAsFixed(0)} km/h '
+                              '· límite ${evento.cartographyLimitSpeed!.toStringAsFixed(0)} km/h'
+                          : '${evento.speed!.toStringAsFixed(0)} km/h',
+                      style: TextStyle(
+                        color: exceso ? Colors.redAccent : Colors.white60,
+                        fontSize: 11,
+                        fontWeight: exceso ? FontWeight.w600 : null,
+                      ),
+                    ),
+                  if ((evento.assetName ?? '').isNotEmpty)
+                    Text(
+                      'Unidad: ${evento.assetName}',
+                      style: const TextStyle(
+                        color: Colors.white38,
+                        fontSize: 11,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _NotaFuente extends StatelessWidget {
   const _NotaFuente();
 
@@ -488,7 +784,9 @@ class _NotaFuente extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       'Fuente: tablero ICM oficial de Sitrack (lo que audita YPF). '
-      'Escala más baja = mejor. Se actualiza una vez al día.',
+      'Escala más baja = mejor. Se actualiza una vez al día. '
+      'El detalle de eventos viene del stream /files/reports de Sitrack '
+      '(actualizado cada 5 min).',
       style: TextStyle(
         color: Colors.white.withValues(alpha: 0.35),
         fontSize: 11,
