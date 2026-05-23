@@ -1,16 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/constants/app_constants.dart';
 import '../../../core/services/excluidos_service.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/icm_oficial_service.dart';
 
 /// Ranking de choferes según el ICM **oficial de Sitrack** (lo que audita
-/// YPF). Escala MÁS BAJO = MEJOR. Se ordena PEOR arriba (ICM más alto)
-/// para que el admin aborde primero a los de mayor riesgo; los "sin
-/// actividad" quedan grises al final. Click en una fila → detalle.
+/// YPF). Escala MÁS BAJO = MEJOR. Se ordena MEJOR arriba (#1 = mejor
+/// chofer del período, gamification estilo podio). Los "sin actividad"
+/// quedan grises al final. Búsqueda client-side por nombre o DNI.
 ///
 /// Reemplaza el ranking CESVI estimado (que daba números optimistas que no
 /// coincidían con el tablero de YPF). Período mensual: mes actual / anterior.
@@ -26,15 +25,40 @@ enum _Periodo { semanaActual, mesActual, mesAnterior }
 class _IcmRankingScreenState extends State<IcmRankingScreen> {
   _Periodo _periodo = _Periodo.mesActual;
   Future<IcmOficialPeriodo?>? _future;
+  final TextEditingController _busqueda = TextEditingController();
+  // El filtro normalizado se cachea para no recomputar lower+trim por cada
+  // chofer en cada keystroke.
+  String _filtroNorm = '';
 
   @override
   void initState() {
     super.initState();
     _recargar();
+    _busqueda.addListener(() {
+      setState(() => _filtroNorm = _normalizar(_busqueda.text));
+    });
+  }
+
+  @override
+  void dispose() {
+    _busqueda.dispose();
+    super.dispose();
   }
 
   void _recargar() {
     _future = _cargar(_periodo);
+  }
+
+  /// Normaliza un string para búsqueda case-insensitive y tolerante a
+  /// acentos: "Pérez" → "perez". Sin paquete extra (App. no usa unorm).
+  static String _normalizar(String s) {
+    const con = 'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ';
+    const sin = 'aaaaaeeeeiiiiooooouuuuncAAAAAEEEEIIIIOOOOOUUUUNC';
+    var out = s.toLowerCase().trim();
+    for (var i = 0; i < con.length; i++) {
+      out = out.replaceAll(con[i], sin[i]);
+    }
+    return out;
   }
 
   /// (id del doc, colección Firestore, label legible) según el período.
@@ -93,6 +117,7 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
               _recargar();
             }),
           ),
+          _Buscador(controller: _busqueda),
           Expanded(
             child: FutureBuilder<IcmOficialPeriodo?>(
               future: _future,
@@ -117,8 +142,35 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
                     color: Colors.white54,
                   );
                 }
-                final filas = periodo.choferesParaRanking;
+                // ORDEN: mejor arriba (#1 = mejor chofer del período).
+                // Los sin actividad/DNI quedan al final (no compiten).
+                final orden = periodo.choferesOrdenadosMejorPrimero;
+                // Posición numerada: solo cuenta a los rankeables (con
+                // actividad y DNI). Los grises de abajo van sin posición
+                // para no confundir "está en el puesto N" con "no compite".
+                final rankeables = periodo.choferesConActividad.length;
+                // Filtro por nombre o DNI (normalizado: case-insensitive +
+                // sin acentos). Aplicado después del orden para no romper
+                // la posición numerada.
+                final filas = _filtroNorm.isEmpty
+                    ? orden
+                    : orden
+                        .where((c) =>
+                            _normalizar(c.nombre).contains(_filtroNorm) ||
+                            c.dni.contains(_filtroNorm))
+                        .toList();
                 final label = _ref(_periodo).label;
+                if (filas.isEmpty) {
+                  return Column(
+                    children: [
+                      _HeaderFlota(periodo: periodo, label: label),
+                      _MensajeCentro(
+                        'Sin coincidencias para "${_busqueda.text}".',
+                        color: Colors.white54,
+                      ),
+                    ],
+                  );
+                }
                 return ListView.builder(
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
                   itemCount: filas.length + 1,
@@ -127,13 +179,68 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
                       return _HeaderFlota(periodo: periodo, label: label);
                     }
                     final c = filas[i - 1];
-                    return _FilaChofer(posicion: i, chofer: c);
+                    // Posición = índice en el orden ORIGINAL (no en el
+                    // filtrado), para que filtrar no cambie el #N de un
+                    // chofer. Los sin actividad/DNI van sin posición.
+                    final esRankeable =
+                        !c.sinActividad && c.tieneDni;
+                    final posicion = esRankeable ? orden.indexOf(c) + 1 : null;
+                    return _FilaChofer(
+                      posicion: posicion,
+                      totalRankeables: rankeables,
+                      chofer: c,
+                    );
                   },
                 );
               },
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _Buscador extends StatelessWidget {
+  final TextEditingController controller;
+  const _Buscador({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+      child: TextField(
+        controller: controller,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'Buscar por nombre o DNI',
+          hintStyle:
+              const TextStyle(color: Colors.white38, fontSize: 13),
+          prefixIcon: const Icon(Icons.search,
+              color: Colors.white54, size: 20),
+          suffixIcon: controller.text.isEmpty
+              ? null
+              : IconButton(
+                  icon: const Icon(Icons.close,
+                      color: Colors.white54, size: 18),
+                  splashRadius: 18,
+                  visualDensity: VisualDensity.compact,
+                  onPressed: controller.clear,
+                ),
+          isDense: true,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide:
+                const BorderSide(color: Colors.white24, width: 1),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide:
+                const BorderSide(color: Colors.white24, width: 1),
+          ),
+        ),
       ),
     );
   }
@@ -319,20 +426,31 @@ class _ChipSeveridad extends StatelessWidget {
 }
 
 class _FilaChofer extends StatelessWidget {
-  final int posicion;
+  /// Posición en el ranking (`null` = sin actividad/DNI, no compite).
+  final int? posicion;
+
+  /// Cantidad total de choferes rankeables del período (para mostrar
+  /// "#3 de 28" — da contexto del podio).
+  final int totalRankeables;
+
   final IcmOficialChofer chofer;
 
-  const _FilaChofer({required this.posicion, required this.chofer});
+  const _FilaChofer({
+    required this.posicion,
+    required this.totalRankeables,
+    required this.chofer,
+  });
 
   @override
   Widget build(BuildContext context) {
     final color = colorSeveridadIcm(chofer.severidad);
-    final esNavegable = chofer.tieneDni && !chofer.sinActividad;
     final icmStr =
         chofer.sinActividad ? '—' : chofer.icm.toStringAsFixed(1);
     final dniStr = chofer.tieneDni
         ? 'DNI ${AppFormatters.formatearDNI(chofer.dni)}'
         : 'Sin chofer identificado';
+    final posStr =
+        posicion == null ? '—' : '#$posicion${totalRankeables > 0 ? '/$totalRankeables' : ''}';
     return Card(
       elevation: 1,
       margin: const EdgeInsets.symmetric(vertical: 4),
@@ -344,12 +462,12 @@ class _FilaChofer extends StatelessWidget {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
         leading: SizedBox(
-          width: 58,
+          width: 64,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                '#$posicion',
+                posStr,
                 style: const TextStyle(color: Colors.white60, fontSize: 11),
               ),
               const SizedBox(height: 2),
@@ -400,16 +518,6 @@ class _FilaChofer extends StatelessWidget {
             ],
           ),
         ),
-        trailing: esNavegable
-            ? const Icon(Icons.chevron_right, color: Colors.white38)
-            : null,
-        onTap: esNavegable
-            ? () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.adminIcmDetalleChofer,
-                  arguments: chofer.dni,
-                )
-            : null,
       ),
     );
   }

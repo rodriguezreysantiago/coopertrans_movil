@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/constants/app_constants.dart';
 import '../../../core/services/excluidos_service.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
@@ -535,13 +534,6 @@ class _ListaChoferes extends StatelessWidget {
                     fontWeight: FontWeight.bold),
               ),
             ),
-            onTap: c.tieneDni
-                ? () => Navigator.pushNamed(
-                      context,
-                      AppRoutes.adminIcmDetalleChofer,
-                      arguments: c.dni,
-                    )
-                : null,
           ),
         );
       }).toList(),

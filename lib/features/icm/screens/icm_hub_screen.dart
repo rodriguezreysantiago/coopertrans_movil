@@ -16,13 +16,16 @@ import '../services/icm_hub_service.dart';
 ///   1. Banner explicativo (escala oficial Sitrack — más bajo = mejor).
 ///   2. KPI grande: ICM flota del mes + variación vs mes anterior.
 ///   3. Tendencia ICM oficial Sitrack — por día del mes en curso.
-///   4. Grid de 4 sub-pantallas:
-///      - RANKING: choferes ordenados por ICM.
+///   4. Grid de 3 sub-pantallas:
+///      - RANKING: choferes ordenados por ICM (con buscador).
 ///      - REPORTE MENSUAL: flota + severidad + top 5.
 ///      - MAPA DE CALOR: distribución geográfica de infracciones.
-///      - DETALLE POR CHOFER: drill-down individual.
 ///   5. Top 5 mejores choferes (verde).
 ///   6. Top 5 a mejorar (rojo).
+///
+/// Tile "DETALLE POR CHOFER" eliminado 2026-05-23 — el operador prefiere
+/// abrir el portal Sitrack para drill-down real; la pantalla daba poco
+/// valor agregado (mismos números que ya aparecen en el reporte).
 ///
 /// Los widgets 2-3-5-6 antes vivían en el panel de inicio del admin
 /// (mudados al ICM Hub 2026-05-23 por decisión de Santiago — pertenecen
@@ -297,7 +300,9 @@ class _GridSubpantallas extends StatelessWidget {
     return LayoutBuilder(
       builder: (ctx, constraints) {
         final w = constraints.maxWidth;
-        final cols = w >= 800 ? 4 : (w >= 540 ? 2 : 1);
+        // 3 tiles (antes 4; el de DETALLE POR CHOFER se sacó 2026-05-23).
+        // Desktop 3×1, tablet 2×2 con el 3º solo en la 2ª fila, mobile 1 col.
+        final cols = w >= 800 ? 3 : (w >= 540 ? 2 : 1);
         return GridView.count(
           crossAxisCount: cols,
           shrinkWrap: true,
@@ -308,7 +313,7 @@ class _GridSubpantallas extends StatelessWidget {
           children: const [
             _HubTile(
               titulo: 'RANKING',
-              subtitulo: 'Choferes ordenados por ICM',
+              subtitulo: 'Choferes ordenados por ICM (#1 = mejor)',
               icono: Icons.leaderboard_outlined,
               color: AppColors.accentBlue,
               ruta: AppRoutes.adminIcmRanking,
@@ -326,13 +331,6 @@ class _GridSubpantallas extends StatelessWidget {
               icono: Icons.map_outlined,
               color: AppColors.accentOrange,
               ruta: AppRoutes.adminIcmMapaCalor,
-            ),
-            _HubTile(
-              titulo: 'DETALLE POR CHOFER',
-              subtitulo: 'Histórico individual + gráficos',
-              icono: Icons.person_search_outlined,
-              color: AppColors.accentTeal,
-              ruta: AppRoutes.adminIcmDetalleChofer,
             ),
           ],
         );

@@ -38,7 +38,7 @@ class AppRoutes {
   static const String adminIcmRanking = '/admin_icm_ranking';
   static const String adminIcmReporteSemanal = '/admin_icm_reporte_semanal';
   static const String adminIcmMapaCalor = '/admin_icm_mapa_calor';
-  static const String adminIcmDetalleChofer = '/admin_icm_detalle_chofer';
+  // adminIcmDetalleChofer eliminado 2026-05-23 — baja utilidad.
   // Pantallas Volvo restantes (mantienen `verAlertasVolvo` por ahora):
   static const String adminDescargasPto = '/admin_descargas_pto';
   static const String adminMapaVolvo = '/admin_mapa_volvo';

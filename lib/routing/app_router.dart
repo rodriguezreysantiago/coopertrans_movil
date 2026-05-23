@@ -60,7 +60,6 @@ import '../features/icm/screens/icm_hub_screen.dart';
 import '../features/icm/screens/icm_ranking_screen.dart';
 import '../features/icm/screens/icm_reporte_semanal_screen.dart';
 import '../features/icm/screens/icm_mapa_calor_screen.dart';
-import '../features/icm/screens/icm_detalle_chofer_screen.dart';
 
 import '../features/cachatore/screens/cachatore_hub_screen.dart';
 
@@ -297,11 +296,9 @@ class AppRouter {
           _protegerAdmin(const IcmMapaCalorScreen(), Capability.verIcm),
           settings,
         );
-      case AppRoutes.adminIcmDetalleChofer:
-        return _buildRoute(
-          _protegerAdmin(const IcmDetalleChoferScreen(), Capability.verIcm),
-          settings,
-        );
+      // case AppRoutes.adminIcmDetalleChofer: eliminado 2026-05-23 —
+      // baja utilidad (los mismos números aparecen en RANKING y
+      // REPORTE MENSUAL; el operador prefiere drill-down en Sitrack).
 
       // ================= ALERTAS VOLVO (LEGACY) =================
       // Mantenido por compat para shortcuts viejos. NO está en el menú
