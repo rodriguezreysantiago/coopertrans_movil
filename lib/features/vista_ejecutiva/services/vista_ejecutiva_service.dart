@@ -1,24 +1,29 @@
-// Servicio que arma los KPIs del módulo Vista Ejecutiva.
+// Servicio que arma los KPIs del módulo Vista Ejecutiva (= panel de inicio
+// del admin).
 //
 // Filosofía: reusar al máximo la data ya pre-calculada por crons
-// (STATS/dashboard cada 5 min + ICM_SEMANAL/{id} semanal). Solo lo que
-// no esté pre-agregado se queryea on-the-fly (con limit para mantener
-// los reads controlados).
+// (STATS/dashboard cada 5 min). Solo lo que no esté pre-agregado se queryea
+// on-the-fly (con limit para mantener los reads controlados).
 //
 // Sin caching propio — el StreamBuilder/FutureBuilder del lado UI
 // se encarga del refresh. Si en el futuro abrimos la pantalla muy
 // seguido conviene memoizar el último snapshot por unos minutos.
+//
+// Decisión 2026-05-23 (Santiago): los KPIs/widgets de ICM (icmFlota,
+// tendencia diaria, top 5 mejores, top 5 a mejorar) se mudaron al módulo
+// ICM (`IcmHubService` + `IcmHubScreen`). El panel de inicio se queda con
+// los KPIs operativos rápidos: viajes del mes, alertas críticas, eficiencia
+// de combustible y viajes por semana. Las clases compartidas (`KpiIcm`,
+// `PuntoTendencia`, `ChoferRankingItem`) siguen viviendo acá porque los
+// widgets de gráfico/top que las consumen también, y los reusa el ICM Hub.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-import '../../../core/services/excluidos_service.dart';
-import '../../icm/services/icm_oficial_service.dart';
-
-/// Snapshot completo de KPIs para la Vista Ejecutiva. Se carga 1 vez
-/// y se renderiza en pantalla; refresh manual pull-to-refresh.
+/// Snapshot completo de KPIs para el panel de inicio del admin (antigua
+/// Vista Ejecutiva). Se carga 1 vez y se renderiza en pantalla; refresh
+/// manual pull-to-refresh.
 class KpisVistaEjecutiva {
   final KpiMes viajesDelMes;
-  final KpiIcm icmFlota;
   final KpiSimple choferesActivos;
   final KpiSimple alertasCriticas;
 
@@ -28,30 +33,16 @@ class KpisVistaEjecutiva {
   /// más bajo = mejor.
   final KpiEficiencia eficienciaCombustible;
 
-  /// Línea ICM últimas 12 semanas (label + valor).
-  /// Orden cronológico ascendente.
-  final List<PuntoTendencia> tendenciaIcm;
-
   /// Barras viajes últimas 8 semanas (label + valor).
   /// Orden cronológico ascendente.
   final List<PuntoTendencia> viajesPorSemana;
 
-  /// Top 5 mejores choferes por ICM de la última semana cerrada.
-  final List<ChoferRankingItem> top5Mejores;
-
-  /// Top 5 a mejorar (peores ICM) de la última semana cerrada.
-  final List<ChoferRankingItem> top5Peores;
-
   const KpisVistaEjecutiva({
     required this.viajesDelMes,
-    required this.icmFlota,
     required this.choferesActivos,
     required this.alertasCriticas,
     required this.eficienciaCombustible,
-    required this.tendenciaIcm,
     required this.viajesPorSemana,
-    required this.top5Mejores,
-    required this.top5Peores,
   });
 }
 
@@ -201,7 +192,10 @@ class VistaEjecutivaService {
   VistaEjecutivaService._();
 
   /// Carga todos los KPIs del tablero en un solo Future. Las queries
-  /// independientes corren en paralelo con `Future.wait`.
+  /// independientes corren en paralelo con `Future.wait`. Los KPIs de ICM
+  /// (icm flota, tendencia diaria, top 5) NO se cargan acá — viven en
+  /// `IcmHubService.cargarKpis()` y se muestran en el módulo ICM
+  /// (decisión Santiago 2026-05-23).
   static Future<KpisVistaEjecutiva> cargar({
     required FirebaseFirestore db,
   }) async {
@@ -210,24 +204,15 @@ class VistaEjecutivaService {
     // Lanzar en paralelo — son queries independientes.
     final results = await Future.wait([
       _viajesDelMes(db, ahora),
-      _icmFlota(db, ahora),
       _statsSnapshot(db),
-      _tendenciaIcm(db, ahora),
       _viajesPorSemana(db, ahora, semanas: 8),
       _eficienciaCombustible(db, ahora),
     ]);
 
     final viajesMes = results[0] as KpiMes;
-    final icm = results[1] as _IcmDosSemanas;
-    final stats = results[2] as Map<String, dynamic>;
-    final tendIcm = results[3] as List<PuntoTendencia>;
-    final viajesSem = results[4] as List<PuntoTendencia>;
-    final eficiencia = results[5] as KpiEficiencia;
-
-    // De ICM_SEMANAL ya viene el top 5 mejores y peores — los
-    // extraemos del doc de la última semana cerrada (que ya pedimos).
-    final mejores = icm.top5Mejores;
-    final peores = icm.top5Peores;
+    final stats = results[1] as Map<String, dynamic>;
+    final viajesSem = results[2] as List<PuntoTendencia>;
+    final eficiencia = results[3] as KpiEficiencia;
 
     final choferesActivos = (stats['choferes_activos'] as num?)?.toInt() ?? 0;
     final unidadesAsign = (stats['unidades_asignadas'] as num?)?.toInt() ?? 0;
@@ -239,11 +224,6 @@ class VistaEjecutivaService {
 
     return KpisVistaEjecutiva(
       viajesDelMes: viajesMes,
-      icmFlota: KpiIcm.fromActualYAnterior(
-        icm.actual,
-        icm.anterior,
-        icm.choferesEnPromedio,
-      ),
       choferesActivos: KpiSimple(
         valor: choferesActivos,
         sublabel: '$unidadesAsign con unidad asignada',
@@ -255,10 +235,7 @@ class VistaEjecutivaService {
             : '$vencidos vencidos · $pendientes revisiones',
       ),
       eficienciaCombustible: eficiencia,
-      tendenciaIcm: tendIcm,
       viajesPorSemana: viajesSem,
-      top5Mejores: mejores,
-      top5Peores: peores,
     );
   }
 
@@ -319,74 +296,6 @@ class VistaEjecutivaService {
     }
   }
 
-  /// ICM OFICIAL de la flota del mes en curso vs el mes anterior +
-  /// top5 mejores/peores. Lee de `ICM_OFICIAL/{YYYY-MM}` (ingerido del
-  /// portal Sitrack por el scraper `sync_icm.py`, 1 vez al día). ESE es el
-  /// número que audita YPF. Escala MÁS BAJO = MEJOR.
-  ///
-  /// Reemplaza la lectura de `ICM_SEMANAL` (CESVI estimado, que daba
-  /// números optimistas que no coincidían con YPF). Si el mes en curso aún
-  /// no tiene doc, cae a 0 (UI lo refleja con "—").
-  static Future<_IcmDosSemanas> _icmFlota(
-    FirebaseFirestore db,
-    DateTime ahora,
-  ) async {
-    final excluidos = await ExcluidosService.cargar(db: db);
-    excluir(String dni) => ExcluidosService.esExcluido(excluidos, dni: dni);
-    final cargados = await Future.wait([
-      IcmOficialService.cargarPeriodo(db, IcmOficialService.periodoId(),
-          excluirDni: excluir),
-      IcmOficialService.cargarPeriodo(
-          db, IcmOficialService.periodoId(offsetMeses: -1),
-          excluirDni: excluir),
-    ]);
-    final actual = cargados[0];
-    final anterior = cargados[1];
-    if (actual == null || actual.vacio) {
-      return const _IcmDosSemanas(
-        actual: 0,
-        anterior: 0,
-        choferesEnPromedio: 0,
-        top5Mejores: [],
-        top5Peores: [],
-      );
-    }
-    return _IcmDosSemanas(
-      actual: actual.icmGeneral,
-      anterior: anterior?.icmGeneral ?? 0,
-      choferesEnPromedio: actual.choferesActivos,
-      top5Mejores: actual.mejores(5).map(_choferAItem).toList(),
-      top5Peores: actual.peores(5).map(_choferAItem).toList(),
-    );
-  }
-
-  static ChoferRankingItem _choferAItem(IcmOficialChofer c) {
-    return ChoferRankingItem(
-      dni: c.dni,
-      nombre: c.nombre.isEmpty ? 'DNI ${c.dni}' : c.nombre,
-      icm: c.icm,
-      categoria: _categoriaDeSeveridad(c.severidad),
-    );
-  }
-
-  /// Severidad oficial Sitrack → etiqueta de color de la UI del tablero
-  /// ('verde'/'amarillo'/'rojo'/'gris'). NO inventamos umbrales: usamos la
-  /// severidad que ya viene calculada por Sitrack.
-  static String _categoriaDeSeveridad(String severidad) {
-    switch (severidadIcmDesde(severidad)) {
-      case SeveridadIcm.alto:
-        return 'rojo';
-      case SeveridadIcm.medio:
-        return 'amarillo';
-      case SeveridadIcm.bajo:
-      case SeveridadIcm.sinInfracciones:
-        return 'verde';
-      case SeveridadIcm.sinActividad:
-      case SeveridadIcm.desconocida:
-        return 'gris';
-    }
-  }
-
   /// Lee `STATS/dashboard` (poblado por el cron `recomputeDashboardStats`
   /// cada 5 min). Si el doc no existe devuelve {} para que los KPIs
   /// caigan a 0 silenciosamente.
@@ -399,44 +308,6 @@ class VistaEjecutivaService {
     } catch (_) {
       return const {};
     }
-  }
-
-  /// Serie de la tendencia: ICM OFICIAL de la flota DÍA por DÍA del mes en
-  /// curso (campo `tendencia_diaria` del doc `ICM_OFICIAL/{YYYY-MM}`, que
-  /// Sitrack expone en `rankingItemsByDay`). Más bajo = mejor. Es el mismo
-  /// número que YPF audita, desglosado por día — mucho más útil que una
-  /// tendencia mensual que tardaría meses en poblarse.
-  ///
-  /// Si el mes recién arranca y todavía no hay ≥2 días, cae al mes anterior
-  /// para no mostrar un gráfico vacío.
-  static Future<List<PuntoTendencia>> _tendenciaIcm(
-    FirebaseFirestore db,
-    DateTime ahora,
-  ) async {
-    Future<List<PuntoTendencia>> leer(String periodoId) async {
-      final snap =
-          await db.collection(IcmOficialService.coleccion).doc(periodoId).get();
-      final raw = (snap.data()?['tendencia_diaria'] as List?) ?? const [];
-      final pts = <PuntoTendencia>[];
-      for (final e in raw) {
-        if (e is! Map) continue;
-        final fecha = (e['fecha'] ?? '').toString(); // "YYYY-MM-DD"
-        final icm = (e['icm'] as num?)?.toDouble();
-        if (icm == null) continue;
-        // Label = día del mes ("1".."31"), compacto para el eje X.
-        final dia = fecha.length >= 10
-            ? int.tryParse(fecha.substring(8, 10))?.toString() ?? fecha
-            : fecha;
-        pts.add(PuntoTendencia(label: dia, valor: icm));
-      }
-      return pts;
-    }
-
-    var pts = await leer(IcmOficialService.periodoId());
-    if (pts.length < 2) {
-      pts = await leer(IcmOficialService.periodoId(offsetMeses: -1));
-    }
-    return pts;
   }
 
   /// Serie de N puntos: cantidad de viajes por semana (count) las
@@ -580,20 +451,3 @@ class VistaEjecutivaService {
   }
 }
 
-/// Estructura interna que devuelve `_icmFlota` con todo lo necesario
-/// para los KPIs ICM y el top5/peores (evita re-leer el mismo doc).
-class _IcmDosSemanas {
-  final double actual;
-  final double anterior;
-  final int choferesEnPromedio;
-  final List<ChoferRankingItem> top5Mejores;
-  final List<ChoferRankingItem> top5Peores;
-
-  const _IcmDosSemanas({
-    required this.actual,
-    required this.anterior,
-    required this.choferesEnPromedio,
-    required this.top5Mejores,
-    required this.top5Peores,
-  });
-}

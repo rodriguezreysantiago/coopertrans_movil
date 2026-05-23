@@ -11,27 +11,31 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../vista_ejecutiva/services/vista_ejecutiva_service.dart';
 import '../../vista_ejecutiva/widgets/kpi_grande_card.dart';
-import '../../vista_ejecutiva/widgets/tendencia_icm_chart.dart';
-import '../../vista_ejecutiva/widgets/top_choferes_lista.dart';
 import '../../vista_ejecutiva/widgets/viajes_semanales_chart.dart';
 
 /// Panel de administración — pantalla "Inicio" del shell admin.
 ///
 /// REFACTOR 2026-05-18 (decisión Santiago): unificada con la antigua
-/// "Vista Ejecutiva" que duplicaba choferes activos + alertas. Ahora
-/// INICIO es UNA sola vista superadora con todo el dashboard:
+/// "Vista Ejecutiva" que duplicaba choferes activos + alertas.
+///
+/// REFACTOR 2026-05-23 (decisión Santiago): los widgets ricos de ICM
+/// (KPI ICM flota, tendencia ICM oficial Sitrack, top 5 mejores, top 5
+/// a mejorar) se MUDARON al hub del módulo ICM — pertenecen más a ese
+/// módulo que al tablero general. Acá quedan los KPIs operativos rápidos.
+///
+/// Layout actual:
 ///
 ///   - Saludo
 ///   - HOY (alarmas operativas urgentes — rojo si críticas)
-///   - PANORAMA DEL MES (KPIs grandes con tendencia vs mes anterior)
+///   - PANORAMA DEL MES (viajes / alertas / eficiencia + tendencia vs mes
+///     anterior; ICM flota mudado al hub ICM)
 ///   - FLOTA (estado general de unidades y vencimientos no urgentes)
-///   - TENDENCIAS (gráficos ICM 12 semanas + viajes 8 semanas)
-///   - PERSONAS (top 5 mejores + top 5 a mejorar)
+///   - TENDENCIAS (gráfico viajes 8 semanas; el de ICM mudado al hub ICM)
 ///   - ACCESOS RÁPIDOS (navegación a módulos)
 ///   - Footer versión
 ///
-/// Pantalla `vista_ejecutiva_screen.dart` eliminada en el mismo
-/// commit. Service + widgets reusados desde acá.
+/// Pantalla `vista_ejecutiva_screen.dart` eliminada en el refactor
+/// 2026-05-18. Service + widgets reusados desde acá.
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
 
@@ -346,10 +350,10 @@ class _SeccionesEjecutivas extends StatelessWidget {
   }
 }
 
-/// Renderiza las 4 secciones ricas:
-///   1. PANORAMA DEL MES (4 KPIs grandes + eficiencia)
-///   2. TENDENCIAS (2 gráficos)
-///   3. PERSONAS (top 5 mejores + top 5 a mejorar)
+/// Renderiza las 2 secciones ricas restantes (los widgets ricos de ICM se
+/// mudaron al hub ICM 2026-05-23):
+///   1. PANORAMA DEL MES (3 KPIs grandes: viajes / alertas / eficiencia)
+///   2. TENDENCIAS (1 gráfico: viajes por semana)
 class _SeccionesPanorama extends StatelessWidget {
   final KpisVistaEjecutiva kpis;
   const _SeccionesPanorama({required this.kpis});
@@ -363,7 +367,10 @@ class _SeccionesPanorama extends StatelessWidget {
         const _SeccionLabel('Panorama del mes'),
         const SizedBox(height: 10),
         GridView.count(
-          crossAxisCount: esDesktop ? 4 : 2,
+          // 3 KPIs (antes 4: el de ICM flota se mudó al hub ICM). Desktop
+          // los pinta en una sola fila; mobile en grid 2x2 con uno solo
+          // en la 2ª fila para mantener el mismo aspecto de card.
+          crossAxisCount: esDesktop ? 3 : 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 10,
@@ -378,13 +385,6 @@ class _SeccionesPanorama extends StatelessWidget {
               mejorEsSubir: true,
               onTap: () => Navigator.pushNamed(
                   context, AppRoutes.adminLogisticaViajes),
-            ),
-            KpiGrandeCard.icm(
-              label: 'ICM flota',
-              kpi: kpis.icmFlota,
-              icono: Icons.leaderboard,
-              onTap: () => Navigator.pushNamed(
-                  context, AppRoutes.adminIcmReporteSemanal),
             ),
             KpiGrandeCard.simple(
               label: 'Alertas críticas',
@@ -408,77 +408,13 @@ class _SeccionesPanorama extends StatelessWidget {
         const SizedBox(height: 24),
         const _SeccionLabel('Tendencias'),
         const SizedBox(height: 10),
-        if (esDesktop)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: TendenciaIcmChart(
-                  puntos: kpis.tendenciaIcm,
-                  titulo: 'ICM oficial Sitrack · por día (mes en curso)',
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ViajesSemanalesChart(
-                  puntos: kpis.viajesPorSemana,
-                  titulo: 'Viajes por semana · últimas 8',
-                ),
-              ),
-            ],
-          )
-        else ...[
-          TendenciaIcmChart(
-            puntos: kpis.tendenciaIcm,
-            titulo: 'ICM promedio · últimas 12 semanas',
-          ),
-          const SizedBox(height: 10),
-          ViajesSemanalesChart(
-            puntos: kpis.viajesPorSemana,
-            titulo: 'Viajes por semana · últimas 8',
-          ),
-        ],
-        const SizedBox(height: 24),
-        const _SeccionLabel('Personas'),
-        const SizedBox(height: 10),
-        if (esDesktop)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: TopChoferesLista(
-                  titulo: 'TOP 5 — MEJORES CHOFERES',
-                  icono: Icons.emoji_events,
-                  colorTitulo: AppColors.accentGreen,
-                  items: kpis.top5Mejores,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TopChoferesLista(
-                  titulo: 'TOP 5 — A MEJORAR',
-                  icono: Icons.priority_high,
-                  colorTitulo: AppColors.accentRed,
-                  items: kpis.top5Peores,
-                ),
-              ),
-            ],
-          )
-        else ...[
-          TopChoferesLista(
-            titulo: 'TOP 5 — MEJORES CHOFERES',
-            icono: Icons.emoji_events,
-            colorTitulo: AppColors.accentGreen,
-            items: kpis.top5Mejores,
-          ),
-          const SizedBox(height: 10),
-          TopChoferesLista(
-            titulo: 'TOP 5 — A MEJORAR',
-            icono: Icons.priority_high,
-            colorTitulo: AppColors.accentRed,
-            items: kpis.top5Peores,
-          ),
-        ],
+        // Antes era Row(ICM + viajes) en desktop; ahora queda un solo
+        // gráfico (el de ICM se mudó al hub ICM) → full-width en ambos
+        // layouts.
+        ViajesSemanalesChart(
+          puntos: kpis.viajesPorSemana,
+          titulo: 'Viajes por semana · últimas 8',
+        ),
       ],
     );
   }
