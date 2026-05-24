@@ -38,7 +38,6 @@ import '../features/logistica/screens/logistica_ubicaciones_screen.dart';
 import '../features/logistica/screens/logistica_viaje_detalle_screen.dart';
 import '../features/logistica/screens/logistica_viaje_form_screen.dart';
 import '../features/logistica/screens/logistica_viajes_lista_screen.dart';
-import '../features/eco_driving/screens/admin_descargas_pto_screen.dart';
 import '../features/zonas_descarga/screens/admin_descargas_screen.dart';
 import '../features/zonas_descarga/screens/admin_zonas_descarga_screen.dart';
 import '../features/auditoria_asignaciones/screens/admin_auditoria_asignaciones_screen.dart';
@@ -326,10 +325,11 @@ class AppRouter {
           settings,
         );
 
-      // ================= DESCARGAS (nuevo) =================
+      // ================= DESCARGAS =================
       // Cola en vivo + recién descargaron + KPIs basado en presencia
-      // REAL en geocercas configurables (ZONAS_DESCARGA). Reemplaza
-      // al detector PTO Volvo desde 2026-05-23.
+      // REAL en geocercas configurables (ZONAS_DESCARGA). Reemplazó al
+      // detector PTO Volvo (eliminado el 2026-05-24, ver
+      // PENDIENTES.md). Es la única pantalla de descargas hoy.
       case AppRoutes.adminDescargas:
         return _buildRoute(
           _protegerAdmin(const AdminDescargasScreen(),
@@ -351,16 +351,6 @@ class AppRouter {
       case AppRoutes.adminAuditoriaAsignaciones:
         return _buildRoute(
           _protegerAdmin(const AdminAuditoriaAsignacionesScreen(),
-              Capability.verAlertasVolvo),
-          settings,
-        );
-
-      // ================= DESCARGAS PTO (LEGACY) =================
-      // Detector viejo basado en PTO Volvo. Queda para comparar 1-2 releases
-      // con el nuevo y después se elimina junto con el archivo.
-      case AppRoutes.adminDescargasPto:
-        return _buildRoute(
-          _protegerAdmin(const AdminDescargasPtoScreen(),
               Capability.verAlertasVolvo),
           settings,
         );

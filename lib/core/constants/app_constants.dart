@@ -50,18 +50,16 @@ class AppRoutes {
   /// para multas tardías + investigaciones + reconciliación.
   static const String adminAuditoriaAsignaciones = '/admin_auditoria_asignaciones';
 
-  /// Módulo "Descargas" nuevo (2026-05-23) — cola en vivo + recién +
-  /// KPIs basado en presencia REAL en geocercas configurables. Reemplaza
-  /// al detector PTO que solo cubría flota Volvo y daba falsos positivos.
+  /// Módulo "Descargas" — cola en vivo + recién + KPIs basado en
+  /// presencia REAL en geocercas configurables. Reemplazó al detector
+  /// PTO Volvo (eliminado 2026-05-24) que solo cubría flota Volvo y
+  /// daba falsos positivos.
   static const String adminDescargas = '/admin_descargas';
 
   /// Pantalla admin para CRUD de zonas de descarga (las geocercas que
   /// alimentan al módulo Descargas).
   static const String adminZonasDescarga = '/admin_zonas_descarga';
 
-  /// LEGACY — detector PTO Volvo. Queda 1-2 releases visible para
-  /// comparar contra el nuevo y después se elimina (con el archivo).
-  static const String adminDescargasPto = '/admin_descargas_pto';
   static const String adminMapaVolvo = '/admin_mapa_volvo';
   static const String adminMapaFlota = '/admin_mapa_flota';
   // Rutas legacy (en deprecación — quitadas del menú principal pero el

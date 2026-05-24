@@ -10,10 +10,10 @@ import '../services/zonas_descarga_service.dart';
 
 /// Módulo "Descargas" — cola en vivo + recién descargaron + KPIs.
 ///
-/// Reemplazo del módulo `admin_descargas_pto_screen.dart` que detectaba
-/// descargas por evento PTO de Volvo (falsos positivos + solo flota Volvo).
-/// Ahora el dato viene de presencia REAL en geocercas configurables
-/// (`ZONAS_DESCARGA`) que la CF `zonaDescargaPoller` cruza con Sitrack.
+/// Reemplazó al detector PTO Volvo (eliminado 2026-05-24) que daba
+/// falsos positivos y solo cubría flota Volvo. Ahora el dato viene de
+/// presencia REAL en geocercas configurables (`ZONAS_DESCARGA`) que la
+/// CF `zonaDescargaPoller` cruza con Sitrack — cubre la flota completa.
 ///
 /// Para que funcione tienen que estar cargadas las zonas desde
 /// "Zonas de descarga" (admin). Si no hay zonas → pantalla vacía con

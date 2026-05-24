@@ -14,7 +14,7 @@ import '../../employees/screens/admin_personal_lista_screen.dart';
 import '../../expirations/screens/admin_vencimientos_menu_screen.dart';
 import '../../reports/screens/admin_reports_screen.dart';
 import '../../revisions/screens/admin_revisiones_screen.dart';
-import '../../eco_driving/screens/admin_descargas_pto_screen.dart';
+import '../../zonas_descarga/screens/admin_descargas_screen.dart';
 import '../../fleet_map/screens/admin_mapa_flota_screen.dart';
 import '../../icm/screens/icm_hub_screen.dart';
 import '../../cachatore/screens/cachatore_hub_screen.dart';
@@ -167,7 +167,10 @@ class _AdminShellState extends State<AdminShell> {
       icon: Icons.local_shipping_outlined,
       iconActive: Icons.local_shipping,
       requiredCapability: Capability.verAlertasVolvo,
-      build: () => const AdminDescargasPtoScreen(),
+      // Cola en vivo + recién descargaron + KPIs basado en presencia REAL
+      // en geocercas configurables (ZONAS_DESCARGA). Reemplazó al detector
+      // PTO Volvo (falsos positivos + solo flota Volvo) el 2026-05-24.
+      build: () => const AdminDescargasScreen(),
     ),
     // "Mapa" muestra la posición ACTUAL de toda la flota según Sitrack
     // (tractores Volvo + no-Volvo). Reusa la capability de Volvo porque
