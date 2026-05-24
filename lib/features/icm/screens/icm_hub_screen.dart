@@ -77,8 +77,6 @@ class _IcmHubScreenState extends State<IcmHubScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
-            const _BannerInfo(),
-            const SizedBox(height: 16),
             FutureBuilder<KpisIcmHub>(
               future: _futureKpis,
               builder: (ctx, snap) {
@@ -110,39 +108,6 @@ class _IcmHubScreenState extends State<IcmHubScreen> {
   }
 }
 
-class _BannerInfo extends StatelessWidget {
-  const _BannerInfo();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.accentBlue.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: AppColors.accentBlue.withValues(alpha: 0.30),
-        ),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.info_outline, color: AppColors.accentBlue, size: 20),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'ICM oficial de Sitrack — el mismo número que audita YPF. '
-              'Acá MÁS BAJO = MEJOR (la flota ronda ~20). Color por '
-              'severidad: verde sin/pocas infracciones, amarillo medio, '
-              'rojo alto. Se actualiza una vez al día.',
-              style: TextStyle(fontSize: 12, color: Colors.white70),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Las 3 secciones ricas del hub: KPI ICM flota + tendencia + 2 top 5.
 class _SeccionesIcm extends StatelessWidget {
   final KpisIcmHub kpis;
@@ -151,38 +116,44 @@ class _SeccionesIcm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final esDesktop = MediaQuery.of(context).size.width >= 800;
+    // KPI ICM flota + Tendencias lado a lado en desktop (2026-05-24).
+    // Antes la card ICM flota ocupaba toda una fila y debajo iba el
+    // gráfico — quedaba mucho aire vertical. Ahora en desktop la card
+    // queda a la izquierda (ancho fijo 280) y el gráfico ocupa el
+    // resto. En mobile siguen apilados, card primero.
+    final cardIcm = KpiGrandeCard.icm(
+      label: 'ICM flota',
+      kpi: kpis.icmFlota,
+      icono: Icons.leaderboard,
+      onTap: () => Navigator.pushNamed(
+          context, AppRoutes.adminIcmReporteSemanal),
+    );
+    final chartTendencia = TendenciaIcmChart(
+      puntos: kpis.tendenciaIcm,
+      titulo: 'ICM oficial Sitrack · por día (mes en curso)',
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ─── KPI ICM flota (card grande única) ───
-        const _SeccionLabel('ICM flota'),
+        // ─── ICM flota + Tendencias (lado a lado en desktop) ───
+        const _SeccionLabel('Panorama'),
         const SizedBox(height: 10),
-        // En desktop la card ocupa media pantalla (no se ve gigante);
-        // en mobile va full-width.
-        Align(
-          alignment: Alignment.centerLeft,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxWidth: esDesktop ? 280 : double.infinity,
-              minHeight: 140,
+        if (esDesktop)
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(width: 280, child: cardIcm),
+                const SizedBox(width: 12),
+                Expanded(child: chartTendencia),
+              ],
             ),
-            child: KpiGrandeCard.icm(
-              label: 'ICM flota',
-              kpi: kpis.icmFlota,
-              icono: Icons.leaderboard,
-              onTap: () => Navigator.pushNamed(
-                  context, AppRoutes.adminIcmReporteSemanal),
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-        // ─── Tendencia ICM oficial ───
-        const _SeccionLabel('Tendencias'),
-        const SizedBox(height: 10),
-        TendenciaIcmChart(
-          puntos: kpis.tendenciaIcm,
-          titulo: 'ICM oficial Sitrack · por día (mes en curso)',
-        ),
+          )
+        else ...[
+          cardIcm,
+          const SizedBox(height: 12),
+          chartTendencia,
+        ],
         const SizedBox(height: 24),
         // ─── Personas: top 5 mejores + top 5 a mejorar ───
         const _SeccionLabel('Personas'),
