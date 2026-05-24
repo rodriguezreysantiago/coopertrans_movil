@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/icm_oficial_service.dart';
-import '../services/sitrack_eventos_service.dart';
 
 /// Detalle ICM individual de un chofer, con el número **oficial de Sitrack**
 /// (lo que audita YPF, MÁS BAJO = MEJOR):
@@ -13,9 +12,11 @@ import '../services/sitrack_eventos_service.dart';
 ///   - ICM urbano vs no-urbano (dónde maneja peor).
 ///   - Desglose de infracciones (altas / medias / leves) + excesos de
 ///     velocidad + conducción agresiva.
-///   - **Detalle de eventos** (desde SITRACK_EVENTOS): qué tipo, cuándo,
-///     dónde, a qué velocidad y con qué límite. Para que el operador
-///     entienda QUÉ disparó los counters de infracciones.
+///   - **Detalle de infracciones** (desde `chofer.infracciones`, que el
+///     scraper trae con `get_infractions(scopeId)` de Sitrack): tabla
+///     con las MISMAS columnas que muestra el modal de Sitrack
+///     (vehículo + tipo + fecha + ubicación + vel.permitida + pico +
+///     tiempo + puntaje).
 ///
 /// Se llega desde el ranking / reporte / card de inicio con el DNI como
 /// argumento de ruta.
@@ -53,36 +54,12 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
     // distinto / vacío).
     final empSnap = await db.collection('EMPLEADOS').doc(dni).get();
     final nombreEmp = (empSnap.data()?['NOMBRE'] ?? '').toString().trim();
-    // Eventos individuales del período actual desde SITRACK_EVENTOS.
-    // Si el actual está vacío, caemos al anterior para no mostrar lista
-    // vacía si el chofer no manejó este mes (mismo patrón de fallback
-    // que la tendencia ICM en el hub).
-    final periodoConDatos =
-        periodos[0] != null && !periodos[0]!.vacio ? periodos[0] : periodos[1];
-    List<SitrackEventoChofer> eventos = const [];
-    if (periodoConDatos != null) {
-      final desde = DateTime.tryParse(periodoConDatos.fechaDesde);
-      final hastaBase = DateTime.tryParse(periodoConDatos.fechaHasta);
-      // El doc oficial trae `fecha_hasta` como YYYY-MM-DD (00:00 ART).
-      // Sumamos casi un día para incluir TODOS los eventos de la fecha hasta.
-      final hasta = hastaBase?.add(
-          const Duration(hours: 23, minutes: 59, seconds: 59));
-      if (desde != null && hasta != null) {
-        eventos = await SitrackEventosService.cargarEventosChofer(
-          db: db,
-          dni: dni,
-          desde: desde,
-          hasta: hasta,
-        );
-      }
-    }
     return _DetalleData(
       actual: _buscar(periodos[0], dni),
       anterior: _buscar(periodos[1], dni),
       idActual: idActual,
       idAnterior: idAnterior,
       nombreEmpleado: nombreEmp,
-      eventos: eventos,
     );
   }
 
@@ -225,9 +202,9 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
                   ],
                 ),
                 const SizedBox(height: 18),
-                const _SeccionTitulo('Detalle de eventos'),
+                const _SeccionTitulo('Detalle de infracciones'),
                 const SizedBox(height: 8),
-                _ListaEventos(eventos: data.eventos),
+                _ListaInfracciones(infracciones: c.infracciones),
                 const SizedBox(height: 20),
                 const _NotaFuente(),
               ],
@@ -245,7 +222,6 @@ class _DetalleData {
   final String idActual;
   final String idAnterior;
   final String nombreEmpleado;
-  final List<SitrackEventoChofer> eventos;
 
   const _DetalleData({
     required this.actual,
@@ -253,7 +229,6 @@ class _DetalleData {
     required this.idActual,
     required this.idAnterior,
     required this.nombreEmpleado,
-    this.eventos = const [],
   });
 }
 
@@ -515,36 +490,36 @@ class _SeccionTitulo extends StatelessWidget {
   }
 }
 
-/// Lista de eventos individuales del período (desde SITRACK_EVENTOS).
-/// Stateful porque mantiene el filtro por tipo seleccionado.
-class _ListaEventos extends StatefulWidget {
-  final List<SitrackEventoChofer> eventos;
-  const _ListaEventos({required this.eventos});
+/// Lista de infracciones individuales del chofer en el período (de
+/// `chofer.infracciones`, embebido en el doc del período por el scraper
+/// Python que llama get_infractions(scopeId) de Sitrack). Muestra las
+/// MISMAS columnas que el modal de Sitrack — el operador ve lo mismo
+/// en la app que en el portal.
+///
+/// Stateful porque mantiene chips de filtro por tipo de infracción
+/// (top 6 más frecuentes) y paginación local (de a 30 con "Mostrar más").
+class _ListaInfracciones extends StatefulWidget {
+  final List<InfraccionIndividual> infracciones;
+  const _ListaInfracciones({required this.infracciones});
 
   @override
-  State<_ListaEventos> createState() => _ListaEventosState();
+  State<_ListaInfracciones> createState() => _ListaInfraccionesState();
 }
 
-class _ListaEventosState extends State<_ListaEventos> {
-  /// `null` = "todos". Si está seteado, filtra por `event_name`.
+class _ListaInfraccionesState extends State<_ListaInfracciones> {
   String? _filtroTipo;
-
-  /// Máximo a mostrar de entrada — la mayoría de los choferes
-  /// tienen >100 eventos por mes, lista gigante ahoga al operador.
-  /// El botón "Mostrar más" levanta el tope.
   int _maxVisibles = 30;
 
   @override
   Widget build(BuildContext context) {
-    final eventos = widget.eventos;
-    if (eventos.isEmpty) {
+    final lista = widget.infracciones;
+    if (lista.isEmpty) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 16),
         child: Center(
           child: Text(
-            'Sin eventos individuales para este período.\n'
-            'Si el chofer manejó, puede que Sitrack todavía no haya enviado '
-            'los detalles (se sincroniza cada 5 min).',
+            'Sin infracciones individuales para este período.\n'
+            'El detalle se sincroniza desde Sitrack una vez al día.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.45),
@@ -556,27 +531,27 @@ class _ListaEventosState extends State<_ListaEventos> {
       );
     }
 
-    // Cuento por tipo para los chips de filtro (top 8 más frecuentes).
+    // Top tipos por cantidad
     final conteoPorTipo = <String, int>{};
-    for (final e in eventos) {
-      conteoPorTipo[e.eventName] = (conteoPorTipo[e.eventName] ?? 0) + 1;
+    for (final i in lista) {
+      conteoPorTipo[i.infraccion] = (conteoPorTipo[i.infraccion] ?? 0) + 1;
     }
     final tiposFrecuentes = conteoPorTipo.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
     final filtrados = _filtroTipo == null
-        ? eventos
-        : eventos.where((e) => e.eventName == _filtroTipo).toList();
+        ? lista
+        : lista.where((i) => i.infraccion == _filtroTipo).toList();
     final visibles = filtrados.take(_maxVisibles).toList();
     final hayMas = filtrados.length > visibles.length;
+    final sumaPuntaje = lista.fold<double>(0, (a, b) => a + b.puntaje);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Resumen + chips
         Text(
-          '${eventos.length} evento${eventos.length == 1 ? "" : "s"} '
-          'en el período',
+          '${lista.length} infracción${lista.length == 1 ? "" : "es"} · '
+          'Suma de puntaje: ${sumaPuntaje.toStringAsFixed(2)}',
           style: const TextStyle(color: Colors.white60, fontSize: 11),
         ),
         const SizedBox(height: 8),
@@ -586,14 +561,14 @@ class _ListaEventosState extends State<_ListaEventos> {
             scrollDirection: Axis.horizontal,
             children: [
               _ChipFiltro(
-                label: 'Todos (${eventos.length})',
+                label: 'Todas (${lista.length})',
                 selected: _filtroTipo == null,
                 onTap: () => setState(() {
                   _filtroTipo = null;
                   _maxVisibles = 30;
                 }),
               ),
-              for (final t in tiposFrecuentes.take(8))
+              for (final t in tiposFrecuentes.take(6))
                 Padding(
                   padding: const EdgeInsets.only(left: 6),
                   child: _ChipFiltro(
@@ -609,8 +584,7 @@ class _ListaEventosState extends State<_ListaEventos> {
           ),
         ),
         const SizedBox(height: 10),
-        // Lista
-        ...visibles.map((e) => _EventoCard(evento: e)),
+        ...visibles.map((i) => _InfraccionCard(infraccion: i)),
         if (hayMas) ...[
           const SizedBox(height: 8),
           Center(
@@ -619,17 +593,6 @@ class _ListaEventosState extends State<_ListaEventos> {
               icon: const Icon(Icons.expand_more, size: 18),
               label: Text('Mostrar más '
                   '(${filtrados.length - visibles.length} restantes)'),
-            ),
-          ),
-        ],
-        if (eventos.length >= 500) ...[
-          const SizedBox(height: 6),
-          Text(
-            'Mostrando los 500 eventos más recientes del período.',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.4),
-              fontSize: 11,
-              fontStyle: FontStyle.italic,
             ),
           ),
         ],
@@ -665,28 +628,31 @@ class _ChipFiltro extends StatelessWidget {
   }
 }
 
-/// Card compacta de un evento: tipo + timestamp ART + ubicación +
-/// velocidad si aplica. Si fue exceso cartográfico, fondo rojo claro.
-class _EventoCard extends StatelessWidget {
-  final SitrackEventoChofer evento;
-  const _EventoCard({required this.evento});
+/// Card de una infracción individual. Mismas columnas que la tabla del
+/// modal de Sitrack: tipo + fecha + ubicación + vel.permitida + pico de
+/// velocidad + tiempo (si aplica) + puntaje. Color rojo si es exceso real.
+class _InfraccionCard extends StatelessWidget {
+  final InfraccionIndividual infraccion;
+  const _InfraccionCard({required this.infraccion});
+
+  Color _colorPuntaje() {
+    if (infraccion.puntaje >= 10) return Colors.red.shade600;
+    if (infraccion.puntaje >= 5) return Colors.amber.shade700;
+    return Colors.green.shade600;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final exceso = evento.esExcesoCartografico;
-    final tieneVel = evento.speed != null;
+    final i = infraccion;
+    final color = _colorPuntaje();
     return Card(
       elevation: 0,
       margin: const EdgeInsets.symmetric(vertical: 3),
-      color: exceso
-          ? Colors.red.shade900.withValues(alpha: 0.18)
-          : Colors.white.withValues(alpha: 0.04),
+      color: Colors.white.withValues(alpha: 0.04),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(6),
         side: BorderSide(
-          color: exceso
-              ? Colors.redAccent.withValues(alpha: 0.5)
-              : Colors.white12,
+          color: color.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -695,32 +661,81 @@ class _EventoCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Fila 1: tipo + puntaje
             Row(
               children: [
                 Expanded(
                   child: Text(
-                    evento.eventName,
+                    i.infraccion,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: exceso ? Colors.redAccent : Colors.white,
+                    style: const TextStyle(
+                      color: Colors.white,
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  AppFormatters.formatearFechaHoraSinSegundos(
-                      evento.reportDate),
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 11,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: color.withValues(alpha: 0.5)),
+                  ),
+                  child: Text(
+                    i.puntaje.toStringAsFixed(2),
+                    style: TextStyle(
+                      color: color,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ],
             ),
-            if ((evento.location ?? '').isNotEmpty) ...[
+            const SizedBox(height: 4),
+            // Fila 2: fecha + patente
+            Row(
+              children: [
+                const Icon(Icons.access_time,
+                    size: 12, color: Colors.white38),
+                const SizedBox(width: 4),
+                Text(
+                  i.fecha,
+                  style: const TextStyle(
+                      color: Colors.white60, fontSize: 11),
+                ),
+                if (i.patente.isNotEmpty) ...[
+                  const SizedBox(width: 14),
+                  const Icon(Icons.local_shipping,
+                      size: 12, color: Colors.white38),
+                  const SizedBox(width: 4),
+                  Text(
+                    i.patente,
+                    style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+                if (i.tiempo != null) ...[
+                  const SizedBox(width: 14),
+                  const Icon(Icons.timer,
+                      size: 12, color: Colors.white38),
+                  const SizedBox(width: 4),
+                  Text(
+                    i.tiempo!,
+                    style: const TextStyle(
+                        color: Colors.white60, fontSize: 11),
+                  ),
+                ],
+              ],
+            ),
+            // Fila 3: ubicación
+            if (i.ubicacion.isNotEmpty) ...[
               const SizedBox(height: 4),
               Row(
                 children: [
@@ -729,44 +744,41 @@ class _EventoCard extends StatelessWidget {
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      evento.location!,
+                      i.ubicacion,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 11,
-                      ),
+                          color: Colors.white54, fontSize: 11),
                     ),
                   ),
                 ],
               ),
             ],
-            if (tieneVel || evento.assetName != null) ...[
+            // Fila 4: velocidades (sólo si están)
+            if (i.velMaxima != null || i.velLimite != null) ...[
               const SizedBox(height: 4),
-              Wrap(
-                spacing: 12,
-                runSpacing: 2,
+              Row(
                 children: [
-                  if (tieneVel)
-                    Text(
-                      evento.cartographyLimitSpeed != null
-                          ? '${evento.speed!.toStringAsFixed(0)} km/h '
-                              '· límite ${evento.cartographyLimitSpeed!.toStringAsFixed(0)} km/h'
-                          : '${evento.speed!.toStringAsFixed(0)} km/h',
-                      style: TextStyle(
-                        color: exceso ? Colors.redAccent : Colors.white60,
-                        fontSize: 11,
-                        fontWeight: exceso ? FontWeight.w600 : null,
-                      ),
+                  const Icon(Icons.speed,
+                      size: 12, color: Colors.white38),
+                  const SizedBox(width: 4),
+                  Text(
+                    i.velLimite != null && i.velMaxima != null
+                        ? 'Pico ${i.velMaxima!.toStringAsFixed(0)} km/h '
+                            '· límite ${i.velLimite!.toStringAsFixed(0)} km/h'
+                        : i.velMaxima != null
+                            ? 'Pico ${i.velMaxima!.toStringAsFixed(0)} km/h'
+                            : 'Límite ${i.velLimite!.toStringAsFixed(0)} km/h',
+                    style: TextStyle(
+                      color: i.esExcesoVelocidad
+                          ? Colors.redAccent
+                          : Colors.white60,
+                      fontSize: 11,
+                      fontWeight: i.esExcesoVelocidad
+                          ? FontWeight.w600
+                          : null,
                     ),
-                  if ((evento.assetName ?? '').isNotEmpty)
-                    Text(
-                      'Unidad: ${evento.assetName}',
-                      style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 11,
-                      ),
-                    ),
+                  ),
                 ],
               ),
             ],

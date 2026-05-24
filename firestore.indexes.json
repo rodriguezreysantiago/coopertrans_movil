@@ -254,14 +254,6 @@
         { "fieldPath": "driver_dni", "order": "ASCENDING" },
         { "fieldPath": "report_date", "order": "ASCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "SITRACK_EVENTOS",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "driver_dni", "order": "ASCENDING" },
-        { "fieldPath": "report_date", "order": "DESCENDING" }
-      ]
     }
   ],
   "fieldOverrides": [

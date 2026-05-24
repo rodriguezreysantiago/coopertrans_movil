@@ -68,6 +68,129 @@ double _d(dynamic v) => (v is num) ? v.toDouble() : 0.0;
 int _i(dynamic v) => (v is num) ? v.toInt() : 0;
 String _s(dynamic v) => (v ?? '').toString().trim();
 
+/// Una infracción individual del chofer en el período (1 fila del modal
+/// "Detalle de infracciones" de Sitrack). Las trae el scraper Python con
+/// `get_infractions(scopeId)` y se persisten embebidas en cada chofer del
+/// doc `ICM_OFICIAL/{periodo}` (campo `infracciones[]`).
+class InfraccionIndividual {
+  /// Patente del tractor al momento de la infracción (útil si hubo
+  /// reasignación durante el período).
+  final String patente;
+
+  /// Tipo legible: "Frenada Brusca Grave", "Giro Brusco Leve",
+  /// "Conducción Continua...".
+  final String infraccion;
+
+  /// Código corto Sitrack: 'sbg' = stop bruto grave, 'htl' = harsh turn
+  /// light, etc. Sirve para agrupar/filtrar.
+  final String tipo;
+
+  /// Timestamp con hora "2026-05-18 17:01:38" (string crudo de Sitrack).
+  final String fecha;
+
+  /// Texto legible de ubicación (calle + referencia + localidad).
+  final String ubicacion;
+
+  final double? latitud;
+  final double? longitud;
+
+  /// Velocidad permitida según cartografía Sitrack (km/h, opcional).
+  final double? velLimite;
+
+  /// Pico de velocidad del momento (km/h, opcional).
+  final double? velMaxima;
+
+  /// Duración legible "04:23:27" — sólo para "Conducción Continua" o
+  /// similar, null en eventos puntuales.
+  final String? tiempo;
+
+  /// Puntaje individual con el que sumó al ICM (10.00 para grave,
+  /// 5.00 para media, 2.35 para conducción continua, etc.).
+  final double puntaje;
+
+  const InfraccionIndividual({
+    required this.patente,
+    required this.infraccion,
+    required this.tipo,
+    required this.fecha,
+    required this.ubicacion,
+    this.latitud,
+    this.longitud,
+    this.velLimite,
+    this.velMaxima,
+    this.tiempo,
+    required this.puntaje,
+  });
+
+  factory InfraccionIndividual.fromMap(Map<String, dynamic> m) {
+    double? nz(dynamic v) {
+      if (v is! num) return null;
+      final d = v.toDouble();
+      return d == 0.0 ? null : d;
+    }
+    return InfraccionIndividual(
+      patente: _s(m['patente']),
+      infraccion: _s(m['infraccion']),
+      tipo: _s(m['tipo']),
+      fecha: _s(m['fecha']),
+      ubicacion: _s(m['ubicacion']),
+      latitud: nz(m['latitud']),
+      longitud: nz(m['longitud']),
+      velLimite: nz(m['vel_limite']),
+      velMaxima: nz(m['vel_maxima']),
+      tiempo: (m['tiempo'] is String && (m['tiempo'] as String).isNotEmpty)
+          ? m['tiempo']
+          : null,
+      puntaje: _d(m['puntaje']),
+    );
+  }
+
+  /// `true` si tenemos vel_limite + vel_maxima y hay exceso real.
+  bool get esExcesoVelocidad =>
+      velLimite != null && velMaxima != null && velMaxima! > velLimite! + 1.0;
+}
+
+/// Un hotspot del mapa de calor (1 ubicación cartográfica única con N
+/// infracciones acumuladas). Lo trae get_top_infractions agregado por
+/// Sitrack. Para el mapa de calor + lista lateral.
+class HotspotInfraccion {
+  final String infraccion;
+  final String tipo;
+  final String ubicacion;
+  final double latitud;
+  final double longitud;
+  /// Cantidad de infracciones acumuladas en esa ubicación cartográfica.
+  final int cantidad;
+  /// Porcentaje del total de infracciones de la flota.
+  final double porcentaje;
+  /// Cuánto suma al ICM cada ocurrencia.
+  final double puntaje;
+
+  const HotspotInfraccion({
+    required this.infraccion,
+    required this.tipo,
+    required this.ubicacion,
+    required this.latitud,
+    required this.longitud,
+    required this.cantidad,
+    required this.porcentaje,
+    required this.puntaje,
+  });
+
+  factory HotspotInfraccion.fromMap(Map<String, dynamic> m) {
+    return HotspotInfraccion(
+      infraccion: _s(m['infraccion']),
+      tipo: _s(m['tipo']),
+      ubicacion: _s(m['ubicacion']),
+      latitud: _d(m['latitud']),
+      longitud: _d(m['longitud']),
+      cantidad: _i(m['cantidad']),
+      porcentaje: _d(m['porcentaje']),
+      puntaje: _d(m['puntaje']),
+    );
+  }
+}
+
 /// Un chofer en el ICM oficial de un período.
 class IcmOficialChofer {
   final String dni;
@@ -84,6 +207,10 @@ class IcmOficialChofer {
   final int conduccionAgresiva;
   final String severidad; // crudo Sitrack
   final String severidadLabel; // ES (viene del doc)
+  /// Infracciones individuales del chofer en el período (capeado a 100 por
+  /// el scraper para no explotar el límite de 1 MB del doc). Vacío si el
+  /// período se cargó antes del cambio 2026-05-23.
+  final List<InfraccionIndividual> infracciones;
 
   const IcmOficialChofer({
     required this.dni,
@@ -100,9 +227,11 @@ class IcmOficialChofer {
     required this.conduccionAgresiva,
     required this.severidad,
     required this.severidadLabel,
+    this.infracciones = const [],
   });
 
   factory IcmOficialChofer.fromMap(Map<String, dynamic> m) {
+    final rawInfrac = (m['infracciones'] as List?) ?? const [];
     return IcmOficialChofer(
       dni: _s(m['dni']),
       nombre: _s(m['nombre']),
@@ -118,6 +247,10 @@ class IcmOficialChofer {
       conduccionAgresiva: _i(m['conduccion_agresiva']),
       severidad: _s(m['severidad']),
       severidadLabel: _s(m['severidad_label']),
+      infracciones: rawInfrac
+          .whereType<Map>()
+          .map((e) => InfraccionIndividual.fromMap(e.cast<String, dynamic>()))
+          .toList(),
     );
   }
 
@@ -205,6 +338,10 @@ class IcmOficialPeriodo {
   final List<IcmOficialVehiculo> vehiculos;
   final DateTime? sincronizadoEn;
 
+  /// Hotspots del mapa de calor (agrupados por ubicación cartográfica
+  /// única). Vacío en docs cargados antes del cambio 2026-05-23.
+  final List<HotspotInfraccion> infraccionesHeatmap;
+
   const IcmOficialPeriodo({
     required this.periodo,
     required this.alcance,
@@ -221,6 +358,7 @@ class IcmOficialPeriodo {
     required this.choferes,
     required this.vehiculos,
     required this.sincronizadoEn,
+    this.infraccionesHeatmap = const [],
   });
 
   /// Construye desde el map de Firestore. `excluir` filtra choferes/vehículos
@@ -254,6 +392,10 @@ class IcmOficialPeriodo {
     DateTime? sinc;
     final ts = m['sincronizado_en'];
     if (ts is Timestamp) sinc = ts.toDate();
+    final hotspots = ((m['infracciones_heatmap'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => HotspotInfraccion.fromMap(e.cast<String, dynamic>()))
+        .toList();
     return IcmOficialPeriodo(
       periodo: _s(m['periodo']),
       alcance: _s(m['alcance']),
@@ -270,6 +412,7 @@ class IcmOficialPeriodo {
       choferes: choferes,
       vehiculos: vehiculos,
       sincronizadoEn: sinc,
+      infraccionesHeatmap: hotspots,
     );
   }
 
