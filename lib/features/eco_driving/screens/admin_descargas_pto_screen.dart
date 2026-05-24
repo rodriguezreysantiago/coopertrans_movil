@@ -7,6 +7,11 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
+/// LEGACY (2026-05-23) — reemplazado por `AdminDescargasScreen` (cola en
+/// vivo + KPIs basado en presencia REAL en geocercas configurables vía
+/// Sitrack). Queda 1-2 releases visible solo para comparación durante
+/// validación; después se elimina el archivo + ruta + constante.
+///
 /// Pantalla "Descargas por unidad" — lista de eventos PTO (toma de fuerza)
 /// del Vehicle Alerts API.
 ///

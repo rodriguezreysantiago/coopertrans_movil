@@ -45,6 +45,17 @@ class AppRoutes {
   /// el ranking + top 5 mejores/peores del hub + top 5 del reporte mensual.
   static const String adminIcmDetalleChofer = '/admin_icm_detalle_chofer';
   // Pantallas Volvo restantes (mantienen `verAlertasVolvo` por ahora):
+  /// Módulo "Descargas" nuevo (2026-05-23) — cola en vivo + recién +
+  /// KPIs basado en presencia REAL en geocercas configurables. Reemplaza
+  /// al detector PTO que solo cubría flota Volvo y daba falsos positivos.
+  static const String adminDescargas = '/admin_descargas';
+
+  /// Pantalla admin para CRUD de zonas de descarga (las geocercas que
+  /// alimentan al módulo Descargas).
+  static const String adminZonasDescarga = '/admin_zonas_descarga';
+
+  /// LEGACY — detector PTO Volvo. Queda 1-2 releases visible para
+  /// comparar contra el nuevo y después se elimina (con el archivo).
   static const String adminDescargasPto = '/admin_descargas_pto';
   static const String adminMapaVolvo = '/admin_mapa_volvo';
   static const String adminMapaFlota = '/admin_mapa_flota';
@@ -402,6 +413,33 @@ class AppCollections {
   /// La pantalla "Turnos concretados" lee de acá. Si un chofer no tiene turno,
   /// el bot borra su doc. Solo lo escribe el bot (Admin SDK).
   static const String cachatoreTurnos = 'CACHATORE_TURNOS';
+
+  // ─── Módulo Zonas de Descarga (2026-05-23) ───
+  /// Zonas geográficas configurables (polígono o círculo) que marcan
+  /// lugares de descarga relevantes (YPF Añelo, plantas cliente, etc).
+  /// DocId = slug derivado del nombre. El operador admin las crea/edita
+  /// desde la pantalla "Zonas de descarga". La CF `zonaDescargaPoller`
+  /// las lee cada 5 min y, cruzando con `SITRACK_POSICIONES`, mantiene
+  /// la cola en vivo (`zonaDescargaCola`) y el histórico de descargas
+  /// completadas (`zonaDescargaHistorico`). Reemplaza la detección por
+  /// PTO de Volvo (que cubría solo flota Volvo y daba falsos positivos).
+  static const String zonasDescarga = 'ZONAS_DESCARGA';
+
+  /// Cola en vivo de unidades dentro de una zona. DocId compuesto:
+  /// `{patente}_{slug_zona}`. Existe MIENTRAS la unidad esté dentro y
+  /// cumpla la estadía mínima. Al salir, el doc se mueve a
+  /// `zonaDescargaHistorico` y se borra de acá.
+  /// Schema: `{patente, slug_zona, chofer_dni, chofer_nombre,
+  /// entrada_ts, ultima_pos_ts, ultimo_lat, ultimo_lng}`.
+  /// Solo lo escribe la CF (Admin SDK). Lectura: admin/supervisor.
+  static const String zonaDescargaCola = 'ZONA_DESCARGA_COLA';
+
+  /// Histórico inmutable de descargas completadas. DocId:
+  /// `{slug_zona}_{patente}_{entrada_ts_ms}`. Cada doc representa una
+  /// estadía completa en la zona: entrada, salida, duración. Base para
+  /// KPIs (tiempo promedio de descarga, ranking choferes) y reporte
+  /// Excel mensual. Append-only. Solo escribe la CF.
+  static const String zonaDescargaHistorico = 'ZONA_DESCARGA_HISTORICO';
 
   /// Pedidos one-shot del operador para verificar si un chofer (que NO está
   /// en CACHATORE_OBJETIVOS) tiene un turno preexistente sacado por la web

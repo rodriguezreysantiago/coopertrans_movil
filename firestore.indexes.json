@@ -254,6 +254,22 @@
         { "fieldPath": "driver_dni", "order": "ASCENDING" },
         { "fieldPath": "report_date", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "ZONA_DESCARGA_HISTORICO",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "slug_zona", "order": "ASCENDING" },
+        { "fieldPath": "entrada_ts", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ZONA_DESCARGA_HISTORICO",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "slug_zona", "order": "ASCENDING" },
+        { "fieldPath": "salida_ts", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

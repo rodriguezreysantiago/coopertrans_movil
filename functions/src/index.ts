@@ -45,4 +45,5 @@ export * from "./dashboard_stats";
 export * from "./icm";
 export * from "./mantenimiento";
 export * from "./sitrack";
+export * from "./zonas_descarga";
 export * from "./resumenes_diarios";

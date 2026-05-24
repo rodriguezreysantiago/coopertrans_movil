@@ -784,6 +784,34 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ========================================================================
+    // ZONAS_DESCARGA — geofences configurables para módulo "Descargas"
+    // ========================================================================
+    // El operador admin crea/edita zonas (polígono o círculo) desde la app.
+    // La CF `zonaDescargaPoller` las lee + cruza con SITRACK_POSICIONES para
+    // mantener la cola en vivo + histórico de descargas. Reemplaza la
+    // detección por PTO Volvo.
+
+    match /ZONAS_DESCARGA/{slug} {
+      // Admin/supervisor manejan las zonas. SEG_HIGIENE no las edita.
+      allow read, create, update, delete: if isAdminOrSupervisor();
+    }
+
+    // Cola en vivo de unidades en cada zona. Solo escribe la CF (Admin SDK).
+    // Lectura: roles que ven Volvo (admin/supervisor/SEG_HIGIENE) — el módulo
+    // "Descargas" lo lee y los 3 roles necesitan operar.
+    match /ZONA_DESCARGA_COLA/{doc} {
+      allow read: if puedeVerVolvoTableros();
+      allow create, update, delete: if false;
+    }
+
+    // Histórico inmutable de descargas completadas. Lectura igual que cola.
+    // Solo escribe la CF. NUNCA se modifica (auditoría operativa).
+    match /ZONA_DESCARGA_HISTORICO/{doc} {
+      allow read: if puedeVerVolvoTableros();
+      allow create, update, delete: if false;
+    }
+
     // Pedidos one-shot del operador: "¿este chofer (que NO está en CACHATORE_
     // OBJETIVOS) tiene un turno preexistente sacado por la web?". La app crea
     // el doc al tappear "Verificar" en el wizard Agregar; el bot lo procesa,

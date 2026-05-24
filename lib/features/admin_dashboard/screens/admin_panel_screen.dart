@@ -223,10 +223,18 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             if (Capabilities.can(PrefsService.rol, Capability.verAlertasVolvo))
               const _AdminTile(
                 titulo: 'DESCARGAS',
-                subtitulo: 'Eventos PTO de la flota Volvo',
+                subtitulo: 'Cola en vivo + KPIs por zona (YPF Añelo)',
                 icono: Icons.local_shipping_outlined,
                 color: AppColors.accentDeepOrange,
-                ruta: AppRoutes.adminDescargasPto,
+                ruta: AppRoutes.adminDescargas,
+              ),
+            if (Capabilities.can(PrefsService.rol, Capability.verAlertasVolvo))
+              const _AdminTile(
+                titulo: 'ZONAS DE DESCARGA',
+                subtitulo: 'Configurar geocercas de descarga (admin)',
+                icono: Icons.add_location_alt_outlined,
+                color: AppColors.accentCyan,
+                ruta: AppRoutes.adminZonasDescarga,
               ),
             if (Capabilities.can(PrefsService.rol, Capability.verAlertasVolvo))
               const _AdminTile(

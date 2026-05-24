@@ -39,6 +39,8 @@ import '../features/logistica/screens/logistica_viaje_detalle_screen.dart';
 import '../features/logistica/screens/logistica_viaje_form_screen.dart';
 import '../features/logistica/screens/logistica_viajes_lista_screen.dart';
 import '../features/eco_driving/screens/admin_descargas_pto_screen.dart';
+import '../features/zonas_descarga/screens/admin_descargas_screen.dart';
+import '../features/zonas_descarga/screens/admin_zonas_descarga_screen.dart';
 import '../features/eco_driving/screens/admin_eco_driving_screen.dart';
 import '../features/eco_driving/screens/admin_mapa_volvo_screen.dart';
 import '../features/fleet_map/screens/admin_mapa_flota_screen.dart';
@@ -323,11 +325,28 @@ class AppRouter {
           settings,
         );
 
-      // ================= DESCARGAS (PTO) =================
-      // Lista de eventos PTO (toma de fuerza) del Vehicle Alerts API. En
-      // la flota Coopertrans = batea levantada para descargar carga.
-      // Útil para anti-fraude, productividad por chofer y planeamiento
-      // de viajes futuro.
+      // ================= DESCARGAS (nuevo) =================
+      // Cola en vivo + recién descargaron + KPIs basado en presencia
+      // REAL en geocercas configurables (ZONAS_DESCARGA). Reemplaza
+      // al detector PTO Volvo desde 2026-05-23.
+      case AppRoutes.adminDescargas:
+        return _buildRoute(
+          _protegerAdmin(const AdminDescargasScreen(),
+              Capability.verAlertasVolvo),
+          settings,
+        );
+
+      // ================= ZONAS DE DESCARGA (admin geocercas) =================
+      case AppRoutes.adminZonasDescarga:
+        return _buildRoute(
+          _protegerAdmin(const AdminZonasDescargaScreen(),
+              Capability.verAlertasVolvo),
+          settings,
+        );
+
+      // ================= DESCARGAS PTO (LEGACY) =================
+      // Detector viejo basado en PTO Volvo. Queda para comparar 1-2 releases
+      // con el nuevo y después se elimina junto con el archivo.
       case AppRoutes.adminDescargasPto:
         return _buildRoute(
           _protegerAdmin(const AdminDescargasPtoScreen(),
