@@ -343,17 +343,53 @@ class _CardReglasNotificacion extends StatelessWidget {
       );
     }
 
-    final items = <Widget>[];
+    // Agrupamos por la nueva categoría que publica el bot (2026-05-24).
+    // Compat: reglas viejas sin `categoria` caen en "OTROS".
+    final porCategoria = <String, List<MapEntry<String, Map>>>{};
     reglas.forEach((tipoKey, regla) {
       if (regla is! Map) return;
-      final dni = (regla['destinatarioDni'] ?? '').toString();
-      final desc = (regla['descripcion'] ?? '').toString();
-      items.add(_FilaReglaNotif(
-        titulo: _etiquetaTipo(tipoKey.toString()),
-        descripcion: desc,
-        destinatarioDni: dni,
-      ));
+      final cat = (regla['categoria'] ?? 'OTROS').toString();
+      porCategoria.putIfAbsent(cat, () => []).add(
+            MapEntry(tipoKey.toString(), regla),
+          );
     });
+    final ordenCategorias = [
+      'RESUMEN_DIARIO_08',
+      'CRON_BOT_60MIN',
+      'TIEMPO_REAL_CHOFER',
+      'CACHATORE',
+      'SISTEMA',
+      'OTROS',
+    ];
+
+    final secciones = <Widget>[];
+    for (final cat in ordenCategorias) {
+      final items = porCategoria[cat];
+      if (items == null || items.isEmpty) continue;
+      secciones.add(Padding(
+        padding: const EdgeInsets.only(top: 6, bottom: 8, left: 2),
+        child: Text(
+          _etiquetaCategoria(cat),
+          style: const TextStyle(
+            color: AppColors.accentGreen,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
+          ),
+        ),
+      ));
+      for (final entry in items) {
+        final dni = (entry.value['destinatarioDni'] ?? '').toString();
+        final desc = (entry.value['descripcion'] ?? '').toString();
+        final fuente = (entry.value['fuente'] ?? '').toString();
+        secciones.add(_FilaReglaNotif(
+          titulo: _etiquetaTipo(entry.key),
+          descripcion: desc,
+          destinatarioDni: dni,
+          fuente: fuente,
+        ));
+      }
+    }
 
     return AppCard(
       padding: const EdgeInsets.all(16),
@@ -376,13 +412,15 @@ class _CardReglasNotificacion extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          ...items,
+          const SizedBox(height: 8),
+          ...secciones,
           const SizedBox(height: 8),
           const Text(
-            'Para cambiar el destinatario del service diario: editar '
-            'SERVICE_DESTINATARIO_DNI en el .env del bot y reiniciar '
-            '(npm restart). El próximo heartbeat refleja el cambio.',
+            'Catálogo completo de mensajes que la app manda por WhatsApp. '
+            'Los DNI fijos de RESUMEN_DIARIO_08 viven hardcoded en '
+            'functions/src/comun.ts (cambio requiere redeploy de CF). '
+            'Los .env del bot (serviceDiario, vencimientosProximos) se '
+            'cambian editando .env + npm restart.',
             style: TextStyle(color: Colors.white38, fontSize: 11),
           ),
         ],
@@ -390,14 +428,62 @@ class _CardReglasNotificacion extends StatelessWidget {
     );
   }
 
+  String _etiquetaCategoria(String cat) {
+    switch (cat) {
+      case 'RESUMEN_DIARIO_08':
+        return 'RESÚMENES DIARIOS 08:00 ART (CLOUD FUNCTIONS)';
+      case 'CRON_BOT_60MIN':
+        return 'CRONS DEL BOT (CADA 60 MIN)';
+      case 'TIEMPO_REAL_CHOFER':
+        return 'TIEMPO REAL AL CHOFER (EVENT-DRIVEN)';
+      case 'CACHATORE':
+        return 'CACHATORE — TURNOS YPF';
+      case 'SISTEMA':
+        return 'SISTEMA / ADMIN';
+      default:
+        return 'OTROS';
+    }
+  }
+
   String _etiquetaTipo(String key) {
     switch (key) {
+      // Resúmenes 08:00
+      case 'mantenimientoBot':
+        return 'Salud del bot (caídas / recuperaciones)';
+      case 'driftsAsignaciones':
+        return 'Drifts iButton vs asignación del sistema';
+      case 'parteMantenimientoVolvo':
+        return 'Parte de mantenimiento Volvo';
+      case 'excesosJornada':
+        return 'Excesos de jornada (bloque/cuota/veda)';
+      case 'conductaManejo':
+        return 'Conducta de manejo (Sitrack + Volvo)';
+      // Crons bot 60 min
       case 'serviceDiario':
-        return 'Resumen diario de service';
+        return 'Service próximo / vencido';
+      case 'vencimientosProximosConsolidado':
+        return 'Vencimientos próximos (consolidado)';
       case 'vencimientosChofer':
         return 'Vencimientos del chofer';
       case 'vencimientosVehiculo':
         return 'Vencimientos del vehículo';
+      // Tiempo real chofer
+      case 'vigiladorJornada':
+        return 'Vigilador de jornada v2';
+      case 'alertasVolvoHigh':
+        return 'Alertas Volvo HIGH';
+      case 'iButtonNoIdentificado':
+        return 'Pasá el iButton (Sitrack drift)';
+      case 'silencioReanudado':
+        return 'Silencio reanudado';
+      // Cachatore
+      case 'cachatoreChofer':
+        return 'Turno YPF al chofer';
+      case 'cachatoreEncargado':
+        return 'Turnos YPF al encargado';
+      // Sistema
+      case 'colaCreciente':
+        return 'Alerta de cola creciente';
       default:
         return key;
     }
@@ -407,19 +493,22 @@ class _CardReglasNotificacion extends StatelessWidget {
 class _FilaReglaNotif extends StatelessWidget {
   final String titulo;
   final String descripcion;
-  /// Puede ser un DNI numérico, "CHOFER_AFECTADO", "CHOFER_ASIGNADO" o
+  /// Puede ser un DNI numérico, "CHOFER_AFECTADO", "CHOFER_ASIGNADO",
+  /// "CHOFER_MANEJANDO", "CHOFER_DEL_TURNO", "CHOFER_SILENCIADO" o
   /// vacío si no está configurado.
   final String destinatarioDni;
+  /// Origen técnico (ej. "CF resumenBotDiario", "bot cron_service_diario").
+  /// Se muestra chico abajo para que el admin pueda mapear regla → código.
+  final String fuente;
 
   const _FilaReglaNotif({
     required this.titulo,
     required this.descripcion,
     required this.destinatarioDni,
+    this.fuente = '',
   });
 
-  bool get _esDinamico =>
-      destinatarioDni == 'CHOFER_AFECTADO' ||
-      destinatarioDni == 'CHOFER_ASIGNADO';
+  bool get _esDinamico => destinatarioDni.startsWith('CHOFER_');
 
   @override
   Widget build(BuildContext context) {
@@ -454,16 +543,43 @@ class _FilaReglaNotif extends StatelessWidget {
           else if (_esDinamico)
             _BadgeDestinatario(
               icono: Icons.person_outline,
-              texto: destinatarioDni == 'CHOFER_AFECTADO'
-                  ? 'Al chofer dueño del documento'
-                  : 'Al chofer asignado al vehículo',
+              texto: _etiquetaChoferDinamico(destinatarioDni),
               color: AppColors.accentBlue,
             )
           else
             _DniResolver(dni: destinatarioDni),
+          if (fuente.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                'Fuente: $fuente',
+                style: const TextStyle(
+                  color: Colors.white24,
+                  fontSize: 10,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  String _etiquetaChoferDinamico(String tipo) {
+    switch (tipo) {
+      case 'CHOFER_AFECTADO':
+        return 'Al chofer dueño del documento';
+      case 'CHOFER_ASIGNADO':
+        return 'Al chofer asignado al vehículo';
+      case 'CHOFER_MANEJANDO':
+        return 'Al chofer que está manejando';
+      case 'CHOFER_DEL_TURNO':
+        return 'Al chofer titular del turno';
+      case 'CHOFER_SILENCIADO':
+        return 'Al chofer que fue silenciado';
+      default:
+        return tipo;
+    }
   }
 }
 
