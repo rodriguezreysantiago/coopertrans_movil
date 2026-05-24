@@ -37,6 +37,7 @@ from firebase_admin import credentials, firestore
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import parser as parser_mod  # noqa: E402
 from parser import (  # noqa: E402
     construir_doc_icm, _rango_semana_actual, _rango_semana_anterior,
     _rango_mes_anterior,
@@ -132,24 +133,158 @@ def _fetch_ranking(page, client_id, scope, grant, desde, hasta):
         return {}
 
 
-def _persistir(raw_driver, raw_holder, periodo, desde, hasta, alcance,
-               coleccion, commit, db):
-    """Construye el doc ICM y (si commit) lo escribe en coleccion/periodo.
-    Devuelve True si había data de choferes."""
+def _fetch_top_infractions(page, client_id, grant, desde, hasta, limit=10000):
+    """GET get_top_infractions: hotspots de infracciones agregados por
+    ubicación cartográfica única. Devuelve lista o []. Alimenta el mapa de
+    calor de la app."""
+    url = (f"{ICM_URL}get_top_infractions?limit={limit}&clientId={client_id}"
+           f"&scope=scopeDriver&dateTo={hasta}&dateFrom={desde}&grant={grant}")
+    try:
+        out = page.evaluate(
+            """async (u) => { const r = await fetch(u, {credentials:'include'});
+               if (!r.ok) return {__err: r.status}; return await r.json(); }""",
+            url,
+        )
+        if isinstance(out, list):
+            return out
+        if isinstance(out, dict) and "__err" in out:
+            print(f"    (get_top_infractions HTTP {out['__err']})")
+        return []
+    except Exception as e:
+        print(f"    (get_top_infractions falló: {str(e)[:90]})")
+        return []
+
+
+def _fetch_infractions_chofer(page, client_id, grant, scope_id, desde, hasta,
+                              limit=1000):
+    """POST get_infractions: lista individual de las infracciones del chofer
+    `scope_id` (ID interno Sitrack, NO DNI — viene del response de
+    get_ranking_data como `scopeId`). Devuelve lista o [].
+
+    Sitrack normalmente devuelve `limit=10` por defecto (paginado); pedimos
+    1000 que cubre cualquier chofer en un período mensual (el más malo ronda
+    50-100 infracciones)."""
+    js = (
+        "async (args) => {\n"
+        "  const body = new URLSearchParams({\n"
+        "    limit: String(args.limit),\n"
+        "    scope: 'scopeDriver',\n"
+        "    scopeId: String(args.scopeId),\n"
+        "    dateFrom: args.dateFrom,\n"
+        "    dateTo: args.dateTo,\n"
+        "    fleetId: '',\n"
+        "    suffix: '',\n"
+        "    grant: args.grant,\n"
+        "    clientId: String(args.clientId),\n"
+        "  });\n"
+        "  const r = await fetch(args.url, {\n"
+        "    method: 'POST',\n"
+        "    credentials: 'include',\n"
+        "    headers: {'Content-Type': 'application/x-www-form-urlencoded'},\n"
+        "    body: body.toString(),\n"
+        "  });\n"
+        "  if (!r.ok) return {__err: r.status};\n"
+        "  return await r.json();\n"
+        "}"
+    )
+    args = {
+        "url": f"{ICM_URL}get_infractions",
+        "limit": limit,
+        "scopeId": scope_id,
+        "dateFrom": desde,
+        "dateTo": hasta,
+        "grant": grant,
+        "clientId": client_id,
+    }
+    try:
+        out = page.evaluate(js, args)
+        if isinstance(out, list):
+            return out
+        if isinstance(out, dict):
+            # Sitrack a veces envuelve la lista en {items:[...]} o {data:[...]}
+            for k in ("items", "data", "rows", "infractions"):
+                if isinstance(out.get(k), list):
+                    return out[k]
+            if "__err" in out:
+                print(f"      (get_infractions HTTP {out['__err']} para scopeId {scope_id})")
+        return []
+    except Exception as e:
+        print(f"      (get_infractions falló scopeId {scope_id}: {str(e)[:90]})")
+        return []
+
+
+MAX_INFRAC_POR_CHOFER = 100
+"""Tope de infracciones individuales que guardamos por chofer en el doc del
+período. El doc serializado supera ~700 KB para un mes normal de la flota
+Vecchi (50 choferes activos × ~33 infracciones promedio). Firestore limita
+los docs a 1 MB → para no explotar en meses largos / choferes outlier (vimos
+casos reales de 91 infrac/mes) capamos en 100 y dejamos margen del ~30%.
+Si en algún chofer se supera, loguemos y queda como señal de que conviene
+migrar a subcolección antes de seguir creciendo."""
+
+
+def _enriquecer_con_infracciones(page, client_id, grant, doc, desde, hasta):
+    """Para cada chofer activo del doc, llama get_infractions(scopeId) y
+    guarda el array en `doc['choferes'][i]['infracciones']`. Choferes sin
+    actividad o sin scope_id quedan con la lista vacía. Logueamos progreso
+    cada 10 choferes (con 50 puede demorar ~1 min).
+
+    Cap de MAX_INFRAC_POR_CHOFER por chofer (las más recientes según las
+    devuelve Sitrack). Si alguno supera el cap, log warning para alertar."""
+    if not doc or not doc.get("choferes"):
+        return
+    activos = [c for c in doc["choferes"]
+               if c.get("severidad") != "UNAVAILABLE_NO_ACTIVITY"
+               and int(c.get("scope_id") or 0) > 0]
+    print(f"      → trayendo infracciones individuales de "
+          f"{len(activos)} chofer(es) activo(s)…")
+    total_infrac = 0
+    capeados = 0
+    for idx, c in enumerate(activos):
+        raw = _fetch_infractions_chofer(
+            page, client_id, grant, c["scope_id"], desde, hasta,
+            limit=MAX_INFRAC_POR_CHOFER + 1)  # +1 para detectar overflow
+        items = [parser_mod.parsear_infraccion_individual(i)
+                 for i in raw if isinstance(i, dict)]
+        if len(items) > MAX_INFRAC_POR_CHOFER:
+            capeados += 1
+            print(f"        ⚠ {c.get('nombre')}: {len(items)} infrac. "
+                  f"(capeado a {MAX_INFRAC_POR_CHOFER})")
+            items = items[:MAX_INFRAC_POR_CHOFER]
+        c["infracciones"] = items
+        total_infrac += len(items)
+        if (idx + 1) % 10 == 0:
+            print(f"        ({idx+1}/{len(activos)} procesados, "
+                  f"{total_infrac} infrac. acumuladas)")
+        # Pequeño jitter para no martillar el WAF de Sitrack.
+        page.wait_for_timeout(120)
+    suf = f" ({capeados} chofer(es) capeados al tope)" if capeados else ""
+    print(f"      ← total {total_infrac} infracciones individuales mapeadas{suf}")
+
+
+def _persistir(raw_driver, raw_holder, raw_hotspots, periodo, desde, hasta,
+               alcance, coleccion, commit, db, page, client_id, grant):
+    """Construye el doc ICM (incluye hotspots de mapa de calor), enriquece
+    los choferes activos con sus infracciones individuales (get_infractions
+    por scopeId) y, si commit, lo escribe en coleccion/periodo. Devuelve
+    True si había data de choferes."""
     n = len((raw_driver or {}).get("rankingItemsByScope", {}))
     if not n:
         print(f"  [{coleccion}/{periodo}] driver vacío — salteado")
         return False
     doc = construir_doc_icm(raw_driver, raw_holder, periodo, desde, hasta,
-                            alcance)
+                            alcance, raw_hotspots=raw_hotspots)
     print(f"  [{coleccion}/{periodo}] ICM flota {doc['icm_general']} | "
           f"activos {doc['choferes_activos']}/{doc['choferes_total']} | "
           f"veh {len(doc['vehiculos'])} | km {doc['distancia_total_km']:,.0f} | "
-          f"días {len(doc['tendencia_diaria'])}")
+          f"días {len(doc['tendencia_diaria'])} | "
+          f"hotspots {len(doc['infracciones_heatmap'])}")
     peor = doc["choferes"][0] if doc["choferes"] else None
     if peor:
         print(f"      peor: {peor['icm']:.2f} {peor['severidad_label']} "
               f"{peor['nombre']}")
+    # Enriquecer con infracciones individuales por chofer (1 fetch por activo).
+    _enriquecer_con_infracciones(page, client_id, grant, doc, desde, hasta)
     if commit:
         db.collection(coleccion).document(periodo).set({
             **doc, "sincronizado_en": firestore.SERVER_TIMESTAMP,
@@ -163,7 +298,12 @@ def _cerrar_si_falta(page, client_id, grant, db, coleccion, periodo, desde,
     """Snapshot INMUTABLE de cierre: crea coleccion/periodo UNA sola vez (si no
     existe) con la data del período ya cerrado. NUNCA sobreescribe → la
     liquidación de premios se hace sobre un número que no cambia aunque Sitrack
-    reprocese. En dry-run solo reporta qué congelaría."""
+    reprocese. En dry-run solo reporta qué congelaría.
+
+    El cierre también trae hotspots + infracciones individuales (mismo
+    enriquecimiento que la corrida diaria del período en curso) para que el
+    snapshot sea autónomo y la app pueda mostrar el detalle aunque Sitrack
+    pierda la data."""
     if commit and db.collection(coleccion).document(periodo).get().exists:
         return  # ya congelado — no tocar
     drv = _fetch_ranking(page, client_id, "scopeDriver", grant, desde, hasta)
@@ -171,9 +311,13 @@ def _cerrar_si_falta(page, client_id, grant, db, coleccion, periodo, desde,
         print(f"  [cierre {coleccion}/{periodo}] sin data ({desde}→{hasta}) — salteado")
         return
     hold = _fetch_ranking(page, client_id, "scopeHolder", grant, desde, hasta)
-    doc = construir_doc_icm(drv, hold, periodo, desde, hasta, alcance)
+    hotspots = _fetch_top_infractions(page, client_id, grant, desde, hasta)
+    doc = construir_doc_icm(drv, hold, periodo, desde, hasta, alcance,
+                            raw_hotspots=hotspots)
     print(f"  [cierre {coleccion}/{periodo}] {desde}→{hasta} ICM {doc['icm_general']} "
-          f"activos {doc['choferes_activos']}/{doc['choferes_total']}")
+          f"activos {doc['choferes_activos']}/{doc['choferes_total']} | "
+          f"hotspots {len(doc['infracciones_heatmap'])}")
+    _enriquecer_con_infracciones(page, client_id, grant, doc, desde, hasta)
     if commit:
         db.collection(coleccion).document(periodo).set({
             **doc,
@@ -256,6 +400,8 @@ def main():
                                     desde, hasta)
         raw_holder = _fetch_ranking(page, client_id, "scopeHolder", grant,
                                     desde, hasta)
+        raw_hotspots = _fetch_top_infractions(page, client_id, grant,
+                                              desde, hasta)
         # Semanal (lunes ART → hoy) — mismo request, otro rango. Para el
         # ranking semanal de la app (premios por semana).
         sem_desde, sem_hasta, sem_id = _rango_semana_actual(hoy_art)
@@ -263,6 +409,8 @@ def main():
                                      sem_desde, sem_hasta)
         raw_hold_sem = _fetch_ranking(page, client_id, "scopeHolder", grant,
                                       sem_desde, sem_hasta)
+        raw_hotspots_sem = _fetch_top_infractions(page, client_id, grant,
+                                                  sem_desde, sem_hasta)
 
         # Cierres INMUTABLES (mes anterior desde el día 4; semana anterior
         # desde el martes). Crean el snapshot UNA vez para liquidar premios.
@@ -270,17 +418,25 @@ def main():
                                        args.commit)
         _cerrar_semanal_si_corresponde(page, client_id, grant, db, hoy_art,
                                        args.commit)
+
+        # Persistir mensual + semanal con enriquecimiento de infracciones
+        # POR CHOFER (1 fetch por activo, ~120ms entre cada uno). Hay que
+        # hacerlo ANTES de cerrar el browser porque _enriquecer_con_infrac…
+        # usa la sesión Playwright para cada fetch.
+        ok = _persistir(raw_driver, raw_holder, raw_hotspots, periodo, desde,
+                        hasta, "mensual", "ICM_OFICIAL", args.commit, db,
+                        page, client_id, grant)
+        if not ok:
+            print("mensual vino vacío — abortando (revisar grant/sesión)")
+            browser.close()
+            return 1
+
+        print(f"--- semanal {sem_id} ({sem_desde} → {sem_hasta}) ---")
+        _persistir(raw_drv_sem, raw_hold_sem, raw_hotspots_sem, sem_id,
+                   sem_desde, sem_hasta, "semanal", "ICM_OFICIAL_SEMANAL",
+                   args.commit, db, page, client_id, grant)
+
         browser.close()
-
-    ok = _persistir(raw_driver, raw_holder, periodo, desde, hasta, "mensual",
-                    "ICM_OFICIAL", args.commit, db)
-    if not ok:
-        print("mensual vino vacío — abortando (revisar grant/sesión)")
-        return 1
-
-    print(f"--- semanal {sem_id} ({sem_desde} → {sem_hasta}) ---")
-    _persistir(raw_drv_sem, raw_hold_sem, sem_id, sem_desde, sem_hasta,
-               "semanal", "ICM_OFICIAL_SEMANAL", args.commit, db)
 
     if not args.commit:
         print("\n=== DRY-RUN (no escribió). Agregá --commit para guardar. ===")

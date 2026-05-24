@@ -99,6 +99,10 @@ def parsear_chofer(item: dict) -> dict:
     return {
         "dni": (item.get("document") or "").strip(),
         "nombre": (item.get("scope") or "").strip(),
+        # scopeId: ID interno de Sitrack (distinto del DNI). Sirve para
+        # llamar a get_infractions(scopeId) y traer el detalle individual.
+        # Lo guardamos en el doc para que el sync no tenga que re-resolverlo.
+        "scope_id": int(_num(item.get("scopeId"))),
         "icm": _r(item.get("score")),
         "icm_urbano": _r(item.get("scoreOnUrban")),
         "icm_no_urbano": _r(item.get("scoreOnNonUrban")),
@@ -111,6 +115,63 @@ def parsear_chofer(item: dict) -> dict:
         "conduccion_agresiva": int(_num(item.get("scoreAggressiveActivityCount"))),
         "severidad": sev,
         "severidad_label": SEVERIDAD_ES.get(sev, sev or "—"),
+        # infracciones[] se llena en sync_icm.py después con el endpoint
+        # get_infractions(scopeId). Acá lo dejamos vacío como contrato.
+        "infracciones": [],
+    }
+
+
+def parsear_hotspot_infraccion(item: dict) -> dict:
+    """Item crudo de get_top_infractions (agregado por ubicación cartográfica
+    única) → dict para Firestore. El array completo alimenta el mapa de calor
+    de la app: cada hotspot tiene lat/lng + amount (cantidad de infracciones
+    en esa ubicación) + tipo + score + ejemplo de timestamp/velocidad."""
+    return {
+        # Identificación del hotspot
+        "infraccion": (item.get("infraction") or "").strip(),
+        "tipo": (item.get("type") or "").strip(),       # 'htl'/'htm'/'htg' etc.
+        "ubicacion": (item.get("location") or "").strip(),
+        "latitud": _r(item.get("latitude"), 6),
+        "longitud": _r(item.get("longitude"), 6),
+        # Métricas
+        "cantidad": int(_num(item.get("amount"))),       # cuántas veces ocurrió
+        "porcentaje": _r(item.get("percent"), 2),        # % del total de infrac.
+        "puntaje": _r(item.get("score"), 2),             # cuánto suma al ICM
+        # Datos de ejemplo / detalle
+        "fecha_reporte": (item.get("reportDate") or "").strip(),
+        "vel_maxima": _r(item.get("maxSpeed"), 1),
+        "vel_promedio": _r(item.get("avgSpeed"), 1),
+        "vel_limite": _r(item.get("speedLimit"), 1),
+        "tiempo": (item.get("time") or "").strip() if isinstance(item.get("time"), str) else None,
+    }
+
+
+def parsear_infraccion_individual(item: dict) -> dict:
+    """Item crudo de get_infractions (1 fila = 1 infracción individual del
+    chofer) → dict para Firestore. Mapea las MISMAS columnas que muestra el
+    modal de detalle de Sitrack: vehículo + tipo + fecha+hora + ubicación
+    + vel.permitida + pico + tiempo + puntaje."""
+    return {
+        # Vehículo al momento de la infracción (para reasignaciones del período)
+        "patente": (item.get("vehicle") or item.get("plate") or "").strip().upper(),
+        # Tipo legible: "Frenada Brusca Grave", "Giro Brusco Leve", "Conducción Continua..."
+        "infraccion": (item.get("infraction") or "").strip(),
+        "tipo": (item.get("type") or "").strip(),
+        # Timestamp con hora ("2026-05-18 17:01:38")
+        "fecha": (item.get("reportDate") or item.get("date") or "").strip(),
+        # Texto de ubicación + coordenadas
+        "ubicacion": (item.get("location") or "").strip(),
+        "latitud": _r(item.get("latitude"), 6),
+        "longitud": _r(item.get("longitude"), 6),
+        "rumbo": (item.get("heading") or item.get("course") or "").strip() if isinstance(item.get("heading") or item.get("course"), str) else None,
+        # Velocidades
+        "vel_limite": _r(item.get("speedLimit"), 1),
+        "vel_maxima": _r(item.get("maxSpeed"), 1),   # "Pico de velocidad" en la UI
+        "vel_promedio": _r(item.get("avgSpeed"), 1),
+        # Tiempo (sólo para "Conducción Continua" — HH:MM:SS)
+        "tiempo": (item.get("time") or "").strip() if isinstance(item.get("time"), str) else None,
+        # Puntaje individual (cuánto sumó al ICM)
+        "puntaje": _r(item.get("score"), 2),
     }
 
 
@@ -195,11 +256,17 @@ def _tendencia_diaria(raw: dict | None) -> list:
 
 def construir_doc_icm(raw_driver: dict, raw_holder: dict | None,
                       periodo: str, desde: str, hasta: str,
-                      alcance: str = "mensual") -> dict:
+                      alcance: str = "mensual",
+                      raw_hotspots: list | None = None) -> dict:
     """Arma el doc `ICM_OFICIAL/{periodo}` desde las respuestas crudas del
     endpoint por chofer (raw_driver, obligatorio) y por vehículo (raw_holder,
-    opcional). `periodo` ej. '2026-05'. Devuelve dict listo para Firestore
-    (sin serverTimestamp — eso lo agrega el caller)."""
+    opcional). `raw_hotspots` (opcional) = lista cruda de get_top_infractions
+    para alimentar el mapa de calor. `periodo` ej. '2026-05'. Devuelve dict
+    listo para Firestore (sin serverTimestamp — eso lo agrega el caller).
+
+    Las infracciones individuales por chofer NO se inyectan acá — el caller
+    las trae por chofer activo (con get_infractions(scopeId)) y las hace
+    merge en `doc['choferes'][i]['infracciones']` antes de persistir."""
     items_d = [i for i in (raw_driver or {}).get("rankingItemsByScope", {}).values()
                if not _es_no_chofer(i)]
     choferes = _ordenar_peor_primero([parsear_chofer(i) for i in items_d])
@@ -210,6 +277,11 @@ def construir_doc_icm(raw_driver: dict, raw_holder: dict | None,
         vehiculos = _ordenar_peor_primero([parsear_vehiculo(i) for i in items_v])
 
     activos = [c for c in choferes if c["severidad"] != "UNAVAILABLE_NO_ACTIVITY"]
+
+    hotspots = []
+    if raw_hotspots:
+        hotspots = [parsear_hotspot_infraccion(i) for i in raw_hotspots
+                    if isinstance(i, dict)]
 
     return {
         "periodo": periodo,
@@ -229,5 +301,9 @@ def construir_doc_icm(raw_driver: dict, raw_holder: dict | None,
         "vehiculos": vehiculos,
         # ICM de la flota día por día (para el gráfico de tendencia de la app).
         "tendencia_diaria": _tendencia_diaria(raw_driver),
+        # Mapa de calor: hotspots agregados por ubicación cartográfica única
+        # (el endpoint get_top_infractions devuelve <= 5 items por defecto;
+        # con limit=10000 trae todos). Vacío si raw_hotspots es None.
+        "infracciones_heatmap": hotspots,
         "fuente": "sitrack_icm_oficial",
     }
