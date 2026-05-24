@@ -7,6 +7,119 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-05-24 — Análisis Volvo Connect vs nuestra app — propuestas pendientes
+
+Exploración profunda del portal Volvo Connect (9 módulos del app launcher
++ 8 informes estándar + dashboard) + inventario exhaustivo del lado nuestro
+(qué ya consumimos vs qué no). **8 propuestas priorizadas por ROI**. Hoy
+se cerró V6 — las 7 restantes quedan acá como roadmap.
+
+### ✅ HECHO hoy
+
+- **V6 — Widget Km Recorridos** (commit `3507d4a`). Sorpresa: TELEMETRIA_HISTORICO
+  ya tenía snapshot diario por las 53 unidades Volvo (`telemetriaSnapshotScheduled`
+  cada 6h). Solo faltaba consumirlo. Nuevo widget en
+  AdminMantenimientoDetalleScreen con KPIs mes en curso vs anterior +
+  gráfico 30 días + tabla 3 meses (km, L, l/100km). Service
+  OdometrosService calcula deltas client-side.
+
+### ⏳ PENDIENTE — ordenadas por ROI
+
+#### 🥇 V1 — Tablero Seguridad por chofer (data ya en Firestore, solo UI)
+**Esfuerzo: S. Valor: 🔥🔥🔥**
+
+`VOLVO_SCORES_DIARIOS` ya tiene 17 sub-scores del API Volvo (Defensivo, Atención,
+Uso funcional, etc.). La pantalla Eco-Driving solo muestra eficiencia.
+**Toda la data de seguridad está, falta UI.**
+
+Plan: pantalla nueva "Seguridad" en hub ICM con score 78 + 3 sub-scores
+(Defensivo 85 / Atención 53 / Uso funcional 91) + 12 sub-métricas (Distance
+Alert, ABS, frenado brusco, advertencia colisión, DAS, LKS, LCS, AEBS) +
+ranking unidades por score seguridad + WhatsApp diario a Molina con
+unidades < 60.
+
+#### 🥈 V2 — Métrica RALENTÍ % por chofer/unidad (combustible perdido)
+**Esfuerzo: M. Valor: 🔥🔥🔥**
+
+Hoy desperdiciamos plata sin medir. Volvo lo expone en informe Rendimiento
+(% ralentí, % PTO, % punto muerto, % programador velocidad por vehículo).
+**1 punto % menos de ralentí flota = ~3000 L/mes = $1.500.000 ARS/mes.**
+
+Plan: extender `volvoScoresPoller` para persistir `ralenti_pct`, `pto_pct`,
+`punto_muerto_pct` por vehículo/día (los campos ya vienen del API).
+Pantalla "Combustible" en Reportes con ranking + L perdidos estimados +
+$/mes + alerta WhatsApp si una unidad > 35% ralentí 3 días seguidos.
+Cruce con chofer asignado via SITRACK_IBUTTONS_HISTORICO.
+
+#### 🥉 V3 — Calendario citas taller FUTURAS (visibilidad Emmanuel)
+**Esfuerzo: M. Valor: 🔥🔥🔥**
+
+Hoy Emmanuel sabe lo PASADO (sync_taller.py historial). NO sabe qué hay
+PROGRAMADO. Volvo `/calendar` tiene cada cita con tipo (Diagnóstico/Reparación)
++ taller + dirección + tel + estado.
+
+Plan: scraper Playwright `sync_calendario.py` en volvo_sync/ → escribe
+VEHICULOS_CITAS_TALLER/{patente}_{fecha_iso}. Pantalla "Calendario taller"
+en Mantenimiento (vista mes con citas). WhatsApp a Emmanuel cada lunes
+06:00: "Esta semana van al taller: AF472BO mié 30/abr (Ruta Sur Trucks
+Bahía Blanca)". Tile en panel: "3 citas próximas".
+
+#### 4️⃣ V4 — Reporte mensual sostenibilidad CO₂/NOx/PM para YPF
+**Esfuerzo: M. Valor: 🔥🔥🔥** (diferenciador comercial)
+
+YPF y clientes corporativos PIDEN datos de emisiones. Volvo los calcula
+(informe Medioambiental: CO₂ t, NOx kg, PM kg por unidad).
+
+Plan: scraper extrae informe Medioambiental mensual → VOLVO_EMISIONES_MES/{YYYY-MM}.
+Pantalla "Sostenibilidad" en Reportes (CO₂ t mensual + por unidad + tendencia
+anual). Excel exportable "Reporte de Emisiones Vecchi — Mes X" listo para
+enviar a YPF.
+
+#### 5️⃣ V5 — Capturar "DAS desactivado" + alertas bypass de seguridad
+**Esfuerzo: S. Valor: 🔥🔥🔥** (señal grave hoy invisible)
+
+Cuando un chofer apaga DAS/AEBS/LKS, deliberadamente apaga la seguridad.
+Volvo lo emite como alerta separada. Hoy probablemente cae en nuestra
+blacklist genérica.
+
+Plan: auditar tipos de alerta en VOLVO_ALERTAS últimos 30 días → identificar
+"DAS desactivado" / "Sistema deshabilitado". Whitelist específica
+(DAS_DISABLED, DISTANCE_ALERT_DISABLED, LKS_DISABLED) → SIEMPRE al admin
+(no al chofer). WhatsApp inmediato a Molina. Ranking mensual top 5 unidades
+con más DAS-disabled.
+
+#### 6️⃣ V7 — Monitor suscripciones Volvo vencidas
+**Esfuerzo: S. Valor: 🔥** (preventivo, evita perder data)
+
+Dashboard muestra 6 suscripciones vencidas hoy. Si vencen las críticas
+(Posicionamiento, Telemetría, Alerts API), perdemos data sin enterarnos.
+
+Plan: scraper extiende sync_taller.py para leer el widget de suscripciones
+semanalmente. Si hay vencidas → alerta a Santiago para renovar antes.
+
+#### 7️⃣ V8 — Frenadas/Aceleraciones/ESC/Distance Alert por 100 km
+**Esfuerzo: S. Valor: 🔥🔥**
+
+Hoy comparamos choferes por # eventos absolutos. Un chofer que hizo 3000 km
+naturalmente tiene más eventos que uno que hizo 1000 km. Volvo normaliza
+por 100 km — comparación justa.
+
+Plan: extender VOLVO_SCORES_DIARIOS con los promedios/100km que Volvo
+expone en informe Seguridad. Agregar columnas al ranking ICM:
+"Frenadas/100km", "Aceleraciones/100km", "ESC/100km".
+
+### ❌ DESCARTADOS con justificación
+
+- **Libro de Registro Volvo**: chat con taller. Vecchi no lo usa, nuestro
+  módulo de Taller es propio.
+- **Mensajería Volvo**: chat con asistencia. WhatsApp ya cubre.
+- **Tienda de servicios Volvo**: gestión comercial externa.
+- **Administración usuarios/vehículos Volvo**: gestión externa, no fluye
+  nada operativo a la app.
+- **Informe Resumen + Seguimiento**: duplican lo que tenemos en pantallas propias.
+
+---
+
 ## 📅 2026-05-24 — Análisis Sitrack vs nuestra app — propuestas pendientes
 
 Auditoría completa del portal Sitrack (43 endpoints / vistas inventariados) + cruce
