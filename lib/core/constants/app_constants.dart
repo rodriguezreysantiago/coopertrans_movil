@@ -44,6 +44,11 @@ class AppRoutes {
   /// pero la pantalla se mantiene como destino de los tap → detalle desde
   /// el ranking + top 5 mejores/peores del hub + top 5 del reporte mensual.
   static const String adminIcmDetalleChofer = '/admin_icm_detalle_chofer';
+  /// Jornada por chofer y día — inicio/fin, tramos de manejo y paradas
+  /// reconstruidos desde SITRACK_EVENTOS por la CF
+  /// `reconstruirJornadasDiario`. Marca descansos suficientes (≥15 min
+  /// para corte de bloque, ≥8h para fin de jornada según política Vecchi v2).
+  static const String adminIcmJornadaDia = '/admin_icm_jornada_dia';
   // Pantallas Volvo restantes (mantienen `verAlertasVolvo` por ahora):
   /// Auditoría de asignaciones — cruza el histórico REAL del iButton
   /// (SITRACK_IBUTTONS_HISTORICO) contra ASIGNACIONES_VEHICULO. Util
@@ -433,6 +438,14 @@ class AppCollections {
   /// discrepancias se marcan en la UI — útil para multas tardías,
   /// investigaciones y reconciliación de asignaciones cargadas mal.
   static const String sitrackIButtonsHistorico = 'SITRACK_IBUTTONS_HISTORICO';
+
+  /// Histórico de jornadas reconstruidas desde SITRACK_EVENTOS.
+  /// DocId determinístico `{dni}_{YYYY-MM-DD}`. La produce la CF
+  /// `reconstruirJornadasDiario` (cron 06:30 ART) y la consume la
+  /// pantalla "Jornada" del hub ICM con gráfico velocidad/tiempo,
+  /// tramos de manejo y paradas clasificadas (≥15 min para corte de
+  /// bloque, ≥8h para fin de jornada).
+  static const String volvoJornadasHistorico = 'VOLVO_JORNADAS_HISTORICO';
 
   // ─── Módulo Zonas de Descarga (2026-05-23) ───
   /// Zonas geográficas configurables (polígono o círculo) que marcan

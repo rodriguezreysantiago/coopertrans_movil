@@ -47,4 +47,5 @@ export * from "./mantenimiento";
 export * from "./sitrack";
 export * from "./zonas_descarga";
 export * from "./historico_ibuttons";
+export * from "./jornada_historico";
 export * from "./resumenes_diarios";

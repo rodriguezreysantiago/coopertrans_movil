@@ -797,6 +797,20 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // VOLVO_JORNADAS_HISTORICO — jornada reconstruida por chofer y día
+    // ========================================================================
+    // La CF `reconstruirJornadasDiario` agrupa SITRACK_EVENTOS por
+    // (driver_dni, día ART) y reconstruye tramos de manejo + paradas.
+    // DocId determinístico `{dni}_{YYYY-MM-DD}`. Solo escribe la CF.
+    // Lectura: admin/supervisor/SEG_HIGIENE (mismo grupo que ICM).
+    // El chofer ve SU PROPIA jornada (isSelf con prefijo del docId).
+    match /VOLVO_JORNADAS_HISTORICO/{doc} {
+      allow read: if puedeVerVolvoTableros()
+                  || (isSignedIn() && doc.split('_')[0] == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+
+    // ========================================================================
     // ZONAS_DESCARGA — geofences configurables para módulo "Descargas"
     // ========================================================================
     // El operador admin crea/edita zonas (polígono o círculo) desde la app.

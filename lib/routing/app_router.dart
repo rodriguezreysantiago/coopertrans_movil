@@ -63,6 +63,7 @@ import '../features/icm/screens/icm_ranking_screen.dart';
 import '../features/icm/screens/icm_reporte_semanal_screen.dart';
 import '../features/icm/screens/icm_mapa_calor_screen.dart';
 import '../features/icm/screens/icm_detalle_chofer_screen.dart';
+import '../features/jornada_historico/screens/jornada_dia_screen.dart';
 
 import '../features/cachatore/screens/cachatore_hub_screen.dart';
 
@@ -302,6 +303,17 @@ class AppRouter {
       case AppRoutes.adminIcmDetalleChofer:
         return _buildRoute(
           _protegerAdmin(const IcmDetalleChoferScreen(), Capability.verIcm),
+          settings,
+        );
+
+      // ================= JORNADA POR CHOFER + DÍA =================
+      // Reconstruida desde SITRACK_EVENTOS por la CF reconstruirJornadasDiario.
+      // Gráfico velocidad/tiempo + tramos + paradas clasificadas según
+      // política Vecchi v2 (≥15 min cumple corte de bloque, ≥8h cumple
+      // descanso entre jornadas).
+      case AppRoutes.adminIcmJornadaDia:
+        return _buildRoute(
+          _protegerAdmin(const JornadaDiaScreen(), Capability.verIcm),
           settings,
         );
 

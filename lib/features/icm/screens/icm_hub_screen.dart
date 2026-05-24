@@ -302,7 +302,7 @@ class _GridSubpantallas extends StatelessWidget {
         final w = constraints.maxWidth;
         // 3 tiles (antes 4; el de DETALLE POR CHOFER se sacó 2026-05-23).
         // Desktop 3×1, tablet 2×2 con el 3º solo en la 2ª fila, mobile 1 col.
-        final cols = w >= 800 ? 3 : (w >= 540 ? 2 : 1);
+        final cols = w >= 800 ? 4 : (w >= 540 ? 2 : 1);
         return GridView.count(
           crossAxisCount: cols,
           shrinkWrap: true,
@@ -331,6 +331,13 @@ class _GridSubpantallas extends StatelessWidget {
               icono: Icons.map_outlined,
               color: AppColors.accentOrange,
               ruta: AppRoutes.adminIcmMapaCalor,
+            ),
+            _HubTile(
+              titulo: 'JORNADA',
+              subtitulo: 'Inicio, paradas y descansos por chofer + día',
+              icono: Icons.timeline,
+              color: AppColors.accentTeal,
+              ruta: AppRoutes.adminIcmJornadaDia,
             ),
           ],
         );
