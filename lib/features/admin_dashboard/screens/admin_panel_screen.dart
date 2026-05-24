@@ -259,8 +259,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               ),
             if (Capabilities.can(PrefsService.rol, Capability.verEstadoBot))
               const _AdminTile(
-                titulo: 'ESTADO BOT',
-                subtitulo: 'Bot WhatsApp: cola, cron, errores y heartbeat',
+                titulo: 'WHATSAPP BOT',
+                subtitulo: 'Cola, cron, errores y heartbeat',
                 icono: Icons.smart_toy_outlined,
                 color: AppColors.accentLightGreen,
                 ruta: AppRoutes.adminEstadoBot,

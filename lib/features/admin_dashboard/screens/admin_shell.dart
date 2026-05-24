@@ -194,7 +194,7 @@ class _AdminShellState extends State<AdminShell> {
       build: () => const CachatoreHubScreen(),
     ),
     _ShellSection(
-      label: 'Estado Bot',
+      label: 'WhatsApp Bot',
       icon: Icons.smart_toy_outlined,
       iconActive: Icons.smart_toy,
       build: () => const AdminEstadoBotScreen(),
