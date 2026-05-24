@@ -49,6 +49,18 @@ const _state = {
   ultimoCicloStats: null, // { encolados, salteados, errores } | null
   ultimoMensajeEnviado: null, // Date | null
   mensajesEnviadosHoy: 0,
+  // Breakdown del contador del día por categoría (2026-05-24): el
+  // operador admin necesita ver "150 enviados = 100 vencimientos +
+  // 30 jornada + 20 alertas Volvo" en vez de un solo número agregado.
+  // Las 5 categorías mapean 1-1 con las de `reglasNotificacion` abajo.
+  mensajesEnviadosHoyPorCategoria: {
+    RESUMEN_DIARIO_08: 0,
+    CRON_BOT_60MIN: 0,
+    TIEMPO_REAL_CHOFER: 0,
+    CACHATORE: 0,
+    SISTEMA: 0,
+    OTROS: 0,
+  },
   fechaContadorHoy: _hoyIso(), // YYYY-MM-DD en TZ del server
   erroresRecientes: [], // [{ en: Date, contexto, mensaje }]
   // Timestamps (en ms) de los últimos envíos de la última hora — usados
@@ -87,19 +99,79 @@ function setEstadoCliente(estado) {
 }
 
 /**
- * Llamar después de cada envío exitoso.
- * Bumpea el contador del día y registra el timestamp.
+ * Mapea el `origen` del doc de COLA_WHATSAPP a la categoría que se usa
+ * para el breakdown y para `reglasNotificacion`. Los strings vienen de
+ * los callers en functions/src/* y whatsapp-bot/src/*. Si aparece un
+ * origen desconocido cae en OTROS — eso es visible en la card y avisa
+ * de un nuevo path a mapear.
  */
-function registrarEnvio() {
+function _categoriaDeOrigen(origen) {
+  const o = (origen || '').toString();
+  if (!o) return 'OTROS';
+  // RESUMEN_DIARIO_08 (CFs 08:00 ART)
+  if (
+    o === 'cron_bot_resumen_diario' ||
+    o === 'resumen_drifts_asignaciones' ||
+    o === 'resumen_jornadas_v2' ||
+    o === 'resumen_conducta_manejo_diario' ||
+    o === 'resumen_mantenimiento_vehiculos'
+  ) return 'RESUMEN_DIARIO_08';
+  // CRON_BOT_60MIN (los 4 crons del bot)
+  if (
+    o.startsWith('cron_aviso_') ||
+    o === 'cron_service_diario' ||
+    o === 'cron_vencimientos_proximos_diario'
+  ) return 'CRON_BOT_60MIN';
+  // TIEMPO_REAL_CHOFER
+  if (
+    o.startsWith('jornada_v2_') ||
+    o === 'sitrack_chofer_no_identificado' ||
+    o === 'silencio_reanudado' ||
+    o === 'silenciado_aviso' ||
+    o === 'desilenciado_aviso' ||
+    o === 'jornada_manual_admin' ||
+    o.startsWith('volvo_alerta_') ||
+    o.startsWith('alerta_volvo_')
+  ) return 'TIEMPO_REAL_CHOFER';
+  // CACHATORE
+  if (o.startsWith('cachatore_')) return 'CACHATORE';
+  // SISTEMA
+  if (
+    o === 'health_alert_cola_creciente' ||
+    o === 'comando_test_aviso'
+  ) return 'SISTEMA';
+  return 'OTROS';
+}
+
+/**
+ * Llamar después de cada envío exitoso.
+ * Bumpea el contador del día (total y por categoría) y registra el ts.
+ *
+ * `origen` viene del campo `origen` del doc COLA_WHATSAPP. Si no se
+ * pasa, el envío suma a OTROS — útil para detectar callers nuevos que
+ * todavía no están mapeados en _categoriaDeOrigen.
+ */
+function registrarEnvio(origen) {
   // Si cambió el día desde el último envío, reseteamos el contador.
   // Esto evita acumular el contador para siempre (ahora la app puede
   // mostrar "X mensajes enviados HOY" sin lógica extra).
   const hoy = _hoyIso();
   if (hoy !== _state.fechaContadorHoy) {
     _state.mensajesEnviadosHoy = 0;
+    _state.mensajesEnviadosHoyPorCategoria = {
+      RESUMEN_DIARIO_08: 0,
+      CRON_BOT_60MIN: 0,
+      TIEMPO_REAL_CHOFER: 0,
+      CACHATORE: 0,
+      SISTEMA: 0,
+      OTROS: 0,
+    };
     _state.fechaContadorHoy = hoy;
   }
   _state.mensajesEnviadosHoy++;
+  const cat = _categoriaDeOrigen(origen);
+  _state.mensajesEnviadosHoyPorCategoria[cat] =
+    (_state.mensajesEnviadosHoyPorCategoria[cat] || 0) + 1;
   const ahora = new Date();
   _state.ultimoMensajeEnviado = ahora;
   _state.timestampsUltimaHora.push(ahora.getTime());
@@ -301,6 +373,10 @@ async function escribirHeartbeat() {
         ? admin.firestore.Timestamp.fromDate(_state.ultimoMensajeEnviado)
         : null,
       enviadosHoy: _state.mensajesEnviadosHoy,
+      // Breakdown por categoría (2026-05-24). La app lo lee y lo
+      // muestra debajo del total para que el operador vea "100 son
+      // del cron de vencimientos vs 30 del vigilador de jornada".
+      enviadosHoyPorCategoria: _state.mensajesEnviadosHoyPorCategoria,
       fechaContadorHoy: _state.fechaContadorHoy,
     },
 

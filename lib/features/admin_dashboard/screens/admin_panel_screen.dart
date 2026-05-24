@@ -258,13 +258,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 ruta: AppRoutes.adminCachatoreHub,
               ),
             if (Capabilities.can(PrefsService.rol, Capability.verEstadoBot))
-              const _AdminTile(
-                titulo: 'WHATSAPP BOT',
-                subtitulo: 'Cola, cron, errores y heartbeat',
-                icono: Icons.smart_toy_outlined,
-                color: AppColors.accentLightGreen,
-                ruta: AppRoutes.adminEstadoBot,
-              ),
+              const _AdminTileWhatsAppBot(),
             const SizedBox(height: 28),
             // Footer con versión.
             const Center(
@@ -835,6 +829,143 @@ class _KpiCard extends StatelessWidget {
 // =============================================================================
 // TILE DE ACCESO DIRECTO (sección Accesos rápidos)
 // =============================================================================
+
+/// Tile especializado para el menú "WhatsApp Bot" — muestra un badge
+/// con el estado del bot leyendo `BOT_HEALTH/main` (M3, 2026-05-24):
+///   - 🟢 sin badge: bot OK, cola normal.
+///   - 🟠 número amber: hay N mensajes en error pendientes de reintento.
+///   - 🔴 punto rojo: heartbeat caído (sin update en > 2 min) — bot
+///     probablemente murió y nadie está enviando.
+/// Permite que el admin vea desde el panel principal si tiene que
+/// entrar a la pantalla del bot sin tener que abrirla.
+class _AdminTileWhatsAppBot extends StatelessWidget {
+  const _AdminTileWhatsAppBot();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('BOT_HEALTH')
+          .doc('main')
+          .snapshots(),
+      builder: (ctx, snap) {
+        final data = snap.data?.data() as Map<String, dynamic>?;
+        // Errores con estado ERROR en la cola (los que merecen badge —
+        // los pendientes "frescos" son normales, no alarma).
+        final cola = (data?['cola'] as Map?) ?? const {};
+        final errores = (cola['error'] ?? 0) as int;
+        // Heartbeat caído = sin update en > 2 min.
+        final ts = data?['ultimoHeartbeat'];
+        DateTime? hb;
+        if (ts is Timestamp) hb = ts.toDate();
+        final hbCaido = hb == null ||
+            DateTime.now().difference(hb).inSeconds > 120;
+        final Widget? badge = hbCaido
+            ? const _BadgeCirculo(
+                texto: '!', color: AppColors.error)
+            : (errores > 0
+                ? _BadgeCirculo(
+                    texto: errores > 99 ? '99+' : '$errores',
+                    color: AppColors.warning,
+                  )
+                : null);
+        return AppCard(
+          onTap: () =>
+              Navigator.pushNamed(context, AppRoutes.adminEstadoBot),
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentLightGreen.withAlpha(25),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.smart_toy_outlined,
+                        color: AppColors.accentLightGreen, size: 22),
+                  ),
+                  if (badge != null)
+                    Positioned(top: -4, right: -4, child: badge),
+                ],
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'WHATSAPP BOT',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 13,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      hbCaido
+                          ? '⚠ Heartbeat caído — bot probablemente offline'
+                          : (errores > 0
+                              ? '$errores mensajes con error — tocá para revisar'
+                              : 'Cola, cron, errores y heartbeat'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: hbCaido
+                            ? AppColors.error
+                            : (errores > 0
+                                ? AppColors.warning
+                                : Colors.white60),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.arrow_forward_ios,
+                  color: Colors.white24, size: 14),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _BadgeCirculo extends StatelessWidget {
+  final String texto;
+  final Color color;
+  const _BadgeCirculo({required this.texto, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.background, width: 1.5),
+      ),
+      child: Text(
+        texto,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+}
 
 class _AdminTile extends StatelessWidget {
   final String titulo;

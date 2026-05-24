@@ -760,7 +760,9 @@ async function procesarSiguiente() {
       log.info(`  ${docsAgrupados.length} doc(s) marcados como agrupados en ${docId}`);
     }
 
-    health.registrarEnvio();
+    // Pasar el `origen` del doc para que el contador por categoría se
+    // incremente correctamente (M1, 2026-05-24).
+    health.registrarEnvio(data.origen);
     log.info(`✓ Enviado a ${_quien(data.telefono)}`);
   } catch (e) {
     log.error(`✗ Falló ${docId}: ${e.message}`);

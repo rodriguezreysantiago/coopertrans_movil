@@ -263,15 +263,41 @@ class _CardMensajes extends StatelessWidget {
   Widget build(BuildContext context) {
     final hoy = (mensajes['enviadosHoy'] ?? 0) as int;
     final ultimo = _toDate(mensajes['ultimoEnviado']);
+    // Breakdown publicado por el bot desde 2026-05-24 (M1). Si el bot
+    // está en una versión vieja sin breakdown el map viene vacío y solo
+    // mostramos el total — la pantalla degrada limpio.
+    final porCat = (mensajes['enviadosHoyPorCategoria'] as Map?) ??
+        const <String, dynamic>{};
+
+    final filas = <_Fila>[
+      _Fila('Enviados hoy', '$hoy', color: AppColors.success),
+      _Fila('Último envío', ultimo == null ? 'Nunca' : _hace(ultimo)),
+    ];
+    // Solo mostramos las categorías con > 0 envíos para no llenar de "0".
+    // El orden refleja "qué pesa más en la operación" (resúmenes y crons
+    // diarios primero porque son los que vacían más cola en horario pico).
+    const orden = [
+      ('RESUMEN_DIARIO_08', 'Resúmenes 08:00'),
+      ('CRON_BOT_60MIN', 'Crons del bot'),
+      ('TIEMPO_REAL_CHOFER', 'Tiempo real al chofer'),
+      ('CACHATORE', 'Cachatore'),
+      ('SISTEMA', 'Sistema'),
+      ('OTROS', 'Otros'),
+    ];
+    final breakdown = <_Fila>[];
+    for (final t in orden) {
+      final n = (porCat[t.$1] ?? 0) as int;
+      if (n > 0) {
+        breakdown.add(_Fila('  · ${t.$2}', '$n',
+            color: t.$1 == 'OTROS' ? AppColors.warning : Colors.white70));
+      }
+    }
+    if (breakdown.isNotEmpty) filas.addAll(breakdown);
+
     return _BloqueDatos(
       titulo: 'Mensajes',
       icono: Icons.mark_chat_read_outlined,
-      filas: [
-        _Fila('Enviados hoy', '$hoy',
-            color: AppColors.success),
-        _Fila('Último envío',
-            ultimo == null ? 'Nunca' : _hace(ultimo)),
-      ],
+      filas: filas,
     );
   }
 }

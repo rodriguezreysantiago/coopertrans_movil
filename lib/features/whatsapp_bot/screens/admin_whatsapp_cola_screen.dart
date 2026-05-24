@@ -49,10 +49,41 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
   /// y modificable desde la fila de chips de filtro.
   String? _filtroEstado;
 
+  /// Texto de búsqueda free-form (M2, 2026-05-24). Se aplica
+  /// client-side sobre los docs ya filtrados por estado, matcheando
+  /// contra teléfono, mensaje, origen y destinatario_id (DNI).
+  String _query = '';
+  final TextEditingController _searchCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _filtroEstado = widget.initialFilter;
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Filtra los docs por el query actual (case-insensitive, substring).
+  /// Si `_query` está vacío, devuelve la lista tal cual.
+  List<QueryDocumentSnapshot> _filtrarPorQuery(
+      List<QueryDocumentSnapshot> docs) {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return docs;
+    return docs.where((doc) {
+      final m = doc.data() as Map<String, dynamic>? ?? const {};
+      bool contiene(dynamic v) =>
+          v != null && v.toString().toLowerCase().contains(q);
+      return contiene(m['telefono']) ||
+          contiene(m['mensaje']) ||
+          contiene(m['origen']) ||
+          contiene(m['destinatario_id']) ||
+          contiene(m['destinatario_coleccion']) ||
+          contiene(m['alert_patente']);
+    }).toList();
   }
 
   Future<void> _reintentar(String id) async {
@@ -124,7 +155,7 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
                   'Cuando encoles un aviso desde la auditoría de vencimientos, aparece acá.',
             );
           }
-          final filtrados = docs;
+          final filtrados = _filtrarPorQuery(docs);
           return ListView(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
             children: [
@@ -138,12 +169,44 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
                 },
               ),
               const SizedBox(height: 8),
+              // Búsqueda free-form (M2, 2026-05-24): DNI / patente /
+              // teléfono / origen / texto. Útil cuando un chofer reclama
+              // "no me llegó X" y hay que ver qué pasó con el mensaje.
+              TextField(
+                controller: _searchCtrl,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                decoration: InputDecoration(
+                  isDense: true,
+                  prefixIcon: const Icon(Icons.search,
+                      color: Colors.white54, size: 20),
+                  suffixIcon: _query.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.clear,
+                              color: Colors.white54, size: 18),
+                          onPressed: () {
+                            _searchCtrl.clear();
+                            setState(() => _query = '');
+                          },
+                        ),
+                  hintText: 'Buscar DNI / patente / teléfono / origen / texto',
+                  hintStyle: const TextStyle(
+                      color: Colors.white38, fontSize: 12),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 10),
+                ),
+                onChanged: (v) => setState(() => _query = v),
+              ),
+              const SizedBox(height: 8),
               if (filtrados.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 40),
                   child: Center(
                     child: Text(
-                      'Sin mensajes con estado "${_filtroEstado ?? ''}"',
+                      _query.isNotEmpty
+                          ? 'Sin coincidencias para "$_query"'
+                          : 'Sin mensajes con estado "${_filtroEstado ?? ''}"',
                       style: const TextStyle(color: Colors.white54),
                     ),
                   ),
