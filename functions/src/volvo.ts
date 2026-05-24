@@ -45,6 +45,7 @@ import {
   buscarAsignacionEnFecha,
   adquirirLockTick,
   fetchWithTimeout,
+  SEG_HIGIENE_DESTINATARIO_DNI,
 } from "./comun";
 
 // ============================================================================
@@ -877,6 +878,41 @@ export const onAlertaVolvoCreated = onDocumentCreated(
       return;
     }
 
+    // ─── BYPASS DE SEGURIDAD (V5, 2026-05-24) ───────────────────────
+    // Cuando un chofer DESACTIVA un sistema de asistencia a la
+    // conducción (DAS = cansancio, LKS = carril, LCS = cambio carril,
+    // AEBS = frenado de emergencia), Volvo emite un evento HIGH con
+    // ese tipo. Avisarle al chofer NO sirve — él fue el que lo apagó.
+    // En cambio Molina (SEG_HIGIENE) necesita verlo en tiempo real para
+    // documentarlo (potencial sanción si el chofer reincide o hay un
+    // siniestro). Throttle 6h por (patente, tipo) para que un mismo
+    // chofer apagando DAS varias veces en el día no spamee a Molina.
+    const TIPOS_BYPASS_SEGURIDAD = new Set([
+      "DAS",
+      "LKS",
+      "LCS",
+      "AEBS",
+    ]);
+    if (TIPOS_BYPASS_SEGURIDAD.has(tipoEfectivo)) {
+      try {
+        await _notificarBypassSeguridad(
+          patente,
+          tipoEfectivo,
+          (data.chofer_dni ?? "").toString().trim(),
+          (data.creado_en as Timestamp | undefined)?.toMillis() ?? Date.now(),
+          event.params.alertId,
+        );
+      } catch (e) {
+        logger.warn("[onAlertaVolvoCreated] bypass seguridad falló", {
+          alertId: event.params.alertId,
+          patente,
+          tipoEfectivo,
+          error: (e as Error).message,
+        });
+      }
+      return; // No al chofer (él lo apagó).
+    }
+
     // Lookup chofer: priorizamos el `chofer_dni` snapshoteado por
     // `volvoAlertasPoller` al crear la alerta (atribución del chofer del
     // MOMENTO del evento, no el chofer actual asignado). Esto es crítico
@@ -1665,3 +1701,129 @@ export const onAlertaVolvoMantenimientoCreated = onDocumentCreated(
     );
   }
 );
+
+// ============================================================================
+// Bypass de seguridad: notificar a Molina cuando un chofer desactiva un
+// sistema de asistencia (DAS / LKS / LCS / AEBS). Helper privado usado
+// solo por onAlertaVolvoCreated (V5, 2026-05-24).
+// ============================================================================
+
+/** Throttle entre avisos del MISMO (patente, tipo). 6h = no más de 4
+ *  avisos por día por unidad y tipo. Suficiente para registrar el
+ *  incidente sin spamear si el chofer apaga DAS varias veces seguidas. */
+const BYPASS_SEGURIDAD_THROTTLE_HS = 6;
+const TTL_BYPASS_SEGURIDAD_MIN = 60;
+
+const ETIQUETA_BYPASS: Record<string, string> = {
+  DAS: "alerta de cansancio (DAS)",
+  LKS: "asistente de carril (LKS)",
+  LCS: "asistente de cambio de carril (LCS)",
+  AEBS: "frenado automático de emergencia (AEBS)",
+};
+
+async function _notificarBypassSeguridad(
+  patente: string,
+  tipoEfectivo: string,
+  choferDniSnapshot: string,
+  creadoMs: number,
+  alertId: string,
+): Promise<void> {
+  // Throttle: clave determinística (patente, tipo) — el lock está en
+  // META_BYPASS_SEGURIDAD con expira_en para que TTL Firestore lo
+  // limpie solo (sin cron de purga).
+  const throttleId = `${patente}_${tipoEfectivo}`;
+  const throttleRef = db.collection("META_BYPASS_SEGURIDAD").doc(throttleId);
+  const throttleSnap = await throttleRef.get();
+  if (throttleSnap.exists) {
+    const lastSentAt = throttleSnap.data()?.last_sent_at;
+    if (lastSentAt && typeof lastSentAt.toMillis === "function") {
+      const horasDesde = (Date.now() - lastSentAt.toMillis()) / 3600000;
+      if (horasDesde < BYPASS_SEGURIDAD_THROTTLE_HS) {
+        logger.info("[bypassSeguridad] throttled", {
+          alertId, patente, tipoEfectivo,
+          horasDesdeUltimo: horasDesde.toFixed(1),
+        });
+        return;
+      }
+    }
+  }
+
+  // Lookup Molina (destinatario seguridad e higiene).
+  const molinaSnap = await db
+    .collection("EMPLEADOS")
+    .doc(SEG_HIGIENE_DESTINATARIO_DNI)
+    .get();
+  if (!molinaSnap.exists) {
+    logger.warn("[bypassSeguridad] destinatario SEG_HIGIENE no existe", {
+      dni: SEG_HIGIENE_DESTINATARIO_DNI,
+    });
+    return;
+  }
+  const tel = (molinaSnap.data()?.TELEFONO ?? "").toString().trim();
+  if (!tel || tel === "-") {
+    logger.warn("[bypassSeguridad] destinatario SEG_HIGIENE sin teléfono");
+    return;
+  }
+
+  // Resolver nombre del chofer (opcional, mensaje más útil).
+  let choferNombre = "(chofer no identificado)";
+  if (choferDniSnapshot) {
+    const empSnap = await db.collection("EMPLEADOS")
+      .doc(choferDniSnapshot).get();
+    if (empSnap.exists) {
+      const n = (empSnap.data()?.NOMBRE ?? "").toString().trim();
+      if (n) choferNombre = n;
+    }
+  }
+
+  const horaTxt = formatHoraArg(creadoMs);
+  const fechaTxt = formatFechaArg(creadoMs);
+  const etiquetaSistema =
+    ETIQUETA_BYPASS[tipoEfectivo] ?? tipoEfectivo;
+
+  const mensaje =
+    `⚠️ *Bypass de seguridad detectado*\n\n` +
+    `Sistema desactivado: *${etiquetaSistema}*\n` +
+    `Unidad: ${patente}\n` +
+    `Chofer: ${choferNombre}\n` +
+    `Cuándo: ${fechaTxt} ${horaTxt}\n\n` +
+    `Cuando un chofer desactiva un sistema de asistencia, Volvo lo ` +
+    `reporta como evento HIGH. Documentado para revisión / sanción.\n\n` +
+    BANNER_TESTING +
+    "_Bot-On — Coopertrans Móvil_";
+
+  try {
+    await db.collection("COLA_WHATSAPP").add({
+      telefono: tel,
+      mensaje,
+      estado: "PENDIENTE",
+      encolado_en: FieldValue.serverTimestamp(),
+      expira_en: expiraEnMin(TTL_BYPASS_SEGURIDAD_MIN),
+      enviado_en: null,
+      error: null,
+      intentos: 0,
+      origen: "bypass_seguridad",
+      destinatario_coleccion: "EMPLEADOS",
+      destinatario_id: SEG_HIGIENE_DESTINATARIO_DNI,
+      campo_base: "BYPASS_SEGURIDAD",
+      admin_dni: "BOT",
+      admin_nombre: "Bot Volvo",
+      alert_patente: patente,
+      alert_tipo: tipoEfectivo,
+      alert_id: alertId,
+    });
+  } catch (e) {
+    logger.warn("[bypassSeguridad] add a COLA falló", {
+      patente, tipoEfectivo, error: (e as Error).message,
+    });
+    return;
+  }
+
+  // Marcar throttle: 6h hasta el próximo aviso de esta (patente, tipo).
+  await throttleRef.set({
+    last_sent_at: FieldValue.serverTimestamp(),
+    last_patente: patente,
+    last_tipo: tipoEfectivo,
+    last_alert_id: alertId,
+  });
+}

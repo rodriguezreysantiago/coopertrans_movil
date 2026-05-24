@@ -7,6 +7,55 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-05-24 — Actualización del estado de propuestas Volvo/WhatsApp
+
+### ✅ HECHO hoy (commits del 24-may)
+
+- **V5 Bypass de seguridad** (`onAlertaVolvoCreated` extendido):
+  DAS / LKS / LCS / AEBS ya NO van al chofer (él los apagó) → van a
+  Molina con throttle 6h por (patente, tipo). Helper
+  `_notificarBypassSeguridad` + colección META_BYPASS_SEGURIDAD.
+
+- **WhatsApp Bot — mejoras menú** (M1 + M2 + M3): breakdown enviados
+  por categoría, búsqueda free-form en cola, badge en tile panel.
+  M4 ya estaba.
+
+- **Card "Reglas de notificación" completa**: 16 reglas en 5 categorías
+  reflejan TODA la realidad operativa (no las 3 viejas).
+
+### ⚠️ HALLAZGOS que reorientan tareas
+
+- **V1 (Tablero Seguridad)**: el agente del inventario se equivocó.
+  `VOLVO_SCORES_DIARIOS` tiene los 17 sub-scores de EFICIENCIA
+  (anticipation/idling/topgear/etc.) — NO los de SEGURIDAD
+  (Defensivo/Atención/Uso funcional que vimos en Volvo Connect web).
+  Para hacer V1 real hay que agregar un poller a `/safetyReport` (M).
+  Postponed.
+
+- **V2 (Ralentí)**: la pantalla Eco-Driving YA expone `idling` por
+  unidad + drill-down con los 17 sub-scores. Una pantalla nueva
+  "Ralentí" sería redundante. Lo que SÍ falta:
+  · % real de ralentí (no el score Volvo, el % de tiempo del informe
+    Rendimiento — requiere endpoint /performance o cálculo desde
+    /vehiclestatuses con ignition + speed).
+  · Estimación monetaria L perdidos × precio diésel.
+  Ambos requieren ingest nuevo. Postponed.
+
+- **Bonus (Eco-Driving detallado)**: YA estaba implementado de antes.
+  La pantalla muestra los 8 principales + drill-down con los 17.
+
+- **C P3 (DTCs históricos Sitrack)**: requiere scraper Sitrack web
+  nuevo (`sync_dtcs.py` en `sitrack_sync/`). Postponed.
+
+- **E M5 (Editar destinatarios desde la app)**: refactor de ~10 CFs
+  para que lean los DNIs de Firestore `META/destinatarios_notificacion`
+  en lugar de hardcoded en `comun.ts`. Pantalla CRUD. Postponed por
+  scope (M-L), pero queda como prioritario porque ya lo flageó la
+  auditoría del 2026-05-18 y mantenimiento es realmente importante
+  para evitar dependencia técnica si cambia un destinatario.
+
+---
+
 ## 📅 2026-05-24 — Análisis Volvo Connect vs nuestra app — propuestas pendientes
 
 Exploración profunda del portal Volvo Connect (9 módulos del app launcher
