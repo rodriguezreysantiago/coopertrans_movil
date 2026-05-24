@@ -77,6 +77,13 @@ class _IcmHubScreenState extends State<IcmHubScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
+            // Orden 2026-05-24: primero los iconos de acceso (Ranking,
+            // Reporte mensual, Mapa de calor, Jornada), después Personas
+            // y al final los gráficos. Antes era al revés (gráficos
+            // arriba) y el operador tenía que scrollear para llegar a
+            // las acciones que más usa.
+            const _GridSubpantallas(),
+            const SizedBox(height: 20),
             FutureBuilder<KpisIcmHub>(
               future: _futureKpis,
               builder: (ctx, snap) {
@@ -99,8 +106,6 @@ class _IcmHubScreenState extends State<IcmHubScreen> {
                 return _SeccionesIcm(kpis: kpis);
               },
             ),
-            const SizedBox(height: 20),
-            const _GridSubpantallas(),
           ],
         ),
       ),
@@ -135,26 +140,6 @@ class _SeccionesIcm extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ─── ICM flota + Tendencias (lado a lado en desktop) ───
-        const _SeccionLabel('Panorama'),
-        const SizedBox(height: 10),
-        if (esDesktop)
-          IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(width: 280, child: cardIcm),
-                const SizedBox(width: 12),
-                Expanded(child: chartTendencia),
-              ],
-            ),
-          )
-        else ...[
-          cardIcm,
-          const SizedBox(height: 12),
-          chartTendencia,
-        ],
-        const SizedBox(height: 24),
         // ─── Personas: top 5 mejores + top 5 a mejorar ───
         const _SeccionLabel('Personas'),
         const SizedBox(height: 10),
@@ -195,6 +180,26 @@ class _SeccionesIcm extends StatelessWidget {
             colorTitulo: AppColors.accentRed,
             items: kpis.top5Peores,
           ),
+        ],
+        const SizedBox(height: 24),
+        // ─── ICM flota + Tendencias (lado a lado en desktop) — AL FINAL ───
+        const _SeccionLabel('Panorama'),
+        const SizedBox(height: 10),
+        if (esDesktop)
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SizedBox(width: 280, child: cardIcm),
+                const SizedBox(width: 12),
+                Expanded(child: chartTendencia),
+              ],
+            ),
+          )
+        else ...[
+          cardIcm,
+          const SizedBox(height: 12),
+          chartTendencia,
         ],
       ],
     );
