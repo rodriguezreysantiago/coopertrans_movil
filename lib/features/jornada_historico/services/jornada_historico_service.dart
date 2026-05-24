@@ -39,6 +39,27 @@ class JornadaHistoricoService {
         .map((s) => s.docs.map(JornadaDia.fromDoc).toList());
   }
 
+  /// Stream de jornadas de un chofer en un rango de fechas (ambos
+  /// inclusive), ordenadas por fecha ASCENDENTE para que la UI muestre
+  /// el día más viejo primero. Usado por la pantalla Jornada cuando el
+  /// operador elige "22 al 24 de mayo" — devuelve hasta 3 docs (uno por
+  /// día con jornada; los días sin actividad no aparecen).
+  static Stream<List<JornadaDia>> streamPorRango({
+    required String choferDni,
+    required DateTime desde,
+    required DateTime hasta,
+  }) {
+    final desdeStr = _fmtFecha(desde);
+    final hastaStr = _fmtFecha(hasta);
+    return _col
+        .where('chofer_dni', isEqualTo: choferDni)
+        .where('fecha', isGreaterThanOrEqualTo: desdeStr)
+        .where('fecha', isLessThanOrEqualTo: hastaStr)
+        .orderBy('fecha')
+        .snapshots()
+        .map((s) => s.docs.map(JornadaDia.fromDoc).toList());
+  }
+
   /// Fechas en las que hay doc procesado para el chofer (para que el
   /// selector de fechas pinte las que tienen data).
   static Future<Set<String>> fechasDisponibles({

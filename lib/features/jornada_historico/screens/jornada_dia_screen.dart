@@ -43,7 +43,11 @@ class JornadaDiaScreen extends StatefulWidget {
 class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
   String? _choferDni;
   String? _choferNombre;
-  late DateTime _fecha;
+  // Rango de fechas (puede ser 1 solo día → desde == hasta). Si el usuario
+  // elige más de un día, mostramos lista de cards resumen; tap sobre una
+  // expande el detalle del día.
+  late DateTime _desde;
+  late DateTime _hasta;
 
   // Cache de choferes (EMPLEADOS con rol CHOFER) para el dropdown.
   List<_ChoferOpt> _choferes = const [];
@@ -54,9 +58,17 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
     super.initState();
     _choferDni = widget.choferDniInicial;
     final ayer = DateTime.now().subtract(const Duration(days: 1));
-    _fecha = widget.fechaInicial ?? DateTime(ayer.year, ayer.month, ayer.day);
+    final inicial =
+        widget.fechaInicial ?? DateTime(ayer.year, ayer.month, ayer.day);
+    _desde = inicial;
+    _hasta = inicial;
     _cargarChoferes();
   }
+
+  bool get _esUnSoloDia =>
+      _desde.year == _hasta.year &&
+      _desde.month == _hasta.month &&
+      _desde.day == _hasta.day;
 
   Future<void> _cargarChoferes() async {
     try {
@@ -92,18 +104,22 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
     }
   }
 
-  Future<void> _elegirFecha() async {
+  Future<void> _elegirRango() async {
     final hoy = DateTime.now();
-    final r = await showDatePicker(
+    final r = await showDateRangePicker(
       context: context,
-      initialDate: _fecha,
+      initialDateRange: DateTimeRange(start: _desde, end: _hasta),
       firstDate: hoy.subtract(const Duration(days: 365)),
       lastDate: hoy,
       locale: const Locale('es', 'AR'),
-      helpText: 'Día de jornada',
+      helpText: 'Días de jornada',
+      saveText: 'Aplicar',
     );
     if (r == null) return;
-    setState(() => _fecha = DateTime(r.year, r.month, r.day));
+    setState(() {
+      _desde = DateTime(r.start.year, r.start.month, r.start.day);
+      _hasta = DateTime(r.end.year, r.end.month, r.end.day);
+    });
   }
 
   Future<void> _elegirChofer() async {
@@ -194,10 +210,12 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
         children: [
           _Selectores(
             choferLabel: _choferNombre ?? 'Elegir chofer…',
-            fechaLabel: _fmtFecha(_fecha),
+            rangoLabel: _esUnSoloDia
+                ? _fmtFecha(_desde)
+                : '${_fmtFecha(_desde)} → ${_fmtFecha(_hasta)}',
             cargandoChoferes: _cargandoChoferes,
             onChofer: _elegirChofer,
-            onFecha: _elegirFecha,
+            onRango: _elegirRango,
           ),
           Expanded(
             child: _choferDni == null
@@ -206,42 +224,274 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
                     titulo: 'Elegí un chofer para ver su jornada',
                     subtitulo: 'Tocá "Elegir chofer" arriba.',
                   )
-                : StreamBuilder<JornadaDia?>(
-                    stream: JornadaHistoricoService.streamDia(
-                      choferDni: _choferDni!,
-                      fecha: _fecha,
-                    ),
-                    builder: (ctx, snap) {
-                      if (snap.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                          child: CircularProgressIndicator(
-                              color: AppColors.accentGreen),
-                        );
-                      }
-                      if (snap.hasError) {
-                        return _Placeholder(
-                          icono: Icons.error_outline,
-                          titulo: 'Error al cargar la jornada',
-                          subtitulo: snap.error.toString(),
-                        );
-                      }
-                      final j = snap.data;
-                      if (j == null) {
-                        return const _Placeholder(
-                          icono: Icons.event_busy,
-                          titulo: 'Sin jornada procesada',
-                          subtitulo:
-                              'Este chofer no manejó ese día, o el día '
-                              'todavía no se procesó (el cron corre a las '
-                              '06:30 ART procesando el día anterior).',
-                        );
-                      }
-                      return _Contenido(jornada: j);
-                    },
-                  ),
+                : (_esUnSoloDia
+                    ? _DetalleUnDia(
+                        choferDni: _choferDni!, fecha: _desde)
+                    : _ListaRango(
+                        choferDni: _choferDni!,
+                        desde: _desde,
+                        hasta: _hasta,
+                      )),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Stream de UN solo día — detalle completo (resumen + gráfico + tramos
+/// + paradas) usando los widgets viejos.
+class _DetalleUnDia extends StatelessWidget {
+  final String choferDni;
+  final DateTime fecha;
+  const _DetalleUnDia({required this.choferDni, required this.fecha});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<JornadaDia?>(
+      stream: JornadaHistoricoService.streamDia(
+          choferDni: choferDni, fecha: fecha),
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(
+              child: CircularProgressIndicator(
+                  color: AppColors.accentGreen));
+        }
+        if (snap.hasError) {
+          return _Placeholder(
+            icono: Icons.error_outline,
+            titulo: 'Error al cargar la jornada',
+            subtitulo: snap.error.toString(),
+          );
+        }
+        final j = snap.data;
+        if (j == null) {
+          return const _Placeholder(
+            icono: Icons.event_busy,
+            titulo: 'Sin jornada procesada',
+            subtitulo:
+                'Este chofer no manejó ese día, o el día todavía no se '
+                'procesó (el cron corre a las 06:30 ART procesando el día '
+                'anterior).',
+          );
+        }
+        return _Contenido(jornada: j);
+      },
+    );
+  }
+}
+
+/// Stream de varios días — lista de cards resumen ordenadas
+/// cronológicamente. Tap sobre una card abre el detalle del día puntual
+/// (reusa la misma pantalla con fecha igual a desde y hasta).
+class _ListaRango extends StatelessWidget {
+  final String choferDni;
+  final DateTime desde;
+  final DateTime hasta;
+  const _ListaRango(
+      {required this.choferDni,
+      required this.desde,
+      required this.hasta});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<List<JornadaDia>>(
+      stream: JornadaHistoricoService.streamPorRango(
+          choferDni: choferDni, desde: desde, hasta: hasta),
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(
+              child: CircularProgressIndicator(
+                  color: AppColors.accentGreen));
+        }
+        if (snap.hasError) {
+          return _Placeholder(
+            icono: Icons.error_outline,
+            titulo: 'Error al cargar las jornadas del rango',
+            subtitulo: snap.error.toString(),
+          );
+        }
+        final jornadas = snap.data ?? const [];
+        if (jornadas.isEmpty) {
+          return const _Placeholder(
+            icono: Icons.event_busy,
+            titulo: 'Sin jornadas en el rango',
+            subtitulo:
+                'No hay jornadas procesadas para este chofer entre las fechas '
+                'elegidas (o no manejó esos días).',
+          );
+        }
+        // Suma agregada para que el operador vea totales del rango.
+        final totalKm = jornadas.fold<int>(0, (s, j) => s + j.kmTotal);
+        final totalManejo =
+            jornadas.fold<int>(0, (s, j) => s + j.manejoMin);
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
+              child: Text(
+                '${jornadas.length} jornada${jornadas.length == 1 ? "" : "s"} · '
+                'total ${_fmtHM(totalManejo)} manejo · '
+                '${totalKm.toString()} km',
+                style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ),
+            for (final j in jornadas) _CardResumenDia(jornada: j),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Card compacta con resumen de UN día dentro de una lista de rango.
+/// Tap → abre la misma pantalla con ese día puntual (vista detalle).
+class _CardResumenDia extends StatelessWidget {
+  final JornadaDia jornada;
+  const _CardResumenDia({required this.jornada});
+
+  @override
+  Widget build(BuildContext context) {
+    // Convertimos 'YYYY-MM-DD' del doc a un DateTime ART (sin tiempo).
+    final partes = jornada.fecha.split('-');
+    final fecha = partes.length == 3
+        ? DateTime(
+            int.tryParse(partes[0]) ?? 0,
+            int.tryParse(partes[1]) ?? 1,
+            int.tryParse(partes[2]) ?? 1,
+          )
+        : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: AppCard(
+        padding: const EdgeInsets.all(14),
+        onTap: fecha == null
+            ? null
+            : () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => JornadaDiaScreen(
+                      choferDniInicial: jornada.choferDni,
+                      fechaInicial: fecha,
+                    ),
+                  ),
+                );
+              },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.calendar_today,
+                    color: AppColors.accentGreen, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  jornada.fecha,
+                  style: const TextStyle(
+                    color: AppColors.accentGreen,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  jornada.patentePrincipal,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.arrow_forward_ios,
+                    color: Colors.white24, size: 12),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _MiniKpi(
+                  label: 'INICIO',
+                  valor: _fmtHoraCorta(jornada.inicio),
+                  color: AppColors.accentTeal,
+                  icono: Icons.play_arrow,
+                ),
+                const SizedBox(width: 18),
+                _MiniKpi(
+                  label: 'FIN',
+                  valor: _fmtHoraCorta(jornada.fin),
+                  color: AppColors.accentTeal,
+                  icono: Icons.stop,
+                ),
+                const SizedBox(width: 18),
+                _MiniKpi(
+                  label: 'MANEJO',
+                  valor: _fmtHM(jornada.manejoMin),
+                  color: AppColors.accentBlue,
+                  icono: Icons.directions_car,
+                ),
+                const SizedBox(width: 18),
+                _MiniKpi(
+                  label: 'KM',
+                  valor: jornada.kmTotal.toString(),
+                  color: AppColors.accentGreen,
+                  icono: Icons.route,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MiniKpi extends StatelessWidget {
+  final String label;
+  final String valor;
+  final Color color;
+  final IconData icono;
+  const _MiniKpi({
+    required this.label,
+    required this.valor,
+    required this.color,
+    required this.icono,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icono, color: color, size: 14),
+        const SizedBox(width: 4),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                )),
+            Text(valor,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                )),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -256,17 +506,17 @@ class _ChoferOpt {
 
 class _Selectores extends StatelessWidget {
   final String choferLabel;
-  final String fechaLabel;
+  final String rangoLabel;
   final bool cargandoChoferes;
   final VoidCallback onChofer;
-  final VoidCallback onFecha;
+  final VoidCallback onRango;
 
   const _Selectores({
     required this.choferLabel,
-    required this.fechaLabel,
+    required this.rangoLabel,
     required this.cargandoChoferes,
     required this.onChofer,
-    required this.onFecha,
+    required this.onRango,
   });
 
   @override
@@ -288,10 +538,10 @@ class _Selectores extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: _PillButton(
-              icono: Icons.calendar_today,
-              label: fechaLabel,
+              icono: Icons.date_range,
+              label: rangoLabel,
               color: AppColors.accentTeal,
-              onTap: onFecha,
+              onTap: onRango,
             ),
           ),
         ],
