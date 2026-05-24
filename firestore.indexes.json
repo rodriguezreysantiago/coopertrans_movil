@@ -270,6 +270,22 @@
         { "fieldPath": "slug_zona", "order": "ASCENDING" },
         { "fieldPath": "entrada_ts", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "SITRACK_IBUTTONS_HISTORICO",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "patente", "order": "ASCENDING" },
+        { "fieldPath": "desde", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "SITRACK_IBUTTONS_HISTORICO",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "chofer_dni", "order": "ASCENDING" },
+        { "fieldPath": "desde", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

@@ -45,6 +45,11 @@ class AppRoutes {
   /// el ranking + top 5 mejores/peores del hub + top 5 del reporte mensual.
   static const String adminIcmDetalleChofer = '/admin_icm_detalle_chofer';
   // Pantallas Volvo restantes (mantienen `verAlertasVolvo` por ahora):
+  /// Auditoría de asignaciones — cruza el histórico REAL del iButton
+  /// (SITRACK_IBUTTONS_HISTORICO) contra ASIGNACIONES_VEHICULO. Util
+  /// para multas tardías + investigaciones + reconciliación.
+  static const String adminAuditoriaAsignaciones = '/admin_auditoria_asignaciones';
+
   /// Módulo "Descargas" nuevo (2026-05-23) — cola en vivo + recién +
   /// KPIs basado en presencia REAL en geocercas configurables. Reemplaza
   /// al detector PTO que solo cubría flota Volvo y daba falsos positivos.
@@ -413,6 +418,23 @@ class AppCollections {
   /// La pantalla "Turnos concretados" lee de acá. Si un chofer no tiene turno,
   /// el bot borra su doc. Solo lo escribe el bot (Admin SDK).
   static const String cachatoreTurnos = 'CACHATORE_TURNOS';
+
+  // ─── Histórico real de iButtons (2026-05-23) ───
+  /// Tramos continuos de iButton por patente, reconstruidos desde
+  /// SITRACK_EVENTOS por la CF `reconstruirHistoricoIButtonsDiario` (cron
+  /// 06:00 ART procesando el día anterior). DocId determinístico:
+  /// `{patente}_{chofer_dni}_{desde_ms}`. Cada doc representa un tramo
+  /// donde el MISMO iButton estuvo en la MISMA patente sin gaps >30 min.
+  ///
+  /// Schema: `{patente, chofer_dni, chofer_nombre, desde (Timestamp),
+  /// hasta (Timestamp), duracion_min, eventos_count, procesado_en}`.
+  ///
+  /// Uso: pantalla "Auditoría asignaciones" cruza estos tramos REALES
+  /// (lo que físicamente reportó Sitrack vía iButton) contra
+  /// ASIGNACIONES_VEHICULO (lo que el sistema dice que pasó). Las
+  /// discrepancias se marcan en la UI — útil para multas tardías,
+  /// investigaciones y reconciliación de asignaciones cargadas mal.
+  static const String sitrackIButtonsHistorico = 'SITRACK_IBUTTONS_HISTORICO';
 
   // ─── Módulo Zonas de Descarga (2026-05-23) ───
   /// Zonas geográficas configurables (polígono o círculo) que marcan

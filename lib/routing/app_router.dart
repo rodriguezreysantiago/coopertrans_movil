@@ -41,6 +41,7 @@ import '../features/logistica/screens/logistica_viajes_lista_screen.dart';
 import '../features/eco_driving/screens/admin_descargas_pto_screen.dart';
 import '../features/zonas_descarga/screens/admin_descargas_screen.dart';
 import '../features/zonas_descarga/screens/admin_zonas_descarga_screen.dart';
+import '../features/auditoria_asignaciones/screens/admin_auditoria_asignaciones_screen.dart';
 import '../features/eco_driving/screens/admin_eco_driving_screen.dart';
 import '../features/eco_driving/screens/admin_mapa_volvo_screen.dart';
 import '../features/fleet_map/screens/admin_mapa_flota_screen.dart';
@@ -340,6 +341,16 @@ class AppRouter {
       case AppRoutes.adminZonasDescarga:
         return _buildRoute(
           _protegerAdmin(const AdminZonasDescargaScreen(),
+              Capability.verAlertasVolvo),
+          settings,
+        );
+
+      // ================= AUDITORÍA ASIGNACIONES =================
+      // Cruce iButton físico (Sitrack) vs ASIGNACIONES_VEHICULO. Para
+      // multas tardías, investigaciones y reconciliación.
+      case AppRoutes.adminAuditoriaAsignaciones:
+        return _buildRoute(
+          _protegerAdmin(const AdminAuditoriaAsignacionesScreen(),
               Capability.verAlertasVolvo),
           settings,
         );

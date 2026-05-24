@@ -785,6 +785,18 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // SITRACK_IBUTTONS_HISTORICO — tramos reconstruidos del iButton físico
+    // ========================================================================
+    // La CF `reconstruirHistoricoIButtonsDiario` agrupa SITRACK_EVENTOS
+    // del día anterior por (patente, dni) detectando cambios y persiste
+    // 1 doc por tramo. Solo escribe la CF (Admin SDK). Lectura: roles
+    // que ven Volvo + admin/supervisor (auditoría de asignaciones).
+    match /SITRACK_IBUTTONS_HISTORICO/{doc} {
+      allow read: if puedeVerVolvoTableros();
+      allow create, update, delete: if false;
+    }
+
+    // ========================================================================
     // ZONAS_DESCARGA — geofences configurables para módulo "Descargas"
     // ========================================================================
     // El operador admin crea/edita zonas (polígono o círculo) desde la app.

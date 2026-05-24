@@ -238,6 +238,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               ),
             if (Capabilities.can(PrefsService.rol, Capability.verAlertasVolvo))
               const _AdminTile(
+                titulo: 'AUDITORÍA ASIGNACIONES',
+                subtitulo: 'iButton real vs asignación del sistema',
+                icono: Icons.fact_check,
+                color: AppColors.accentTeal,
+                ruta: AppRoutes.adminAuditoriaAsignaciones,
+              ),
+            if (Capabilities.can(PrefsService.rol, Capability.verAlertasVolvo))
+              const _AdminTile(
                 titulo: 'MAPA',
                 subtitulo: 'Posición actual de la flota en tiempo real',
                 icono: Icons.map_outlined,
