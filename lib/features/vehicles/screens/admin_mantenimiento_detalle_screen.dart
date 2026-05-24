@@ -1,10 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../services/odometros_service.dart';
 import '../utils/volvo_telltales_es.dart';
 import '../widgets/mantenimiento_badge.dart';
 
@@ -53,6 +55,8 @@ class AdminMantenimientoDetalleScreen extends StatelessWidget {
               _SeccionAdvertencias(volvo: volvo),
               const SizedBox(height: 12),
               _SeccionTelemetria(vehiculo: vehiculo, volvo: volvo),
+              const SizedBox(height: 12),
+              _SeccionKmRecorridos(patente: patente),
               const SizedBox(height: 12),
               _SeccionHistorial(taller: taller),
             ],
@@ -398,6 +402,308 @@ class _ItemVisita extends StatelessWidget {
                 );
               }).toList(),
       ),
+    );
+  }
+}
+
+/// Km recorridos por día — gráfico últimos 30 días + KPIs del mes en
+/// curso vs mes anterior + tabla últimos 3 meses (km, L, l/100km).
+/// Lee `TELEMETRIA_HISTORICO` (snapshot diario que escribe la CF
+/// `telemetriaSnapshotScheduled` cada 6h). El `km` y `litros_acumulados`
+/// son acumulados → calculamos delta diario client-side.
+class _SeccionKmRecorridos extends StatefulWidget {
+  final String patente;
+  const _SeccionKmRecorridos({required this.patente});
+
+  @override
+  State<_SeccionKmRecorridos> createState() => _SeccionKmRecorridosState();
+}
+
+class _SeccionKmRecorridosState extends State<_SeccionKmRecorridos> {
+  late Future<_KmRecorridosData> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _cargar();
+  }
+
+  Future<_KmRecorridosData> _cargar() async {
+    final dias = await OdometrosService.cargarUltimosDias(
+        patente: widget.patente, dias: 30);
+    final meses = await OdometrosService.agruparPorMes(
+        patente: widget.patente, meses: 3);
+    return _KmRecorridosData(dias: dias, meses: meses);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.all(14),
+      child: FutureBuilder<_KmRecorridosData>(
+        future: _future,
+        builder: (ctx, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const SizedBox(
+                height: 120,
+                child: Center(
+                    child: CircularProgressIndicator(
+                        color: AppColors.accentTeal)));
+          }
+          if (snap.hasError || snap.data == null) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _TituloSeccion(Icons.route, 'Km recorridos'),
+                Text('No se pudo cargar: ${snap.error ?? "sin datos"}',
+                    style: const TextStyle(
+                        color: Colors.white54, fontSize: 12)),
+              ],
+            );
+          }
+          final data = snap.data!;
+          if (data.dias.isEmpty) {
+            return const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _TituloSeccion(Icons.route, 'Km recorridos'),
+                Text(
+                  'Sin snapshots para esta unidad (probable no-Volvo o nueva).',
+                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const _TituloSeccion(Icons.route, 'Km recorridos'),
+              _KpisMes(meses: data.meses),
+              const SizedBox(height: 14),
+              _GraficoDias(dias: data.dias),
+              const SizedBox(height: 12),
+              _TablaMeses(meses: data.meses),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _KmRecorridosData {
+  final List<OdometroDia> dias;
+  final Map<String, MesAgregado> meses;
+  const _KmRecorridosData({required this.dias, required this.meses});
+}
+
+class _KpisMes extends StatelessWidget {
+  final Map<String, MesAgregado> meses;
+  const _KpisMes({required this.meses});
+
+  @override
+  Widget build(BuildContext context) {
+    if (meses.isEmpty) return const SizedBox.shrink();
+    final lista = meses.values.toList();
+    final mesActual = lista.first;
+    final mesAnterior = lista.length > 1 ? lista[1] : null;
+    return Wrap(
+      spacing: 18,
+      runSpacing: 8,
+      children: [
+        _Kpi(
+            label: 'KM MES EN CURSO',
+            valor: AppFormatters.formatearMiles(mesActual.kmTotal.toDouble()),
+            sub: '${mesActual.diasConDato} días con dato',
+            color: AppColors.accentTeal),
+        if (mesAnterior != null)
+          _Kpi(
+              label: 'KM MES ANTERIOR',
+              valor: AppFormatters.formatearMiles(
+                  mesAnterior.kmTotal.toDouble()),
+              sub: '${mesAnterior.diasConDato} días con dato',
+              color: Colors.white60),
+        _Kpi(
+            label: 'L/100KM MES',
+            valor: mesActual.litros100km > 0
+                ? mesActual.litros100km.toStringAsFixed(1)
+                : '—',
+            sub: '${mesActual.litrosTotal.toStringAsFixed(0)} L consumidos',
+            color: AppColors.accentBlue),
+      ],
+    );
+  }
+}
+
+class _Kpi extends StatelessWidget {
+  final String label;
+  final String valor;
+  final String sub;
+  final Color color;
+  const _Kpi(
+      {required this.label,
+      required this.valor,
+      required this.sub,
+      required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(
+                color: Colors.white54,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1)),
+        Text(valor,
+            style: TextStyle(
+                color: color,
+                fontSize: 18,
+                fontWeight: FontWeight.bold)),
+        Text(sub,
+            style:
+                const TextStyle(color: Colors.white38, fontSize: 10)),
+      ],
+    );
+  }
+}
+
+class _GraficoDias extends StatelessWidget {
+  final List<OdometroDia> dias;
+  const _GraficoDias({required this.dias});
+
+  @override
+  Widget build(BuildContext context) {
+    // Filtramos los días con delta > 0 (el primero suele tener 0 por no
+    // tener día previo). La serie va cronológicamente ascendente.
+    final cronologico = dias.reversed.toList();
+    final spots = <FlSpot>[];
+    var maxKm = 0.0;
+    for (var i = 0; i < cronologico.length; i++) {
+      final k = cronologico[i].deltaKm.toDouble();
+      spots.add(FlSpot(i.toDouble(), k));
+      if (k > maxKm) maxKm = k;
+    }
+    if (spots.length < 2) {
+      return const SizedBox(
+        height: 60,
+        child: Center(
+          child: Text(
+            'Necesitamos más días para graficar',
+            style: TextStyle(color: Colors.white54, fontSize: 12),
+          ),
+        ),
+      );
+    }
+    final maxY = maxKm <= 0 ? 100.0 : (maxKm * 1.15).ceilToDouble();
+    return SizedBox(
+      height: 160,
+      child: LineChart(
+        LineChartData(
+          minY: 0,
+          maxY: maxY,
+          gridData: FlGridData(
+            show: true,
+            drawVerticalLine: false,
+            horizontalInterval: maxY / 4,
+            getDrawingHorizontalLine: (v) => FlLine(
+              color: Colors.white.withValues(alpha: 0.05),
+              strokeWidth: 1,
+            ),
+          ),
+          titlesData: FlTitlesData(
+            topTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false)),
+            rightTitles: const AxisTitles(
+                sideTitles: SideTitles(showTitles: false)),
+            leftTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                reservedSize: 32,
+                interval: maxY / 4,
+                getTitlesWidget: (v, m) => Text(v.toInt().toString(),
+                    style: const TextStyle(
+                        color: Colors.white54, fontSize: 10)),
+              ),
+            ),
+            bottomTitles: AxisTitles(
+              sideTitles: SideTitles(
+                showTitles: true,
+                interval: (cronologico.length / 5).ceilToDouble(),
+                reservedSize: 22,
+                getTitlesWidget: (v, m) {
+                  final i = v.toInt();
+                  if (i < 0 || i >= cronologico.length) return const Text('');
+                  final f = cronologico[i].fecha;
+                  if (f.length < 10) return const Text('');
+                  return Text('${f.substring(8, 10)}/${f.substring(5, 7)}',
+                      style: const TextStyle(
+                          color: Colors.white54, fontSize: 10));
+                },
+              ),
+            ),
+          ),
+          borderData: FlBorderData(show: false),
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              isCurved: false,
+              color: AppColors.accentTeal,
+              barWidth: 2,
+              dotData: const FlDotData(show: false),
+              belowBarData: BarAreaData(
+                show: true,
+                color: AppColors.accentTeal.withValues(alpha: 0.15),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TablaMeses extends StatelessWidget {
+  final Map<String, MesAgregado> meses;
+  const _TablaMeses({required this.meses});
+
+  @override
+  Widget build(BuildContext context) {
+    if (meses.isEmpty) return const SizedBox.shrink();
+    return DataTable(
+      headingRowHeight: 32,
+      dataRowMinHeight: 30,
+      dataRowMaxHeight: 36,
+      columnSpacing: 18,
+      horizontalMargin: 4,
+      headingTextStyle: const TextStyle(
+          color: Colors.white60,
+          fontWeight: FontWeight.bold,
+          fontSize: 11,
+          letterSpacing: 0.8),
+      dataTextStyle:
+          const TextStyle(color: Colors.white, fontSize: 12),
+      columns: const [
+        DataColumn(label: Text('MES')),
+        DataColumn(label: Text('KM'), numeric: true),
+        DataColumn(label: Text('L'), numeric: true),
+        DataColumn(label: Text('L/100KM'), numeric: true),
+        DataColumn(label: Text('DÍAS'), numeric: true),
+      ],
+      rows: meses.values
+          .map((m) => DataRow(cells: [
+                DataCell(Text(m.mes)),
+                DataCell(Text(AppFormatters.formatearMiles(
+                    m.kmTotal.toDouble()))),
+                DataCell(Text(m.litrosTotal.toStringAsFixed(0))),
+                DataCell(Text(m.litros100km > 0
+                    ? m.litros100km.toStringAsFixed(1)
+                    : '—')),
+                DataCell(Text(m.diasConDato.toString())),
+              ]))
+          .toList(),
     );
   }
 }

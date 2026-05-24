@@ -294,6 +294,14 @@
         { "fieldPath": "chofer_dni", "order": "ASCENDING" },
         { "fieldPath": "fecha", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "TELEMETRIA_HISTORICO",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "patente", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

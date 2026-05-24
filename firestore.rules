@@ -265,8 +265,11 @@ service cloud.firestore {
       // Solo escribe la scheduled function `telemetriaSnapshotScheduled`
       // (cada 6 horas) vía Admin SDK. La app cliente NO escribe acá
       // desde 2026-04-29 — el cliente solo lee para mostrar el reporte
-      // de consumo.
-      allow read: if isAdmin();
+      // de consumo + el widget "Km recorridos" en mantenimiento.
+      // 2026-05-24: abrimos read a puedeVerVolvoTableros (admin/
+      // supervisor/SEG_HIGIENE) — los 3 abren la pantalla de
+      // mantenimiento detalle y necesitan ver km/consumo de la unidad.
+      allow read: if puedeVerVolvoTableros();
       allow write: if false;
     }
 
