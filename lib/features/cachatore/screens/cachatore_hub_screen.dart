@@ -409,9 +409,7 @@ class _SeccionConcretados extends StatelessWidget {
                 if (turnos.isEmpty)
                   const AppCard(
                     child: Text(
-                      'No hay turnos sacados. El bot chequea en iTurnos los turnos de '
-                      'CADA chofer (los haya sacado el bot o no); cuando aparece uno, '
-                      'tocalo para reagendarlo.',
+                      'No hay turnos sacados.',
                       style: TextStyle(color: Colors.white38, fontSize: 12),
                     ),
                   )
