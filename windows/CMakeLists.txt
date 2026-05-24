@@ -10,6 +10,15 @@ set(BINARY_NAME "coopertrans_movil")
 # versions of CMake.
 cmake_policy(VERSION 3.14...3.25)
 
+# Silenciar el "CMake Deprecation Warning" del CMakeLists.txt del
+# firebase_cpp_sdk_windows (declara `cmake_minimum_required(VERSION 2.8.11)`
+# y CMake actual avisa que <3.10 va a dejar de soportarse). El archivo lo
+# descomprime firebase_core en cada build dentro de
+# `build/windows/x64/extracted/firebase_cpp_sdk_windows/` — si lo editamos
+# se sobrescribe. Apagamos los warnings de deprecación SOLO para subdirs
+# de terceros (no afecta nuestro código).
+set(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "" FORCE)
+
 # Define build configuration option.
 get_property(IS_MULTICONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(IS_MULTICONFIG)
