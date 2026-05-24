@@ -7,6 +7,102 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-05-24 — Análisis Sitrack vs nuestra app — propuestas pendientes
+
+Auditoría completa del portal Sitrack (43 endpoints / vistas inventariados) + cruce
+con nuestra app. **6 propuestas priorizadas por ROI**. Hoy se cerraron 2 — las 4
+restantes quedan acá como roadmap para próximas sesiones.
+
+### ✅ HECHO hoy
+
+- **P2 — Histórico real de iButton** (`7d9919d`). Pipeline desde `SITRACK_EVENTOS`
+  con CF diaria + backfill + pantalla "Auditoría asignaciones" que cruza contra
+  `ASIGNACIONES_VEHICULO`. 1.755 tramos cargados.
+- **P4 (parcial) — Cola de descargas YPF Añelo** (`78f50aa` + `2ad40be`). Reemplaza
+  PTO Volvo por geocercas Sitrack configurables. Filtro por rango de fecha+hora.
+  Falta: el KPI específico "tiempo promedio descarga" + ranking choferes + alerta
+  outliers (acumular ~1 mes de data primero y después decidir).
+
+### ⏳ PENDIENTE — ordenadas por ROI
+
+#### 🥇 P1 — Auto-poblar viajes desde Sitrack (ROI MÁXIMO)
+**Esfuerzo: M (3-7 días). Valor: 🔥🔥🔥**
+
+Hoy: cada viaje en `VIAJES_LOGISTICA` se carga MANUAL (chofer / unidad / origen /
+destino / fecha_carga / fecha_descarga / km). Es la fricción más grande del módulo.
+
+**Plan:**
+1. Definir geocercas en Sitrack para los 5-10 lugares clave (YPF Añelo, plantas
+   Vecchi, destinos GASPERINI, etc.). 1 vez, en Sitrack web.
+2. Scraper nuevo `sitrack_sync/sync_viajes.py` cada 30 min:
+   - `tiempoEnZona.php` (rango ayer→hoy) — entradas/salidas por chofer
+   - `tiempoViaje.php` (rango ayer→hoy) — viajes detectados
+3. CF que ingiere y propone viajes:
+   - Patrón "estadía >30min origen → movimiento → estadía >30min destino"
+   - Crea `VIAJES_LOGISTICA` con `estado='PROPUESTO_SITRACK'` (no `EN_CURSO`)
+   - Pre-llena chofer, unidad, fecha_carga, fecha_descarga, tarifa sugerida
+4. Pantalla nueva "Viajes propuestos" en hub Logística — admin revisa y confirma
+   con 1 click.
+
+**Impacto:** ahorro de horas/mes de operador, 0 errores de tipeo, métricas reales
+de duración. **Esto sólo justifica el proyecto.**
+
+#### 🥈 P3 — DTCs históricos para Emmanuel (alto valor, rápido)
+**Esfuerzo: S (1-2 días). Valor: 🔥🔥🔥**
+
+Hoy: sólo tell-tales del momento actual (Volvo `VOLVO_ESTADO`). Si un Check Engine
+se prende y apaga sin que Emmanuel mire en ese instante, lo perdemos.
+
+**Plan:**
+1. Extender `sync_icm.py` (o nuevo `sync_dtcs.py`) para llamar
+   `historicoCodigoFalla.php` (últimos 7 días) → array de DTCs por unidad.
+2. Persistir `VEHICULOS_DTC_HISTORICO/{patente}_{ts}` (idempotente por timestamp).
+3. **Sumar al "Parte de mantenimiento" 08:00 de Emmanuel**
+   (`resumenMantenimientoVehiculosDiario`):
+   - "Tractor AB421DP: 3 códigos de falla últimos 7 días (P0507, P0420, P1259)"
+   - DTC recurrente 3+ veces → highlight rojo "REVISAR"
+4. Pantalla "Historial DTCs" en mantenimiento detalle por unidad.
+
+**Impacto:** mantenimiento PREDICTIVO real (no reactivo). Emmanuel anticipa fallas.
+
+#### 🥉 P5 — Consumo combustible cubriendo NO-Volvo
+**Esfuerzo: M. Valor: 🔥🔥**
+
+Hoy: `report_consumo.dart` sale de `TELEMETRIA_HISTORICO` (Volvo) — sólo cubre los
+53 Volvo. Las unidades no-Volvo quedan fuera.
+
+**Plan:**
+1. Scraper consulta `/site5/fuel_consumption/` (toda la flota).
+2. Persistir `SITRACK_CONSUMO_DIARIO/{patente}_{YYYY-MM-DD}`.
+3. Modificar `report_consumo.dart` para cruzar Volvo + Sitrack — consumo unificado.
+
+**Impacto:** cobertura total de la flota Vecchi.
+
+#### 6️⃣ P6 — Auditar geocercas + Reglas Sitrack
+**Esfuerzo: S. Valor: 🔥** (bajo en código, alto en operación)
+
+Hoy: no sabemos qué reglas / geocercas tiene Vecchi configuradas en Sitrack.
+
+**Plan:**
+1. Santiago abre las Reglas en Sitrack y lista qué hay vs qué falta.
+2. Configurar las que faltan (ej. "Salir de zona Bahía Blanca después de las 02:00"
+   → alerta operativa).
+3. Documentar en un doc o card admin.
+
+**Impacto:** complementa el sistema de alertas existente con triggers nativos
+Sitrack que NO requieren código nuestro.
+
+### ❌ DESCARTADOS con justificación
+
+- **Adm Mantenimiento de Sitrack** (G11): nuestra solución es más rica (Volvo
+  serviceDistance + horas motor + historial taller + Emmanuel). Migrar = retroceder.
+- **DVR cámaras cabina** (G9): Vecchi probable no tiene cámaras. N/A.
+- **Enviar Mensaje a teclado cabina** (G8): WhatsApp ya cubre. Bajísimo ROI.
+- **H. Temperatura** (G13) + **Validar Carga Combustible** (G14): no aplican al
+  negocio Vecchi (transporta arena seca, carga combustible en estaciones).
+
+---
+
 ## 📅 2026-05-22 PM (3) — Auditoría general + dedup Emmanuel + F.931 iOS + cachatore
 
 Sesión grande de cierre. 7 commits (`f334604` → `46626c6`), todo en main + pusheado.
