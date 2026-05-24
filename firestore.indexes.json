@@ -268,7 +268,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "slug_zona", "order": "ASCENDING" },
-        { "fieldPath": "salida_ts", "order": "DESCENDING" }
+        { "fieldPath": "entrada_ts", "order": "DESCENDING" }
       ]
     }
   ],

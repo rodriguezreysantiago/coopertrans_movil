@@ -28,6 +28,44 @@ class AdminDescargasScreen extends StatefulWidget {
 class _AdminDescargasScreenState extends State<AdminDescargasScreen> {
   String? _slugSeleccionado;
 
+  /// Rango de fechas para filtrar el histórico de descargas. Default:
+  /// hoy 00:00 → ahora. La cola en vivo NO se filtra (siempre es ahora).
+  late DateTime _desde;
+  late DateTime _hasta;
+
+  @override
+  void initState() {
+    super.initState();
+    final ahora = DateTime.now();
+    _desde = DateTime(ahora.year, ahora.month, ahora.day); // 00:00 hoy
+    _hasta = ahora;
+  }
+
+  Future<void> _elegirRango() async {
+    final ahora = DateTime.now();
+    final r = await showDateRangePicker(
+      context: context,
+      firstDate: ahora.subtract(const Duration(days: 365)),
+      lastDate: ahora,
+      initialDateRange: DateTimeRange(start: _desde, end: _hasta),
+      helpText: 'Rango de descargas a mostrar',
+      saveText: 'Aplicar',
+      locale: const Locale('es', 'AR'),
+    );
+    if (r == null) return;
+    setState(() {
+      _desde = DateTime(r.start.year, r.start.month, r.start.day);
+      // Si elegís HOY como hasta, queremos hasta AHORA (no medianoche).
+      // Si elegís un día pasado, hasta el fin del día.
+      final esHoy = r.end.year == ahora.year &&
+          r.end.month == ahora.month &&
+          r.end.day == ahora.day;
+      _hasta = esHoy
+          ? ahora
+          : DateTime(r.end.year, r.end.month, r.end.day, 23, 59, 59);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
@@ -59,21 +97,106 @@ class _AdminDescargasScreenState extends State<AdminDescargasScreen> {
                   onChanged: (s) =>
                       setState(() => _slugSeleccionado = s),
                 ),
+              _BotonRango(
+                desde: _desde,
+                hasta: _hasta,
+                onTap: _elegirRango,
+              ),
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.all(12),
                   children: [
-                    _KpisZona(slug: zonaActual.slug),
+                    _KpisZona(
+                      slug: zonaActual.slug,
+                      desde: _desde,
+                      hasta: _hasta,
+                    ),
                     const SizedBox(height: 16),
                     _ColaEnVivo(zona: zonaActual),
                     const SizedBox(height: 16),
-                    _RecienDescargaron(slug: zonaActual.slug),
+                    _DescargasDelRango(
+                      slug: zonaActual.slug,
+                      desde: _desde,
+                      hasta: _hasta,
+                    ),
                   ],
                 ),
               ),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// Botón único con el rango actual visible. Tap → date range picker.
+class _BotonRango extends StatelessWidget {
+  final DateTime desde;
+  final DateTime hasta;
+  final VoidCallback onTap;
+  const _BotonRango({
+    required this.desde,
+    required this.hasta,
+    required this.onTap,
+  });
+
+  String _fmt(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-${d.year}';
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.accentCyan.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: AppColors.accentCyan.withValues(alpha: 0.4),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.date_range,
+                  color: AppColors.accentCyan, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'RANGO DE DESCARGAS',
+                      style: TextStyle(
+                        color: AppColors.accentCyan,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${_fmt(desde)} → ${_fmt(hasta)}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.calendar_today,
+                  color: Colors.white54, size: 18),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -161,52 +284,61 @@ class _SelectorZona extends StatelessWidget {
 
 class _KpisZona extends StatelessWidget {
   final String slug;
-  const _KpisZona({required this.slug});
+  final DateTime desde;
+  final DateTime hasta;
+  const _KpisZona({
+    required this.slug,
+    required this.desde,
+    required this.hasta,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final hace30d = DateTime.now().subtract(const Duration(days: 30));
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection(AppCollections.zonaDescargaHistorico)
           .where('slug_zona', isEqualTo: slug)
           .where('entrada_ts',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(hace30d))
+              isGreaterThanOrEqualTo: Timestamp.fromDate(desde))
+          .where('entrada_ts',
+              isLessThanOrEqualTo: Timestamp.fromDate(hasta))
           .snapshots(),
       builder: (ctx, snap) {
         final docs = snap.data?.docs ?? const [];
-        final hoy = DateTime.now();
-        final inicioHoy = DateTime(hoy.year, hoy.month, hoy.day);
-        final desc30 = docs.length;
-        var sum = 0, descHoy = 0;
+        final count = docs.length;
+        var sum = 0;
+        int maxDur = 0;
+        String maxPat = '';
         for (final d in docs) {
-          sum += ((d.data()['duracion_min'] ?? 0) as num).toInt();
-          final ts =
-              (d.data()['entrada_ts'] as Timestamp?)?.toDate();
-          if (ts != null && ts.isAfter(inicioHoy)) descHoy++;
+          final dur = ((d.data()['duracion_min'] ?? 0) as num).toInt();
+          sum += dur;
+          if (dur > maxDur) {
+            maxDur = dur;
+            maxPat = (d.data()['patente'] ?? '').toString();
+          }
         }
-        final promedio = desc30 > 0 ? (sum / desc30).round() : 0;
+        final promedio = count > 0 ? (sum / count).round() : 0;
         return Row(
           children: [
             _KpiCard(
-              label: 'Descargas hoy',
-              valor: '$descHoy',
+              label: 'Descargas',
+              valor: '$count',
               color: AppColors.accentBlue,
-              icon: Icons.today,
+              icon: Icons.local_shipping,
             ),
             const SizedBox(width: 8),
             _KpiCard(
-              label: 'Promedio 30d',
+              label: 'Promedio',
               valor: '$promedio min',
               color: AppColors.accentAmber,
               icon: Icons.timer,
             ),
             const SizedBox(width: 8),
             _KpiCard(
-              label: 'Total 30d',
-              valor: '$desc30',
-              color: AppColors.accentGreen,
-              icon: Icons.local_shipping,
+              label: maxPat.isEmpty ? 'Más lenta' : 'Más lenta · $maxPat',
+              valor: maxDur > 0 ? '$maxDur min' : '—',
+              color: AppColors.accentRed,
+              icon: Icons.priority_high,
             ),
           ],
         );
@@ -439,15 +571,20 @@ class _FilaCola extends StatelessWidget {
   }
 }
 
-// ─── Recién descargaron ─────────────────────────────────────────
+// ─── Descargas del rango (histórico filtrado) ────────────────────
 
-class _RecienDescargaron extends StatelessWidget {
+class _DescargasDelRango extends StatelessWidget {
   final String slug;
-  const _RecienDescargaron({required this.slug});
+  final DateTime desde;
+  final DateTime hasta;
+  const _DescargasDelRango({
+    required this.slug,
+    required this.desde,
+    required this.hasta,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final hace4h = DateTime.now().subtract(const Duration(hours: 4));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -456,7 +593,7 @@ class _RecienDescargaron extends StatelessWidget {
             Icon(Icons.history, color: AppColors.accentTeal, size: 18),
             SizedBox(width: 6),
             Text(
-              'RECIÉN DESCARGARON (últimas 4hs)',
+              'DESCARGAS DEL RANGO',
               style: TextStyle(
                   color: AppColors.accentTeal,
                   fontWeight: FontWeight.bold,
@@ -467,13 +604,19 @@ class _RecienDescargaron extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          // Filtra por ENTRADA en el rango (cuándo empezó la descarga).
+          // Si una descarga empezó dentro pero terminó después de "hasta",
+          // igual aparece — útil para "qué descargas hubo en este turno"
+          // sin perder las que se extendieron al siguiente.
           stream: FirebaseFirestore.instance
               .collection(AppCollections.zonaDescargaHistorico)
               .where('slug_zona', isEqualTo: slug)
-              .where('salida_ts',
-                  isGreaterThanOrEqualTo: Timestamp.fromDate(hace4h))
-              .orderBy('salida_ts', descending: true)
-              .limit(20)
+              .where('entrada_ts',
+                  isGreaterThanOrEqualTo: Timestamp.fromDate(desde))
+              .where('entrada_ts',
+                  isLessThanOrEqualTo: Timestamp.fromDate(hasta))
+              .orderBy('entrada_ts', descending: true)
+              .limit(500)
               .snapshots(),
           builder: (ctx, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
@@ -489,7 +632,7 @@ class _RecienDescargaron extends StatelessWidget {
                   padding: EdgeInsets.symmetric(vertical: 18),
                   child: Center(
                     child: Text(
-                      'Sin descargas en las últimas 4 horas',
+                      'Sin descargas en el rango seleccionado',
                       style: TextStyle(color: Colors.white54),
                     ),
                   ),
@@ -497,7 +640,9 @@ class _RecienDescargaron extends StatelessWidget {
               );
             }
             return Column(
-              children: docs.map((d) => _FilaHistorico(data: d.data())).toList(),
+              children: docs
+                  .map((d) => _FilaHistorico(data: d.data()))
+                  .toList(),
             );
           },
         ),
