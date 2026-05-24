@@ -43,6 +43,30 @@
       ]
     },
     {
+      "collectionGroup": "WHATSAPP_HISTORICO",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "destinatario_id", "order": "ASCENDING" },
+        { "fieldPath": "registrado_en", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "WHATSAPP_HISTORICO",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "origen", "order": "ASCENDING" },
+        { "fieldPath": "registrado_en", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "WHATSAPP_HISTORICO",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "registrado_en", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "COLA_WHATSAPP",
       "queryScope": "COLLECTION",
       "fields": [

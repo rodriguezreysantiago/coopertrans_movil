@@ -10,6 +10,7 @@ import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../whatsapp_bot/screens/admin_whatsapp_cola_screen.dart';
+import '../../whatsapp_bot/screens/admin_whatsapp_historico_screen.dart';
 
 // 14 widgets visuales (banner, cards de cola/mensajes/cron/config/info,
 // errores recientes, bloque datos, filas, kill-switch) extraidos para
@@ -66,6 +67,22 @@ class _AdminEstadoBotScreenState extends State<AdminEstadoBotScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Estado del Bot',
+      actions: [
+        // M8+M10 — acceso al histórico de mensajes (30 días). El
+        // dashboard muestra "Cola en vivo" (TTL horas); el histórico
+        // resuelve "¿se mandó tal mensaje el lunes?".
+        IconButton(
+          icon: const Icon(Icons.history, color: Colors.white),
+          tooltip: 'Historial de mensajes (30 días)',
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminWhatsappHistoricoScreen(),
+              ),
+            );
+          },
+        ),
+      ],
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
             .collection('BOT_HEALTH')

@@ -96,6 +96,13 @@ const ESTADO = {
   error: 'ERROR',
 };
 
+// M8 — Histórico de envíos. Doc 1:1 con COLA_WHATSAPP (mismo docId)
+// pero con TTL 30 días. Sirve para auditar "¿se mandó tal mensaje?"
+// cuando alguien reclama. COLA_WHATSAPP tiene TTL muy corto (horas)
+// porque su rol es "cola de trabajo", no archivo.
+const COLECCION_HISTORICO = 'WHATSAPP_HISTORICO';
+const TTL_HISTORICO_DIAS = 30;
+
 /** Marca un doc como en proceso de envío (transitorio). */
 async function marcarProcesando(docRef) {
   await docRef.update({
@@ -173,18 +180,38 @@ async function marcarProcesandoSiPendiente(docRef) {
  * Marca un doc como enviado exitosamente. Si se pasa el [waMessageId]
  * (id devuelto por wwebjs al enviar) lo guardamos para asociar
  * después las respuestas que cite ese mensaje (Fase 3).
+ *
+ * Si se pasa `data` (el contenido del doc original que ya leímos),
+ * además persiste el mensaje en WHATSAPP_HISTORICO (M8, retention 30d)
+ * para auditar mensajes pasados — COLA_WHATSAPP tiene TTL muy corto.
+ * Si no se pasa data o el espejo falla, NO interrumpimos el flujo de
+ * marcar enviado (mejor un mensaje sin histórico que un mensaje sin
+ * marcar).
  */
-async function marcarEnviado(docRef, { waMessageId } = {}) {
+async function marcarEnviado(docRef, dataOrOpts, opts) {
+  // Compat con firma vieja: marcarEnviado(docRef, { waMessageId }).
+  const { data, waMessageId } = _normalizarMarcarArgs(dataOrOpts, opts);
   await docRef.update({
     estado: ESTADO.enviado,
     enviado_en: admin.firestore.FieldValue.serverTimestamp(),
     error: null,
     wa_message_id: waMessageId || null,
   });
+  if (data) {
+    await _espejarAlHistorico(docRef, data, ESTADO.enviado, {
+      waMessageId,
+    });
+  }
 }
 
 /** Marca un doc con error y guarda el detalle para que lo vea el admin. */
-async function marcarError(docRef, mensaje) {
+async function marcarError(docRef, dataOrMensaje, mensajeMaybe) {
+  // Compat con firma vieja: marcarError(docRef, mensaje).
+  const { data, mensaje } = _normalizarMarcarArgs(
+    dataOrMensaje,
+    mensajeMaybe,
+    /* esError */ true,
+  );
   const error = String(mensaje).slice(0, 500);
   await docRef.update({
     estado: ESTADO.error,
@@ -200,6 +227,77 @@ async function marcarError(docRef, mensaje) {
       at: new Date().toISOString(),
     }),
   });
+  if (data) {
+    await _espejarAlHistorico(docRef, data, ESTADO.error, { error });
+  }
+}
+
+/**
+ * Acepta tanto la firma nueva `(docRef, data, opts)` como la vieja
+ * `(docRef, opts|mensaje)` durante la migración. Si el segundo arg es
+ * un Map con `telefono` y `mensaje`, lo trata como data; sino, como opts.
+ */
+function _normalizarMarcarArgs(dataOrOpts, second, esError = false) {
+  // Firma vieja: marcarError(docRef, "texto error") o
+  // marcarEnviado(docRef, { waMessageId }).
+  if (
+    typeof dataOrOpts === 'string' ||
+    !dataOrOpts ||
+    typeof dataOrOpts.mensaje !== 'string'
+  ) {
+    if (esError) {
+      return { data: null, mensaje: String(dataOrOpts ?? '') };
+    }
+    return { data: null, waMessageId: (dataOrOpts || {}).waMessageId };
+  }
+  // Firma nueva: marcarEnviado(docRef, data, { waMessageId }) o
+  // marcarError(docRef, data, "texto error").
+  if (esError) {
+    return { data: dataOrOpts, mensaje: String(second ?? '') };
+  }
+  return { data: dataOrOpts, waMessageId: (second || {}).waMessageId };
+}
+
+/**
+ * M8 — espeja un mensaje terminal (ENVIADO / ERROR) a WHATSAPP_HISTORICO
+ * con TTL 30 días. Best-effort: cualquier falla se loguea pero NO se
+ * propaga (el mensaje ya fue enviado / marcado, no queremos romper el
+ * flujo por un problema de auditoría).
+ *
+ * DocId = mismo ID del doc original en COLA_WHATSAPP. Idempotente: si
+ * se llama dos veces, el segundo write sobreescribe.
+ */
+async function _espejarAlHistorico(docRef, data, estado, extras = {}) {
+  try {
+    const expiraEnMs = Date.now() + TTL_HISTORICO_DIAS * 24 * 3600 * 1000;
+    const espejo = {
+      cola_id: docRef.id,
+      telefono: data.telefono || '',
+      mensaje: data.mensaje || '',
+      origen: data.origen || '',
+      destinatario_id: data.destinatario_id || '',
+      destinatario_coleccion: data.destinatario_coleccion || '',
+      alert_patente: data.alert_patente || null,
+      estado,
+      registrado_en: admin.firestore.FieldValue.serverTimestamp(),
+      expira_en: admin.firestore.Timestamp.fromMillis(expiraEnMs),
+    };
+    if (estado === ESTADO.enviado) {
+      espejo.wa_message_id = extras.waMessageId || null;
+      espejo.error = null;
+    } else if (estado === ESTADO.error) {
+      espejo.wa_message_id = null;
+      espejo.error = extras.error || '';
+    }
+    await docRef.firestore
+      .collection(COLECCION_HISTORICO)
+      .doc(docRef.id)
+      .set(espejo, { merge: true });
+  } catch (e) {
+    log.warn(
+      `Espejar a WHATSAPP_HISTORICO falló para ${docRef.id}: ${e.message}`,
+    );
+  }
 }
 
 /**
@@ -294,4 +392,6 @@ module.exports = {
   marcarError,
   marcarReintento,
   recuperarStaleProcesando,
+  COLECCION_HISTORICO,
+  TTL_HISTORICO_DIAS,
 };

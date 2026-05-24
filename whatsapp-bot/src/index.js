@@ -292,7 +292,8 @@ async function _despacharFalloEnvio(docRef, error) {
   const maxRetries = parseInt(process.env.MAX_RETRIES || '3', 10);
   const transitorio = _esErrorTransitorio(error);
   const snap = await docRef.get();
-  const intentos = (snap.exists && snap.data().intentos) || 0;
+  const data = snap.exists ? snap.data() : null;
+  const intentos = (data && data.intentos) || 0;
 
   if (transitorio && intentos < maxRetries) {
     const backoffSeg = _backoffSegundos(intentos);
@@ -314,7 +315,10 @@ async function _despacharFalloEnvio(docRef, error) {
   const motivo = transitorio
     ? `agotados ${maxRetries} reintentos`
     : 'error no transitorio';
-  await fs.marcarError(docRef, `${error.message} (${motivo})`);
+  // M8 — pasamos data para que se espeje al WHATSAPP_HISTORICO. Si
+  // data es null (el doc no existe), marcarError lo trata como llamada
+  // legacy y solo actualiza el doc original (no escribe histórico).
+  await fs.marcarError(docRef, data, `${error.message} (${motivo})`);
   log.warn(`✗ ${docRef.id}: ERROR definitivo (${motivo}).`);
 }
 
@@ -485,6 +489,7 @@ async function procesarSiguiente() {
       log.warn(`${docId} con teléfono inválido: ${data.telefono}`);
       await fs.marcarError(
         docRef,
+        data,
         `Teléfono inválido: "${data.telefono}". Esperado E.164 (+5492914567890).`
       );
       return;
@@ -519,7 +524,11 @@ async function procesarSiguiente() {
     }
     if (!existe) {
       log.warn(`${docId}: ${wid} no tiene WhatsApp.`);
-      await fs.marcarError(docRef, 'El número no tiene WhatsApp registrado.');
+      await fs.marcarError(
+        docRef,
+        data,
+        'El número no tiene WhatsApp registrado.',
+      );
       return;
     }
 
@@ -742,7 +751,7 @@ async function procesarSiguiente() {
       health.registrarError('envio_parcial',
         `${docId}: ${chunksEnviados}/${partes.length}`);
     }
-    await fs.marcarEnviado(docRef, meta);
+    await fs.marcarEnviado(docRef, data, meta);
 
     // Marcar los docs agrupados como ENVIADO con `agrupado_en` apuntando
     // al doc principal — sin reenviar, queda traza para auditoría.

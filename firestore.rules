@@ -242,6 +242,21 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // WHATSAPP_HISTORICO — espejo de mensajes terminales (M8, 2026-05-24)
+    // ========================================================================
+    // Doc espejo de COLA_WHATSAPP cuando el mensaje llega a estado terminal
+    // (ENVIADO o ERROR). Mismo docId. TTL 30d (campo `expira_en` + TTL
+    // policy en Firestore Console). Sirve para auditar "¿se mandó X?"
+    // cuando alguien reclama — COLA_WHATSAPP tiene TTL muy corto.
+    //
+    // Solo el bot escribe (vía Admin SDK). Admin y supervisor LEEN, nadie
+    // escribe desde la app (evitar tamper de auditoría).
+    match /WHATSAPP_HISTORICO/{doc} {
+      allow read: if isAdminOrSupervisor();
+      allow write: if false;
+    }
+
+    // ========================================================================
     // AUDITORIA_ACCIONES — bitácora del admin
     // ========================================================================
 
