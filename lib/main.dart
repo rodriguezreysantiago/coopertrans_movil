@@ -12,14 +12,12 @@ import 'firebase_options.dart';
 import 'core/services/app_logger.dart';
 import 'core/services/prefs_service.dart';
 import 'core/services/notification_service.dart';
-import 'core/services/auto_sync_service.dart';
 import 'routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/constants/app_constants.dart';
 
 // 🔹 DEPENDENCIAS
 import 'features/vehicles/providers/vehiculo_provider.dart';
-import 'features/sync_dashboard/providers/sync_dashboard_provider.dart';
 import 'features/vehicles/services/vehiculo_manager.dart';
 import 'features/vehicles/services/vehiculo_repository.dart';
 import 'features/vehicles/services/volvo_api_service.dart';
@@ -301,24 +299,14 @@ Widget _armarApp() {
         },
       ),
 
-      // 🔥 DASHBOARD OBSERVABILIDAD
-      ChangeNotifierProvider(
-        create: (_) => SyncDashboardProvider(),
-      ),
-
-      // 🔥 AUTO-SYNC SERVICE
-      // Se crea una sola vez (cuando prev es null) y se le pasa al
-      // dispose del provider la baja del Timer interno. El botón
-      // "ejecutar ahora" del dashboard usa runNow() de esta instancia.
-      ProxyProvider2<VehiculoProvider, SyncDashboardProvider, AutoSyncService>(
-        update: (_, vehProv, dashProv, prev) {
-          if (prev != null) return prev;
-          final svc = AutoSyncService(vehProv, dashboard: dashProv);
-          svc.start();
-          return svc;
-        },
-        dispose: (_, svc) => svc.stop(),
-      ),
+      // AutoSyncService + SyncDashboard eliminados 2026-05-24: el timer
+      // cliente cada 60s era duplicado del cron server-side
+      // `estadoVolvoPoller` (cada 5 min) que ya escribe VOLVO_ESTADO Y
+      // propaga KM_ACTUAL/NIVEL_COMBUSTIBLE/AUTONOMIA_KM/SERVICE_DISTANCE_KM
+      // a VEHICULOS. Las pantallas críticas (Mantenimiento Detalle, V6 Km
+      // Recorridos) leen VOLVO_ESTADO/TELEMETRIA_HISTORICO directos —
+      // refresco más fresco que el viejo dashboard de Sync, sin pegarle al
+      // API Volvo desde cada admin abierto.
     ],
     child: const LogisticaApp(),
   );
@@ -334,24 +322,14 @@ class LogisticaApp extends StatefulWidget {
 }
 
 class _LogisticaAppState extends State<LogisticaApp> {
-  // El AutoSyncService ahora vive en el provider tree (ver main()). El
-  // start/stop lo maneja el ProxyProvider — acá solo precargamos los
-  // datos del provider y nos enganchamos al stream de notificaciones.
-
   @override
   void initState() {
     super.initState();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Precarga del cache de Volvo (no bloqueante: si falla, los syncs
+      // Precarga del cache de Volvo (no bloqueante: si falla, los reads
       // posteriores irán igual al endpoint individual).
       context.read<VehiculoProvider>().init();
-
-      // Tocamos el AutoSyncService para forzar su construcción ahora,
-      // así el primer ciclo arranca apenas se completa el primer build.
-      // Sin esto, el ProxyProvider lo construye recién cuando alguien
-      // lo lee desde el árbol.
-      context.read<AutoSyncService>();
     });
 
     NotificationService.selectNotificationStream.stream

@@ -387,6 +387,37 @@ export const estadoVolvoPoller = onSchedule(
           },
           { merge: true }
         );
+
+        // Propagar 4 campos críticos a VEHICULOS/{patente} para que las
+        // pantallas que leen del doc VEHICULOS (lista Flota, "Mi equipo"
+        // del chofer, Mantenimiento lista) vean datos frescos cada 5 min
+        // sin depender de un cliente con la app abierta. Reemplaza al
+        // viejo AutoSyncService cliente (eliminado 2026-05-24). limpiarNulos
+        // previene pisar valores existentes con null cuando la API no los
+        // trajo en este poll.
+        const vehiculosUpdate: Record<string, unknown> = {};
+        if (est.odometro_km != null) {
+          vehiculosUpdate.KM_ACTUAL = est.odometro_km;
+        }
+        if (est.combustible_pct != null) {
+          vehiculosUpdate.NIVEL_COMBUSTIBLE = est.combustible_pct;
+        }
+        if (est.autonomia_km != null) {
+          vehiculosUpdate.AUTONOMIA_KM = est.autonomia_km;
+        }
+        if (est.service_distance_km != null) {
+          vehiculosUpdate.SERVICE_DISTANCE_KM = est.service_distance_km;
+        }
+        if (Object.keys(vehiculosUpdate).length > 0) {
+          vehiculosUpdate.ULTIMA_LECTURA_COMBUSTIBLE =
+            FieldValue.serverTimestamp();
+          batch.set(
+            db.collection("VEHICULOS").doc(patente),
+            vehiculosUpdate,
+            { merge: true }
+          );
+        }
+
         escritos++;
       }
 

@@ -35,7 +35,6 @@ enum Capability {
   verReportes,
   verMantenimiento,
   verEstadoBot,
-  verSyncDashboard,
   /// Tablero de alertas de Volvo Vehicle Alerts API (eventos de la flota:
   /// IDLING, OVERSPEED, DISTANCE_ALERT, PTO, TELL_TALE, etc.). Tanto admin
   /// como supervisor pueden verlas y marcarlas como atendidas.
@@ -169,7 +168,6 @@ class Capabilities {
       Capability.asignarRolAdmin,
       Capability.cambiarRolEmpleado,
       Capability.verAuditoria,
-      Capability.verSyncDashboard,
     };
     return {
       AppRoles.chofer: _porRol[AppRoles.chofer] ?? {},

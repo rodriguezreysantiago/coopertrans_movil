@@ -10,7 +10,6 @@ import '../../../shared/utils/responsive_grid.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../../core/services/prefs_service.dart';
 import '../../auth/services/auth_service.dart';
-import '../../sync_dashboard/providers/sync_dashboard_provider.dart';
 import '../../vehicles/providers/vehiculo_provider.dart';
 import '../../vehicles/services/vehiculo_repository.dart';
 
@@ -166,11 +165,9 @@ class MainPanel extends StatelessWidget {
     // siguiente usuario que loguee no vea datos cacheados del anterior.
     // - Repositorio: cierra los listeners de Firestore (deja de gastar lecturas)
     // - Provider: limpia estados de loading/success/error y last sync
-    // - Dashboard: resetea métricas
     try {
       context.read<VehiculoRepository>().clearStreamCache();
       context.read<VehiculoProvider>().clearAll();
-      context.read<SyncDashboardProvider>().reset();
     } catch (e) {
       // Si por algún motivo Provider no está disponible, seguimos igual
       debugPrint('Aviso: no se pudo limpiar estado al logout: $e');

@@ -458,7 +458,8 @@ class _ChipResumen extends StatelessWidget {
 
 /// Bloque de telemetría en vivo del vehículo: nivel de combustible y
 /// autonomía estimada. Lee los campos `NIVEL_COMBUSTIBLE` y `AUTONOMIA_KM`
-/// que el AutoSyncService va escribiendo en Firestore desde Volvo Connect.
+/// que la CF `estadoVolvoPoller` (cada 5 min) mergea a VEHICULOS desde
+/// VOLVO_ESTADO (que es la fuente fresca de Volvo Connect API).
 ///
 /// Si la unidad no reporta esos datos (marca no-Volvo, telemetría
 /// desconectada, sincronización vieja), el bloque entero no se muestra

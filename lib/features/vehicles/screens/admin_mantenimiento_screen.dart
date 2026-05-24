@@ -18,8 +18,8 @@ part 'admin_mantenimiento_widgets.dart';
 /// Lista los TRACTORES ordenados por urgencia de service (vencidos
 /// primero, después por menor `SERVICE_DISTANCE_KM`). Los datos
 /// vienen de la colección `VEHICULOS`, donde `SERVICE_DISTANCE_KM`
-/// se actualiza automáticamente por el `AutoSyncService` cada vez
-/// que sincroniza con Volvo.
+/// se actualiza automáticamente por la CF `estadoVolvoPoller` (cada
+/// 5 min) que lee la API Volvo y mergea a VEHICULOS server-side.
 ///
 /// **Ordenamiento client-side** (no orderBy Firestore): la flota es
 /// chica (<100 tractores) y evitar el índice compuesto

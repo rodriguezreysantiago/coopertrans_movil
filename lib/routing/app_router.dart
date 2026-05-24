@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../features/sync_dashboard/screens/sync_dashboard_screen.dart'; // ✅ OK (ahora se usa)
 
 import '../core/services/prefs_service.dart';
 import '../core/services/capabilities.dart';
@@ -243,15 +242,6 @@ class AppRouter {
         );
 
       // ================= 🔥 NUEVO: SYNC DASHBOARD =================
-      // Restringido a ADMIN (no SUPERVISOR): muestra info técnica de
-      // sincronización y operaciones potencialmente disruptivas. Los
-      // supervisores no la necesitan para su día a día.
-      case AppRoutes.syncDashboard:
-        return _buildRoute(
-          _protegerSoloAdmin(const SyncDashboardScreen()),
-          settings,
-        );
-
       // ================= MANTENIMIENTO PREVENTIVO =================
       // Lista de tractores ordenados por urgencia de service
       // (basado en `serviceDistance` que viene del API Volvo).

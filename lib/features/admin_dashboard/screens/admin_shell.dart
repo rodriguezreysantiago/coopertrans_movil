@@ -20,7 +20,6 @@ import '../../icm/screens/icm_hub_screen.dart';
 import '../../cachatore/screens/cachatore_hub_screen.dart';
 import '../../gomeria/screens/gomeria_hub_screen.dart';
 import '../../logistica/screens/logistica_hub_screen.dart';
-import '../../sync_dashboard/screens/sync_dashboard_screen.dart';
 import '../../vehicles/screens/admin_mantenimiento_screen.dart';
 import '../../vehicles/screens/admin_vehiculos_lista_screen.dart';
 
@@ -198,13 +197,6 @@ class _AdminShellState extends State<AdminShell> {
       iconActive: Icons.analytics,
       build: () => const AdminReportsScreen(),
       requiredCapability: Capability.verReportes,
-    ),
-    _ShellSection(
-      label: 'Sync',
-      icon: Icons.monitor_heart_outlined,
-      iconActive: Icons.monitor_heart,
-      build: () => const SyncDashboardScreen(),
-      requiredCapability: Capability.verSyncDashboard,
     ),
     _ShellSection(
       label: 'Estado Bot',

@@ -107,10 +107,8 @@ void main() {
           isFalse);
     });
 
-    test('SUPERVISOR NO ve auditoría ni sync dashboard (solo ADMIN)', () {
+    test('SUPERVISOR NO ve auditoría (solo ADMIN)', () {
       expect(Capabilities.can(AppRoles.supervisor, Capability.verAuditoria),
-          isFalse);
-      expect(Capabilities.can(AppRoles.supervisor, Capability.verSyncDashboard),
           isFalse);
     });
   });
@@ -135,7 +133,6 @@ void main() {
         Capability.asignarRolAdmin,
         Capability.cambiarRolEmpleado,
         Capability.verAuditoria,
-        Capability.verSyncDashboard,
       ];
       for (final cap in exclusivasAdmin) {
         expect(
@@ -147,14 +144,16 @@ void main() {
     });
 
     test('REGRESSION: si se rompe la herencia, ADMIN debería seguir teniendo TODAS', () {
-      // Sanity check: ADMIN tiene exactamente |SUPERVISOR| + 6 exclusivas.
-      // Si alguien agrega una capability nueva en SUPERVISOR sin actualizar
-      // adminExtra y _resolverHerencia funciona mal, este test lo detecta.
+      // Sanity check: ADMIN tiene exactamente |SUPERVISOR| + 5 exclusivas.
+      // (5 desde 2026-05-24, era 6 — se quitó verSyncDashboard junto con
+      // AutoSyncService.) Si alguien agrega una capability nueva en
+      // SUPERVISOR sin actualizar adminExtra y _resolverHerencia funciona
+      // mal, este test lo detecta.
       final supSize = Capabilities.ofRol(AppRoles.supervisor).length;
       final adminSize = Capabilities.ofRol(AppRoles.admin).length;
-      expect(adminSize, equals(supSize + 6),
+      expect(adminSize, equals(supSize + 5),
           reason:
-              'ADMIN debería tener |SUPERVISOR| + 6 exclusivas. Si esto rompe, revisar adminExtra en _resolverHerencia.');
+              'ADMIN debería tener |SUPERVISOR| + 5 exclusivas. Si esto rompe, revisar adminExtra en _resolverHerencia.');
     });
   });
 

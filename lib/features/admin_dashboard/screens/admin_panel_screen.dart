@@ -260,14 +260,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 color: AppColors.accentAmber,
                 ruta: '/admin_reportes',
               ),
-            if (Capabilities.can(PrefsService.rol, Capability.verSyncDashboard))
-              const _AdminTile(
-                titulo: 'SYNC',
-                subtitulo: 'Monitoreo en tiempo real de sincronización',
-                icono: Icons.monitor_heart_outlined,
-                color: AppColors.accentCyan,
-                ruta: AppRoutes.syncDashboard,
-              ),
             if (Capabilities.can(PrefsService.rol, Capability.verEstadoBot))
               const _AdminTile(
                 titulo: 'ESTADO BOT',
