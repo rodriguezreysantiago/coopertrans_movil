@@ -164,18 +164,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 color: AppColors.accentPurple,
                 ruta: '/admin_vehiculos_lista',
               ),
-            if (Capabilities.can(PrefsService.rol, Capability.verRevisiones))
-              const _AdminTile(
-                titulo: 'REVISIONES',
-                subtitulo: 'Aprobar/rechazar trámites cargados por choferes',
-                icono: Icons.fact_check_outlined,
-                color: AppColors.accentTeal,
-                ruta: '/admin_revisiones',
-              ),
+            // REVISIONES movido dentro de VENCIMIENTOS (2026-05-24) — ya
+            // no tiene tile propio acá; se entra desde el menú de
+            // vencimientos. Sub-aprobación rápida via badge del tab.
             if (Capabilities.can(PrefsService.rol, Capability.verVencimientos))
               const _AdminTile(
                 titulo: 'VENCIMIENTOS',
-                subtitulo: 'Calendario, personal, flota y empresas',
+                subtitulo: 'Revisiones, calendario, personal, flota y empresas',
                 icono: Icons.event_note,
                 color: AppColors.accentGreen,
                 ruta: '/admin_vencimientos_menu',
@@ -187,14 +182,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 icono: Icons.route_outlined,
                 color: AppColors.accentGreen,
                 ruta: AppRoutes.adminLogisticaHub,
-              ),
-            if (Capabilities.can(PrefsService.rol, Capability.verCachatore))
-              const _AdminTile(
-                titulo: 'CACHATORE',
-                subtitulo: '',
-                icono: Icons.schedule,
-                color: AppColors.accentCyan,
-                ruta: AppRoutes.adminCachatoreHub,
               ),
             if (Capabilities.can(PrefsService.rol, Capability.verGomeria))
               const _AdminTile(
@@ -259,6 +246,16 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 icono: Icons.analytics_outlined,
                 color: AppColors.accentAmber,
                 ruta: '/admin_reportes',
+              ),
+            // Bots juntos al final (2026-05-24): mismos 2 "agentes
+            // automáticos" del sistema, mismo orden que en el shell.
+            if (Capabilities.can(PrefsService.rol, Capability.verCachatore))
+              const _AdminTile(
+                titulo: 'CACHATORE',
+                subtitulo: 'Bot que reserva turnos de carga en YPF/iTurnos',
+                icono: Icons.schedule,
+                color: AppColors.accentCyan,
+                ruta: AppRoutes.adminCachatoreHub,
               ),
             if (Capabilities.can(PrefsService.rol, Capability.verEstadoBot))
               const _AdminTile(

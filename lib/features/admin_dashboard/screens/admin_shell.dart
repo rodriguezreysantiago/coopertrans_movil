@@ -13,7 +13,6 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../../employees/screens/admin_personal_lista_screen.dart';
 import '../../expirations/screens/admin_vencimientos_menu_screen.dart';
 import '../../reports/screens/admin_reports_screen.dart';
-import '../../revisions/screens/admin_revisiones_screen.dart';
 import '../../zonas_descarga/screens/admin_descargas_screen.dart';
 import '../../fleet_map/screens/admin_mapa_flota_screen.dart';
 import '../../icm/screens/icm_hub_screen.dart';
@@ -88,29 +87,22 @@ class _AdminShellState extends State<AdminShell> {
       build: () => const AdminVehiculosListaScreen(),
       requiredCapability: Capability.verListaFlota,
     ),
-    _ShellSection(
-      label: 'Revisiones',
-      icon: Icons.fact_check_outlined,
-      iconActive: Icons.fact_check,
-      requiredCapability: Capability.verRevisiones,
-      // .limit(100) en TODOS los badge streams: el badge solo necesita el
-      // count para mostrar `count` o `99+` (ver _buildIconWithBadge). Sin
-      // limit, cada reconexión del StreamBuilder lee TODA la colección —
-      // potencialmente cientos de docs cuando crece el histórico. Con
-      // limit(100), si el stream trae 100 docs sé que hay >=100 → muestro
-      // "99+". Cap el costo Firestore en O(100) lecturas/sesión.
-      badgeStream: FirebaseFirestore.instance
-          .collection(AppCollections.revisiones)
-          .limit(100)
-          .snapshots(),
-      build: () => const AdminRevisionesScreen(),
-    ),
+    // Revisiones movido a Vencimientos como sub-item (2026-05-24) — antes
+    // era un tab propio. Se sigue accediendo a `/admin_revisiones`, solo
+    // cambió la puerta de entrada. El badge de pendientes ahora se muestra
+    // sobre el tab "Vencimientos" (que las contiene).
     _ShellSection(
       label: 'Vencimientos',
       icon: Icons.assignment_late_outlined,
       iconActive: Icons.assignment_late,
       build: () => const AdminVencimientosMenuScreen(),
       requiredCapability: Capability.verVencimientos,
+      // .limit(100) cap conservador (ver auditoría 2026-05-18): si el
+      // stream trae 100 docs sabemos que hay >=100 → mostramos "99+".
+      badgeStream: FirebaseFirestore.instance
+          .collection(AppCollections.revisiones)
+          .limit(100)
+          .snapshots(),
     ),
     _ShellSection(
       label: 'Logística',
@@ -118,13 +110,6 @@ class _AdminShellState extends State<AdminShell> {
       iconActive: Icons.route,
       requiredCapability: Capability.verLogistica,
       build: () => const LogisticaHubScreen(),
-    ),
-    _ShellSection(
-      label: 'Cachatore',
-      icon: Icons.schedule,
-      iconActive: Icons.schedule,
-      requiredCapability: Capability.verCachatore,
-      build: () => const CachatoreHubScreen(),
     ),
     _ShellSection(
       label: 'Gomería',
@@ -190,13 +175,23 @@ class _AdminShellState extends State<AdminShell> {
       requiredCapability: Capability.verAlertasVolvo,
       build: () => const AdminMapaFlotaScreen(),
     ),
-    // ─── Cierre: reportes + diagnóstico técnico ─────────────────────
+    // ─── Cierre: reportes + bots ─────────────────────
     _ShellSection(
       label: 'Reportes',
       icon: Icons.analytics_outlined,
       iconActive: Icons.analytics,
       build: () => const AdminReportsScreen(),
       requiredCapability: Capability.verReportes,
+    ),
+    // Bots al final (Cachatore + Estado Bot juntos, 2026-05-24): son los
+    // dos "agentes automáticos" del sistema (turnos YPF + WhatsApp). El
+    // panel admin (admin_panel_screen.dart) usa el mismo orden.
+    _ShellSection(
+      label: 'Cachatore',
+      icon: Icons.schedule,
+      iconActive: Icons.schedule,
+      requiredCapability: Capability.verCachatore,
+      build: () => const CachatoreHubScreen(),
     ),
     _ShellSection(
       label: 'Estado Bot',

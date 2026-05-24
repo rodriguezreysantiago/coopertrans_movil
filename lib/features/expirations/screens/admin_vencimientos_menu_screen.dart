@@ -38,6 +38,18 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
             ),
           ),
           SizedBox(height: 10),
+          // REVISIONES movido acá 2026-05-24 (estaba como tab propio del
+          // shell). Conceptualmente vive con vencimientos: el chofer carga
+          // un trámite que vence pronto, el admin lo aprueba o lo rechaza
+          // desde acá. Lo mantenemos primero porque es la acción más
+          // urgente del día (cosas en bandeja esperando aprobación).
+          _MenuTile(
+            titulo: 'REVISIONES',
+            subtitulo: 'Aprobar/rechazar trámites cargados por choferes',
+            icono: Icons.fact_check_outlined,
+            colorIcono: AppColors.accentTeal,
+            ruta: AppRoutes.adminRevisiones,
+          ),
           _MenuTile(
             titulo: 'CALENDARIO MENSUAL',
             subtitulo: 'Vista global con todos los vencimientos por día',

@@ -922,6 +922,12 @@ class _ToggleKillSwitch extends StatelessWidget {
         final data = snap.data?.data() as Map<String, dynamic>?;
         final pausado = data?['pausado'] == true;
         final motivo = (data?['motivo'] ?? '').toString().trim();
+        // Mismo formato que el _MasterSwitch del CachatoreHubScreen
+        // (2026-05-24): switch ON = bot encendido (verde), switch OFF =
+        // bot pausado. Antes el toggle estaba invertido (ON = pausado)
+        // y confundía a los operadores. Internamente el doc sigue siendo
+        // `pausado: bool` — solo cambia la semántica visual.
+        final encendido = !pausado;
         return AppCard(
           padding: const EdgeInsets.all(14),
           borderColor: pausado ? AppColors.warning.withAlpha(160) : null,
@@ -929,8 +935,8 @@ class _ToggleKillSwitch extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                pausado ? Icons.pause_circle_filled : Icons.power_settings_new,
-                color: pausado ? AppColors.warning : AppColors.success,
+                encendido ? Icons.power_settings_new : Icons.pause_circle_filled,
+                color: encendido ? AppColors.success : AppColors.warning,
                 size: 28,
               ),
               const SizedBox(width: 14),
@@ -939,22 +945,22 @@ class _ToggleKillSwitch extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      pausado ? 'Bot pausado por admin' : 'Bot operando normal',
+                      encendido ? 'Bot encendido' : 'Bot pausado por admin',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: pausado ? AppColors.warning : Colors.white,
+                        color: encendido ? Colors.white : AppColors.warning,
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      pausado
-                          ? (motivo.isEmpty
+                      encendido
+                          ? 'Enviando mensajes a los choferes.'
+                          : (motivo.isEmpty
                               ? 'No envía mensajes hasta reanudar.'
-                              : 'Motivo: $motivo')
-                          : 'Tocá el toggle para pausar el envío.',
+                              : 'Motivo: $motivo'),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -966,10 +972,13 @@ class _ToggleKillSwitch extends StatelessWidget {
                 ),
               ),
               Switch(
-                value: pausado,
-                activeThumbColor: AppColors.warning,
-                onChanged: (nuevoValor) =>
-                    _confirmarYTogglear(context, pausado, nuevoValor),
+                value: encendido,
+                activeThumbColor: AppColors.success,
+                // El usuario apaga el switch ⇒ pasamos `nuevoPausado=true`
+                // a `_confirmarYTogglear` (que sigue trabajando con la
+                // variable `pausado` original del doc Firestore).
+                onChanged: (nuevoEncendido) => _confirmarYTogglear(
+                    context, pausado, !nuevoEncendido),
               ),
             ],
           ),
