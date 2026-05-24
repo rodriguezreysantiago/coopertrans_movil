@@ -215,6 +215,151 @@ function msHastaSlotLibre(maxPorHora) {
   return Math.max(0, liberaEn - ahora);
 }
 
+// Importa el helper M5 acá adentro (no arriba) para evitar circular
+// require — destinatarios.js usa admin.firestore() que está inicializado
+// cuando llega esta llamada (heartbeat).
+const { obtenerDestinatario: _obtenerDestinatarioM5 } = require('./destinatarios');
+
+/**
+ * Construye el map `reglasNotificacion` que se publica en cada heartbeat.
+ * Resuelve los DNIs hardcoded/env vs override Firestore (M5). Async
+ * porque cada key hace un lookup (con cache 5 min, así que en la
+ * práctica solo el primer call de cada ciclo va a Firestore).
+ */
+async function _construirReglasNotificacion() {
+  const fallback = (k, def) => _obtenerDestinatarioM5(k, def);
+  return {
+    // ─── A) Resúmenes diarios 08:00 ART (Cloud Functions) ──────────
+    mantenimientoBot: {
+      categoria: 'RESUMEN_DIARIO_08',
+      destinatarioDni: await fallback('mantenimientoBot', '35244439'),
+      descripcion: 'Bot WhatsApp: caídas, recuperaciones, salud (24h).',
+      fuente: 'CF resumenBotDiario',
+    },
+    driftsAsignaciones: {
+      categoria: 'RESUMEN_DIARIO_08',
+      destinatarioDni: await fallback('driftsAsignaciones', '35244439'),
+      descripcion: 'Drifts iButton vs ASIGNACIONES_VEHICULO (24h).',
+      fuente: 'CF resumenDriftsAsignacionesDiario',
+    },
+    parteMantenimientoVolvo: {
+      categoria: 'RESUMEN_DIARIO_08',
+      destinatarioDni: await fallback('parteMantenimientoVolvo', '29820141'),
+      descripcion:
+        'Parte de mantenimiento: tell-tales Volvo + TPM/TTM/tacógrafo (24h).',
+      fuente: 'CF resumenMantenimientoVehiculosDiario',
+    },
+    excesosJornada: {
+      categoria: 'RESUMEN_DIARIO_08',
+      destinatarioDni: await fallback('excesosJornada', '34730329'),
+      descripcion:
+        'Jornadas ayer con bloque > 4h, cuota > 12h, veda nocturna.',
+      fuente: 'CF resumenExcesosJornadaDiario',
+    },
+    conductaManejo: {
+      categoria: 'RESUMEN_DIARIO_08',
+      destinatarioDni: await fallback('conductaManejo', '34730329'),
+      descripcion:
+        'Sitrack peligrosos + Volvo AEBS/ESP + peor sobrevelocidad por chofer.',
+      fuente: 'CF resumenConductaManejoDiario',
+    },
+
+    // ─── B) Crons del BOT cada 60 min ──────────────────────────────
+    serviceDiario: {
+      categoria: 'CRON_BOT_60MIN',
+      destinatarioDni: await fallback(
+        'serviceDiario', process.env.SERVICE_DESTINATARIO_DNI || null),
+      descripcion: 'Tractores con service próximo o vencido (≤ 50 000 km).',
+      fuente: 'bot cron_service_diario',
+    },
+    vencimientosProximosConsolidado: {
+      categoria: 'CRON_BOT_60MIN',
+      destinatarioDni: await fallback(
+        'vencimientosProximosConsolidado',
+        process.env.DOCUMENTACION_DESTINATARIO_DNI || null),
+      descripcion:
+        'Personal 15 d + vehículos 15 d + empresas 30 d, mensaje único diario.',
+      fuente: 'bot cron_vencimientos_proximos_diario',
+    },
+    vencimientosChofer: {
+      categoria: 'CRON_BOT_60MIN',
+      destinatarioDni: 'CHOFER_AFECTADO',
+      descripcion:
+        'Licencia / preocupacional / manejo defensivo al dueño del documento.',
+      fuente: 'bot _runOnce',
+    },
+    vencimientosVehiculo: {
+      categoria: 'CRON_BOT_60MIN',
+      destinatarioDni: 'CHOFER_ASIGNADO',
+      descripcion:
+        'RTO / seguro / extintores al chofer asignado al vehículo.',
+      fuente: 'bot _runOnce',
+    },
+
+    // ─── C) Tiempo real al chofer (event-driven) ───────────────────
+    vigiladorJornada: {
+      categoria: 'TIEMPO_REAL_CHOFER',
+      destinatarioDni: 'CHOFER_MANEJANDO',
+      descripcion:
+        '3h30 pará 20 min · 4h excedido · 11h cuota próxima · 12h cumplida · veda 00:00 ART.',
+      fuente: 'CF vigiladorJornadaChofer (cada 5 min)',
+    },
+    alertasVolvoHigh: {
+      categoria: 'TIEMPO_REAL_CHOFER',
+      destinatarioDni: 'CHOFER_ASIGNADO',
+      descripcion:
+        'Eventos HIGH del Vehicle Alerts API (OVERSPEED, IDLING, AEBS, ESP, LKS…). Excluye AdBlue/FUEL/TELL_TALE.',
+      fuente: 'CF onAlertaVolvoCreated',
+    },
+    iButtonNoIdentificado: {
+      categoria: 'TIEMPO_REAL_CHOFER',
+      destinatarioDni: 'CHOFER_ASIGNADO',
+      descripcion:
+        'Sitrack drift: motor en marcha sin iButton. Throttle 30 min/chofer.',
+      fuente: 'CF sitrackPosicionPoller',
+    },
+    silencioReanudado: {
+      categoria: 'TIEMPO_REAL_CHOFER',
+      destinatarioDni: 'CHOFER_SILENCIADO',
+      descripcion:
+        'Aviso al chofer cuando expira el /silenciar del admin.',
+      fuente: 'CF procesarSilenciadosExpirados',
+    },
+    bypassSeguridad: {
+      categoria: 'TIEMPO_REAL_CHOFER',
+      destinatarioDni: await fallback('bypassSeguridad', '34730329'),
+      descripcion:
+        'DAS/LKS/LCS/AEBS desactivado por chofer. Throttle 6h por (patente, tipo).',
+      fuente: 'CF onAlertaVolvoCreated (V5)',
+    },
+
+    // ─── D) Cachatore (turnos YPF) ─────────────────────────────────
+    cachatoreChofer: {
+      categoria: 'CACHATORE',
+      destinatarioDni: 'CHOFER_DEL_TURNO',
+      descripcion: 'Turno YPF reservado, reagendado o cancelado.',
+      fuente: 'cachatore vigia.py → avisar_turno',
+    },
+    cachatoreEncargado: {
+      categoria: 'CACHATORE',
+      destinatarioDni: await fallback('cachatoreEncargado', '25022800'),
+      descripcion:
+        'Cada movimiento de turno + resumen diario ~08:00 ART.',
+      fuente: 'cachatore vigia.py',
+    },
+
+    // ─── E) Sistema / admin ────────────────────────────────────────
+    colaCreciente: {
+      categoria: 'SISTEMA',
+      destinatarioDni: await fallback(
+        'colaCreciente', process.env.COLA_CRECIENTE_ALERT_DNI || null),
+      descripcion:
+        'Cola pendiente > umbral por X min sostenidos (bot lento).',
+      fuente: 'bot health.js → _encolarAlertaColaCreciente',
+    },
+  };
+}
+
 /**
  * Llamar cuando ocurre un error que conviene mostrar al admin.
  *
@@ -424,125 +569,11 @@ async function escribirHeartbeat() {
     //   - TIEMPO_REAL_CHOFER: trigger event-driven, va al chofer.
     //   - CACHATORE: turnos YPF (corre en la PC dedicada Python).
     //   - SISTEMA: alertas al admin sobre el bot/cola.
-    reglasNotificacion: {
-      // ─── A) Resúmenes diarios 08:00 ART (Cloud Functions) ──────────
-      mantenimientoBot: {
-        categoria: 'RESUMEN_DIARIO_08',
-        destinatarioDni: '35244439', // Santiago
-        descripcion: 'Bot WhatsApp: caídas, recuperaciones, salud (24h).',
-        fuente: 'CF resumenBotDiario',
-      },
-      driftsAsignaciones: {
-        categoria: 'RESUMEN_DIARIO_08',
-        destinatarioDni: '35244439', // Santiago
-        descripcion: 'Drifts iButton vs ASIGNACIONES_VEHICULO (24h).',
-        fuente: 'CF resumenDriftsAsignacionesDiario',
-      },
-      parteMantenimientoVolvo: {
-        categoria: 'RESUMEN_DIARIO_08',
-        destinatarioDni: '29820141', // Emmanuel
-        descripcion:
-          'Parte de mantenimiento: tell-tales Volvo + TPM/TTM/tacógrafo (24h).',
-        fuente: 'CF resumenMantenimientoVehiculosDiario',
-      },
-      excesosJornada: {
-        categoria: 'RESUMEN_DIARIO_08',
-        destinatarioDni: '34730329', // Molina
-        descripcion:
-          'Jornadas ayer con bloque > 4h, cuota > 12h, veda nocturna.',
-        fuente: 'CF resumenExcesosJornadaDiario',
-      },
-      conductaManejo: {
-        categoria: 'RESUMEN_DIARIO_08',
-        destinatarioDni: '34730329', // Molina
-        descripcion:
-          'Sitrack peligrosos + Volvo AEBS/ESP + peor sobrevelocidad por chofer.',
-        fuente: 'CF resumenConductaManejoDiario',
-      },
-
-      // ─── B) Crons del BOT cada 60 min ──────────────────────────────
-      serviceDiario: {
-        categoria: 'CRON_BOT_60MIN',
-        destinatarioDni: process.env.SERVICE_DESTINATARIO_DNI || null,
-        descripcion: 'Tractores con service próximo o vencido (≤ 50 000 km).',
-        fuente: 'bot cron_service_diario',
-      },
-      vencimientosProximosConsolidado: {
-        categoria: 'CRON_BOT_60MIN',
-        destinatarioDni: process.env.DOCUMENTACION_DESTINATARIO_DNI || null,
-        descripcion:
-          'Personal 15 d + vehículos 15 d + empresas 30 d, mensaje único diario.',
-        fuente: 'bot cron_vencimientos_proximos_diario',
-      },
-      vencimientosChofer: {
-        categoria: 'CRON_BOT_60MIN',
-        destinatarioDni: 'CHOFER_AFECTADO',
-        descripcion:
-          'Licencia / preocupacional / manejo defensivo al dueño del documento.',
-        fuente: 'bot _runOnce',
-      },
-      vencimientosVehiculo: {
-        categoria: 'CRON_BOT_60MIN',
-        destinatarioDni: 'CHOFER_ASIGNADO',
-        descripcion:
-          'RTO / seguro / extintores al chofer asignado al vehículo.',
-        fuente: 'bot _runOnce',
-      },
-
-      // ─── C) Tiempo real al chofer (event-driven) ───────────────────
-      vigiladorJornada: {
-        categoria: 'TIEMPO_REAL_CHOFER',
-        destinatarioDni: 'CHOFER_MANEJANDO',
-        descripcion:
-          '3h30 pará 20 min · 4h excedido · 11h cuota próxima · 12h cumplida · veda 00:00 ART.',
-        fuente: 'CF vigiladorJornadaChofer (cada 5 min)',
-      },
-      alertasVolvoHigh: {
-        categoria: 'TIEMPO_REAL_CHOFER',
-        destinatarioDni: 'CHOFER_ASIGNADO',
-        descripcion:
-          'Eventos HIGH del Vehicle Alerts API (OVERSPEED, IDLING, AEBS, ESP, LKS…). Excluye AdBlue/FUEL/TELL_TALE.',
-        fuente: 'CF onAlertaVolvoCreated',
-      },
-      iButtonNoIdentificado: {
-        categoria: 'TIEMPO_REAL_CHOFER',
-        destinatarioDni: 'CHOFER_ASIGNADO',
-        descripcion:
-          'Sitrack drift: motor en marcha sin iButton. Throttle 30 min/chofer.',
-        fuente: 'CF sitrackPosicionPoller',
-      },
-      silencioReanudado: {
-        categoria: 'TIEMPO_REAL_CHOFER',
-        destinatarioDni: 'CHOFER_SILENCIADO',
-        descripcion:
-          'Aviso al chofer cuando expira el /silenciar del admin.',
-        fuente: 'CF procesarSilenciadosExpirados',
-      },
-
-      // ─── D) Cachatore (turnos YPF) ─────────────────────────────────
-      cachatoreChofer: {
-        categoria: 'CACHATORE',
-        destinatarioDni: 'CHOFER_DEL_TURNO',
-        descripcion: 'Turno YPF reservado, reagendado o cancelado.',
-        fuente: 'cachatore vigia.py → avisar_turno',
-      },
-      cachatoreEncargado: {
-        categoria: 'CACHATORE',
-        destinatarioDni: '25022800', // Errazu
-        descripcion:
-          'Cada movimiento de turno + resumen diario ~08:00 ART.',
-        fuente: 'cachatore vigia.py',
-      },
-
-      // ─── E) Sistema / admin ────────────────────────────────────────
-      colaCreciente: {
-        categoria: 'SISTEMA',
-        destinatarioDni: process.env.COLA_CRECIENTE_ALERT_DNI || null,
-        descripcion:
-          'Cola pendiente > umbral por X min sostenidos (bot lento).',
-        fuente: 'bot health.js → _encolarAlertaColaCreciente',
-      },
-    },
+    // Los destinatarios se resuelven con override desde Firestore (M5,
+    // 2026-05-24). Si no hay override en META/destinatarios_notificacion,
+    // cae al hardcoded/env. El heartbeat refleja el DNI efectivo, no el
+    // hardcoded — así la pantalla muestra siempre quién recibe DE VERDAD.
+    reglasNotificacion: await _construirReglasNotificacion(),
 
     bot: {
       version: VERSION,

@@ -261,6 +261,23 @@ service cloud.firestore {
     // TELEMETRIA_HISTORICO — snapshots Volvo para reporte de consumo
     // ========================================================================
 
+    // ========================================================================
+    // META/destinatarios_notificacion — overrides editables desde la app
+    // ========================================================================
+    // Doc único `destinatarios_notificacion` con map { key: dni } que las
+    // CFs (functions/src/comun.ts → obtenerDestinatarioDni) leen con cache
+    // 5 min. Si una key no existe, el caller usa el fallback hardcoded —
+    // editar este doc NO puede romper nada, solo cambia destinatarios.
+    // (M5, 2026-05-24.)
+    match /META/destinatarios_notificacion {
+      // Read amplio — admin/supervisor para que la pantalla CRUD
+      // muestre los valores al supervisor también.
+      allow read: if isAdminOrSupervisor();
+      // Solo ADMIN puede cambiar destinatarios — afecta a quién recibe
+      // resúmenes que pueden incluir info sensible.
+      allow write: if isAdmin();
+    }
+
     match /TELEMETRIA_HISTORICO/{doc=**} {
       // Solo escribe la scheduled function `telemetriaSnapshotScheduled`
       // (cada 6 horas) vía Admin SDK. La app cliente NO escribe acá

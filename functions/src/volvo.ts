@@ -45,6 +45,7 @@ import {
   buscarAsignacionEnFecha,
   adquirirLockTick,
   fetchWithTimeout,
+  obtenerDestinatarioDni,
   SEG_HIGIENE_DESTINATARIO_DNI,
 } from "./comun";
 
@@ -1748,14 +1749,18 @@ async function _notificarBypassSeguridad(
     }
   }
 
-  // Lookup Molina (destinatario seguridad e higiene).
+  // Lookup destinatario seguridad e higiene (Molina por default,
+  // override M5 desde Firestore).
+  const seguridadDni = await obtenerDestinatarioDni(
+    "bypassSeguridad", SEG_HIGIENE_DESTINATARIO_DNI,
+  );
   const molinaSnap = await db
     .collection("EMPLEADOS")
-    .doc(SEG_HIGIENE_DESTINATARIO_DNI)
+    .doc(seguridadDni)
     .get();
   if (!molinaSnap.exists) {
     logger.warn("[bypassSeguridad] destinatario SEG_HIGIENE no existe", {
-      dni: SEG_HIGIENE_DESTINATARIO_DNI,
+      dni: seguridadDni,
     });
     return;
   }
@@ -1782,13 +1787,13 @@ async function _notificarBypassSeguridad(
     ETIQUETA_BYPASS[tipoEfectivo] ?? tipoEfectivo;
 
   const mensaje =
-    `⚠️ *Bypass de seguridad detectado*\n\n` +
+    "⚠️ *Bypass de seguridad detectado*\n\n" +
     `Sistema desactivado: *${etiquetaSistema}*\n` +
     `Unidad: ${patente}\n` +
     `Chofer: ${choferNombre}\n` +
     `Cuándo: ${fechaTxt} ${horaTxt}\n\n` +
-    `Cuando un chofer desactiva un sistema de asistencia, Volvo lo ` +
-    `reporta como evento HIGH. Documentado para revisión / sanción.\n\n` +
+    "Cuando un chofer desactiva un sistema de asistencia, Volvo lo " +
+    "reporta como evento HIGH. Documentado para revisión / sanción.\n\n" +
     BANNER_TESTING +
     "_Bot-On — Coopertrans Móvil_";
 
@@ -1804,7 +1809,7 @@ async function _notificarBypassSeguridad(
       intentos: 0,
       origen: "bypass_seguridad",
       destinatario_coleccion: "EMPLEADOS",
-      destinatario_id: SEG_HIGIENE_DESTINATARIO_DNI,
+      destinatario_id: seguridadDni,
       campo_base: "BYPASS_SEGURIDAD",
       admin_dni: "BOT",
       admin_nombre: "Bot Volvo",

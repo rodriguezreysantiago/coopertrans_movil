@@ -23,6 +23,7 @@ import { db, BANNER_TESTING } from "./setup";
 import {
   adquirirIdempotenciaDiaria,
   MANTENIMIENTO_VEHICULOS_DNI,
+  obtenerDestinatarioDni,
   TTL_RESUMEN_DIARIO_MIN,
 } from "./comun";
 import { expiraEnMin, formatFechaArg, primerNombre } from "./helpers";
@@ -330,14 +331,17 @@ export const resumenMantenimientoVehiculosDiario = onSchedule(
 
       const unidades: UnidadAdvertencias[] = [...porPatente.values()];
 
-      // Destinatario (Emmanuel)
+      // Destinatario (Emmanuel por default, override desde Firestore M5)
+      const parteDni = await obtenerDestinatarioDni(
+        "parteMantenimientoVolvo", MANTENIMIENTO_VEHICULOS_DNI,
+      );
       const empSnap = await db
         .collection("EMPLEADOS")
-        .doc(MANTENIMIENTO_VEHICULOS_DNI)
+        .doc(parteDni)
         .get();
       if (!empSnap.exists) {
         logger.error("[resumenMantenimientoVehiculos] destinatario no existe", {
-          dni: MANTENIMIENTO_VEHICULOS_DNI,
+          dni: parteDni,
         });
         return;
       }
@@ -369,7 +373,7 @@ export const resumenMantenimientoVehiculosDiario = onSchedule(
         intentos: 0,
         origen: "resumen_mantenimiento_vehiculos",
         destinatario_coleccion: "EMPLEADOS",
-        destinatario_id: MANTENIMIENTO_VEHICULOS_DNI,
+        destinatario_id: parteDni,
         campo_base: "MANTENIMIENTO",
         admin_dni: "BOT",
         admin_nombre: "Bot parte mantenimiento Volvo",
@@ -381,7 +385,7 @@ export const resumenMantenimientoVehiculosDiario = onSchedule(
         eventos24h: totalEventos,
         monitoreadas,
         totalOperativas,
-        destinatario: MANTENIMIENTO_VEHICULOS_DNI,
+        destinatario: parteDni,
       });
     } finally {
       if (!exitoCron) {

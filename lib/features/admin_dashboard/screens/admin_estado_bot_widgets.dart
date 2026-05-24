@@ -443,11 +443,32 @@ class _CardReglasNotificacion extends StatelessWidget {
           const SizedBox(height: 8),
           const Text(
             'Catálogo completo de mensajes que la app manda por WhatsApp. '
-            'Los DNI fijos de RESUMEN_DIARIO_08 viven hardcoded en '
-            'functions/src/comun.ts (cambio requiere redeploy de CF). '
-            'Los .env del bot (serviceDiario, vencimientosProximos) se '
-            'cambian editando .env + npm restart.',
+            'Si querés cambiar quién recibe un resumen sin tocar código '
+            'ni reiniciar nada, usá el botón de abajo (M5, 2026-05-24): '
+            'el cambio se aplica en ≤ 5 min vía Firestore.',
             style: TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          const SizedBox(height: 10),
+          Center(
+            child: OutlinedButton.icon(
+              onPressed: () => Navigator.pushNamed(
+                  context, AppRoutes.adminDestinatariosNotificacion),
+              icon: const Icon(Icons.edit_outlined,
+                  size: 16, color: AppColors.accentBlue),
+              label: const Text(
+                'EDITAR DESTINATARIOS',
+                style: TextStyle(
+                  color: AppColors.accentBlue,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.accentBlue),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 8),
+              ),
+            ),
           ),
         ],
       ),

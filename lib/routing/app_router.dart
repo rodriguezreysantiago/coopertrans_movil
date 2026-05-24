@@ -16,6 +16,7 @@ import '../features/expirations/screens/user_mis_vencimientos_screen.dart';
 
 import '../features/admin_dashboard/screens/admin_shell.dart';
 import '../features/admin_dashboard/screens/admin_panel_screen.dart';
+import '../features/admin_dashboard/screens/admin_destinatarios_notificacion_screen.dart';
 import '../features/admin_dashboard/screens/admin_estado_bot_screen.dart';
 import '../features/admin_dashboard/screens/admin_volvo_alertas_screen.dart';
 import '../features/gomeria/constants/posiciones.dart';
@@ -388,6 +389,15 @@ class AppRouter {
         return _buildRoute(
           _protegerAdmin(const AdminEstadoBotScreen(),
               Capability.verEstadoBot),
+          settings,
+        );
+
+      // ================= DESTINATARIOS DE NOTIFICACIÓN (M5) =================
+      // CRUD para overridear el DNI de cada resumen/aviso sin tocar
+      // código (lee/escribe META/destinatarios_notificacion).
+      case AppRoutes.adminDestinatariosNotificacion:
+        return _buildRoute(
+          _protegerSoloAdmin(const AdminDestinatariosNotificacionScreen()),
           settings,
         );
 

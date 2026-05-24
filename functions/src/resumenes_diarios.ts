@@ -30,6 +30,7 @@ import {
   buscarAsignacionEnFecha,
   cargarAsignacionesPorPatentes,
   MANTENIMIENTO_DESTINATARIO_DNI,
+  obtenerDestinatarioDni,
   SEG_HIGIENE_DESTINATARIO_DNI,
   TIPOS_PELIGROSOS_SITRACK,
   TTL_RESUMEN_DIARIO_MIN,
@@ -159,10 +160,17 @@ export const resumenBotDiario = onSchedule(
     // era get + skip + set al final, que tenia race con retry de GCP
     // entre el get y el set → mensaje duplicado. Ahora `create()` es
     // atomico: si ya existe tira ALREADY_EXISTS y el helper devuelve false.
+    //
+    // El docId de idempotencia usa el DNI RESUELTO (desde Firestore o
+    // hardcoded) — si el admin cambia el destinatario, el cron del día
+    // siguiente va a otro doc → no duplica al nuevo ni re-envía al viejo.
+    const adminDni = await obtenerDestinatarioDni(
+      "mantenimientoBot", MANTENIMIENTO_DESTINATARIO_DNI,
+    );
     const hoyKey = formatFechaArg(Date.now()).replace(/\//g, "-");
     const histRef = db
       .collection("AVISOS_AUTOMATICOS_HISTORICO")
-      .doc(`bot_resumen_${hoyKey}_${MANTENIMIENTO_DESTINATARIO_DNI}`);
+      .doc(`bot_resumen_${hoyKey}_${adminDni}`);
     if (!(await adquirirIdempotenciaDiaria(histRef, "bot_resumen_diario"))) {
       logger.info("[resumenBotDiario] ya enviado hoy, skip");
       return;
@@ -182,8 +190,7 @@ export const resumenBotDiario = onSchedule(
         .orderBy("detectadoEn", "asc")
         .get();
 
-      // Lookup destinatario.
-      const adminDni = MANTENIMIENTO_DESTINATARIO_DNI;
+      // Lookup destinatario (DNI ya resuelto arriba para idempotencia).
       const empSnap = await db.collection("EMPLEADOS").doc(adminDni).get();
       const tel = empSnap.exists ?
         (empSnap.data()?.TELEFONO ?? "").toString().trim() :
@@ -391,10 +398,13 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
     // mandar el mismo resumen 2 veces a Santiago. Antes faltaba este
     // gate y los 3 crons que corren a las 8:00 podian generar mensajes
     // duplicados ante cualquier reintento.
+    const adminDni = await obtenerDestinatarioDni(
+      "driftsAsignaciones", MANTENIMIENTO_DESTINATARIO_DNI,
+    );
     const hoyKey = formatFechaArg(Date.now()).replace(/\//g, "-");
     const histRef = db
       .collection("AVISOS_AUTOMATICOS_HISTORICO")
-      .doc(`drifts_${hoyKey}_${MANTENIMIENTO_DESTINATARIO_DNI}`);
+      .doc(`drifts_${hoyKey}_${adminDni}`);
     if (!(await adquirirIdempotenciaDiaria(histRef, "drifts_asignaciones"))) {
       logger.info("[resumenDriftsAsignacionesDiario] ya enviado hoy, skip");
       return;
@@ -432,8 +442,7 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
           asignadoNombre: (x.data.asignacion_nombre ?? "").toString(),
         }));
 
-      // ─── Lookup teléfono del admin ─────────────────────────────────
-      const adminDni = MANTENIMIENTO_DESTINATARIO_DNI;
+      // ─── Lookup teléfono del admin (DNI ya resuelto arriba) ──────
       const empSnap = await db.collection("EMPLEADOS").doc(adminDni).get();
       const tel = empSnap.exists ?
         (empSnap.data()?.TELEFONO ?? "").toString().trim() :
@@ -944,15 +953,18 @@ export const resumenConductaManejoDiario = onSchedule(
       }
     }
 
-    // ─── Lookup destinatario (Molina) ──────────────────────────────
+    // ─── Lookup destinatario (Molina por default, override M5) ─────
+    const seguridadDni = await obtenerDestinatarioDni(
+      "conductaManejo", SEG_HIGIENE_DESTINATARIO_DNI,
+    );
     const empSnap = await db
       .collection("EMPLEADOS")
-      .doc(SEG_HIGIENE_DESTINATARIO_DNI)
+      .doc(seguridadDni)
       .get();
     if (!empSnap.exists) {
       logger.error(
         "[resumenConductaManejoDiario] destinatario no existe",
-        { dni: SEG_HIGIENE_DESTINATARIO_DNI }
+        { dni: seguridadDni }
       );
       return;
     }
@@ -961,7 +973,7 @@ export const resumenConductaManejoDiario = onSchedule(
     if (!tel || tel === "-") {
       logger.error(
         "[resumenConductaManejoDiario] destinatario sin TELEFONO",
-        { dni: SEG_HIGIENE_DESTINATARIO_DNI }
+        { dni: seguridadDni }
       );
       return;
     }
@@ -1025,7 +1037,7 @@ export const resumenConductaManejoDiario = onSchedule(
       intentos: 0,
       origen: "resumen_conducta_manejo_diario",
       destinatario_coleccion: "EMPLEADOS",
-      destinatario_id: SEG_HIGIENE_DESTINATARIO_DNI,
+      destinatario_id: seguridadDni,
       campo_base: "CONDUCTA_MANEJO_DIARIO",
       admin_dni: "BOT",
       admin_nombre: "Bot resumen conducta",

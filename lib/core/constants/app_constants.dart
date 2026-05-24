@@ -73,6 +73,10 @@ class AppRoutes {
   static const String adminVolvoAlertas = '/admin_volvo_alertas';
   static const String adminEcoDriving = '/admin_eco_driving';
   static const String adminEstadoBot = '/admin_estado_bot';
+  /// CRUD de destinatarios de notificación (M5, 2026-05-24). Override
+  /// editable desde la app de los DNIs hardcoded en CF y bot.
+  static const String adminDestinatariosNotificacion =
+      '/admin_destinatarios_notificacion';
 
   // Gomería
   static const String adminGomeriaHub = '/admin_gomeria';
@@ -445,6 +449,12 @@ class AppCollections {
   /// tramos de manejo y paradas clasificadas (≥15 min para corte de
   /// bloque, ≥8h para fin de jornada).
   static const String volvoJornadasHistorico = 'VOLVO_JORNADAS_HISTORICO';
+
+  /// Doc dentro de `META` con map { key: dni } editable desde la app
+  /// (pantalla "Destinatarios de notificación") para cambiar a quién le
+  /// llegan los 9 resúmenes/avisos sin redeploy. Cambio M5 2026-05-24.
+  static const String metaDestinatariosNotificacion =
+      'destinatarios_notificacion';
 
   // ─── Módulo Zonas de Descarga (2026-05-23) ───
   /// Zonas geográficas configurables (polígono o círculo) que marcan

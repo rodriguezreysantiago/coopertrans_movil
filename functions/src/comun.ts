@@ -51,6 +51,88 @@ export const SEG_HIGIENE_DESTINATARIO_DNI = "34730329";
 
 export const TTL_RESUMEN_DIARIO_MIN = 24 * 60; // resumenes diarios — vence en 24h
 
+// ============================================================================
+// DESTINATARIOS DE NOTIFICACIÓN — override desde Firestore
+// ============================================================================
+//
+// Los DNIs hardcoded arriba son el DEFAULT — si nunca se editó nada en la
+// app, las CFs los usan tal cual y todo funciona como siempre. Pero a
+// partir de M5 (2026-05-24) el admin puede sobreescribir CADA destinatario
+// desde la pantalla "Destinatarios de notificación" sin tocar código —
+// los valores override viven en `META/destinatarios_notificacion` y este
+// helper los lee con cache 5 min para no pegarle a Firestore en cada
+// cron tick.
+//
+// Si Firestore falla / el doc no existe / la key no tiene override,
+// devuelve el fallback hardcoded. Esto significa que el sistema sigue
+// funcionando exactamente igual si el helper falla — defensivo.
+//
+// Cuando un cron consulta, el cache se chequea atómicamente — la
+// primera CF dispara la lectura y las siguientes durante 5 min reusan.
+
+let _destinatariosCache: Record<string, unknown> | null = null;
+let _destinatariosCacheExpiraMs = 0;
+const _destinatariosCacheTTLms = 5 * 60 * 1000; // 5 min
+
+/**
+ * Lee el doc `META/destinatarios_notificacion` con cache de 5 min.
+ * Devuelve un map plano `{ key: dni }`. Si la lectura falla, devuelve
+ * el cache vencido (si existe) o un map vacío — los callers ya tienen
+ * fallback al hardcoded, así que un Firestore caído no rompe nada.
+ */
+async function _cargarDestinatarios(): Promise<Record<string, unknown>> {
+  if (_destinatariosCache && Date.now() < _destinatariosCacheExpiraMs) {
+    return _destinatariosCache;
+  }
+  try {
+    const snap = await db
+      .collection("META")
+      .doc("destinatarios_notificacion")
+      .get();
+    if (snap.exists) {
+      _destinatariosCache = snap.data() ?? {};
+      _destinatariosCacheExpiraMs = Date.now() + _destinatariosCacheTTLms;
+      return _destinatariosCache;
+    }
+    // El doc no existe — cacheamos un map vacío para no leer Firestore
+    // en cada tick siguientes 5 min.
+    _destinatariosCache = {};
+    _destinatariosCacheExpiraMs = Date.now() + _destinatariosCacheTTLms;
+    return _destinatariosCache;
+  } catch {
+    // En caso de error, devolvemos el cache viejo (aunque haya expirado)
+    // o un map vacío. Mejor servir data potencialmente stale que romper.
+    return _destinatariosCache ?? {};
+  }
+}
+
+/**
+ * Devuelve el DNI del destinatario para una key dada (ej. "serviceDiario",
+ * "parteMantenimientoVolvo"). Si Firestore tiene override válido lo usa;
+ * sino devuelve `fallbackHardcoded` (los `*_DESTINATARIO_DNI` exportados
+ * arriba). Esto preserva el comportamiento actual si el operador nunca
+ * editó nada — zero-downtime al deployar.
+ *
+ * Keys conocidas (alineadas con `reglasNotificacion` del bot health.js):
+ *   - mantenimientoBot, driftsAsignaciones (Santiago)
+ *   - parteMantenimientoVolvo, serviceDiario (Emmanuel)
+ *   - excesosJornada, conductaManejo (Molina)
+ *   - vencimientosProximosConsolidado (Giagante)
+ *   - cachatoreEncargado (Errazu)
+ *   - colaCreciente (admin del bot)
+ */
+export async function obtenerDestinatarioDni(
+  key: string,
+  fallbackHardcoded: string,
+): Promise<string> {
+  const map = await _cargarDestinatarios();
+  const v = map[key];
+  if (typeof v === "string" && v.trim().length > 0) {
+    return v.trim();
+  }
+  return fallbackHardcoded;
+}
+
 /**
  * Eventos Sitrack que disparan el resumen diario de conducta a Molina
  * (`resumenConductaManejoDiario`). Incluye los CESVI puros + alertas

@@ -16,6 +16,7 @@ from datetime import datetime
 from firebase_admin import firestore
 
 import choferes
+import destinatarios
 
 COL_CONFIG = "CACHATORE_CONFIG"
 DOC_CONFIG = "global"
@@ -244,8 +245,17 @@ def listar_chequeos_resueltos_viejos(antes_de_ts) -> list:
 # ---- avisos por WhatsApp (vía COLA_WHATSAPP, la consume el bot) ------------
 COL_COLA = "COLA_WHATSAPP"
 COL_EMPLEADOS = "EMPLEADOS"
-# Encargado de logística: recibe TODOS los turnos (Errazu Esteban).
+# Encargado de logística: recibe TODOS los turnos (default Errazu Esteban).
+# Hoy se puede sobreescribir desde la app — pantalla "Destinatarios de
+# notificación" → key `cachatoreEncargado`. Si la app no fija un override,
+# usamos este DNI hardcoded como fallback.
 ENCARGADO_LOGISTICA_DNI = "25022800"
+
+
+def _encargado_dni() -> str:
+    return destinatarios.obtener_destinatario(
+        "cachatoreEncargado", ENCARGADO_LOGISTICA_DNI
+    )
 
 
 def _telefono_de(db, dni):
@@ -293,7 +303,7 @@ def avisar_turno(chofer_dni, chofer_nombre, cuando, evento):
                       f"*{cuando}*.\n\n_Coopertrans Móvil_")
         msg_enc = (f"Turno YPF — {nombre} (DNI {chofer_dni}): {cuando}.")
     encolar_whatsapp(_telefono_de(db, chofer_dni), msg_chofer)
-    encolar_whatsapp(_telefono_de(db, ENCARGADO_LOGISTICA_DNI), msg_enc)
+    encolar_whatsapp(_telefono_de(db, _encargado_dni()), msg_enc)
 
 
 def resumen_turnos_para_encargado():
@@ -322,7 +332,7 @@ def enviar_resumen_diario_turnos():
     ref = db.collection(COL_COLA).document(f"cachatore_resumen_{hoy}")
     if ref.get().exists:
         return False
-    tel = _telefono_de(db, ENCARGADO_LOGISTICA_DNI)
+    tel = _telefono_de(db, _encargado_dni())
     if not tel:
         return False
     texto = resumen_turnos_para_encargado() or \

@@ -21,6 +21,7 @@ const avisoService = require('./aviso_service_builder');
 const avisoVencProx = require('./aviso_vencimientos_proximos_builder');
 const hist = require('./historico');
 const health = require('./health');
+const { obtenerDestinatario } = require('./destinatarios');
 const fs = require('./firestore');
 const { aIsoLocal } = require('./fechas');
 const { cargarExcluidos } = require('./excluidos');
@@ -633,7 +634,13 @@ async function _runOnce(fs) {
     // hist.yaSeEnvioServiceDiario / hist.prepararRegistroServiceDiario
     // quedan obsoletos para este flujo (siguen exportados por compat,
     // pueden borrarse en cleanup futuro).
-    const dniDestinatarioService = process.env.SERVICE_DESTINATARIO_DNI;
+    // Resuelve el destinatario: primero Firestore (M5, override desde
+    // la app), después env var como fallback. Cache 5 min adentro del
+    // helper para no pegarle a Firestore en cada tick.
+    const dniDestinatarioService = await obtenerDestinatario(
+      'serviceDiario',
+      process.env.SERVICE_DESTINATARIO_DNI,
+    );
     if (dniDestinatarioService) {
       // Lookup con fallback a Firestore: el destinatario suele ser
       // SUPERVISOR/ADMIN y NO está en `empleadosByDni` (que tiene
@@ -772,7 +779,11 @@ async function _runOnce(fs) {
     // encargado no requiera cambios de código (mismo patrón que
     // SERVICE_DESTINATARIO_DNI).
     // REFACTOR 2026-05-18 — datos siempre frescos (ver service_diario arriba).
-    const dniDocumentacion = process.env.DOCUMENTACION_DESTINATARIO_DNI;
+    // Resuelve destinatario con override Firestore (M5).
+    const dniDocumentacion = await obtenerDestinatario(
+      'vencimientosProximosConsolidado',
+      process.env.DOCUMENTACION_DESTINATARIO_DNI,
+    );
     if (dniDocumentacion) {
       const empDoc = await _obtenerDestinatarioConsolidado(
         db,
