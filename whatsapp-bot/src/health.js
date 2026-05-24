@@ -219,6 +219,7 @@ function msHastaSlotLibre(maxPorHora) {
 // require — destinatarios.js usa admin.firestore() que está inicializado
 // cuando llega esta llamada (heartbeat).
 const { obtenerDestinatario: _obtenerDestinatarioM5 } = require('./destinatarios');
+const { estaCanalPausado: _estaCanalPausadoM9 } = require('./canales_pausados');
 
 /**
  * Construye el map `reglasNotificacion` que se publica en cada heartbeat.
@@ -617,6 +618,10 @@ async function escribirHeartbeat() {
 async function _verificarColaCreciente(cola) {
   const dniAlert = process.env.COLA_CRECIENTE_ALERT_DNI;
   if (!dniAlert) return;
+
+  // M9 — pausa por canal. Si el admin pausó "colaCreciente" (testing,
+  // backlog conocido, etc), salteamos toda la verificación.
+  if (await _estaCanalPausadoM9('colaCreciente')) return;
 
   const threshold = parseInt(process.env.COLA_CRECIENTE_UMBRAL || '50', 10);
   const sustainedMin = parseInt(

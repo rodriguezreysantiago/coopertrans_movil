@@ -22,6 +22,7 @@ const avisoVencProx = require('./aviso_vencimientos_proximos_builder');
 const hist = require('./historico');
 const health = require('./health');
 const { obtenerDestinatario } = require('./destinatarios');
+const { estaCanalPausado } = require('./canales_pausados');
 const fs = require('./firestore');
 const { aIsoLocal } = require('./fechas');
 const { cargarExcluidos } = require('./excluidos');
@@ -637,11 +638,17 @@ async function _runOnce(fs) {
     // Resuelve el destinatario: primero Firestore (M5, override desde
     // la app), después env var como fallback. Cache 5 min adentro del
     // helper para no pegarle a Firestore en cada tick.
+    //
+    // M9 — pausa por canal. Si el admin pausó "serviceDiario" desde la
+    // app (vacaciones de Emma, por ejemplo), salteamos solo este bloque
+    // y seguimos con el resto del cron (drifts, vencimientos, etc).
     const dniDestinatarioService = await obtenerDestinatario(
       'serviceDiario',
       process.env.SERVICE_DESTINATARIO_DNI,
     );
-    if (dniDestinatarioService) {
+    if (await estaCanalPausado('serviceDiario')) {
+      log.info('Service diario: canal pausado, skip');
+    } else if (dniDestinatarioService) {
       // Lookup con fallback a Firestore: el destinatario suele ser
       // SUPERVISOR/ADMIN y NO está en `empleadosByDni` (que tiene
       // solo CHOFERES desde el refactor del 2026-05-02).
@@ -780,11 +787,15 @@ async function _runOnce(fs) {
     // SERVICE_DESTINATARIO_DNI).
     // REFACTOR 2026-05-18 — datos siempre frescos (ver service_diario arriba).
     // Resuelve destinatario con override Firestore (M5).
+    // M9 — pausa por canal: si el admin pausó vencimientos próximos,
+    // skipeamos solo este bloque.
     const dniDocumentacion = await obtenerDestinatario(
       'vencimientosProximosConsolidado',
       process.env.DOCUMENTACION_DESTINATARIO_DNI,
     );
-    if (dniDocumentacion) {
+    if (await estaCanalPausado('vencimientosProximosConsolidado')) {
+      log.info('Vencimientos próximos: canal pausado, skip');
+    } else if (dniDocumentacion) {
       const empDoc = await _obtenerDestinatarioConsolidado(
         db,
         dniDocumentacion,

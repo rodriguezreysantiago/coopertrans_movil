@@ -48,6 +48,7 @@ import {
   obtenerDestinatarioDni,
   SEG_HIGIENE_DESTINATARIO_DNI,
 } from "./comun";
+import { estaCanalPausado } from "./canales_pausados";
 
 // ============================================================================
 // volvoProxy
@@ -1729,6 +1730,17 @@ async function _notificarBypassSeguridad(
   creadoMs: number,
   alertId: string,
 ): Promise<void> {
+  // M9 — pausa por canal. Si el admin pausó este canal (testing del
+  // módulo Volvo, por ejemplo), salteamos el aviso silenciosamente. La
+  // pantalla pinta este canal en rojo porque silencia un aviso de
+  // seguridad — usar con cuidado.
+  if (await estaCanalPausado("bypassSeguridad")) {
+    logger.info("[bypassSeguridad] canal pausado, skip", {
+      alertId, patente, tipoEfectivo,
+    });
+    return;
+  }
+
   // Throttle: clave determinística (patente, tipo) — el lock está en
   // META_BYPASS_SEGURIDAD con expira_en para que TTL Firestore lo
   // limpie solo (sin cron de purga).

@@ -17,6 +17,7 @@ from firebase_admin import firestore
 
 import choferes
 import destinatarios
+import canales_pausados
 
 COL_CONFIG = "CACHATORE_CONFIG"
 DOC_CONFIG = "global"
@@ -303,7 +304,10 @@ def avisar_turno(chofer_dni, chofer_nombre, cuando, evento):
                       f"*{cuando}*.\n\n_Coopertrans Móvil_")
         msg_enc = (f"Turno YPF — {nombre} (DNI {chofer_dni}): {cuando}.")
     encolar_whatsapp(_telefono_de(db, chofer_dni), msg_chofer)
-    encolar_whatsapp(_telefono_de(db, _encargado_dni()), msg_enc)
+    # M9 — pausa por canal. La pausa silencia SOLO el aviso al encargado;
+    # el chofer siempre recibe el aviso de su turno (es crítico).
+    if not canales_pausados.esta_canal_pausado("cachatoreEncargado"):
+        encolar_whatsapp(_telefono_de(db, _encargado_dni()), msg_enc)
 
 
 def resumen_turnos_para_encargado():
@@ -327,6 +331,9 @@ def enviar_resumen_diario_turnos():
     logística. Devuelve True si lo encoló ahora; False si ya estaba hoy o sin tel.
     Idempotencia: doc determinístico `cachatore_resumen_<fecha>` en COLA_WHATSAPP
     (si ya existe, no re-encola aunque el bot se reinicie)."""
+    # M9 — pausa por canal: el resumen diario es 100% para el encargado.
+    if canales_pausados.esta_canal_pausado("cachatoreEncargado"):
+        return False
     db = choferes._db()
     hoy = datetime.now().strftime("%Y-%m-%d")
     ref = db.collection(COL_COLA).document(f"cachatore_resumen_{hoy}")

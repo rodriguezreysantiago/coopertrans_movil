@@ -369,6 +369,28 @@ class _CardReglasNotificacion extends StatelessWidget {
       );
     }
 
+    // M9 — escucha el doc de pausas en vivo. Si el admin pausa un canal,
+    // la card refresca al toque (sin esperar al cache 5min del bot).
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection(AppCollections.meta)
+          .doc('canales_pausados')
+          .snapshots(),
+      builder: (ctx, snap) {
+        Map<String, dynamic> pausas = const {};
+        if (snap.hasData && snap.data!.exists) {
+          pausas =
+              (snap.data!.data() as Map<String, dynamic>?) ?? const {};
+        }
+        return _buildContenido(context, pausas);
+      },
+    );
+  }
+
+  Widget _buildContenido(
+    BuildContext context,
+    Map<String, dynamic> pausas,
+  ) {
     // Agrupamos por la nueva categoría que publica el bot (2026-05-24).
     // Compat: reglas viejas sin `categoria` caen en "OTROS".
     final porCategoria = <String, List<MapEntry<String, Map>>>{};
@@ -408,11 +430,14 @@ class _CardReglasNotificacion extends StatelessWidget {
         final dni = (entry.value['destinatarioDni'] ?? '').toString();
         final desc = (entry.value['descripcion'] ?? '').toString();
         final fuente = (entry.value['fuente'] ?? '').toString();
+        final pausaRaw = pausas[entry.key];
         secciones.add(_FilaReglaNotif(
+          regKey: entry.key,
           titulo: _etiquetaTipo(entry.key),
           descripcion: desc,
           destinatarioDni: dni,
           fuente: fuente,
+          pausaInfo: pausaRaw is Map<String, dynamic> ? pausaRaw : null,
         ));
       }
     }
@@ -538,6 +563,9 @@ class _CardReglasNotificacion extends StatelessWidget {
 }
 
 class _FilaReglaNotif extends StatelessWidget {
+  /// Key del canal en META/canales_pausados (ej. "mantenimientoBot").
+  /// Vacío si la regla no es pausable.
+  final String regKey;
   final String titulo;
   final String descripcion;
   /// Puede ser un DNI numérico, "CHOFER_AFECTADO", "CHOFER_ASIGNADO",
@@ -547,18 +575,48 @@ class _FilaReglaNotif extends StatelessWidget {
   /// Origen técnico (ej. "CF resumenBotDiario", "bot cron_service_diario").
   /// Se muestra chico abajo para que el admin pueda mapear regla → código.
   final String fuente;
+  /// Info de pausa M9. `null` = canal activo. Map = pausado (puede tener
+  /// `hasta_iso`, `motivo`, `pausado_en`, `pausado_por_dni`).
+  final Map<String, dynamic>? pausaInfo;
 
   const _FilaReglaNotif({
     required this.titulo,
     required this.descripcion,
     required this.destinatarioDni,
     this.fuente = '',
+    this.regKey = '',
+    this.pausaInfo,
   });
 
   bool get _esDinamico => destinatarioDni.startsWith('CHOFER_');
 
+  /// `true` cuando pausar este canal silencia algo de seguridad — se pinta
+  /// en rojo y el bottom sheet muestra warning fuerte.
+  bool get _esCritico => regKey == 'bypassSeguridad';
+
+  /// Info de pausa vigente (descarta si la fecha ya pasó).
+  ({DateTime? hasta, String? motivo})? get _pausaVigente {
+    final p = pausaInfo;
+    if (p == null) return null;
+    final hastaRaw = p['hasta_iso'];
+    DateTime? hasta;
+    if (hastaRaw is String && hastaRaw.isNotEmpty) {
+      hasta = DateTime.tryParse(hastaRaw);
+      if (hasta != null && DateTime.now().isAfter(hasta)) {
+        return null; // ya vencida
+      }
+    }
+    final motivoRaw = p['motivo'];
+    final motivo =
+        motivoRaw is String && motivoRaw.trim().isNotEmpty
+            ? motivoRaw.trim()
+            : null;
+    return (hasta: hasta, motivo: motivo);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final pausa = _pausaVigente;
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Column(
@@ -606,6 +664,18 @@ class _FilaReglaNotif extends StatelessWidget {
                   fontFamily: 'monospace',
                 ),
               ),
+            ),
+          if (regKey.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: pausa != null
+                  ? _BadgePausa(
+                      regKey: regKey,
+                      hasta: pausa.hasta,
+                      motivo: pausa.motivo,
+                      critico: _esCritico,
+                    )
+                  : _BotonPausar(regKey: regKey, critico: _esCritico),
             ),
         ],
       ),
@@ -1210,6 +1280,466 @@ class _ToggleKillSwitch extends StatelessWidget {
       AppFeedback.errorTecnicoOn(
         messenger,
         usuario: 'No se pudo actualizar el control del bot. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
+    }
+  }
+}
+
+// =============================================================================
+// M9 — PAUSAR CANAL DE NOTIFICACIÓN
+// =============================================================================
+// Badge de canal pausado + botón para reanudar (con confirmación) y botón
+// para pausar (abre bottom sheet con date picker + motivo opcional).
+//
+// El doc `META/canales_pausados` lo lee la card en vivo via StreamBuilder,
+// así que cualquier cambio acá refresca al toque (sin esperar al cache 5min
+// de los CFs / bot). Los crons del lado server hacen el chequeo recién en
+// su próxima corrida.
+
+class _BadgePausa extends StatelessWidget {
+  final String regKey;
+  final DateTime? hasta;
+  final String? motivo;
+  final bool critico;
+  const _BadgePausa({
+    required this.regKey,
+    required this.hasta,
+    required this.motivo,
+    required this.critico,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = critico ? AppColors.error : AppColors.warning;
+    final hastaTxt = hasta == null
+        ? 'indefinido'
+        : 'hasta ${AppFormatters.formatearFechaCorta(hasta!)} '
+            '${_hhMm(hasta!)}';
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withAlpha(30),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: color.withAlpha(120)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.pause_circle_outline, color: color, size: 14),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'CANAL PAUSADO — $hastaTxt',
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (motivo != null && motivo!.isNotEmpty)
+                        Text(
+                          motivo!,
+                          style: TextStyle(
+                            color: color.withAlpha(220),
+                            fontSize: 10,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        TextButton.icon(
+          onPressed: () => _confirmarReanudar(context),
+          icon: const Icon(Icons.play_arrow,
+              size: 16, color: AppColors.accentGreen),
+          label: const Text(
+            'Reanudar',
+            style: TextStyle(
+              color: AppColors.accentGreen,
+              fontWeight: FontWeight.bold,
+              fontSize: 11,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _hhMm(DateTime d) {
+    final hh = d.hour.toString().padLeft(2, '0');
+    final mm = d.minute.toString().padLeft(2, '0');
+    return '$hh:$mm';
+  }
+
+  Future<void> _confirmarReanudar(BuildContext context) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: const Text(
+          'Reanudar canal',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'El canal va a empezar a mandar mensajes de nuevo a partir '
+          'del próximo ciclo (≤ 5 min). ¿Confirmar?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Reanudar',
+              style: TextStyle(color: AppColors.accentGreen),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await FirebaseFirestore.instance
+          .collection(AppCollections.meta)
+          .doc('canales_pausados')
+          .set({regKey: FieldValue.delete()}, SetOptions(merge: true));
+      AppFeedback.successOn(messenger, 'Canal reanudado.');
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo reanudar el canal.',
+        tecnico: e,
+        stack: s,
+      );
+    }
+  }
+}
+
+class _BotonPausar extends StatelessWidget {
+  final String regKey;
+  final bool critico;
+  const _BotonPausar({required this.regKey, required this.critico});
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: TextButton.icon(
+        onPressed: () => _BottomSheetPausa.abrir(context, regKey, critico),
+        icon: Icon(
+          Icons.pause_circle_outline,
+          size: 14,
+          color: critico ? AppColors.error : Colors.white54,
+        ),
+        label: Text(
+          'Pausar canal…',
+          style: TextStyle(
+            color: critico ? AppColors.error : Colors.white54,
+            fontSize: 11,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        style: TextButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ),
+    );
+  }
+}
+
+class _BottomSheetPausa extends StatefulWidget {
+  final String regKey;
+  final bool critico;
+  const _BottomSheetPausa({required this.regKey, required this.critico});
+
+  static Future<void> abrir(
+    BuildContext context,
+    String regKey,
+    bool critico,
+  ) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) =>
+          _BottomSheetPausa(regKey: regKey, critico: critico),
+    );
+  }
+
+  @override
+  State<_BottomSheetPausa> createState() => _BottomSheetPausaState();
+}
+
+class _BottomSheetPausaState extends State<_BottomSheetPausa> {
+  late DateTime _hasta;
+  bool _indefinida = false;
+  final _motivoCtrl = TextEditingController();
+  bool _guardando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Default: hasta mañana 03:00 ART (cubre el día actual, en la madru
+    // ya está reanudado para el cron de las 08:00 del día siguiente — el
+    // admin lo extiende si quiere más).
+    final ahora = DateTime.now();
+    _hasta = DateTime(ahora.year, ahora.month, ahora.day + 1, 3, 0);
+  }
+
+  @override
+  void dispose() {
+    _motivoCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    return Padding(
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + bottomInset),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.pause_circle_outline,
+                color: widget.critico
+                    ? AppColors.error
+                    : AppColors.warning,
+                size: 22,
+              ),
+              const SizedBox(width: 8),
+              const Text(
+                'Pausar canal',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            widget.regKey,
+            style: const TextStyle(
+              color: Colors.white38,
+              fontSize: 11,
+              fontFamily: 'monospace',
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (widget.critico)
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.error.withAlpha(30),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.error.withAlpha(120)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.warning_amber_outlined,
+                      color: AppColors.error, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Atención: este canal silencia un aviso de '
+                      'seguridad. Pausar SOLO en testing del módulo Volvo.',
+                      style: TextStyle(
+                        color: AppColors.error,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          if (widget.critico) const SizedBox(height: 16),
+          Row(
+            children: [
+              const Text('Pausa indefinida',
+                  style: TextStyle(color: Colors.white)),
+              const Spacer(),
+              Switch(
+                value: _indefinida,
+                onChanged: _guardando
+                    ? null
+                    : (v) => setState(() => _indefinida = v),
+                activeThumbColor: AppColors.warning,
+              ),
+            ],
+          ),
+          if (!_indefinida) ...[
+            const SizedBox(height: 8),
+            const Text(
+              'Hasta:',
+              style: TextStyle(color: Colors.white60, fontSize: 12),
+            ),
+            const SizedBox(height: 4),
+            InkWell(
+              onTap: _guardando ? null : _pickDate,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.accentBlue),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_today,
+                        color: AppColors.accentBlue, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${AppFormatters.formatearFechaCorta(_hasta)} '
+                      '${_hasta.hour.toString().padLeft(2, '0')}:'
+                      '${_hasta.minute.toString().padLeft(2, '0')}',
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: _guardando ? null : _pickTime,
+                      child: const Text('Cambiar hora'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 16),
+          TextField(
+            controller: _motivoCtrl,
+            enabled: !_guardando,
+            maxLength: 80,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              labelText: 'Motivo (opcional)',
+              hintText: 'Ej. Vacaciones Molina hasta el 01-Jun',
+              hintStyle: TextStyle(color: Colors.white24),
+              labelStyle: TextStyle(color: Colors.white60),
+              border: OutlineInputBorder(),
+              counterStyle: TextStyle(color: Colors.white30),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              TextButton(
+                onPressed: _guardando ? null : () => Navigator.pop(context),
+                child: const Text('Cancelar'),
+              ),
+              const Spacer(),
+              ElevatedButton.icon(
+                onPressed: _guardando ? null : _confirmar,
+                icon: _guardando
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
+                      )
+                    : const Icon(Icons.pause_circle, size: 18),
+                label: const Text('Pausar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: widget.critico
+                      ? AppColors.error
+                      : AppColors.warning,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickDate() async {
+    final ahora = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _hasta,
+      firstDate: ahora,
+      lastDate: ahora.add(const Duration(days: 365)),
+    );
+    if (picked == null) return;
+    setState(() {
+      _hasta = DateTime(
+          picked.year, picked.month, picked.day, _hasta.hour, _hasta.minute);
+    });
+  }
+
+  Future<void> _pickTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: _hasta.hour, minute: _hasta.minute),
+    );
+    if (picked == null) return;
+    setState(() {
+      _hasta = DateTime(_hasta.year, _hasta.month, _hasta.day,
+          picked.hour, picked.minute);
+    });
+  }
+
+  Future<void> _confirmar() async {
+    setState(() => _guardando = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    try {
+      final hastaIso = _indefinida ? null : _hasta.toUtc().toIso8601String();
+      final motivo = _motivoCtrl.text.trim();
+      await FirebaseFirestore.instance
+          .collection(AppCollections.meta)
+          .doc('canales_pausados')
+          .set({
+        widget.regKey: {
+          'hasta_iso': hastaIso,
+          'motivo': motivo.isEmpty ? null : motivo,
+          'pausado_en': FieldValue.serverTimestamp(),
+          'pausado_por_dni': PrefsService.dni,
+        }
+      }, SetOptions(merge: true));
+      AppFeedback.successOn(messenger, 'Canal pausado.');
+      navigator.pop();
+    } catch (e, s) {
+      setState(() => _guardando = false);
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo pausar el canal.',
         tecnico: e,
         stack: s,
       );

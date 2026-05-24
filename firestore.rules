@@ -278,6 +278,20 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // ========================================================================
+    // META/canales_pausados — pausa temporal de categorías (M9, 2026-05-24)
+    // ========================================================================
+    // Doc único `canales_pausados` con map { key: { hasta_iso, motivo,
+    // pausado_en, pausado_por_dni } }. Los crons/triggers chequean este
+    // doc (cache 5 min) antes de encolar mensajes — sirve para "vacaciones"
+    // del receptor, testing de un módulo, etc.
+    match /META/canales_pausados {
+      allow read: if isAdminOrSupervisor();
+      // Solo ADMIN puede pausar/reanudar canales — el supervisor lo VE
+      // pero no toca.
+      allow write: if isAdmin();
+    }
+
     match /TELEMETRIA_HISTORICO/{doc=**} {
       // Solo escribe la scheduled function `telemetriaSnapshotScheduled`
       // (cada 6 horas) vía Admin SDK. La app cliente NO escribe acá

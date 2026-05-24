@@ -38,6 +38,7 @@ import {
 import { expiraEnMin, formatFechaArg, formatHoraArg, primerNombre } from "./helpers";
 import * as jornadasV2 from "./jornadas_v2";
 import { cargarExcluidos } from "./excluidos";
+import { estaCanalPausado } from "./canales_pausados";
 
 // ============================================================================
 // resumenBotDiario — resumen consolidado de eventos del bot (8 AM diario)
@@ -155,6 +156,14 @@ export const resumenBotDiario = onSchedule(
   },
   async () => {
     logger.info("[resumenBotDiario] iniciando");
+
+    // M9 — pausa por canal. Si el admin pausó esta categoría (vacaciones,
+    // testing), salteamos el envío sin consumir el lock de idempotencia
+    // para que mañana el cron del día siguiente reintente normal.
+    if (await estaCanalPausado("mantenimientoBot")) {
+      logger.info("[resumenBotDiario] canal pausado, skip");
+      return;
+    }
 
     // Idempotencia diaria ATOMICA (auditoria 2026-05-17): el patron viejo
     // era get + skip + set al final, que tenia race con retry de GCP
@@ -393,6 +402,12 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
   async () => {
     logger.info("[resumenDriftsAsignacionesDiario] iniciando");
 
+    // M9 — pausa por canal (ver resumenBotDiario).
+    if (await estaCanalPausado("driftsAsignaciones")) {
+      logger.info("[resumenDriftsAsignacionesDiario] canal pausado, skip");
+      return;
+    }
+
     // Idempotencia diaria. Si GCP re-dispara el cron (retry, double
     // trigger en la sliding window de las 8AM), saltamos en lugar de
     // mandar el mismo resumen 2 veces a Santiago. Antes faltaba este
@@ -553,6 +568,11 @@ export const resumenExcesosJornadaDiario = onSchedule(
     memory: "256MiB",
   },
   async () => {
+    // M9 — pausa por canal.
+    if (await estaCanalPausado("excesosJornada")) {
+      logger.info("[resumenExcesosJornadaDiario] canal pausado, skip");
+      return;
+    }
     // Idempotencia diaria (gate compartido para evitar duplicados ante
     // retry de GCP). El destinatario real lo resuelve el modulo
     // jornadas_v2 — usamos un docId generico por dia.
@@ -733,6 +753,12 @@ export const resumenConductaManejoDiario = onSchedule(
   },
   async () => {
     logger.info("[resumenConductaManejoDiario] iniciando");
+
+    // M9 — pausa por canal.
+    if (await estaCanalPausado("conductaManejo")) {
+      logger.info("[resumenConductaManejoDiario] canal pausado, skip");
+      return;
+    }
 
     // Idempotencia diaria — si GCP re-dispara el cron Molina recibe el
     // mismo resumen 2 veces. Lock ATOMICO con `adquirirIdempotenciaDiaria`

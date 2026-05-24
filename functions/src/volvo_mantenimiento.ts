@@ -26,6 +26,7 @@ import {
   obtenerDestinatarioDni,
   TTL_RESUMEN_DIARIO_MIN,
 } from "./comun";
+import { estaCanalPausado } from "./canales_pausados";
 import { expiraEnMin, formatFechaArg, primerNombre } from "./helpers";
 import {
   Advertencia,
@@ -250,6 +251,12 @@ export const resumenMantenimientoVehiculosDiario = onSchedule(
   },
   async () => {
     logger.info("[resumenMantenimientoVehiculos] iniciando");
+
+    // M9 — pausa por canal.
+    if (await estaCanalPausado("parteMantenimientoVolvo")) {
+      logger.info("[resumenMantenimientoVehiculos] canal pausado, skip");
+      return;
+    }
 
     const hoyKey = formatFechaArg(Date.now()).replace(/\//g, "-");
     const histRef = db
