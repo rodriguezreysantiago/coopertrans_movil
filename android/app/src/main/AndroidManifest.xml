@@ -5,18 +5,36 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <!-- Storage legacy: en Android ≤12 (API ≤32) image_picker usa el
+         Storage Access Framework legacy que necesita READ_EXTERNAL_STORAGE.
+         Lo capamos a maxSdkVersion 32 para que en Android 13+ NO se pida
+         (en 13+ usamos Photo Picker del sistema, ver abajo). El WRITE ya
+         no se necesita en 13+ (scoped storage). -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
 
-    <!-- Solo declaramos READ_MEDIA_IMAGES porque la app sólo permite subir
-         fotos de comprobantes (RTO, seguro, licencia, etc.). NO se usan
-         videos ni audios. Si algún plugin transitivo (image_picker u otro)
-         intenta sumar READ_MEDIA_VIDEO o READ_MEDIA_AUDIO en el manifest
-         mergeado, los excluimos explícitamente con tools:node="remove" para
-         que Play Store no objete permisos no usados. -->
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
-    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" tools:node="remove" />
-    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" tools:node="remove" />
+    <!-- En Android 13+ NO declaramos READ_MEDIA_IMAGES / VIDEO / AUDIO.
+         Google rechaza apps que no son galerías cuando los declaran
+         (policy 2024): la app sólo sube fotos PUNTUALES de comprobantes
+         (RTO, seguro, foto de perfil), no es una galería. image_picker
+         1.0+ usa automáticamente el Photo Picker del sistema en API 33+
+         cuando no hay permiso declarado — sin permission prompt para
+         el usuario. tools:node="remove" excluye explícitamente cualquier
+         declaración que algún plugin transitivo agregue al manifest
+         mergeado. -->
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_IMAGES"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_VIDEO"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.READ_MEDIA_AUDIO"
+        tools:node="remove" />
 
     <!-- Notificaciones runtime permission (Android 13+ / API 33).
          Sin esto flutter_local_notifications no puede mostrar avisos en
