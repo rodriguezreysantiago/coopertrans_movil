@@ -36,6 +36,15 @@ import '../../vista_ejecutiva/widgets/viajes_semanales_chart.dart';
 ///
 /// Pantalla `vista_ejecutiva_screen.dart` eliminada en el refactor
 /// 2026-05-18. Service + widgets reusados desde acá.
+///
+/// **INVARIANTE shell ↔ panel** (2026-05-25): los tiles de "accesos
+/// rápidos" de este archivo y los `_ShellSection` de `admin_shell.dart`
+/// deben mostrar las MISMAS 12 entradas operativas en el MISMO orden:
+///   Personal → Flota → Vencimientos → Logística → Gomería →
+///   Mantenimiento → ICM → Descargas → Auditoría → Mapa → Reportes →
+///   Cachatore → WhatsApp Bot
+/// El shell incluye además "Inicio" al principio (que es esta pantalla).
+/// Al sumar/quitar/reordenar features de menú, tocar AMBOS archivos.
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
 
