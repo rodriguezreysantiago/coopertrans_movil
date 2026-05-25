@@ -100,3 +100,7 @@ serviceAccountKey.json
 secrets.json
 !secrets.example.jsonfirepit-log.txt
 firepit-log.txt
+
+# Sentry CLI config con auth token — NUNCA debe ir al repo, vive en $HOME
+.sentryclirc
+
