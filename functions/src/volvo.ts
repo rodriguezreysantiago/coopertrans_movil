@@ -45,6 +45,7 @@ import {
   buscarAsignacionEnFecha,
   adquirirLockTick,
   fetchWithTimeout,
+  esErrorTransient,
   obtenerDestinatarioDni,
   SEG_HIGIENE_DESTINATARIO_DNI,
 } from "./comun";
@@ -421,9 +422,16 @@ export const volvoAlertasPoller = onSchedule(
             },
           });
         } catch (e) {
-          logger.error("[volvoAlertasPoller] fetch falló", {
+          // Auditoria 2026-05-24: 69 de 80 errors/7d eran AbortError
+          // transient del API Volvo. Downgradeamos a WARN si es
+          // transient para no inflar Sentry/Cloud Logging con ruido
+          // que no es bug real.
+          const transient = esErrorTransient(e);
+          const log = transient ? logger.warn : logger.error;
+          log("[volvoAlertasPoller] fetch falló", {
             page: pages,
             error: (e as Error).message,
+            transient,
           });
           return; // No actualizamos cursor, próximo run reintenta.
         }
@@ -1232,9 +1240,13 @@ export const onAlertaVolvoCreated = onDocumentCreated(
       // Si fallo el encolado, borrar el claim para que el retry de
       // GCF pueda reintentar (sin borrar, el retry verìa el claim y
       // saltarìa, perdiendo el aviso al chofer).
-      await claimRef.delete().catch(() => {
+      await claimRef.delete().catch((e2) => {
         // best-effort: si no se puede borrar, el siguiente retry
-        // tira ALREADY_EXISTS y skipea, pero al menos quedò log.
+        // tira ALREADY_EXISTS y skipea, pero al menos queda log.
+        logger.warn("[onAlertaVolvoCreated] no se pudo borrar claim", {
+          alertId: event.params.alertId,
+          error: (e2 as Error).message,
+        });
       });
       // No re-throw: el trigger no debe reintentar agresivamente.
       // Si el encolado falla, queda registro en el log y la alerta
@@ -1390,9 +1402,12 @@ export const volvoScoresPoller = onSchedule(
           headers: { Authorization: authHeader, Accept: ACCEPT_SCORES },
         });
       } catch (e) {
-        logger.error("[volvoScoresPoller] fetch falló", {
+        const transient = esErrorTransient(e);
+        const log = transient ? logger.warn : logger.error;
+        log("[volvoScoresPoller] fetch falló", {
           page: pages,
           error: (e as Error).message,
+          transient,
         });
         return;
       }

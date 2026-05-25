@@ -436,6 +436,15 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
       // colección tiene 1 doc por patente, no debería crecer mucho.
       const excluidos = await cargarExcluidos(db);
       const snap = await db.collection("SITRACK_POSICIONES").limit(5000).get();
+      // Audit 2026-05-24: aviso si nos acercamos al límite — flota actual
+      // ~55 patentes, muy lejos del cap 5000. Si algún día crece y este
+      // log dispara, paginar con cursor antes de quemar memoria.
+      if (snap.size >= 4500) {
+        logger.warn(
+          "[resumenDriftsAsignacionesDiario] SITRACK_POSICIONES cerca del límite 5000",
+          { size: snap.size },
+        );
+      }
       const drifts: DriftAsignacion[] = snap.docs
         .map((d) => ({ patente: d.id, data: d.data() }))
         .filter((x) => {

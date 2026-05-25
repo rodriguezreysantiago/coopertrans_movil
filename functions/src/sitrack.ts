@@ -17,7 +17,7 @@ import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db, BANNER_TESTING } from "./setup";
-import { adquirirLockTick, fetchWithTimeout, hashId } from "./index";
+import { adquirirLockTick, esErrorTransient, fetchWithTimeout, hashId } from "./index";
 import { expiraEnMin, primerNombre, rrPick } from "./helpers";
 
 const sitrackUsername = defineSecret("SITRACK_USERNAME");
@@ -148,8 +148,11 @@ export const sitrackPosicionPoller = onSchedule(
           },
         });
       } catch (e) {
-        logger.error("[sitrackPosicionPoller] fetch falló", {
+        const transient = esErrorTransient(e);
+        const log = transient ? logger.warn : logger.error;
+        log("[sitrackPosicionPoller] fetch falló", {
           error: (e as Error).message,
+          transient,
         });
         return;
       }
@@ -544,8 +547,11 @@ export const sitrackEventosPoller = onSchedule(
         // los bytes, en la próxima llamada se reenvía el bloque entero.
         bodyText = await res.text();
       } catch (e) {
-        logger.error("[sitrackEventosPoller] fetch falló", {
+        const transient = esErrorTransient(e);
+        const log = transient ? logger.warn : logger.error;
+        log("[sitrackEventosPoller] fetch falló", {
           error: (e as Error).message,
+          transient,
         });
         return;
       }

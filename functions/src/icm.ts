@@ -105,6 +105,14 @@ export const recomputeIcmSemanalScheduled = onSchedule(
 
     // ─── 2. Lookup nombres de empleados ───────────────────────────
     const empSnap = await db.collection("EMPLEADOS").limit(5000).get();
+    // Audit 2026-05-24: aviso si EMPLEADOS crece cerca del cap. Hoy
+    // ~100 docs, muy lejos del límite. Si dispara, paginar con cursor.
+    if (empSnap.size >= 4500) {
+      logger.warn(
+        "[recomputeIcmSemanalScheduled] EMPLEADOS cerca del límite 5000",
+        { size: empSnap.size },
+      );
+    }
     const nombrePorDni = new Map<string, string>();
     for (const d of empSnap.docs) {
       const data = d.data();

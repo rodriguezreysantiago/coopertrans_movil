@@ -358,3 +358,28 @@ export async function fetchWithTimeout(
     clearTimeout(timer);
   }
 }
+
+/**
+ * `true` si la excepción es transient (timeout / network / abort), no
+ * un bug real. Sirve para distinguir en los catches de los pollers
+ * (volvoAlertasPoller, sitrackEventosPoller, etc) entre:
+ *   - bug: logger.error (cuenta como issue en Sentry/Cloud Logging)
+ *   - transient: logger.warn (no inflama métricas, recoverable)
+ *
+ * Auditoria 2026-05-24: 69 de 80 errors/7d eran AbortError del API
+ * Volvo (`fetch falló` por timeout 20s). Loguear como ERROR generaba
+ * ruido sin actionable. Ahora se downgradan a WARN.
+ */
+export function esErrorTransient(e: unknown): boolean {
+  if (!e) return false;
+  const err = e as { name?: string; message?: string; cause?: unknown };
+  const name = err.name || "";
+  const msg = err.message || "";
+  if (name === "AbortError" || name === "TimeoutError") return true;
+  if (/abort|timeout|deadline|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|fetch failed|network|socket hang up|ECONNREFUSED/i.test(msg)) {
+    return true;
+  }
+  // node-fetch / undici a veces anidan la causa real adentro.
+  if (err.cause) return esErrorTransient(err.cause);
+  return false;
+}
