@@ -215,14 +215,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 color: AppColors.accentDeepOrange,
                 ruta: AppRoutes.adminDescargas,
               ),
-            if (Capabilities.can(PrefsService.rol, Capability.verAlertasVolvo))
-              const _AdminTile(
-                titulo: 'ZONAS DE DESCARGA',
-                subtitulo: 'Configurar geocercas de descarga (admin)',
-                icono: Icons.add_location_alt_outlined,
-                color: AppColors.accentCyan,
-                ruta: AppRoutes.adminZonasDescarga,
-              ),
+            // ZONAS DE DESCARGA — quitado de accesos rápidos 2026-05-25.
+            // La pantalla sigue accesible desde el botón "Configurar zonas"
+            // adentro de DESCARGAS (admin_descargas_screen.dart:240).
             if (Capabilities.can(PrefsService.rol, Capability.verAlertasVolvo))
               const _AdminTile(
                 titulo: 'AUDITORÍA ASIGNACIONES',

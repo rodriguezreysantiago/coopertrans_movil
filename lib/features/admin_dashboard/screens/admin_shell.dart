@@ -14,6 +14,7 @@ import '../../employees/screens/admin_personal_lista_screen.dart';
 import '../../expirations/screens/admin_vencimientos_menu_screen.dart';
 import '../../reports/screens/admin_reports_screen.dart';
 import '../../zonas_descarga/screens/admin_descargas_screen.dart';
+import '../../auditoria_asignaciones/screens/admin_auditoria_asignaciones_screen.dart';
 import '../../fleet_map/screens/admin_mapa_flota_screen.dart';
 import '../../icm/screens/icm_hub_screen.dart';
 import '../../cachatore/screens/cachatore_hub_screen.dart';
@@ -155,6 +156,16 @@ class _AdminShellState extends State<AdminShell> {
       // en geocercas configurables (ZONAS_DESCARGA). Reemplazó al detector
       // PTO Volvo (falsos positivos + solo flota Volvo) el 2026-05-24.
       build: () => const AdminDescargasScreen(),
+    ),
+    // Auditoría asignaciones: cruce iButton real (SITRACK) vs el asignado
+    // en ASIGNACIONES_VEHICULO. Sumado al shell 2026-05-25 para igualar
+    // el orden de tiles del panel admin (accesos rápidos).
+    _ShellSection(
+      label: 'Auditoría',
+      icon: Icons.fact_check_outlined,
+      iconActive: Icons.fact_check,
+      requiredCapability: Capability.verAlertasVolvo,
+      build: () => const AdminAuditoriaAsignacionesScreen(),
     ),
     // "Mapa" muestra la posición ACTUAL de toda la flota según Sitrack
     // (tractores Volvo + no-Volvo). Reusa la capability de Volvo porque
