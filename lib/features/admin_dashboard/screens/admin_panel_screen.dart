@@ -447,7 +447,10 @@ class _SeccionHoyFlota extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 10,
           crossAxisSpacing: 10,
-          childAspectRatio: esDesktop ? 1.6 : 1.1,
+          // Igualado al ratio de "Panorama del mes" para consistencia
+          // visual entre las 3 secciones (Hoy / Flota / Panorama).
+          // _KpiCard usa FittedBox.scaleDown → no hay riesgo de overflow.
+          childAspectRatio: esDesktop ? 1.0 : 0.85,
           children: [
             _KpiCard(
               label: 'Trámites pendientes',
@@ -492,7 +495,8 @@ class _SeccionHoyFlota extends StatelessWidget {
           physics: const NeverScrollableScrollPhysics(),
           mainAxisSpacing: 10,
           crossAxisSpacing: 10,
-          childAspectRatio: esDesktop ? 1.6 : 1.1,
+          // Igualado al ratio de "Panorama del mes" (ver Hoy arriba).
+          childAspectRatio: esDesktop ? 1.0 : 0.85,
           children: [
             _KpiCard(
               label: 'Choferes activos',
