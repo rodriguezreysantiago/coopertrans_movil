@@ -236,6 +236,38 @@ void main() async {
             return null;
           }
 
+          // ─── Capa 1d: Firestore transient (auditoría 2026-05-24) ───
+          // El SDK de Firestore reporta "service unavailable" cuando hay
+          // microcaídas del backend. El propio mensaje literal del
+          // framework dice "This is most likely a transient condition
+          // and may be corrected by retrying with a backoff" → no es
+          // bug, no es actionable. El SDK ya reintenta solo. Sentry
+          // estaba reportando FLUTTER-25 (1 issue, ~25 events/14d) por
+          // este patrón sin que hubiera nada que arreglar.
+          if (texto.contains('cloud_firestore/unavailable') ||
+              texto.contains('cloud_firestore/deadline-exceeded') ||
+              texto.contains('the service is currently unavailable')) {
+            return null;
+          }
+
+          // ─── Capa 1e: Pre-Launch Report de Google Play ───
+          // (auditoría 2026-05-24). Cada vez que se sube un AAB a Play,
+          // Google corre la app en farms de emuladores virtuales con
+          // specs falsas (OnePlus 8 Pro pero CPU 2-core, screen 288x448
+          // DPI 106, processorFrequency 0). Los crashes que genera ese
+          // testing automatizado el SDK los reporta como si fueran
+          // usuarios reales. FLUTTER-H + FLUTTER-W ambos del Pre-Launch.
+          //
+          // Heurística: `processorFrequency == 0` es la señal MÁS
+          // confiable — devices reales nunca reportan 0 MHz. Si en el
+          // futuro aparecen falsos positivos (usuarios reales
+          // droppeados), endurecer agregando AND con screenWidth < 360
+          // o processorCount < 4.
+          final device = event.contexts.device;
+          if (device?.processorFrequency == 0) {
+            return null;
+          }
+
           // ─── Capa 2: Rate limiter (anti event storm) ───
           // Red de seguridad para CUALQUIER error que entre en loop
           // (callback que se ejecuta 60-120 veces por segundo, listener
