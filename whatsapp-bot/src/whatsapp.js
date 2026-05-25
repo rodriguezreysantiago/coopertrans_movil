@@ -10,6 +10,7 @@ const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const { execSync } = require('child_process');
 const path = require('path');
+const admin = require('firebase-admin');
 const log = require('./logger');
 const health = require('./health');
 
@@ -146,6 +147,59 @@ function _construirCliente() {
   // recovery del cliente — la instancia nueva no hereda los listeners).
   if (_messageHandler) {
     client.on('message_create', _messageHandler);
+  }
+
+  // M11 — Confirmaciones de lectura. WhatsApp emite `message_ack` con
+  // un nivel:
+  //   1 SERVER   recibido por el server WA (lo seteamos ya como ENVIADO)
+  //   2 DEVICE   entregado al dispositivo del receptor
+  //   3 READ     leído (doble check azul)
+  //   4 PLAYED   audio reproducido (no aplica para texto)
+  // Mapeamos 2→entregado_en, 3→leido_en sobre WHATSAPP_HISTORICO.
+  //
+  // CAVEAT: el ack solo llega si el bot está vivo cuando WhatsApp lo
+  // notifica. Si el bot reinicia, los acks pasados se pierden — la app
+  // muestra los checks que llegaron, no más. Para mensajes anteriores
+  // al deploy M11, los campos quedan vacíos (esperado).
+  client.on('message_ack', _handleMessageAck);
+}
+
+async function _handleMessageAck(msg, ack) {
+  try {
+    if (ack < 2) return; // 0/1 ya se setearon como ENVIADO al marcar el doc
+    if (!msg || !msg.id || !msg.id._serialized) return;
+    const waId = msg.id._serialized;
+    const db = admin.firestore();
+    const snap = await db
+      .collection('WHATSAPP_HISTORICO')
+      .where('wa_message_id', '==', waId)
+      .limit(1)
+      .get();
+    if (snap.empty) return;
+    const doc = snap.docs[0];
+    const data = doc.data() || {};
+    const updates = {};
+    if (ack === 2) {
+      // Solo set si todavía no estaba — evita rewrite con timestamp
+      // diferente cuando llegan acks duplicados (sync entre devices).
+      if (!data.entregado_en) {
+        updates.entregado_en = admin.firestore.FieldValue.serverTimestamp();
+      }
+    } else if (ack >= 3) {
+      // READ implica DELIVERED. Setear entregado_en si faltaba.
+      if (!data.entregado_en) {
+        updates.entregado_en = admin.firestore.FieldValue.serverTimestamp();
+      }
+      if (!data.leido_en) {
+        updates.leido_en = admin.firestore.FieldValue.serverTimestamp();
+      }
+    }
+    if (Object.keys(updates).length > 0) {
+      await doc.ref.set(updates, { merge: true });
+    }
+  } catch (e) {
+    // Defensivo: jamás romper el flujo del bot por un ack que falla.
+    log.warn(`message_ack handler falló: ${e.message}`);
   }
 }
 

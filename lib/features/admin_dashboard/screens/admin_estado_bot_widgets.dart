@@ -30,6 +30,8 @@ class _DashboardBot extends StatelessWidget {
         const SizedBox(height: 12),
         _CardMensajes(mensajes: (data['mensajes'] as Map?) ?? const {}),
         const SizedBox(height: 12),
+        const _CardSparklineEnviados(),
+        const SizedBox(height: 12),
         _CardCron(cron: (data['cron'] as Map?) ?? const {}),
         const SizedBox(height: 12),
         _CardConfig(config: (data['config'] as Map?) ?? const {}),
@@ -677,9 +679,77 @@ class _FilaReglaNotif extends StatelessWidget {
                     )
                   : _BotonPausar(regKey: regKey, critico: _esCritico),
             ),
+          // M6 — deep-link al histórico filtrado por origen. Útil para
+          // responder "¿qué le mandé la última vez?" sin necesitar
+          // dry-run real (que requeriría refactor de cada CF).
+          if (_origenParaHistorico != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => AdminWhatsappHistoricoScreen(
+                          initialOrigen: _origenParaHistorico,
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.history,
+                      size: 13, color: AppColors.accentBlue),
+                  label: const Text(
+                    'Ver último enviado',
+                    style: TextStyle(
+                      color: AppColors.accentBlue,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 4, vertical: 2),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
+  }
+
+  /// Mapeo M6: cada `regKey` a su `origen` correspondiente en
+  /// COLA_WHATSAPP / WHATSAPP_HISTORICO. Si la regla no tiene un
+  /// origen 1:1 (porque emite varios) devolvemos null y el botón no
+  /// aparece — el usuario filtra a mano en la pantalla.
+  String? get _origenParaHistorico {
+    switch (regKey) {
+      case 'mantenimientoBot':
+        return 'cron_bot_resumen_diario';
+      case 'driftsAsignaciones':
+        return 'resumen_drifts_asignaciones';
+      case 'parteMantenimientoVolvo':
+        return 'resumen_mantenimiento_vehiculos';
+      case 'excesosJornada':
+        return 'resumen_jornadas_v2';
+      case 'conductaManejo':
+        return 'resumen_conducta_manejo_diario';
+      case 'bypassSeguridad':
+        return 'bypass_seguridad';
+      case 'serviceDiario':
+        return 'cron_service_diario';
+      case 'vencimientosProximosConsolidado':
+        return 'cron_vencimientos_proximos_diario';
+      case 'cachatoreEncargado':
+        return 'cachatore_resumen';
+      case 'colaCreciente':
+        return 'health_alert_cola_creciente';
+      default:
+        return null;
+    }
   }
 
   String _etiquetaChoferDinamico(String tipo) {
@@ -1744,5 +1814,250 @@ class _BottomSheetPausaState extends State<_BottomSheetPausa> {
         stack: s,
       );
     }
+  }
+}
+
+// =============================================================================
+// M7 — SPARKLINE 7 DÍAS DE MENSAJES ENVIADOS
+// =============================================================================
+// BarChart chiquito con el conteo de mensajes (ENVIADO + ERROR) por día
+// los últimos 7 días. Lee WHATSAPP_HISTORICO con `count()` aggregation
+// — 7 reads por carga, eficiente.
+//
+// Tap a una barra → push a la pantalla "Historial WhatsApp" — el usuario
+// puede ajustar el rango ahí si quiere ver detalle. Decisión: no abrir
+// con rango pre-seteado porque eso requiere props en el constructor de
+// la screen y la pantalla ya tiene su propio picker; mejor mantenerla
+// simple.
+//
+// Caveat: WHATSAPP_HISTORICO se empezó a llenar el 2026-05-24. Los días
+// previos al deploy aparecen vacíos — esperado.
+
+class _CardSparklineEnviados extends StatefulWidget {
+  const _CardSparklineEnviados();
+
+  @override
+  State<_CardSparklineEnviados> createState() => _CardSparklineEnviadosState();
+}
+
+class _CardSparklineEnviadosState extends State<_CardSparklineEnviados> {
+  final _service = WhatsAppHistoricoService();
+  static const int _dias = 7;
+
+  /// null = cargando. Lista de `_dias` enteros = conteo por día.
+  List<int>? _conteos;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargar();
+  }
+
+  Future<void> _cargar() async {
+    try {
+      final r = await _service.contarPorDia(_dias);
+      if (!mounted) return;
+      setState(() {
+        _conteos = r;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.toString());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.bar_chart,
+                  color: AppColors.accentBlue, size: 18),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Enviados últimos 7 días',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              if (_conteos != null)
+                Text(
+                  'Total: ${_conteos!.fold<int>(0, (a, b) => a + b)}',
+                  style: const TextStyle(
+                    color: Colors.white60,
+                    fontSize: 11,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 110,
+            child: _contenido(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _contenido() {
+    if (_error != null) {
+      return const Center(
+        child: Text(
+          'Sin datos del histórico todavía',
+          style: TextStyle(color: Colors.white38, fontSize: 11),
+        ),
+      );
+    }
+    if (_conteos == null) {
+      return const Center(
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child:
+              CircularProgressIndicator(strokeWidth: 2, color: Colors.white24),
+        ),
+      );
+    }
+    final c = _conteos!;
+    final maxValor = c.fold<int>(0, (a, b) => b > a ? b : a);
+    if (maxValor == 0) {
+      return const Center(
+        child: Text(
+          'Sin mensajes en los últimos 7 días',
+          style: TextStyle(color: Colors.white38, fontSize: 11),
+        ),
+      );
+    }
+    final maxY = (maxValor * 1.15).ceilToDouble();
+    final interval = maxY <= 10
+        ? 2.0
+        : (maxY <= 30 ? 5.0 : (maxY / 4).ceilToDouble());
+
+    final ahora = DateTime.now();
+    String labelEjeX(int idx) {
+      // idx 0 = más viejo (hace _dias-1), idx _dias-1 = hoy.
+      if (idx == _dias - 1) return 'Hoy';
+      final d = ahora.subtract(Duration(days: _dias - 1 - idx));
+      const dows = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa', 'Do'];
+      return dows[(d.weekday - 1).clamp(0, 6)];
+    }
+
+    return BarChart(
+      BarChartData(
+        maxY: maxY,
+        minY: 0,
+        barGroups: [
+          for (var i = 0; i < c.length; i++)
+            BarChartGroupData(
+              x: i,
+              barRods: [
+                BarChartRodData(
+                  toY: c[i].toDouble(),
+                  color: c[i] > 0
+                      ? AppColors.accentBlue
+                      : Colors.white12,
+                  width: 16,
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(3),
+                  ),
+                ),
+              ],
+            ),
+        ],
+        gridData: FlGridData(
+          show: true,
+          horizontalInterval: interval,
+          drawVerticalLine: false,
+          getDrawingHorizontalLine: (v) => FlLine(
+            color: Colors.white.withValues(alpha: 0.05),
+            strokeWidth: 1,
+          ),
+        ),
+        titlesData: FlTitlesData(
+          topTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles:
+              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              interval: interval,
+              reservedSize: 26,
+              getTitlesWidget: (v, m) => Text(
+                v.toInt().toString(),
+                style: const TextStyle(
+                    color: Colors.white54, fontSize: 9),
+              ),
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 20,
+              getTitlesWidget: (v, m) {
+                final idx = v.toInt();
+                if (idx < 0 || idx >= c.length) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    labelEjeX(idx),
+                    style: const TextStyle(
+                        color: Colors.white54, fontSize: 9),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        borderData: FlBorderData(
+          show: true,
+          border: Border(
+            left: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+            bottom:
+                BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+          ),
+        ),
+        barTouchData: BarTouchData(
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipColor: (_) =>
+                Colors.black.withValues(alpha: 0.85),
+            getTooltipItem: (group, _, __, ___) {
+              final idx = group.x;
+              final n = c[idx];
+              return BarTooltipItem(
+                '${labelEjeX(idx)}: $n msg',
+                const TextStyle(color: Colors.white, fontSize: 11),
+              );
+            },
+          ),
+          touchCallback: (event, response) {
+            if (!event.isInterestedForInteractions) return;
+            if (response?.spot == null) return;
+            // Tap a una barra → abrir el histórico (el usuario refina
+            // el rango ahí). Por ahora navegamos sin pre-seleccionar
+            // un día específico para no acoplar la API de la screen.
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminWhatsappHistoricoScreen(),
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }

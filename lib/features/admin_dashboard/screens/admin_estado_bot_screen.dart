@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -11,6 +12,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../whatsapp_bot/screens/admin_whatsapp_cola_screen.dart';
 import '../../whatsapp_bot/screens/admin_whatsapp_historico_screen.dart';
+import '../../whatsapp_bot/services/whatsapp_historico_service.dart';
 
 // 14 widgets visuales (banner, cards de cola/mensajes/cron/config/info,
 // errores recientes, bloque datos, filas, kill-switch) extraidos para

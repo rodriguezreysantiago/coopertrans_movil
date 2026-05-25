@@ -24,6 +24,28 @@ class WhatsAppHistoricoService {
   /// campo `expira_en`.
   static const int ttlDias = 30;
 
+  /// M7 — Cuenta mensajes registrados en cada uno de los últimos `dias`
+  /// (ART local). Devuelve lista cronológica: índice 0 = hace `dias-1`,
+  /// índice `dias-1` = hoy. Usa `count()` aggregation server-side → cobra
+  /// 1 read por día sin importar cuántos mensajes haya en cada uno.
+  Future<List<int>> contarPorDia(int dias) async {
+    final ahora = DateTime.now();
+    final resultados = <int>[];
+    for (int i = dias - 1; i >= 0; i--) {
+      final inicio = DateTime(ahora.year, ahora.month, ahora.day - i);
+      final fin = inicio.add(const Duration(days: 1));
+      final agg = await _db
+          .collection(coleccion)
+          .where('registrado_en',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(inicio))
+          .where('registrado_en', isLessThan: Timestamp.fromDate(fin))
+          .count()
+          .get();
+      resultados.add(agg.count ?? 0);
+    }
+    return resultados;
+  }
+
   /// Consulta el histórico con filtros opcionales + paginación.
   ///
   /// IMPORTANTE: solo se puede combinar UN filtro de igualdad

@@ -22,7 +22,11 @@ import '../services/whatsapp_historico_service.dart';
 /// Client-side: buscador full-text sobre los resultados (rápido porque
 /// la página es 50).
 class AdminWhatsappHistoricoScreen extends StatefulWidget {
-  const AdminWhatsappHistoricoScreen({super.key});
+  /// M6 — filtro inicial por origen, para deep-link "Ver último enviado"
+  /// desde la card "Reglas de notificación" del dashboard del bot. Si
+  /// es null, abre sin filtro.
+  final String? initialOrigen;
+  const AdminWhatsappHistoricoScreen({super.key, this.initialOrigen});
 
   @override
   State<AdminWhatsappHistoricoScreen> createState() =>
@@ -63,6 +67,10 @@ class _AdminWhatsappHistoricoScreenState
     _hasta = DateTime(ahora.year, ahora.month, ahora.day, 23, 59, 59);
     _desde =
         DateTime(ahora.year, ahora.month, ahora.day - 6, 0, 0, 0); // 7 días
+    // M6 — deep-link desde la card "Reglas de notificación".
+    if (widget.initialOrigen != null && widget.initialOrigen!.isNotEmpty) {
+      _origenCtrl.text = widget.initialOrigen!;
+    }
     _ejecutarConsulta();
   }
 
@@ -395,6 +403,8 @@ class _ItemHistorico extends StatelessWidget {
     final mensaje = (m['mensaje'] ?? '').toString();
     final origen = (m['origen'] ?? '').toString();
     final registradoEn = m['registrado_en'];
+    final entregadoEn = m['entregado_en']; // M11
+    final leidoEn = m['leido_en']; // M11
     final hora = registradoEn is Timestamp
         ? AppFormatters.formatearFechaHoraSinSegundos(registradoEn.toDate())
         : '';
@@ -430,7 +440,18 @@ class _ItemHistorico extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
+                  // M11 — checkmarks de ack (gris/azul). Solo si NO es
+                  // error y el mensaje fue al menos enviado.
+                  if (!esError)
+                    _AckIcon(
+                      entregadoEn: entregadoEn is Timestamp
+                          ? entregadoEn.toDate()
+                          : null,
+                      leidoEn:
+                          leidoEn is Timestamp ? leidoEn.toDate() : null,
+                    ),
+                  const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       PhoneFormatter.paraMostrar(telefono),
@@ -494,8 +515,16 @@ class _DetalleHistoricoSheet extends StatelessWidget {
     final waId = (m['wa_message_id'] ?? '').toString();
     final error = (m['error'] ?? '').toString();
     final registrado = m['registrado_en'];
+    final entregado = m['entregado_en']; // M11
+    final leido = m['leido_en']; // M11
     final fechaTxt = registrado is Timestamp
         ? AppFormatters.formatearFechaHoraSinSegundos(registrado.toDate())
+        : '';
+    final entregadoTxt = entregado is Timestamp
+        ? AppFormatters.formatearFechaHoraSinSegundos(entregado.toDate())
+        : '';
+    final leidoTxt = leido is Timestamp
+        ? AppFormatters.formatearFechaHoraSinSegundos(leido.toDate())
         : '';
 
     return SafeArea(
@@ -531,7 +560,11 @@ class _DetalleHistoricoSheet extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               _fila('Teléfono', PhoneFormatter.paraMostrar(telefono)),
-              _fila('Cuándo', fechaTxt),
+              _fila('Enviado', fechaTxt),
+              if (entregadoTxt.isNotEmpty)
+                _fila('Entregado ✓✓', entregadoTxt),
+              if (leidoTxt.isNotEmpty)
+                _fila('Leído ✓✓ (azul)', leidoTxt),
               if (origen.isNotEmpty) _fila('Origen', origen),
               if (destinatarioId.isNotEmpty)
                 _fila('Destinatario', destinatarioId),
@@ -641,5 +674,25 @@ class _DetalleHistoricoSheet extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+
+/// M11 — Mini-widget con los ✓/✓✓/✓✓-azul al estilo WhatsApp.
+/// gris/blanco = solo enviado; gris/blanco con doble = entregado;
+/// azul con doble = leído. Solo se renderiza si hay al menos un
+/// timestamp; sino devuelve un SizedBox chico para mantener alineado.
+class _AckIcon extends StatelessWidget {
+  final DateTime? entregadoEn;
+  final DateTime? leidoEn;
+  const _AckIcon({this.entregadoEn, this.leidoEn});
+
+  @override
+  Widget build(BuildContext context) {
+    if (entregadoEn == null && leidoEn == null) {
+      return const Icon(Icons.check, size: 14, color: Colors.white38);
+    }
+    final color = leidoEn != null ? AppColors.accentBlue : Colors.white60;
+    return Icon(Icons.done_all, size: 14, color: color);
   }
 }
