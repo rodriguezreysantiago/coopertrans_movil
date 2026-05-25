@@ -70,4 +70,9 @@ flutter {
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // androidx.activity 1.8+ trae enableEdgeToEdge() para opt-in explícito
+    // al comportamiento edge-to-edge de Android 15+ (Play Console warning
+    // "es posible que la pantalla de borde a borde no se muestre para
+    // todos los usuarios"). Llamado desde MainActivity.onCreate().
+    implementation("androidx.activity:activity-ktx:1.9.3")
 }
