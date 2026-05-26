@@ -31,6 +31,12 @@ from datetime import datetime
 
 import iturnos
 
+# stdout en UTF-8 (evita UnicodeEncodeError en PowerShell con cp1252).
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 
 def _resolver_chofer_firestore(dni: str):
     """Trae email + clave del chofer de Firestore + claves.json (igual que el bot)."""

@@ -418,8 +418,8 @@ class IturnosClient:
         de madrugada).
 
         Flujo CONFIRMADO 2026-05-20 (misma mecánica de 2 pasos que reservar):
-        1) GET /reagendar/calendario/{uuid}[?d=AAAA-MM-DD] → lista los slots
-           libres como <a href=".../editar/{ISO}">HH:MM</a>.
+        1) GET /reagendar/calendario/{uuid} → lista los slots libres como
+           <a href=".../editar/{ISO}">HH:MM</a> de la SEMANA entera.
         2) GET de ese href (página /editar) → trae el FORM de confirmación con
            los ocultos `fecha` + `hora` (es read-only: NO reasigna por sí solo).
         3) POST a /reagendar/calendario/{uuid} con _token + fecha + hora → ahí
@@ -427,10 +427,14 @@ class IturnosClient:
 
         Bug viejo (2026-05-20): hacía solo el paso 2 (GET de /editar) y asumía
         que reasignaba — nunca posteaba, así que NO movía el turno.
+
+        OJO (2026-05-26, verificado en vivo con LACEAR): NO pasar `?d=fecha` en
+        la URL. iTurnos NO usa ese parámetro como filtro: redirige a otra vista
+        (HTML ~93 KB con calendario panorámico) que NO tiene los <a> de slots
+        libres. La URL sin `?d=` devuelve el calendario operativo con los
+        botones de reservar slots, en formato esperado.
         """
         url = f"{BASE}/reagendar/calendario/{uuid}"
-        if fecha:
-            url += f"?d={fecha}"
         # El calendario trae la semana entera → filtrar por franja + fecha (si se
         # pidió) + que sea a futuro, y elegir el ÚLTIMO de la franja (día más
         # cercano, hora más tarde — ver ordenar_slots_preferidos). Sin el filtro
