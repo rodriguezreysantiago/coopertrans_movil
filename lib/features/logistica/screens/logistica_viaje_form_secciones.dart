@@ -26,7 +26,7 @@ class _SeccionResumen extends StatelessWidget {
         if (montos == null)
           Text(
             'Agregá al menos 1 tramo con tarifa para ver el cálculo.',
-            style: AppType.label.copyWith(color: Colors.white60),
+            style: AppType.label.copyWith(color: AppColors.textSecondary),
           )
         else ...[
           _LineaResumen(
@@ -48,7 +48,7 @@ class _SeccionResumen extends StatelessWidget {
             label: 'Gastos extras',
             valor: '+ \$${AppFormatters.formatearMonto(montos!.gastosTotal)}',
           ),
-          const Divider(color: Colors.white24, height: 16),
+          const Divider(color: AppColors.borderStrong, height: AppSpacing.lg),
           _LineaResumen(
             label: 'Liquidación final al chofer',
             valor:
@@ -81,16 +81,18 @@ class _LineaResumen extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: TextStyle(
-                color: destacado ? Colors.white : Colors.white70,
+              style: AppType.body.copyWith(
+                color: destacado
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
                 fontSize: 13,
               ),
             ),
           ),
           Text(
             valor,
-            style: TextStyle(
-              color: destacado ? AppColors.success : Colors.white,
+            style: AppType.body.copyWith(
+              color: destacado ? AppColors.success : AppColors.textPrimary,
               fontSize: destacado ? 16 : 14,
               fontWeight: destacado ? FontWeight.bold : FontWeight.normal,
             ),
@@ -312,7 +314,8 @@ class _SeccionChoferState extends State<_SeccionChofer> {
                     color: Theme.of(context).colorScheme.surface,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(AppRadius.sm),
-                      side: BorderSide(color: Colors.white.withAlpha(20)),
+                      side:
+                          const BorderSide(color: AppColors.borderStrong),
                     ),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(
@@ -333,7 +336,8 @@ class _SeccionChoferState extends State<_SeccionChofer> {
                             onTap: () => onSel(d),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 12),
+                                  horizontal: AppSpacing.lg,
+                                  vertical: AppSpacing.md),
                               child: Row(
                                 children: [
                                   Icon(
@@ -343,14 +347,15 @@ class _SeccionChoferState extends State<_SeccionChofer> {
                                     size: 16,
                                     color: esActual
                                         ? AppColors.success
-                                        : Colors.white54,
+                                        : AppColors.textTertiary,
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: AppSpacing.sm),
                                   Expanded(
                                     child: Text(
                                       nom,
                                       overflow: TextOverflow.ellipsis,
-                                      style: AppType.body.copyWith(color: Colors.white),
+                                      style: AppType.body.copyWith(
+                                          color: AppColors.textPrimary),
                                     ),
                                   ),
                                 ],
@@ -484,7 +489,7 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
         if (choferDni == null || choferDni!.isEmpty)
           Text(
             'Seleccioná un chofer primero — los adelantos viven por chofer.',
-            style: AppType.label.copyWith(color: Colors.white60),
+            style: AppType.label.copyWith(color: AppColors.textSecondary),
           )
         else
           StreamBuilder<List<AdelantoChofer>>(
@@ -498,7 +503,7 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
               }
               if (!snap.hasData) {
                 return const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
                   child: LinearProgressIndicator(minHeight: 2),
                 );
               }
@@ -518,14 +523,15 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
                   children: [
                     Text(
                       'No hay adelantos libres de este chofer.',
-                      style:
-                          AppType.label.copyWith(color: Colors.white60),
+                      style: AppType.label
+                          .copyWith(color: AppColors.textSecondary),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       'Si necesitás crear uno, andá a LOGÍSTICA → '
                       'ADELANTOS y volvé.',
-                      style: AppType.eyebrow.copyWith(color: Colors.white38),
+                      style: AppType.eyebrow
+                          .copyWith(color: AppColors.textHint),
                     ),
                   ],
                 );
@@ -538,7 +544,7 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
                   border: OutlineInputBorder(),
                   isDense: true,
                   contentPadding: EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 12),
+                      horizontal: AppSpacing.md, vertical: AppSpacing.md),
                 ),
                 items: [
                   const DropdownMenuItem<String?>(
