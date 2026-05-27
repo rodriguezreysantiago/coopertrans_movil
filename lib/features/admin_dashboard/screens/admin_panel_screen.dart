@@ -6,45 +6,41 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/capabilities.dart';
 import '../../../core/services/prefs_service.dart';
+import '../../../core/theme/app_breakpoints.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
+import '../../../core/utils/platform_keys.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/formatters.dart';
+import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../vista_ejecutiva/services/vista_ejecutiva_service.dart';
 import '../../vista_ejecutiva/widgets/kpi_grande_card.dart';
 import '../../vista_ejecutiva/widgets/viajes_semanales_chart.dart';
 
-/// Panel de administración — pantalla "Inicio" del shell admin.
+/// Panel de administración — REFACTOR 2026-05-24 (split).
 ///
-/// REFACTOR 2026-05-18 (decisión Santiago): unificada con la antigua
-/// "Vista Ejecutiva" que duplicaba choferes activos + alertas.
+/// **Decisión del refactor:** este panel hacía DOS trabajos a la vez —
+/// dashboard de operaciones (Hoy / Mes / Tendencias) Y launcher de
+/// módulos (12 tiles de "Accesos rápidos"). El launcher duplicaba los
+/// items del `AdminShell` NavigationRail / BottomNav, que ya los lista.
 ///
-/// REFACTOR 2026-05-23 (decisión Santiago): los widgets ricos de ICM
-/// (KPI ICM flota, tendencia ICM oficial Sitrack, top 5 mejores, top 5
-/// a mejorar) se MUDARON al hub del módulo ICM — pertenecen más a ese
-/// módulo que al tablero general. Acá quedan los KPIs operativos rápidos.
+/// **Ahora:** el launcher SALE. Esta pantalla es 100% dashboard.
+/// La navegación entre módulos sigue por el shell (sidebar / bottom
+/// nav). El power-user usa `Ctrl+K` (la command palette ya existente).
 ///
-/// Layout actual:
+/// **Layout:**
+/// - Saludo (con hora del día + nombre + fecha)
+/// - **Urgente** — 3 KPIs críticos con fondo destacado si hay rojos.
+/// - **Esta semana / Mes** — viajes, eficiencia, ICM con trend ▲▼.
+/// - **Tendencias** — chart de viajes 8 semanas.
+/// - Footer versión.
 ///
-///   - Saludo
-///   - HOY (alarmas operativas urgentes — rojo si críticas)
-///   - PANORAMA DEL MES (viajes / alertas / eficiencia + tendencia vs mes
-///     anterior; ICM flota mudado al hub ICM)
-///   - FLOTA (estado general de unidades y vencimientos no urgentes)
-///   - TENDENCIAS (gráfico viajes 8 semanas; el de ICM mudado al hub ICM)
-///   - ACCESOS RÁPIDOS (navegación a módulos)
-///   - Footer versión
-///
-/// Pantalla `vista_ejecutiva_screen.dart` eliminada en el refactor
-/// 2026-05-18. Service + widgets reusados desde acá.
-///
-/// **INVARIANTE shell ↔ panel** (2026-05-25): los tiles de "accesos
-/// rápidos" de este archivo y los `_ShellSection` de `admin_shell.dart`
-/// deben mostrar las MISMAS 12 entradas operativas en el MISMO orden:
-///   Personal → Flota → Vencimientos → Logística → Gomería →
-///   Mantenimiento → ICM → Descargas → Auditoría → Mapa → Reportes →
-///   Cachatore → WhatsApp Bot
-/// El shell incluye además "Inicio" al principio (que es esta pantalla).
-/// Al sumar/quitar/reordenar features de menú, tocar AMBOS archivos.
+/// **Lo que ya NO está acá:**
+/// - Los 12 tiles `_AdminTile` y `_AdminTileWhatsAppBot` — ahora viven
+///   exclusivamente en `admin_shell.dart`.
+/// - Si necesitás un acceso rápido a un módulo que no está en el shell:
+///   agregalo al shell, no acá.
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
 
@@ -57,9 +53,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   late final Stream<QuerySnapshot<Map<String, dynamic>>>
       _revisionesPendientesStream;
 
-  /// KPIs ricos del mes (viajes, ICM, eficiencia, tendencias, top choferes).
-  /// Lazy: solo se carga si el rol tiene capability + 1 sola vez por entrada
-  /// a la pantalla. Pull-to-refresh lo recarga.
   Future<KpisVistaEjecutiva>? _futureKpisRicos;
   bool get _verKpisRicos =>
       Capabilities.can(PrefsService.rol, Capability.verVistaEjecutiva);
@@ -67,26 +60,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   @override
   void initState() {
     super.initState();
-    // STATS/dashboard lo mantiene la Cloud Function `recomputeDashboardStats`
-    // (cada 5 min). Antes traíamos las 3 colecciones enteras (EMPLEADOS,
-    // VEHICULOS, REVISIONES) y calculábamos KPIs O(N×M) client-side. Ahora
-    // leemos UN solo doc — escala constante con el tamaño de la flota.
     _statsStream = FirebaseFirestore.instance
         .collection('STATS')
         .doc('dashboard')
         .snapshots();
-    // EXCEPCIÓN: "Trámites pendientes" se lee EN VIVO (no del stats
-    // stale). Cuando un chofer envía una revisión nueva, el admin
-    // necesita verlo al toque, no esperar hasta 5 min al próximo
-    // ciclo del cron. Bug reportado por Santiago 2026-05-12.
     _revisionesPendientesStream = FirebaseFirestore.instance
         .collection('REVISIONES')
         .where('estado', isEqualTo: 'PENDIENTE')
         .snapshots();
-
-    if (_verKpisRicos) {
-      _cargarKpisRicos();
-    }
+    if (_verKpisRicos) _cargarKpisRicos();
   }
 
   void _cargarKpisRicos() {
@@ -100,8 +82,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Future<void> _refrescar() async {
     if (_verKpisRicos) {
       _cargarKpisRicos();
-      // Esperamos a que termine la carga para que el RefreshIndicator se
-      // mantenga visible mientras dura el fetch.
       await _futureKpisRicos;
     }
   }
@@ -112,18 +92,21 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       title: AppTexts.appName,
       body: RefreshIndicator(
         onRefresh: _refrescar,
-        color: AppColors.accentGreen,
-        backgroundColor: AppColors.surface,
+        color: AppColors.brand,
+        backgroundColor: AppColors.surface2,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
           children: [
             const _Saludo(),
-            const SizedBox(height: 16),
-            // ------- SECCIÓN 1: HOY (operativo urgente) -------
-            // Stats genérico desde STATS/dashboard (cron 5 min) +
-            // override en vivo de "trámites pendientes" desde
-            // REVISIONES directo.
+            const SizedBox(height: AppSpacing.lg),
+
+            // ============ URGENTE — el bloque hero ============
+            const _SeccionEyebrow('Urgente'),
+            const SizedBox(height: AppSpacing.sm),
             StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
               stream: _statsStream,
               builder: (ctx, statsSnap) {
@@ -132,150 +115,48 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                   stream: _revisionesPendientesStream,
                   builder: (ctx2, revSnap) {
                     final statsFinal = revSnap.hasData
-                        ? stats.conRevisionesPendientes(revSnap.data!.docs.length)
+                        ? stats.conRevisionesPendientes(
+                            revSnap.data!.docs.length,
+                          )
                         : stats;
-                    return _SeccionHoyFlota(stats: statsFinal);
+                    return _SeccionUrgente(stats: statsFinal);
                   },
                 );
               },
             ),
-            // ------- SECCIONES 2-5: KPIs ricos (mes, tendencias, personas) -------
+
+            const SizedBox(height: AppSpacing.xl),
+
+            // ============ ESTA SEMANA / MES ============
             if (_verKpisRicos) ...[
-              const SizedBox(height: 24),
               _SeccionesEjecutivas(
                 future: _futureKpisRicos!,
                 onReintentar: _cargarKpisRicos,
               ),
+              const SizedBox(height: AppSpacing.xl),
             ],
-            const SizedBox(height: 24),
-            // ------- SECCIÓN 6: ACCESOS RÁPIDOS -------
-            const _SeccionLabel('Accesos rápidos'),
-            const SizedBox(height: 8),
-            // Cada tile aparece solo si el rol logueado tiene la
-            // capability correspondiente. Orden alineado con el sidebar
-            // del shell (decisión Vecchi 2026-05-07).
-            //
-            // Tile "VISTA EJECUTIVA" ELIMINADO 2026-05-18 — sus secciones
-            // están integradas en este mismo INICIO arriba.
-            if (Capabilities.can(PrefsService.rol, Capability.verListaPersonal))
-              const _AdminTile(
-                titulo: 'PERSONAL',
-                subtitulo: 'Lista de legajos y choferes',
-                icono: Icons.badge_outlined,
-                color: AppColors.accentBlue,
-                ruta: '/admin_personal_lista',
-              ),
-            if (Capabilities.can(PrefsService.rol, Capability.verListaFlota))
-              const _AdminTile(
-                titulo: 'FLOTA',
-                subtitulo: 'Control de camiones y acoplados',
-                icono: Icons.local_shipping_outlined,
-                color: AppColors.accentPurple,
-                ruta: '/admin_vehiculos_lista',
-              ),
-            // REVISIONES movido dentro de VENCIMIENTOS (2026-05-24) — ya
-            // no tiene tile propio acá; se entra desde el menú de
-            // vencimientos. Sub-aprobación rápida via badge del tab.
-            if (Capabilities.can(PrefsService.rol, Capability.verVencimientos))
-              const _AdminTile(
-                titulo: 'VENCIMIENTOS',
-                subtitulo: 'Revisiones, calendario, personal, flota y empresas',
-                icono: Icons.event_note,
-                color: AppColors.accentGreen,
-                ruta: '/admin_vencimientos_menu',
-              ),
-            if (Capabilities.can(PrefsService.rol, Capability.verLogistica))
-              const _AdminTile(
-                titulo: 'LOGÍSTICA',
-                subtitulo: 'Empresas, ubicaciones y tarifas',
-                icono: Icons.route_outlined,
-                color: AppColors.accentGreen,
-                ruta: AppRoutes.adminLogisticaHub,
-              ),
-            if (Capabilities.can(PrefsService.rol, Capability.verGomeria))
-              const _AdminTile(
-                titulo: 'GOMERÍA',
-                subtitulo: 'Stock, instalación y recapados de cubiertas',
-                icono: Icons.tire_repair,
-                color: AppColors.accentOrange,
-                ruta: AppRoutes.adminGomeriaHub,
-              ),
-            if (Capabilities.can(PrefsService.rol, Capability.verMantenimiento))
-              const _AdminTile(
-                titulo: 'MANTENIMIENTO',
-                subtitulo: 'Service, advertencias e historial de la flota Volvo',
-                icono: Icons.build_circle_outlined,
-                color: AppColors.accentDeepOrange,
-                ruta: AppRoutes.adminMantenimiento,
-              ),
-            if (Capabilities.can(PrefsService.rol, Capability.verIcm))
-              const _AdminTile(
-                titulo: 'ICM',
-                subtitulo: 'Conducta de Manejo: ranking, mapa de calor, drill-down',
-                icono: Icons.leaderboard_outlined,
-                color: AppColors.accentRed,
-                ruta: AppRoutes.adminIcmHub,
-              ),
-            if (Capabilities.can(PrefsService.rol, Capability.verAlertasVolvo))
-              const _AdminTile(
-                titulo: 'DESCARGAS',
-                subtitulo: 'Cola en vivo + KPIs por zona (YPF Añelo)',
-                icono: Icons.local_shipping_outlined,
-                color: AppColors.accentDeepOrange,
-                ruta: AppRoutes.adminDescargas,
-              ),
-            // ZONAS DE DESCARGA — quitado de accesos rápidos 2026-05-25.
-            // La pantalla sigue accesible desde el botón "Configurar zonas"
-            // adentro de DESCARGAS (admin_descargas_screen.dart:240).
-            if (Capabilities.can(PrefsService.rol, Capability.verAlertasVolvo))
-              const _AdminTile(
-                titulo: 'AUDITORÍA ASIGNACIONES',
-                subtitulo: 'iButton real vs asignación del sistema',
-                icono: Icons.fact_check,
-                color: AppColors.accentTeal,
-                ruta: AppRoutes.adminAuditoriaAsignaciones,
-              ),
-            if (Capabilities.can(PrefsService.rol, Capability.verAlertasVolvo))
-              const _AdminTile(
-                titulo: 'MAPA',
-                subtitulo: 'Posición actual de la flota en tiempo real',
-                icono: Icons.map_outlined,
-                color: AppColors.accentLightBlue,
-                ruta: AppRoutes.adminMapaFlota,
-              ),
-            if (Capabilities.can(PrefsService.rol, Capability.verReportes))
-              const _AdminTile(
-                titulo: 'REPORTES',
-                subtitulo: 'Exportar Excel y analítica de flota',
-                icono: Icons.analytics_outlined,
-                color: AppColors.accentAmber,
-                ruta: '/admin_reportes',
-              ),
-            // Bots juntos al final (2026-05-24): mismos 2 "agentes
-            // automáticos" del sistema, mismo orden que en el shell.
-            if (Capabilities.can(PrefsService.rol, Capability.verCachatore))
-              const _AdminTile(
-                titulo: 'CACHATORE',
-                subtitulo: 'Bot que reserva turnos de carga en YPF/iTurnos',
-                icono: Icons.schedule,
-                color: AppColors.accentCyan,
-                ruta: AppRoutes.adminCachatoreHub,
-              ),
-            if (Capabilities.can(PrefsService.rol, Capability.verEstadoBot))
-              const _AdminTileWhatsAppBot(),
-            const SizedBox(height: 28),
-            // Footer con versión.
-            const Center(
+
+            // ============ FOOTER ============
+            Center(
               child: Text(
-                '${AppTexts.appVersion} — Base Operativa',
-                style: TextStyle(
-                  color: Colors.white24,
-                  fontSize: 11,
-                  letterSpacing: 1,
-                ),
+                '${AppTexts.appVersion} · Base Operativa',
+                style: AppType.label.copyWith(color: AppColors.textDisabled),
               ),
             ),
-            const SizedBox(height: 12),
+            // Hint a la command palette — la palette es la nueva
+            // "accesos rápidos". En mobile no se muestra (no hay teclado);
+            // en macOS dice ⌘K; en Windows/Linux dice Ctrl+K.
+            Builder(
+              builder: (ctx) {
+                final hint = PlatformKeys.commandPaletteHint();
+                if (hint == null) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.md),
+                  child: Center(child: Text(hint, style: AppType.label)),
+                );
+              },
+            ),
+            const SizedBox(height: AppSpacing.md),
           ],
         ),
       ),
@@ -284,12 +165,158 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 }
 
 // =============================================================================
-// SECCIONES EJECUTIVAS (KPIs ricos del mes — antigua Vista Ejecutiva)
+// SECCIÓN URGENTE — bloque hero
 // =============================================================================
 
-/// Envoltorio del FutureBuilder de los KPIs ricos. Si el future falla,
-/// muestra error con botón reintentar. Si está cargando, placeholder
-/// compacto (no bloquea las secciones de arriba que ya cargaron).
+class _SeccionUrgente extends StatelessWidget {
+  final _Stats stats;
+  const _SeccionUrgente({required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final hayCriticos = stats.vencidos > 0;
+    final hayPendientes =
+        stats.revisionesPendientes > 0 || stats.proximos7 > 0;
+
+    final cuenta = (hayCriticos ? 1 : 0) +
+        (stats.revisionesPendientes > 0 ? 1 : 0) +
+        (stats.proximos7 > 0 ? 1 : 0);
+
+    return AppCard(
+      tier: 2,
+      highlighted: hayCriticos,
+      borderColor: hayCriticos
+          ? AppColors.error.withAlpha(120)
+          : (hayPendientes ? AppColors.warning.withAlpha(80) : null),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  stats.cargando
+                      ? 'Cargando estado…'
+                      : (cuenta == 0
+                          ? 'Sin alertas urgentes hoy'
+                          : 'Tenés $cuenta ${cuenta == 1 ? "cosa urgente" : "cosas urgentes"} hoy'),
+                  style: AppType.heading,
+                ),
+              ),
+              if (cuenta == 0)
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: const BoxDecoration(
+                    color: AppColors.success,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          _LineaUrgencia(
+            color: stats.vencidos > 0
+                ? AppColors.error
+                : AppColors.textDisabled,
+            valor: stats.cargando ? '…' : '${stats.vencidos}',
+            label: stats.vencidos == 1
+                ? 'papel vencido sin renovar'
+                : 'papeles vencidos sin renovar',
+            onTap: () => Navigator.pushNamed(
+              context,
+              '/vencimientos_calendario',
+            ),
+          ),
+          const Divider(height: AppSpacing.lg),
+          _LineaUrgencia(
+            color: stats.revisionesPendientes > 0
+                ? AppColors.warning
+                : AppColors.textDisabled,
+            valor: stats.cargando ? '…' : '${stats.revisionesPendientes}',
+            label: stats.revisionesPendientes == 1
+                ? 'trámite esperando tu revisión'
+                : 'trámites esperando tu revisión',
+            onTap: () => Navigator.pushNamed(context, '/admin_revisiones'),
+          ),
+          const Divider(height: AppSpacing.lg),
+          _LineaUrgencia(
+            color: stats.proximos7 > 0
+                ? AppColors.warning
+                : AppColors.textDisabled,
+            valor: stats.cargando ? '…' : '${stats.proximos7}',
+            label: 'vencen en los próximos 7 días',
+            onTap: () => Navigator.pushNamed(
+              context,
+              '/vencimientos_calendario',
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LineaUrgencia extends StatelessWidget {
+  final Color color;
+  final String valor;
+  final String label;
+  final VoidCallback onTap;
+
+  const _LineaUrgencia({
+    required this.color,
+    required this.valor,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: AppSpacing.md),
+            Text(
+              valor,
+              style: AppType.title.copyWith(color: color, fontSize: 24),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                label,
+                style: AppType.body.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios,
+              size: 12,
+              color: AppColors.textHint,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// SECCIONES EJECUTIVAS — Esta semana / Mes / Tendencias
+// =============================================================================
+
 class _SeccionesEjecutivas extends StatelessWidget {
   final Future<KpisVistaEjecutiva> future;
   final VoidCallback onReintentar;
@@ -306,114 +333,102 @@ class _SeccionesEjecutivas extends StatelessWidget {
       builder: (ctx, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 32),
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.xxl),
             child: Center(
-              child: CircularProgressIndicator(
-                color: AppColors.accentGreen,
-              ),
+              child: CircularProgressIndicator(color: AppColors.brand),
             ),
           );
         }
         if (snap.hasError) {
           return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 24),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
             child: Column(
               children: [
-                const Icon(Icons.error_outline,
-                    color: AppColors.accentRed, size: 36),
-                const SizedBox(height: 8),
+                const Icon(
+                  Icons.error_outline,
+                  color: AppColors.error,
+                  size: 36,
+                ),
+                const SizedBox(height: AppSpacing.sm),
                 const Text(
                   'No se pudieron cargar los KPIs del mes',
-                  style: TextStyle(color: Colors.white70),
+                  style: AppType.body,
                 ),
-                const SizedBox(height: 6),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Text(
-                    snap.error.toString(),
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                        color: Colors.white38, fontSize: 11),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
+                const SizedBox(height: AppSpacing.md),
+                AppButton.secondary(
+                  label: 'Reintentar',
+                  icon: Icons.refresh,
                   onPressed: onReintentar,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Reintentar'),
                 ),
               ],
             ),
           );
         }
         final kpis = snap.data!;
-        return _SeccionesPanorama(kpis: kpis);
+        return _PanoramaYTendencias(kpis: kpis);
       },
     );
   }
 }
 
-/// Renderiza las 2 secciones ricas restantes (los widgets ricos de ICM se
-/// mudaron al hub ICM 2026-05-23):
-///   1. PANORAMA DEL MES (3 KPIs grandes: viajes / alertas / eficiencia)
-///   2. TENDENCIAS (1 gráfico: viajes por semana)
-class _SeccionesPanorama extends StatelessWidget {
+class _PanoramaYTendencias extends StatelessWidget {
   final KpisVistaEjecutiva kpis;
-  const _SeccionesPanorama({required this.kpis});
+  const _PanoramaYTendencias({required this.kpis});
 
   @override
   Widget build(BuildContext context) {
-    final esDesktop = MediaQuery.of(context).size.width >= 800;
+    final esDesktop = AppBreakpoints.isDesktopOrLarger(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const _SeccionLabel('Panorama del mes'),
-        const SizedBox(height: 10),
+        const _SeccionEyebrow('Panorama del mes'),
+        const SizedBox(height: AppSpacing.sm),
         GridView.count(
-          // 3 KPIs (antes 4: el de ICM flota se mudó al hub ICM). Desktop
-          // los pinta en una sola fila; mobile en grid 2x2 con uno solo
-          // en la 2ª fila para mantener el mismo aspecto de card.
           crossAxisCount: esDesktop ? 3 : 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          childAspectRatio: esDesktop ? 1.0 : 0.85,
+          mainAxisSpacing: AppSpacing.md,
+          crossAxisSpacing: AppSpacing.md,
+          childAspectRatio: esDesktop ? 1.0 : 0.95,
           children: [
             KpiGrandeCard.mes(
               label: 'Viajes del mes',
               kpi: kpis.viajesDelMes,
               icono: Icons.local_shipping,
-              color: AppColors.accentPurple,
+              // Antes accentPurple → ahora cobalto del brand.
+              color: AppColors.brand,
               mejorEsSubir: true,
               onTap: () => Navigator.pushNamed(
-                  context, AppRoutes.adminLogisticaViajes),
+                context,
+                AppRoutes.adminLogisticaViajes,
+              ),
             ),
             KpiGrandeCard.simple(
               label: 'Alertas críticas',
               kpi: kpis.alertasCriticas,
               icono: Icons.warning_amber_rounded,
               color: kpis.alertasCriticas.valor > 0
-                  ? AppColors.accentRed
-                  : AppColors.accentGreen,
+                  ? AppColors.error
+                  : AppColors.success,
               onTap: () => Navigator.pushNamed(
-                  context, AppRoutes.vencimientosCalendario),
+                context,
+                AppRoutes.vencimientosCalendario,
+              ),
             ),
             KpiGrandeCard.eficiencia(
               label: 'Eficiencia 30d',
               kpi: kpis.eficienciaCombustible,
               icono: Icons.local_gas_station,
               onTap: () => Navigator.pushNamed(
-                  context, AppRoutes.adminEcoDriving),
+                context,
+                AppRoutes.adminEcoDriving,
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 24),
-        const _SeccionLabel('Tendencias'),
-        const SizedBox(height: 10),
-        // Antes era Row(ICM + viajes) en desktop; ahora queda un solo
-        // gráfico (el de ICM se mudó al hub ICM) → full-width en ambos
-        // layouts.
+        const SizedBox(height: AppSpacing.xl),
+        const _SeccionEyebrow('Tendencias'),
+        const SizedBox(height: AppSpacing.sm),
         ViajesSemanalesChart(
           puntos: kpis.viajesPorSemana,
           titulo: 'Viajes por semana · últimas 8',
@@ -424,120 +439,9 @@ class _SeccionesPanorama extends StatelessWidget {
 }
 
 // =============================================================================
-// SECCIÓN HOY + FLOTA (KPIs operativos rápidos)
-// =============================================================================
-
-/// 2 sub-secciones combinadas:
-///   - HOY: 3 KPIs urgentes (pendientes, vencidos, vencen ≤ 7d).
-///     Bordes rojos si críticos.
-///   - FLOTA: 3 KPIs estado general (choferes, unidades, vencen ≤ 30d).
-class _SeccionHoyFlota extends StatelessWidget {
-  final _Stats stats;
-  const _SeccionHoyFlota({required this.stats});
-
-  @override
-  Widget build(BuildContext context) {
-    final esDesktop = MediaQuery.of(context).size.width >= 600;
-    final cols = esDesktop ? 3 : 2;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const _SeccionLabel('Hoy'),
-        const SizedBox(height: 8),
-        GridView.count(
-          crossAxisCount: cols,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          // Igualado al ratio de "Panorama del mes" para consistencia
-          // visual entre las 3 secciones (Hoy / Flota / Panorama).
-          // _KpiCard usa FittedBox.scaleDown → no hay riesgo de overflow.
-          childAspectRatio: esDesktop ? 1.0 : 0.85,
-          children: [
-            _KpiCard(
-              label: 'Trámites pendientes',
-              valor:
-                  stats.cargando ? '…' : '${stats.revisionesPendientes}',
-              icon: Icons.fact_check_outlined,
-              color: stats.revisionesPendientes > 0
-                  ? AppColors.accentOrange
-                  : AppColors.accentGreen,
-              urgente: stats.revisionesPendientes > 0,
-              ruta: '/admin_revisiones',
-            ),
-            _KpiCard(
-              label: 'Vencidos',
-              valor: stats.cargando ? '…' : '${stats.vencidos}',
-              sublabel: 'sin renovar',
-              icon: Icons.error_outline,
-              color: stats.vencidos > 0
-                  ? AppColors.accentRed
-                  : AppColors.accentGreen,
-              urgente: stats.vencidos > 0,
-              ruta: '/vencimientos_calendario',
-            ),
-            _KpiCard(
-              label: 'Vencen ≤ 7 días',
-              valor: stats.cargando ? '…' : '${stats.proximos7}',
-              icon: Icons.warning_amber_rounded,
-              color: stats.proximos7 > 0
-                  ? AppColors.accentOrange
-                  : AppColors.accentGreen,
-              urgente: stats.proximos7 > 0,
-              ruta: '/vencimientos_calendario',
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-        const _SeccionLabel('Flota'),
-        const SizedBox(height: 8),
-        GridView.count(
-          crossAxisCount: cols,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          mainAxisSpacing: 10,
-          crossAxisSpacing: 10,
-          // Igualado al ratio de "Panorama del mes" (ver Hoy arriba).
-          childAspectRatio: esDesktop ? 1.0 : 0.85,
-          children: [
-            _KpiCard(
-              label: 'Choferes activos',
-              valor: stats.cargando ? '…' : '${stats.choferesActivos}',
-              icon: Icons.badge,
-              color: AppColors.accentBlue,
-              ruta: '/admin_personal_lista',
-            ),
-            _KpiCard(
-              label: 'Unidades en flota',
-              valor: stats.cargando ? '…' : '${stats.unidadesTotal}',
-              sublabel: stats.cargando
-                  ? null
-                  : '${stats.unidadesAsignadas} asignadas',
-              icon: Icons.local_shipping,
-              color: AppColors.accentPurple,
-              ruta: '/admin_vehiculos_lista',
-            ),
-            _KpiCard(
-              label: 'Vencen ≤ 30 días',
-              valor: stats.cargando ? '…' : '${stats.proximos30}',
-              icon: Icons.event_note,
-              color: AppColors.accentTeal,
-              ruta: '/vencimientos_calendario',
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-// =============================================================================
 // SALUDO
 // =============================================================================
 
-/// Encabezado con saludo según hora del día + apodo o primer nombre del admin.
 class _Saludo extends StatefulWidget {
   const _Saludo();
 
@@ -546,20 +450,14 @@ class _Saludo extends StatefulWidget {
 }
 
 class _SaludoState extends State<_Saludo> {
-  /// Inicializado SÍNCRONO desde `PrefsService.apodo` (cacheado al login)
-  /// para evitar el flicker "Buen día, Santiago" → "Buen día, Santi".
   late String _apodoResuelto = PrefsService.apodo.trim();
 
   @override
   void initState() {
     super.initState();
-    if (_apodoResuelto.isEmpty) {
-      _resolverApodoLegacy();
-    }
+    if (_apodoResuelto.isEmpty) _resolverApodoLegacy();
   }
 
-  /// Solo se invoca para admins que iniciaron sesión antes de que
-  /// PrefsService cacheara el APODO.
   Future<void> _resolverApodoLegacy() async {
     final dni = PrefsService.dni;
     if (dni.isEmpty) return;
@@ -573,9 +471,7 @@ class _SaludoState extends State<_Saludo> {
       if (apodo.isEmpty) return;
       setState(() => _apodoResuelto = apodo);
       unawaited(PrefsService.setApodo(apodo));
-    } catch (_) {
-      // Si Firestore falla o el doc no existe, dejamos el fallback.
-    }
+    } catch (_) {}
   }
 
   String _saludoHora() {
@@ -585,7 +481,6 @@ class _SaludoState extends State<_Saludo> {
     return 'Buenas noches';
   }
 
-  /// Para nombres "APELLIDO NOMBRE …", devuelve "Nombre" capitalizado.
   String? _primerNombre(String full) {
     final partes = full.trim().split(RegExp(r'\s+'));
     if (partes.length < 2) return null;
@@ -605,7 +500,7 @@ class _SaludoState extends State<_Saludo> {
     final fechaHoy = AppFormatters.formatearFecha(DateTime.now());
 
     return Padding(
-      padding: const EdgeInsets.only(top: 4, left: 4),
+      padding: const EdgeInsets.only(top: AppSpacing.xs, left: AppSpacing.xs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -613,54 +508,40 @@ class _SaludoState extends State<_Saludo> {
             saludo,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-            ),
+            style: AppType.title,
           ),
           const SizedBox(height: 2),
-          Text(
-            fechaHoy,
-            style: const TextStyle(
-              color: Colors.white54,
-              fontSize: 12,
-            ),
-          ),
+          Text(fechaHoy, style: AppType.label),
         ],
       ),
     );
   }
 }
 
-class _SeccionLabel extends StatelessWidget {
+// =============================================================================
+// EYEBROW de sección
+// =============================================================================
+
+class _SeccionEyebrow extends StatelessWidget {
   final String texto;
-  const _SeccionLabel(this.texto);
+  const _SeccionEyebrow(this.texto);
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 6, top: 4),
-      child: Text(
-        texto.toUpperCase(),
-        style: const TextStyle(
-          color: AppColors.accentGreen,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.5,
-        ),
-      ),
+      padding: const EdgeInsets.only(left: AppSpacing.xs, top: AppSpacing.xs),
+      // Antes: ALL CAPS verde-neón con letterSpacing 1.5. Ahora: AppType.eyebrow
+      // que es uppercase pero más sobrio + sentence case del título visible.
+      // El "uppercase" sucede en el estilo, no en el string fuente.
+      child: Text(texto.toUpperCase(), style: AppType.eyebrow),
     );
   }
 }
 
 // =============================================================================
-// CÁLCULO DE MÉTRICAS (KPIs operativos rápidos desde STATS/dashboard)
+// STATS (sin cambios — mismo modelo que la versión anterior)
 // =============================================================================
 
-/// Estadísticas agregadas que pinta la sección "Hoy" + "Flota". Inmutable;
-/// se hidrata desde el doc `STATS/dashboard` que mantiene la Cloud Function
-/// `recomputeDashboardStats` (cada 5 min).
 class _Stats {
   final int choferesActivos;
   final int unidadesTotal;
@@ -669,8 +550,6 @@ class _Stats {
   final int vencidos;
   final int proximos7;
   final int proximos30;
-
-  /// `true` mientras el snapshot de `STATS/dashboard` no llegó todavía.
   final bool cargando;
 
   const _Stats({
@@ -711,8 +590,6 @@ class _Stats {
     );
   }
 
-  /// Override `revisionesPendientes` con el count en vivo del stream
-  /// de REVISIONES.
   _Stats conRevisionesPendientes(int cantidad) {
     return _Stats(
       choferesActivos: choferesActivos,
@@ -723,319 +600,6 @@ class _Stats {
       proximos7: proximos7,
       proximos30: proximos30,
       cargando: cargando,
-    );
-  }
-}
-
-// =============================================================================
-// KPI CARD (sección Hoy / Flota)
-// =============================================================================
-
-class _KpiCard extends StatelessWidget {
-  final String label;
-  final String valor;
-  final String? sublabel;
-  final IconData icon;
-  final Color color;
-  final String? ruta;
-
-  /// Si es `true`, agrega un borde visible del color para destacar.
-  final bool urgente;
-
-  const _KpiCard({
-    required this.label,
-    required this.valor,
-    required this.icon,
-    required this.color,
-    this.sublabel,
-    this.ruta,
-    this.urgente = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tap = ruta != null
-        ? () => Navigator.pushNamed(context, ruta!)
-        : null;
-
-    return AppCard(
-      onTap: tap,
-      padding: const EdgeInsets.all(14),
-      highlighted: urgente,
-      borderColor: urgente ? color.withAlpha(160) : null,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: color.withAlpha(30),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 18),
-              ),
-              if (urgente)
-                const Icon(Icons.priority_high,
-                    color: Colors.white54, size: 14),
-            ],
-          ),
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      valor,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 30,
-                        fontWeight: FontWeight.bold,
-                        height: 1,
-                      ),
-                    ),
-                    if (sublabel != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        sublabel!,
-                        style: const TextStyle(
-                          color: Colors.white38,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-          ),
-          Flexible(
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// =============================================================================
-// TILE DE ACCESO DIRECTO (sección Accesos rápidos)
-// =============================================================================
-
-/// Tile especializado para el menú "WhatsApp Bot" — muestra un badge
-/// con el estado del bot leyendo `BOT_HEALTH/main` (M3, 2026-05-24):
-///   - 🟢 sin badge: bot OK, cola normal.
-///   - 🟠 número amber: hay N mensajes en error pendientes de reintento.
-///   - 🔴 punto rojo: heartbeat caído (sin update en > 2 min) — bot
-///     probablemente murió y nadie está enviando.
-/// Permite que el admin vea desde el panel principal si tiene que
-/// entrar a la pantalla del bot sin tener que abrirla.
-class _AdminTileWhatsAppBot extends StatelessWidget {
-  const _AdminTileWhatsAppBot();
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('BOT_HEALTH')
-          .doc('main')
-          .snapshots(),
-      builder: (ctx, snap) {
-        final data = snap.data?.data() as Map<String, dynamic>?;
-        // Errores con estado ERROR en la cola (los que merecen badge —
-        // los pendientes "frescos" son normales, no alarma).
-        final cola = (data?['cola'] as Map?) ?? const {};
-        final errores = (cola['error'] ?? 0) as int;
-        // Heartbeat caído = sin update en > 2 min.
-        final ts = data?['ultimoHeartbeat'];
-        DateTime? hb;
-        if (ts is Timestamp) hb = ts.toDate();
-        final hbCaido = hb == null ||
-            DateTime.now().difference(hb).inSeconds > 120;
-        final Widget? badge = hbCaido
-            ? const _BadgeCirculo(
-                texto: '!', color: AppColors.error)
-            : (errores > 0
-                ? _BadgeCirculo(
-                    texto: errores > 99 ? '99+' : '$errores',
-                    color: AppColors.warning,
-                  )
-                : null);
-        return AppCard(
-          onTap: () =>
-              Navigator.pushNamed(context, AppRoutes.adminEstadoBot),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppColors.accentLightGreen.withAlpha(25),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.smart_toy_outlined,
-                        color: AppColors.accentLightGreen, size: 22),
-                  ),
-                  if (badge != null)
-                    Positioned(top: -4, right: -4, child: badge),
-                ],
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'WHATSAPP BOT',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        fontSize: 13,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      hbCaido
-                          ? '⚠ Heartbeat caído — bot probablemente offline'
-                          : (errores > 0
-                              ? '$errores mensajes con error — tocá para revisar'
-                              : 'Cola, cron, errores y heartbeat'),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: hbCaido
-                            ? AppColors.error
-                            : (errores > 0
-                                ? AppColors.warning
-                                : Colors.white60),
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.arrow_forward_ios,
-                  color: Colors.white24, size: 14),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _BadgeCirculo extends StatelessWidget {
-  final String texto;
-  final Color color;
-  const _BadgeCirculo({required this.texto, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.background, width: 1.5),
-      ),
-      child: Text(
-        texto,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-  }
-}
-
-class _AdminTile extends StatelessWidget {
-  final String titulo;
-  final String subtitulo;
-  final IconData icono;
-  final Color color;
-  final String ruta;
-
-  const _AdminTile({
-    required this.titulo,
-    required this.subtitulo,
-    required this.icono,
-    required this.color,
-    required this.ruta,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      onTap: () => Navigator.pushNamed(context, ruta),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: color.withAlpha(25),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icono, color: color, size: 22),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  titulo,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    fontSize: 13,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitulo,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: Colors.white60, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-          const Icon(Icons.arrow_forward_ios,
-              color: Colors.white24, size: 14),
-        ],
-      ),
     );
   }
 }

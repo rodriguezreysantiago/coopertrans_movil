@@ -5,19 +5,31 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_constants.dart';
-import '../../../shared/constants/app_colors.dart';
-import '../../../shared/utils/responsive_grid.dart';
-import '../../../shared/widgets/app_widgets.dart';
 import '../../../core/services/prefs_service.dart';
+import '../../../core/theme/app_breakpoints.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
+import '../../../shared/constants/app_colors.dart';
+import '../../../shared/widgets/app_widgets.dart';
 import '../../auth/services/auth_service.dart';
 import '../../vehicles/providers/vehiculo_provider.dart';
 import '../../vehicles/services/vehiculo_repository.dart';
 
-/// Panel principal — primera pantalla después del login.
+/// Panel principal — REFACTOR 2026-05-24.
 ///
-/// Muestra un grid 2×2 con accesos rápidos a las funciones del chofer.
-/// Si el usuario es ADMIN, aparece una cuarta tarjeta para entrar al
-/// panel de administración.
+/// **Antes:** grid 2×2 con tiles de colores neón (azul / naranja / verde /
+/// rojo), saludo "BIENVENIDO" + nombre en 32px, footer "Legajo: X · Rol: Y".
+///
+/// **Ahora:**
+/// - Saludo con hora del día + nombre + línea de estado real
+///   ("Todos tus papeles al día" / "ART vence en 23 días" / "Tenés 1
+///   trámite en revisión") leída del doc del legajo.
+/// - 2 tiles cuadradas (Mi Perfil / Mi Unidad) en sentence case, sin
+///   colores de categoría — solo iconos sobre surface3 chip.
+/// - "Mis Vencimientos" promovido a tile full-width con preview del
+///   próximo vencimiento + countdown ("ART · vence el 14-06 · faltan 23d").
+/// - Si admin, una 4ta tile full-width para "Panel de administración".
+/// - Sin all-caps gritado, sin letter-spacing exagerado.
 class MainPanel extends StatelessWidget {
   final String dni;
   final String nombre;
@@ -37,9 +49,7 @@ class MainPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      // El logo a la izquierda del AppBar ya muestra "Coopertrans Móvil";
-      // poner appName acá producía "Coopertrans Móvil | Coopertrans Móvil".
-      title: 'Menú Principal',
+      title: AppTexts.appName,
       actions: [
         IconButton(
           icon: const Icon(Icons.logout_outlined),
@@ -49,103 +59,70 @@ class MainPanel extends StatelessWidget {
       ],
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
+          // Mobile: full width. Tablet/desktop: cap para que el layout
+          // no se estire ilegible en monitores grandes.
+          constraints: BoxConstraints(
+            maxWidth: AppBreakpoints.contentMaxWidth(context),
+          ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 20),
-                _WelcomeHeader(dni: dni, nombre: nombre),
-                const SizedBox(height: 30),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (ctx, constraints) {
-                      // Botones del menú: 3 (chofer) o 4 (admin) en grid
-                      // 2x2. Calculamos el ratio según el alto disponible
-                      // para que las cards llenen la pantalla SIN scroll
-                      // interno. Antes era ratio 1.2 fijo → en mobile
-                      // chico el GridView scrolleaba internamente y
-                      // dejaba ver solo 2 botones.
-                      const cols = 2;
-                      const spacing = 15.0;
-                      // Cant filas reales = ceil(N / cols). Con 3 botones
-                      // y 2 cols, son 2 filas (la 2ª con 1 hueco). Con 4
-                      // botones, idem 2 filas pero llenas. Mismo cálculo.
-                      final n = _isAdmin ? 4 : 3;
-                      final filas = (n / cols).ceil();
-                      // Helper compartido — clamp 0.5..2.0 + fallback
-                      // 1.2 (botones más anchos que altos por diseño).
-                      final ratio = computeGridRatio(
-                        boxWidth: constraints.maxWidth,
-                        boxHeight: constraints.maxHeight,
-                        cols: cols,
-                        rows: filas,
-                        spacing: spacing,
-                        clampMin: 0.5,
-                        fallback: 1.2,
-                      );
-                      return GridView.count(
-                        crossAxisCount: cols,
-                        crossAxisSpacing: spacing,
-                        mainAxisSpacing: spacing,
-                        childAspectRatio: ratio,
-                        physics: const NeverScrollableScrollPhysics(),
-                        children: [
-                          _MenuButton(
-                            titulo: 'MI PERFIL',
-                            icono: Icons.person_pin_outlined,
-                            color: AppColors.accentBlue,
-                            onTap: () => Navigator.pushNamed(
-                              context,
-                              AppRoutes.perfil,
-                              arguments: dni,
-                            ),
-                          ),
-                          _MenuButton(
-                            titulo: 'MI UNIDAD',
-                            icono: Icons.local_shipping_outlined,
-                            color: AppColors.accentOrange,
-                            onTap: () => Navigator.pushNamed(
-                              context,
-                              AppRoutes.equipo,
-                              arguments: dni,
-                            ),
-                          ),
-                          _MenuButton(
-                            titulo: 'MIS VENCIMIENTOS',
-                            icono: Icons.assignment_late_outlined,
-                            color: AppColors.accentGreen,
-                            onTap: () => Navigator.pushNamed(
-                              context,
-                              AppRoutes.misVencimientos,
-                              arguments: dni,
-                            ),
-                          ),
-                          if (_isAdmin)
-                            _MenuButton(
-                              titulo: 'ADMINISTRACIÓN',
-                              icono: Icons.admin_panel_settings_sharp,
-                              color: AppColors.accentRed,
-                              onTap: () => Navigator.pushNamed(
-                                context,
-                                AppRoutes.adminPanel,
-                              ),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
+                const SizedBox(height: AppSpacing.lg),
+                _GreetingCard(dni: dni, nombre: nombre),
+                const SizedBox(height: AppSpacing.lg),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _TileSquare(
+                        titulo: 'Mi perfil',
+                        icono: Icons.person_outline,
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.perfil,
+                          arguments: dni,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: _TileSquare(
+                        titulo: 'Mi unidad',
+                        icono: Icons.local_shipping_outlined,
+                        onTap: () => Navigator.pushNamed(
+                          context,
+                          AppRoutes.equipo,
+                          arguments: dni,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: AppSpacing.md),
+                _TileVencimientos(dni: dni),
+                if (_isAdmin) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  _TileWide(
+                    titulo: 'Panel de administración',
+                    subtitulo: 'Personal, flota, vencimientos y más',
+                    icono: Icons.admin_panel_settings_outlined,
+                    onTap: () => Navigator.pushNamed(
+                      context,
+                      AppRoutes.adminPanel,
+                    ),
+                  ),
+                ],
+                const Spacer(),
                 Center(
                   child: Padding(
-                    padding: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.lg,
+                    ),
                     child: Text(
-                      'Legajo: $dni · Rol: $rol',
-                      style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 11,
-                        letterSpacing: 1,
+                      'Legajo $dni · ${rol.toLowerCase()}',
+                      style: AppType.label.copyWith(
+                        color: AppColors.textDisabled,
                       ),
                     ),
                   ),
@@ -160,95 +137,32 @@ class MainPanel extends StatelessWidget {
 
   Future<void> _logout(BuildContext context) async {
     final navigator = Navigator.of(context);
-
-    // Limpiamos el estado en memoria ANTES de hacer logout, para que el
-    // siguiente usuario que loguee no vea datos cacheados del anterior.
-    // - Repositorio: cierra los listeners de Firestore (deja de gastar lecturas)
-    // - Provider: limpia estados de loading/success/error y last sync
     try {
       context.read<VehiculoRepository>().clearStreamCache();
       context.read<VehiculoProvider>().clearAll();
     } catch (e) {
-      // Si por algún motivo Provider no está disponible, seguimos igual
       debugPrint('Aviso: no se pudo limpiar estado al logout: $e');
     }
-
     await _authService.logout();
     if (!context.mounted) return;
-    // El Future de pushNamedAndRemoveUntil se completa cuando la nueva
-    // ruta haga pop (nunca, en este caso). Lo descartamos explícito.
     unawaited(navigator.pushNamedAndRemoveUntil('/', (route) => false));
   }
 }
 
 // =============================================================================
-// HEADER DE BIENVENIDA
+// GREETING — saludo con hora + estado real
 // =============================================================================
 
-class _WelcomeHeader extends StatelessWidget {
+class _GreetingCard extends StatefulWidget {
   final String dni;
   final String nombre;
-  const _WelcomeHeader({required this.dni, required this.nombre});
+  const _GreetingCard({required this.dni, required this.nombre});
 
   @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.all(25),
-      margin: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.account_circle,
-                color: AppColors.accentGreen,
-                size: 18,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'BIENVENIDO',
-                style: TextStyle(
-                  color: Colors.white.withAlpha(150),
-                  letterSpacing: 2,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Saludo con prioridad APODO si está cargado, fallback al
-          // primer nombre del NOMBRE (segundo token, formato
-          // APELLIDO NOMBRE SEGUNDO_NOMBRE). Mismo patrón que el
-          // _Saludo del admin_panel_screen.
-          _NombreSaludo(dni: dni, nombreFull: nombre),
-        ],
-      ),
-    );
-  }
+  State<_GreetingCard> createState() => _GreetingCardState();
 }
 
-/// Resuelve el nombre a saludar leyendo `EMPLEADOS/{dni}.APODO` una sola
-/// vez y, si no está cargado, cae al primer nombre del campo NOMBRE.
-/// Renderiza solo el `Text` grande con el resultado.
-class _NombreSaludo extends StatefulWidget {
-  final String dni;
-  final String nombreFull;
-
-  const _NombreSaludo({required this.dni, required this.nombreFull});
-
-  @override
-  State<_NombreSaludo> createState() => _NombreSaludoState();
-}
-
-class _NombreSaludoState extends State<_NombreSaludo> {
-  /// Inicializado SÍNCRONO desde `PrefsService.apodo` (cacheado al login)
-  /// para evitar el flicker "Bienvenido Santiago" → "Bienvenido Santi"
-  /// que pasaba cuando esto era un Future a Firestore. Si la cache está
-  /// vacía (usuarios legacy logueados pre-fix 2026-05-07), el lookup
-  /// async se ejecuta una vez y cachea el resultado para próximas
-  /// sesiones.
+class _GreetingCardState extends State<_GreetingCard> {
   late String _apodoResuelto = PrefsService.apodo.trim();
 
   @override
@@ -259,9 +173,6 @@ class _NombreSaludoState extends State<_NombreSaludo> {
     }
   }
 
-  /// Solo se invoca para usuarios que iniciaron sesión antes de que
-  /// PrefsService cacheara el APODO. Una vez resuelto, queda guardado
-  /// y la próxima sesión arranca síncrona.
   Future<void> _resolverApodoLegacy() async {
     final dni = widget.dni.trim();
     if (dni.isEmpty) return;
@@ -272,17 +183,19 @@ class _NombreSaludoState extends State<_NombreSaludo> {
           .get();
       if (!mounted) return;
       final apodo = (snap.data()?['APODO'] ?? '').toString().trim();
-      if (apodo.isEmpty) return; // sin apodo cargado, dejamos el fallback
+      if (apodo.isEmpty) return;
       setState(() => _apodoResuelto = apodo);
-      // Cacheamos para próximas sesiones (sin await — no bloquea UI).
       unawaited(PrefsService.setApodo(apodo));
-    } catch (_) {
-      // Si Firestore falla, dejamos el fallback del primer nombre.
-    }
+    } catch (_) {}
   }
 
-  /// Para nombres "APELLIDO NOMBRE …", devuelve "Nombre" capitalizado.
-  /// Si el campo NOMBRE viene con una sola palabra, devuelve esa palabra.
+  String _saludoHora() {
+    final h = DateTime.now().hour;
+    if (h < 12) return 'Buen día';
+    if (h < 19) return 'Buenas tardes';
+    return 'Buenas noches';
+  }
+
   String _primerNombre(String full) {
     final partes = full.trim().split(RegExp(r'\s+'));
     if (partes.isEmpty) return '';
@@ -295,76 +208,416 @@ class _NombreSaludoState extends State<_NombreSaludo> {
   Widget build(BuildContext context) {
     final nombre = _apodoResuelto.isNotEmpty
         ? _apodoResuelto
-        : _primerNombre(widget.nombreFull);
-    return Text(
-      nombre,
-      style: const TextStyle(
-        fontSize: 32,
-        fontWeight: FontWeight.bold,
-        color: Colors.white,
+        : _primerNombre(widget.nombre);
+
+    return AppCard(
+      tier: 2,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(_saludoHora(), style: AppType.label),
+          const SizedBox(height: AppSpacing.xs),
+          Text(nombre, style: AppType.display),
+          const SizedBox(height: AppSpacing.md),
+          _LineaEstado(dni: widget.dni),
+        ],
       ),
     );
   }
 }
 
+/// Catálogo central de los papeles del chofer que viven en su legajo
+/// (`EMPLEADOS/{dni}`). Las keys son los nombres reales de Firestore
+/// (convención: `VENCIMIENTO_<sufijo>`). Mantener consistente con
+/// `AppDocsEmpleado.etiquetas` en `lib/core/constants/app_constants.dart`.
+const Map<String, String> _papelesChofer = {
+  'VENCIMIENTO_LICENCIA_DE_CONDUCIR': 'Licencia',
+  'VENCIMIENTO_PREOCUPACIONAL': 'Preocupacional',
+  'VENCIMIENTO_CURSO_DE_MANEJO_DEFENSIVO': 'Manejo Defensivo',
+};
+
+/// Catálogo central de los papeles de la EMPRESA EMPLEADORA del chofer
+/// — viven en `EMPRESAS_EMPLEADORAS/{cuit}` y son comunes a todos los
+/// empleados de esa razón social (Vecchi Ariel o Sucesión Vecchi Carlos).
+/// Migración 2026-05-08. La rule deja al chofer leer SOLO su propia
+/// empresa (matchea contra `EMPRESA_CUIT` denormalizado en su legajo).
+const Map<String, String> _papelesEmpresa = {
+  'VENCIMIENTO_POLIZA_ART': 'ART',
+  'VENCIMIENTO_FORMULARIO_931': 'F.931',
+  'VENCIMIENTO_SCVO': 'Seguro de Vida',
+  'VENCIMIENTO_LIBRE_DE_DEUDA_SINDICAL': 'Sindicato',
+};
+
+/// Lee el legajo del chofer + (opcional) los docs de su empresa
+/// empleadora y compone una línea humana con el estado:
+/// "Todos tus papeles al día" / "ART vence en 23 días" / "Tenés papeles
+/// vencidos" / "1 trámite en revisión".
+///
+/// Hace 2 streams anidados:
+///   1. EMPLEADOS/{dni}  → siempre (3 docs del chofer + REVISIONES_PENDIENTES).
+///   2. EMPRESAS_EMPLEADORAS/{cuit} → si el legajo tiene `EMPRESA_CUIT`
+///      denormalizado (verificado 2026-05-27: 67/67 empleados lo tienen).
+class _LineaEstado extends StatelessWidget {
+  final String dni;
+  const _LineaEstado({required this.dni});
+
+  @override
+  Widget build(BuildContext context) {
+    final empStream = FirebaseFirestore.instance
+        .collection(AppCollections.empleados)
+        .doc(dni)
+        .snapshots();
+
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: empStream,
+      builder: (ctx, empSnap) {
+        if (!empSnap.hasData) {
+          return _badge(
+            color: AppColors.textTertiary,
+            label: 'Cargando estado…',
+          );
+        }
+        final empData = empSnap.data?.data() ?? const <String, dynamic>{};
+        final cuit = (empData['EMPRESA_CUIT'] ?? '').toString().trim();
+
+        // Sin EMPRESA_CUIT → solo papeles del chofer (caso edge defensivo).
+        if (cuit.isEmpty) {
+          final estado = _resolverEstado(empData, const {});
+          return _badge(color: estado.color, label: estado.label);
+        }
+
+        // Con CUIT → segundo stream para los 4 docs de empresa.
+        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection(AppCollections.empresasEmpleadoras)
+              .doc(cuit)
+              .snapshots(),
+          builder: (ctx2, empresaSnap) {
+            // Si la lectura de empresa falla o todavía no llegó, mostramos
+            // estado solo con papeles del chofer — no bloqueamos la UI.
+            final empresaData = empresaSnap.hasError || !empresaSnap.hasData
+                ? const <String, dynamic>{}
+                : (empresaSnap.data?.data() ?? const <String, dynamic>{});
+            final estado = _resolverEstado(empData, empresaData);
+            return _badge(color: estado.color, label: estado.label);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _badge({required Color color, required String label}) {
+    return Row(
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Flexible(
+          child: Text(
+            label,
+            style: AppType.body.copyWith(color: AppColors.textSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Combina los docs de empleado y empresa en un (color, mensaje) único.
+  ///
+  /// **Reglas** (ordenadas por prioridad — la primera que matchea gana):
+  /// 1. Algún papel vencido → error rojo.
+  /// 2. Algún trámite en revisión pendiente → info azul.
+  /// 3. Algún papel vence ≤ 7d → warning con countdown del más cercano.
+  /// 4. Algún papel vence ≤ 30d → warning con "Próximo: X en N días".
+  /// 5. Todo bien → success verde.
+  ({Color color, String label}) _resolverEstado(
+    Map<String, dynamic> empleado,
+    Map<String, dynamic> empresa,
+  ) {
+    final hoy = DateTime.now();
+    DateTime? proximaFecha;
+    String? proximaEtiqueta;
+    int vencidos = 0;
+
+    void considerar(Map<String, dynamic> doc, Map<String, String> papeles) {
+      papeles.forEach((key, etiqueta) {
+        final fecha = _parseFecha(doc[key]);
+        if (fecha == null) return;
+        final dias = fecha.difference(hoy).inDays;
+        if (dias < 0) {
+          vencidos++;
+        } else if (proximaFecha == null || fecha.isBefore(proximaFecha!)) {
+          proximaFecha = fecha;
+          proximaEtiqueta = etiqueta;
+        }
+      });
+    }
+
+    considerar(empleado, _papelesChofer);
+    considerar(empresa, _papelesEmpresa);
+
+    if (vencidos > 0) {
+      return (
+        color: AppColors.error,
+        label: vencidos == 1
+            ? 'Tenés 1 papel vencido — entrá a verlos'
+            : 'Tenés $vencidos papeles vencidos',
+      );
+    }
+    final pendientesRev = empleado['REVISIONES_PENDIENTES'];
+    if (pendientesRev is num && pendientesRev > 0) {
+      return (
+        color: AppColors.info,
+        label: pendientesRev == 1
+            ? '1 trámite en revisión'
+            : '$pendientesRev trámites en revisión',
+      );
+    }
+    if (proximaFecha != null && proximaEtiqueta != null) {
+      final dias = proximaFecha!.difference(hoy).inDays;
+      if (dias <= 7) {
+        return (
+          color: AppColors.warning,
+          label:
+              'Vence $proximaEtiqueta en $dias ${dias == 1 ? "día" : "días"}',
+        );
+      }
+      if (dias <= 30) {
+        return (
+          color: AppColors.warning,
+          label: 'Próximo: $proximaEtiqueta en $dias días',
+        );
+      }
+    }
+    return (
+      color: AppColors.success,
+      label: 'Todos tus papeles al día',
+    );
+  }
+
+  DateTime? _parseFecha(dynamic raw) {
+    if (raw is Timestamp) return raw.toDate();
+    if (raw is String && raw.isNotEmpty) {
+      return DateTime.tryParse(raw);
+    }
+    return null;
+  }
+}
+
 // =============================================================================
-// BOTÓN DEL MENÚ (cuadradito grande)
+// TILES
 // =============================================================================
 
-class _MenuButton extends StatelessWidget {
+/// Tile cuadrada — icono grande, label sentence-case. Sin colores de
+/// categoría: el icono ya hace la identificación.
+class _TileSquare extends StatelessWidget {
   final String titulo;
   final IconData icono;
-  final Color color;
   final VoidCallback onTap;
-
-  const _MenuButton({
+  const _TileSquare({
     required this.titulo,
     required this.icono,
-    required this.color,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withAlpha(15)),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(22),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withAlpha(25),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icono, color: color, size: 30),
+    return AppCard(
+      tier: 2,
+      onTap: onTap,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: SizedBox(
+        height: 120,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.surface3,
+                borderRadius: BorderRadius.circular(AppRadius.md),
               ),
-              const SizedBox(height: 12),
-              Text(
-                titulo,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
+              child: Icon(icono, color: AppColors.textPrimary, size: 22),
+            ),
+            Text(
+              titulo,
+              style: AppType.heading,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       ),
     );
+  }
+}
+
+/// Tile horizontal — icono a la izquierda, título + subtítulo, flecha.
+class _TileWide extends StatelessWidget {
+  final String titulo;
+  final String? subtitulo;
+  final IconData icono;
+  final VoidCallback onTap;
+
+  const _TileWide({
+    required this.titulo,
+    required this.icono,
+    required this.onTap,
+    this.subtitulo,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      tier: 2,
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.lg,
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: AppColors.surface3,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: Icon(
+              icono,
+              color: AppColors.textPrimary,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(titulo, style: AppType.heading),
+                if (subtitulo != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitulo!,
+                    style: AppType.label,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.arrow_forward_ios,
+            color: AppColors.textHint,
+            size: 14,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tile especial de Vencimientos — full-width con preview del próximo.
+/// Es la razón por la que la mayoría de choferes abren la app.
+///
+/// Mismo patrón que [_LineaEstado]: streams anidados de EMPLEADOS +
+/// EMPRESAS_EMPLEADORAS para cubrir tanto los 3 papeles propios del
+/// chofer como los 4 de su empresa empleadora.
+class _TileVencimientos extends StatelessWidget {
+  final String dni;
+  const _TileVencimientos({required this.dni});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection(AppCollections.empleados)
+          .doc(dni)
+          .snapshots(),
+      builder: (ctx, empSnap) {
+        final empData = empSnap.data?.data() ?? const <String, dynamic>{};
+        final cuit = (empData['EMPRESA_CUIT'] ?? '').toString().trim();
+        if (cuit.isEmpty) {
+          final subtitulo = _resumirProximos(empData, const {});
+          return _tile(ctx, subtitulo);
+        }
+        return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection(AppCollections.empresasEmpleadoras)
+              .doc(cuit)
+              .snapshots(),
+          builder: (ctx2, empresaSnap) {
+            final empresaData = empresaSnap.hasError || !empresaSnap.hasData
+                ? const <String, dynamic>{}
+                : (empresaSnap.data?.data() ?? const <String, dynamic>{});
+            final subtitulo = _resumirProximos(empData, empresaData);
+            return _tile(ctx, subtitulo);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _tile(BuildContext ctx, String subtitulo) => _TileWide(
+        titulo: 'Mis vencimientos',
+        subtitulo: subtitulo,
+        icono: Icons.event_note_outlined,
+        onTap: () => Navigator.pushNamed(
+          ctx,
+          AppRoutes.misVencimientos,
+          arguments: dni,
+        ),
+      );
+
+  String _resumirProximos(
+    Map<String, dynamic> empleado,
+    Map<String, dynamic> empresa,
+  ) {
+    final hoy = DateTime.now();
+    DateTime? proxFecha;
+    String? proxLabel;
+    int vencidos = 0;
+    int en7 = 0;
+
+    void considerar(Map<String, dynamic> doc, Map<String, String> papeles) {
+      papeles.forEach((k, label) {
+        final raw = doc[k];
+        DateTime? fecha;
+        if (raw is Timestamp) fecha = raw.toDate();
+        if (raw is String && raw.isNotEmpty) fecha = DateTime.tryParse(raw);
+        if (fecha == null) return;
+        final dias = fecha.difference(hoy).inDays;
+        if (dias < 0) {
+          vencidos++;
+        } else {
+          if (dias <= 7) en7++;
+          if (proxFecha == null || fecha.isBefore(proxFecha!)) {
+            proxFecha = fecha;
+            proxLabel = label;
+          }
+        }
+      });
+    }
+
+    considerar(empleado, _papelesChofer);
+    considerar(empresa, _papelesEmpresa);
+
+    if (vencidos > 0) {
+      return 'Tenés $vencidos vencido${vencidos == 1 ? "" : "s"} — revisá';
+    }
+    if (en7 > 0) return '$en7 ${en7 == 1 ? "vence" : "vencen"} esta semana';
+    if (proxFecha != null && proxLabel != null) {
+      final dias = proxFecha!.difference(hoy).inDays;
+      return 'Próximo: $proxLabel en $dias días';
+    }
+    return 'Todo al día';
   }
 }
