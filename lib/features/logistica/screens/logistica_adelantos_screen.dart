@@ -291,7 +291,7 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                   : AdelantosService.streamAdelantos(),
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const AppSkeletonList(count: 8);
                 }
                 if (snap.hasError) {
                   return AppEmptyState(

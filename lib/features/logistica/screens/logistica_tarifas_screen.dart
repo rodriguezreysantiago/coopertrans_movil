@@ -80,7 +80,7 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
                   ),
                   builder: (ctx, snap) {
                     if (snap.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
+                      return const AppSkeletonList(count: 6, conAvatar: false);
                     }
                     if (snap.hasError) {
                       return AppEmptyState(

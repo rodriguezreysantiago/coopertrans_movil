@@ -116,7 +116,7 @@ class _LogisticaViajesListaScreenState
                 ),
                 builder: (ctx, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const AppSkeletonList(count: 6);
                   }
                   if (snap.hasError) {
                     return Center(

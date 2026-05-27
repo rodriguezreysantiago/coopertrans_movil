@@ -111,7 +111,7 @@ class _LogisticaUbicacionesScreenState
               stream: LogisticaService.streamUbicaciones(),
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const AppSkeletonList(count: 8, conAvatar: false);
                 }
                 if (snap.hasError) {
                   return AppEmptyState(

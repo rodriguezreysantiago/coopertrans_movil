@@ -135,7 +135,7 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
               future: _future,
               builder: (ctx, snap) {
                 if (snap.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const AppSkeletonList(count: 8);
                 }
                 if (snap.hasError) {
                   return _MensajeCentro(

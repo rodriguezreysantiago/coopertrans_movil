@@ -82,7 +82,7 @@ class _EnProcesoTab extends StatelessWidget {
           );
         }
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const AppSkeletonList(count: 6, conAvatar: false);
         }
         final recapados = snap.data ?? const <CubiertaRecapado>[];
         if (recapados.isEmpty) {
@@ -135,7 +135,7 @@ class _HistoricoTab extends StatelessWidget {
           );
         }
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
+          return const AppSkeletonList(count: 8, conAvatar: false);
         }
         final recs = snap.data ?? const <CubiertaRecapado>[];
         if (recs.isEmpty) {

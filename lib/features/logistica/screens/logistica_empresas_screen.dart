@@ -124,7 +124,7 @@ class _ListaEmpresasState extends State<_ListaEmpresas> {
                 stream: LogisticaService.streamEmpresas(tipo: widget.tipo),
                 builder: (ctx, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const AppSkeletonList(count: 8);
                   }
                   // Mostrar error real (típico: "requires an index" si falta
                   // el índice compuesto en firestore.indexes.json). Sin esto

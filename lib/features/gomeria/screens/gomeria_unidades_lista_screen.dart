@@ -84,7 +84,7 @@ class _GomeriaUnidadesListaScreenState
                   );
                 }
                 if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const AppSkeletonList(count: 10, conAvatar: false);
                 }
                 final docs = snap.data?.docs ?? const [];
                 final filtrados = docs.toList()

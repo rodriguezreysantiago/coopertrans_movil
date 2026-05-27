@@ -87,7 +87,7 @@ class _GomeriaStockScreenState extends State<GomeriaStockScreen> {
                   );
                 }
                 if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const AppSkeletonList(count: 8, conAvatar: false);
                 }
                 final cubiertas = (snap.data ?? const <Cubierta>[]).where(_matchBusqueda).toList()
                   ..sort((a, b) => a.codigo.compareTo(b.codigo));

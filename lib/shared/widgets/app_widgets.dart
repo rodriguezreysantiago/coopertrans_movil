@@ -7,6 +7,7 @@
 /// y vas a tener disponible:
 /// AppScaffold, AppCard, AppListPage, AppDetailSheet,
 /// AppEmptyState, AppLoadingState, AppErrorState,
+/// AppSkeleton, AppSkeletonList,
 /// VencimientoBadge, AppFileThumbnail, PreviewScreen.
 library;
 
@@ -18,6 +19,7 @@ export 'app_shell_context.dart';
 export 'app_file_thumbnail.dart';
 export 'app_list_page.dart';
 export 'app_scaffold.dart';
+export 'app_skeleton.dart';
 export 'app_states.dart';
 export 'command_palette.dart';
 export 'coopertrans_logo.dart';
