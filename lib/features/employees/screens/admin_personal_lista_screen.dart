@@ -91,7 +91,7 @@ class _AdminPersonalListaScreenState
                   : Icons.shield_outlined,
               color: _mostrarExcluidos
                   ? AppColors.warning
-                  : Colors.white70,
+                  : AppColors.textSecondary,
             ),
             onPressed: () =>
                 setState(() => _mostrarExcluidos = !_mostrarExcluidos),
@@ -105,10 +105,10 @@ class _AdminPersonalListaScreenState
           ),
         ),
         // El tooltip ayuda en desktop (hover) y a screen readers — el
-        // label "NUEVO" del FAB es ambiguo sin contexto fuera del título.
+        // label "Nuevo" del FAB es ambiguo sin contexto fuera del título.
         tooltip: 'Agregar nuevo chofer',
         icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('NUEVO'),
+        label: const Text('Nuevo'),
       ),
       body: Column(
         children: [
@@ -118,7 +118,7 @@ class _AdminPersonalListaScreenState
           // Antes vivía como icono pequeño en el AppBar, ahora es un
           // FilterChip explícito con etiqueta y color.
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
             child: Row(
               children: [
                 FilterChip(
@@ -134,8 +134,8 @@ class _AdminPersonalListaScreenState
                         : Icons.visibility_off,
                     size: 16,
                     color: _mostrarInactivos
-                        ? Colors.white
-                        : Colors.white70,
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
                   ),
                 ),
               ],
