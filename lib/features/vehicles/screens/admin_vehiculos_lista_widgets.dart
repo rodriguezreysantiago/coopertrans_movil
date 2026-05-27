@@ -101,12 +101,12 @@ class _VehiculoCard extends StatelessWidget {
               // para tractor, enganche para acoplados).
               CircleAvatar(
                 radius: 24,
-                backgroundColor: Colors.white12,
+                backgroundColor: AppColors.surface3,
                 backgroundImage: tieneFoto ? NetworkImage(urlFoto) : null,
                 child: !tieneFoto
                     ? Icon(
                         esTractor ? Icons.local_shipping : Icons.rv_hookup,
-                        color: Colors.white54,
+                        color: AppColors.textTertiary,
                         size: 22,
                       )
                     : null,
@@ -150,18 +150,18 @@ class _VehiculoCard extends StatelessWidget {
                     // Subtítulo: marca/modelo + km
                     Row(
                       children: [
-                        Icon(Icons.local_shipping,
-                            size: 12, color: Colors.white.withAlpha(120)),
+                        const Icon(Icons.local_shipping,
+                            size: 12, color: AppColors.textHint),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             '$marca $modelo',
-                            style: AppType.label.copyWith(color: Colors.white70),
+                            style: AppType.label.copyWith(color: AppColors.textSecondary),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        Icon(Icons.speed,
-                            size: 12, color: Colors.white.withAlpha(120)),
+                        const Icon(Icons.speed,
+                            size: 12, color: AppColors.textHint),
                         const SizedBox(width: AppSpacing.xs),
                         Text(
                           '${AppFormatters.formatearKilometraje(km)} km',
@@ -270,7 +270,7 @@ class _AccionesVehiculoMenu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, color: Colors.white70, size: 20),
+      icon: const Icon(Icons.more_vert, color: AppColors.textSecondary, size: 20),
       tooltip: 'Más acciones',
       onSelected: (val) async {
         switch (val) {
@@ -469,14 +469,14 @@ class _DetalleVehiculo extends StatelessWidget {
                         .ifEmpty('SIN DATOS'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: AppType.heading,
                   ),
                   if (anioInt > 0)
                     Text(
                       'Año $anioInt',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.label.copyWith(color: Colors.white54),
+                      style: AppType.label.copyWith(color: AppColors.textTertiary),
                     ),
                 ],
               ),
@@ -568,7 +568,7 @@ class _DetalleVehiculo extends StatelessWidget {
               Text(
                 _formatTimestamp(data['ULTIMA_SINCRO']),
                 style:
-                    AppType.label.copyWith(color: Colors.white70),
+                    AppType.label.copyWith(color: AppColors.textSecondary),
               ),
               const SizedBox(width: AppSpacing.sm),
               if ((data['SINCRO_TIPO'] ?? '') != '')
@@ -699,13 +699,13 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           Text(
             'Fecha: $bajaEnFmt',
-            style: AppType.label.copyWith(color: Colors.white70),
+            style: AppType.label.copyWith(color: AppColors.textSecondary),
           ),
           if (motivo.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Motivo: $motivo',
-              style: AppType.label.copyWith(color: Colors.white70),
+              style: AppType.label.copyWith(color: AppColors.textSecondary),
             ),
           ],
           const SizedBox(height: AppSpacing.md),
@@ -750,7 +750,7 @@ class _EstadoBadge extends StatelessWidget {
       case 'INACTIVO':
         return AppColors.error;
       default:
-        return Colors.white54;
+        return AppColors.textTertiary;
     }
   }
 
@@ -786,11 +786,11 @@ class _MiniVencimiento extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.event_note, size: 12, color: Colors.white38),
+        const Icon(Icons.event_note, size: 12, color: AppColors.textHint),
         const SizedBox(width: AppSpacing.xs),
         Text(label,
             style:
-                AppType.eyebrow.copyWith(color: Colors.white54)),
+                AppType.eyebrow.copyWith(color: AppColors.textTertiary)),
         const SizedBox(width: 6),
         VencimientoBadge(fecha: fecha, compact: true),
       ],
@@ -1013,7 +1013,7 @@ class _PanelTelemetria extends StatelessWidget {
                 const Icon(Icons.speed, color: AppColors.success),
                 const SizedBox(width: 10),
                 Text('Kilometraje',
-                    style: AppType.label.copyWith(color: Colors.white60)),
+                    style: AppType.label.copyWith(color: AppColors.textSecondary)),
                 const Spacer(),
                 Text(
                   '${AppFormatters.formatearKilometraje(km)} km',
@@ -1055,12 +1055,12 @@ class _CeldaTelemetria extends StatelessWidget {
             children: [
               TextSpan(
                 text: valor,
-                style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                style: AppType.heading,
               ),
               TextSpan(
                 text: ' $unidad',
                 style: const TextStyle(
-                  color: Colors.white54,
+                  color: AppColors.textTertiary,
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
                 ),
@@ -1072,7 +1072,7 @@ class _CeldaTelemetria extends StatelessWidget {
         Text(
           etiqueta,
           style: const TextStyle(
-            color: Colors.white38,
+            color: AppColors.textHint,
             fontSize: 9,
             fontWeight: FontWeight.bold,
             letterSpacing: 1,
@@ -1120,7 +1120,7 @@ class _CeldaPorcentaje extends StatelessWidget {
             borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
               value: pct / 100,
-              backgroundColor: Colors.white12,
+              backgroundColor: AppColors.surface3,
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
@@ -1129,7 +1129,7 @@ class _CeldaPorcentaje extends StatelessWidget {
         Text(
           etiqueta,
           style: const TextStyle(
-            color: Colors.white38,
+            color: AppColors.textHint,
             fontSize: 9,
             fontWeight: FontWeight.bold,
             letterSpacing: 1,
@@ -1190,7 +1190,7 @@ class _VencimientoRow extends StatelessWidget {
                 etiqueta,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppType.eyebrow.copyWith(color: Colors.white54, fontWeight: FontWeight.bold),
+                style: AppType.eyebrow.copyWith(color: AppColors.textTertiary, fontWeight: FontWeight.bold),
               ),
             ),
             Expanded(
@@ -1198,13 +1198,13 @@ class _VencimientoRow extends StatelessWidget {
                 tieneFecha ? AppFormatters.formatearFecha(fecha) : '—',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppType.label.copyWith(color: Colors.white),
+                style: AppType.label.copyWith(color: AppColors.textPrimary),
               ),
             ),
             VencimientoBadge(fecha: fecha),
             const SizedBox(width: AppSpacing.xs),
             const Icon(Icons.edit_outlined,
-                size: 14, color: Colors.white38),
+                size: 14, color: AppColors.textHint),
           ],
         ),
       ),
@@ -1236,7 +1236,7 @@ class _DatoEditableEmpresa extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(
         'EMPRESA',
-        style: AppType.eyebrow.copyWith(color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: AppColors.textHint),
       ),
       subtitle: Text(
         valor.isEmpty ? '—' : valor,
@@ -1244,7 +1244,7 @@ class _DatoEditableEmpresa extends StatelessWidget {
         // se cortaba feo en mobile. 2 líneas + ellipsis para prolijidad.
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+        style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
       ),
       trailing: const Icon(Icons.business_center,
           color: AppColors.success, size: 20),
@@ -1269,12 +1269,12 @@ class _DatoEditableEmpresa extends StatelessWidget {
                   esActual
                       ? Icons.radio_button_checked
                       : Icons.radio_button_off,
-                  color: esActual ? AppColors.success : Colors.white38,
+                  color: esActual ? AppColors.success : AppColors.textHint,
                   size: 18,
                 ),
                 title: Text(
                   e,
-                  style: AppType.label.copyWith(color: Colors.white),
+                  style: AppType.label.copyWith(color: AppColors.textPrimary),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -1305,11 +1305,11 @@ class _DatoEditableAnio extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(
         'AÑO',
-        style: AppType.eyebrow.copyWith(color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: AppColors.textHint),
       ),
       subtitle: Text(
         valorActual?.toString() ?? '—',
-        style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+        style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
       ),
       trailing: const Icon(Icons.calendar_view_month,
           color: AppColors.success, size: 20),
@@ -1339,12 +1339,12 @@ class _DatoEditableAnio extends StatelessWidget {
                   esActual
                       ? Icons.radio_button_checked
                       : Icons.radio_button_off,
-                  color: esActual ? AppColors.success : Colors.white38,
+                  color: esActual ? AppColors.success : AppColors.textHint,
                   size: 18,
                 ),
                 title: Text(
                   a.toString(),
-                  style: AppType.body.copyWith(color: Colors.white),
+                  style: AppType.body.copyWith(color: AppColors.textPrimary),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -1388,7 +1388,7 @@ class _ResumenService extends StatelessWidget {
     }
 
     final colorRestantes = kmRestantes == null
-        ? Colors.white60
+        ? AppColors.textSecondary
         : kmRestantes < 0
             ? AppColors.error
             : kmRestantes < 2000
@@ -1405,12 +1405,12 @@ class _ResumenService extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, size: 16, color: Colors.white38),
+                const Icon(Icons.info_outline, size: 16, color: AppColors.textHint),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'Sin último service cargado.',
-                    style: AppType.label.copyWith(color: Colors.white60),
+                    style: AppType.label.copyWith(color: AppColors.textSecondary),
                   ),
                 ),
               ],
@@ -1422,11 +1422,11 @@ class _ResumenService extends StatelessWidget {
             child: Row(
               children: [
                 const Icon(Icons.event_available,
-                    size: 16, color: Colors.white54),
+                    size: 16, color: AppColors.textTertiary),
                 const SizedBox(width: 6),
                 Text(
                   'Último service: ${AppFormatters.formatearFecha(fechaRaw)}',
-                  style: AppType.label.copyWith(color: Colors.white70),
+                  style: AppType.label.copyWith(color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -1437,11 +1437,11 @@ class _ResumenService extends StatelessWidget {
             child: Row(
               children: [
                 const Icon(Icons.speed_outlined,
-                    size: 16, color: Colors.white54),
+                    size: 16, color: AppColors.textTertiary),
                 const SizedBox(width: 6),
                 Text(
                   'KM al hacerlo: ${AppFormatters.formatearMiles(ultimoKm)}',
-                  style: AppType.label.copyWith(color: Colors.white70),
+                  style: AppType.label.copyWith(color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -1477,14 +1477,14 @@ class _ResumenService extends StatelessWidget {
           child: Row(
             children: [
               const Icon(Icons.cloud_done_outlined,
-                  size: 14, color: Colors.white38),
+                  size: 14, color: AppColors.textHint),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   sinDatos
                       ? 'Se actualiza solo desde Volvo Connect.'
                       : 'Dato automático desde Volvo Connect.',
-                  style: AppType.eyebrow.copyWith(color: Colors.white38, fontStyle: FontStyle.italic),
+                  style: AppType.eyebrow.copyWith(color: AppColors.textHint, fontStyle: FontStyle.italic),
                 ),
               ),
             ],
