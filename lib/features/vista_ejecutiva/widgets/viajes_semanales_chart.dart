@@ -31,7 +31,7 @@ class ViajesSemanalesChart extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.local_shipping,
-                  color: AppColors.accentPurple, size: 18),
+                  color: AppColors.brand, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -91,7 +91,7 @@ class ViajesSemanalesChart extends StatelessWidget {
                 BarChartRodData(
                   toY: puntos[i].valor,
                   color: puntos[i].valor > 0
-                      ? AppColors.accentPurple
+                      ? AppColors.brand
                       : Colors.white12,
                   width: 14,
                   borderRadius: const BorderRadius.vertical(

@@ -509,7 +509,7 @@ class _Mapa extends StatelessWidget {
             builder: (ctx, markers) => Container(
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppColors.accentPurple,
+                color: AppColors.brand,
               ),
               child: Center(
                 child: Text(

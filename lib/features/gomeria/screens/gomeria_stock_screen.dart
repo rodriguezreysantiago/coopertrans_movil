@@ -227,7 +227,7 @@ class _FiltrosEstado extends StatelessWidget {
               label: 'TODAS',
               seleccionado: seleccionado == null,
               onTap: () => onChanged(null),
-              color: AppColors.accentPurple,
+              color: AppColors.brand,
             ),
             const SizedBox(width: 6),
             _ChipFiltro(

@@ -30,7 +30,7 @@ class AdminGomeriaMarcasModelosScreen extends StatelessWidget {
             Tab(text: 'MARCAS'),
             Tab(text: 'MODELOS'),
           ],
-          indicatorColor: AppColors.accentPurple,
+          indicatorColor: AppColors.brand,
         ),
         body: TabBarView(
           children: [
@@ -89,7 +89,7 @@ class _MarcasTab extends StatelessWidget {
                     children: [
                       Icon(
                         Icons.label_outline,
-                        color: m.activo ? AppColors.accentPurple : Colors.grey,
+                        color: m.activo ? AppColors.brand : Colors.grey,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -107,7 +107,7 @@ class _MarcasTab extends StatelessWidget {
                       Switch(
                         value: m.activo,
                         onChanged: (v) => col.doc(m.id).update({'activo': v}),
-                        activeTrackColor: AppColors.accentPurple,
+                        activeTrackColor: AppColors.brand,
                       ),
                     ],
                   ),
@@ -121,7 +121,7 @@ class _MarcasTab extends StatelessWidget {
           bottom: 16,
           child: FloatingActionButton.extended(
             heroTag: 'fab_marca',
-            backgroundColor: AppColors.accentPurple,
+            backgroundColor: AppColors.brand,
             onPressed: () => _abrirAltaMarca(context),
             icon: const Icon(Icons.add),
             label: const Text('NUEVA MARCA'),
@@ -222,7 +222,7 @@ class _ModelosTab extends StatelessWidget {
                           Icon(
                             Icons.tire_repair,
                             color: m.activo
-                                ? AppColors.accentPurple
+                                ? AppColors.brand
                                 : Colors.grey,
                           ),
                           const SizedBox(width: 12),
@@ -240,7 +240,7 @@ class _ModelosTab extends StatelessWidget {
                             value: m.activo,
                             onChanged: (v) =>
                                 colModelos.doc(m.id).update({'activo': v}),
-                            activeTrackColor: AppColors.accentPurple,
+                            activeTrackColor: AppColors.brand,
                           ),
                         ],
                       ),
@@ -280,7 +280,7 @@ class _ModelosTab extends StatelessWidget {
           bottom: 16,
           child: FloatingActionButton.extended(
             heroTag: 'fab_modelo',
-            backgroundColor: AppColors.accentPurple,
+            backgroundColor: AppColors.brand,
             onPressed: () => _abrirAltaModelo(context),
             icon: const Icon(Icons.add),
             label: const Text('NUEVO MODELO'),
@@ -353,7 +353,7 @@ class _EditarModeloSheet extends StatelessWidget {
             child: Row(
               children: [
                 const Icon(Icons.tire_repair,
-                    color: AppColors.accentPurple),
+                    color: AppColors.brand),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -429,7 +429,7 @@ class _EditarModeloSheet extends StatelessWidget {
                   title: const Text('Recapable',
                       style: TextStyle(color: Colors.white)),
                   onChanged: (v) => setCampo('recapable', v),
-                  activeTrackColor: AppColors.accentPurple,
+                  activeTrackColor: AppColors.brand,
                 ),
               ],
             ),
@@ -619,7 +619,7 @@ class _EditarModeloSheet extends StatelessWidget {
                   child: Text(e.value,
                       style: TextStyle(
                         color: e.key == valorActual
-                            ? AppColors.accentPurple
+                            ? AppColors.brand
                             : Colors.white,
                       )),
                   onPressed: () => Navigator.pop(ctx, e.key),
@@ -790,7 +790,7 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
                 style: TextStyle(fontSize: 11, color: Colors.white60),
               ),
               onChanged: (v) => setState(() => _recapable = v),
-              activeTrackColor: AppColors.accentPurple,
+              activeTrackColor: AppColors.brand,
             ),
           ],
         ),

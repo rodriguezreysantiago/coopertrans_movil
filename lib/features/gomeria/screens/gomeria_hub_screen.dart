@@ -104,7 +104,7 @@ class GomeriaHubScreen extends StatelessWidget {
                         titulo: 'MARCAS Y MODELOS',
                         subtitulo: 'Catálogo (ABM)',
                         icono: Icons.category_outlined,
-                        color: AppColors.accentPurple,
+                        color: AppColors.brand,
                         ruta: AppRoutes.adminGomeriaMarcasModelos,
                       ),
                     ],

@@ -570,11 +570,11 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                   TextButton.icon(
                     onPressed: _operando ? null : _abrirRegistroControl,
                     icon: const Icon(Icons.fact_check_outlined,
-                        color: AppColors.accentPurple, size: 18),
+                        color: AppColors.brand, size: 18),
                     label: const Text(
                       'REGISTRAR CONTROL (presión / banda)',
                       style: TextStyle(
-                          color: AppColors.accentPurple, fontSize: 11),
+                          color: AppColors.brand, fontSize: 11),
                     ),
                   ),
                   const SizedBox(height: 4),
