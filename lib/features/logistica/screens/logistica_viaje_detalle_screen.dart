@@ -43,7 +43,7 @@ class LogisticaViajeDetalleScreen extends StatelessWidget {
             );
           }
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const AppSkeletonList(count: 5, conAvatar: false);
           }
           final v = snap.data;
           if (v == null) {

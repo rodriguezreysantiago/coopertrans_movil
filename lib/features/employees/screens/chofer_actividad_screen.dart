@@ -66,10 +66,7 @@ class _ChoferActividadScreenState extends State<ChoferActividadScreen> {
               future: _futuro,
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(
-                        color: AppColors.success),
-                  );
+                  return const AppSkeletonList(count: 5);
                 }
                 if (snap.hasError) {
                   return AppErrorState(

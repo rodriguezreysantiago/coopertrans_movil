@@ -42,7 +42,7 @@ class GomeriaCubiertaDetalleScreen extends StatelessWidget {
             );
           }
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const AppSkeletonList(count: 4, conAvatar: false);
           }
           final c = snap.data;
           if (c == null) {

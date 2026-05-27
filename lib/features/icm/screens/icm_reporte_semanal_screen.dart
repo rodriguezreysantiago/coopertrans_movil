@@ -103,7 +103,7 @@ class _IcmReporteSemanalScreenState extends State<IcmReporteSemanalScreen> {
               future: _future,
               builder: (ctx, snap) {
                 if (snap.connectionState != ConnectionState.done) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const AppSkeletonList(count: 5);
                 }
                 if (snap.hasError) {
                   return Center(

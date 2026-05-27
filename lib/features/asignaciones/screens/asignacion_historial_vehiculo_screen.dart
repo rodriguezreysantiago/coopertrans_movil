@@ -31,9 +31,7 @@ class AsignacionHistorialVehiculoScreen extends StatelessWidget {
         stream: servicio.streamHistorialPorVehiculo(patente),
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppColors.success),
-            );
+            return const AppSkeletonList(count: 6, conAvatar: false);
           }
           if (snap.hasError) {
             return Center(

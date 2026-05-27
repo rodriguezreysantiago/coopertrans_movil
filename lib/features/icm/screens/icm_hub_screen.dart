@@ -92,10 +92,7 @@ class _IcmHubScreenState extends State<IcmHubScreen> {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                          color: AppColors.success),
-                    ),
+                    child: AppSkeleton.box(height: 180),
                   );
                 }
                 if (snap.hasError) {

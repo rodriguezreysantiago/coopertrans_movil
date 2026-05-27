@@ -334,9 +334,7 @@ class _SeccionesEjecutivas extends StatelessWidget {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.xxl),
-            child: Center(
-              child: CircularProgressIndicator(color: AppColors.brand),
-            ),
+            child: AppSkeletonList(count: 3, conAvatar: false),
           );
         }
         if (snap.hasError) {

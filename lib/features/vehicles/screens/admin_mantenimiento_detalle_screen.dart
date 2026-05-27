@@ -437,10 +437,9 @@ class _SeccionKmRecorridosState extends State<_SeccionKmRecorridos> {
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const SizedBox(
-                height: 120,
-                child: Center(
-                    child: CircularProgressIndicator(
-                        color: AppColors.brandSoft)));
+              height: 120,
+              child: AppSkeleton.box(height: 120),
+            );
           }
           if (snap.hasError || snap.data == null) {
             return Column(
