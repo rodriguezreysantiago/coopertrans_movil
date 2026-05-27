@@ -85,7 +85,7 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
       builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: AppColors.success),
+              child: CircularProgressIndicator(color: AppColors.brand),
             );
           }
           if (snap.hasError) {
@@ -225,11 +225,11 @@ class _Toolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withAlpha(80),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
+      decoration: const BoxDecoration(
+        color: AppColors.surface0,
         border: Border(
-          bottom: BorderSide(color: Colors.white.withAlpha(15)),
+          bottom: BorderSide(color: AppColors.borderSubtle),
         ),
       ),
       child: Column(
@@ -255,7 +255,7 @@ class _Toolbar extends StatelessWidget {
                 _ContadorMini(
                     label: 'APAGADOS',
                     valor: '$conIgnicionOff',
-                    color: Colors.white54),
+                    color: AppColors.textTertiary),
                 const SizedBox(width: AppSpacing.md),
                 _ContadorMini(
                     label: '> 1H',
@@ -267,7 +267,7 @@ class _Toolbar extends StatelessWidget {
                     valor: '$drifts',
                     color: drifts > 0
                         ? AppColors.warning
-                        : Colors.white38),
+                        : AppColors.textDisabled),
               ],
             ),
           ),
@@ -276,10 +276,10 @@ class _Toolbar extends StatelessWidget {
             alignment: Alignment.centerRight,
             child: Text(
               'Mostrando $visibles',
-              style: AppType.eyebrow.copyWith(color: Colors.white60, fontWeight: FontWeight.w600),
+              style: AppType.eyebrow,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: AppSpacing.xs),
           SizedBox(
             height: 30,
             child: ListView(
@@ -346,12 +346,7 @@ class _ContadorMini extends StatelessWidget {
       children: [
         Text(
           label,
-          style: TextStyle(
-            color: color.withAlpha(180),
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.4,
-          ),
+          style: AppType.eyebrow.copyWith(color: color.withAlpha(180)),
         ),
         Text(
           valor,
@@ -375,17 +370,17 @@ class _ChipFiltro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.success : Colors.white38;
+    final color = selected ? AppColors.brand : AppColors.textDisabled;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.success.withAlpha(25)
-              : Colors.white.withAlpha(8),
-          borderRadius: BorderRadius.circular(14),
+              ? AppColors.brand.withAlpha(25)
+              : AppColors.borderSubtle,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           border: Border.all(color: color.withAlpha(80)),
         ),
         alignment: Alignment.center,
@@ -420,16 +415,15 @@ class _ToggleChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = activo ? colorActivo : Colors.white54;
+    final color = activo ? colorActivo : AppColors.textTertiary;
     return InkWell(
       onTap: () => onChange(!activo),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
         decoration: BoxDecoration(
-          color:
-              activo ? colorActivo.withAlpha(35) : Colors.white.withAlpha(8),
-          borderRadius: BorderRadius.circular(14),
+          color: activo ? colorActivo.withAlpha(35) : AppColors.borderSubtle,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           border: Border.all(color: color.withAlpha(120)),
         ),
         child: Row(
@@ -508,10 +502,7 @@ class _Mapa extends StatelessWidget {
               child: Center(
                 child: Text(
                   markers.length.toString(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.heading.copyWith(color: AppColors.textPrimary),
                 ),
               ),
             ),
@@ -555,20 +546,20 @@ class _Mapa extends StatelessWidget {
             // Borde más grueso/contrastado si hay drift, para que salte
             // a la vista incluso cuando hay muchos markers cerca.
             border: Border.all(
-              color: tieneDrift ? Colors.white : Colors.white,
+              color: AppColors.textPrimary,
               width: tieneDrift ? 3 : 2,
             ),
-            boxShadow: [
+            boxShadow: const [
               BoxShadow(
-                color: Colors.black.withAlpha(120),
+                color: AppColors.surface0,
                 blurRadius: 4,
-                offset: const Offset(0, 2),
+                offset: Offset(0, 2),
               ),
             ],
           ),
           child: Icon(
             tieneDrift ? Icons.warning_amber : Icons.local_shipping,
-            color: Colors.white,
+            color: AppColors.textPrimary,
             size: tieneDrift ? 20 : 18,
           ),
         ),
@@ -587,7 +578,7 @@ class _Mapa extends StatelessWidget {
     if (tieneDrift) return AppColors.warning;
     if (minStale != null && minStale > 60) return AppColors.error;
     if (ignition) return AppColors.success;
-    return Colors.white60;
+    return AppColors.textSecondary;
   }
 }
 
@@ -631,15 +622,15 @@ class _DetalleSheet extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        color: AppColors.surface2,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
         border: Border.all(
           color: ignition
               ? AppColors.success.withAlpha(60)
-              : Colors.white24,
+              : AppColors.textHint,
         ),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.xl),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -649,8 +640,8 @@ class _DetalleSheet extends StatelessWidget {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.white24,
-                borderRadius: BorderRadius.circular(2),
+                color: AppColors.textHint,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
             ),
           ),
@@ -660,7 +651,7 @@ class _DetalleSheet extends StatelessWidget {
               Expanded(
                 child: Text(
                   patente,
-                  style: AppType.title.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
+                  style: AppType.title,
                 ),
               ),
               _BadgeIgnicion(on: ignition),
@@ -681,7 +672,7 @@ class _DetalleSheet extends StatelessWidget {
             label: 'Chofer',
             valor: choferTexto,
             icono: Icons.person_outline,
-            colorIcono: driverDni.isEmpty ? Colors.white38 : AppColors.success,
+            colorIcono: driverDni.isEmpty ? AppColors.textDisabled : AppColors.success,
           ),
           if (driverDni.isNotEmpty)
             _Fila(label: 'DNI', valor: driverDni),
@@ -734,30 +725,24 @@ class _DetalleSheet extends StatelessWidget {
               esLargo: true,
             ),
           ],
-          const SizedBox(height: 18),
+          const SizedBox(height: AppSpacing.lg),
           Row(
             children: [
               Expanded(
-                child: OutlinedButton(
+                child: AppButton.ghost(
+                  label: 'Cerrar',
+                  expand: true,
                   onPressed: () => Navigator.of(context).pop(),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white54,
-                    side: BorderSide(color: Colors.white.withAlpha(40)),
-                  ),
-                  child: const Text('Cerrar'),
                 ),
               ),
               if (lat != null && lng != null) ...[
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: AppButton(
+                    label: 'Ver en Maps',
+                    icon: Icons.open_in_new,
+                    expand: true,
                     onPressed: () => _abrirMaps(lat, lng),
-                    icon: const Icon(Icons.open_in_new, size: 16),
-                    label: const Text('Ver en Maps'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.info.withAlpha(180),
-                      foregroundColor: Colors.white,
-                    ),
                   ),
                 ),
               ],
@@ -811,28 +796,25 @@ class _Fila extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
         crossAxisAlignment:
             esLargo ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
           if (icono != null) ...[
-            Icon(icono, size: 14, color: colorIcono ?? Colors.white38),
-            const SizedBox(width: 6),
+            Icon(icono, size: 14, color: colorIcono ?? AppColors.textDisabled),
+            const SizedBox(width: AppSpacing.xs),
           ] else ...[
-            const SizedBox(width: 20),
+            const SizedBox(width: AppSpacing.xl),
           ],
           SizedBox(
             width: 90,
-            child: Text(
-              label,
-              style: AppType.label.copyWith(color: Colors.white54),
-            ),
+            child: Text(label, style: AppType.label),
           ),
           Expanded(
             child: Text(
               valor,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+              style: AppType.body.copyWith(color: AppColors.textPrimary),
               maxLines: esLargo ? 3 : 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -850,9 +832,9 @@ class _BadgeIgnicion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = on ? AppColors.success : Colors.white54;
+    final color = on ? AppColors.success : AppColors.textTertiary;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
       decoration: BoxDecoration(
         color: color.withAlpha(30),
         borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -860,12 +842,7 @@ class _BadgeIgnicion extends StatelessWidget {
       ),
       child: Text(
         on ? 'EN MARCHA' : 'APAGADO',
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1,
-        ),
+        style: AppType.eyebrow.copyWith(color: color),
       ),
     );
   }
@@ -999,10 +976,10 @@ class _DriftBanner extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
       decoration: BoxDecoration(
         color: AppColors.warning.withAlpha(30),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: AppColors.warning.withAlpha(120)),
       ),
       child: Row(
@@ -1017,12 +994,12 @@ class _DriftBanner extends StatelessWidget {
               children: [
                 Text(
                   titulo,
-                  style: AppType.label.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold, letterSpacing: 0.4),
+                  style: AppType.label.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   detalle,
-                  style: AppType.label.copyWith(color: Colors.white),
+                  style: AppType.label.copyWith(color: AppColors.textPrimary),
                 ),
               ],
             ),
