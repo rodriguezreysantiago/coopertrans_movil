@@ -8,10 +8,12 @@ import '../../../core/services/storage_service.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
+import '../../../shared/widgets/app_widgets.dart';
 import '../../../shared/widgets/fecha_dialog.dart';
 import 'vencimiento_item.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Bottom sheet para editar un vencimiento puntual.
 ///
 /// Permite al admin:
@@ -148,16 +150,15 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
   Widget build(BuildContext context) {
     return Container(
       padding: EdgeInsets.fromLTRB(
-        20,
-        20,
-        20,
-        MediaQuery.of(context).viewInsets.bottom + 20,
+        AppSpacing.xl,
+        AppSpacing.xl,
+        AppSpacing.xl,
+        MediaQuery.of(context).viewInsets.bottom + AppSpacing.xl,
       ),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
-        border: const Border(
-          top: BorderSide(color: AppColors.success, width: 2),
+      decoration: const BoxDecoration(
+        color: AppColors.surface2,
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.lg),
         ),
       ),
       child: Column(
@@ -167,65 +168,68 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
           Container(
             width: 40,
             height: 4,
-            margin: const EdgeInsets.only(bottom: 16),
+            margin: const EdgeInsets.only(bottom: AppSpacing.lg),
             decoration: BoxDecoration(
-              color: Colors.white24,
+              color: AppColors.textHint,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           // Título
           Text(
             'Actualizar ${widget.item.tipoDoc}',
-            style: const TextStyle(
+            style: AppType.heading.copyWith(
+              color: AppColors.textPrimary,
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
             ),
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: AppSpacing.xs + 1),
           Text(
             widget.item.titulo,
-            style: const TextStyle(
-              color: AppColors.success,
+            style: AppType.body.copyWith(
+              color: AppColors.brand,
               fontWeight: FontWeight.w500,
             ),
           ),
-          const Divider(color: Colors.white10, height: 25),
+          const Divider(color: AppColors.borderSubtle, height: 25),
 
           // Selector de fecha
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text(
+            title: Text(
               'Fecha de vencimiento',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
+              style: AppType.label.copyWith(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
             ),
             subtitle: Text(
               AppFormatters.formatearFecha(_fechaSeleccionada),
-              style: const TextStyle(
-                color: Colors.white,
+              style: AppType.heading.copyWith(
+                color: AppColors.textPrimary,
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
               ),
             ),
             trailing: const Icon(Icons.event_note,
-                color: AppColors.success, size: 28),
+                color: AppColors.brand, size: 28),
             onTap: _seleccionarFecha,
           ),
 
-          const SizedBox(height: 15),
+          const SizedBox(height: AppSpacing.lg - 1),
 
           // Selector de archivo
           InkWell(
             onTap: _seleccionarArchivo,
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
             child: Container(
               padding: const EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(
-                color: Colors.black12,
-                borderRadius: BorderRadius.circular(15),
+                color: AppColors.surface0,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
                 border: Border.all(
                   color: _archivoBytes == null
-                      ? Colors.white10
+                      ? AppColors.borderSubtle
                       : AppColors.success,
                 ),
               ),
@@ -236,19 +240,19 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
                         ? Icons.upload_file
                         : Icons.check_circle,
                     color: _archivoBytes == null
-                        ? Colors.white38
+                        ? AppColors.textDisabled
                         : AppColors.success,
                     size: 28,
                   ),
-                  const SizedBox(width: 15),
+                  const SizedBox(width: AppSpacing.lg - 1),
                   Expanded(
                     child: Text(
                       _archivoBytes == null
                           ? 'Cargar comprobante nuevo'
                           : 'Archivo listo para subir',
-                      style: TextStyle(
+                      style: AppType.body.copyWith(
                         color: _archivoBytes == null
-                            ? Colors.white54
+                            ? AppColors.textTertiary
                             : AppColors.success,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
@@ -257,62 +261,38 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
                   ),
                   if (_archivoBytes == null)
                     const Icon(Icons.add_a_photo_outlined,
-                        color: AppColors.success, size: 20),
+                        color: AppColors.brand, size: 20),
                 ],
               ),
             ),
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: AppSpacing.xl),
 
           // Botones de acción
-          if (_subiendo)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 14),
-              child: CircularProgressIndicator(color: AppColors.success),
-            )
-          else
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Colors.white24),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.md)),
-                    ),
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text(
-                      'CANCELAR',
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
+          Row(
+            children: [
+              Expanded(
+                child: AppButton.secondary(
+                  label: 'Cancelar',
+                  expand: true,
+                  onPressed:
+                      _subiendo ? null : () => Navigator.pop(context),
                 ),
-                const SizedBox(width: 15),
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.md)),
-                    ),
-                    // Disabled mientras sube — antes el doble tap rapido
-                    // disparaba 2 uploads paralelos (auditoria 2026-05-17).
-                    onPressed: _subiendo ? null : _guardar,
-                    child: _subiendo
-                        ? const SizedBox(
-                            width: 18, height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                        : const Text('GUARDAR CAMBIOS'),
-                  ),
+              ),
+              const SizedBox(width: AppSpacing.lg - 1),
+              Expanded(
+                child: AppButton(
+                  label: 'Guardar cambios',
+                  expand: true,
+                  isLoading: _subiendo,
+                  // Disabled mientras sube — antes el doble tap rapido
+                  // disparaba 2 uploads paralelos (auditoria 2026-05-17).
+                  onPressed: _subiendo ? null : _guardar,
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
         ],
       ),
     );
