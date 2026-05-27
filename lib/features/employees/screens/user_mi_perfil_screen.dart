@@ -433,8 +433,6 @@ class _Header extends StatelessWidget {
             FotoPerfilAvatar(
               url: fotoUrl,
               radius: 65,
-              fondo: Colors.white10,
-              iconColor: Colors.white24,
             ),
             Positioned(
               bottom: 0,

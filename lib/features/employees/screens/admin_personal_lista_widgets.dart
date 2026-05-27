@@ -605,7 +605,6 @@ class _HeaderDetalle extends StatelessWidget {
             FotoPerfilAvatar(
               url: urlPerfil,
               radius: 50,
-              iconColor: Colors.white24,
             ),
             Positioned(
               bottom: 0,
