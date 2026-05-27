@@ -85,13 +85,13 @@ class _IcmHubScreenState extends State<IcmHubScreen> {
             // arriba) y el operador tenía que scrollear para llegar a
             // las acciones que más usa.
             const _GridSubpantallas(),
-            const SizedBox(height: 20),
+            const SizedBox(height: AppSpacing.xl),
             FutureBuilder<KpisIcmHub>(
               future: _futureKpis,
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
+                    padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
                     child: AppSkeleton.box(height: 180),
                   );
                 }
@@ -141,7 +141,7 @@ class _SeccionesIcm extends StatelessWidget {
       children: [
         // ─── Personas: top 5 mejores + top 5 a mejorar ───
         const _SeccionLabel('Personas'),
-        const SizedBox(height: 10),
+        const SizedBox(height: AppSpacing.sm),
         if (esDesktop)
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -154,7 +154,7 @@ class _SeccionesIcm extends StatelessWidget {
                   items: kpis.top5Mejores,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: TopChoferesLista(
                   titulo: 'TOP 5 — A MEJORAR',
@@ -172,7 +172,7 @@ class _SeccionesIcm extends StatelessWidget {
             colorTitulo: AppColors.success,
             items: kpis.top5Mejores,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.sm),
           TopChoferesLista(
             titulo: 'TOP 5 — A MEJORAR',
             icono: Icons.priority_high,
@@ -183,7 +183,7 @@ class _SeccionesIcm extends StatelessWidget {
         const SizedBox(height: AppSpacing.xl),
         // ─── ICM flota + Tendencias (lado a lado en desktop) — AL FINAL ───
         const _SeccionLabel('Panorama'),
-        const SizedBox(height: 10),
+        const SizedBox(height: AppSpacing.sm),
         if (esDesktop)
           IntrinsicHeight(
             child: Row(
@@ -212,10 +212,11 @@ class _SeccionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 6, top: 4),
+      padding: const EdgeInsets.only(left: 6, top: AppSpacing.xs),
       child: Text(
         texto.toUpperCase(),
-        style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+        style: AppType.eyebrow
+            .copyWith(color: AppColors.success, letterSpacing: 1.5),
       ),
     );
   }
@@ -229,30 +230,30 @@ class _ErrorReintentar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
       child: Column(
         children: [
           const Icon(Icons.error_outline,
               color: AppColors.error, size: 36),
           const SizedBox(height: AppSpacing.sm),
-          const Text(
+          Text(
             'No se pudieron cargar los KPIs del ICM',
-            style: TextStyle(color: Colors.white70),
+            style: AppType.body.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 6),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
             child: Text(
               error,
               textAlign: TextAlign.center,
-              style: AppType.eyebrow.copyWith(color: Colors.white38),
+              style: AppType.eyebrow.copyWith(color: AppColors.textHint),
             ),
           ),
           const SizedBox(height: AppSpacing.md),
-          ElevatedButton.icon(
+          AppButton(
+            label: 'Reintentar',
+            icon: Icons.refresh,
             onPressed: onReintentar,
-            icon: const Icon(Icons.refresh),
-            label: const Text('Reintentar'),
           ),
         ],
       ),
@@ -277,8 +278,8 @@ class _GridSubpantallas extends StatelessWidget {
           crossAxisCount: cols,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
+          crossAxisSpacing: AppSpacing.md,
+          mainAxisSpacing: AppSpacing.md,
           childAspectRatio: cols == 1 ? 2.4 : 1.3,
           children: const [
             _HubTile(
@@ -335,18 +336,21 @@ class _HubTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppCard(
       onTap: () => Navigator.pushNamed(context, ruta),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Icon(icono, color: color, size: 36),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.sm),
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
               titulo,
-              style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5),
+              style: AppType.body.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                  letterSpacing: 0.5),
             ),
           ),
           const SizedBox(height: AppSpacing.xs),
@@ -355,7 +359,7 @@ class _HubTile extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: AppType.eyebrow.copyWith(color: Colors.white60),
+            style: AppType.eyebrow.copyWith(color: AppColors.textSecondary),
           ),
         ],
       ),
