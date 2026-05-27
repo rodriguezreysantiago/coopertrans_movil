@@ -27,6 +27,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/constants/map_constants.dart';
+import '../../../shared/widgets/app_widgets.dart';
 import '../services/logistica_geo_utils.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
@@ -64,7 +65,7 @@ class UbicacionMapPicker extends StatefulWidget {
   }) {
     return showModalBottomSheet<UbicacionMapPickerResultado>(
       context: context,
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.surface0,
       isScrollControlled: true,
       builder: (_) => UbicacionMapPicker(
         puntoInicial: puntoInicial,
@@ -167,7 +168,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
         context: context,
         builder: (ctx) {
           return AlertDialog(
-            backgroundColor: AppColors.background,
+            backgroundColor: AppColors.surface2,
             title: const Text('Pegar link de Google Maps'),
             content: SizedBox(
               width: (MediaQuery.of(ctx).size.width - 80).clamp(240.0, 400.0),
@@ -175,9 +176,9 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text(
+                  const Text(
                     'Buscá el lugar en Google Maps web, copiá el enlace y pegalo acá. Se extraen automáticamente las coordenadas.',
-                    style: AppType.label.copyWith(color: Colors.white60),
+                    style: AppType.label,
                   ),
                   const SizedBox(height: AppSpacing.md),
                   TextField(
@@ -191,21 +192,21 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  Text(
+                  const Text(
                     'Acepta links largos (con @lat,lng) y links cortos (maps.app.goo.gl).',
-                    style: AppType.eyebrow.copyWith(color: Colors.white38),
+                    style: AppType.eyebrow,
                   ),
                 ],
               ),
             ),
             actions: [
-              TextButton(
+              AppButton.ghost(
+                label: 'Cancelar',
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('CANCELAR'),
               ),
-              ElevatedButton(
+              AppButton(
+                label: 'Usar este link',
                 onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-                child: const Text('USAR ESTE LINK'),
               ),
             ],
           );
@@ -360,46 +361,39 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
         children: [
           // Handle
           Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
+            margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(2),
+              color: AppColors.textHint,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
           ),
           // Header con título
           const Padding(
-            padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+            padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
             child: Row(
               children: [
                 Icon(Icons.map_outlined, color: AppColors.info),
-                SizedBox(width: 10),
+                SizedBox(width: AppSpacing.md),
                 Expanded(
-                  child: Text(
-                    'Elegir punto en el mapa',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  child: Text('Elegir punto en el mapa', style: AppType.heading),
                 ),
               ],
             ),
           ),
           // Buscador + sugerencias
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             child: TextField(
               controller: _busquedaCtl,
               onChanged: _onCambioBusqueda,
-              style: const TextStyle(color: Colors.white),
+              style: AppType.body.copyWith(color: AppColors.textPrimary),
               decoration: InputDecoration(
                 isDense: true,
                 hintText: widget.hintBusqueda ?? 'Buscar lugar (ej. Tres Arroyos)',
-                hintStyle: const TextStyle(color: Colors.white38),
-                prefixIcon: const Icon(Icons.search, color: Colors.white54),
+                hintStyle: AppType.body.copyWith(color: AppColors.textDisabled),
+                prefixIcon: const Icon(Icons.search, color: AppColors.textTertiary),
                 suffixIcon: _buscando
                     ? const Padding(
                         padding: EdgeInsets.all(AppSpacing.md),
@@ -414,7 +408,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                       )
                     : (_busquedaCtl.text.isNotEmpty
                         ? IconButton(
-                            icon: const Icon(Icons.close, color: Colors.white54),
+                            icon: const Icon(Icons.close, color: AppColors.textTertiary),
                             tooltip: 'Limpiar búsqueda',
                             onPressed: () {
                               _busquedaCtl.clear();
@@ -423,7 +417,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                           )
                         : null),
                 filled: true,
-                fillColor: Colors.white10,
+                fillColor: AppColors.borderSubtle,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppRadius.sm),
                   borderSide: BorderSide.none,
@@ -433,7 +427,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
           ),
           if (_errorBusqueda != null)
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 0),
               child: Text(
                 _errorBusqueda!,
                 style: AppType.label.copyWith(color: AppColors.error),
@@ -442,9 +436,9 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
           if (_resultados.isNotEmpty)
             Container(
               constraints: const BoxConstraints(maxHeight: 200),
-              margin: const EdgeInsets.fromLTRB(16, 6, 16, 0),
+              margin: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, 0),
               decoration: BoxDecoration(
-                color: Colors.white10,
+                color: AppColors.borderSubtle,
                 borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
               child: ListView.separated(
@@ -452,17 +446,17 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                 itemCount: _resultados.length,
                 separatorBuilder: (_, __) => const Divider(
                   height: 1,
-                  color: Colors.white12,
+                  color: AppColors.borderSubtle,
                 ),
                 itemBuilder: (_, i) {
                   final r = _resultados[i];
                   return ListTile(
                     dense: true,
                     leading: const Icon(Icons.place_outlined,
-                        color: Colors.white54, size: 18),
+                        color: AppColors.textTertiary, size: 18),
                     title: Text(
                       r.displayName,
-                      style: const TextStyle(color: Colors.white, fontSize: 13),
+                      style: AppType.body.copyWith(color: AppColors.textPrimary),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -511,10 +505,10 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                 // token, el satelital no funciona y mejor no mostrarlo.
                 if (MapConstants.tieneMapbox)
                   Positioned(
-                    top: 12,
-                    right: 12,
+                    top: AppSpacing.md,
+                    right: AppSpacing.md,
                     child: Material(
-                      color: Colors.black.withValues(alpha: 0.7),
+                      color: AppColors.surface0.withValues(alpha: 0.7),
                       borderRadius: BorderRadius.circular(AppRadius.sm),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -522,7 +516,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                             () => _modoSatelite = !_modoSatelite),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
+                              horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -530,13 +524,13 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                                 _modoSatelite
                                     ? Icons.map_outlined
                                     : Icons.satellite_alt_outlined,
-                                color: Colors.white,
+                                color: AppColors.textPrimary,
                                 size: 18,
                               ),
-                              const SizedBox(width: 6),
+                              const SizedBox(width: AppSpacing.xs),
                               Text(
                                 _modoSatelite ? 'MAPA' : 'SATÉLITE',
-                                style: AppType.eyebrow.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.1),
+                                style: AppType.eyebrow.copyWith(color: AppColors.textPrimary),
                               ),
                             ],
                           ),
@@ -572,8 +566,8 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
           ),
           // Footer con coords actuales + botones
           Container(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-            color: Colors.black26,
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.lg),
+            color: AppColors.surface1,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -582,7 +576,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                     'Punto seleccionado: '
                     '${_puntoCentral.latitude.toStringAsFixed(5)}, '
                     '${_puntoCentral.longitude.toStringAsFixed(5)}',
-                    style: AppType.label.copyWith(color: Colors.white70),
+                    style: AppType.label.copyWith(color: AppColors.textSecondary),
                     textAlign: TextAlign.center,
                   );
                 }),
@@ -594,58 +588,41 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                 // app extrae las coords.
                 Wrap(
                   alignment: WrapAlignment.spaceEvenly,
-                  spacing: 8,
+                  spacing: AppSpacing.sm,
                   children: [
-                    TextButton.icon(
+                    AppButton.ghost(
+                      label: 'Usar mi ubicación',
+                      icon: Icons.my_location,
                       onPressed: _confirmando ? null : _usarMiUbicacion,
-                      icon: const Icon(Icons.my_location, size: 18),
-                      label: const Text('USAR MI UBICACIÓN'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.brandSoft,
-                      ),
                     ),
-                    TextButton.icon(
+                    AppButton.ghost(
+                      label: 'Pegar link Google Maps',
+                      icon: Icons.link,
                       onPressed:
                           _confirmando ? null : _pegarLinkGoogleMaps,
-                      icon: const Icon(Icons.link, size: 18),
-                      label: const Text('PEGAR LINK GOOGLE MAPS'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.info,
-                      ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: AppSpacing.xs),
                 Row(
                   children: [
                     Expanded(
-                      child: TextButton(
+                      child: AppButton.ghost(
+                        label: 'Cancelar',
+                        expand: true,
                         onPressed: _confirmando
                             ? null
                             : () => Navigator.pop(context),
-                        child: const Text('CANCELAR'),
                       ),
                     ),
                     const SizedBox(width: AppSpacing.md),
                     Expanded(
-                      child: ElevatedButton.icon(
+                      child: AppButton(
+                        label: 'Confirmar',
+                        icon: Icons.check,
+                        expand: true,
+                        isLoading: _confirmando,
                         onPressed: _confirmando ? null : _confirmar,
-                        icon: _confirmando
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.check),
-                        label: const Text('CONFIRMAR'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.info,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                        ),
                       ),
                     ),
                   ],
