@@ -92,9 +92,20 @@ cd macos
 LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 pod install
 cd ..
 
-# 7. Verificar Generated.xcconfig tenga FLUTTER_ROOT correcto
-echo "==> Generated.xcconfig:"
-cat macos/Flutter/Generated.xcconfig | grep -E "FLUTTER_ROOT|FLUTTER_APPLICATION_PATH"
+# 7. Verificar Flutter-Generated.xcconfig tenga FLUTTER_ROOT correcto.
+#
+# OJO (build 29 falló por esto): el archivo se llama
+# `Flutter-Generated.xcconfig` (NO `Generated.xcconfig` como iOS) y
+# vive en `macos/Flutter/ephemeral/` (NO en `macos/Flutter/`).
+# Está incluido por `Flutter-Debug.xcconfig` / `Flutter-Release.xcconfig`
+# (que sí están versionados en macos/Flutter/).
+#
+# El `|| true` es defensivo — el `cat | grep` con `set -e` aborta todo
+# el post_clone si el archivo aún no está. Esto es info, no crítico.
+echo "==> Flutter-Generated.xcconfig:"
+cat macos/Flutter/ephemeral/Flutter-Generated.xcconfig 2>/dev/null \
+    | grep -E "FLUTTER_ROOT|FLUTTER_APPLICATION_PATH" \
+    || echo "(no encontrado — la build phase de Xcode lo va a regenerar)"
 
 # 8. Manual Signing setup (igual que iOS).
 #
