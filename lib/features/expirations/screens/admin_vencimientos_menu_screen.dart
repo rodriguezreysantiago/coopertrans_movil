@@ -52,7 +52,7 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
             titulo: 'REVISIONES',
             subtitulo: 'Aprobar/rechazar trámites cargados por choferes',
             icono: Icons.fact_check_outlined,
-            colorIcono: AppColors.brandSoft,
+            colorIcono: AppColors.surface3,
             ruta: AppRoutes.adminRevisiones,
             badgeStream: FirebaseFirestore.instance
                 .collection(AppCollections.revisiones)
@@ -64,28 +64,28 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
             titulo: 'CALENDARIO MENSUAL',
             subtitulo: 'Vista global con todos los vencimientos por día',
             icono: Icons.event_note,
-            colorIcono: AppColors.success,
+            colorIcono: AppColors.surface3,
             ruta: '/vencimientos_calendario',
           ),
           const _MenuTile(
             titulo: 'VENCIMIENTOS DE PERSONAL',
             subtitulo: 'Seguimiento de carnets, preocupacional y ART',
             icono: Icons.person_search,
-            colorIcono: AppColors.info,
+            colorIcono: AppColors.surface3,
             ruta: '/vencimientos_choferes',
           ),
           const _MenuTile(
             titulo: 'VENCIMIENTOS DE TRACTORES',
             subtitulo: 'Control de RTO y seguros de camiones',
             icono: Icons.local_shipping,
-            colorIcono: AppColors.warning,
+            colorIcono: AppColors.surface3,
             ruta: '/vencimientos_chasis',
           ),
           const _MenuTile(
             titulo: 'VENCIMIENTOS DE ENGANCHES',
             subtitulo: 'Auditoría de bateas, tolvas, bivuelcos y tanques',
             icono: Icons.grid_view,
-            colorIcono: AppColors.brandSoft,
+            colorIcono: AppColors.surface3,
             ruta: '/vencimientos_acoplados',
           ),
           // ─── ABM por empresa empleadora ───
@@ -108,7 +108,7 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
             titulo: 'EMPRESAS Y SEGUROS',
             subtitulo: 'Póliza ART y Formulario 931 por razón social',
             icono: Icons.business_outlined,
-            colorIcono: AppColors.info,
+            colorIcono: AppColors.surface3,
             ruta: AppRoutes.adminEmpresasEmpleadoras,
           ),
           const Padding(
@@ -153,13 +153,24 @@ class _MenuTile extends StatelessWidget {
   });
 
   Widget _buildIcono(BuildContext context) {
+    // Phase 6.3 (design-system refactor 2026-05-27): dropeamos la
+    // categorizacion por color. Disc neutro (surface3) + icono blanco
+    // (textPrimary) en TODOS los tiles. La identidad del modulo viene
+    // del icono + etiqueta, no del color. Si en el futuro se quiere
+    // re-introducir color, hacer un branch sobre colorIcono igual a
+    // surface3 (default) -> neutro, otro -> usar como antes.
+    final esNeutro = colorIcono == AppColors.surface3;
     final iconoBase = Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: colorIcono.withAlpha(30),
+        color: esNeutro ? AppColors.surface3 : colorIcono.withAlpha(30),
         shape: BoxShape.circle,
       ),
-      child: Icon(icono, color: colorIcono, size: 24),
+      child: Icon(
+        icono,
+        color: esNeutro ? AppColors.textPrimary : colorIcono,
+        size: 24,
+      ),
     );
     if (badgeStream == null) return iconoBase;
     return StreamBuilder<QuerySnapshot>(
