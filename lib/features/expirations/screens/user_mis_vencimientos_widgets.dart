@@ -16,10 +16,11 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8, left: 5),
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm, left: 5),
       child: Text(
         label,
-        style: AppType.eyebrow.copyWith(fontWeight: FontWeight.bold, color: AppColors.success, letterSpacing: 2),
+        style: AppType.eyebrow
+            .copyWith(color: AppColors.success, letterSpacing: 2),
       ),
     );
   }
@@ -70,7 +71,8 @@ class _CardVencimientoUser extends StatelessWidget {
 
         return AppCard(
           margin: const EdgeInsets.symmetric(vertical: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md, vertical: AppSpacing.sm),
           highlighted: enRevision,
           borderColor: enRevision ? AppColors.warning.withAlpha(150) : null,
           child: Row(
@@ -88,11 +90,7 @@ class _CardVencimientoUser extends StatelessWidget {
                       titulo,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: Colors.white,
-                      ),
+                      style: AppType.heading.copyWith(fontSize: 13),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
@@ -101,11 +99,14 @@ class _CardVencimientoUser extends StatelessWidget {
                           : 'Vence: ${AppFormatters.formatearFecha(fecha)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.eyebrow.copyWith(color: enRevision
-                            ? AppColors.warning
-                            : Colors.white60, fontWeight: enRevision
-                            ? FontWeight.bold
-                            : FontWeight.normal, letterSpacing: enRevision ? 1 : 0),
+                      style: AppType.eyebrow.copyWith(
+                          color: enRevision
+                              ? AppColors.warning
+                              : AppColors.textSecondary,
+                          fontWeight: enRevision
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                          letterSpacing: enRevision ? 1 : 0),
                     ),
                   ],
                 ),
@@ -134,16 +135,16 @@ class _BotonUpload extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(50),
+        borderRadius: BorderRadius.circular(AppRadius.full),
         onTap: onTap,
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.sm),
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.white24),
+            border: Border.all(color: AppColors.borderStrong),
             shape: BoxShape.circle,
           ),
           child: const Icon(Icons.upload_file,
-              color: Colors.white70, size: 18),
+              color: AppColors.textSecondary, size: 18),
         ),
       ),
     );
@@ -201,7 +202,8 @@ class _CardVencimientoEmpresa extends StatelessWidget {
 
         return AppCard(
           margin: const EdgeInsets.symmetric(vertical: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md, vertical: AppSpacing.sm),
           child: Row(
             children: [
               AppFileThumbnail(
@@ -217,11 +219,7 @@ class _CardVencimientoEmpresa extends StatelessWidget {
                       titulo,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: Colors.white,
-                      ),
+                      style: AppType.heading.copyWith(fontSize: 13),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
@@ -230,9 +228,10 @@ class _CardVencimientoEmpresa extends StatelessWidget {
                           : 'Pendiente — consultar a la oficina',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.eyebrow.copyWith(color: tieneArchivo || fecha != null
-                            ? Colors.white60
-                            : Colors.white38),
+                      style: AppType.eyebrow.copyWith(
+                          color: tieneArchivo || fecha != null
+                              ? AppColors.textSecondary
+                              : AppColors.textHint),
                     ),
                   ],
                 ),
@@ -242,7 +241,7 @@ class _CardVencimientoEmpresa extends StatelessWidget {
               // Sin botón upload — el chofer no edita estos docs.
               // Lock icon visible para que se entienda que es view-only.
               const Icon(Icons.lock_outline,
-                  color: Colors.white24, size: 18),
+                  color: AppColors.textHint, size: 18),
             ],
           ),
         );
@@ -253,11 +252,12 @@ class _CardVencimientoEmpresa extends StatelessWidget {
   Widget _placeholder(String subtitulo) {
     return AppCard(
       margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       child: Row(
         children: [
           const Icon(Icons.warning_amber_rounded,
-              color: Colors.white38, size: 22),
+              color: AppColors.textHint, size: 22),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
@@ -265,16 +265,14 @@ class _CardVencimientoEmpresa extends StatelessWidget {
               children: [
                 Text(
                   titulo,
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.heading.copyWith(
+                      color: AppColors.textSecondary, fontSize: 13),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   subtitulo,
-                  style: AppType.eyebrow.copyWith(color: Colors.white38),
+                  style:
+                      AppType.eyebrow.copyWith(color: AppColors.textHint),
                 ),
               ],
             ),
@@ -292,11 +290,12 @@ class _CardInformativa extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       margin: EdgeInsets.zero,
       child: Text(
         mensaje,
-        style: AppType.label.copyWith(color: Colors.white54, fontStyle: FontStyle.italic),
+        style: AppType.label.copyWith(
+            color: AppColors.textTertiary, fontStyle: FontStyle.italic),
       ),
     );
   }
@@ -348,13 +347,13 @@ class _DetalleEquipo extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
-                padding: const EdgeInsets.only(bottom: 10, left: 5),
+                padding:
+                    const EdgeInsets.only(bottom: AppSpacing.sm, left: 5),
                 child: Text(
                   '$tipo: $patente',
-                  style: const TextStyle(
+                  style: AppType.eyebrow.copyWith(
                     color: AppColors.success,
                     fontSize: 13,
-                    fontWeight: FontWeight.bold,
                     letterSpacing: 1.5,
                   ),
                 ),
@@ -461,7 +460,7 @@ class _AccesoChecklist extends StatelessWidget {
           mensaje = 'Checklist pendiente (vence el día 15)';
           icono = Icons.fact_check_outlined;
         } else {
-          color = Colors.white60;
+          color = AppColors.textSecondary;
           mensaje = 'Checklist pendiente';
           icono = Icons.fact_check_outlined;
         }
@@ -567,36 +566,14 @@ class _BotonDetectarFechaState extends State<_BotonDetectarFecha> {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: TextButton.icon(
-        onPressed: _procesando ? null : _capturar,
-        style: TextButton.styleFrom(
-          backgroundColor: AppColors.success.withAlpha(20),
-          foregroundColor: AppColors.success,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            side: BorderSide(color: AppColors.success.withAlpha(80)),
-          ),
-        ),
-        icon: _procesando
-            ? const SizedBox(
-                width: 14,
-                height: 14,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: AppColors.success,
-                ),
-              )
-            : const Icon(Icons.document_scanner_outlined, size: 18),
-        label: Text(
-          _procesando
-              ? 'Analizando comprobante...'
-              : 'Detectar fecha desde foto',
-          style: AppType.label.copyWith(fontWeight: FontWeight.bold),
-        ),
-      ),
+    return AppButton.secondary(
+      label: _procesando
+          ? 'Analizando comprobante...'
+          : 'Detectar fecha desde foto',
+      icon: Icons.document_scanner_outlined,
+      onPressed: _procesando ? null : _capturar,
+      isLoading: _procesando,
+      expand: true,
     );
   }
 }
@@ -700,7 +677,7 @@ class _BannerProximoAVencerState extends State<_BannerProximoAVencer> {
         };
 
         return Container(
-          margin: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+          margin: const EdgeInsets.fromLTRB(0, 0, 0, AppSpacing.md),
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.18),
@@ -716,16 +693,15 @@ class _BannerProximoAVencerState extends State<_BannerProximoAVencer> {
                 color: color,
                 size: 24,
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       mensaje,
-                      style: TextStyle(
+                      style: AppType.heading.copyWith(
                         color: color,
-                        fontWeight: FontWeight.bold,
                         fontSize: 13,
                       ),
                     ),
@@ -733,7 +709,8 @@ class _BannerProximoAVencerState extends State<_BannerProximoAVencer> {
                       const SizedBox(height: 2),
                       Text(
                         'Y $extras papel(es) más por vencer pronto.',
-                        style: AppType.eyebrow.copyWith(color: Colors.white60),
+                        style: AppType.eyebrow
+                            .copyWith(color: AppColors.textSecondary),
                       ),
                     ],
                   ],
@@ -817,11 +794,7 @@ class _VencimientoOfflineFallback extends StatelessWidget {
           const SizedBox(height: AppSpacing.lg),
           Text(
             motivo == null ? 'Conexión lenta' : 'Sin datos',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
+            style: AppType.heading.copyWith(fontSize: 18),
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
@@ -829,7 +802,8 @@ class _VencimientoOfflineFallback extends StatelessWidget {
                 'Estamos teniendo problemas para traer tus vencimientos. '
                     'Probá de nuevo en unos segundos o conectate a una mejor red.',
             textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 13),
+            style: AppType.body
+                .copyWith(color: AppColors.textSecondary, fontSize: 13),
           ),
         ],
       ),
