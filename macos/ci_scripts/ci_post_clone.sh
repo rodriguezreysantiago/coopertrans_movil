@@ -71,6 +71,21 @@ flutter pub get
 echo "==> flutter precache --macos..."
 flutter precache --macos
 
+# 5b. Generar macos/Flutter/Generated.xcconfig.
+#
+# OJO (build 25 falló por esto): `flutter pub get` NO genera
+# `macos/Flutter/Generated.xcconfig` aunque la app tenga macos/
+# como plataforma. Sin ese archivo el xcodebuild del Archive falla
+# porque no encuentra FLUTTER_ROOT / FLUTTER_APPLICATION_PATH.
+#
+# `flutter build macos --config-only` prepara el config sin
+# compilar nada — exactamente lo que necesitamos pre-Xcode.
+# (En iOS Apple lo genera transparente porque corre pod install
+# desde ios/, y Flutter detecta y genera Generated.xcconfig en
+# ese flujo. Para macOS hay que pedirlo explícito.)
+echo "==> flutter build macos --config-only..."
+flutter build macos --config-only
+
 # 6. CocoaPods (workaround UTF-8 por si las moscas)
 echo "==> pod install..."
 cd macos
