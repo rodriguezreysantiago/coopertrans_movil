@@ -199,7 +199,8 @@ class _AdminVencimientosCalendarioScreenState
       children: [
         // Calendario
         Padding(
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.sm, AppSpacing.sm, AppSpacing.sm, 0),
           child: TableCalendar<VencimientoItem>(
             firstDay: DateTime(2024),
             lastDay: DateTime(2030),
@@ -231,9 +232,10 @@ class _AdminVencimientosCalendarioScreenState
             // accent para selección).
             calendarStyle: CalendarStyle(
               outsideDaysVisible: false,
-              defaultTextStyle: const TextStyle(color: Colors.white70),
+              defaultTextStyle:
+                  const TextStyle(color: AppColors.textSecondary),
               weekendTextStyle:
-                  const TextStyle(color: Colors.white54),
+                  const TextStyle(color: AppColors.textTertiary),
               todayDecoration: BoxDecoration(
                 color: AppColors.success.withAlpha(60),
                 shape: BoxShape.circle,
@@ -251,18 +253,20 @@ class _AdminVencimientosCalendarioScreenState
                 fontWeight: FontWeight.bold,
               ),
             ),
-            headerStyle: HeaderStyle(
+            headerStyle: const HeaderStyle(
               titleCentered: true,
               formatButtonShowsNext: false,
-              titleTextStyle: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+              titleTextStyle: AppType.heading,
               leftChevronIcon:
-                  const Icon(Icons.chevron_left, color: AppColors.success),
+                  Icon(Icons.chevron_left, color: AppColors.success),
               rightChevronIcon:
-                  const Icon(Icons.chevron_right, color: AppColors.success),
+                  Icon(Icons.chevron_right, color: AppColors.success),
             ),
             daysOfWeekStyle: DaysOfWeekStyle(
-              weekdayStyle: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
-              weekendStyle: AppType.eyebrow.copyWith(color: Colors.white38, fontWeight: FontWeight.bold),
+              weekdayStyle:
+                  AppType.eyebrow.copyWith(color: AppColors.success),
+              weekendStyle:
+                  AppType.eyebrow.copyWith(color: AppColors.textHint),
             ),
             // Marker custom: dot del color de urgencia + contador si
             // hay más de uno.
@@ -296,13 +300,14 @@ class _AdminVencimientosCalendarioScreenState
             ),
           ),
         ),
-        const Divider(color: Colors.white10, height: 1),
+        const Divider(color: AppColors.borderSubtle, height: 1),
         // Lista del día seleccionado
         Expanded(
           child: eventosDelDia.isEmpty
               ? _ListaVacia(dia: _selectedDay)
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.md, AppSpacing.md, AppSpacing.md, 80),
                   itemCount: eventosDelDia.length,
                   itemBuilder: (ctx, idx) => VencimientoItemCard(
                     item: eventosDelDia[idx],
@@ -332,12 +337,13 @@ class _ListaVacia extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.event_available,
-                size: 56, color: Colors.white24),
+                size: 56, color: AppColors.textHint),
             const SizedBox(height: AppSpacing.md),
             Text(
               texto,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 13),
+              style: AppType.body
+                  .copyWith(color: AppColors.textTertiary, fontSize: 13),
             ),
           ],
         ),
