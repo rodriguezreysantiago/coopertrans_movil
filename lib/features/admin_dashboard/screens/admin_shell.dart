@@ -100,8 +100,17 @@ class _AdminShellState extends State<AdminShell> {
       requiredCapability: Capability.verVencimientos,
       // .limit(100) cap conservador (ver auditoría 2026-05-18): si el
       // stream trae 100 docs sabemos que hay >=100 → mostramos "99+".
+      //
+      // Filtro explícito `estado == PENDIENTE` (2026-05-27): hoy el flujo
+      // BORRA el doc al aprobar/rechazar (revision_service.dart líneas
+      // 399/564/578), pero un doc tirado con otro estado por debug o un
+      // estado intermedio futuro inflaría el badge sin acción posible.
+      // Filtrar explícito empareja con la query del propio service en
+      // línea 419 y mantiene el badge fiel al "lo que se ve en la
+      // pantalla de Revisiones".
       badgeStream: FirebaseFirestore.instance
           .collection(AppCollections.revisiones)
+          .where('estado', isEqualTo: 'PENDIENTE')
           .limit(100)
           .snapshots(),
     ),

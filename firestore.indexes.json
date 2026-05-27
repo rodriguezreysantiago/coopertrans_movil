@@ -334,6 +334,14 @@
         { "fieldPath": "patente", "order": "ASCENDING" },
         { "fieldPath": "fecha", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "revisiones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "fecha_vencimiento", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

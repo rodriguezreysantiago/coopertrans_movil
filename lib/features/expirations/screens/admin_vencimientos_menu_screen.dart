@@ -56,6 +56,7 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
             ruta: AppRoutes.adminRevisiones,
             badgeStream: FirebaseFirestore.instance
                 .collection(AppCollections.revisiones)
+                .where('estado', isEqualTo: 'PENDIENTE')
                 .limit(100)
                 .snapshots(),
           ),

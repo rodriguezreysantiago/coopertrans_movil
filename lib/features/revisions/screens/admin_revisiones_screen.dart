@@ -32,8 +32,16 @@ class _AdminRevisionesScreenState extends State<AdminRevisionesScreen> {
   @override
   void initState() {
     super.initState();
+    // Filtramos explícito `estado == PENDIENTE` para alinear con los
+    // badges del shell + del menú de Vencimientos (admin_shell.dart y
+    // admin_vencimientos_menu_screen.dart) — antes la pantalla mostraba
+    // cualquier doc de la collection sin importar el estado, pero un doc
+    // tirado con otro estado por debug habría dejado al admin sin entender
+    // "¿qué hago con esto?". Hoy el flujo borra al aprobar/rechazar; esto
+    // es red de seguridad para estados intermedios futuros.
     _revisionesStream = FirebaseFirestore.instance
         .collection(AppCollections.revisiones)
+        .where('estado', isEqualTo: 'PENDIENTE')
         .orderBy('fecha_vencimiento', descending: false)
         .snapshots();
   }
