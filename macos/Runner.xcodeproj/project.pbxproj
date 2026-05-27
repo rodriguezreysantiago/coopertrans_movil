@@ -209,6 +209,7 @@
 				33CC10EB2044A3C60003C045 /* Resources */,
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
+				C0DE516E0000000000000001 /* CodeSign binary interno (workaround Xcode Cloud macOS) */,
 			);
 			buildRules = (
 			);
@@ -328,6 +329,24 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"$FLUTTER_ROOT\"/packages/flutter_tools/bin/macos_assemble.sh && touch Flutter/ephemeral/tripwire";
+		};
+		C0DE516E0000000000000001 /* CodeSign binary interno (workaround Xcode Cloud macOS) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Workaround Xcode Cloud macOS — firma el binario interno antes del\n# CodeSign implícito del .app raíz. Sin esto, el codesign del .app\n# falla con 'code object is not signed at all - In subcomponent:\n# .../Contents/MacOS/Coopertrans Móvil' porque el binario interno\n# queda sin firma (Xcode Cloud pasa CODE_SIGN_IDENTITY=- por CLI lo\n# que rompe el flujo normal de Strip+CodeSign del binario).\n# Ver Builds 32, 38, 39, 40, 42, 43 en el historial de Xcode Cloud.\nset -e\nEXE=\"$TARGET_BUILD_DIR/$EXECUTABLE_PATH\"\nif [ -f \"$EXE\" ]; then\n  echo \"==> Pre-CodeSign del binario interno: $EXE\"\n  /usr/bin/codesign --force --sign - \"$EXE\"\n  echo \"==> Binary firmado ad-hoc OK.\"\nelse\n  echo \"==> AVISO: no encuentro $EXE — workaround skip.\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

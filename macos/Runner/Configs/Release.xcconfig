@@ -4,38 +4,9 @@
 #include "../../Flutter/Flutter-Release.xcconfig"
 #include "Warnings.xcconfig"
 
-// Xcode Cloud + macOS: workaround del fallo "code object is not signed at all".
-//
-// Xcode Cloud SIEMPRE hace el archive con CODE_SIGN_IDENTITY=- (ad-hoc),
-// independiente de lo que diga el pbxproj o el workflow. En iOS funciona
-// porque Apple no strippea el binario raíz en archive. En macOS el step
-// Strip corre DESPUÉS de la firma ad-hoc de los frameworks y ANTES del
-// codesign final del .app, lo que invalida la firma del binario interno
-// (Contents/MacOS/Coopertrans Móvil) → el CodeSign del .app raíz falla
-// con "code object is not signed at all - In subcomponent: ...".
-//
-// Apagar STRIP_INSTALLED_PRODUCT mantiene el binario sin strippear, la
-// firma ad-hoc del archive queda intacta, y Xcode Cloud re-firma en el
-// step Distribute Build con el cert+profile reales (Manual Signing del
-// pbxproj: "3rd Party Mac Developer Application" + "Coopertrans Movil
-// Mac App Store"). dSYM igual genera los símbolos separados, así que
-// no perdés stack traces de Crashlytics/Sentry.
-//
-// Verificado en Builds 32, 38, 39 — todos rompieron en este mismo paso.
-STRIP_INSTALLED_PRODUCT = NO
-
-// Build 40: con STRIP_INSTALLED_PRODUCT=NO el Strip no corre, pero como
-// Xcode combina Strip + CodeSign del binario interno en el MISMO build
-// phase, apagar Strip también apaga la firma del binario. Resultado:
-// `Contents/MacOS/Coopertrans Móvil` queda sin firma, y el CodeSign final
-// del .app raíz falla con "code object is not signed at all".
-//
-// Fix: agregar --deep al codesign del .app raíz para que firme
-// recursivamente todos los subcomponentes (binario interno + frameworks
-// que pudieran haber quedado sin firmar por el orden del archive).
-//
-// --deep tiene una mala reputación porque en distribución manual puede
-// "esconder" frameworks sin firmar legítimos. Acá es seguro porque
-// estamos en Xcode Cloud con firma ad-hoc por diseño — la firma real
-// la pone el step "Distribute Build" post-archive con cert + profile.
-OTHER_CODE_SIGN_FLAGS = --deep
+// NOTA: los parches STRIP_INSTALLED_PRODUCT=NO y OTHER_CODE_SIGN_FLAGS=--deep
+// que estuvieron acá (commits 74b4402 + 2a21fe6, Builds 40/43) NO resolvieron
+// el "code object is not signed at all" del .app raíz. Reemplazados por un
+// Run Script Phase en el target Runner del pbxproj que firma manualmente el
+// binario interno antes del CodeSign implícito del .app (ver el shell phase
+// "CodeSign binary interno (workaround Xcode Cloud macOS)" en project.pbxproj).
