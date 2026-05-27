@@ -92,7 +92,7 @@ class _AdminMapaVolvoScreenState extends State<AdminMapaVolvoScreen> {
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: AppColors.success),
+              child: CircularProgressIndicator(color: AppColors.brand),
             );
           }
           if (snap.hasError) {
@@ -322,12 +322,10 @@ class _Toolbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final sinGps = totalEventos - conGps;
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      decoration: BoxDecoration(
-        color: Colors.black.withAlpha(80),
-        border: Border(
-          bottom: BorderSide(color: Colors.white.withAlpha(20)),
-        ),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
+      decoration: const BoxDecoration(
+        color: AppColors.surface0,
+        border: Border(bottom: BorderSide(color: AppColors.borderSubtle)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -341,7 +339,7 @@ class _Toolbar extends StatelessWidget {
                   '${rutaActiva ? " · ruta activa" : ""}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.eyebrow.copyWith(color: Colors.white70),
+                  style: AppType.eyebrow,
                 ),
               ),
               // Toggle heatmap OVERSPEED. Visible siempre — independiente
@@ -355,7 +353,7 @@ class _Toolbar extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: AppSpacing.xs),
           // Filtros de tipo (chip horizontal scrolleable).
           SizedBox(
             height: 30,
@@ -370,7 +368,7 @@ class _Toolbar extends StatelessWidget {
                 const SizedBox(width: AppSpacing.xs),
                 for (final t in tipos)
                   Padding(
-                    padding: const EdgeInsets.only(right: 4),
+                    padding: const EdgeInsets.only(right: AppSpacing.xs),
                     // El chip muestra la etiqueta legible (ej. "Exceso de
                     // velocidad") pero filtra por el codigo crudo. Para
                     // eventos GENERIC se va a ver "Evento generico" en el
@@ -401,7 +399,7 @@ class _Toolbar extends StatelessWidget {
                 const SizedBox(width: AppSpacing.xs),
                 for (final p in patentes)
                   Padding(
-                    padding: const EdgeInsets.only(right: 4),
+                    padding: const EdgeInsets.only(right: AppSpacing.xs),
                     child: _Chip(
                       label: p,
                       selected: filtroPatente == p,
@@ -430,28 +428,23 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.success : Colors.white38;
+    final color = selected ? AppColors.brand : AppColors.textDisabled;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.success.withAlpha(25)
-              : Colors.white.withAlpha(8),
-          borderRadius: BorderRadius.circular(14),
+              ? AppColors.brand.withAlpha(25)
+              : AppColors.borderSubtle,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           border: Border.all(color: color.withAlpha(80)),
         ),
         alignment: Alignment.center,
         child: Text(
           label,
-          style: TextStyle(
-            color: color,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.4,
-          ),
+          style: AppType.eyebrow.copyWith(color: color),
         ),
       ),
     );
@@ -475,15 +468,15 @@ class _ToggleChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = activo ? colorActivo : Colors.white54;
+    final color = activo ? colorActivo : AppColors.textTertiary;
     return InkWell(
       onTap: () => onChange(!activo),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
         decoration: BoxDecoration(
-          color: activo ? colorActivo.withAlpha(35) : Colors.white.withAlpha(8),
-          borderRadius: BorderRadius.circular(14),
+          color: activo ? colorActivo.withAlpha(35) : AppColors.borderSubtle,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           border: Border.all(color: color.withAlpha(120)),
         ),
         child: Row(
@@ -493,12 +486,7 @@ class _ToggleChip extends StatelessWidget {
             const SizedBox(width: AppSpacing.xs),
             Text(
               label,
-              style: TextStyle(
-                color: color,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.4,
-              ),
+              style: AppType.eyebrow.copyWith(color: color),
             ),
           ],
         ),
@@ -583,22 +571,22 @@ class _Mapa extends StatelessWidget {
         ),
         if (hayMapbox)
           Positioned(
-            top: 12,
-            right: 12,
+            top: AppSpacing.md,
+            right: AppSpacing.md,
             child: Material(
-              color: Colors.black.withAlpha(170),
+              color: AppColors.surface0.withAlpha(170),
               shape: const CircleBorder(),
               elevation: 4,
               child: InkWell(
                 customBorder: const CircleBorder(),
                 onTap: onToggleSatelite,
                 child: Padding(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(AppSpacing.md),
                   child: Icon(
                     modoSatelite
                         ? Icons.map_outlined
                         : Icons.satellite_alt_outlined,
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                     size: 22,
                   ),
                 ),
@@ -660,7 +648,7 @@ class _Mapa extends StatelessWidget {
   }
 
   static Color _colorVelocidad(double? vel) {
-    if (vel == null) return Colors.white38;
+    if (vel == null) return AppColors.textDisabled;
     if (vel > 100) return AppColors.error;
     if (vel > 80) return AppColors.warning;
     return AppColors.success;
@@ -680,7 +668,7 @@ class _Mapa extends StatelessWidget {
     final severidad = (data['severidad'] ?? '').toString().toUpperCase();
     final atendida = data['atendida'] == true;
     final color = atendida
-        ? Colors.white38
+        ? AppColors.textDisabled
         : severidad == 'HIGH'
             ? AppColors.error
             : severidad == 'MEDIUM'
@@ -698,18 +686,18 @@ class _Mapa extends StatelessWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             color: color.withAlpha(220),
-            border: Border.all(color: Colors.black.withAlpha(120), width: 2),
-            boxShadow: [
+            border: Border.all(color: AppColors.surface0.withAlpha(120), width: 2),
+            boxShadow: const [
               BoxShadow(
-                color: Colors.black.withAlpha(80),
+                color: AppColors.surface0,
                 blurRadius: 4,
-                offset: const Offset(0, 2),
+                offset: Offset(0, 2),
               ),
             ],
           ),
           child: const Icon(
             Icons.warning_amber_rounded,
-            color: Colors.black,
+            color: AppColors.surface0,
             size: 14,
           ),
         ),
