@@ -672,14 +672,14 @@ class _PreviewArchivo extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         onTap: () => _abrirVisor(context),
         child: esPdf
             ? Container(
                 height: 180,
                 decoration: BoxDecoration(
                   color: AppColors.error.withAlpha(15),
-                  borderRadius: BorderRadius.circular(15),
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
                   border: Border.all(
                       color: AppColors.error.withAlpha(80)),
                 ),
@@ -699,7 +699,7 @@ class _PreviewArchivo extends StatelessWidget {
                 ),
               )
             : ClipRRect(
-                borderRadius: BorderRadius.circular(15),
+                borderRadius: BorderRadius.circular(AppRadius.lg),
                 child: Image.network(
                   url,
                   height: 220,
@@ -766,42 +766,20 @@ class _BotonesAccion extends StatelessWidget {
         child: Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.error),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                  ),
-                ),
+              child: AppButton.danger(
+                label: 'Rechazar',
+                icon: Icons.close,
                 onPressed: onRechazar,
-                icon: const Icon(Icons.close, color: AppColors.error),
-                label: const Text(
-                  'RECHAZAR',
-                  style: TextStyle(
-                    color: AppColors.error,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+                expand: true,
               ),
             ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.md),
-                  ),
-                ),
+              child: AppButton(
+                label: 'Aprobar',
+                icon: Icons.check,
                 onPressed: onAprobar,
-                icon: const Icon(Icons.check),
-                label: const Text(
-                  'APROBAR',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+                expand: true,
               ),
             ),
           ],
