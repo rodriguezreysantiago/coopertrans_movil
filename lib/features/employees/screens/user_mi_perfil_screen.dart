@@ -432,6 +432,7 @@ class _Header extends StatelessWidget {
           children: [
             FotoPerfilAvatar(
               url: fotoUrl,
+              nombre: (data['NOMBRE'] ?? '').toString(),
               radius: 65,
             ),
             Positioned(

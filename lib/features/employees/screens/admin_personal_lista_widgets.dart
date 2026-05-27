@@ -37,7 +37,7 @@ class _EmpleadoCard extends StatelessWidget {
       onTap: () => _DetalleChofer.abrir(context, dni),
       child: Row(
         children: [
-          FotoPerfilAvatar(url: urlPerfil, radius: 24),
+          FotoPerfilAvatar(url: urlPerfil, nombre: nombre, radius: 24),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -604,6 +604,7 @@ class _HeaderDetalle extends StatelessWidget {
           children: [
             FotoPerfilAvatar(
               url: urlPerfil,
+              nombre: (data['NOMBRE'] ?? '').toString(),
               radius: 50,
             ),
             Positioned(
