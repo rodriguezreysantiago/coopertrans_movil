@@ -48,7 +48,7 @@ class GomeriaRecapadosScreen extends StatelessWidget {
           backgroundColor: AppColors.brandSoft,
           onPressed: () => _abrirEnvio(context, service),
           icon: const Icon(Icons.send_outlined),
-          label: const Text('MANDAR A RECAPAR'),
+          label: const Text('Mandar a recapar'),
         ),
       ),
     );
@@ -92,13 +92,18 @@ class _EnProcesoTab extends StatelessWidget {
               child: Text(
                 'No hay recapados en proceso.\nTocá + para mandar una cubierta a recapar.',
                 textAlign: TextAlign.center,
-                style: AppType.body.copyWith(color: Colors.white60),
+                style: AppType.body.copyWith(color: AppColors.textSecondary),
               ),
             ),
           );
         }
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.md,
+            AppSpacing.md,
+            80,
+          ),
           itemCount: recapados.length,
           separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
           itemBuilder: (_, i) => _RecapadoTile(
@@ -144,7 +149,7 @@ class _HistoricoTab extends StatelessWidget {
               padding: EdgeInsets.all(40),
               child: Text(
                 'Aún no hay recapados cerrados.',
-                style: TextStyle(color: Colors.white60),
+                style: TextStyle(color: AppColors.textSecondary),
               ),
             ),
           );
@@ -162,7 +167,12 @@ class _HistoricoTab extends StatelessWidget {
           }
         }
         return ListView.separated(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.md,
+            AppSpacing.md,
+            80,
+          ),
           itemCount: recs.length + 1,
           separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
           itemBuilder: (_, i) {
@@ -198,26 +208,25 @@ class _ResumenHistorico extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.lg - 2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'ÚLTIMOS RECAPADOS CERRADOS',
-            style: AppType.eyebrow.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.5),
-          ),
-          const SizedBox(height: 10),
+          const Text('ÚLTIMOS RECAPADOS CERRADOS', style: AppType.eyebrow),
+          const SizedBox(height: AppSpacing.md),
           Wrap(
-            spacing: 14,
-            runSpacing: 6,
+            spacing: AppSpacing.lg - 2,
+            runSpacing: AppSpacing.xs + 2,
             children: [
               _stat('Total', '$total', AppColors.brandSoft),
               _stat('Recibidas', '$recibidas', AppColors.success),
               _stat('Descartadas', '$descartadas', AppColors.error),
               if (costoTotal > 0)
-                _stat('Costo total',
-                    '\$${AppFormatters.formatearMonto(costoTotal)}',
-                    Colors.white70),
+                _stat(
+                  'Costo total',
+                  '\$${AppFormatters.formatearMonto(costoTotal)}',
+                  AppColors.textSecondary,
+                ),
             ],
           ),
         ],
@@ -229,13 +238,20 @@ class _ResumenHistorico extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label,
-              style:
-                  const TextStyle(color: Colors.white60, fontSize: 10)),
+          Text(
+            label,
+            style: AppType.label.copyWith(
+              color: AppColors.textSecondary,
+              fontSize: 10,
+            ),
+          ),
           const SizedBox(height: 2),
           Text(
             valor,
-            style: AppType.heading.copyWith(color: color, fontWeight: FontWeight.bold),
+            style: AppType.heading.copyWith(
+              color: color,
+              fontWeight: FontWeight.bold,
+            ),
           ),
         ],
       );
@@ -260,7 +276,7 @@ class _RecapadoTile extends StatelessWidget {
             : AppColors.error;
     return AppCard(
       onTap: onTap,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.lg - 2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -270,15 +286,20 @@ class _RecapadoTile extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
               Text(
                 r.cubiertaCodigo,
-                style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                style: AppType.heading.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const Spacer(),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm,
+                  vertical: 3,
+                ),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(AppRadius.sm / 2),
                   border: Border.all(color: color),
                 ),
                 child: Text(
@@ -287,7 +308,10 @@ class _RecapadoTile extends StatelessWidget {
                           ? 'RECIBIDA'
                           : 'DESCARTADA'
                       : '${r.diasEnRecapado()}d',
-                  style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.bold),
+                  style: AppType.eyebrow.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -295,33 +319,36 @@ class _RecapadoTile extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Proveedor: ${r.proveedor}',
-            style: AppType.label.copyWith(color: Colors.white70),
+            style: AppType.label.copyWith(color: AppColors.textSecondary),
           ),
           Text(
             cerrado
                 ? '${AppFormatters.formatearFecha(r.fechaEnvio)} → ${AppFormatters.formatearFecha(r.fechaRetorno!)} (${r.diasEnRecapado()} días)'
                 : 'Para vida ${r.vidaRecapado} · enviada ${AppFormatters.formatearFecha(r.fechaEnvio)}',
-            style: AppType.eyebrow.copyWith(color: Colors.white60),
+            style: AppType.label.copyWith(color: AppColors.textSecondary),
           ),
           if (r.costo != null) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Costo: \$${AppFormatters.formatearMonto(r.costo)}',
-              style: AppType.label.copyWith(color: Colors.white70),
+              style: AppType.label.copyWith(color: AppColors.textSecondary),
             ),
           ],
           if (r.notas != null && r.notas!.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
               r.notas!,
-              style: AppType.eyebrow.copyWith(color: Colors.white60, fontStyle: FontStyle.italic),
+              style: AppType.label.copyWith(
+                color: AppColors.textSecondary,
+                fontStyle: FontStyle.italic,
+              ),
             ),
           ],
           if (!cerrado) ...[
             const SizedBox(height: 6),
             Text(
               'Tocá para cerrar el recapado al recibir.',
-              style: AppType.eyebrow.copyWith(color: Colors.white38),
+              style: AppType.label.copyWith(color: AppColors.textDisabled),
             ),
           ],
         ],
@@ -381,7 +408,7 @@ class _EnviarRecapadoDialogState extends State<_EnviarRecapadoDialog> {
                       padding: EdgeInsets.all(AppSpacing.sm),
                       child: Text(
                         'No hay cubiertas en depósito para recapar.',
-                        style: TextStyle(color: Colors.amber),
+                        style: TextStyle(color: AppColors.warning),
                       ),
                     );
                   }
@@ -419,18 +446,14 @@ class _EnviarRecapadoDialogState extends State<_EnviarRecapadoDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        AppButton.ghost(
+          label: 'Cancelar',
           onPressed: _guardando ? null : () => Navigator.pop(context),
-          child: const Text('CANCELAR'),
         ),
-        ElevatedButton(
+        AppButton(
+          label: 'Enviar',
+          isLoading: _guardando,
           onPressed: _guardando ? null : _guardar,
-          style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brandSoft),
-          child: _guardando
-              ? const SizedBox(
-                  width: 18, height: 18, child: CircularProgressIndicator())
-              : const Text('ENVIAR'),
         ),
       ],
     );
@@ -458,7 +481,7 @@ class _EnviarRecapadoDialogState extends State<_EnviarRecapadoDialog> {
           ),
           IconButton(
             tooltip: 'Volver al selector',
-            icon: const Icon(Icons.close, color: Colors.white60),
+            icon: const Icon(Icons.close, color: AppColors.textSecondary),
             onPressed: () => setState(() {
               _agregandoProveedor = false;
               _proveedorNuevoCtrl.clear();
@@ -625,7 +648,7 @@ class _CerrarRecapadoDialogState extends State<_CerrarRecapadoDialog> {
             children: [
               Text(
                 'Resultado:',
-                style: AppType.label.copyWith(color: Colors.white70),
+                style: AppType.label.copyWith(color: AppColors.textSecondary),
               ),
               RadioGroup<ResultadoRecapado>(
                 groupValue: _resultado,
@@ -669,16 +692,14 @@ class _CerrarRecapadoDialogState extends State<_CerrarRecapadoDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        AppButton.ghost(
+          label: 'Cancelar',
           onPressed: _guardando ? null : () => Navigator.pop(context),
-          child: const Text('CANCELAR'),
         ),
-        ElevatedButton(
+        AppButton(
+          label: 'Cerrar',
+          isLoading: _guardando,
           onPressed: _guardando ? null : _guardar,
-          child: _guardando
-              ? const SizedBox(
-                  width: 18, height: 18, child: CircularProgressIndicator())
-              : const Text('CERRAR'),
         ),
       ],
     );
