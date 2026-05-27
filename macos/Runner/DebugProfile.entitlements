@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Igual que Release.entitlements + 2 extras de debug -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.device.camera</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+	<key>com.apple.security.personal-information.location</key>
+	<true/>
+
+	<!-- DEBUG-ONLY: JIT necesario para hot-reload de Flutter. -->
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+
+	<!-- DEBUG-ONLY: network server para que el devtools de Flutter pueda
+	     conectar al debugger. NO va en Release. -->
+	<key>com.apple.security.network.server</key>
+	<true/>
+</dict>
+</plist>

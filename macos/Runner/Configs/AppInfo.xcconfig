@@ -1,0 +1,18 @@
+// Application-level settings for the Runner target (macOS).
+//
+// Sincronizado con iOS — mismo bundle ID + display name + copyright que
+// la app iOS, para que App Store Connect las pueda unificar bajo el
+// mismo app record (1 app, 2 platforms).
+
+// Nombre que aparece debajo del icono en Launchpad/Dock + título de la
+// ventana principal cuando Flutter no lo override-a.
+PRODUCT_NAME = Coopertrans Móvil
+
+// Bundle ID — IDÉNTICO al de iOS para que App Store Connect lo trate
+// como app multi-platform en lugar de dos apps separadas. La review
+// de macOS es independiente pero el listing comparte ratings, reviews
+// y estadísticas con iOS.
+PRODUCT_BUNDLE_IDENTIFIER = com.coopertrans.movil
+
+// Copyright visible en menu "About Coopertrans Móvil" del macOS app.
+PRODUCT_COPYRIGHT = Copyright © 2026 VECCHI ARIEL Y VECCHI GRACIELA SRL. All rights reserved.

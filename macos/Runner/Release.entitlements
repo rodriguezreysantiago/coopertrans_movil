@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Sandbox obligatorio para macOS App Store -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+
+	<!-- Network client: Firebase (Firestore, Auth, Storage, Crashlytics),
+	     Sentry, Volvo Connect proxy, Sitrack API, etc. La app es
+	     online-first, todo lo que muestra viene de la nube. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+
+	<!-- Cámara: image_picker.tomarFoto() para subir foto de comprobantes
+	     (RTO, seguro, licencia) o foto de perfil. -->
+	<key>com.apple.security.device.camera</key>
+	<true/>
+
+	<!-- Selección manual de archivos: file_picker permite al admin
+	     adjuntar PDFs (vencimientos, facturas) y al chofer fotos desde
+	     Finder. user-selected.read-write porque también podemos guardar
+	     reportes Excel generados desde Reportes. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+
+	<!-- Carpeta Descargas: necesaria para que share_plus pueda escribir
+	     reportes Excel exportados antes de abrirlos. -->
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+
+	<!-- Localización: geolocator para el botón "Usar mi ubicación" del
+	     picker de Logística. Solo cuando se solicita, no background. -->
+	<key>com.apple.security.personal-information.location</key>
+	<true/>
+
+	<!-- Apple Events: flutter_local_notifications usa NSAppleEventManager
+	     para algunas operaciones (defensivo, no estrictamente requerido). -->
+	<key>com.apple.security.automation.apple-events</key>
+	<false/>
+</dict>
+</plist>

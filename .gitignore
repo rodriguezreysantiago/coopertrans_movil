@@ -104,3 +104,7 @@ firepit-log.txt
 # Sentry CLI config con auth token — NUNCA debe ir al repo, vive en $HOME
 .sentryclirc
 
+
+# Kit del refactor design-system (TASK.md en G:/Drive). Es scratch
+# para fases 1-8 del rebrand cobalto — no debe entrar al repo.
+refactor/
