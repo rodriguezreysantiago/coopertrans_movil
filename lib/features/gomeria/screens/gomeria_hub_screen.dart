@@ -60,7 +60,7 @@ class GomeriaHubScreen extends StatelessWidget {
                   }
                   const totalTiles = 4;
                   final filas = (totalTiles / columnas).ceil();
-                  const spacing = 12.0;
+                  const spacing = AppSpacing.md;
                   // clampMin 1.0 = piso cuadrado: con pocas filas evita que
                   // las tiles se estiren a lo alto (ícono arriba flotando +
                   // texto abajo con un hueco enorme). Quedan cuadradas-ish
@@ -140,7 +140,7 @@ class _HubTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppCard(
       onTap: () => Navigator.pushNamed(context, ruta),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -155,14 +155,14 @@ class _HubTile extends StatelessWidget {
                   titulo,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                  style: AppType.heading,
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   subtitulo,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.label.copyWith(color: Colors.white60),
+                  style: AppType.label,
                 ),
               ],
             ),
@@ -236,43 +236,43 @@ class _AlertasFinDeVida extends StatelessWidget {
             // sin agregar un SizedBox suelto en el padre (que quedaría
             // visible cuando no hay alertas).
             return Padding(
-              padding: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.only(bottom: AppSpacing.lg),
               child: InkWell(
-              onTap: () => _abrirDetalle(context, alertas),
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: color),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning_amber_rounded, color: color, size: 28),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            etiqueta.toUpperCase(),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppType.label.copyWith(color: color, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Tocá para ver el detalle.',
-                            style: AppType.eyebrow.copyWith(color: Colors.white70),
-                          ),
-                        ],
+                onTap: () => _abrirDetalle(context, alertas),
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                child: Container(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    border: Border.all(color: color),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: color, size: 28),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              etiqueta.toUpperCase(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppType.eyebrow.copyWith(color: color),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'Tocá para ver el detalle.',
+                              style: AppType.eyebrow,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                    Icon(Icons.chevron_right, color: color),
-                  ],
+                      Icon(Icons.chevron_right, color: color),
+                    ],
+                  ),
                 ),
-              ),
               ),
             );
           },
@@ -284,7 +284,7 @@ class _AlertasFinDeVida extends StatelessWidget {
   void _abrirDetalle(BuildContext context, List<_Alerta> alertas) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.surface0,
       isScrollControlled: true,
       builder: (ctx) => _AlertasSheet(alertas: alertas),
     );
@@ -311,30 +311,25 @@ class _AlertasSheet extends StatelessWidget {
       builder: (ctx, controller) => Column(
         children: [
           Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
+            margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(2),
+              color: AppColors.textHint,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
           ),
           const Padding(
-            padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+            padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
             child: Text(
               'CUBIERTAS PRÓXIMAS A FIN DE VIDA',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-              ),
+              style: AppType.heading,
             ),
           ),
           Expanded(
             child: ListView.separated(
               controller: controller,
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.xs, AppSpacing.md, AppSpacing.xl),
               itemCount: alertas.length,
               separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
               itemBuilder: (_, i) {
@@ -357,15 +352,15 @@ class _AlertasSheet extends StatelessWidget {
                       },
                     );
                   },
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(AppSpacing.lg),
                   child: Row(
                     children: [
                       Container(
                         width: 56,
-                        padding: const EdgeInsets.symmetric(vertical: 6),
+                        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                         decoration: BoxDecoration(
                           color: color.withValues(alpha: 0.18),
-                          borderRadius: BorderRadius.circular(6),
+                          borderRadius: BorderRadius.circular(AppRadius.sm),
                           border: Border.all(color: color),
                         ),
                         alignment: Alignment.center,
@@ -383,14 +378,17 @@ class _AlertasSheet extends StatelessWidget {
                               '${a.instalada.cubiertaCodigo} · ${a.instalada.unidadId}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                              style: AppType.body.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               pos?.etiqueta ?? a.instalada.posicion,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppType.label.copyWith(color: Colors.white70),
+                              style: AppType.label,
                             ),
                             if (a.instalada.modeloEtiqueta != null) ...[
                               const SizedBox(height: 2),
@@ -398,14 +396,14 @@ class _AlertasSheet extends StatelessWidget {
                                 a.instalada.modeloEtiqueta!,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: AppType.eyebrow.copyWith(color: Colors.white60),
+                                style: AppType.eyebrow,
                               ),
                             ],
                           ],
                         ),
                       ),
                       const Icon(Icons.chevron_right,
-                          color: Colors.white38),
+                          color: AppColors.textDisabled),
                     ],
                   ),
                 );
