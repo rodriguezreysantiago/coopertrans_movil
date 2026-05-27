@@ -16,7 +16,6 @@ import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/fecha_input_formatter.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/utils/ocr_service.dart';
-import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../checklist/screens/user_checklist_form_screen.dart';
 

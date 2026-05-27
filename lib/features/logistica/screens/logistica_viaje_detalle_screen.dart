@@ -610,17 +610,13 @@ class _BotoneraAcciones extends StatelessWidget {
       runSpacing: 8,
       alignment: WrapAlignment.center,
       children: [
-        ElevatedButton.icon(
+        AppButton.secondary(
+          label: 'Editar',
+          icon: Icons.edit,
           onPressed: () => Navigator.pushNamed(
             context,
             AppRoutes.adminLogisticaViajeForm,
             arguments: {'viajeId': v.id},
-          ),
-          icon: const Icon(Icons.edit, size: 18),
-          label: const Text('EDITAR'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.info,
-            foregroundColor: Colors.white,
           ),
         ),
         if (v.activo) ...[
@@ -630,38 +626,29 @@ class _BotoneraAcciones extends StatelessWidget {
           // El flag `liquidado` del viaje SE MANTIENE en el modelo y
           // se sigue mostrando en el chip de cabecera — solo cambió
           // el lugar donde se setea (de individual aquí a masivo allá).
-          OutlinedButton.icon(
+          AppButton.danger(
+            label: 'Borrar',
+            icon: Icons.delete_outline,
             onPressed: () => _confirmarBorrar(context, v),
-            icon: const Icon(Icons.delete_outline, size: 18),
-            label: const Text('BORRAR'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.error,
-              side: const BorderSide(color: AppColors.error),
-            ),
           ),
         ] else ...[
-          OutlinedButton.icon(
+          // REACTIVAR es la acción positiva opuesta a borrar — usa
+          // secondary (cobalto) en lugar de un warning custom. La
+          // semántica "se borró por error" se da por el icono restore.
+          AppButton.secondary(
+            label: 'Reactivar',
+            icon: Icons.restore,
             onPressed: () => _reactivar(context, v),
-            icon: const Icon(Icons.restore, size: 18),
-            label: const Text('REACTIVAR'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.warning,
-              side: const BorderSide(color: AppColors.warning),
-            ),
           ),
           // Eliminar DEFINITIVO: solo aparece cuando el viaje ya está
           // soft-deleted (activo=false). Etapa de testing: limpia
           // viajes de prueba sin dejar rastro. Doble confirmación
           // (soft primero, hard después) previene borrados
           // accidentales.
-          OutlinedButton.icon(
+          AppButton.danger(
+            label: 'Eliminar definitivo',
+            icon: Icons.delete_forever,
             onPressed: () => _confirmarEliminarDefinitivo(context, v),
-            icon: const Icon(Icons.delete_forever, size: 18),
-            label: const Text('ELIMINAR DEFINITIVO'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.error,
-              side: const BorderSide(color: AppColors.error),
-            ),
           ),
         ],
       ],
@@ -678,43 +665,40 @@ class _BotoneraAcciones extends StatelessWidget {
     final ok = await showDialog<bool>(
       context: ctx,
       builder: (dCtx) => AlertDialog(
-        backgroundColor: Theme.of(dCtx).colorScheme.surface,
+        backgroundColor: AppColors.surface2,
         title: const Text('¿Eliminar definitivamente?'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Vas a borrar este viaje POR COMPLETO de la base. No '
               'queda en histórico, no se puede reactivar, los '
               'comprobantes de remito también se borran de Storage.',
-              style: TextStyle(color: Colors.white70),
+              style: AppType.body.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
               'Chofer: ${v.choferNombre ?? v.choferDni}',
-              style: const TextStyle(
-                color: Colors.white,
+              style: AppType.body.copyWith(
+                color: AppColors.textPrimary,
                 fontWeight: FontWeight.bold,
               ),
             ),
             Text(
               'Ruta: ${v.rutaEtiqueta}',
-              style: const TextStyle(color: Colors.white60),
+              style: AppType.label.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.pop(dCtx, false),
-            child: const Text('CANCELAR'),
           ),
-          FilledButton(
+          AppButton.danger(
+            label: 'Eliminar definitivo',
             onPressed: () => Navigator.pop(dCtx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
-            ),
-            child: const Text('ELIMINAR DEFINITIVO'),
           ),
         ],
       ),
@@ -767,17 +751,13 @@ class _BotoneraAcciones extends StatelessWidget {
           ],
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.pop(dCtx, false),
-            child: const Text('CANCELAR'),
           ),
-          ElevatedButton(
+          AppButton.danger(
+            label: 'Borrar',
             onPressed: () => Navigator.pop(dCtx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('BORRAR'),
           ),
         ],
       ),

@@ -17,6 +17,8 @@ import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/digit_only_formatter.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/utils/phone_formatter.dart';
+import '../../../shared/widgets/app_button.dart';
+import '../../../shared/widgets/app_card.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../../shared/widgets/foto_perfil_avatar.dart';
 
@@ -195,7 +197,7 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
           borderRadius: BorderRadius.circular(AppRadius.lg),
           side: const BorderSide(color: AppColors.borderSubtle),
         ),
-        title: const Text('Cambiar contraseña', style: AppType.title),
+        title: Text('Cambiar contraseña', style: AppType.title),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -267,8 +269,8 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
         ),
         child: SafeArea(
           child: Wrap(children: [
-            const Padding(
-              padding: EdgeInsets.all(AppSpacing.lg),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
               child: Text('Actualizar foto', style: AppType.heading),
             ),
             ListTile(
@@ -478,7 +480,7 @@ class _Header extends StatelessWidget {
         // Eyebrow sentence-case en el fuente; el AppType.eyebrow ya
         // aplica el tracking. Cero overrides de color/weight: el
         // eyebrow ES el estilo, no necesita decoración.
-        const Text('CHOFER PROFESIONAL', style: AppType.eyebrow),
+        Text('CHOFER PROFESIONAL', style: AppType.eyebrow),
       ],
     );
   }
@@ -927,10 +929,10 @@ class _PerfilOfflineFallback extends StatelessWidget {
         // Si solo es conexión lenta, mostramos indicador de carga
         // discreto al pie — el stream sigue intentando.
         if (motivo == null)
-          const Center(
+          Center(
             child: Column(
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 22,
                   height: 22,
                   child: CircularProgressIndicator(
@@ -938,7 +940,7 @@ class _PerfilOfflineFallback extends StatelessWidget {
                     color: AppColors.info,
                   ),
                 ),
-                SizedBox(height: AppSpacing.sm),
+                const SizedBox(height: AppSpacing.sm),
                 Text(
                   'Cargando datos completos…',
                   style: AppType.label,
