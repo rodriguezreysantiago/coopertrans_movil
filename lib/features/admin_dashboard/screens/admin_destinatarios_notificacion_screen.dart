@@ -107,17 +107,19 @@ class _AdminDestinatariosNotificacionScreenState
           }
           final data = snap.data!;
           return ListView(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.xl),
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.sm, AppSpacing.xs, AppSpacing.sm, AppSpacing.md),
                 child: Text(
                   'Cambiar el destinatario de un resumen / aviso. Los valores '
                   'override viven en META/destinatarios_notificacion y se '
                   'sobreponen a los hardcoded. Si dejás "Por defecto", '
                   'vuelve al original. Cambios efectivos en ≤ 5 min '
                   '(cache de las Cloud Functions y del bot).',
-                  style: AppType.label.copyWith(color: Colors.white60),
+                  style: AppType.label.copyWith(color: AppColors.textSecondary),
                 ),
               ),
               for (final grupo in _reglas) ...[
@@ -131,7 +133,7 @@ class _AdminDestinatariosNotificacionScreenState
                     empleados: data.empleados,
                     onChange: (dni) => _guardar(regla.key, dni),
                   ),
-                const SizedBox(height: 14),
+                const SizedBox(height: AppSpacing.md),
               ],
             ],
           );
@@ -289,7 +291,7 @@ class _FilaEditable extends StatelessWidget {
   Widget build(BuildContext context) {
     final tieneOverride = overrideDni.isNotEmpty;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: AppCard(
         padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
@@ -297,17 +299,13 @@ class _FilaEditable extends StatelessWidget {
           children: [
             Text(
               regla.label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-              ),
+              style: AppType.heading.copyWith(fontSize: 13),
             ),
             Padding(
-              padding: const EdgeInsets.only(top: 2, bottom: 8),
+              padding: const EdgeInsets.only(top: 2, bottom: AppSpacing.sm),
               child: Text(
                 regla.descripcion,
-                style: AppType.eyebrow.copyWith(color: Colors.white60),
+                style: AppType.eyebrow.copyWith(color: AppColors.textSecondary),
               ),
             ),
             Row(
@@ -315,20 +313,20 @@ class _FilaEditable extends StatelessWidget {
                 Expanded(
                   child: InkWell(
                     onTap: () => _elegir(context),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 10),
+                          horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
                       decoration: BoxDecoration(
                         color: (tieneOverride
                                 ? AppColors.info
                                 : Colors.white)
                             .withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
                         border: Border.all(
                           color: tieneOverride
                               ? AppColors.info.withValues(alpha: 0.4)
-                              : Colors.white24,
+                              : AppColors.borderStrong,
                         ),
                       ),
                       child: Row(
@@ -339,7 +337,7 @@ class _FilaEditable extends StatelessWidget {
                                 : Icons.settings_outlined,
                             color: tieneOverride
                                 ? AppColors.info
-                                : Colors.white54,
+                                : AppColors.textTertiary,
                             size: 16,
                           ),
                           const SizedBox(width: AppSpacing.sm),
@@ -350,13 +348,14 @@ class _FilaEditable extends StatelessWidget {
                                   : 'Por defecto: ${regla.fallbackHardcoded}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppType.label.copyWith(color: tieneOverride
-                                    ? Colors.white
-                                    : Colors.white54),
+                              style: AppType.label.copyWith(
+                                  color: tieneOverride
+                                      ? AppColors.textPrimary
+                                      : AppColors.textTertiary),
                             ),
                           ),
                           const Icon(Icons.unfold_more,
-                              color: Colors.white38, size: 16),
+                              color: AppColors.textHint, size: 16),
                         ],
                       ),
                     ),
@@ -366,7 +365,7 @@ class _FilaEditable extends StatelessWidget {
                   const SizedBox(width: AppSpacing.sm),
                   IconButton(
                     icon: const Icon(Icons.restore,
-                        color: Colors.white60, size: 18),
+                        color: AppColors.textSecondary, size: 18),
                     tooltip: 'Volver al por defecto',
                     onPressed: () => onChange(null),
                   ),
@@ -395,12 +394,14 @@ class _FilaEditable extends StatelessWidget {
       isScrollControlled: true,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
       ),
       builder: (ctx) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.md),
             child: StatefulBuilder(builder: (ctx, setStateSheet) {
               final q = ctrl.text.trim().toUpperCase();
               final filtrados = q.isEmpty
@@ -416,17 +417,13 @@ class _FilaEditable extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text('Elegir destinatario para "${regla.label}"',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        )),
-                    const SizedBox(height: 10),
+                        style: AppType.heading.copyWith(fontSize: 15)),
+                    const SizedBox(height: AppSpacing.sm),
                     TextField(
                       controller: ctrl,
                       autofocus: true,
                       textCapitalization: TextCapitalization.characters,
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(color: AppColors.textPrimary),
                       decoration: const InputDecoration(
                         prefixIcon: Icon(Icons.search),
                         labelText: 'Buscar por nombre o DNI',
@@ -434,7 +431,7 @@ class _FilaEditable extends StatelessWidget {
                       ),
                       onChanged: (_) => setStateSheet(() {}),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: AppSpacing.sm),
                     Expanded(
                       child: ListView.builder(
                         itemCount: filtrados.length,
@@ -442,10 +439,12 @@ class _FilaEditable extends StatelessWidget {
                           final e = filtrados[i];
                           return ListTile(
                             title: Text(e.nombre,
-                                style: const TextStyle(color: Colors.white)),
+                                style: const TextStyle(
+                                    color: AppColors.textPrimary)),
                             subtitle: Text(
                                 'DNI ${AppFormatters.formatearDNI(e.dni)}',
-                                style: AppType.label.copyWith(color: Colors.white60)),
+                                style: AppType.label.copyWith(
+                                    color: AppColors.textSecondary)),
                             onTap: () => Navigator.pop(ctx, e),
                           );
                         },
@@ -472,15 +471,10 @@ class _SeccionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 6, top: 4),
+      padding: const EdgeInsets.only(left: 6, top: AppSpacing.xs),
       child: Text(
         texto,
-        style: TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-        ),
+        style: AppType.eyebrow.copyWith(color: color, fontSize: 10),
       ),
     );
   }
