@@ -45,7 +45,7 @@ class _ResumenContador extends StatelessWidget {
           }
         }
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          padding: const EdgeInsets.all(AppSpacing.xs),
           child: Row(
             children: [
               _MiniContador(
@@ -112,7 +112,7 @@ class _MiniContador extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(AppRadius.sm),
           child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm, horizontal: 6),
             decoration: BoxDecoration(
               color: color.withAlpha(fondoAlpha),
               borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -274,25 +274,19 @@ class _ItemCola extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               if (esError || estado == 'PENDIENTE')
-                TextButton.icon(
+                AppButton.ghost(
+                  label: 'Eliminar',
+                  icon: Icons.delete_outline,
+                  size: AppButtonSize.sm,
                   onPressed: onEliminar,
-                  icon: const Icon(Icons.delete_outline,
-                      color: Colors.white54, size: 16),
-                  label: Text(
-                    'Eliminar',
-                    style: AppType.eyebrow.copyWith(color: Colors.white54),
-                  ),
                 ),
               if (esError) ...[
                 const SizedBox(width: AppSpacing.xs),
-                TextButton.icon(
+                AppButton.ghost(
+                  label: 'Reintentar',
+                  icon: Icons.refresh,
+                  size: AppButtonSize.sm,
                   onPressed: onReintentar,
-                  icon: const Icon(Icons.refresh,
-                      color: AppColors.success, size: 16),
-                  label: Text(
-                    'Reintentar',
-                    style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
-                  ),
                 ),
               ],
             ],
@@ -346,7 +340,7 @@ class _BadgeEstado extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = _ItemCola._colorEstado(estado);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
       decoration: BoxDecoration(
         color: color.withAlpha(25),
         borderRadius: BorderRadius.circular(4),
@@ -609,7 +603,7 @@ class _FilaDato extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
