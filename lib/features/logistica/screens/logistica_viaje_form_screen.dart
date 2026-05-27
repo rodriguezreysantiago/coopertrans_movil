@@ -305,11 +305,11 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dCtx).pop(false),
-              child: const Text('DESCARTAR'),
+              child: const Text('Descartar'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dCtx).pop(true),
-              child: const Text('RECUPERAR'),
+              child: const Text('Recuperar'),
             ),
           ],
         );
@@ -569,7 +569,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
                   'Encontramos ${candidatos.length} '
                   'viaje${candidatos.length == 1 ? "" : "s"} del mismo '
                   'chofer en las últimas 24h con alguna tarifa en común:',
-                  style: const TextStyle(fontSize: 13),
+                  style: AppType.body.copyWith(fontSize: 13),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 ...candidatos.map((v) {
@@ -597,12 +597,9 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
                   );
                 }),
                 const SizedBox(height: AppSpacing.sm),
-                const Text(
+                Text(
                   '¿Es un viaje distinto?',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.heading.copyWith(fontSize: 13),
                 ),
               ],
             ),
@@ -610,11 +607,11 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dCtx).pop(false),
-              child: const Text('REVISAR'),
+              child: const Text('Revisar'),
             ),
             FilledButton(
               onPressed: () => Navigator.of(dCtx).pop(true),
-              child: const Text('SÍ, GUARDAR IGUAL'),
+              child: const Text('Sí, guardar igual'),
             ),
           ],
         );
@@ -909,7 +906,8 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
         child: Focus(
           autofocus: true,
           child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1013,7 +1011,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
                 }
               }
               widgets.add(Padding(
-                padding: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.only(bottom: AppSpacing.md),
                 child: _TramoCard(
                   key: ValueKey(tramo.id),
                   numero: index + 1,
