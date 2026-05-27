@@ -92,7 +92,7 @@ class _AdminVehiculosListaScreenState
                     : Icons.shield_outlined,
                 color: _mostrarExcluidos
                     ? AppColors.warning
-                    : Colors.white70,
+                    : AppColors.textSecondary,
               ),
               onPressed: () =>
                   setState(() => _mostrarExcluidos = !_mostrarExcluidos),
@@ -107,7 +107,7 @@ class _AdminVehiculosListaScreenState
                   : Icons.archive_outlined,
               color: _mostrarInactivos
                   ? AppColors.warning
-                  : Colors.white70,
+                  : AppColors.textSecondary,
             ),
             onPressed: () =>
                 setState(() => _mostrarInactivos = !_mostrarInactivos),
@@ -131,7 +131,7 @@ class _AdminVehiculosListaScreenState
           ),
           tooltip: 'Agregar nueva unidad',
           icon: const Icon(Icons.add),
-          label: const Text('NUEVO'),
+          label: const Text('Nuevo'),
         ),
         body: TabBarView(
           children: [
