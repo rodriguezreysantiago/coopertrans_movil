@@ -50,7 +50,8 @@ class AdminMantenimientoDetalleScreen extends StatelessWidget {
           final volvo = snap.data![1];
           final taller = snap.data![2];
           return ListView(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md, AppSpacing.md, AppSpacing.md, 80),
             children: [
               _SeccionService(vehiculo: vehiculo),
               const SizedBox(height: AppSpacing.md),
@@ -78,7 +79,7 @@ Color _colorSeveridad(SeveridadAdvertencia s) {
     case SeveridadAdvertencia.medio:
       return AppColors.warning;
     case SeveridadAdvertencia.bajo:
-      return Colors.white54;
+      return AppColors.textTertiary;
   }
 }
 
@@ -90,14 +91,15 @@ class _TituloSeccion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8, left: 2),
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm, left: 2),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: Colors.white60),
+          Icon(icon, size: 18, color: AppColors.textSecondary),
           const SizedBox(width: AppSpacing.sm),
           Text(
             texto.toUpperCase(),
-            style: AppType.label.copyWith(color: Colors.white60, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+            style: AppType.eyebrow
+                .copyWith(color: AppColors.textSecondary, letterSpacing: 0.8),
           ),
         ],
       ),
@@ -120,14 +122,17 @@ class _Fila extends StatelessWidget {
           Expanded(
             flex: 4,
             child: Text(label,
-                style: AppType.label.copyWith(color: Colors.white54)),
+                style:
+                    AppType.label.copyWith(color: AppColors.textTertiary)),
           ),
           Expanded(
             flex: 5,
             child: Text(
               valor,
               textAlign: TextAlign.right,
-              style: AppType.label.copyWith(color: color ?? Colors.white, fontWeight: FontWeight.w600),
+              style: AppType.label.copyWith(
+                  color: color ?? AppColors.textPrimary,
+                  fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -181,10 +186,12 @@ class _SeccionService extends StatelessWidget {
             _Fila('Recorrido desde el último',
                 '${AppFormatters.formatearMiles(kmActual - ultimoKm)} km'),
           const SizedBox(height: AppSpacing.xs),
-          const Text(
+          Text(
             'Intervalo 50.000 km · dato automático desde Volvo Connect',
-            style: TextStyle(
-                color: Colors.white38, fontSize: 10, fontStyle: FontStyle.italic),
+            style: AppType.eyebrow.copyWith(
+                color: AppColors.textHint,
+                fontSize: 10,
+                fontStyle: FontStyle.italic),
           ),
         ],
       ),
@@ -214,35 +221,33 @@ class _SeccionAdvertencias extends StatelessWidget {
               tieneDatos
                   ? 'Sin advertencias activas — ningún testigo en rojo o amarillo.'
                   : 'Esta unidad no transmite los testigos del tablero (modelo sin esa telemetría).',
-              style: AppType.label.copyWith(color: Colors.white54),
+              style: AppType.label.copyWith(color: AppColors.textTertiary),
             )
           else
             ...advertencias.map((a) {
               final color = _colorSeveridad(a.severidad);
               return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                 child: Row(
                   children: [
                     Icon(Icons.circle, size: 10, color: color),
                     const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(a.nombre,
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 13)),
+                          style: AppType.body.copyWith(
+                              color: AppColors.textPrimary, fontSize: 13)),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: color.withAlpha(25),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(AppRadius.sm / 2),
                       ),
                       child: Text(
                         a.estado == 'RED' ? 'CRÍTICO' : a.severidad.name.toUpperCase(),
-                        style: TextStyle(
-                            color: color,
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold),
+                        style: AppType.eyebrow.copyWith(
+                            color: color, fontSize: 9),
                       ),
                     ),
                   ],
@@ -288,7 +293,7 @@ class _SeccionTelemetria extends StatelessWidget {
           const _TituloSeccion(Icons.insights_outlined, 'Telemetría'),
           if (filas.isEmpty)
             Text('Sin datos de telemetría.',
-                style: AppType.label.copyWith(color: Colors.white54))
+                style: AppType.label.copyWith(color: AppColors.textTertiary))
           else
             ...filas,
         ],
@@ -313,7 +318,7 @@ class _SeccionHistorial extends StatelessWidget {
           if (servicios.isEmpty)
             Text(
               'Sin historial de taller. Se sincroniza desde Volvo Connect.',
-              style: AppType.label.copyWith(color: Colors.white54),
+              style: AppType.label.copyWith(color: AppColors.textTertiary),
             )
           else
             ...servicios.map((s) => _ItemVisita(visita: s as Map)),
@@ -334,13 +339,14 @@ class _ItemVisita extends StatelessWidget {
     final km = (visita['km'] as num?)?.toDouble();
     final taller = (visita['taller'] ?? '').toString();
     final ops = (visita['operaciones'] as List?) ?? const [];
-    final color = esService ? AppColors.success : Colors.white38;
+    final color = esService ? AppColors.success : AppColors.textHint;
 
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
         tilePadding: EdgeInsets.zero,
-        childrenPadding: const EdgeInsets.only(left: 18, bottom: 8),
+        childrenPadding:
+            const EdgeInsets.only(left: AppSpacing.lg, bottom: AppSpacing.sm),
         leading: Icon(
           esService ? Icons.build_outlined : Icons.handyman_outlined,
           color: color,
@@ -349,8 +355,7 @@ class _ItemVisita extends StatelessWidget {
         title: Text(
           '${AppFormatters.formatearFecha(fecha)}'
           '${km != null ? ' · ${AppFormatters.formatearMiles(km)} km' : ''}',
-          style: const TextStyle(
-              color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+          style: AppType.heading.copyWith(fontSize: 13),
         ),
         subtitle: Text(
           '${esService ? 'Service' : 'Reparación'}'
@@ -362,7 +367,8 @@ class _ItemVisita extends StatelessWidget {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text('Sin detalle de operaciones.',
-                      style: AppType.eyebrow.copyWith(color: Colors.white38)),
+                      style: AppType.eyebrow
+                          .copyWith(color: AppColors.textHint)),
                 )
               ]
             : ops.map<Widget>((o) {
@@ -375,17 +381,20 @@ class _ItemVisita extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('• ',
-                          style: AppType.label.copyWith(color: Colors.white38)),
+                          style: AppType.label
+                              .copyWith(color: AppColors.textHint)),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(desc.isEmpty ? grupo : desc,
-                                style: AppType.label.copyWith(color: Colors.white70)),
+                                style: AppType.label.copyWith(
+                                    color: AppColors.textSecondary)),
                             if (grupo.isNotEmpty && desc.isNotEmpty)
                               Text(grupo,
-                                  style: const TextStyle(
-                                      color: Colors.white38, fontSize: 10)),
+                                  style: AppType.eyebrow.copyWith(
+                                      color: AppColors.textHint,
+                                      fontSize: 10)),
                           ],
                         ),
                       ),
@@ -431,7 +440,7 @@ class _SeccionKmRecorridosState extends State<_SeccionKmRecorridos> {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: FutureBuilder<_KmRecorridosData>(
         future: _future,
         builder: (ctx, snap) {
@@ -447,7 +456,8 @@ class _SeccionKmRecorridosState extends State<_SeccionKmRecorridos> {
               children: [
                 const _TituloSeccion(Icons.route, 'Km recorridos'),
                 Text('No se pudo cargar: ${snap.error ?? "sin datos"}',
-                    style: AppType.label.copyWith(color: Colors.white54)),
+                    style: AppType.label
+                        .copyWith(color: AppColors.textTertiary)),
               ],
             );
           }
@@ -459,7 +469,7 @@ class _SeccionKmRecorridosState extends State<_SeccionKmRecorridos> {
                 const _TituloSeccion(Icons.route, 'Km recorridos'),
                 Text(
                   'Sin snapshots para esta unidad (probable no-Volvo o nueva).',
-                  style: AppType.label.copyWith(color: Colors.white54),
+                  style: AppType.label.copyWith(color: AppColors.textTertiary),
                 ),
               ],
             );
@@ -469,7 +479,7 @@ class _SeccionKmRecorridosState extends State<_SeccionKmRecorridos> {
             children: [
               const _TituloSeccion(Icons.route, 'Km recorridos'),
               _KpisMes(meses: data.meses),
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpacing.md),
               _GraficoDias(dias: data.dias),
               const SizedBox(height: AppSpacing.md),
               _TablaMeses(meses: data.meses),
@@ -498,8 +508,8 @@ class _KpisMes extends StatelessWidget {
     final mesActual = lista.first;
     final mesAnterior = lista.length > 1 ? lista[1] : null;
     return Wrap(
-      spacing: 18,
-      runSpacing: 8,
+      spacing: AppSpacing.lg,
+      runSpacing: AppSpacing.sm,
       children: [
         _Kpi(
             label: 'KM MES EN CURSO',
@@ -512,7 +522,7 @@ class _KpisMes extends StatelessWidget {
               valor: AppFormatters.formatearMiles(
                   mesAnterior.kmTotal.toDouble()),
               sub: '${mesAnterior.diasConDato} días con dato',
-              color: Colors.white60),
+              color: AppColors.textSecondary),
         _Kpi(
             label: 'L/100KM MES',
             valor: mesActual.litros100km > 0
@@ -542,19 +552,15 @@ class _Kpi extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(
-                color: Colors.white54,
+            style: AppType.eyebrow.copyWith(
+                color: AppColors.textTertiary,
                 fontSize: 10,
-                fontWeight: FontWeight.bold,
                 letterSpacing: 1)),
         Text(valor,
-            style: TextStyle(
-                color: color,
-                fontSize: 18,
-                fontWeight: FontWeight.bold)),
+            style: AppType.heading.copyWith(color: color, fontSize: 18)),
         Text(sub,
-            style:
-                const TextStyle(color: Colors.white38, fontSize: 10)),
+            style: AppType.eyebrow.copyWith(
+                color: AppColors.textHint, fontSize: 10)),
       ],
     );
   }
@@ -582,7 +588,7 @@ class _GraficoDias extends StatelessWidget {
         child: Center(
           child: Text(
             'Necesitamos más días para graficar',
-            style: AppType.label.copyWith(color: Colors.white54),
+            style: AppType.label.copyWith(color: AppColors.textTertiary),
           ),
         ),
       );
@@ -666,11 +672,11 @@ class _TablaMeses extends StatelessWidget {
       headingRowHeight: 32,
       dataRowMinHeight: 30,
       dataRowMaxHeight: 36,
-      columnSpacing: 18,
+      columnSpacing: AppSpacing.lg,
       horizontalMargin: 4,
-      headingTextStyle: AppType.eyebrow.copyWith(color: Colors.white60, fontWeight: FontWeight.bold, letterSpacing: 0.8),
-      dataTextStyle:
-          AppType.label.copyWith(color: Colors.white),
+      headingTextStyle: AppType.eyebrow
+          .copyWith(color: AppColors.textSecondary, letterSpacing: 0.8),
+      dataTextStyle: AppType.label.copyWith(color: AppColors.textPrimary),
       columns: const [
         DataColumn(label: Text('MES')),
         DataColumn(label: Text('KM'), numeric: true),
