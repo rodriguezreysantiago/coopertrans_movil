@@ -14,6 +14,7 @@ import '../services/report_liquidacion.dart';
 import '../services/liquidacion_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla LIQUIDACIÓN — agregaciones financieras de los viajes
 /// del mes filtrados por **empresa empleadora del chofer** (no por
 /// cliente del flete) + chofer opcional.
@@ -307,12 +308,7 @@ class _BarraFiltros extends StatelessWidget {
                 child: Center(
                   child: Text(
                     AppFormatters.formatearMes(mes).toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                      letterSpacing: 1.1,
-                    ),
+                    style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.1),
                   ),
                 ),
               ),
@@ -430,11 +426,7 @@ class _ChipFiltro extends StatelessWidget {
       label: Text(label),
       selected: selected,
       onSelected: (_) => onTap(),
-      labelStyle: TextStyle(
-        color: selected ? Colors.black : Colors.white70,
-        fontSize: 12,
-        fontWeight: FontWeight.w600,
-      ),
+      labelStyle: AppType.label.copyWith(color: selected ? Colors.black : Colors.white70, fontWeight: FontWeight.w600),
       selectedColor: AppColors.success,
       backgroundColor: AppColors.background,
     );
@@ -594,12 +586,7 @@ class _SeccionKPIs extends StatelessWidget {
                 child: Text(
                   'Resumen — $cantViajes viaje(s) · '
                   '$cantAdelantos adelanto(s)',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    letterSpacing: 0.8,
-                  ),
+                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 0.8),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -725,16 +712,11 @@ class _TablaPorChofer extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(4, 4, 4, 8),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
           child: Text(
             'POR CHOFER',
-            style: TextStyle(
-              color: Colors.white60,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
-            ),
+            style: AppType.eyebrow.copyWith(color: Colors.white60, fontWeight: FontWeight.bold, letterSpacing: 1.5),
           ),
         ),
         ...dnis.map((dni) {
@@ -775,19 +757,13 @@ class _TablaPorChofer extends StatelessWidget {
                       vs.isEmpty
                           ? 'sin viajes'
                           : '${vs.length} viaje${vs.length == 1 ? "" : "s"}',
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 11,
-                      ),
+                      style: AppType.eyebrow.copyWith(color: Colors.white54),
                     ),
                     if (ads.isNotEmpty) ...[
                       const SizedBox(width: 6),
                       Text(
                         '·  ${ads.length} adel.',
-                        style: const TextStyle(
-                          color: AppColors.info,
-                          fontSize: 11,
-                        ),
+                        style: AppType.eyebrow.copyWith(color: AppColors.info),
                       ),
                     ],
                     if (pendientes > 0) ...[
@@ -849,11 +825,7 @@ class _MiniCelda extends StatelessWidget {
           Expanded(
             child: Text(
               label,
-              style: TextStyle(
-                color: destacado ? Colors.white : Colors.white60,
-                fontSize: 11,
-                fontWeight: destacado ? FontWeight.bold : FontWeight.normal,
-              ),
+              style: AppType.eyebrow.copyWith(color: destacado ? Colors.white : Colors.white60, fontWeight: destacado ? FontWeight.bold : FontWeight.normal),
             ),
           ),
           Text(
@@ -889,32 +861,22 @@ class _ListaViajes extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (viajes.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(4, 4, 4, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
             child: Text(
               'VIAJES DEL CHOFER',
-              style: TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-              ),
+              style: AppType.eyebrow.copyWith(color: Colors.white60, fontWeight: FontWeight.bold, letterSpacing: 1.5),
             ),
           ),
           ...viajes.map((v) => _ViajeCardLiquidacion(v: v)),
         ],
         if (adelantos.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.sm),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(4, 4, 4, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
             child: Text(
               'ADELANTOS DEL CHOFER',
-              style: TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-              ),
+              style: AppType.eyebrow.copyWith(color: Colors.white60, fontWeight: FontWeight.bold, letterSpacing: 1.5),
             ),
           ),
           ...adelantos.map((a) => _AdelantoCardLiquidacion(a: a)),
@@ -948,19 +910,12 @@ class _AdelantoCardLiquidacion extends StatelessWidget {
               children: [
                 Text(
                   AppFormatters.formatearFecha(a.fecha),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
+                  style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 if (a.observacion != null && a.observacion!.isNotEmpty)
                   Text(
                     a.observacion!,
-                    style: const TextStyle(
-                      color: Colors.white60,
-                      fontSize: 11,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: Colors.white60),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -978,11 +933,7 @@ class _AdelantoCardLiquidacion extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Text(
             '−\$${AppFormatters.formatearMonto(a.monto)}',
-            style: const TextStyle(
-              color: AppColors.warning,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
+            style: AppType.body.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -1030,11 +981,7 @@ class _ViajeCardLiquidacionState extends State<_ViajeCardLiquidacion> {
                   '$fecha · ${v.rutaEtiqueta}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
+                  style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
               if (v.liquidado)
@@ -1079,10 +1026,7 @@ class _ViajeCardLiquidacionState extends State<_ViajeCardLiquidacion> {
                     _expandido
                         ? 'Ocultar tramos'
                         : 'Ver detalle de ${v.cantidadTramos} tramos',
-                    style: const TextStyle(
-                      color: Colors.white54,
-                      fontSize: 11,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: Colors.white54),
                   ),
                 ],
               ),
@@ -1155,15 +1099,15 @@ class _DetalleTramoLiquidacion extends StatelessWidget {
           if (tramo.producto != null && tramo.producto!.isNotEmpty)
             Text(
               tramo.producto!,
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white70),
             ),
           Text(
             'Carga: $fc${kgC != null ? "  ·  $kgC" : ""}',
-            style: const TextStyle(color: Colors.white60, fontSize: 11),
+            style: AppType.eyebrow.copyWith(color: Colors.white60),
           ),
           Text(
             'Descarga: $fd${kgD != null ? "  ·  $kgD" : ""}',
-            style: const TextStyle(color: Colors.white60, fontSize: 11),
+            style: AppType.eyebrow.copyWith(color: Colors.white60),
           ),
           if (tramo.remitoNumero != null && tramo.remitoNumero!.isNotEmpty)
             Text(

@@ -4,6 +4,7 @@ import '../constants/app_colors.dart';
 import '../utils/fecha_input_formatter.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Diálogo de selección de fecha por **input directo** (`DD/MM/YYYY`),
 /// pensado como reemplazo del `showDatePicker` nativo de Material.
 ///
@@ -146,18 +147,14 @@ class _FechaDialogState extends State<_FechaDialog> {
       ),
       title: Text(
         widget.titulo,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-        ),
+        style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
+          Text(
             'Ingresá la fecha en formato DD/MM/AAAA',
-            style: TextStyle(color: Colors.white60, fontSize: 12),
+            style: AppType.label.copyWith(color: Colors.white60),
           ),
           const SizedBox(height: AppSpacing.lg),
           TextField(

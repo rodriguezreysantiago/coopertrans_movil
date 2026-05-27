@@ -22,6 +22,7 @@ import '../services/viajes_service.dart';
 import '../utils/calculos_viaje.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 // ─── Split del archivo principal (refactor 2026-05-18) ───
 //
 // Originalmente este archivo tenia 2823 LOC con 24 classes en un solo lugar.
@@ -588,7 +589,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
                         Expanded(
                           child: Text(
                             '$fecha · $ruta',
-                            style: const TextStyle(fontSize: 12),
+                            style: AppType.label,
                           ),
                         ),
                       ],

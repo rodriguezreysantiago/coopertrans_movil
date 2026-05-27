@@ -19,6 +19,7 @@ import 'admin_vehiculo_form_screen.dart';
 import 'diagnostico_volvo_screen.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 // 13 widgets visuales (cards, sheet de detalle, telemetría, badges,
 // rows) extraídos para mantener navegable el screen principal.
 // Comparten privacidad y los imports via `part of`.

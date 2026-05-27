@@ -9,6 +9,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../services/whatsapp_cola_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 // 9 widgets visuales (resumen contadores, item de cola, badge estado,
 // detalle sheet, filas de dato, etc) extraidos para mantener navegable
 // este screen. Comparten privacidad via `part of`.
@@ -191,8 +192,7 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
                           },
                         ),
                   hintText: 'Buscar DNI / patente / teléfono / origen / texto',
-                  hintStyle: const TextStyle(
-                      color: Colors.white38, fontSize: 12),
+                  hintStyle: AppType.label.copyWith(color: Colors.white38),
                   border: const OutlineInputBorder(),
                   contentPadding: const EdgeInsets.symmetric(
                       horizontal: 12, vertical: 10),

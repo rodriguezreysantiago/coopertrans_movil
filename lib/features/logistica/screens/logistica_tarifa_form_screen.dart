@@ -10,6 +10,7 @@ import '../models/ubicacion_logistica.dart';
 import '../services/logistica_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Form full-screen para alta y edición de tarifas. Diseñado como un
 /// flujo lineal arriba-abajo:
 ///
@@ -289,8 +290,7 @@ class _LogisticaTarifaFormScreenState
                         prefixText: '\$ ',
                         suffixText: '/viaje',
                       ),
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 16),
+                      style: AppType.heading.copyWith(color: Colors.white),
                     )
                   else
                     TextField(
@@ -394,10 +394,7 @@ class _LogisticaTarifaFormScreenState
                           child: Text(
                             'Flete a cargo de ${_empOrigen!.nombre} '
                             '(origen y destino son la misma empresa).',
-                            style: const TextStyle(
-                              color: AppColors.info,
-                              fontSize: 12,
-                            ),
+                            style: AppType.label.copyWith(color: AppColors.info),
                           ),
                         ),
                       ],
@@ -585,7 +582,7 @@ class _LogisticaTarifaFormScreenState
         prefixStyle: TextStyle(color: color, fontWeight: FontWeight.bold),
         suffixText: _unidad.sufijoMonto,
       ),
-      style: const TextStyle(color: Colors.white, fontSize: 16),
+      style: AppType.heading.copyWith(color: Colors.white),
     );
   }
 
@@ -606,7 +603,7 @@ class _LogisticaTarifaFormScreenState
         ),
         suffixText: '/viaje',
       ),
-      style: const TextStyle(color: Colors.white, fontSize: 16),
+      style: AppType.heading.copyWith(color: Colors.white),
     );
   }
 
@@ -865,21 +862,14 @@ class _SelectorEmpresa extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   valor?.etiquetaPrincipal ?? 'Seleccionar...',
-                  style: TextStyle(
-                    color: valor == null ? Colors.white38 : Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.body.copyWith(color: valor == null ? Colors.white38 : Colors.white, fontWeight: FontWeight.bold),
                 ),
                 if (valor?.etiquetaSecundaria != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       valor!.etiquetaSecundaria!,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 11,
-                      ),
+                      style: AppType.eyebrow.copyWith(color: Colors.white54),
                     ),
                   ),
               ],
@@ -912,7 +902,7 @@ class _BuscadorField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       onChanged: onChanged,
-      style: const TextStyle(color: Colors.white, fontSize: 14),
+      style: AppType.body.copyWith(color: Colors.white),
       decoration: InputDecoration(
         hintText: hint,
         prefixIcon:
@@ -1038,21 +1028,14 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
                               children: [
                                 Text(
                                   e.etiquetaPrincipal,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                                 ),
                                 if (e.etiquetaSecundaria != null)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 2),
                                     child: Text(
                                       e.etiquetaSecundaria!,
-                                      style: const TextStyle(
-                                        color: Colors.white54,
-                                        fontSize: 11,
-                                      ),
+                                      style: AppType.eyebrow.copyWith(color: Colors.white54),
                                     ),
                                   ),
                               ],
@@ -1117,20 +1100,13 @@ class _SelectorUbicacion extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   valor?.nombre ?? 'Seleccionar...',
-                  style: TextStyle(
-                    color: valor == null ? Colors.white38 : Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.body.copyWith(color: valor == null ? Colors.white38 : Colors.white, fontWeight: FontWeight.bold),
                 ),
                 if (valor != null) ...[
                   const SizedBox(height: 2),
                   Text(
                     valor!.etiquetaCompleta,
-                    style: const TextStyle(
-                      color: Colors.white60,
-                      fontSize: 11,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: Colors.white60),
                   ),
                 ],
               ],
@@ -1207,7 +1183,7 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                   FilterChip(
                     label: Text(
                       _mostrarTodas ? 'Mostrar solo de la empresa' : 'Mostrar todas',
-                      style: const TextStyle(fontSize: 11),
+                      style: AppType.eyebrow,
                     ),
                     selected: _mostrarTodas,
                     onSelected: (v) =>
@@ -1295,18 +1271,11 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                               children: [
                                 Text(
                                   u.nombre,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                                 ),
                                 Text(
                                   u.etiquetaCompleta,
-                                  style: const TextStyle(
-                                    color: Colors.white60,
-                                    fontSize: 11,
-                                  ),
+                                  style: AppType.eyebrow.copyWith(color: Colors.white60),
                                 ),
                               ],
                             ),
@@ -1353,23 +1322,14 @@ class _SeccionTitulo extends StatelessWidget {
               ),
               child: Text(
                 '$numero',
-                style: const TextStyle(
-                  color: AppColors.success,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
           ],
           Text(
             texto.toUpperCase(),
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.3,
-            ),
+            style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.3),
           ),
         ],
       ),
@@ -1445,11 +1405,11 @@ class _SelectorProducto extends StatelessWidget {
             ],
           ),
           if (valor == null)
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
               child: Text(
                 'Tarifa general para esta ruta (cualquier producto).',
-                style: TextStyle(color: Colors.white54, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: Colors.white54),
               ),
             ),
         ],

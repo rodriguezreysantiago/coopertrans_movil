@@ -11,6 +11,7 @@ import '../../../shared/widgets/coopertrans_logo.dart';
 import '../services/auth_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla de login.
 ///
 /// A diferencia del resto de la app, NO usa AppScaffold porque necesita
@@ -358,13 +359,9 @@ class _BotonIngresar extends StatelessWidget {
         ),
       ),
       onPressed: onPressed,
-      child: const Text(
+      child: Text(
         'INICIAR SESIÓN',
-        style: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.5,
-        ),
+        style: AppType.heading.copyWith(fontWeight: FontWeight.bold, letterSpacing: 1.5),
       ),
     );
   }

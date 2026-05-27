@@ -7,6 +7,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../constants/posiciones.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Lista de unidades (tractores + enganches). Tap → vista detalle de
 /// la unidad con grid de posiciones para cambiar cubiertas.
 ///
@@ -139,17 +140,12 @@ class _GomeriaUnidadesListaScreenState
                               children: [
                                 Text(
                                   doc.id,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   '$tipo${modelo.isNotEmpty ? " · $modelo" : ""}',
-                                  style: const TextStyle(
-                                      color: Colors.white60, fontSize: 12),
+                                  style: AppType.label.copyWith(color: Colors.white60),
                                 ),
                               ],
                             ),
@@ -188,11 +184,7 @@ class _Chip extends StatelessWidget {
       selected: seleccionado,
       onSelected: (_) => onTap(),
       selectedColor: AppColors.warning,
-      labelStyle: TextStyle(
-        color: seleccionado ? Colors.black : Colors.white,
-        fontWeight: FontWeight.bold,
-        fontSize: 11,
-      ),
+      labelStyle: AppType.eyebrow.copyWith(color: seleccionado ? Colors.black : Colors.white, fontWeight: FontWeight.bold),
       backgroundColor: AppColors.background,
     );
   }

@@ -25,6 +25,7 @@ import '../services/logistica_service.dart';
 import '../widgets/acciones_navegacion_sheet.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 class LogisticaMapaTarifasScreen extends StatefulWidget {
   const LogisticaMapaTarifasScreen({super.key});
 
@@ -278,10 +279,7 @@ class _LogisticaMapaTarifasScreenState
                           const SizedBox(height: AppSpacing.xs),
                           Text(
                             f.motivo,
-                            style: const TextStyle(
-                              color: AppColors.warning,
-                              fontSize: 12,
-                            ),
+                            style: AppType.label.copyWith(color: AppColors.warning),
                           ),
                         ],
                       );
@@ -352,10 +350,7 @@ class _LogisticaMapaTarifasScreenState
                     'Mostrando ${tarifasConCoords.length} de '
                     '$tarifasTotales tarifas. El resto no tiene coords '
                     'cargadas en origen y destino.',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
+                    style: AppType.label.copyWith(color: Colors.white70),
                   ),
                 ),
                 TextButton.icon(
@@ -364,7 +359,7 @@ class _LogisticaMapaTarifasScreenState
                   icon: const Icon(Icons.warning_amber_outlined, size: 14),
                   label: const Text(
                     'DIAGNÓSTICO',
-                    style: TextStyle(fontSize: 11),
+                    style: AppType.eyebrow,
                   ),
                   style: TextButton.styleFrom(
                     foregroundColor: AppColors.warning,
@@ -511,12 +506,7 @@ class _LogisticaMapaTarifasScreenState
                             const SizedBox(width: 6),
                             Text(
                               _modoSatelite ? 'MAPA' : 'SATÉLITE',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.1,
-                              ),
+                              style: AppType.eyebrow.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.1),
                             ),
                           ],
                         ),
@@ -537,23 +527,18 @@ class _LogisticaMapaTarifasScreenState
                     child: InkWell(
                       borderRadius: BorderRadius.circular(AppRadius.sm),
                       onTap: () => _verPanoramica(tarifasConCoords, bbox),
-                      child: const Padding(
-                        padding: EdgeInsets.symmetric(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 8),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.zoom_out_map,
+                            const Icon(Icons.zoom_out_map,
                                 color: Colors.white, size: 18),
-                            SizedBox(width: 6),
+                            const SizedBox(width: 6),
                             Text(
                               'VER TODAS',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.1,
-                              ),
+                              style: AppType.eyebrow.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.1),
                             ),
                           ],
                         ),
@@ -805,12 +790,7 @@ class _PanelLateralTarifasState extends State<_PanelLateralTarifas> {
                     _filtro.isEmpty
                         ? '${widget.tarifasConCoords.length} TARIFA(S)'
                         : '${filtradas.length} de ${widget.tarifasConCoords.length}',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                   ),
                 ),
                 IconButton(
@@ -854,12 +834,12 @@ class _PanelLateralTarifasState extends State<_PanelLateralTarifas> {
           // Lista vertical.
           Expanded(
             child: filtradas.isEmpty
-                ? const Center(
+                ? Center(
                     child: Padding(
-                      padding: EdgeInsets.all(AppSpacing.xl),
+                      padding: const EdgeInsets.all(AppSpacing.xl),
                       child: Text(
                         'Sin tarifas que coincidan con la búsqueda.',
-                        style: TextStyle(color: Colors.white54, fontSize: 12),
+                        style: AppType.label.copyWith(color: Colors.white54),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -922,11 +902,7 @@ class _TarifaTile extends StatelessWidget {
           children: [
             Text(
               t.ubicacionOrigenEtiqueta,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
+              style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -938,11 +914,7 @@ class _TarifaTile extends StatelessWidget {
                 Expanded(
                   child: Text(
                     t.ubicacionDestinoEtiqueta,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -961,11 +933,7 @@ class _TarifaTile extends StatelessWidget {
               '${tarifaConRuta.distanciaKm.toStringAsFixed(0)} km · '
               '\$${AppFormatters.formatearMonto(t.tarifaReal)}'
               '/${t.unidadTarifa.codigo}',
-              style: const TextStyle(
-                color: AppColors.success,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
+              style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -1012,11 +980,7 @@ class _DetalleTarifaSheet extends StatelessWidget {
                   '${t.ubicacionOrigenEtiqueta} → ${t.ubicacionDestinoEtiqueta}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -1026,7 +990,7 @@ class _DetalleTarifaSheet extends StatelessWidget {
             '${tarifaConRuta.nombreOrigen}  →  ${tarifaConRuta.nombreDestino}',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white60, fontSize: 12),
+            style: AppType.label.copyWith(color: Colors.white60),
           ),
           const Divider(color: Colors.white12, height: 24),
           if (rutaReal != null) ...[

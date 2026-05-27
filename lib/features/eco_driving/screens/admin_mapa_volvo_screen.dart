@@ -12,6 +12,7 @@ import '../utils/etiquetas_alerta_volvo.dart';
 import '../widgets/evento_volvo_detalle_sheet.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla "Mapa Volvo" — visualización geográfica de eventos del
 /// Vehicle Alerts API sobre OpenStreetMap.
 ///
@@ -340,8 +341,7 @@ class _Toolbar extends StatelessWidget {
                   '${rutaActiva ? " · ruta activa" : ""}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 11),
+                  style: AppType.eyebrow.copyWith(color: Colors.white70),
                 ),
               ),
               // Toggle heatmap OVERSPEED. Visible siempre — independiente

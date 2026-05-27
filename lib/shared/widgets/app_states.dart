@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Estado vacío estándar — para cuando una lista no tiene resultados.
 ///
 /// Uso:
@@ -40,11 +41,7 @@ class AppEmptyState extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
+              style: AppType.heading.copyWith(color: Colors.white70, fontWeight: FontWeight.w500),
             ),
             if (subtitle != null) ...[
               const SizedBox(height: AppSpacing.sm),
@@ -119,21 +116,14 @@ class AppErrorState extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
+              style: AppType.heading.copyWith(color: Colors.white70, fontWeight: FontWeight.w500),
             ),
             if (subtitle != null) ...[
               const SizedBox(height: AppSpacing.sm),
               Text(
                 subtitle!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppColors.error,
-                  fontSize: 12,
-                ),
+                style: AppType.label.copyWith(color: AppColors.error),
               ),
             ],
             if (onRetry != null) ...[

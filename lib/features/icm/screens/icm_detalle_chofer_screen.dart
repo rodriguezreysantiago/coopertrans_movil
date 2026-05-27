@@ -7,6 +7,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../services/icm_oficial_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Detalle ICM individual de un chofer, con el número **oficial de Sitrack**
 /// (lo que audita YPF, MÁS BAJO = MEJOR):
 ///   - Header: nombre + DNI + ICM del mes + severidad.
@@ -301,14 +302,13 @@ class _Header extends StatelessWidget {
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     'DNI ${AppFormatters.formatearDNI(dni)}',
-                    style: const TextStyle(
-                        color: Colors.white54, fontSize: 12),
+                    style: AppType.label.copyWith(color: Colors.white54),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     '${chofer.severidadLabel} · $periodoLabel'
                     '${esMesActual ? '' : ' (último con datos)'}',
-                    style: TextStyle(color: color, fontSize: 11),
+                    style: AppType.eyebrow.copyWith(color: color),
                   ),
                 ],
               ),
@@ -357,7 +357,7 @@ class _ComparativaMeses extends StatelessWidget {
                   actual!.sinActividad
                       ? 'Sin actividad este mes — no comparable con $labelAnterior.'
                       : 'Sin actividad en $labelAnterior — no hay base de comparación.',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white54),
                 ),
               ),
             ],
@@ -482,12 +482,7 @@ class _SeccionTitulo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       texto,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.3,
-      ),
+      style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600, letterSpacing: 0.3),
     );
   }
 }
@@ -523,11 +518,7 @@ class _ListaInfraccionesState extends State<_ListaInfracciones> {
             'Sin infracciones individuales para este período.\n'
             'El detalle se sincroniza desde Sitrack una vez al día.',
             textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.45),
-              fontSize: 12,
-              height: 1.4,
-            ),
+            style: AppType.label.copyWith(color: Colors.white.withValues(alpha: 0.45), height: 1.4),
           ),
         ),
       );
@@ -554,7 +545,7 @@ class _ListaInfraccionesState extends State<_ListaInfracciones> {
         Text(
           '${lista.length} infracción${lista.length == 1 ? "" : "es"} · '
           'Suma de puntaje: ${sumaPuntaje.toStringAsFixed(2)}',
-          style: const TextStyle(color: Colors.white60, fontSize: 11),
+          style: AppType.eyebrow.copyWith(color: Colors.white60),
         ),
         const SizedBox(height: AppSpacing.sm),
         SizedBox(
@@ -618,10 +609,7 @@ class _ChipFiltro extends StatelessWidget {
     return ChoiceChip(
       label: Text(
         label,
-        style: TextStyle(
-          fontSize: 11,
-          color: selected ? Colors.black : Colors.white70,
-        ),
+        style: AppType.eyebrow.copyWith(color: selected ? Colors.black : Colors.white70),
       ),
       selected: selected,
       onSelected: (_) => onTap(),
@@ -689,11 +677,7 @@ class _InfraccionCard extends StatelessWidget {
                   ),
                   child: Text(
                     i.puntaje.toStringAsFixed(2),
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.label.copyWith(color: color, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
@@ -707,8 +691,7 @@ class _InfraccionCard extends StatelessWidget {
                 const SizedBox(width: AppSpacing.xs),
                 Text(
                   i.fecha,
-                  style: const TextStyle(
-                      color: Colors.white60, fontSize: 11),
+                  style: AppType.eyebrow.copyWith(color: Colors.white60),
                 ),
                 if (i.patente.isNotEmpty) ...[
                   const SizedBox(width: 14),
@@ -717,10 +700,7 @@ class _InfraccionCard extends StatelessWidget {
                   const SizedBox(width: AppSpacing.xs),
                   Text(
                     i.patente,
-                    style: const TextStyle(
-                        color: Colors.white60,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500),
+                    style: AppType.eyebrow.copyWith(color: Colors.white60, fontWeight: FontWeight.w500),
                   ),
                 ],
                 if (i.tiempo != null) ...[
@@ -730,8 +710,7 @@ class _InfraccionCard extends StatelessWidget {
                   const SizedBox(width: AppSpacing.xs),
                   Text(
                     i.tiempo!,
-                    style: const TextStyle(
-                        color: Colors.white60, fontSize: 11),
+                    style: AppType.eyebrow.copyWith(color: Colors.white60),
                   ),
                 ],
               ],
@@ -749,8 +728,7 @@ class _InfraccionCard extends StatelessWidget {
                       i.ubicacion,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: Colors.white54, fontSize: 11),
+                      style: AppType.eyebrow.copyWith(color: Colors.white54),
                     ),
                   ),
                 ],
@@ -771,15 +749,11 @@ class _InfraccionCard extends StatelessWidget {
                         : i.velMaxima != null
                             ? 'Pico ${i.velMaxima!.toStringAsFixed(0)} km/h'
                             : 'Límite ${i.velLimite!.toStringAsFixed(0)} km/h',
-                    style: TextStyle(
-                      color: i.esExcesoVelocidad
+                    style: AppType.eyebrow.copyWith(color: i.esExcesoVelocidad
                           ? AppColors.error
-                          : Colors.white60,
-                      fontSize: 11,
-                      fontWeight: i.esExcesoVelocidad
+                          : Colors.white60, fontWeight: i.esExcesoVelocidad
                           ? FontWeight.w600
-                          : null,
-                    ),
+                          : null),
                   ),
                 ],
               ),
@@ -801,12 +775,7 @@ class _NotaFuente extends StatelessWidget {
       'Escala más baja = mejor. Se actualiza una vez al día. '
       'El detalle de eventos viene del stream /files/reports de Sitrack '
       '(actualizado cada 5 min).',
-      style: TextStyle(
-        color: Colors.white.withValues(alpha: 0.35),
-        fontSize: 11,
-        fontStyle: FontStyle.italic,
-        height: 1.3,
-      ),
+      style: AppType.eyebrow.copyWith(color: Colors.white.withValues(alpha: 0.35), fontStyle: FontStyle.italic, height: 1.3),
     );
   }
 }

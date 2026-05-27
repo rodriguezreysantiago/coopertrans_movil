@@ -102,12 +102,7 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12, left: 5),
       child: Text(
         label.toUpperCase(),
-        style: const TextStyle(
-          color: AppColors.success,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.5,
-        ),
+        style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.5),
       ),
     );
   }
@@ -228,14 +223,9 @@ class _BloqueVolvo extends StatelessWidget {
               onPressed: onDiagnostico,
               icon: const Icon(Icons.bug_report,
                   color: AppColors.warning, size: 18),
-              label: const Text(
+              label: Text(
                 'DIAGNÓSTICO',
-                style: TextStyle(
-                  color: AppColors.warning,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  letterSpacing: 1,
-                ),
+                style: AppType.label.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold, letterSpacing: 1),
               ),
             ),
           ),
@@ -265,9 +255,9 @@ class _EmpresaTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Empresa titular',
-                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                  style: AppType.eyebrow.copyWith(color: Colors.white54),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
@@ -341,8 +331,7 @@ class _DateTile extends StatelessWidget {
                       label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: Colors.white54, fontSize: 12),
+                      style: AppType.label.copyWith(color: Colors.white54),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -429,10 +418,7 @@ class _BotonGuardar extends StatelessWidget {
             : const Icon(Icons.save),
         label: Text(
           guardando ? 'GUARDANDO...' : 'GUARDAR CAMBIOS',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
+          style: AppType.heading.copyWith(fontWeight: FontWeight.bold),
         ),
       ),
     );
@@ -472,7 +458,7 @@ class _FechaTileSimple extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  style: AppType.eyebrow.copyWith(color: Colors.white54),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(

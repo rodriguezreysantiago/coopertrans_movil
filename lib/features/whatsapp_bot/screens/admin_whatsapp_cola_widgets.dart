@@ -215,11 +215,7 @@ class _ItemCola extends StatelessWidget {
               Expanded(
                 child: Text(
                   telefono,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -227,18 +223,14 @@ class _ItemCola extends StatelessWidget {
               if (intentos > 1)
                 Text(
                   'x$intentos',
-                  style: const TextStyle(
-                    color: Colors.white38,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.eyebrow.copyWith(color: Colors.white38, fontWeight: FontWeight.bold),
                 ),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
             mensaje,
-            style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+            style: AppType.label.copyWith(color: Colors.white70, height: 1.4),
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
@@ -273,11 +265,7 @@ class _ItemCola extends StatelessWidget {
               ),
               child: Text(
                 error,
-                style: const TextStyle(
-                  color: AppColors.error,
-                  fontSize: 11,
-                  height: 1.3,
-                ),
+                style: AppType.eyebrow.copyWith(color: AppColors.error, height: 1.3),
               ),
             ),
           ],
@@ -290,9 +278,9 @@ class _ItemCola extends StatelessWidget {
                   onPressed: onEliminar,
                   icon: const Icon(Icons.delete_outline,
                       color: Colors.white54, size: 16),
-                  label: const Text(
+                  label: Text(
                     'Eliminar',
-                    style: TextStyle(color: Colors.white54, fontSize: 11),
+                    style: AppType.eyebrow.copyWith(color: Colors.white54),
                   ),
                 ),
               if (esError) ...[
@@ -301,13 +289,9 @@ class _ItemCola extends StatelessWidget {
                   onPressed: onReintentar,
                   icon: const Icon(Icons.refresh,
                       color: AppColors.success, size: 16),
-                  label: const Text(
+                  label: Text(
                     'Reintentar',
-                    style: TextStyle(
-                      color: AppColors.success,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
                   ),
                 ),
               ],
@@ -484,11 +468,7 @@ class _DetalleColaSheet extends StatelessWidget {
                 Expanded(
                   child: Text(
                     telefono,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
+                    style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
                 IconButton(
@@ -576,12 +556,7 @@ class _DetalleColaSheet extends StatelessWidget {
                 ),
                 child: SelectableText(
                   error,
-                  style: const TextStyle(
-                    color: AppColors.error,
-                    fontSize: 12,
-                    fontFamily: 'monospace',
-                    height: 1.4,
-                  ),
+                  style: AppType.label.copyWith(color: AppColors.error, fontFamily: 'monospace', height: 1.4),
                 ),
               ),
             ],
@@ -610,12 +585,7 @@ class _SeccionTitulo extends StatelessWidget {
         const SizedBox(width: AppSpacing.sm),
         Text(
           texto.toUpperCase(),
-          style: TextStyle(
-            color: color,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
+          style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.bold, letterSpacing: 1),
         ),
       ],
     );
@@ -647,22 +617,18 @@ class _FilaDato extends StatelessWidget {
             width: 130,
             child: Text(
               label,
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white54),
             ),
           ),
           Expanded(
             child: copiable
                 ? SelectableText(
                     valor,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontFamily: 'monospace',
-                    ),
+                    style: AppType.label.copyWith(color: Colors.white, fontFamily: 'monospace'),
                   )
                 : Text(
                     valor,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    style: AppType.label.copyWith(color: Colors.white),
                   ),
           ),
         ],
@@ -716,11 +682,7 @@ class _FilaItemAgrupado extends StatelessWidget {
                 children: [
                   Text(
                     tipoDoc,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                   if (fecha.isNotEmpty)
                     Text(
@@ -733,11 +695,7 @@ class _FilaItemAgrupado extends StatelessWidget {
             ),
             Text(
               estadoLegible,
-              style: TextStyle(
-                color: colorDias,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
+              style: AppType.eyebrow.copyWith(color: colorDias, fontWeight: FontWeight.bold),
             ),
           ],
         ),

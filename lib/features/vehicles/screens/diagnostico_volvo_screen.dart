@@ -9,6 +9,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../services/volvo_api_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla de diagnóstico de la API de Volvo.
 ///
 /// Pega al endpoint `/vehiclestatuses?vin=...&additionalContent=VOLVOGROUPSNAPSHOT`
@@ -117,11 +118,7 @@ class _Header extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   'VIN $vin',
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                  ),
+                  style: AppType.eyebrow.copyWith(color: Colors.white60, fontFamily: 'monospace'),
                 ),
               ],
             ),
@@ -195,11 +192,7 @@ class _ResumenRequest extends StatelessWidget {
               ),
               child: Text(
                 diag.errorMessage!,
-                style: const TextStyle(
-                  color: AppColors.error,
-                  fontSize: 12,
-                  fontFamily: 'monospace',
-                ),
+                style: AppType.label.copyWith(color: AppColors.error, fontFamily: 'monospace'),
               ),
             ),
           ],
@@ -484,10 +477,7 @@ class _CheckTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     check.valor!,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 12,
-                    ),
+                    style: AppType.label.copyWith(color: color),
                   ),
                 ],
               ],
@@ -587,12 +577,7 @@ class _JsonViewerState extends State<_JsonViewer> {
                 padding: const EdgeInsets.all(AppSpacing.md),
                 child: SelectableText(
                   json,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                    height: 1.4,
-                  ),
+                  style: AppType.eyebrow.copyWith(color: Colors.white70, fontFamily: 'monospace', height: 1.4),
                 ),
               ),
             ),
@@ -670,23 +655,13 @@ class _Linea extends StatelessWidget {
             width: 60,
             child: Text(
               etiqueta,
-              style: const TextStyle(
-                color: Colors.white54,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
+              style: AppType.eyebrow.copyWith(color: Colors.white54, fontWeight: FontWeight.bold),
             ),
           ),
           Expanded(
             child: Text(
               valor,
-              style: TextStyle(
-                color: valorColor ?? Colors.white,
-                fontSize: 12,
-                fontFamily: monoespaciado ? 'monospace' : null,
-                fontWeight: negrita ? FontWeight.bold : FontWeight.normal,
-                letterSpacing: monoespaciado ? 0.3 : 0,
-              ),
+              style: AppType.label.copyWith(color: valorColor ?? Colors.white, fontFamily: monoespaciado ? 'monospace' : null, fontWeight: negrita ? FontWeight.bold : FontWeight.normal, letterSpacing: monoespaciado ? 0.3 : 0),
               maxLines: multiline ? 5 : 1,
               overflow: multiline
                   ? TextOverflow.visible

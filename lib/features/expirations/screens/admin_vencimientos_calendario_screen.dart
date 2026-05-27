@@ -12,6 +12,7 @@ import '../widgets/vencimiento_item.dart';
 import '../widgets/vencimiento_item_card.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Vista calendario de TODOS los vencimientos (personal + flota).
 ///
 /// Diferencia con las pantallas de auditoría existentes:
@@ -250,30 +251,18 @@ class _AdminVencimientosCalendarioScreenState
                 fontWeight: FontWeight.bold,
               ),
             ),
-            headerStyle: const HeaderStyle(
+            headerStyle: HeaderStyle(
               titleCentered: true,
               formatButtonShowsNext: false,
-              titleTextStyle: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+              titleTextStyle: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
               leftChevronIcon:
-                  Icon(Icons.chevron_left, color: AppColors.success),
+                  const Icon(Icons.chevron_left, color: AppColors.success),
               rightChevronIcon:
-                  Icon(Icons.chevron_right, color: AppColors.success),
+                  const Icon(Icons.chevron_right, color: AppColors.success),
             ),
-            daysOfWeekStyle: const DaysOfWeekStyle(
-              weekdayStyle: TextStyle(
-                color: AppColors.success,
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-              ),
-              weekendStyle: TextStyle(
-                color: Colors.white38,
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-              ),
+            daysOfWeekStyle: DaysOfWeekStyle(
+              weekdayStyle: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
+              weekendStyle: AppType.eyebrow.copyWith(color: Colors.white38, fontWeight: FontWeight.bold),
             ),
             // Marker custom: dot del color de urgencia + contador si
             // hay más de uno.

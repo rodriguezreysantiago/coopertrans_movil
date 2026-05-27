@@ -14,6 +14,7 @@ import '../services/gomeria_service.dart';
 import '../widgets/esquema_unidad_view.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla detalle de una unidad — el corazón del flujo del operador
 /// de gomería. Muestra un esquema visual de la unidad desde arriba
 /// (CustomPainter en `EsquemaUnidadView`) con cada cubierta en su
@@ -209,8 +210,7 @@ class _Cabecera extends StatelessWidget {
                     ),
                     Text(
                       '$tipoVehiculo${modelo.isNotEmpty ? " · $modelo" : ""}',
-                      style: const TextStyle(
-                          color: Colors.white60, fontSize: 12),
+                      style: AppType.label.copyWith(color: Colors.white60),
                     ),
                   ],
                 ),
@@ -256,7 +256,7 @@ class _Cabecera extends StatelessWidget {
                   kmActual != null
                       ? '${AppFormatters.formatearMiles(kmActual)} km actuales'
                       : 'Sin lectura de odómetro',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white70),
                 ),
               ],
             ),
@@ -291,10 +291,7 @@ class _Cabecera extends StatelessWidget {
                 Expanded(
                   child: Text(
                     '$cantLegacy ${cantLegacy == 1 ? "cubierta sin datos previos" : "cubiertas sin datos previos"} (carga inicial)',
-                    style: const TextStyle(
-                      color: Colors.white60,
-                      fontSize: 12,
-                    ),
+                    style: AppType.label.copyWith(color: Colors.white60),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -538,8 +535,7 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       i.modeloEtiqueta!,
-                      style: const TextStyle(
-                          color: Colors.white70, fontSize: 12),
+                      style: AppType.label.copyWith(color: Colors.white70),
                     ),
                   ],
                   const SizedBox(height: AppSpacing.md),
@@ -572,10 +568,9 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                     onPressed: _operando ? null : _abrirRegistroControl,
                     icon: const Icon(Icons.fact_check_outlined,
                         color: AppColors.brand, size: 18),
-                    label: const Text(
+                    label: Text(
                       'REGISTRAR CONTROL (presión / banda)',
-                      style: TextStyle(
-                          color: AppColors.brand, fontSize: 11),
+                      style: AppType.eyebrow.copyWith(color: AppColors.brand),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
@@ -713,7 +708,7 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style:
-                    const TextStyle(color: Colors.white60, fontSize: 12),
+                    AppType.label.copyWith(color: Colors.white60),
               ),
             ),
             Expanded(
@@ -721,7 +716,7 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                 valor,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
+                style: AppType.label.copyWith(color: Colors.white),
               ),
             ),
           ],
@@ -814,9 +809,9 @@ class _RegistrarControlDialogState extends State<_RegistrarControlDialog> {
                   const TextInputType.numberWithOptions(decimal: true),
             ),
             const SizedBox(height: AppSpacing.sm),
-            const Text(
+            Text(
               'Completá al menos uno de los dos.',
-              style: TextStyle(color: Colors.white60, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white60),
             ),
           ],
         ),
@@ -895,12 +890,12 @@ class _SelectorPosicionDestinoDialog extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.only(bottom: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
                     child: Text(
                       'Elegí la posición destino. Si está ocupada, '
                       'se hace un intercambio (swap).',
-                      style: TextStyle(color: Colors.white60, fontSize: 12),
+                      style: AppType.label.copyWith(color: Colors.white60),
                     ),
                   ),
                   for (final p in posiciones)
@@ -960,13 +955,13 @@ class _SelectorPosicionDestinoDialog extends StatelessWidget {
                       Text(
                         'Tiene ${actual.cubiertaCodigo} — se intercambian.',
                         style:
-                            const TextStyle(color: Colors.white60, fontSize: 11),
+                            AppType.eyebrow.copyWith(color: Colors.white60),
                       )
                     else
-                      const Text(
+                      Text(
                         'Vacía',
                         style:
-                            TextStyle(color: Colors.white60, fontSize: 11),
+                            AppType.eyebrow.copyWith(color: Colors.white60),
                       ),
                   ],
                 ),
@@ -1003,20 +998,12 @@ class _BarraVida extends StatelessWidget {
           children: [
             Text(
               etiqueta,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
+              style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.bold),
             ),
             const Spacer(),
             Text(
               '${porcentaje.toStringAsFixed(0)}%',
-              style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-              ),
+              style: AppType.label.copyWith(color: color, fontWeight: FontWeight.bold),
             ),
           ],
         ),

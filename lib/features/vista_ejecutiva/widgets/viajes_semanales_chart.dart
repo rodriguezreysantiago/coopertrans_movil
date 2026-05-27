@@ -10,6 +10,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../services/vista_ejecutiva_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 class ViajesSemanalesChart extends StatelessWidget {
   final List<PuntoTendencia> puntos;
   final String titulo;
@@ -53,11 +54,11 @@ class ViajesSemanalesChart extends StatelessWidget {
             height: 180,
             child: hayDatos
                 ? _buildChart(context)
-                : const Center(
+                : Center(
                     child: Text(
                       'Sin viajes cargados en el período',
                       style:
-                          TextStyle(color: Colors.white38, fontSize: 12),
+                          AppType.label.copyWith(color: Colors.white38),
                     ),
                   ),
           ),
@@ -166,7 +167,7 @@ class ViajesSemanalesChart extends StatelessWidget {
               final n = p.valor.toInt();
               return BarTooltipItem(
                 '${p.label}\n$n viaje${n == 1 ? '' : 's'}',
-                const TextStyle(color: Colors.white, fontSize: 11),
+                AppType.eyebrow.copyWith(color: Colors.white),
               );
             },
           ),

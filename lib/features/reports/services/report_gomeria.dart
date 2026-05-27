@@ -14,6 +14,7 @@ import 'excel_utils.dart' as xu;
 import 'report_save_helper.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Reportes Excel del módulo Gomería. 3 informes:
 ///
 /// 1. **Estado actual** — 1 fila por posición ocupada de toda la flota.
@@ -602,11 +603,7 @@ class _OpcionTile extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             Text(
               detalle,
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-                height: 1.3,
-              ),
+              style: AppType.eyebrow.copyWith(color: Colors.white60, height: 1.3),
             ),
           ],
         ),

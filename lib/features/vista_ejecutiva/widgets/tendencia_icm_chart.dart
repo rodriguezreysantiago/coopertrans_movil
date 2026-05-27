@@ -12,6 +12,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../services/vista_ejecutiva_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 class TendenciaIcmChart extends StatelessWidget {
   final List<PuntoTendencia> puntos;
   final String titulo;
@@ -59,13 +60,13 @@ class TendenciaIcmChart extends StatelessWidget {
             height: 180,
             child: mostrarChart
                 ? _buildChart(context)
-                : const Center(
+                : Center(
                     child: Text(
                       'Tendencia diaria en construcción\n'
                       '(aún no hay días con actividad este mes)',
                       textAlign: TextAlign.center,
                       style:
-                          TextStyle(color: Colors.white38, fontSize: 12),
+                          AppType.label.copyWith(color: Colors.white38),
                     ),
                   ),
           ),
@@ -184,7 +185,7 @@ class TendenciaIcmChart extends StatelessWidget {
               final p = puntos[s.x.toInt()];
               return LineTooltipItem(
                 'Día ${p.label}\nICM ${p.valor.toStringAsFixed(1)}',
-                const TextStyle(color: Colors.white, fontSize: 11),
+                AppType.eyebrow.copyWith(color: Colors.white),
               );
             }).toList(),
           ),

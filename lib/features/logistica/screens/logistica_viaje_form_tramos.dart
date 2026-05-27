@@ -395,9 +395,9 @@ class _TramoCard extends StatelessWidget {
         ),
         if (state.remitoUrl != null && state.remitoNombreLocal == null) ...[
           const SizedBox(height: AppSpacing.xs),
-          const Text(
+          Text(
             '✓ Comprobante ya cargado.',
-            style: TextStyle(color: AppColors.success, fontSize: 11),
+            style: AppType.eyebrow.copyWith(color: AppColors.success),
           ),
         ],
         if (esTn) ...[
@@ -574,10 +574,7 @@ class _BannerEncadenamiento extends StatelessWidget {
           Expanded(
             child: Text(
               mensaje,
-              style: const TextStyle(
-                color: AppColors.warning,
-                fontSize: 12,
-              ),
+              style: AppType.label.copyWith(color: AppColors.warning),
             ),
           ),
         ],

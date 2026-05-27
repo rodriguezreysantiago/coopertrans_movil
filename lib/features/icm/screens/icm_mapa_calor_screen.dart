@@ -9,6 +9,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../services/icm_oficial_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Mapa de calor de infracciones — hotspots agregados por ubicación
 /// cartográfica única, igual al "Mapa de calor de infracciones" de
 /// Sitrack. Los popula el scraper Python (`get_top_infractions`,
@@ -236,20 +237,12 @@ class _MapaHotspots extends StatelessWidget {
                 Expanded(
                   child: Text(
                     h.infraccion,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ),
                 Text(
                   '${h.cantidad}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.title.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -262,13 +255,13 @@ class _MapaHotspots extends StatelessWidget {
             Text(
               '${h.porcentaje.toStringAsFixed(1)}% del total de infracciones '
               '· puntaje ${h.puntaje.toStringAsFixed(2)} c/u',
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white54),
             ),
             const SizedBox(height: AppSpacing.lg),
             Text(
               'Lat/Lng: ${h.latitud.toStringAsFixed(5)}, '
               '${h.longitud.toStringAsFixed(5)}',
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white38),
             ),
           ],
         ),
@@ -296,12 +289,7 @@ class _ListaHotspots extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
             child: Text(
               'HOTSPOTS (${hotspots.length})',
-              style: const TextStyle(
-                color: Colors.white70,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-                letterSpacing: 0.5,
-              ),
+              style: AppType.label.copyWith(color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 0.5),
             ),
           ),
           Expanded(
@@ -317,11 +305,7 @@ class _ListaHotspots extends StatelessWidget {
                         hotspots.first.cantidad),
                     child: Text(
                       '${h.cantidad}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: AppType.eyebrow.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
                   title: Text(
@@ -337,8 +321,7 @@ class _ListaHotspots extends StatelessWidget {
                     '${h.porcentaje.toStringAsFixed(1)}% · ${h.ubicacion}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white54, fontSize: 11),
+                    style: AppType.eyebrow.copyWith(color: Colors.white54),
                   ),
                   trailing: const Icon(Icons.center_focus_strong,
                       size: 18, color: Colors.white38),
@@ -403,7 +386,7 @@ class _MensajeCentro extends StatelessWidget {
         child: Text(
           texto,
           textAlign: TextAlign.center,
-          style: TextStyle(color: color, fontSize: 14, height: 1.4),
+          style: AppType.body.copyWith(color: color, height: 1.4),
         ),
       ),
     );

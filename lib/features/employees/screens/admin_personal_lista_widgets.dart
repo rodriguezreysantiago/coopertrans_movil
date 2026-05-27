@@ -49,21 +49,13 @@ class _EmpleadoCard extends StatelessWidget {
                       child: RichText(
                         overflow: TextOverflow.ellipsis,
                         text: TextSpan(
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            fontSize: 14,
-                          ),
+                          style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
                           children: [
                             TextSpan(text: nombre),
                             if (apodo.isNotEmpty)
                               TextSpan(
                                 text: '  ($apodo)',
-                                style: const TextStyle(
-                                  color: AppColors.success,
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 12,
-                                ),
+                                style: AppType.label.copyWith(color: AppColors.success, fontWeight: FontWeight.w500),
                               ),
                           ],
                         ),
@@ -87,8 +79,7 @@ class _EmpleadoCard extends StatelessWidget {
                           tractor,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Colors.white54, fontSize: 11),
+                          style: AppType.eyebrow.copyWith(color: Colors.white54),
                         ),
                       ),
                       const SizedBox(width: AppSpacing.md),
@@ -99,8 +90,7 @@ class _EmpleadoCard extends StatelessWidget {
                           enganche,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Colors.white54, fontSize: 11),
+                          style: AppType.eyebrow.copyWith(color: Colors.white54),
                         ),
                       ),
                     ],
@@ -116,8 +106,7 @@ class _EmpleadoCard extends StatelessWidget {
                           AppAreas.etiquetas[area] ?? area,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Colors.white54, fontSize: 11),
+                          style: AppType.eyebrow.copyWith(color: Colors.white54),
                         ),
                       ),
                     ],
@@ -517,32 +506,27 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.archive_outlined,
+              const Icon(Icons.archive_outlined,
                   color: AppColors.warning, size: 18),
-              SizedBox(width: AppSpacing.sm),
+              const SizedBox(width: AppSpacing.sm),
               Text(
                 'EMPLEADO DADO DE BAJA',
-                style: TextStyle(
-                  color: AppColors.warning,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  letterSpacing: 1.2,
-                ),
+                style: AppType.label.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold, letterSpacing: 1.2),
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
             'Fecha: $bajaEnFmt',
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: AppType.label.copyWith(color: Colors.white70),
           ),
           if (motivo.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Motivo: $motivo',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white70),
             ),
           ],
           const SizedBox(height: AppSpacing.md),
@@ -674,12 +658,7 @@ class _SectionTitle extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Text(
             label.toUpperCase(),
-            style: const TextStyle(
-              color: AppColors.success,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
-            ),
+            style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.2),
           ),
         ],
       ),
@@ -714,15 +693,11 @@ class _DatoEditableTexto extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(
         etiqueta,
-        style: const TextStyle(fontSize: 11, color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: Colors.white38),
       ),
       subtitle: Text(
         valor,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
+        style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
       ),
       trailing:
           const Icon(Icons.edit_note, size: 22, color: AppColors.success),
@@ -818,9 +793,9 @@ class _DatoEditableEmpresa extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      title: const Text(
+      title: Text(
         'EMPRESA',
-        style: TextStyle(fontSize: 11, color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: Colors.white38),
       ),
       subtitle: Text(
         valor,
@@ -829,7 +804,7 @@ class _DatoEditableEmpresa extends StatelessWidget {
         // que se vea prolijo y no rompa layout del ListTile.
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 12, color: Colors.white),
+        style: AppType.label.copyWith(color: Colors.white),
       ),
       trailing: const Icon(Icons.business_center,
           size: 20, color: AppColors.success),
@@ -849,8 +824,7 @@ class _DatoEditableEmpresa extends StatelessWidget {
                 (e) => ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: Text(e,
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.white)),
+                      style: AppType.label.copyWith(color: Colors.white)),
                   onTap: () {
                     onSave(e);
                     Navigator.pop(dCtx);
@@ -897,11 +871,11 @@ class _DatoEditableEnum extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(
         etiqueta,
-        style: const TextStyle(fontSize: 11, color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: Colors.white38),
       ),
       subtitle: Text(
         label,
-        style: const TextStyle(fontSize: 12, color: Colors.white),
+        style: AppType.label.copyWith(color: Colors.white),
       ),
       trailing: Icon(
         icono,
@@ -994,8 +968,7 @@ class _FilaVencimiento extends StatelessWidget {
                     etiqueta,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white54, fontSize: 11),
+                    style: AppType.eyebrow.copyWith(color: Colors.white54),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -1052,7 +1025,7 @@ class _AsignacionUnidad extends StatelessWidget {
         '$label: ${tieneAsignacion ? actual : "—"}',
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(color: Colors.white, fontSize: 14),
+        style: AppType.body.copyWith(color: Colors.white),
       ),
       trailing:
           const Icon(Icons.sync_alt, size: 20, color: AppColors.success),

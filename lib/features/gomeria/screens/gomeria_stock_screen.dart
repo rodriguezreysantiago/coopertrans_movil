@@ -12,6 +12,7 @@ import '../models/cubierta_modelo.dart';
 import '../services/gomeria_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Stock de cubiertas — la pantalla central de gestión del inventario.
 ///
 /// Presenta TODAS las cubiertas (no solo EN_DEPOSITO). Filtros:
@@ -99,8 +100,7 @@ class _GomeriaStockScreenState extends State<GomeriaStockScreen> {
                             ? 'No hay cubiertas para este filtro.\nTocá + para agregar una.'
                             : 'No se encontró "$_busqueda".',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: Colors.white60, fontSize: 14),
+                        style: AppType.body.copyWith(color: Colors.white60),
                       ),
                     ),
                   );
@@ -318,11 +318,7 @@ class _ChipFiltro extends StatelessWidget {
       selected: seleccionado,
       onSelected: (_) => onTap(),
       selectedColor: color,
-      labelStyle: TextStyle(
-        color: seleccionado ? Colors.black : Colors.white,
-        fontWeight: FontWeight.bold,
-        fontSize: 11,
-      ),
+      labelStyle: AppType.eyebrow.copyWith(color: seleccionado ? Colors.black : Colors.white, fontWeight: FontWeight.bold),
       backgroundColor: AppColors.background,
       visualDensity: VisualDensity.compact,
     );
@@ -368,11 +364,7 @@ class _CubiertaTile extends StatelessWidget {
                   children: [
                     Text(
                       c.codigo,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     Container(
@@ -401,7 +393,7 @@ class _CubiertaTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style:
-                      const TextStyle(color: Colors.white70, fontSize: 12),
+                      AppType.label.copyWith(color: Colors.white70),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Wrap(
@@ -409,13 +401,12 @@ class _CubiertaTile extends StatelessWidget {
                   children: [
                     Text(
                       c.vidas == 1 ? 'Nueva' : '${c.vidas - 1}× recapada',
-                      style: TextStyle(color: color, fontSize: 11),
+                      style: AppType.eyebrow.copyWith(color: color),
                     ),
                     if (c.kmAcumulados > 0)
                       Text(
                         '${AppFormatters.formatearMiles(c.kmAcumulados)} km totales',
-                        style: const TextStyle(
-                            color: Colors.white60, fontSize: 11),
+                        style: AppType.eyebrow.copyWith(color: Colors.white60),
                       ),
                   ],
                 ),
@@ -562,9 +553,9 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
                 ),
               ),
               const SizedBox(height: AppSpacing.sm),
-              const Text(
+              Text(
                 'El código (CUB-XXXX) se asigna automáticamente.',
-                style: TextStyle(color: Colors.white60, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: Colors.white60),
               ),
               // Barra de progreso del lote: solo visible mientras se
               // crean cubiertas en lote y muestra "X de Y creadas".
@@ -580,8 +571,7 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Creando $_creadas de $_total…',
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white70),
                 ),
               ],
               if (_error != null) ...[
@@ -595,8 +585,7 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
                   ),
                   child: Text(
                     _error!,
-                    style: const TextStyle(
-                        color: AppColors.error, fontSize: 12),
+                    style: AppType.label.copyWith(color: AppColors.error),
                   ),
                 ),
               ],

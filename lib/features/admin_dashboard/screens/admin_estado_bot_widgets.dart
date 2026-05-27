@@ -164,10 +164,7 @@ class _BannerEstado extends StatelessWidget {
                   ultimoHb == null
                       ? 'Sin heartbeat registrado'
                       : 'Último heartbeat: ${_hace(ultimoHb!)}',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                  ),
+                  style: AppType.label.copyWith(color: Colors.white70),
                 ),
               ],
             ),
@@ -449,31 +446,26 @@ class _CardReglasNotificacion extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.rule_folder_outlined,
+              const Icon(Icons.rule_folder_outlined,
                   color: AppColors.success, size: 18),
-              SizedBox(width: AppSpacing.sm),
+              const SizedBox(width: AppSpacing.sm),
               Text(
                 'Reglas de notificación',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
+                style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 0.5),
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
           ...secciones,
           const SizedBox(height: AppSpacing.sm),
-          const Text(
+          Text(
             'Catálogo completo de mensajes que la app manda por WhatsApp. '
             'Si querés cambiar quién recibe un resumen sin tocar código '
             'ni reiniciar nada, usá el botón de abajo (M5, 2026-05-24): '
             'el cambio se aplica en ≤ 5 min vía Firestore.',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
+            style: AppType.eyebrow.copyWith(color: Colors.white38),
           ),
           const SizedBox(height: 10),
           Center(
@@ -637,7 +629,7 @@ class _FilaReglaNotif extends StatelessWidget {
               padding: const EdgeInsets.only(top: 2),
               child: Text(
                 descripcion,
-                style: const TextStyle(color: Colors.white60, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: Colors.white60),
               ),
             ),
           const SizedBox(height: AppSpacing.xs),
@@ -699,13 +691,9 @@ class _FilaReglaNotif extends StatelessWidget {
                   },
                   icon: const Icon(Icons.history,
                       size: 13, color: AppColors.info),
-                  label: const Text(
+                  label: Text(
                     'Ver último enviado',
-                    style: TextStyle(
-                      color: AppColors.info,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: AppColors.info, fontWeight: FontWeight.bold),
                   ),
                   style: TextButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
@@ -833,11 +821,7 @@ class _BadgeDestinatario extends StatelessWidget {
           Flexible(
             child: Text(
               texto,
-              style: TextStyle(
-                color: color,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-              ),
+              style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -996,11 +980,7 @@ class _FilaError extends StatelessWidget {
             // 4 líneas + ellipsis para no inundar la card.
             maxLines: 4,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 12,
-              fontFamily: 'monospace',
-            ),
+            style: AppType.label.copyWith(color: Colors.white, fontFamily: 'monospace'),
           ),
         ],
       ),
@@ -1133,16 +1113,12 @@ class _Fila extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white54),
             ),
           ),
           Text(
             valor,
-            style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
+            style: AppType.label.copyWith(color: color, fontWeight: FontWeight.w600),
           ),
           if (onTap != null) ...[
             const SizedBox(width: 6),
@@ -1187,7 +1163,7 @@ class _Mensaje extends StatelessWidget {
             Text(
               texto,
               textAlign: TextAlign.center,
-              style: TextStyle(color: color, fontSize: 14),
+              style: AppType.body.copyWith(color: color),
             ),
           ],
         ),
@@ -1266,10 +1242,7 @@ class _ToggleKillSwitch extends StatelessWidget {
                               : 'Motivo: $motivo'),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white60,
-                        fontSize: 11,
-                      ),
+                      style: AppType.eyebrow.copyWith(color: Colors.white60),
                     ),
                   ],
                 ),
@@ -1410,11 +1383,7 @@ class _BadgePausa extends StatelessWidget {
                     children: [
                       Text(
                         'CANAL PAUSADO — $hastaTxt',
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.bold),
                       ),
                       if (motivo != null && motivo!.isNotEmpty)
                         Text(
@@ -1436,13 +1405,9 @@ class _BadgePausa extends StatelessWidget {
           onPressed: () => _confirmarReanudar(context),
           icon: const Icon(Icons.play_arrow,
               size: 16, color: AppColors.success),
-          label: const Text(
+          label: Text(
             'Reanudar',
-            style: TextStyle(
-              color: AppColors.success,
-              fontWeight: FontWeight.bold,
-              fontSize: 11,
-            ),
+            style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
           ),
           style: TextButton.styleFrom(
             padding:
@@ -1528,11 +1493,7 @@ class _BotonPausar extends StatelessWidget {
         ),
         label: Text(
           'Pausar canal…',
-          style: TextStyle(
-            color: critico ? AppColors.error : Colors.white54,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-          ),
+          style: AppType.eyebrow.copyWith(color: critico ? AppColors.error : Colors.white54, fontWeight: FontWeight.bold),
         ),
         style: TextButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -1624,11 +1585,7 @@ class _BottomSheetPausaState extends State<_BottomSheetPausa> {
           const SizedBox(height: AppSpacing.xs),
           Text(
             widget.regKey,
-            style: const TextStyle(
-              color: Colors.white38,
-              fontSize: 11,
-              fontFamily: 'monospace',
-            ),
+            style: AppType.eyebrow.copyWith(color: Colors.white38, fontFamily: 'monospace'),
           ),
           const SizedBox(height: AppSpacing.lg),
           if (widget.critico)
@@ -1639,20 +1596,16 @@ class _BottomSheetPausaState extends State<_BottomSheetPausa> {
                 borderRadius: BorderRadius.circular(AppRadius.sm),
                 border: Border.all(color: AppColors.error.withAlpha(120)),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.warning_amber_outlined,
+                  const Icon(Icons.warning_amber_outlined,
                       color: AppColors.error, size: 18),
-                  SizedBox(width: AppSpacing.sm),
+                  const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
                       'Atención: este canal silencia un aviso de '
                       'seguridad. Pausar SOLO en testing del módulo Volvo.',
-                      style: TextStyle(
-                        color: AppColors.error,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: AppType.label.copyWith(color: AppColors.error, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -1675,9 +1628,9 @@ class _BottomSheetPausaState extends State<_BottomSheetPausa> {
           ),
           if (!_indefinida) ...[
             const SizedBox(height: AppSpacing.sm),
-            const Text(
+            Text(
               'Hasta:',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white60),
             ),
             const SizedBox(height: AppSpacing.xs),
             InkWell(
@@ -1894,10 +1847,7 @@ class _CardSparklineEnviadosState extends State<_CardSparklineEnviados> {
               if (_conteos != null)
                 Text(
                   'Total: ${_conteos!.fold<int>(0, (a, b) => a + b)}',
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 11,
-                  ),
+                  style: AppType.eyebrow.copyWith(color: Colors.white60),
                 ),
             ],
           ),
@@ -1913,10 +1863,10 @@ class _CardSparklineEnviadosState extends State<_CardSparklineEnviados> {
 
   Widget _contenido() {
     if (_error != null) {
-      return const Center(
+      return Center(
         child: Text(
           'Sin datos del histórico todavía',
-          style: TextStyle(color: Colors.white38, fontSize: 11),
+          style: AppType.eyebrow.copyWith(color: Colors.white38),
         ),
       );
     }
@@ -1933,10 +1883,10 @@ class _CardSparklineEnviadosState extends State<_CardSparklineEnviados> {
     final c = _conteos!;
     final maxValor = c.fold<int>(0, (a, b) => b > a ? b : a);
     if (maxValor == 0) {
-      return const Center(
+      return Center(
         child: Text(
           'Sin mensajes en los últimos 7 días',
-          style: TextStyle(color: Colors.white38, fontSize: 11),
+          style: AppType.eyebrow.copyWith(color: Colors.white38),
         ),
       );
     }
@@ -2040,7 +1990,7 @@ class _CardSparklineEnviadosState extends State<_CardSparklineEnviados> {
               final n = c[idx];
               return BarTooltipItem(
                 '${labelEjeX(idx)}: $n msg',
-                const TextStyle(color: Colors.white, fontSize: 11),
+                AppType.eyebrow.copyWith(color: Colors.white),
               );
             },
           ),

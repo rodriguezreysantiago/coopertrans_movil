@@ -45,12 +45,7 @@ class _SeccionCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   titulo,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    letterSpacing: 1,
-                  ),
+                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
                 ),
               ),
               if (trailing != null) trailing!,
@@ -72,12 +67,7 @@ class _SubseccionTitulo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       texto,
-      style: const TextStyle(
-        color: Colors.white60,
-        fontSize: 11,
-        fontWeight: FontWeight.bold,
-        letterSpacing: 1.2,
-      ),
+      style: AppType.eyebrow.copyWith(color: Colors.white60, fontWeight: FontWeight.bold, letterSpacing: 1.2),
     );
   }
 }
@@ -148,7 +138,7 @@ class _ResumenTarifa extends StatelessWidget {
         children: [
           Text(
             '${t.empresaOrigenNombre} → ${t.empresaDestinoNombre}',
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: AppType.label.copyWith(color: Colors.white70),
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
@@ -156,27 +146,20 @@ class _ResumenTarifa extends StatelessWidget {
             '${t.unidadTarifa.sufijoMonto}  ·  '
             'Chofer: \$${AppFormatters.formatearMonto(t.tarifaChofer)}'
             '${t.unidadTarifa.sufijoMonto}',
-            style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
+            style: AppType.label.copyWith(color: color, fontWeight: FontWeight.bold),
           ),
           if (sinMonto) ...[
             const SizedBox(height: AppSpacing.xs),
-            const Row(
+            Row(
               children: [
-                Icon(Icons.warning_amber_outlined,
+                const Icon(Icons.warning_amber_outlined,
                     size: 14, color: AppColors.warning),
-                SizedBox(width: AppSpacing.xs),
+                const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
                     'Tarifa pendiente de definir — actualizá la tarifa '
                     'y volvé a guardar el viaje cuando sepas el monto.',
-                    style: TextStyle(
-                      color: AppColors.warning,
-                      fontSize: 11,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: AppColors.warning),
                   ),
                 ),
               ],

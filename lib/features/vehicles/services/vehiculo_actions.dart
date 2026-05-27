@@ -21,6 +21,7 @@ import '../../asignaciones/services/asignacion_enganche_service.dart';
 import '../../asignaciones/services/asignacion_vehiculo_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 // =============================================================================
 // SERVICIO DE ACTUALIZACIÓN — NAMESPACE VehiculoActions
 //
@@ -166,9 +167,9 @@ class VehiculoActions {
                     : 'Subir archivo nuevo',
                 style: const TextStyle(color: Colors.white),
               ),
-              subtitle: const Text(
+              subtitle: Text(
                 'Foto o PDF',
-                style: TextStyle(color: Colors.white38, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: Colors.white38),
               ),
               onTap: () {
                 navigator.pop();

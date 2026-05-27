@@ -8,6 +8,7 @@ import '../models/volvo_score_diario.dart';
 import '../services/eco_driving_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Bottom sheet de drill-down de un vehículo específico.
 ///
 /// Muestra:
@@ -249,17 +250,12 @@ class _Header extends StatelessWidget {
             children: [
               Text(
                 patente,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 22,
-                  letterSpacing: 1,
-                ),
+                style: AppType.title.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
               ),
               const SizedBox(height: 2),
-              const Text(
+              Text(
                 'Detalle eco-driving',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
+                style: AppType.label.copyWith(color: Colors.white54),
               ),
             ],
           ),
@@ -275,11 +271,7 @@ class _Header extends StatelessWidget {
             children: [
               Text(
                 s == null ? '—' : s.toStringAsFixed(0),
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 22,
-                ),
+                style: AppType.title.copyWith(color: color, fontWeight: FontWeight.bold),
               ),
               const Text(
                 'PROM',
@@ -346,7 +338,7 @@ class _FilaDia extends StatelessWidget {
             width: 50,
             child: Text(
               AppFormatters.formatearFechaCorta(doc.fechaTs),
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white70),
             ),
           ),
           Container(
@@ -369,7 +361,7 @@ class _FilaDia extends StatelessWidget {
                 Text(
                   chofer,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white),
                 ),
                 if (km != null || consumo != null)
                   Text(
@@ -413,7 +405,7 @@ class _BarraSubscore extends StatelessWidget {
             child: Text(
               label,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white70),
             ),
           ),
           Expanded(
@@ -441,7 +433,7 @@ class _BarraSubscore extends StatelessWidget {
             child: Text(
               s == null ? '—' : s.toStringAsFixed(0),
               textAlign: TextAlign.end,
-              style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 12),
+              style: AppType.label.copyWith(color: color, fontWeight: FontWeight.bold),
             ),
           ),
         ],

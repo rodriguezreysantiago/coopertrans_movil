@@ -13,6 +13,7 @@ import '../services/logistica_geo_utils.dart';
 import '../services/logistica_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Lista de tarifas con buscador. Cada tarifa = una "ruta con precio"
 /// que el módulo de viajes (futuro) va a poder seleccionar como base.
 class LogisticaTarifasScreen extends StatefulWidget {
@@ -286,11 +287,7 @@ class _CardTarifa extends StatelessWidget {
                 Expanded(
                   child: Text(
                     tarifa.producto!,
-                    style: const TextStyle(
-                      color: AppColors.warning,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.label.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -314,10 +311,7 @@ class _CardTarifa extends StatelessWidget {
                   child: Text(
                     'Dador: ${tarifa.dadorNombre}'
                     '${tarifa.montoFijoDador != null ? " · \$ ${AppFormatters.formatearMonto(tarifa.montoFijoDador!)}/viaje" : tarifa.porcentajeComisionDador != null ? " · ${tarifa.porcentajeComisionDador!.toStringAsFixed(1)}%" : ""}',
-                    style: const TextStyle(
-                      color: Colors.white60,
-                      fontSize: 11,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: Colors.white60),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -466,10 +460,7 @@ class _Punto extends StatelessWidget {
           empresa,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white60,
-            fontSize: 11,
-          ),
+          style: AppType.eyebrow.copyWith(color: Colors.white60),
         ),
       ],
     );

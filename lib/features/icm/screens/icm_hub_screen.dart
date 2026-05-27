@@ -10,6 +10,7 @@ import '../../vista_ejecutiva/widgets/top_choferes_lista.dart';
 import '../services/icm_hub_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Hub del módulo ICM (Índice de Conducta de Manejo).
 ///
 /// Layout (de arriba abajo):
@@ -217,12 +218,7 @@ class _SeccionLabel extends StatelessWidget {
       padding: const EdgeInsets.only(left: 6, top: 4),
       child: Text(
         texto.toUpperCase(),
-        style: const TextStyle(
-          color: AppColors.success,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.5,
-        ),
+        style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.5),
       ),
     );
   }
@@ -252,7 +248,7 @@ class _ErrorReintentar extends StatelessWidget {
             child: Text(
               error,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white38),
             ),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -353,12 +349,7 @@ class _HubTile extends StatelessWidget {
             fit: BoxFit.scaleDown,
             child: Text(
               titulo,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: 0.5,
-              ),
+              style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5),
             ),
           ),
           const SizedBox(height: AppSpacing.xs),
@@ -367,10 +358,7 @@ class _HubTile extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 11,
-              color: Colors.white60,
-            ),
+            style: AppType.eyebrow.copyWith(color: Colors.white60),
           ),
         ],
       ),

@@ -14,6 +14,7 @@ import '../models/ubicacion_logistica.dart';
 import '../services/logistica_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// ABM de empresas con tabs (CLIENTES / DADORES). Cada tipo en una
 /// solapa distinta para evitar que el operador se confunda al armar
 /// tarifas — un cliente nunca debería figurar en el dropdown de
@@ -237,15 +238,11 @@ class _CardEmpresa extends StatelessWidget {
                         empresa.etiquetaSecundaria!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: empresa.activa
+                        style: AppType.label.copyWith(color: empresa.activa
                               ? Colors.white54
-                              : Colors.white24,
-                          fontSize: 12,
-                          decoration: empresa.activa
+                              : Colors.white24, decoration: empresa.activa
                               ? TextDecoration.none
-                              : TextDecoration.lineThrough,
-                        ),
+                              : TextDecoration.lineThrough),
                       ),
                     ],
                   ],
@@ -458,10 +455,7 @@ class _EditarEmpresaSheetBody extends StatelessWidget {
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(
                             empresa.etiquetaSecundaria!,
-                            style: const TextStyle(
-                              color: Colors.white54,
-                              fontSize: 12,
-                            ),
+                            style: AppType.label.copyWith(color: Colors.white54),
                           ),
                         ),
                     ],
@@ -659,19 +653,14 @@ class _BloqueUbicacionesDeEmpresa extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.place_outlined,
+                  const Icon(Icons.place_outlined,
                       color: AppColors.brandSoft, size: 16),
-                  SizedBox(width: 6),
+                  const SizedBox(width: 6),
                   Text(
                     'UBICACIONES DE ESTA EMPRESA',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: Colors.white54, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                   ),
                 ],
               ),
@@ -692,11 +681,7 @@ class _BloqueUbicacionesDeEmpresa extends StatelessWidget {
                     return Chip(
                       label: Text(
                         u.nombre,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                       ),
                       backgroundColor:
                           AppColors.brandSoft.withValues(alpha: 0.25),
@@ -783,16 +768,11 @@ class _SeleccionUbicacionesSheetState
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Text(
               'SELECCIONAR UBICACIONES',
-              style: TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-              ),
+              style: AppType.eyebrow.copyWith(color: Colors.white60, fontWeight: FontWeight.bold, letterSpacing: 1.2),
             ),
           ),
           Padding(
@@ -828,14 +808,11 @@ class _SeleccionUbicacionesSheetState
                   },
                   title: Text(
                     u.nombre,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    style: AppType.body.copyWith(color: Colors.white),
                   ),
                   subtitle: Text(
                     u.etiquetaCompleta,
-                    style: const TextStyle(
-                      color: Colors.white54,
-                      fontSize: 12,
-                    ),
+                    style: AppType.label.copyWith(color: Colors.white54),
                   ),
                   activeColor: AppColors.brandSoft,
                   dense: true,
@@ -1082,10 +1059,7 @@ class _Chip extends StatelessWidget {
       ),
       child: Text(
         texto,
-        style: const TextStyle(
-          color: Colors.white70,
-          fontSize: 11,
-        ),
+        style: AppType.eyebrow.copyWith(color: Colors.white70),
       ),
     );
   }
@@ -1171,19 +1145,14 @@ class _BloqueProductos extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.inventory_2_outlined,
+              const Icon(Icons.inventory_2_outlined,
                   color: AppColors.warning, size: 16),
-              SizedBox(width: 6),
+              const SizedBox(width: 6),
               Text(
                 'PRODUCTOS QUE CARGA',
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
+                style: AppType.eyebrow.copyWith(color: Colors.white54, fontWeight: FontWeight.bold, letterSpacing: 1.2),
               ),
             ],
           ),
@@ -1204,10 +1173,7 @@ class _BloqueProductos extends StatelessWidget {
                 return Chip(
                   label: Text(
                     productos[i],
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                    ),
+                    style: AppType.label.copyWith(color: Colors.white),
                   ),
                   backgroundColor:
                       AppColors.warning.withValues(alpha: 0.2),

@@ -13,6 +13,7 @@ import '../services/report_gomeria.dart';
 import '../services/report_icm.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Centro de Reportes (admin).
 ///
 /// Lista los informes que el admin puede generar y exportar a Excel/PDF.
@@ -165,16 +166,11 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
           body: ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              const Padding(
-                padding: EdgeInsets.only(left: 5, bottom: 14),
+              Padding(
+                padding: const EdgeInsets.only(left: 5, bottom: 14),
                 child: Text(
                   'INFORMES ESTRATÉGICOS',
-                  style: TextStyle(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11,
-                    letterSpacing: 2,
-                  ),
+                  style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 2),
                 ),
               ),
               _ReportCard(
@@ -291,11 +287,7 @@ class _ReportCard extends StatelessWidget {
                   descripcion,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 12,
-                    height: 1.3,
-                  ),
+                  style: AppType.label.copyWith(color: Colors.white54, height: 1.3),
                 ),
               ],
             ),
@@ -333,12 +325,12 @@ class _CargandoOverlay extends StatelessWidget {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: AppColors.info.withAlpha(50)),
               ),
-              child: const Column(
+              child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(color: AppColors.info),
-                  SizedBox(height: 25),
-                  Text(
+                  const CircularProgressIndicator(color: AppColors.info),
+                  const SizedBox(height: 25),
+                  const Text(
                     'CONECTANDO CON VOLVO',
                     style: TextStyle(
                       color: AppColors.info,
@@ -346,10 +338,10 @@ class _CargandoOverlay extends StatelessWidget {
                       letterSpacing: 1,
                     ),
                   ),
-                  SizedBox(height: 10),
+                  const SizedBox(height: 10),
                   Text(
                     'Descargando telemetría de flota...',
-                    style: TextStyle(color: Colors.white54, fontSize: 12),
+                    style: AppType.label.copyWith(color: Colors.white54),
                   ),
                 ],
               ),

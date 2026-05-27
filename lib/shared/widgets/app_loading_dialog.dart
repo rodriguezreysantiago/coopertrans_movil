@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Diálogo modal de "cargando..." reutilizable.
 ///
 /// Encapsula el patrón:
@@ -65,11 +66,7 @@ class AppLoadingDialog {
                   const SizedBox(height: AppSpacing.lg),
                   Text(
                     mensaje,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
                   ),
                 ],
               ],

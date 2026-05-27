@@ -13,6 +13,7 @@ import '../../../shared/utils/digit_only_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Form de alta de un nuevo vehículo (tractor / batea / tolva).
 class AdminVehiculoAltaScreen extends StatefulWidget {
   const AdminVehiculoAltaScreen({super.key});
@@ -265,11 +266,7 @@ class _LabelCampo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: const TextStyle(
-        color: Colors.white70,
-        fontSize: 11,
-        fontWeight: FontWeight.bold,
-      ),
+      style: AppType.eyebrow.copyWith(color: Colors.white70, fontWeight: FontWeight.bold),
     );
   }
 }
@@ -319,15 +316,12 @@ class _VInput extends StatelessWidget {
         inputFormatters: isNumeric
             ? [DigitOnlyFormatter(maxLength: maxLength)]
             : null,
-        style: TextStyle(
-          color: readOnly ? Colors.white54 : Colors.white,
-          fontSize: 14,
-        ),
+        style: AppType.body.copyWith(color: readOnly ? Colors.white54 : Colors.white),
         decoration: InputDecoration(
           counterText: '',
           labelText: label,
           hintText: hint,
-          hintStyle: const TextStyle(color: Colors.white24, fontSize: 11),
+          hintStyle: AppType.eyebrow.copyWith(color: Colors.white24),
           prefixIcon: Icon(
             icon,
             color: readOnly
@@ -414,12 +408,7 @@ class _SelectorTipo extends StatelessWidget {
             ),
             label: Text(
               _label(t),
-              style: TextStyle(
-                fontSize: 12,
-                color: seleccionado ? Colors.black : Colors.white,
-                fontWeight:
-                    seleccionado ? FontWeight.bold : FontWeight.normal,
-              ),
+              style: AppType.label.copyWith(color: seleccionado ? Colors.black : Colors.white, fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal),
             ),
             selected: seleccionado,
             onSelected:
@@ -458,7 +447,7 @@ class _DropdownEmpresa extends StatelessWidget {
           value: value,
           isExpanded: true,
           dropdownColor: Theme.of(context).colorScheme.surface,
-          style: const TextStyle(color: Colors.white, fontSize: 12),
+          style: AppType.label.copyWith(color: Colors.white),
           items: empresas
               .map((e) => DropdownMenuItem(
                     value: e,
@@ -500,10 +489,7 @@ class _BotonGuardar extends StatelessWidget {
             : const Icon(Icons.cloud_upload),
         label: Text(
           guardando ? 'REGISTRANDO...' : 'REGISTRAR EN FLOTA',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
+          style: AppType.heading.copyWith(fontWeight: FontWeight.bold),
         ),
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.success,

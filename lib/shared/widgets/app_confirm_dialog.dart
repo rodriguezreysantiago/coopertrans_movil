@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/app_colors.dart';
 
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Diálogo de confirmación reutilizable.
 ///
 /// Pensado para acciones que el usuario puede arrepentirse: desvincular
@@ -81,11 +82,7 @@ class AppConfirmDialog {
             Flexible(
               child: Text(
                 title,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ),
           ],
@@ -93,11 +90,7 @@ class AppConfirmDialog {
         content: content ??
             Text(
               message!,
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
-                height: 1.4,
-              ),
+              style: AppType.body.copyWith(color: Colors.white70, height: 1.4),
             ),
         actions: [
           TextButton(

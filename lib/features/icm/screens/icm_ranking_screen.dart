@@ -10,6 +10,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../services/icm_oficial_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Ranking de choferes según el ICM **oficial de Sitrack** (lo que audita
 /// YPF). Escala MÁS BAJO = MEJOR. Se ordena MEJOR arriba (#1 = mejor
 /// chofer del período, gamification estilo podio). Los "sin actividad"
@@ -222,7 +223,7 @@ class _Buscador extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
       child: TextField(
         controller: controller,
-        style: const TextStyle(color: Colors.white, fontSize: 14),
+        style: AppType.body.copyWith(color: Colors.white),
         decoration: InputDecoration(
           hintText: 'Buscar por nombre o DNI',
           hintStyle:
@@ -270,7 +271,7 @@ class _MensajeCentro extends StatelessWidget {
         child: Text(
           texto,
           textAlign: TextAlign.center,
-          style: TextStyle(color: color, fontSize: 14, height: 1.4),
+          style: AppType.body.copyWith(color: color, height: 1.4),
         ),
       ),
     );
@@ -344,9 +345,9 @@ class _HeaderFlota extends StatelessWidget {
                         height: 1.0,
                       ),
                     ),
-                    const Text(
+                    Text(
                       'ICM flota (oficial Sitrack)',
-                      style: TextStyle(color: Colors.white60, fontSize: 11),
+                      style: AppType.eyebrow.copyWith(color: Colors.white60),
                     ),
                   ],
                 ),
@@ -360,11 +361,7 @@ class _HeaderFlota extends StatelessWidget {
                         textAlign: TextAlign.end,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                        ),
+                        style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -374,8 +371,7 @@ class _HeaderFlota extends StatelessWidget {
                         textAlign: TextAlign.end,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 11),
+                        style: AppType.eyebrow.copyWith(color: Colors.white54),
                       ),
                     ],
                   ),
@@ -429,8 +425,7 @@ class _ChipSeveridad extends StatelessWidget {
       ),
       child: Text(
         '$label $n',
-        style: TextStyle(
-            color: color, fontSize: 11, fontWeight: FontWeight.w600),
+        style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -483,7 +478,7 @@ class _FilaChofer extends StatelessWidget {
             children: [
               Text(
                 posStr,
-                style: const TextStyle(color: Colors.white60, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: Colors.white60),
               ),
               const SizedBox(height: 2),
               Container(
@@ -519,7 +514,7 @@ class _FilaChofer extends StatelessWidget {
             children: [
               Text(
                 '$dniStr · ${AppFormatters.formatearMiles(chofer.distanciaKm)} km',
-                style: const TextStyle(color: Colors.white54, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: Colors.white54),
               ),
               const SizedBox(height: 2),
               Text(
@@ -528,7 +523,7 @@ class _FilaChofer extends StatelessWidget {
                     : '${chofer.severidadLabel} · ${chofer.totalInfracciones} '
                         'infracciones (${chofer.infAltas}A · '
                         '${chofer.infMedias}M · ${chofer.infLeves}L)',
-                style: TextStyle(color: color, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: color),
               ),
             ],
           ),

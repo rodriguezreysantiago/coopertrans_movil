@@ -19,6 +19,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../../../shared/widgets/foto_perfil_avatar.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Perfil del chofer (vista del usuario, no admin).
 ///
 /// Migrada al sistema de diseño unificado.
@@ -250,15 +251,11 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
         ),
         child: SafeArea(
           child: Wrap(children: [
-            const Padding(
-              padding: EdgeInsets.all(20),
+            Padding(
+              padding: const EdgeInsets.all(20),
               child: Text(
                 'Actualizar foto',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+                style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ),
             ListTile(
@@ -480,14 +477,9 @@ class _Header extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.xs),
-        const Text(
+        Text(
           'CHOFER PROFESIONAL',
-          style: TextStyle(
-            color: AppColors.success,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 2,
-          ),
+          style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 2),
         ),
       ],
     );
@@ -574,12 +566,7 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4, left: 10),
       child: Text(
         label.toUpperCase(),
-        style: const TextStyle(
-          color: AppColors.success,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.5,
-        ),
+        style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.5),
       ),
     );
   }
@@ -691,11 +678,7 @@ class _InfoTile extends StatelessWidget {
         // + ellipsis para que el ListTile no rompa en mobile.
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
+        style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
       ),
       dense: true,
       contentPadding:
@@ -770,11 +753,7 @@ class _InfoTileEditable extends StatelessWidget {
         valor.isEmpty ? '—' : valor,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w600,
-        ),
+        style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
       ),
       trailing: const Icon(
         Icons.edit_note,
@@ -918,11 +897,7 @@ class _PerfilOfflineFallback extends StatelessWidget {
                       motivo == null
                           ? 'Conexión lenta'
                           : 'Datos incompletos',
-                      style: const TextStyle(
-                        color: AppColors.warning,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
+                      style: AppType.body.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
@@ -968,19 +943,14 @@ class _PerfilOfflineFallback extends StatelessWidget {
               const SizedBox(height: 14),
               Text(
                 apodo.isNotEmpty ? apodo : nombre,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppType.title.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                 textAlign: TextAlign.center,
               ),
               if (apodo.isNotEmpty && nombre.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   nombre,
-                  style: const TextStyle(
-                      color: Colors.white60, fontSize: 14),
+                  style: AppType.body.copyWith(color: Colors.white60),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -998,10 +968,10 @@ class _PerfilOfflineFallback extends StatelessWidget {
         // Si solo es conexión lenta, mostramos indicador de carga
         // discreto al pie — el stream sigue intentando.
         if (motivo == null)
-          const Center(
+          Center(
             child: Column(
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 22,
                   height: 22,
                   child: CircularProgressIndicator(
@@ -1009,10 +979,10 @@ class _PerfilOfflineFallback extends StatelessWidget {
                     color: AppColors.info,
                   ),
                 ),
-                SizedBox(height: 10),
+                const SizedBox(height: 10),
                 Text(
                   'Cargando datos completos…',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white54),
                 ),
               ],
             ),
@@ -1045,11 +1015,7 @@ class _FallbackTile extends StatelessWidget {
             flex: 3,
             child: Text(
               valor,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-              ),
+              style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
             ),
           ),
         ],

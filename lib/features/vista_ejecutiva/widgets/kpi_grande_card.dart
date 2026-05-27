@@ -15,6 +15,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../services/vista_ejecutiva_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 class KpiGrandeCard extends StatelessWidget {
   final String label;
   final String valorTexto;
@@ -236,12 +237,7 @@ class KpiGrandeCard extends StatelessWidget {
                   label.toUpperCase(),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
+                  style: AppType.eyebrow.copyWith(color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                 ),
               ),
             ],
@@ -268,7 +264,7 @@ class KpiGrandeCard extends StatelessWidget {
               sublabel!,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white54, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white54),
             ),
           ],
           // Variación opcional — flecha + texto, alineado a la derecha.
@@ -281,11 +277,7 @@ class KpiGrandeCard extends StatelessWidget {
                 const SizedBox(width: 3),
                 Text(
                   variacionTexto!,
-                  style: TextStyle(
-                    color: colorVariacion,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.label.copyWith(color: colorVariacion, fontWeight: FontWeight.bold),
                 ),
               ],
             ),

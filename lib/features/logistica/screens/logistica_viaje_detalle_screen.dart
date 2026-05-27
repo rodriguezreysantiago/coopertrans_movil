@@ -14,6 +14,7 @@ import '../services/adelantos_service.dart';
 import '../services/viajes_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Detalle read-only de un viaje. Vista resumida para consulta rápida
 /// — el operador entra acá desde la lista para revisar antes de
 /// liquidar o editar.
@@ -117,14 +118,9 @@ class _Cabecera extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 'VIAJE',
-                style: TextStyle(
-                  color: Colors.white60,
-                  fontSize: 11,
-                  letterSpacing: 1.4,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppType.eyebrow.copyWith(color: Colors.white60, letterSpacing: 1.4, fontWeight: FontWeight.bold),
               ),
               const Spacer(),
               _ChipEstado(estado: v.estado),
@@ -143,18 +139,14 @@ class _Cabecera extends StatelessWidget {
             v.cargaTransportada?.isNotEmpty == true
                 ? v.cargaTransportada!
                 : 'Sin descripción de carga',
-            style: TextStyle(
-              color: v.cargaTransportada?.isNotEmpty == true
+            style: AppType.heading.copyWith(color: v.cargaTransportada?.isNotEmpty == true
                   ? Colors.white
-                  : Colors.white38,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+                  : Colors.white38, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 2),
           Text(
             'ID: ${v.id}',
-            style: const TextStyle(color: Colors.white38, fontSize: 11),
+            style: AppType.eyebrow.copyWith(color: Colors.white38),
           ),
         ],
       ),
@@ -263,12 +255,7 @@ class _DetalleTramo extends StatelessWidget {
           if (numero != null) ...[
             Text(
               'TRAMO $numero',
-              style: const TextStyle(
-                color: AppColors.info,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-                letterSpacing: 1.2,
-              ),
+              style: AppType.body.copyWith(color: AppColors.info, fontWeight: FontWeight.bold, letterSpacing: 1.2),
             ),
             const SizedBox(height: 6),
           ],
@@ -327,16 +314,11 @@ class _DetalleTramo extends StatelessWidget {
           // (refactor 2026-05-13 — antes vivían al nivel viaje).
           if (tramo.gastos.isNotEmpty) ...[
             const Divider(color: Colors.white12, height: 16),
-            const Padding(
-              padding: EdgeInsets.only(bottom: 4),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
               child: Text(
                 'GASTOS EXTRAORDINARIOS',
-                style: TextStyle(
-                  color: Colors.white60,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
+                style: AppType.label.copyWith(color: Colors.white60, fontWeight: FontWeight.bold, letterSpacing: 1.2),
               ),
             ),
             for (final g in tramo.gastos)
@@ -352,17 +334,12 @@ class _DetalleTramo extends StatelessWidget {
                         g.detalle?.isNotEmpty == true
                             ? '${g.detalle} (${AppFormatters.formatearFecha(g.fecha)})'
                             : 'Gasto del ${AppFormatters.formatearFecha(g.fecha)}',
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 14),
+                        style: AppType.body.copyWith(color: Colors.white70),
                       ),
                     ),
                     Text(
                       '\$ ${AppFormatters.formatearMonto(g.monto)}',
-                      style: const TextStyle(
-                        color: AppColors.brandSoft,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: AppType.body.copyWith(color: AppColors.brandSoft, fontWeight: FontWeight.bold),
                     ),
                   ],
                 ),
@@ -539,13 +516,13 @@ class _SeccionMontos extends StatelessWidget {
           valor: '\$ ${AppFormatters.formatearMonto(v.liquidacionChofer)}',
           highlight: true,
         ),
-        const Padding(
-          padding: EdgeInsets.only(top: 6),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
           child: Text(
             'Los adelantos se restan en LIQUIDACIÓN sumando los '
             'del chofer en el rango. Acá solo se muestra lo que '
             'genera el viaje en sí.',
-            style: TextStyle(color: Colors.white38, fontSize: 11),
+            style: AppType.eyebrow.copyWith(color: Colors.white38),
           ),
         ),
       ],
@@ -881,12 +858,7 @@ class _Seccion extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 titulo,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
+                style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2),
               ),
             ],
           ),
@@ -972,7 +944,7 @@ class _LineaLink extends StatelessWidget {
             flex: 4,
             child: Text(
               label,
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white60),
             ),
           ),
           Expanded(
@@ -992,11 +964,7 @@ class _LineaLink extends StatelessWidget {
                   Flexible(
                     child: Text(
                       etiqueta,
-                      style: const TextStyle(
-                        color: AppColors.info,
-                        fontSize: 12,
-                        decoration: TextDecoration.underline,
-                      ),
+                      style: AppType.label.copyWith(color: AppColors.info, decoration: TextDecoration.underline),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),

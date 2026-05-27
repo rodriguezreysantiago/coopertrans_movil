@@ -12,6 +12,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla "Mapa flota en vivo" del admin.
 ///
 /// Muestra la última posición conocida de TODA la flota (no solo Volvo)
@@ -275,11 +276,7 @@ class _Toolbar extends StatelessWidget {
             alignment: Alignment.centerRight,
             child: Text(
               'Mostrando $visibles',
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppType.eyebrow.copyWith(color: Colors.white60, fontWeight: FontWeight.w600),
             ),
           ),
           const SizedBox(height: 6),
@@ -358,11 +355,7 @@ class _ContadorMini extends StatelessWidget {
         ),
         Text(
           valor,
-          style: TextStyle(
-            color: color,
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-          ),
+          style: AppType.heading.copyWith(color: color, fontWeight: FontWeight.bold),
         ),
       ],
     );
@@ -667,12 +660,7 @@ class _DetalleSheet extends StatelessWidget {
               Expanded(
                 child: Text(
                   patente,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
-                  ),
+                  style: AppType.title.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
                 ),
               ),
               _BadgeIgnicion(on: ignition),
@@ -838,7 +826,7 @@ class _Fila extends StatelessWidget {
             width: 90,
             child: Text(
               label,
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white54),
             ),
           ),
           Expanded(
@@ -1029,17 +1017,12 @@ class _DriftBanner extends StatelessWidget {
               children: [
                 Text(
                   titulo,
-                  style: const TextStyle(
-                    color: AppColors.warning,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.4,
-                  ),
+                  style: AppType.label.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold, letterSpacing: 0.4),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   detalle,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white),
                 ),
               ],
             ),

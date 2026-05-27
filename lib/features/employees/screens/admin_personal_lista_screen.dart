@@ -20,6 +20,7 @@ import 'admin_personal_form_screen.dart';
 import 'chofer_actividad_screen.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 // 10 widgets visuales (card, detalle, header, datos editables, filas
 // de vencimiento, asignacion de unidad) extraidos para mantener
 // navegable el screen principal. Comparten privacidad via `part of`.

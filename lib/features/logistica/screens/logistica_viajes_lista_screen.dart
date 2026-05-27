@@ -11,6 +11,7 @@ import '../models/viaje.dart';
 import '../services/viajes_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Lista de viajes — entry point del módulo. Filtros operativos
 /// (estado + liquidado) y FAB para crear viaje nuevo.
 ///
@@ -388,7 +389,7 @@ class _ViajeTile extends StatelessWidget {
               Expanded(
                 child: Text(
                   viaje.rutaEtiqueta,
-                  style: const TextStyle(color: Colors.white60, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white60),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -403,11 +404,7 @@ class _ViajeTile extends StatelessWidget {
               const SizedBox(width: 2),
               Text(
                 AppFormatters.formatearMonto(viaje.montoChoferRedondeado),
-                style: const TextStyle(
-                  color: AppColors.success,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppType.label.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
               ),
               const SizedBox(width: AppSpacing.sm),
               if (viaje.liquidado)

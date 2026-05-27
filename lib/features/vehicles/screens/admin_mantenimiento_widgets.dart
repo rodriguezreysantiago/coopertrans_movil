@@ -159,21 +159,13 @@ class _TractorCard extends StatelessWidget {
                   '$marca $modelo'.trim().isEmpty
                       ? 'Sin marca/modelo'
                       : '$marca $modelo',
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 12,
-                  ),
+                  style: AppType.label.copyWith(color: Colors.white54),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   estado.etiqueta,
-                  style: TextStyle(
-                    color: estado.color,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.6,
-                  ),
+                  style: AppType.eyebrow.copyWith(color: estado.color, fontWeight: FontWeight.w600, letterSpacing: 0.6),
                 ),
                 if (faltaCargaInicial) ...[
                   const SizedBox(height: AppSpacing.xs),
@@ -477,12 +469,7 @@ class _Chip extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 label,
-                style: TextStyle(
-                  color: activo ? Colors.white : Colors.white70,
-                  fontSize: 11,
-                  fontWeight:
-                      activo ? FontWeight.w600 : FontWeight.normal,
-                ),
+                style: AppType.eyebrow.copyWith(color: activo ? Colors.white : Colors.white70, fontWeight: activo ? FontWeight.w600 : FontWeight.normal),
               ),
             ],
           ),

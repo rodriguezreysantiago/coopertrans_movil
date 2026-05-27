@@ -9,6 +9,7 @@ import '../models/zona_descarga.dart';
 import '../services/zonas_descarga_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Módulo "Descargas" — cola en vivo + recién descargaron + KPIs.
 ///
 /// Reemplazó al detector PTO Volvo (eliminado 2026-05-24) que daba
@@ -193,11 +194,7 @@ class _BotonRango extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       '${_fmt(desde)} → ${_fmt(hasta)}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),
@@ -226,12 +223,9 @@ class _SinZonas extends StatelessWidget {
             const Icon(Icons.add_location_alt_outlined,
                 color: Colors.white24, size: 72),
             const SizedBox(height: AppSpacing.lg),
-            const Text(
+            Text(
               'No hay zonas de descarga cargadas',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16),
+              style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
@@ -287,10 +281,7 @@ class _BotonGestionarZonas extends StatelessWidget {
             ),
             padding: const EdgeInsets.symmetric(
                 horizontal: 14, vertical: 8),
-            textStyle: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
+            textStyle: AppType.label.copyWith(fontWeight: FontWeight.w600),
           ),
         ),
       ),
@@ -416,14 +407,10 @@ class _KpiCard extends StatelessWidget {
             Icon(icon, color: color, size: 18),
             const SizedBox(height: 6),
             Text(valor,
-                style: TextStyle(
-                    color: color,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold)),
+                style: AppType.title.copyWith(color: color, fontWeight: FontWeight.bold)),
             const SizedBox(height: 2),
             Text(label,
-                style: const TextStyle(
-                    color: Colors.white60, fontSize: 11)),
+                style: AppType.eyebrow.copyWith(color: Colors.white60)),
           ],
         ),
       ),
@@ -448,11 +435,7 @@ class _ColaEnVivo extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               'COLA EN VIVO — ${zona.nombre.toUpperCase()}',
-              style: const TextStyle(
-                  color: AppColors.success,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                  fontSize: 12),
+              style: AppType.label.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 0.5),
             ),
           ],
         ),
@@ -551,21 +534,14 @@ class _FilaCola extends StatelessWidget {
           backgroundColor: colorPos,
           child: Text(
             '#$posicion',
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.bold),
+            style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ),
         title: Row(
           children: [
             Text(
               patente,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                  letterSpacing: 1),
+              style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -593,7 +569,7 @@ class _FilaCola extends StatelessWidget {
             '${dni.isNotEmpty ? " · DNI $dni" : ""}',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white54, fontSize: 11),
+            style: AppType.eyebrow.copyWith(color: Colors.white54),
           ),
         ),
         trailing: cumple
@@ -634,17 +610,13 @@ class _DescargasDelRango extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Row(
+        Row(
           children: [
-            Icon(Icons.history, color: AppColors.brandSoft, size: 18),
-            SizedBox(width: 6),
+            const Icon(Icons.history, color: AppColors.brandSoft, size: 18),
+            const SizedBox(width: 6),
             Text(
               'DESCARGAS DEL RANGO',
-              style: TextStyle(
-                  color: AppColors.brandSoft,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                  fontSize: 12),
+              style: AppType.label.copyWith(color: AppColors.brandSoft, fontWeight: FontWeight.bold, letterSpacing: 0.5),
             ),
           ],
         ),
@@ -745,12 +717,9 @@ class _FilaHistorico extends StatelessWidget {
                               : '(sin chofer iButton)',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: chofer.isNotEmpty
+                          style: AppType.label.copyWith(color: chofer.isNotEmpty
                                 ? Colors.white70
-                                : Colors.white38,
-                            fontSize: 12,
-                          ),
+                                : Colors.white38),
                         ),
                       ),
                     ],
@@ -763,8 +732,7 @@ class _FilaHistorico extends StatelessWidget {
                       if (salida != null)
                         'Salió ${AppFormatters.formatearFechaHoraSinSegundos(salida)}',
                     ].join(' · '),
-                    style: const TextStyle(
-                        color: Colors.white54, fontSize: 11),
+                    style: AppType.eyebrow.copyWith(color: Colors.white54),
                   ),
                 ],
               ),
@@ -781,10 +749,7 @@ class _FilaHistorico extends StatelessWidget {
               ),
               child: Text(
                 '$dur min',
-                style: TextStyle(
-                    color: colorDur,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12),
+                style: AppType.label.copyWith(color: colorDur, fontWeight: FontWeight.bold),
               ),
             ),
           ],

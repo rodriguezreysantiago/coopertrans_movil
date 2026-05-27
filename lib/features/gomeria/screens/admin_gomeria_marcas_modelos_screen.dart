@@ -10,6 +10,7 @@ import '../models/cubierta_marca.dart';
 import '../models/cubierta_modelo.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// ABM de marcas y modelos de cubiertas. 2 tabs:
 /// - **Marcas**: solo nombre + activo (soft-delete).
 /// - **Modelos**: marca + modelo + medida + tipo_uso + km_vida_estimada
@@ -230,11 +231,7 @@ class _ModelosTab extends StatelessWidget {
                           Expanded(
                             child: Text(
                               m.etiqueta,
-                              style: TextStyle(
-                                color: m.activo ? Colors.white : Colors.grey,
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: AppType.body.copyWith(color: m.activo ? Colors.white : Colors.grey, fontWeight: FontWeight.bold),
                             ),
                           ),
                           Switch(
@@ -446,9 +443,9 @@ class _EditarModeloSheet extends StatelessWidget {
       required Future<void> Function(String) onSave}) {
     return ListTile(
       title: Text(etiqueta,
-          style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          style: AppType.label.copyWith(color: Colors.white60)),
       subtitle: Text(valor.isEmpty ? '—' : valor,
-          style: const TextStyle(color: Colors.white, fontSize: 14)),
+          style: AppType.body.copyWith(color: Colors.white)),
       trailing: const Icon(Icons.edit, color: Colors.white38, size: 18),
       onTap: () async {
         final ctrl = TextEditingController(text: valor);
@@ -487,10 +484,10 @@ class _EditarModeloSheet extends StatelessWidget {
       required Future<void> Function(int?) onSave}) {
     return ListTile(
       title: Text(etiqueta,
-          style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          style: AppType.label.copyWith(color: Colors.white60)),
       subtitle: Text(
           valor == null ? '—' : '${AppFormatters.formatearMiles(valor)} $sufijo',
-          style: const TextStyle(color: Colors.white, fontSize: 14)),
+          style: AppType.body.copyWith(color: Colors.white)),
       trailing: const Icon(Icons.edit, color: Colors.white38, size: 18),
       onTap: () async {
         final ctrl = TextEditingController(
@@ -545,9 +542,9 @@ class _EditarModeloSheet extends StatelessWidget {
       required Future<void> Function(double?) onSave}) {
     return ListTile(
       title: Text(etiqueta,
-          style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          style: AppType.label.copyWith(color: Colors.white60)),
       subtitle: Text(valor == null ? '—' : '$valor $sufijo',
-          style: const TextStyle(color: Colors.white, fontSize: 14)),
+          style: AppType.body.copyWith(color: Colors.white)),
       trailing: const Icon(Icons.edit, color: Colors.white38, size: 18),
       onTap: () async {
         final ctrl = TextEditingController(
@@ -604,9 +601,9 @@ class _EditarModeloSheet extends StatelessWidget {
       required Future<void> Function(String) onSave}) {
     return ListTile(
       title: Text(etiqueta,
-          style: const TextStyle(color: Colors.white60, fontSize: 12)),
+          style: AppType.label.copyWith(color: Colors.white60)),
       subtitle: Text(opciones[valorActual] ?? valorActual,
-          style: const TextStyle(color: Colors.white, fontSize: 14)),
+          style: AppType.body.copyWith(color: Colors.white)),
       trailing: const Icon(Icons.edit, color: Colors.white38, size: 18),
       onTap: () async {
         final res = await showDialog<String>(
@@ -786,9 +783,9 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
             SwitchListTile(
               value: _recapable,
               title: const Text('Recapable'),
-              subtitle: const Text(
+              subtitle: Text(
                 'Si está apagado, no se va a poder mandar a recapar.',
-                style: TextStyle(fontSize: 11, color: Colors.white60),
+                style: AppType.eyebrow.copyWith(color: Colors.white60),
               ),
               onChanged: (v) => setState(() => _recapable = v),
               activeTrackColor: AppColors.brand,
@@ -870,7 +867,7 @@ class _Vacio extends StatelessWidget {
         child: Text(
           texto,
           textAlign: TextAlign.center,
-          style: const TextStyle(color: Colors.white60, fontSize: 14),
+          style: AppType.body.copyWith(color: Colors.white60),
         ),
       ),
     );
@@ -894,7 +891,7 @@ class _Chip extends StatelessWidget {
       ),
       child: Text(
         texto,
-        style: TextStyle(color: c, fontSize: 11, fontWeight: FontWeight.bold),
+        style: AppType.eyebrow.copyWith(color: c, fontWeight: FontWeight.bold),
       ),
     );
   }

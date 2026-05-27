@@ -13,6 +13,7 @@ import '../../features/vehicles/screens/admin_vehiculos_lista_screen.dart'
     show abrirDetalleVehiculo;
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Palette de búsqueda global estilo VS Code.
 ///
 /// Pensado como atajo del admin en desktop / Web: Ctrl+K abre este
@@ -259,24 +260,20 @@ class _PaletteDialogState extends State<_PaletteDialog> {
                   const Icon(Icons.keyboard_return,
                       size: 14, color: Colors.white54),
                   const SizedBox(width: 6),
-                  const Text('Enter para abrir',
+                  Text('Enter para abrir',
                       style:
-                          TextStyle(color: Colors.white54, fontSize: 11)),
+                          AppType.eyebrow.copyWith(color: Colors.white54)),
                   const SizedBox(width: AppSpacing.lg),
                   const Icon(Icons.keyboard_alt_outlined,
                       size: 14, color: Colors.white54),
                   const SizedBox(width: 6),
-                  const Text('Esc para cerrar',
+                  Text('Esc para cerrar',
                       style:
-                          TextStyle(color: Colors.white54, fontSize: 11)),
+                          AppType.eyebrow.copyWith(color: Colors.white54)),
                   const Spacer(),
                   Text(
                     '${filtrados.length} resultado${filtrados.length == 1 ? '' : 's'}',
-                    style: const TextStyle(
-                      color: AppColors.success,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -301,15 +298,11 @@ class _ItemTile extends StatelessWidget {
       leading: Icon(item.icon, color: AppColors.success, size: 20),
       title: Text(
         item.titulo,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w500,
-          fontSize: 14,
-        ),
+        style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
       ),
       subtitle: Text(
         item.subtitulo,
-        style: const TextStyle(color: Colors.white54, fontSize: 11),
+        style: AppType.eyebrow.copyWith(color: Colors.white54),
       ),
       trailing: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

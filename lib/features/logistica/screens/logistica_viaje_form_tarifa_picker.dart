@@ -254,10 +254,7 @@ class _ItemTarifaPicker extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     '$unidad · Vecchi \$ $montoReal$sufijo · Chofer \$ $montoChofer$sufijo',
-                    style: const TextStyle(
-                      color: Colors.white60,
-                      fontSize: 11,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: Colors.white60),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -271,10 +268,7 @@ class _ItemTarifaPicker extends StatelessWidget {
                         if (tarifa.producto?.isNotEmpty == true)
                           'Producto: ${tarifa.producto}',
                       ].join(' · '),
-                      style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 11,
-                      ),
+                      style: AppType.eyebrow.copyWith(color: Colors.white38),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

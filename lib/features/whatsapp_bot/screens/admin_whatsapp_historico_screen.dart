@@ -9,6 +9,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../services/whatsapp_historico_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// M8 + M10 — Pantalla "Historial WhatsApp": auditar mensajes pasados
 /// del bot (ENVIADO / ERROR) con filtros y buscador.
 ///
@@ -217,8 +218,8 @@ class _AdminWhatsappHistoricoScreenState
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
-              const Text('Estado:',
-                  style: TextStyle(color: Colors.white60, fontSize: 12)),
+              Text('Estado:',
+                  style: AppType.label.copyWith(color: Colors.white60)),
               const SizedBox(width: AppSpacing.sm),
               _chipEstado(null, 'Todos'),
               const SizedBox(width: 6),
@@ -233,13 +234,13 @@ class _AdminWhatsappHistoricoScreenState
               Expanded(
                 child: TextField(
                   controller: _dniCtrl,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                  decoration: const InputDecoration(
+                  style: AppType.label.copyWith(color: Colors.white),
+                  decoration: InputDecoration(
                     isDense: true,
                     labelText: 'DNI destinatario (opcional)',
-                    labelStyle: TextStyle(color: Colors.white60, fontSize: 11),
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
+                    labelStyle: AppType.eyebrow.copyWith(color: Colors.white60),
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 8),
                   ),
                   onSubmitted: (_) => _ejecutarConsulta(),
@@ -249,13 +250,13 @@ class _AdminWhatsappHistoricoScreenState
               Expanded(
                 child: TextField(
                   controller: _origenCtrl,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                  decoration: const InputDecoration(
+                  style: AppType.label.copyWith(color: Colors.white),
+                  decoration: InputDecoration(
                     isDense: true,
                     labelText: 'Origen (opcional)',
-                    labelStyle: TextStyle(color: Colors.white60, fontSize: 11),
-                    border: OutlineInputBorder(),
-                    contentPadding: EdgeInsets.symmetric(
+                    labelStyle: AppType.eyebrow.copyWith(color: Colors.white60),
+                    border: const OutlineInputBorder(),
+                    contentPadding: const EdgeInsets.symmetric(
                         horizontal: 10, vertical: 8),
                   ),
                   onSubmitted: (_) => _ejecutarConsulta(),
@@ -270,13 +271,13 @@ class _AdminWhatsappHistoricoScreenState
             ],
           ),
           if (_filtrosServerActivos > 1)
-            const Padding(
-              padding: EdgeInsets.only(top: 6),
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
               child: Text(
                 'Aviso: combinar estado + DNI + origen puede requerir '
                 'un índice extra. Si la consulta tarda mucho o falla, '
                 'dejá solo un filtro server-side y refiná con la búsqueda.',
-                style: TextStyle(color: AppColors.warning, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: AppColors.warning),
               ),
             ),
         ],
@@ -287,7 +288,7 @@ class _AdminWhatsappHistoricoScreenState
   Widget _chipEstado(String? value, String label) {
     final selected = _filtroEstado == value;
     return ChoiceChip(
-      label: Text(label, style: const TextStyle(fontSize: 11)),
+      label: Text(label, style: AppType.eyebrow),
       selected: selected,
       onSelected: (sel) {
         setState(() => _filtroEstado = value);
@@ -322,7 +323,7 @@ class _AdminWhatsappHistoricoScreenState
               ),
         hintText: 'Buscar dentro de los resultados (texto / teléfono / patente)',
         hintStyle:
-            const TextStyle(color: Colors.white38, fontSize: 12),
+            AppType.label.copyWith(color: Colors.white38),
         border: const OutlineInputBorder(),
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -357,10 +358,7 @@ class _AdminWhatsappHistoricoScreenState
             child: Text(
               '${filtrados.length} mensaje(s)'
               '${_query.isNotEmpty || _filtrosServerActivos > 0 ? " coinciden" : ""}',
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 12,
-              ),
+              style: AppType.label.copyWith(color: Colors.white60),
             ),
           );
         }
@@ -456,17 +454,12 @@ class _ItemHistorico extends StatelessWidget {
                   Expanded(
                     child: Text(
                       PhoneFormatter.paraMostrar(telefono),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
                     ),
                   ),
                   Text(
                     hora,
-                    style: const TextStyle(
-                        color: Colors.white60, fontSize: 11),
+                    style: AppType.eyebrow.copyWith(color: Colors.white60),
                   ),
                 ],
               ),
@@ -474,7 +467,7 @@ class _ItemHistorico extends StatelessWidget {
               Text(
                 preview,
                 style:
-                    const TextStyle(color: Colors.white70, fontSize: 12),
+                    AppType.label.copyWith(color: Colors.white70),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -546,11 +539,7 @@ class _DetalleHistoricoSheet extends StatelessWidget {
                   const SizedBox(width: AppSpacing.sm),
                   Text(
                     estado,
-                    style: TextStyle(
-                      color: color,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.heading.copyWith(color: color, fontWeight: FontWeight.bold),
                   ),
                   const Spacer(),
                   IconButton(
@@ -574,14 +563,9 @@ class _DetalleHistoricoSheet extends StatelessWidget {
               if (alertPatente.isNotEmpty) _fila('Patente', alertPatente),
               if (waId.isNotEmpty) _fila('WhatsApp ID', waId),
               const SizedBox(height: AppSpacing.md),
-              const Text(
+              Text(
                 'Mensaje',
-                style: TextStyle(
-                  color: Colors.white60,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1,
-                ),
+                style: AppType.eyebrow.copyWith(color: Colors.white60, fontWeight: FontWeight.bold, letterSpacing: 1),
               ),
               const SizedBox(height: AppSpacing.xs),
               Container(
@@ -601,14 +585,9 @@ class _DetalleHistoricoSheet extends StatelessWidget {
               ),
               if (error.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.md),
-                const Text(
+                Text(
                   'Error',
-                  style: TextStyle(
-                    color: AppColors.error,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
-                  ),
+                  style: AppType.eyebrow.copyWith(color: AppColors.error, fontWeight: FontWeight.bold, letterSpacing: 1),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Container(
@@ -621,8 +600,7 @@ class _DetalleHistoricoSheet extends StatelessWidget {
                   ),
                   child: SelectableText(
                     error,
-                    style: const TextStyle(
-                        color: AppColors.error, fontSize: 12),
+                    style: AppType.label.copyWith(color: AppColors.error),
                   ),
                 ),
               ],
@@ -639,10 +617,7 @@ class _DetalleHistoricoSheet extends StatelessWidget {
                   icon: const Icon(Icons.copy, size: 14),
                   label: Text(
                     doc.id,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontFamily: 'monospace',
-                    ),
+                    style: AppType.eyebrow.copyWith(fontFamily: 'monospace'),
                   ),
                 ),
               ),
@@ -663,13 +638,13 @@ class _DetalleHistoricoSheet extends StatelessWidget {
             width: 110,
             child: Text(
               label,
-              style: const TextStyle(color: Colors.white60, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white60),
             ),
           ),
           Expanded(
             child: SelectableText(
               value,
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white),
             ),
           ),
         ],

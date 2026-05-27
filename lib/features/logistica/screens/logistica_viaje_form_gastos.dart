@@ -138,9 +138,9 @@ class _SeccionGastos extends StatelessWidget {
     final total = gastos.fold<double>(0, (a, g) => a + g.monto);
     final children = <Widget>[
       if (gastos.isEmpty)
-        const Text(
+        Text(
           'Sin gastos cargados.',
-          style: TextStyle(color: Colors.white60, fontSize: 12),
+          style: AppType.label.copyWith(color: Colors.white60),
         )
       else
         ...gastos.asMap().entries.map((entry) {
@@ -210,11 +210,7 @@ class _SeccionGastos extends StatelessWidget {
             ),
             Text(
               '\$${AppFormatters.formatearMonto(total)}',
-              style: const TextStyle(
-                color: AppColors.success,
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
+              style: AppType.body.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
             ),
           ],
         ),

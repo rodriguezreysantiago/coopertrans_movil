@@ -12,6 +12,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 // 10 widgets visuales (seccion unidad, cards de revision/sin-asignacion/
 // unidad, bloque telemetria, datos, filas, selector de cambio, lista
 // libres) extraidos para mantener navegable este screen. Comparten
@@ -185,11 +186,7 @@ class _EquipoOfflineFallback extends StatelessWidget {
                   children: [
                     Text(
                       motivo == null ? 'Conexión lenta' : 'Datos incompletos',
-                      style: const TextStyle(
-                        color: AppColors.warning,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
+                      style: AppType.body.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
@@ -222,10 +219,10 @@ class _EquipoOfflineFallback extends StatelessWidget {
           ),
         const SizedBox(height: 30),
         if (motivo == null)
-          const Center(
+          Center(
             child: Column(
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 22,
                   height: 22,
                   child: CircularProgressIndicator(
@@ -233,10 +230,10 @@ class _EquipoOfflineFallback extends StatelessWidget {
                     color: AppColors.info,
                   ),
                 ),
-                SizedBox(height: 10),
+                const SizedBox(height: 10),
                 Text(
                   'Cargando datos de tu unidad…',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white54),
                 ),
               ],
             ),

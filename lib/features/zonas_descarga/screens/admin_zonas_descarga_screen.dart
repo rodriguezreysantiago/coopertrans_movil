@@ -7,6 +7,7 @@ import '../models/zona_descarga.dart';
 import '../services/zonas_descarga_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla admin para crear/editar zonas de descarga. El operador
 /// define cada zona (YPF Añelo, otras plantas) con su geometría
 /// (círculo o polígono). La CF `zonaDescargaPoller` las consume cada
@@ -38,8 +39,7 @@ class AdminZonasDescargaScreen extends StatelessWidget {
                         zonas.isEmpty
                             ? 'Sin zonas cargadas todavía'
                             : '${zonas.length} zona${zonas.length == 1 ? "" : "s"}',
-                        style: const TextStyle(
-                            color: Colors.white60, fontSize: 12),
+                        style: AppType.label.copyWith(color: Colors.white60),
                       ),
                     ),
                     FilledButton.icon(
@@ -99,17 +99,17 @@ class _BannerExplicativo extends StatelessWidget {
           color: AppColors.info.withValues(alpha: 0.30),
         ),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.info_outline, color: AppColors.info, size: 20),
-          SizedBox(width: 10),
+          const Icon(Icons.info_outline, color: AppColors.info, size: 20),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               'Cada zona define un lugar de descarga (ej. YPF Añelo). El '
               'sistema detecta cuándo entra y sale cada unidad para armar '
               'la cola en vivo del módulo "Descargas". Definila como '
               'círculo (centro + radio) o polígono (puntos).',
-              style: TextStyle(fontSize: 12, color: Colors.white70),
+              style: AppType.label.copyWith(color: Colors.white70),
             ),
           ),
         ],
@@ -132,12 +132,9 @@ class _EstadoVacio extends StatelessWidget {
             const Icon(Icons.add_location_alt_outlined,
                 color: Colors.white24, size: 64),
             const SizedBox(height: AppSpacing.lg),
-            const Text(
+            Text(
               'Sin zonas cargadas',
-              style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16),
+              style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
@@ -204,31 +201,25 @@ class _ZonaCard extends StatelessWidget {
                 ),
                 Text(
                   zona.activo ? 'Activa' : 'Pausada',
-                  style: TextStyle(
-                      color: color,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600),
+                  style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
             const SizedBox(height: 6),
             Text(
               _resumenGeom,
-              style: const TextStyle(color: Colors.white60, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white60),
             ),
             const SizedBox(height: 2),
             Text(
               'Estadía mínima: ${zona.estadiaMinMin} min · slug ${zona.slug}',
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white38),
             ),
             if ((zona.notas ?? '').isNotEmpty) ...[
               const SizedBox(height: AppSpacing.xs),
               Text(
                 zona.notas!,
-                style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic),
+                style: AppType.eyebrow.copyWith(color: Colors.white54, fontStyle: FontStyle.italic),
               ),
             ],
             Row(
@@ -535,8 +526,7 @@ class _ZonaFormState extends State<_ZonaForm> {
               ] else ...[
                 TextFormField(
                   controller: _verticesText,
-                  style: const TextStyle(
-                      color: Colors.white, fontFamily: 'monospace', fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white, fontFamily: 'monospace'),
                   decoration: const InputDecoration(
                     labelText: 'Vértices (lat, lng — uno por línea)',
                     hintText:
@@ -588,10 +578,10 @@ class _ZonaFormState extends State<_ZonaForm> {
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Zona activa',
                     style: TextStyle(color: Colors.white)),
-                subtitle: const Text(
+                subtitle: Text(
                   'Si está pausada, el sistema no detecta entradas ni salidas '
                   'pero la configuración queda guardada.',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white54),
                 ),
                 value: _activo,
                 onChanged: (v) => setState(() => _activo = v),

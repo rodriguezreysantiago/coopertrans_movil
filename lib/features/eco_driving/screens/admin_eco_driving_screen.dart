@@ -8,6 +8,7 @@ import '../services/eco_driving_service.dart';
 import '../widgets/score_drilldown_sheet.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla "Eco-Driving" del admin/supervisor.
 ///
 /// Muestra los scores de eco-driving que pollea diariamente
@@ -160,12 +161,7 @@ class _ResumenFleet extends StatelessWidget {
             children: [
               Text(
                 'FLOTA · score promedio últimos $diasRango días',
-                style: const TextStyle(
-                  color: AppColors.success,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 11,
-                  letterSpacing: 2,
-                ),
+                style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 2),
               ),
               const SizedBox(height: AppSpacing.md),
               _ScoreGrande(score: scoreTotal),
@@ -304,12 +300,7 @@ class _RankingVehiculos extends StatelessWidget {
                   const SizedBox(width: AppSpacing.sm),
                   Text(
                     'RANKING POR VEHÍCULO · $diasRango DÍAS',
-                    style: const TextStyle(
-                      color: AppColors.info,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
-                      letterSpacing: 1.5,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: AppColors.info, fontWeight: FontWeight.bold, letterSpacing: 1.5),
                   ),
                 ],
               ),
@@ -370,11 +361,7 @@ class _FilaRanking extends StatelessWidget {
               ),
               child: Text(
                 item.scorePromedio.toStringAsFixed(0),
-                style: TextStyle(
-                  color: _colorScore,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
+                style: AppType.body.copyWith(color: _colorScore, fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(width: 14),
@@ -386,11 +373,7 @@ class _FilaRanking extends StatelessWidget {
                     item.patente,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
+                    style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -399,7 +382,7 @@ class _FilaRanking extends StatelessWidget {
                     '${item.consumoPromedioLPor100Km != null ? ' · ${item.consumoPromedioLPor100Km!.toStringAsFixed(1)} L/100km' : ''}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    style: AppType.eyebrow.copyWith(color: Colors.white54),
                   ),
                 ],
               ),
@@ -466,16 +449,12 @@ class _ScoreGrande extends StatelessWidget {
             children: [
               Text(
                 _interpretacion(s),
-                style: TextStyle(
-                  color: colorScore,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+                style: AppType.heading.copyWith(color: colorScore, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 6),
               Text(
                 _detalleInterpretacion(s),
-                style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.3),
+                style: AppType.label.copyWith(color: Colors.white70, height: 1.3),
               ),
             ],
           ),
@@ -520,18 +499,14 @@ class _MiniSubScore extends StatelessWidget {
           width: 40,
           child: Text(
             s == null ? '—' : s.toStringAsFixed(0),
-            style: TextStyle(
-              color: color,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
+            style: AppType.heading.copyWith(color: color, fontWeight: FontWeight.bold),
           ),
         ),
         Expanded(
           child: Text(
             label,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white70, fontSize: 11),
+            style: AppType.eyebrow.copyWith(color: Colors.white70),
           ),
         ),
       ],
@@ -552,7 +527,7 @@ class _MetricaOp extends StatelessWidget {
         children: [
           Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10)),
           const SizedBox(height: 2),
-          Text(valor, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+          Text(valor, style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
         ],
       ),
     );
@@ -613,9 +588,9 @@ class _AvisoCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(titulo, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 14)),
+                Text(titulo, style: AppType.body.copyWith(color: color, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                Text(mensaje, style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
+                Text(mensaje, style: AppType.label.copyWith(color: Colors.white70, height: 1.4)),
               ],
             ),
           ),

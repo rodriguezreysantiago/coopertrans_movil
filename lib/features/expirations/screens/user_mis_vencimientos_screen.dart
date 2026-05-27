@@ -20,6 +20,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../../checklist/screens/user_checklist_form_screen.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 // Componentes visuales (header, card, boton upload, detalle equipo,
 // boton OCR, etc) extraidos para mantener navegable este screen.
 // Comparten privacidad via `part of`.

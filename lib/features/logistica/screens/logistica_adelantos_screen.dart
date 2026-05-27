@@ -18,6 +18,7 @@ import '../services/recibos_adelanto_service.dart';
 import '../services/report_adelantos.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// ABM de adelantos a chofer. Lista por fecha desc, alta vía dialog,
 /// edición inline al tocar la card, eliminar con confirmación,
 /// imprimir comprobante (asigna correlativo server-side la primera vez,
@@ -259,10 +260,10 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                 onSelectionChanged: (sel) =>
                     setState(() => _vista = sel.first),
                 showSelectedIcon: false,
-                style: const ButtonStyle(
+                style: ButtonStyle(
                   visualDensity: VisualDensity.compact,
                   textStyle: WidgetStatePropertyAll(
-                    TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                    AppType.eyebrow.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -537,11 +538,7 @@ class _ChipFiltroEmpleado extends StatelessWidget {
       ),
       label: Text(
         label,
-        style: TextStyle(
-          color: hayFiltro ? Colors.white : Colors.white60,
-          fontSize: 12,
-          fontWeight: hayFiltro ? FontWeight.bold : FontWeight.normal,
-        ),
+        style: AppType.label.copyWith(color: hayFiltro ? Colors.white : Colors.white60, fontWeight: hayFiltro ? FontWeight.bold : FontWeight.normal),
       ),
       backgroundColor: hayFiltro
           ? AppColors.info.withValues(alpha: 0.2)
@@ -599,18 +596,15 @@ class _DialogSeleccionarEmpleadoState
             .clamp(360.0, 560.0),
         child: Column(
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
               child: Row(
                 children: [
-                  Icon(Icons.person_search, size: 20),
-                  SizedBox(width: AppSpacing.sm),
+                  const Icon(Icons.person_search, size: 20),
+                  const SizedBox(width: AppSpacing.sm),
                   Text(
                     'Filtrar por empleado',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.heading.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -674,7 +668,7 @@ class _DialogSeleccionarEmpleadoState
                             color: Colors.white60),
                         title: const Text('TODOS los empleados'),
                         subtitle: const Text('Sin filtro de empleado',
-                            style: TextStyle(fontSize: 11)),
+                            style: AppType.eyebrow),
                         onTap: () => Navigator.pop(
                           context,
                           const _EmpleadoElegido(dni: '', nombre: ''),
@@ -774,7 +768,7 @@ class _BotonRangoFechas extends StatelessWidget {
       icon: const Icon(Icons.date_range_outlined, size: 16),
       label: Text(
         label,
-        style: const TextStyle(fontSize: 12),
+        style: AppType.label,
         overflow: TextOverflow.ellipsis,
       ),
       style: OutlinedButton.styleFrom(
@@ -865,10 +859,7 @@ class _ResumenEmpleadoFiltrado extends StatelessWidget {
               Text(
                 '${adelantos.length} '
                 'adelanto${adelantos.length == 1 ? '' : 's'} en rango',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 11,
-                ),
+                style: AppType.eyebrow.copyWith(color: Colors.white70),
               ),
             ],
           ),
@@ -983,7 +974,7 @@ class _BarraSeleccion extends StatelessWidget {
             totalPendientes == 0
                 ? 'Sin adelantos en rango'
                 : '$totalSeleccionados / $totalPendientes seleccionado(s)',
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: AppType.label.copyWith(color: Colors.white70),
           ),
           const Spacer(),
           Tooltip(
@@ -997,7 +988,7 @@ class _BarraSeleccion extends StatelessWidget {
                 minimumSize: const Size(0, 32),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text('TODOS', style: TextStyle(fontSize: 11)),
+              child: const Text('TODOS', style: AppType.eyebrow),
             ),
           ),
           Tooltip(
@@ -1010,7 +1001,7 @@ class _BarraSeleccion extends StatelessWidget {
                 minimumSize: const Size(0, 32),
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text('NINGUNO', style: TextStyle(fontSize: 11)),
+              child: const Text('NINGUNO', style: AppType.eyebrow),
             ),
           ),
           const SizedBox(width: AppSpacing.xs),
@@ -1021,7 +1012,7 @@ class _BarraSeleccion extends StatelessWidget {
             // pendientes/entregados/eliminados según selección.
             label: Text(
               'IMPRIMIR SELECCIONADOS ($totalSeleccionados)',
-              style: const TextStyle(fontSize: 11),
+              style: AppType.eyebrow,
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.info,
@@ -1112,14 +1103,9 @@ class _CardAdelanto extends StatelessWidget {
                     const Icon(Icons.delete_forever,
                         size: 14, color: AppColors.error),
                     const SizedBox(width: 6),
-                    const Text(
+                    Text(
                       'ELIMINADO',
-                      style: TextStyle(
-                        color: AppColors.error,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
+                      style: AppType.eyebrow.copyWith(color: AppColors.error, fontWeight: FontWeight.bold, letterSpacing: 1),
                     ),
                     if (adelanto.eliminadoEn != null) ...[
                       const SizedBox(width: 6),
@@ -1151,11 +1137,7 @@ class _CardAdelanto extends StatelessWidget {
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Motivo: ${adelanto.eliminadoMotivo!.trim()}',
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic,
-                  ),
+                  style: AppType.eyebrow.copyWith(color: Colors.white60, fontStyle: FontStyle.italic),
                 ),
               ],
               const SizedBox(height: AppSpacing.sm),
@@ -1197,22 +1179,14 @@ class _CardAdelanto extends StatelessWidget {
                 Expanded(
                   child: Text(
                     chofer,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
+                    style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Text(
                   '\$ $montoFmt',
-                  style: const TextStyle(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                  style: AppType.heading.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
                 ),
                 if (!eliminado)
                   IconButton(
@@ -1239,7 +1213,7 @@ class _CardAdelanto extends StatelessWidget {
                   Text(
                     fechaFmt,
                     style:
-                        const TextStyle(color: Colors.white60, fontSize: 12),
+                        AppType.label.copyWith(color: Colors.white60),
                   ),
                 ],
               ),
@@ -1297,10 +1271,7 @@ class _CardAdelanto extends StatelessWidget {
                     const SizedBox(width: AppSpacing.xs),
                     Text(
                       'Recibo N° ${adelanto.numeroRecibo!.toString().padLeft(6, '0')}',
-                      style: const TextStyle(
-                        color: AppColors.info,
-                        fontSize: 12,
-                      ),
+                      style: AppType.label.copyWith(color: AppColors.info),
                     ),
                   ],
                 ),
@@ -1311,7 +1282,7 @@ class _CardAdelanto extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             Text(
               adelanto.observacion!,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white70),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -1362,7 +1333,7 @@ class _CardAdelanto extends StatelessWidget {
                   : 'El adelanto va a quedar visible al activar '
                       '"Mostrar eliminados".',
               style:
-                  const TextStyle(color: Colors.white70, fontSize: 12),
+                  AppType.label.copyWith(color: Colors.white70),
             ),
             const SizedBox(height: AppSpacing.md),
             TextField(
@@ -1625,11 +1596,11 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                   ],
                 ),
                 if (_enCuotas) ...[
-                  const Padding(
-                    padding: EdgeInsets.only(left: 4, bottom: 4),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4, bottom: 4),
                     child: Text(
                       'Cantidad de cuotas',
-                      style: TextStyle(color: Colors.white60, fontSize: 12),
+                      style: AppType.label.copyWith(color: Colors.white60),
                     ),
                   ),
                   SegmentedButton<int>(
@@ -1660,11 +1631,11 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
               // ─── Medio de pago ───
               // Toggle entre efectivo (default) y transferencia. Aparece
               // en el comprobante impreso, donde el chofer firma.
-              const Padding(
-                padding: EdgeInsets.only(left: 4, bottom: 4),
+              Padding(
+                padding: const EdgeInsets.only(left: 4, bottom: 4),
                 child: Text(
                   'Medio de pago',
-                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white60),
                 ),
               ),
               SegmentedButton<MedioPagoAdelanto>(
@@ -2092,9 +2063,9 @@ class _PreviewCuotas extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(6),
         ),
-        child: const Text(
+        child: Text(
           'Cargá el monto total para ver el detalle de las cuotas.',
-          style: TextStyle(color: Colors.white54, fontSize: 12),
+          style: AppType.label.copyWith(color: Colors.white54),
         ),
       );
     }
@@ -2120,8 +2091,7 @@ class _PreviewCuotas extends StatelessWidget {
                 children: [
                   Text(
                     'Cuota ${i + 1}/$cuotas',
-                    style: const TextStyle(
-                        color: Colors.white70, fontSize: 12),
+                    style: AppType.label.copyWith(color: Colors.white70),
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   Expanded(
@@ -2129,8 +2099,7 @@ class _PreviewCuotas extends StatelessWidget {
                       AppFormatters.formatearFecha(
                           AdelantosService.sumarMesesPreservandoDia(
                               fechaPrimera, i)),
-                      style: const TextStyle(
-                          color: Colors.white54, fontSize: 11),
+                      style: AppType.eyebrow.copyWith(color: Colors.white54),
                     ),
                   ),
                   Text(

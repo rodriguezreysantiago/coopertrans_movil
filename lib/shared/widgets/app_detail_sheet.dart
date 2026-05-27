@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Helper estático para abrir BottomSheets de "detalle" uniformemente.
 ///
 /// Reemplaza el patrón inconsistente actual donde:
@@ -86,12 +87,7 @@ class AppDetailSheet {
                     Expanded(
                       child: Text(
                         title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
+                        style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 0.5),
                       ),
                     ),
                     if (actions != null) ...actions,

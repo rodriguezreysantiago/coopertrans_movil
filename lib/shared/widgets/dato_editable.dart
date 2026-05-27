@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../constants/app_colors.dart';
 import '../utils/formatters.dart';
 
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Widgets reusables del patrón "click en el ítem para editarlo".
 ///
 /// Origen: la pantalla de Personal del admin (`_DatoEditableTexto` y
@@ -50,15 +51,11 @@ class DatoEditableTexto extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(
         etiqueta,
-        style: const TextStyle(fontSize: 11, color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: Colors.white38),
       ),
       subtitle: Text(
         valor,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
+        style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
       ),
       trailing: Icon(
         Icons.edit_note,
@@ -163,15 +160,11 @@ class DatoEditableMiles extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(
         etiqueta,
-        style: const TextStyle(fontSize: 11, color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: Colors.white38),
       ),
       subtitle: Text(
         _display,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
+        style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
       ),
       trailing: Icon(
         Icons.edit_note,
@@ -258,15 +251,11 @@ class DatoEditableEnum extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(
         etiqueta,
-        style: const TextStyle(fontSize: 11, color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: Colors.white38),
       ),
       subtitle: Text(
         label,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
+        style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
       ),
       trailing: Icon(
         icono,
@@ -350,15 +339,11 @@ class DatoEditableEnumExtensible extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(
         etiqueta,
-        style: const TextStyle(fontSize: 11, color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: Colors.white38),
       ),
       subtitle: Text(
         valorActual.isEmpty ? '—' : valorActual,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
+        style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
       ),
       trailing: Icon(
         icono,

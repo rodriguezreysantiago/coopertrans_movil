@@ -13,6 +13,7 @@ import '../../../shared/utils/formatters.dart';
 import '../utils/etiquetas_alerta_volvo.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Bottom sheet con el detalle de UN evento de VOLVO_ALERTAS.
 ///
 /// Se muestra al tappear un marker en `AdminMapaVolvoScreen`. Permite
@@ -76,12 +77,7 @@ class EventoVolvoDetalleSheet extends StatelessWidget {
                   children: [
                     Text(
                       patente,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
+                      style: AppType.title.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -219,7 +215,7 @@ class _Linea extends StatelessWidget {
             width: 90,
             child: Text(
               label,
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white54),
             ),
           ),
           Expanded(
@@ -260,7 +256,7 @@ class _LineaConAccion extends StatelessWidget {
               width: 90,
               child: Text(
                 label,
-                style: const TextStyle(color: Colors.white54, fontSize: 12),
+                style: AppType.label.copyWith(color: Colors.white54),
               ),
             ),
             Expanded(

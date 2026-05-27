@@ -6,6 +6,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Menú principal de auditoría de vencimientos.
 class AdminVencimientosMenuScreen extends StatelessWidget {
   const AdminVencimientosMenuScreen({super.key});
@@ -17,24 +18,19 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 20),
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 10, 16, 12),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 16, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'AUDITORÍA PREVENTIVA (60 DÍAS)',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.success,
-                    letterSpacing: 1.5,
-                  ),
+                  style: AppType.eyebrow.copyWith(fontWeight: FontWeight.bold, color: AppColors.success, letterSpacing: 1.5),
                 ),
-                SizedBox(height: AppSpacing.xs),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Control proactivo de documentación próxima a vencer.',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white54),
                 ),
               ],
             ),
@@ -93,16 +89,11 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
           // Visualmente separado: arriba son auditorías por persona /
           // unidad; este es ABM de docs comunes a todos los empleados de
           // una misma razón social (Póliza ART y Formulario 931).
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 24, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 16, 8),
             child: Text(
               'POR EMPRESA EMPLEADORA',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppColors.info,
-                letterSpacing: 1.5,
-              ),
+              style: AppType.eyebrow.copyWith(fontWeight: FontWeight.bold, color: AppColors.info, letterSpacing: 1.5),
             ),
           ),
           const _MenuTile(
@@ -238,21 +229,14 @@ class _MenuTile extends StatelessWidget {
                     titulo,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      fontSize: 14,
-                    ),
+                    style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     subtitulo,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white54,
-                      fontSize: 12,
-                    ),
+                    style: AppType.label.copyWith(color: Colors.white54),
                   ),
                 ],
               ),

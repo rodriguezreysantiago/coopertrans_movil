@@ -28,6 +28,7 @@ import '../../../shared/widgets/fecha_dialog.dart';
 import '../services/empresa_empleadora_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 class AdminEmpresasEmpleadorasScreen extends StatelessWidget {
   const AdminEmpresasEmpleadorasScreen({super.key});
 
@@ -39,14 +40,14 @@ class AdminEmpresasEmpleadorasScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(4, 0, 4, 12),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
             child: Text(
               'Acá cargás la Póliza ART y el Formulario 931 de cada '
               'empresa empleadora UNA SOLA VEZ. Todos los empleados '
               'que figuran en esa empresa los ven en su MIS '
               'VENCIMIENTOS sin poder editar.',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white60),
             ),
           ),
           for (final e in empresas) _CardEmpresa(info: e),
@@ -94,20 +95,14 @@ class _CardEmpresa extends StatelessWidget {
                           info.nombre.toUpperCase(),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                            letterSpacing: 0.4,
-                          ),
+                          style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 0.4),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'CUIT ${info.cuit}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              color: Colors.white54, fontSize: 11),
+                          style: AppType.eyebrow.copyWith(color: Colors.white54),
                         ),
                       ],
                     ),
@@ -197,7 +192,7 @@ class _FilaDocEmpresa extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style:
-                        const TextStyle(color: Colors.white54, fontSize: 11),
+                        AppType.eyebrow.copyWith(color: Colors.white54),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -298,10 +293,10 @@ class _FilaDocEmpresa extends StatelessWidget {
                     : 'Subir archivo nuevo',
                 style: const TextStyle(color: Colors.white),
               ),
-              subtitle: const Text(
+              subtitle: Text(
                 'Foto o PDF — el cambio se ve para todos los empleados '
                 'de esta empresa.',
-                style: TextStyle(color: Colors.white38, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: Colors.white38),
               ),
               onTap: () {
                 Navigator.pop(bCtx);

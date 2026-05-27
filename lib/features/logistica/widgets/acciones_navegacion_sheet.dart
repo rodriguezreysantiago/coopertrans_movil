@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../services/map_navigation_helper.dart';
 
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 class AccionesNavegacionSheet extends StatelessWidget {
   final double lat;
   final double lng;
@@ -65,11 +66,7 @@ class AccionesNavegacionSheet extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
             child: Text(
               '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}',
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 12,
-                fontFamily: 'monospace',
-              ),
+              style: AppType.label.copyWith(color: Colors.white60, fontFamily: 'monospace'),
             ),
           ),
           const Divider(color: Colors.white12, height: 1),
@@ -80,9 +77,9 @@ class AccionesNavegacionSheet extends StatelessWidget {
               'Abrir en Google Maps',
               style: TextStyle(color: Colors.white),
             ),
-            subtitle: const Text(
+            subtitle: Text(
               'Ver ubicación en Google Maps',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white60),
             ),
             onTap: () async {
               final ok = await MapNavigationHelper.abrirEnGoogleMaps(
@@ -108,9 +105,9 @@ class AccionesNavegacionSheet extends StatelessWidget {
               'Navegar con Waze',
               style: TextStyle(color: Colors.white),
             ),
-            subtitle: const Text(
+            subtitle: Text(
               'Iniciar navegación en Waze',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white60),
             ),
             onTap: () async {
               final ok = await MapNavigationHelper.abrirEnWaze(

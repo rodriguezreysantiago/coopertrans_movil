@@ -156,8 +156,7 @@ class _VehiculoCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             '$marca $modelo',
-                            style: const TextStyle(
-                                color: Colors.white70, fontSize: 12),
+                            style: AppType.label.copyWith(color: Colors.white70),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -166,11 +165,7 @@ class _VehiculoCard extends StatelessWidget {
                         const SizedBox(width: AppSpacing.xs),
                         Text(
                           '${AppFormatters.formatearKilometraje(km)} km',
-                          style: const TextStyle(
-                            color: AppColors.success,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
+                          style: AppType.label.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
                         ),
                       ],
                     ),
@@ -305,7 +300,7 @@ class _AccionesVehiculoMenu extends StatelessWidget {
             title: Text('Editar fechas / comprobantes / foto'),
             subtitle: Text(
               'Form completo con vencimientos y archivos',
-              style: TextStyle(fontSize: 11),
+              style: AppType.eyebrow,
             ),
           ),
         ),
@@ -319,7 +314,7 @@ class _AccionesVehiculoMenu extends StatelessWidget {
               title: Text('Forzar sincro Volvo'),
               subtitle: Text(
                 'Refrescar KM desde el API',
-                style: TextStyle(fontSize: 11),
+                style: AppType.eyebrow,
               ),
             ),
           ),
@@ -332,7 +327,7 @@ class _AccionesVehiculoMenu extends StatelessWidget {
               title: Text('Diagnóstico Volvo'),
               subtitle: Text(
                 'Inspeccionar última respuesta del API',
-                style: TextStyle(fontSize: 11),
+                style: AppType.eyebrow,
               ),
             ),
           ),
@@ -474,19 +469,14 @@ class _DetalleVehiculo extends StatelessWidget {
                         .ifEmpty('SIN DATOS'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                   if (anioInt > 0)
                     Text(
                       'Año $anioInt',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: Colors.white54, fontSize: 12),
+                      style: AppType.label.copyWith(color: Colors.white54),
                     ),
                 ],
               ),
@@ -578,7 +568,7 @@ class _DetalleVehiculo extends StatelessWidget {
               Text(
                 _formatTimestamp(data['ULTIMA_SINCRO']),
                 style:
-                    const TextStyle(color: Colors.white70, fontSize: 12),
+                    AppType.label.copyWith(color: Colors.white70),
               ),
               const SizedBox(width: AppSpacing.sm),
               if ((data['SINCRO_TIPO'] ?? '') != '')
@@ -695,32 +685,27 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.archive_outlined,
+              const Icon(Icons.archive_outlined,
                   color: AppColors.warning, size: 18),
-              SizedBox(width: AppSpacing.sm),
+              const SizedBox(width: AppSpacing.sm),
               Text(
                 'UNIDAD DADA DE BAJA',
-                style: TextStyle(
-                  color: AppColors.warning,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  letterSpacing: 1.2,
-                ),
+                style: AppType.label.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold, letterSpacing: 1.2),
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
             'Fecha: $bajaEnFmt',
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: AppType.label.copyWith(color: Colors.white70),
           ),
           if (motivo.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Motivo: $motivo',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white70),
             ),
           ],
           const SizedBox(height: AppSpacing.md),
@@ -805,7 +790,7 @@ class _MiniVencimiento extends StatelessWidget {
         const SizedBox(width: AppSpacing.xs),
         Text(label,
             style:
-                const TextStyle(color: Colors.white54, fontSize: 11)),
+                AppType.eyebrow.copyWith(color: Colors.white54)),
         const SizedBox(width: 6),
         VencimientoBadge(fecha: fecha, compact: true),
       ],
@@ -828,12 +813,7 @@ class _SectionTitle extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           Text(
             label.toUpperCase(),
-            style: const TextStyle(
-              color: AppColors.success,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
-            ),
+            style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.2),
           ),
         ],
       ),
@@ -936,11 +916,7 @@ class _ChipTelemetria extends StatelessWidget {
           const SizedBox(width: AppSpacing.xs),
           Text(
             texto,
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-            ),
+            style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -1036,8 +1012,8 @@ class _PanelTelemetria extends StatelessWidget {
               children: [
                 const Icon(Icons.speed, color: AppColors.success),
                 const SizedBox(width: 10),
-                const Text('Kilometraje',
-                    style: TextStyle(color: Colors.white60, fontSize: 12)),
+                Text('Kilometraje',
+                    style: AppType.label.copyWith(color: Colors.white60)),
                 const Spacer(),
                 Text(
                   '${AppFormatters.formatearKilometraje(km)} km',
@@ -1079,11 +1055,7 @@ class _CeldaTelemetria extends StatelessWidget {
             children: [
               TextSpan(
                 text: valor,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+                style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
               ),
               TextSpan(
                 text: ' $unidad',
@@ -1138,11 +1110,7 @@ class _CeldaPorcentaje extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           '${pct.toStringAsFixed(0)}%',
-          style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
+          style: AppType.heading.copyWith(color: color, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: AppSpacing.xs),
         SizedBox(
@@ -1222,11 +1190,7 @@ class _VencimientoRow extends StatelessWidget {
                 etiqueta,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppType.eyebrow.copyWith(color: Colors.white54, fontWeight: FontWeight.bold),
               ),
             ),
             Expanded(
@@ -1234,7 +1198,7 @@ class _VencimientoRow extends StatelessWidget {
                 tieneFecha ? AppFormatters.formatearFecha(fecha) : '—',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 12),
+                style: AppType.label.copyWith(color: Colors.white),
               ),
             ),
             VencimientoBadge(fecha: fecha),
@@ -1270,9 +1234,9 @@ class _DatoEditableEmpresa extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      title: const Text(
+      title: Text(
         'EMPRESA',
-        style: TextStyle(fontSize: 11, color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: Colors.white38),
       ),
       subtitle: Text(
         valor.isEmpty ? '—' : valor,
@@ -1280,11 +1244,7 @@ class _DatoEditableEmpresa extends StatelessWidget {
         // se cortaba feo en mobile. 2 líneas + ellipsis para prolijidad.
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
+        style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
       ),
       trailing: const Icon(Icons.business_center,
           color: AppColors.success, size: 20),
@@ -1314,7 +1274,7 @@ class _DatoEditableEmpresa extends StatelessWidget {
                 ),
                 title: Text(
                   e,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -1343,17 +1303,13 @@ class _DatoEditableAnio extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      title: const Text(
+      title: Text(
         'AÑO',
-        style: TextStyle(fontSize: 11, color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: Colors.white38),
       ),
       subtitle: Text(
         valorActual?.toString() ?? '—',
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
+        style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
       ),
       trailing: const Icon(Icons.calendar_view_month,
           color: AppColors.success, size: 20),
@@ -1388,7 +1344,7 @@ class _DatoEditableAnio extends StatelessWidget {
                 ),
                 title: Text(
                   a.toString(),
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: AppType.body.copyWith(color: Colors.white),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -1445,16 +1401,16 @@ class _ResumenService extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (sinDatos)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 4),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                Icon(Icons.info_outline, size: 16, color: Colors.white38),
-                SizedBox(width: 6),
+                const Icon(Icons.info_outline, size: 16, color: Colors.white38),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'Sin último service cargado.',
-                    style: TextStyle(color: Colors.white60, fontSize: 12),
+                    style: AppType.label.copyWith(color: Colors.white60),
                   ),
                 ),
               ],
@@ -1470,8 +1426,7 @@ class _ResumenService extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   'Último service: ${AppFormatters.formatearFecha(fechaRaw)}',
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white70),
                 ),
               ],
             ),
@@ -1486,8 +1441,7 @@ class _ResumenService extends StatelessWidget {
                 const SizedBox(width: 6),
                 Text(
                   'KM al hacerlo: ${AppFormatters.formatearMiles(ultimoKm)}',
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white70),
                 ),
               ],
             ),
@@ -1509,11 +1463,7 @@ class _ResumenService extends StatelessWidget {
                   kmRestantes < 0
                       ? 'Service VENCIDO hace ${AppFormatters.formatearMiles(kmRestantes.abs())} km'
                       : 'Próximo service en ${AppFormatters.formatearMiles(kmRestantes)} km',
-                  style: TextStyle(
-                    color: colorRestantes,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.label.copyWith(color: colorRestantes, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
@@ -1534,11 +1484,7 @@ class _ResumenService extends StatelessWidget {
                   sinDatos
                       ? 'Se actualiza solo desde Volvo Connect.'
                       : 'Dato automático desde Volvo Connect.',
-                  style: const TextStyle(
-                    color: Colors.white38,
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic,
-                  ),
+                  style: AppType.eyebrow.copyWith(color: Colors.white38, fontStyle: FontStyle.italic),
                 ),
               ),
             ],

@@ -19,12 +19,7 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8, left: 5),
       child: Text(
         label,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          color: AppColors.success,
-          letterSpacing: 2,
-        ),
+        style: AppType.eyebrow.copyWith(fontWeight: FontWeight.bold, color: AppColors.success, letterSpacing: 2),
       ),
     );
   }
@@ -106,16 +101,11 @@ class _CardVencimientoUser extends StatelessWidget {
                           : 'Vence: ${AppFormatters.formatearFecha(fecha)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: enRevision
+                      style: AppType.eyebrow.copyWith(color: enRevision
                             ? AppColors.warning
-                            : Colors.white60,
-                        fontWeight: enRevision
+                            : Colors.white60, fontWeight: enRevision
                             ? FontWeight.bold
-                            : FontWeight.normal,
-                        letterSpacing: enRevision ? 1 : 0,
-                      ),
+                            : FontWeight.normal, letterSpacing: enRevision ? 1 : 0),
                     ),
                   ],
                 ),
@@ -240,12 +230,9 @@ class _CardVencimientoEmpresa extends StatelessWidget {
                           : 'Pendiente — consultar a la oficina',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: tieneArchivo || fecha != null
+                      style: AppType.eyebrow.copyWith(color: tieneArchivo || fecha != null
                             ? Colors.white60
-                            : Colors.white38,
-                      ),
+                            : Colors.white38),
                     ),
                   ],
                 ),
@@ -287,7 +274,7 @@ class _CardVencimientoEmpresa extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   subtitulo,
-                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                  style: AppType.eyebrow.copyWith(color: Colors.white38),
                 ),
               ],
             ),
@@ -309,11 +296,7 @@ class _CardInformativa extends StatelessWidget {
       margin: EdgeInsets.zero,
       child: Text(
         mensaje,
-        style: const TextStyle(
-          color: Colors.white54,
-          fontStyle: FontStyle.italic,
-          fontSize: 12,
-        ),
+        style: AppType.label.copyWith(color: Colors.white54, fontStyle: FontStyle.italic),
       ),
     );
   }
@@ -507,11 +490,7 @@ class _AccesoChecklist extends StatelessWidget {
                 leading: Icon(icono, color: color, size: 22),
                 title: Text(
                   mensaje,
-                  style: TextStyle(
-                    color: color,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
+                  style: AppType.label.copyWith(color: color, fontWeight: FontWeight.bold),
                 ),
                 trailing:
                     Icon(Icons.arrow_forward_ios, color: color, size: 14),
@@ -615,10 +594,7 @@ class _BotonDetectarFechaState extends State<_BotonDetectarFecha> {
           _procesando
               ? 'Analizando comprobante...'
               : 'Detectar fecha desde foto',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 12,
-          ),
+          style: AppType.label.copyWith(fontWeight: FontWeight.bold),
         ),
       ),
     );
@@ -757,10 +733,7 @@ class _BannerProximoAVencerState extends State<_BannerProximoAVencer> {
                       const SizedBox(height: 2),
                       Text(
                         'Y $extras papel(es) más por vencer pronto.',
-                        style: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 11,
-                        ),
+                        style: AppType.eyebrow.copyWith(color: Colors.white60),
                       ),
                     ],
                   ],

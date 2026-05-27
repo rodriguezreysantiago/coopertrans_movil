@@ -6,6 +6,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import 'vencimiento_item.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Card de auditoría de un vencimiento.
 ///
 /// Reusable entre las 3 pantallas de listas (choferes, chasis, acoplados).
@@ -54,20 +55,13 @@ class VencimientoItemCard extends StatelessWidget {
               children: [
                 Text(
                   item.titulo,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   '${item.tipoDoc} · ${AppFormatters.formatearFecha(item.fecha)}',
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 12,
-                  ),
+                  style: AppType.label.copyWith(color: Colors.white54),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],

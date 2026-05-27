@@ -14,6 +14,7 @@ import 'excel_utils.dart' as xu;
 import 'report_save_helper.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Reporte de Consumo de Combustible (admin).
 ///
 /// Cruza la flota de Firestore con dos fuentes de telemetría:
@@ -167,18 +168,18 @@ class ReportConsumoService {
             borderRadius: BorderRadius.circular(20),
             side: BorderSide(color: Colors.white.withAlpha(20)),
           ),
-          title: const Column(
+          title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 "Reporte de Consumo",
                 style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: AppSpacing.xs),
+              const SizedBox(height: AppSpacing.xs),
               Text(
                 "Litros y promedio L/100km por unidad",
-                style: TextStyle(color: Colors.white54, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: Colors.white54),
               ),
             ],
           ),
@@ -189,13 +190,13 @@ class ReportConsumoService {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const _LabelSeccion('Rango de fechas'),
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 8, left: 4),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8, left: 4),
                   child: Text(
                     'Tocá el botón para abrir el calendario. '
                     'Marcá la fecha de inicio y después la de fin '
                     'en el mismo grid.',
-                    style: TextStyle(color: Colors.white70, fontSize: 11),
+                    style: AppType.eyebrow.copyWith(color: Colors.white70),
                   ),
                 ),
                 _BotonRangoFecha(
@@ -915,11 +916,7 @@ class _WarningHistoricoLimitado extends StatelessWidget {
                     'El histórico de telemetría arranca el ${AppFormatters.formatearFecha(fechaMin)}. '
                     'Los días anteriores al ${AppFormatters.formatearFecha(fechaMin)} no van a tener '
                     'data en el reporte (se reportan como "(acum.)" o vacíos).',
-                    style: const TextStyle(
-                      color: AppColors.warning,
-                      fontSize: 11,
-                      height: 1.4,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: AppColors.warning, height: 1.4),
                   ),
                 ),
               ],

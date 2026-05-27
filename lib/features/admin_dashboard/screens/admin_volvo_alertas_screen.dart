@@ -13,6 +13,7 @@ import '../../eco_driving/screens/admin_mapa_volvo_screen.dart';
 import '../../eco_driving/utils/etiquetas_alerta_volvo.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla "Alertas Volvo" del admin/supervisor.
 ///
 /// Lista los eventos del Vehicle Alerts API que el `volvoAlertasPoller`
@@ -434,11 +435,7 @@ class _ChipSeveridad extends StatelessWidget {
       label: Text(label),
       selected: seleccionado,
       onSelected: (_) => onTap(),
-      labelStyle: TextStyle(
-        color: seleccionado ? Colors.white : color,
-        fontWeight: FontWeight.bold,
-        fontSize: 11,
-      ),
+      labelStyle: AppType.eyebrow.copyWith(color: seleccionado ? Colors.white : color, fontWeight: FontWeight.bold),
       backgroundColor: color.withAlpha(25),
       selectedColor: color,
       side: BorderSide(color: color, width: 1),
@@ -481,7 +478,7 @@ class _Paginador extends StatelessWidget {
         children: [
           Text(
             'Mostrando $desde-$hasta de $totalItems',
-            style: const TextStyle(color: Colors.white60, fontSize: 11),
+            style: AppType.eyebrow.copyWith(color: Colors.white60),
           ),
           const Spacer(),
           IconButton(
@@ -492,7 +489,7 @@ class _Paginador extends StatelessWidget {
           ),
           Text(
             'Pág. ${pagina + 1} / $totalPaginas',
-            style: const TextStyle(color: Colors.white, fontSize: 12),
+            style: AppType.label.copyWith(color: Colors.white),
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
@@ -541,18 +538,15 @@ class _AlertaCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     etiqueta,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
+                    style: AppType.body.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ),
                 if (atendida)
-                  const Chip(
-                    label: Text('Atendida'),
-                    avatar: Icon(Icons.check_circle, size: 16),
-                    backgroundColor: Color(0xFF1B5E20),
-                    labelStyle: TextStyle(color: Colors.white, fontSize: 11),
+                  Chip(
+                    label: const Text('Atendida'),
+                    avatar: const Icon(Icons.check_circle, size: 16),
+                    backgroundColor: const Color(0xFF1B5E20),
+                    labelStyle: AppType.eyebrow.copyWith(color: Colors.white),
                   ),
               ],
             ),
@@ -579,7 +573,7 @@ class _AlertaCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style:
-                        const TextStyle(color: Colors.white70, fontSize: 12),
+                        AppType.label.copyWith(color: Colors.white70),
                   ),
                 ),
               ],
@@ -588,8 +582,7 @@ class _AlertaCard extends StatelessWidget {
               const SizedBox(height: 6),
               Text(
                 'Atendida por $atendidaPor — ${_formatTimestamp(atendidaEn)}',
-                style: const TextStyle(
-                    fontSize: 11, color: Colors.white54),
+                style: AppType.eyebrow.copyWith(color: Colors.white54),
               ),
             ] else ...[
               const SizedBox(height: AppSpacing.sm),
@@ -676,12 +669,7 @@ class _SeveridadChip extends StatelessWidget {
       ),
       child: Text(
         severidad.toUpperCase(),
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.5,
-        ),
+        style: AppType.eyebrow.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 0.5),
       ),
     );
   }

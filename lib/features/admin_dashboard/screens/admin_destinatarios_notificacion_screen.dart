@@ -8,6 +8,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla "Destinatarios de notificación" — admin edita a quién le
 /// llega cada uno de los 9 resúmenes/avisos sin tocar código (M5,
 /// 2026-05-24).
@@ -108,15 +109,15 @@ class _AdminDestinatariosNotificacionScreenState
           return ListView(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(8, 4, 8, 12),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
                 child: Text(
                   'Cambiar el destinatario de un resumen / aviso. Los valores '
                   'override viven en META/destinatarios_notificacion y se '
                   'sobreponen a los hardcoded. Si dejás "Por defecto", '
                   'vuelve al original. Cambios efectivos en ≤ 5 min '
                   '(cache de las Cloud Functions y del bot).',
-                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white60),
                 ),
               ),
               for (final grupo in _reglas) ...[
@@ -306,8 +307,7 @@ class _FilaEditable extends StatelessWidget {
               padding: const EdgeInsets.only(top: 2, bottom: 8),
               child: Text(
                 regla.descripcion,
-                style: const TextStyle(
-                    color: Colors.white60, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: Colors.white60),
               ),
             ),
             Row(
@@ -350,12 +350,9 @@ class _FilaEditable extends StatelessWidget {
                                   : 'Por defecto: ${regla.fallbackHardcoded}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: tieneOverride
+                              style: AppType.label.copyWith(color: tieneOverride
                                     ? Colors.white
-                                    : Colors.white54,
-                                fontSize: 12,
-                              ),
+                                    : Colors.white54),
                             ),
                           ),
                           const Icon(Icons.unfold_more,
@@ -448,8 +445,7 @@ class _FilaEditable extends StatelessWidget {
                                 style: const TextStyle(color: Colors.white)),
                             subtitle: Text(
                                 'DNI ${AppFormatters.formatearDNI(e.dni)}',
-                                style: const TextStyle(
-                                    color: Colors.white60, fontSize: 12)),
+                                style: AppType.label.copyWith(color: Colors.white60)),
                             onTap: () => Navigator.pop(ctx, e),
                           );
                         },

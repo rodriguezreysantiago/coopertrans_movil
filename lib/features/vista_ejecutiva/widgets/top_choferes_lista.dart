@@ -10,6 +10,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../services/vista_ejecutiva_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 class TopChoferesLista extends StatelessWidget {
   final String titulo;
   final IconData icono;
@@ -61,7 +62,7 @@ class TopChoferesLista extends StatelessWidget {
                 child: Text(
                   mensajeVacio ?? 'Sin datos de la semana cerrada',
                   style:
-                      const TextStyle(color: Colors.white38, fontSize: 12),
+                      AppType.label.copyWith(color: Colors.white38),
                 ),
               ),
             )
@@ -125,11 +126,7 @@ class _ChoferRow extends StatelessWidget {
               width: 24,
               child: Text(
                 '$puesto°',
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppType.label.copyWith(color: Colors.white54, fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(width: AppSpacing.xs),
@@ -161,11 +158,7 @@ class _ChoferRow extends StatelessWidget {
               ),
               child: Text(
                 chofer.icm.toStringAsFixed(0),
-                style: TextStyle(
-                  color: _colorBadge,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppType.label.copyWith(color: _colorBadge, fontWeight: FontWeight.bold),
               ),
             ),
             if (onTap != null) ...[

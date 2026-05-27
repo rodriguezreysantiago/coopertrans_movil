@@ -24,9 +24,9 @@ class _SeccionResumen extends StatelessWidget {
       icono: Icons.summarize_outlined,
       children: [
         if (montos == null)
-          const Text(
+          Text(
             'Agregá al menos 1 tramo con tarifa para ver el cálculo.',
-            style: TextStyle(color: Colors.white60, fontSize: 12),
+            style: AppType.label.copyWith(color: Colors.white60),
           )
         else ...[
           _LineaResumen(
@@ -350,10 +350,7 @@ class _SeccionChoferState extends State<_SeccionChofer> {
                                     child: Text(
                                       nom,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 14,
-                                      ),
+                                      style: AppType.body.copyWith(color: Colors.white),
                                     ),
                                   ),
                                 ],
@@ -485,9 +482,9 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
       icono: Icons.payments_outlined,
       children: [
         if (choferDni == null || choferDni!.isEmpty)
-          const Text(
+          Text(
             'Seleccioná un chofer primero — los adelantos viven por chofer.',
-            style: TextStyle(color: Colors.white60, fontSize: 12),
+            style: AppType.label.copyWith(color: Colors.white60),
           )
         else
           StreamBuilder<List<AdelantoChofer>>(
@@ -496,8 +493,7 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
               if (snap.hasError) {
                 return Text(
                   'Error cargando adelantos: ${snap.error}',
-                  style: const TextStyle(
-                      color: AppColors.error, fontSize: 12),
+                  style: AppType.label.copyWith(color: AppColors.error),
                 );
               }
               if (!snap.hasData) {
@@ -517,19 +513,19 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
                       a.viajeId == viajeIdActual)
                   .toList();
               if (candidatos.isEmpty) {
-                return const Column(
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       'No hay adelantos libres de este chofer.',
                       style:
-                          TextStyle(color: Colors.white60, fontSize: 12),
+                          AppType.label.copyWith(color: Colors.white60),
                     ),
-                    SizedBox(height: AppSpacing.xs),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       'Si necesitás crear uno, andá a LOGÍSTICA → '
                       'ADELANTOS y volvé.',
-                      style: TextStyle(color: Colors.white38, fontSize: 11),
+                      style: AppType.eyebrow.copyWith(color: Colors.white38),
                     ),
                   ],
                 );

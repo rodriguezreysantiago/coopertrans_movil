@@ -8,6 +8,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../services/logistica_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Hub del módulo Logística. 4 catálogos + 1 vista de mapa que arman
 /// la base del futuro sistema de planeamiento de viajes:
 ///
@@ -194,30 +195,25 @@ class _BannerInfo extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.success.withValues(alpha: 0.4)),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.info_outline,
+          const Icon(Icons.info_outline,
               color: AppColors.success, size: 26),
-          SizedBox(width: AppSpacing.md),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'BASE DEL FUTURO PLANEAMIENTO DE VIAJES',
-                  style: TextStyle(
-                    color: AppColors.success,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
+                  style: AppType.label.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                 ),
-                SizedBox(height: AppSpacing.xs),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Cargá empresas y ubicaciones, después armá tarifas '
                   '(rutas con precio). Cuando arranque el módulo de '
                   'viajes, cada viaje va a apuntar a una tarifa.',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                  style: AppType.label.copyWith(color: Colors.white70),
                 ),
               ],
             ),
@@ -280,10 +276,7 @@ class _HubTile extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 subtitulo,
-                style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 11,
-                ),
+                style: AppType.eyebrow.copyWith(color: Colors.white60),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),

@@ -27,6 +27,7 @@ import 'admin_estado_bot_screen.dart';
 import 'admin_panel_screen.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Shell principal del admin con navegación lateral.
 ///
 /// - **Desktop (≥ 800px)**: NavigationRail a la izquierda con labels.
@@ -306,11 +307,7 @@ class _AdminShellState extends State<AdminShell> {
               child: Text(
                 section.label.toUpperCase(),
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                  fontSize: 16,
-                ),
+                style: AppType.heading.copyWith(fontWeight: FontWeight.bold, letterSpacing: 1.2),
               ),
             ),
           ],
@@ -416,15 +413,8 @@ class _AdminShellState extends State<AdminShell> {
           const IconThemeData(color: AppColors.success, size: 26),
       unselectedIconTheme:
           const IconThemeData(color: Colors.white54, size: 24),
-      selectedLabelTextStyle: const TextStyle(
-        color: AppColors.success,
-        fontWeight: FontWeight.bold,
-        fontSize: 11,
-      ),
-      unselectedLabelTextStyle: const TextStyle(
-        color: Colors.white54,
-        fontSize: 11,
-      ),
+      selectedLabelTextStyle: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
+      unselectedLabelTextStyle: AppType.eyebrow.copyWith(color: Colors.white54),
       indicatorColor: AppColors.success.withAlpha(40),
       destinations: _seccionesVisibles
           .asMap()
@@ -582,16 +572,11 @@ class _AdminShellState extends State<AdminShell> {
                       ),
                     ),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 20),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Text(
                       'MÁS SECCIONES',
-                      style: TextStyle(
-                        color: AppColors.success,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5,
-                      ),
+                      style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.5),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),

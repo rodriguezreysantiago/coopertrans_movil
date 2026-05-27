@@ -9,6 +9,7 @@ import '../models/jornada_dia.dart';
 import '../services/jornada_historico_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla "Jornada del día" — muestra la jornada reconstruida de un
 /// chofer en una fecha específica:
 ///
@@ -151,12 +152,8 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text('Elegir chofer',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        )),
+                    Text('Elegir chofer',
+                        style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
                     TextField(
                       controller: ctrl,
@@ -180,8 +177,7 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
                             title: Text(c.nombre,
                                 style: const TextStyle(color: Colors.white)),
                             subtitle: Text('DNI ${c.dni}',
-                                style: const TextStyle(
-                                    color: Colors.white60, fontSize: 12)),
+                                style: AppType.label.copyWith(color: Colors.white60)),
                             onTap: () => Navigator.pop(ctx, c),
                           );
                         },
@@ -335,12 +331,7 @@ class _ListaRango extends StatelessWidget {
                 '${jornadas.length} jornada${jornadas.length == 1 ? "" : "s"} · '
                 'total ${_fmtHM(totalManejo)} manejo · '
                 '${totalKm.toString()} km',
-                style: const TextStyle(
-                  color: Colors.white60,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.3,
-                ),
+                style: AppType.label.copyWith(color: Colors.white60, fontWeight: FontWeight.w600, letterSpacing: 0.3),
               ),
             ),
             for (final j in jornadas) _CardResumenDia(jornada: j),
@@ -405,11 +396,7 @@ class _CardResumenDia extends StatelessWidget {
                 const Spacer(),
                 Text(
                   jornada.patentePrincipal,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: AppType.label.copyWith(color: Colors.white70, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(width: AppSpacing.xs),
                 const Icon(Icons.arrow_forward_ios,
@@ -620,16 +607,13 @@ class _Placeholder extends StatelessWidget {
             Text(
               titulo,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14),
+              style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
               subtitulo,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white54),
             ),
           ],
         ),
@@ -664,12 +648,12 @@ class _Contenido extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         if (jornada.paradas.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(
               'Sin paradas detectadas entre tramos.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white54),
             ),
           ),
         for (final p in jornada.paradas) _ParadaCard(p: p),
@@ -700,16 +684,13 @@ class _ResumenCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   patentes,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16),
+                  style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
               Text(
                 '${_fmtHoraCorta(j.inicio)} → ${_fmtHoraCorta(j.fin)}',
                 style:
-                    const TextStyle(color: Colors.white70, fontSize: 12),
+                    AppType.label.copyWith(color: Colors.white70),
               ),
             ],
           ),
@@ -774,10 +755,7 @@ class _Kpi extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1)),
             Text(valor,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold)),
+                style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
       ],
@@ -935,7 +913,7 @@ class _TramoCard extends StatelessWidget {
                   '${_fmtHM(t.duracionMin)} · '
                   '${t.kmAprox > 0 ? "${t.kmAprox} km · " : ""}'
                   'máx ${t.velocidadMax} · prom ${t.velocidadProm} km/h',
-                  style: const TextStyle(color: Colors.white60, fontSize: 11),
+                  style: AppType.eyebrow.copyWith(color: Colors.white60),
                 ),
               ],
             ),
@@ -1008,7 +986,7 @@ class _ParadaCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '${_fmtHM(p.duracionMin)} · $hint',
-                  style: const TextStyle(color: Colors.white60, fontSize: 11),
+                  style: AppType.eyebrow.copyWith(color: Colors.white60),
                 ),
               ],
             ),
@@ -1034,11 +1012,7 @@ class _SeccionLabel extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             texto,
-            style: const TextStyle(
-                color: AppColors.success,
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5),
+            style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.5),
           ),
         ],
       ),

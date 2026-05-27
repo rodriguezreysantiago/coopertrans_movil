@@ -14,6 +14,7 @@ import '../models/cubierta_recapado.dart';
 import '../services/gomeria_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla de recapados — tabs:
 /// - **EN PROCESO**: cubiertas que están ahora en el proveedor.
 /// - **HISTÓRICO**: las últimas 100 ya cerradas.
@@ -85,13 +86,13 @@ class _EnProcesoTab extends StatelessWidget {
         }
         final recapados = snap.data ?? const <CubiertaRecapado>[];
         if (recapados.isEmpty) {
-          return const Center(
+          return Center(
             child: Padding(
-              padding: EdgeInsets.all(40),
+              padding: const EdgeInsets.all(40),
               child: Text(
                 'No hay recapados en proceso.\nTocá + para mandar una cubierta a recapar.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white60, fontSize: 14),
+                style: AppType.body.copyWith(color: Colors.white60),
               ),
             ),
           );
@@ -201,14 +202,9 @@ class _ResumenHistorico extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'ÚLTIMOS RECAPADOS CERRADOS',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 11,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
-            ),
+            style: AppType.eyebrow.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.5),
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -239,11 +235,7 @@ class _ResumenHistorico extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             valor,
-            style: TextStyle(
-              color: color,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+            style: AppType.heading.copyWith(color: color, fontWeight: FontWeight.bold),
           ),
         ],
       );
@@ -278,11 +270,7 @@ class _RecapadoTile extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
               Text(
                 r.cubiertaCodigo,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
               ),
               const Spacer(),
               Container(
@@ -299,11 +287,7 @@ class _RecapadoTile extends StatelessWidget {
                           ? 'RECIBIDA'
                           : 'DESCARTADA'
                       : '${r.diasEnRecapado()}d',
-                  style: TextStyle(
-                    color: color,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -311,37 +295,33 @@ class _RecapadoTile extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             'Proveedor: ${r.proveedor}',
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: AppType.label.copyWith(color: Colors.white70),
           ),
           Text(
             cerrado
                 ? '${AppFormatters.formatearFecha(r.fechaEnvio)} → ${AppFormatters.formatearFecha(r.fechaRetorno!)} (${r.diasEnRecapado()} días)'
                 : 'Para vida ${r.vidaRecapado} · enviada ${AppFormatters.formatearFecha(r.fechaEnvio)}',
-            style: const TextStyle(color: Colors.white60, fontSize: 11),
+            style: AppType.eyebrow.copyWith(color: Colors.white60),
           ),
           if (r.costo != null) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Costo: \$${AppFormatters.formatearMonto(r.costo)}',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white70),
             ),
           ],
           if (r.notas != null && r.notas!.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
               r.notas!,
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-                fontStyle: FontStyle.italic,
-              ),
+              style: AppType.eyebrow.copyWith(color: Colors.white60, fontStyle: FontStyle.italic),
             ),
           ],
           if (!cerrado) ...[
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Tocá para cerrar el recapado al recibir.',
-              style: TextStyle(color: Colors.white38, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white38),
             ),
           ],
         ],
@@ -643,9 +623,9 @@ class _CerrarRecapadoDialogState extends State<_CerrarRecapadoDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
+              Text(
                 'Resultado:',
-                style: TextStyle(color: Colors.white70, fontSize: 12),
+                style: AppType.label.copyWith(color: Colors.white70),
               ),
               RadioGroup<ResultadoRecapado>(
                 groupValue: _resultado,

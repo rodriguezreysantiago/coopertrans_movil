@@ -12,6 +12,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../services/revision_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla de Revisiones Pendientes (Admin).
 ///
 /// Lista todas las solicitudes que los choferes envían:
@@ -123,11 +124,7 @@ class _RevisionCard extends StatelessWidget {
               children: [
                 Text(
                   '$nombreUsuario → $idAfectado',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    fontSize: 14,
-                  ),
+                  style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: AppSpacing.xs),
@@ -137,10 +134,7 @@ class _RevisionCard extends StatelessWidget {
                           ? 'Reporta que ${data['unidad_actual'] ?? 'su unidad'} no es la suya'
                           : 'Solicita: ${data['patente']}')
                       : '$etiqueta · vence ${AppFormatters.formatearFecha(data['fecha_vencimiento'])}',
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 12,
-                  ),
+                  style: AppType.label.copyWith(color: Colors.white54),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
@@ -536,8 +530,7 @@ class _DetalleRevision extends StatelessWidget {
                         ),
                         subtitle: Text(
                           '${d['MARCA'] ?? 'S/D'} ${d['MODELO'] ?? ''}',
-                          style: const TextStyle(
-                              color: Colors.white54, fontSize: 12),
+                          style: AppType.label.copyWith(color: Colors.white54),
                         ),
                         trailing: const Icon(Icons.check_circle,
                             color: AppColors.success),
@@ -690,21 +683,16 @@ class _PreviewArchivo extends StatelessWidget {
                   border: Border.all(
                       color: AppColors.error.withAlpha(80)),
                 ),
-                child: const Center(
+                child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.picture_as_pdf,
+                      const Icon(Icons.picture_as_pdf,
                           size: 60, color: AppColors.error),
-                      SizedBox(height: 10),
+                      const SizedBox(height: 10),
                       Text(
                         'Tocar para ver PDF',
-                        style: TextStyle(
-                          color: AppColors.error,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          letterSpacing: 0.8,
-                        ),
+                        style: AppType.label.copyWith(color: AppColors.error, fontWeight: FontWeight.bold, letterSpacing: 0.8),
                       ),
                     ],
                   ),

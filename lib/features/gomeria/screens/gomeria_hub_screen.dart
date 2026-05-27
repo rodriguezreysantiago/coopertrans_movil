@@ -9,6 +9,7 @@ import '../constants/posiciones.dart';
 import '../models/cubierta_instalada.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla de entrada del módulo Gomería. Muestra:
 ///
 /// - **Alertas activas** (en cabecera): cubiertas instaladas en
@@ -154,22 +155,14 @@ class _HubTile extends StatelessWidget {
                   titulo,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.5,
-                  ),
+                  style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.5),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   subtitulo,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 12,
-                  ),
+                  style: AppType.label.copyWith(color: Colors.white60),
                 ),
               ],
             ),
@@ -266,20 +259,12 @@ class _AlertasFinDeVida extends StatelessWidget {
                             etiqueta.toUpperCase(),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: color,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                            ),
+                            style: AppType.label.copyWith(color: color, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                           ),
                           const SizedBox(height: 2),
-                          const Text(
+                          Text(
                             'Tocá para ver el detalle.',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 11,
-                            ),
+                            style: AppType.eyebrow.copyWith(color: Colors.white70),
                           ),
                         ],
                       ),
@@ -386,11 +371,7 @@ class _AlertasSheet extends StatelessWidget {
                         alignment: Alignment.center,
                         child: Text(
                           '${a.porcentaje.toStringAsFixed(0)}%',
-                          style: TextStyle(
-                            color: color,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: AppType.heading.copyWith(color: color, fontWeight: FontWeight.bold),
                         ),
                       ),
                       const SizedBox(width: AppSpacing.md),
@@ -402,19 +383,14 @@ class _AlertasSheet extends StatelessWidget {
                               '${a.instalada.cubiertaCodigo} · ${a.instalada.unidadId}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               pos?.etiqueta ?? a.instalada.posicion,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  color: Colors.white70, fontSize: 12),
+                              style: AppType.label.copyWith(color: Colors.white70),
                             ),
                             if (a.instalada.modeloEtiqueta != null) ...[
                               const SizedBox(height: 2),
@@ -422,8 +398,7 @@ class _AlertasSheet extends StatelessWidget {
                                 a.instalada.modeloEtiqueta!,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    color: Colors.white60, fontSize: 11),
+                                style: AppType.eyebrow.copyWith(color: Colors.white60),
                               ),
                             ],
                           ],

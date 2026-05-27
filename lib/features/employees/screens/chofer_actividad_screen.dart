@@ -6,6 +6,7 @@ import '../../eco_driving/utils/etiquetas_alerta_volvo.dart';
 import '../services/chofer_actividad_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Tablero personal del chofer: km manejados, tractores que usó y
 /// eventos Volvo asociados, en una ventana de 7/30/90 días.
 ///
@@ -115,17 +116,13 @@ class _Header extends StatelessWidget {
                   nombre,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 Text(
                   'DNI $dni',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  style: AppType.eyebrow.copyWith(color: Colors.white54),
                 ),
               ],
             ),
@@ -187,12 +184,7 @@ class _Chip extends StatelessWidget {
         alignment: Alignment.center,
         child: Text(
           'Últimos $dias días',
-          style: TextStyle(
-            color: color,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.5,
-          ),
+          style: AppType.label.copyWith(color: color, fontWeight: FontWeight.bold, letterSpacing: 0.5),
         ),
       ),
     );
@@ -295,7 +287,7 @@ class _Resumen extends StatelessWidget {
                     'sin datos de odómetro Sitrack — los km de '
                     '${resumen.asignacionesSinTelemetria == 1 ? 'esa' : 'esas'} '
                     'no se pudieron contar.',
-                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    style: AppType.eyebrow.copyWith(color: Colors.white54),
                   ),
                 ),
               ],
@@ -396,20 +388,13 @@ class _KpiCard extends StatelessWidget {
             children: [
               Text(
                 valor,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppType.title.copyWith(color: color, fontWeight: FontWeight.bold),
               ),
               if (unidad != null) ...[
                 const SizedBox(width: AppSpacing.xs),
                 Text(
                   unidad!,
-                  style: TextStyle(
-                    color: color.withAlpha(180),
-                    fontSize: 12,
-                  ),
+                  style: AppType.label.copyWith(color: color.withAlpha(180)),
                 ),
               ],
             ],
@@ -433,12 +418,7 @@ class _Titulo extends StatelessWidget {
         const SizedBox(width: AppSpacing.sm),
         Text(
           label,
-          style: const TextStyle(
-            color: AppColors.success,
-            fontSize: 11,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.2,
-          ),
+          style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.2),
         ),
       ],
     );
@@ -464,12 +444,7 @@ class _TractorTile extends StatelessWidget {
         children: [
           Text(
             tractor.patente,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-              letterSpacing: 0.8,
-            ),
+            style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 0.8),
           ),
           const SizedBox(width: AppSpacing.sm),
           if (tractor.activaActual)
@@ -637,18 +612,13 @@ class _EventosPorTipoCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       etiquetaAlertaVolvo(e.tipo),
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 12),
+                      style: AppType.label.copyWith(color: Colors.white),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   Text(
                     '${e.cantidad}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -657,7 +627,7 @@ class _EventosPorTipoCard extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Y $restantes tipo${restantes == 1 ? '' : 's'} más',
-              style: const TextStyle(color: Colors.white54, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white54),
             ),
           ],
         ],

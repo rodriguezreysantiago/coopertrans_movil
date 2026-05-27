@@ -11,6 +11,7 @@ import '../models/cubierta_recapado.dart';
 import '../services/gomeria_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla detalle de UNA cubierta — accede desde el Stock al tappear
 /// un tile o desde la búsqueda global por código. Muestra:
 ///
@@ -164,8 +165,7 @@ class _Identidad extends StatelessWidget {
                     ),
                     Text(
                       c.modeloEtiqueta,
-                      style: const TextStyle(
-                          color: Colors.white70, fontSize: 12),
+                      style: AppType.label.copyWith(color: Colors.white70),
                     ),
                   ],
                 ),
@@ -212,11 +212,7 @@ class _Identidad extends StatelessWidget {
               ),
               child: Text(
                 c.observaciones!,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                ),
+                style: AppType.label.copyWith(color: Colors.white70, fontStyle: FontStyle.italic),
               ),
             ),
           ],
@@ -295,7 +291,7 @@ class _InstalacionTile extends StatelessWidget {
             i.hasta == null
                 ? 'Desde ${AppFormatters.formatearFecha(i.desde)}'
                 : '${AppFormatters.formatearFecha(i.desde)} → ${AppFormatters.formatearFecha(i.hasta!)}',
-            style: const TextStyle(color: Colors.white60, fontSize: 11),
+            style: AppType.eyebrow.copyWith(color: Colors.white60),
           ),
           const SizedBox(height: AppSpacing.xs),
           Wrap(
@@ -304,22 +300,22 @@ class _InstalacionTile extends StatelessWidget {
             children: [
               Text('${i.diasDuracion()} días',
                   style:
-                      const TextStyle(color: Colors.white70, fontSize: 11)),
+                      AppType.eyebrow.copyWith(color: Colors.white70)),
               if (i.kmRecorridos != null)
                 Text(
                   '${AppFormatters.formatearMiles(i.kmRecorridos)} km',
                   style:
-                      const TextStyle(color: Colors.white70, fontSize: 11),
+                      AppType.eyebrow.copyWith(color: Colors.white70),
                 )
               else if (i.unidadTipo == TipoUnidadCubierta.enganche &&
                   !i.esActiva)
-                const Text(
+                Text(
                   'km enganche pendiente (Fase 2)',
-                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                  style: AppType.eyebrow.copyWith(color: Colors.white38),
                 ),
               Text(
                 'Vida ${i.vidaAlInstalar}',
-                style: const TextStyle(color: Colors.white70, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: Colors.white70),
               ),
             ],
           ),
@@ -327,11 +323,7 @@ class _InstalacionTile extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Motivo: ${i.motivo}',
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-                fontStyle: FontStyle.italic,
-              ),
+              style: AppType.eyebrow.copyWith(color: Colors.white60, fontStyle: FontStyle.italic),
             ),
           ],
         ],
@@ -392,24 +384,20 @@ class _RecapadoTile extends StatelessWidget {
             cerrado
                 ? '${AppFormatters.formatearFecha(r.fechaEnvio)} → ${AppFormatters.formatearFecha(r.fechaRetorno!)} (${r.diasEnRecapado()} días)'
                 : 'Enviada ${AppFormatters.formatearFecha(r.fechaEnvio)} (${r.diasEnRecapado()} días)',
-            style: const TextStyle(color: Colors.white60, fontSize: 11),
+            style: AppType.eyebrow.copyWith(color: Colors.white60),
           ),
           if (r.costo != null) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Costo: \$${AppFormatters.formatearMonto(r.costo)}',
-              style: const TextStyle(color: Colors.white70, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white70),
             ),
           ],
           if (r.notas != null && r.notas!.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
               r.notas!,
-              style: const TextStyle(
-                color: Colors.white60,
-                fontSize: 11,
-                fontStyle: FontStyle.italic,
-              ),
+              style: AppType.eyebrow.copyWith(color: Colors.white60, fontStyle: FontStyle.italic),
             ),
           ],
         ],
@@ -461,7 +449,7 @@ class _ControlTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style:
-                      const TextStyle(color: Colors.white54, fontSize: 11),
+                      AppType.eyebrow.copyWith(color: Colors.white54),
                 ),
               ),
             ],
@@ -475,13 +463,13 @@ class _ControlTile extends StatelessWidget {
                 Text(
                   'Presión: ${c.presionPsi} PSI',
                   style:
-                      const TextStyle(color: Colors.white70, fontSize: 12),
+                      AppType.label.copyWith(color: Colors.white70),
                 ),
               if (c.profundidadBandaMm != null)
                 Text(
                   'Banda: ${c.profundidadBandaMm!.toStringAsFixed(1)} mm',
                   style:
-                      const TextStyle(color: Colors.white70, fontSize: 12),
+                      AppType.label.copyWith(color: Colors.white70),
                 ),
             ],
           ),
@@ -490,7 +478,7 @@ class _ControlTile extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Registrado por ${c.registradoPorNombre}',
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white38),
             ),
           ],
         ],
@@ -513,12 +501,7 @@ class _SeccionTitulo extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8, left: 4),
       child: Text(
         texto.toUpperCase(),
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.5,
-        ),
+        style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.5),
       ),
     );
   }
@@ -538,7 +521,7 @@ class _Vacio extends StatelessWidget {
       ),
       child: Text(
         texto,
-        style: const TextStyle(color: Colors.white38, fontSize: 12),
+        style: AppType.label.copyWith(color: Colors.white38),
       ),
     );
   }

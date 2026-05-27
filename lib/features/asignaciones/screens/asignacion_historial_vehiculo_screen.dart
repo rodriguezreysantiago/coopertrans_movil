@@ -7,6 +7,7 @@ import '../models/asignacion_vehiculo.dart';
 import '../services/asignacion_vehiculo_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Línea de tiempo de quién manejó este vehículo.
 ///
 /// Se accede desde la ficha del vehículo (`AdminVehiculoFormScreen`).
@@ -174,7 +175,7 @@ class _Linea extends StatelessWidget {
             width: 100,
             child: Text(
               label,
-              style: const TextStyle(color: Colors.white54, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white54),
             ),
           ),
           Expanded(

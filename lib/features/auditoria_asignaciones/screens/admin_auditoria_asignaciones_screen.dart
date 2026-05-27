@@ -9,6 +9,7 @@ import '../models/tramo_ibutton.dart';
 import '../services/historico_ibutton_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Auditoría de asignaciones: cruza el HISTÓRICO REAL del iButton físico
 /// (`SITRACK_IBUTTONS_HISTORICO` — qué iButton estuvo en qué patente y
 /// cuándo, reconstruido desde SITRACK_EVENTOS) contra
@@ -120,16 +121,16 @@ class _BannerInfo extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: AppColors.info.withValues(alpha: 0.30)),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.info_outline, color: AppColors.info, size: 20),
-          SizedBox(width: 10),
+          const Icon(Icons.info_outline, color: AppColors.info, size: 20),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               'Compara el iButton que físicamente se pasó (Sitrack) contra '
               'la asignación cargada en el sistema. Útil para multas tardías, '
               'investigaciones y reconciliación. Histórico desde 2026-05-23.',
-              style: TextStyle(fontSize: 12, color: Colors.white70),
+              style: AppType.label.copyWith(color: Colors.white70),
             ),
           ),
         ],
@@ -191,10 +192,7 @@ class _BarraFiltros extends StatelessWidget {
                   Expanded(
                     child: Text(
                       '${_fmt(desde)} → ${_fmt(hasta)}',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14),
+                      style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
                     ),
                   ),
                   const Icon(Icons.calendar_today,
@@ -287,24 +285,24 @@ class _ListadoCruce extends StatelessWidget {
         }
         final tramos = snap.data ?? const <TramoIButton>[];
         if (tramos.isEmpty) {
-          return const Center(
+          return Center(
             child: Padding(
-              padding: EdgeInsets.all(AppSpacing.xxl),
+              padding: const EdgeInsets.all(AppSpacing.xxl),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.history, color: Colors.white24, size: 64),
-                  SizedBox(height: AppSpacing.md),
-                  Text(
+                  const Icon(Icons.history, color: Colors.white24, size: 64),
+                  const SizedBox(height: AppSpacing.md),
+                  const Text(
                     'Sin tramos en el rango seleccionado.',
                     style: TextStyle(color: Colors.white54),
                   ),
-                  SizedBox(height: AppSpacing.xs),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     'El histórico se reconstruye 06:00 ART procesando '
                     'el día anterior — el día actual recién se ve mañana.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                    style: AppType.eyebrow.copyWith(color: Colors.white38),
                   ),
                 ],
               ),
@@ -458,7 +456,7 @@ class _ChipResumen extends StatelessWidget {
                     fontSize: 18,
                     fontWeight: FontWeight.bold)),
             Text(label,
-                style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                style: AppType.eyebrow.copyWith(color: Colors.white70)),
           ],
         ),
       ),
@@ -559,8 +557,7 @@ class _FilaCruce extends StatelessWidget {
                 const Spacer(),
                 Text(
                   '${tramo.duracionMin} min',
-                  style: const TextStyle(
-                      color: Colors.white54, fontSize: 11),
+                  style: AppType.eyebrow.copyWith(color: Colors.white54),
                 ),
               ],
             ),
@@ -602,14 +599,12 @@ class _FilaCruce extends StatelessWidget {
                 Text(
                   '${AppFormatters.formatearFechaHoraSinSegundos(tramo.desde)} → '
                   '${AppFormatters.formatearFechaHoraSinSegundos(tramo.hasta)}',
-                  style: const TextStyle(
-                      color: Colors.white54, fontSize: 11),
+                  style: AppType.eyebrow.copyWith(color: Colors.white54),
                 ),
                 const SizedBox(width: 10),
                 Text(
                   '${tramo.eventosCount} eventos',
-                  style: const TextStyle(
-                      color: Colors.white38, fontSize: 11),
+                  style: AppType.eyebrow.copyWith(color: Colors.white38),
                 ),
               ],
             ),
@@ -640,8 +635,7 @@ class _LineaActor extends StatelessWidget {
           width: 95,
           child: Text(
             label,
-            style: TextStyle(
-                color: labelColor, fontSize: 11, fontWeight: FontWeight.bold),
+            style: AppType.eyebrow.copyWith(color: labelColor, fontWeight: FontWeight.bold),
           ),
         ),
         Expanded(
@@ -655,7 +649,7 @@ class _LineaActor extends StatelessWidget {
         if (dni.isNotEmpty)
           Text(
             'DNI $dni',
-            style: const TextStyle(color: Colors.white38, fontSize: 11),
+            style: AppType.eyebrow.copyWith(color: Colors.white38),
           ),
       ],
     );

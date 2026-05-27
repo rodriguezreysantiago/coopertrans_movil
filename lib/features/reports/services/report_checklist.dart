@@ -12,6 +12,7 @@ import 'excel_utils.dart' as xu;
 import 'report_save_helper.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Reporte de Novedades (admin) — exporta solo respuestas REG y MAL
 /// de los CHECKLISTS de los últimos 45 días.
 ///
@@ -51,26 +52,26 @@ class ReportChecklistService {
           borderRadius: BorderRadius.circular(20),
           side: BorderSide(color: Colors.white.withAlpha(20)),
         ),
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Reporte de Novedades',
               style: TextStyle(
                   color: Colors.white, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               'Items con estado REG o MAL en los últimos $_diasHistorico días',
-              style: TextStyle(color: AppColors.warning, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: AppColors.warning),
             ),
           ],
         ),
-        content: const Text(
+        content: Text(
           'Cada fila es un item del checklist marcado como REG o MAL '
           'por un chofer en los últimos 45 días. Incluye fecha, '
           'patente, tipo de unidad, chofer, item, estado y observación.',
-          style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.5),
+          style: AppType.label.copyWith(color: Colors.white70, height: 1.5),
         ),
         actions: [
           TextButton(

@@ -11,6 +11,7 @@ import 'excel_utils.dart' as xu;
 import 'report_save_helper.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Reporte de Estado de Flota (admin).
 ///
 /// Vista general de TODA la flota — tractores y enganches —
@@ -51,27 +52,27 @@ class ReportFlotaService {
           borderRadius: BorderRadius.circular(20),
           side: BorderSide(color: Colors.white.withAlpha(20)),
         ),
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
               'Reporte de Flota',
               style: TextStyle(
                   color: Colors.white, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               'Estado actual: vencimientos, services y asignaciones',
-              style: TextStyle(color: Colors.white54, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white54),
             ),
           ],
         ),
-        content: const Text(
+        content: Text(
           'El reporte incluye TODAS las unidades (tractores y enganches) '
           'con: tipo, modelo, empresa, KM actual, chofer asignado, '
           'vencimientos (RTO, seguro, extintores) y estado de service.\n\n'
           'Las celdas de vencimiento se colorean según urgencia.',
-          style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.5),
+          style: AppType.label.copyWith(color: Colors.white70, height: 1.5),
         ),
         actions: [
           TextButton(

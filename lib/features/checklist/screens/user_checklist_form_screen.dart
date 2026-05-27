@@ -12,6 +12,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../data/checklist_data.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Checklist mensual del chofer (sobre tractor o batea/tolva).
 ///
 /// El chofer responde BUE/REG/MAL para cada item. Si elige REG o MAL,
@@ -224,16 +225,11 @@ class _HeaderInfo extends StatelessWidget {
         children: [
           const Icon(Icons.tag, color: AppColors.success, size: 18),
           const SizedBox(width: AppSpacing.sm),
-          const Text('UNIDAD: ',
-              style: TextStyle(color: Colors.white60, fontSize: 12)),
+          Text('UNIDAD: ',
+              style: AppType.label.copyWith(color: Colors.white60)),
           Text(
             patente,
-            style: const TextStyle(
-              color: AppColors.success,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-              letterSpacing: 1.5,
-            ),
+            style: AppType.body.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.5),
           ),
         ],
       ),
@@ -257,19 +253,15 @@ class _AvisoObligatorio extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: AppColors.warning.withAlpha(50)),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.info_outline,
+          const Icon(Icons.info_outline,
               color: AppColors.warning, size: 20),
-          SizedBox(width: 10),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               'Es obligatorio completar todos los puntos. Detalle cualquier novedad en el campo de texto.',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 12,
-                fontStyle: FontStyle.italic,
-              ),
+              style: AppType.label.copyWith(color: Colors.white70, fontStyle: FontStyle.italic),
             ),
           ),
         ],
@@ -459,12 +451,7 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
                   child: Center(
                     child: Text(
                       estado,
-                      style: TextStyle(
-                        color:
-                            seleccionado ? Colors.black : Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: AppType.label.copyWith(color: seleccionado ? Colors.black : Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
@@ -488,10 +475,7 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
                     padding: const EdgeInsets.only(top: 14),
                     child: TextField(
                       controller: _obsController,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
+                      style: AppType.body.copyWith(color: Colors.white),
                       maxLines: 2,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(

@@ -16,6 +16,7 @@ import '../widgets/mini_mapa_thumbnail.dart';
 import '../widgets/ubicacion_map_picker.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// ABM de ubicaciones físicas (puntos de carga / descarga). Reusable
 /// entre tarifas: una misma ubicación puede ser origen de una tarifa y
 /// destino de otra.
@@ -194,15 +195,9 @@ class _CardUbicacion extends StatelessWidget {
                   ubicacion.nombre,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color:
-                        ubicacion.activa ? Colors.white : Colors.white38,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    decoration: ubicacion.activa
+                  style: AppType.body.copyWith(color: ubicacion.activa ? Colors.white : Colors.white38, fontWeight: FontWeight.bold, decoration: ubicacion.activa
                         ? TextDecoration.none
-                        : TextDecoration.lineThrough,
-                  ),
+                        : TextDecoration.lineThrough),
                 ),
                 if (ubicacion.empresaNombres.isNotEmpty) ...[
                   const SizedBox(height: 2),
@@ -214,11 +209,7 @@ class _CardUbicacion extends StatelessWidget {
                       Expanded(
                         child: Text(
                           ubicacion.etiquetaEmpresas,
-                          style: const TextStyle(
-                            color: AppColors.info,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: AppType.eyebrow.copyWith(color: AppColors.info, fontWeight: FontWeight.bold),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -230,10 +221,7 @@ class _CardUbicacion extends StatelessWidget {
                   ubicacion.etiquetaCompleta,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white60,
-                    fontSize: 12,
-                  ),
+                  style: AppType.label.copyWith(color: Colors.white60),
                 ),
                 if (ubicacion.lat != null && ubicacion.lng != null) ...[
                   const SizedBox(height: AppSpacing.xs),
@@ -248,11 +236,7 @@ class _CardUbicacion extends StatelessWidget {
                           '${ubicacion.lng!.toStringAsFixed(4)}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: AppColors.brandSoft,
-                            fontSize: 11,
-                            fontFamily: 'monospace',
-                          ),
+                          style: AppType.eyebrow.copyWith(color: AppColors.brandSoft, fontFamily: 'monospace'),
                         ),
                       ),
                       const SizedBox(width: AppSpacing.sm),
@@ -654,34 +638,25 @@ class _FilaCoords extends StatelessWidget {
               const Icon(Icons.my_location,
                   color: AppColors.brandSoft, size: 18),
               const SizedBox(width: AppSpacing.sm),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'COORDENADAS GEOGRÁFICAS',
-                  style: TextStyle(
-                    color: Colors.white54,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
+                  style: AppType.eyebrow.copyWith(color: Colors.white54, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                 ),
               ),
               if (tieneCoords)
                 Text(
                   '${lat!.toStringAsFixed(5)}, ${lng!.toStringAsFixed(5)}',
-                  style: const TextStyle(
-                    color: AppColors.brandSoft,
-                    fontSize: 12,
-                    fontFamily: 'monospace',
-                  ),
+                  style: AppType.label.copyWith(color: AppColors.brandSoft, fontFamily: 'monospace'),
                 ),
             ],
           ),
           if (!tieneCoords) ...[
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Sin coordenadas. Elegí un punto en el mapa para que '
               'aparezca en el mapa de tarifas y se calcule la distancia.',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
+              style: AppType.label.copyWith(color: Colors.white60),
             ),
           ],
           const SizedBox(height: 10),
@@ -737,10 +712,10 @@ class _FilaCoords extends StatelessWidget {
                 style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
               const SizedBox(height: AppSpacing.xs),
-              const Text(
+              Text(
                 'Ej. "https://www.google.com/maps/place/.../@-38.71,-62.27,15z" '
                 'o "-38.71, -62.27".',
-                style: TextStyle(color: Colors.white38, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: Colors.white38),
               ),
               const SizedBox(height: 10),
               TextField(
@@ -929,14 +904,9 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
+                    Text(
                       'COORDENADAS (OPCIONAL)',
-                      style: TextStyle(
-                        color: Colors.white54,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
-                      ),
+                      style: AppType.eyebrow.copyWith(color: Colors.white54, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     Row(

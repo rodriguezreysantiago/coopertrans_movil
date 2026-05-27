@@ -15,6 +15,7 @@ import '../../../shared/utils/password_hasher.dart';
 import '../../../shared/utils/upper_case_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Form de alta de un nuevo legajo de personal (chofer o admin).
 class AdminPersonalFormScreen extends StatefulWidget {
   const AdminPersonalFormScreen({super.key});
@@ -309,11 +310,7 @@ class _CampoLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: const TextStyle(
-        color: Colors.white70,
-        fontSize: 12,
-        fontWeight: FontWeight.bold,
-      ),
+      style: AppType.label.copyWith(color: Colors.white70, fontWeight: FontWeight.bold),
     );
   }
 }
@@ -558,7 +555,7 @@ class _RoleSelector extends StatelessWidget {
                   AppRoles.etiquetas[r] ?? r,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  style: AppType.body.copyWith(color: Colors.white),
                 ),
               ),
             ],
@@ -581,10 +578,7 @@ class _RoleSelector extends StatelessWidget {
                       AppRoles.etiquetas[r] ?? r,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                      ),
+                      style: AppType.body.copyWith(color: Colors.white),
                     ),
                     Text(
                       _descripcion(r),
@@ -632,7 +626,7 @@ class _DropdownArea extends StatelessWidget {
           value: a,
           child: Text(
             AppAreas.etiquetas[a] ?? a,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            style: AppType.body.copyWith(color: Colors.white),
           ),
         );
       }).toList(),
@@ -669,10 +663,7 @@ class _BotonGuardar extends StatelessWidget {
             : const Icon(Icons.person_add_alt_1),
         label: Text(
           guardando ? 'PROCESANDO...' : 'CREAR LEGAJO',
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 16,
-          ),
+          style: AppType.heading.copyWith(fontWeight: FontWeight.bold),
         ),
       ),
     );

@@ -57,12 +57,7 @@ class _SeccionUnidad extends StatelessWidget {
             children: [
               Text(
                 titulo,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.success,
-                  letterSpacing: 2,
-                ),
+                style: AppType.eyebrow.copyWith(fontWeight: FontWeight.bold, color: AppColors.success, letterSpacing: 2),
               ),
               if (!estaVacia && !tienePendiente)
                 // Santiago 2026-05-21: el chofer YA NO elige la unidad (antes
@@ -80,13 +75,9 @@ class _SeccionUnidad extends StatelessWidget {
                   ),
                   icon: const Icon(Icons.report_problem_outlined,
                       size: 16, color: AppColors.warning),
-                  label: const Text(
+                  label: Text(
                     'ESTA NO ES MI UNIDAD',
-                    style: TextStyle(
-                      color: AppColors.warning,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold),
                   ),
                 ),
             ],
@@ -153,21 +144,12 @@ class _CardEnRevision extends StatelessWidget {
               children: [
                 Text(
                   titulo,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   subtitulo,
-                  style: const TextStyle(
-                    color: AppColors.warning,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
-                  ),
+                  style: AppType.eyebrow.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold, letterSpacing: 1),
                 ),
               ],
             ),
@@ -183,14 +165,14 @@ class _CardSinAsignacion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const AppCard(
+    return AppCard(
       child: Row(
         children: [
-          Icon(Icons.info_outline, color: Colors.white24),
-          SizedBox(width: AppSpacing.md),
+          const Icon(Icons.info_outline, color: Colors.white24),
+          const SizedBox(width: AppSpacing.md),
           Text(
             'Sin unidad asignada',
-            style: TextStyle(color: Colors.white38, fontSize: 14),
+            style: AppType.body.copyWith(color: Colors.white38),
           ),
         ],
       ),
@@ -283,10 +265,7 @@ class _CardUnidad extends StatelessWidget {
                         '${(v['MARCA'] ?? 'S/D')} · ${(v['MODELO'] ?? 'S/D')}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
-                        ),
+                        style: AppType.label.copyWith(color: Colors.white54),
                       ),
                     ),
                   ],
@@ -416,13 +395,9 @@ class _ResumenVencimientosEquipo extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           Wrap(spacing: 6, runSpacing: 6, children: chips),
           const SizedBox(height: AppSpacing.sm),
-          const Text(
+          Text(
             'Mirá el detalle en "Mis Vencimientos".',
-            style: TextStyle(
-              color: Colors.white54,
-              fontSize: 11,
-              fontStyle: FontStyle.italic,
-            ),
+            style: AppType.eyebrow.copyWith(color: Colors.white54, fontStyle: FontStyle.italic),
           ),
         ],
       ),
@@ -446,11 +421,7 @@ class _ChipResumen extends StatelessWidget {
       ),
       child: Text(
         texto,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.bold,
-        ),
+        style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -595,11 +566,7 @@ class _DatoTelemetria extends StatelessWidget {
           child: Text(
             valor,
             maxLines: 1,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 14,
-            ),
+            style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
           ),
         ),
         const SizedBox(height: 2),
@@ -641,11 +608,7 @@ class _DatoCombustible extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           '${pct.toStringAsFixed(0)}%',
-          style: TextStyle(
-            color: _color,
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
+          style: AppType.body.copyWith(color: _color, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: AppSpacing.xs),
         // Barra horizontal mini que refuerza visualmente el nivel.

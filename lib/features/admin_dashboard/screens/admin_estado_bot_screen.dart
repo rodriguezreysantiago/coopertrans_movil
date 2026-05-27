@@ -15,6 +15,7 @@ import '../../whatsapp_bot/screens/admin_whatsapp_historico_screen.dart';
 import '../../whatsapp_bot/services/whatsapp_historico_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 // 14 widgets visuales (banner, cards de cola/mensajes/cron/config/info,
 // errores recientes, bloque datos, filas, kill-switch) extraidos para
 // mantener navegable este screen. Comparten privacidad via `part of`.

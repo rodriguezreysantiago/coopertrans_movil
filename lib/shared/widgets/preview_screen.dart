@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../constants/app_colors.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Visor full-screen de archivos remotos (Firebase Storage), todo dentro de
 /// la app (sin abrir otra app).
 ///
@@ -282,10 +283,10 @@ class _PdfViewerRobustoState extends State<_PdfViewerRobusto> {
             const Icon(Icons.picture_as_pdf_outlined,
                 color: Colors.white38, size: 56),
             const SizedBox(height: AppSpacing.lg),
-            const Text(
+            Text(
               'No se pudo mostrar el PDF acá.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white70, fontSize: 14),
+              style: AppType.body.copyWith(color: Colors.white70),
             ),
             const SizedBox(height: 20),
             ElevatedButton.icon(

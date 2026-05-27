@@ -18,6 +18,7 @@ import '../services/volvo_api_service.dart';
 import 'diagnostico_volvo_screen.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 // Componentes visuales del form (8 widgets _X) extraídos para bajar de
 // 1093 a ~630 lineas el archivo principal. Comparten privacidad y los
 // imports de arriba via `part of`.
@@ -333,15 +334,11 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Padding(
-                padding: EdgeInsets.all(15),
+              Padding(
+                padding: const EdgeInsets.all(15),
                 child: Text(
                   'Adjuntar documento',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                  style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
               ),
               ListTile(
@@ -737,12 +734,12 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
               if (esTractor) ...[
                 const SizedBox(height: 28),
                 const _SectionTitle('Mantenimiento preventivo'),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Text(
                     'Cargá los datos del último service realizado en el taller. '
                     'La distancia al próximo service la calcula Volvo automáticamente.',
-                    style: TextStyle(color: Colors.white54, fontSize: 11),
+                    style: AppType.eyebrow.copyWith(color: Colors.white54),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.sm),

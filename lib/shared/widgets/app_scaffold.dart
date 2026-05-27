@@ -4,6 +4,7 @@ import '../constants/app_colors.dart';
 import 'app_shell_context.dart';
 import 'coopertrans_logo.dart';
 
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Scaffold unificado con fondo de imagen + overlay oscuro.
 /// Reemplaza el patrón repetido de Stack con Positioned.fill + Image.asset.
 ///
@@ -97,11 +98,7 @@ class AppScaffold extends StatelessWidget {
                     child: Text(
                       title!,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.2,
-                        fontSize: 16,
-                      ),
+                      style: AppType.heading.copyWith(fontWeight: FontWeight.bold, letterSpacing: 1.2),
                     ),
                   ),
                 ],

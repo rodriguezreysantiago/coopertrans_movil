@@ -11,6 +11,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../services/icm_oficial_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Reporte del ICM **oficial de Sitrack** (lo que audita YPF) de un mes:
 ///   - ICM de la flota + variación vs el mes anterior (más bajo = mejor).
 ///   - KPIs: choferes activos, distancia total, tiempo total.
@@ -225,8 +226,8 @@ class _HeaderFlota extends StatelessWidget {
                     height: 1.0,
                   ),
                 ),
-                const Text('ICM flota (oficial)',
-                    style: TextStyle(color: Colors.white60, fontSize: 11)),
+                Text('ICM flota (oficial)',
+                    style: AppType.eyebrow.copyWith(color: Colors.white60)),
               ],
             ),
             const SizedBox(width: AppSpacing.lg),
@@ -247,10 +248,7 @@ class _HeaderFlota extends StatelessWidget {
                     textAlign: TextAlign.end,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        color: deltaColor,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600),
+                    style: AppType.label.copyWith(color: deltaColor, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   const Text('más bajo = mejor',
@@ -319,10 +317,7 @@ class _Kpi extends StatelessWidget {
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
                 child: Text(valor,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700)),
+                    style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.w700)),
               ),
             ],
           ),
@@ -469,7 +464,7 @@ class _Leyenda extends StatelessWidget {
         ),
         const SizedBox(width: AppSpacing.sm),
         Text('$label: $n',
-            style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            style: AppType.label.copyWith(color: Colors.white70)),
       ],
     );
   }
@@ -508,23 +503,17 @@ class _ListaChoferes extends StatelessWidget {
               radius: 16,
               backgroundColor: color,
               child: Text('$pos',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold)),
+                  style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
             title: Text(
               c.nombre.isEmpty ? '(sin nombre)' : c.nombre,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600),
+              style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
             ),
             subtitle: Text(
               '${c.severidadLabel} · ${c.totalInfracciones} infracciones',
-              style: const TextStyle(color: Colors.white54, fontSize: 11),
+              style: AppType.eyebrow.copyWith(color: Colors.white54),
             ),
             trailing: Container(
               padding:
@@ -535,10 +524,7 @@ class _ListaChoferes extends StatelessWidget {
               ),
               child: Text(
                 c.icm.toStringAsFixed(1),
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold),
+                style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
               ),
             ),
             onTap: c.tieneDni
@@ -563,12 +549,7 @@ class _SeccionTitulo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       texto,
-      style: const TextStyle(
-        color: Colors.white,
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        letterSpacing: 0.3,
-      ),
+      style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600, letterSpacing: 0.3),
     );
   }
 }

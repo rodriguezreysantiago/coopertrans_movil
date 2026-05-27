@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 import 'package:flutter/services.dart'; // ✅ Necesario para el feedback háptico
 
 class MenuCard extends StatelessWidget {
@@ -72,12 +73,7 @@ class MenuCard extends StatelessWidget {
                       textAlign: TextAlign.center,
                       maxLines: 2, // ✅ MEJORA PRO: Evita que el texto deforme la tarjeta
                       overflow: TextOverflow.ellipsis, // Si es muy largo, pone "..."
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12, // Un poco más ajustado para pantallas chicas
-                        letterSpacing: 0.8,
-                      ),
+                      style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ],

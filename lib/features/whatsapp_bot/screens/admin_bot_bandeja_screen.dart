@@ -8,6 +8,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Bandeja de respuestas que el bot recibió pero no pudo asociar
 /// automáticamente a un aviso (Fase 3).
 ///
@@ -92,16 +93,11 @@ class AdminBotBandejaScreen extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.all(20),
+            Padding(
+              padding: const EdgeInsets.all(20),
               child: Text(
                 '¿A QUÉ PAPEL CORRESPONDE?',
-                style: TextStyle(
-                  color: AppColors.success,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 11,
-                  letterSpacing: 1.2,
-                ),
+                style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.2),
               ),
             ),
             ...candidatos.map((c) {
@@ -205,9 +201,9 @@ class AdminBotBandejaScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 10),
                   color: Colors.amber.withAlpha(30),
-                  child: const Text(
+                  child: Text(
                     '⚠️ Mostrando los 200 más recientes. Procesá los antiguos para ver más.',
-                    style: TextStyle(color: AppColors.warning, fontSize: 12),
+                    style: AppType.label.copyWith(color: AppColors.warning),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -273,11 +269,7 @@ class _ItemAmbiguo extends StatelessWidget {
               Expanded(
                 child: Text(
                   nombre,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
+                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -316,11 +308,7 @@ class _ItemAmbiguo extends StatelessWidget {
               ),
               child: Text(
                 mensaje,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  height: 1.4,
-                ),
+                style: AppType.label.copyWith(color: Colors.white70, height: 1.4),
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -337,10 +325,7 @@ class _ItemAmbiguo extends StatelessWidget {
                     'Fecha detectada: $fechaDet',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: AppColors.success,
-                      fontSize: 11,
-                    ),
+                    style: AppType.eyebrow.copyWith(color: AppColors.success),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -357,9 +342,9 @@ class _ItemAmbiguo extends StatelessWidget {
                 onPressed: onDescartar,
                 icon: const Icon(Icons.delete_outline,
                     color: Colors.white54, size: 16),
-                label: const Text(
+                label: Text(
                   'Descartar',
-                  style: TextStyle(color: Colors.white54, fontSize: 11),
+                  style: AppType.eyebrow.copyWith(color: Colors.white54),
                 ),
               ),
               const SizedBox(width: AppSpacing.xs),

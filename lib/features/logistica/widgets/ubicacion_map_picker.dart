@@ -30,6 +30,7 @@ import '../../../shared/constants/map_constants.dart';
 import '../services/logistica_geo_utils.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 class UbicacionMapPickerResultado {
   final LatLng punto;
   final String? localidad;
@@ -174,9 +175,9 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
+                  Text(
                     'Buscá el lugar en Google Maps web, copiá el enlace y pegalo acá. Se extraen automáticamente las coordenadas.',
-                    style: TextStyle(color: Colors.white60, fontSize: 12),
+                    style: AppType.label.copyWith(color: Colors.white60),
                   ),
                   const SizedBox(height: AppSpacing.md),
                   TextField(
@@ -190,9 +191,9 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  const Text(
+                  Text(
                     'Acepta links largos (con @lat,lng) y links cortos (maps.app.goo.gl).',
-                    style: TextStyle(color: Colors.white38, fontSize: 11),
+                    style: AppType.eyebrow.copyWith(color: Colors.white38),
                   ),
                 ],
               ),
@@ -435,7 +436,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Text(
                 _errorBusqueda!,
-                style: const TextStyle(color: AppColors.error, fontSize: 12),
+                style: AppType.label.copyWith(color: AppColors.error),
               ),
             ),
           if (_resultados.isNotEmpty)
@@ -535,12 +536,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                               const SizedBox(width: 6),
                               Text(
                                 _modoSatelite ? 'MAPA' : 'SATÉLITE',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.1,
-                                ),
+                                style: AppType.eyebrow.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.1),
                               ),
                             ],
                           ),
@@ -586,10 +582,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                     'Punto seleccionado: '
                     '${_puntoCentral.latitude.toStringAsFixed(5)}, '
                     '${_puntoCentral.longitude.toStringAsFixed(5)}',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
+                    style: AppType.label.copyWith(color: Colors.white70),
                     textAlign: TextAlign.center,
                   );
                 }),

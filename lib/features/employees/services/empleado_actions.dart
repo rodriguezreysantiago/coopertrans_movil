@@ -28,6 +28,7 @@ import '../../asignaciones/services/asignacion_enganche_service.dart';
 import '../../asignaciones/services/asignacion_vehiculo_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 // =============================================================================
 // SERVICIOS DE ACTUALIZACIÓN — NAMESPACE EmpleadoActions
 //
@@ -766,9 +767,9 @@ class EmpleadoActions {
                     : 'Subir archivo nuevo',
                 style: const TextStyle(color: Colors.white),
               ),
-              subtitle: const Text(
+              subtitle: Text(
                 'Foto o PDF — sin pasar por el flujo de revisión',
-                style: TextStyle(color: Colors.white38, fontSize: 11),
+                style: AppType.eyebrow.copyWith(color: Colors.white38),
               ),
               onTap: () {
                 navigator.pop();
@@ -1031,8 +1032,7 @@ class EmpleadoActions {
                   return ListTile(
                     title: Text(
                       patente,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 14),
+                      style: AppType.body.copyWith(color: Colors.white),
                     ),
                     trailing: patente == patenteActual.trim()
                         ? const Icon(Icons.check_circle,
@@ -1419,7 +1419,7 @@ class EmpleadoActions {
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   errorTxt!,
-                  style: const TextStyle(color: AppColors.error, fontSize: 12),
+                  style: AppType.label.copyWith(color: AppColors.error),
                 ),
               ],
             ],
