@@ -205,29 +205,11 @@ class _BarraFiltros extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: TextField(
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    labelText: 'Filtrar por patente',
-                    border: OutlineInputBorder(),
-                  ),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  onChanged: onPatente,
-                ),
+                child: _DropdownPatente(value: patente, onChanged: onPatente),
               ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
-                child: TextField(
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    labelText: 'Filtrar por DNI',
-                    border: OutlineInputBorder(),
-                  ),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  onChanged: onDni,
-                ),
+                child: _DropdownChofer(value: dni, onChanged: onDni),
               ),
             ],
           ),
@@ -652,6 +634,128 @@ class _LineaActor extends StatelessWidget {
             style: AppType.eyebrow.copyWith(color: Colors.white38),
           ),
       ],
+    );
+  }
+}
+
+/// Dropdown de patentes (solo TIPO=TRACTOR — las únicas que se asignan
+/// a chofer). Stream contra VEHICULOS, sin filtro de ESTADO porque la
+/// auditoría puede interesarse en unidades que ya estén dadas de baja.
+class _DropdownPatente extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  const _DropdownPatente({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('VEHICULOS')
+          .where('TIPO', isEqualTo: 'TRACTOR')
+          .snapshots(),
+      builder: (ctx, snap) {
+        final patentes = (snap.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+            .map((d) => d.id)
+            .toList()
+          ..sort();
+        return DropdownButtonFormField<String>(
+          isDense: true,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Filtrar por patente',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          dropdownColor: AppColors.surface2,
+          initialValue: value.isEmpty ? null : value,
+          hint: const Text('Todas',
+              style: TextStyle(color: Colors.white54, fontSize: 13)),
+          items: [
+            const DropdownMenuItem<String>(
+              value: '',
+              child: Text('Todas',
+                  style: TextStyle(
+                      color: Colors.white70,
+                      fontStyle: FontStyle.italic,
+                      fontSize: 13)),
+            ),
+            ...patentes.map((p) => DropdownMenuItem<String>(
+                  value: p,
+                  child: Text(p,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          letterSpacing: 0.5)),
+                )),
+          ],
+          onChanged: (v) => onChanged(v ?? ''),
+        );
+      },
+    );
+  }
+}
+
+/// Dropdown de choferes (EMPLEADOS where ROL=CHOFER). Ordenado por
+/// NOMBRE alfabético. El value es el DNI (lo que espera el filtro).
+class _DropdownChofer extends StatelessWidget {
+  final String value;
+  final ValueChanged<String> onChanged;
+  const _DropdownChofer({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('EMPLEADOS')
+          .where('ROL', isEqualTo: 'CHOFER')
+          .snapshots(),
+      builder: (ctx, snap) {
+        final docs = (snap.data?.docs ??
+                <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+            .toList()
+          ..sort((a, b) {
+            final na = (a.data()['NOMBRE'] ?? '').toString();
+            final nb = (b.data()['NOMBRE'] ?? '').toString();
+            return na.compareTo(nb);
+          });
+        return DropdownButtonFormField<String>(
+          isDense: true,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Filtrar por chofer',
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          dropdownColor: AppColors.surface2,
+          initialValue: value.isEmpty ? null : value,
+          hint: const Text('Todos',
+              style: TextStyle(color: Colors.white54, fontSize: 13)),
+          items: [
+            const DropdownMenuItem<String>(
+              value: '',
+              child: Text('Todos',
+                  style: TextStyle(
+                      color: Colors.white70,
+                      fontStyle: FontStyle.italic,
+                      fontSize: 13)),
+            ),
+            ...docs.map((d) {
+              final dni = d.id;
+              final nombre = (d.data()['NOMBRE'] ?? dni).toString();
+              return DropdownMenuItem<String>(
+                value: dni,
+                child: Text(nombre,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Colors.white, fontSize: 13)),
+              );
+            }),
+          ],
+          onChanged: (v) => onChanged(v ?? ''),
+        );
+      },
     );
   }
 }
