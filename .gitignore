@@ -96,10 +96,19 @@ serviceAccountKey.json
 *.jks
 *.p12
 *.key
+*.cer
+*.mobileprovision
+*.provisionprofile
 .env
 secrets.json
 !secrets.example.jsonfirepit-log.txt
 firepit-log.txt
+
+# Carpetas de secrets locales del pipeline de release (iOS + macOS).
+# Contienen cert + private key + profiles antes de convertir a base64
+# para los secrets de Xcode Cloud. Nunca van al repo.
+secrets-ios/
+secrets-macos/
 
 # Sentry CLI config con auth token — NUNCA debe ir al repo, vive en $HOME
 .sentryclirc
