@@ -69,7 +69,7 @@ class LogisticaHubScreen extends StatelessWidget {
                   // ajustar acá Y la lista de _HubTile abajo.
                   const totalTiles = 7;
                   final filas = (totalTiles / columnas).ceil();
-                  const spacing = 12.0;
+                  const spacing = AppSpacing.md;
                   // Helper compartido — clamp 0.45..2.0 + fallback
                   // 1.05 (cuadrado-ish) si los constraints son
                   // inválidos (alto cero, etc).
@@ -189,16 +189,15 @@ class _BannerInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.success.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.success.withValues(alpha: 0.4)),
+        color: AppColors.info.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.4)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.info_outline,
-              color: AppColors.success, size: 26),
+          const Icon(Icons.info_outline, color: AppColors.info, size: 26),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
@@ -206,14 +205,14 @@ class _BannerInfo extends StatelessWidget {
               children: [
                 Text(
                   'BASE DEL FUTURO PLANEAMIENTO DE VIAJES',
-                  style: AppType.label.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                  style: AppType.eyebrow.copyWith(color: AppColors.info),
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                Text(
+                const Text(
                   'Cargá empresas y ubicaciones, después armá tarifas '
                   '(rutas con precio). Cuando arranque el módulo de '
                   'viajes, cada viaje va a apuntar a una tarifa.',
-                  style: AppType.label.copyWith(color: Colors.white70),
+                  style: AppType.label,
                 ),
               ],
             ),
@@ -264,19 +263,14 @@ class _HubTile extends StatelessWidget {
             children: [
               Text(
                 titulo,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.0,
-                ),
+                style: AppType.heading,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 2),
               Text(
                 subtitulo,
-                style: AppType.eyebrow.copyWith(color: Colors.white60),
+                style: AppType.eyebrow,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -328,17 +322,16 @@ class _StreamCount extends StatelessWidget {
             ? '—'
             : (count >= 999 ? '999+' : count.toString());
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(AppRadius.md),
             border: Border.all(color: color.withValues(alpha: 0.5)),
           ),
           child: Text(
             texto,
-            style: TextStyle(
+            style: AppType.label.copyWith(
               color: color,
-              fontSize: 13,
               fontWeight: FontWeight.bold,
             ),
           ),
