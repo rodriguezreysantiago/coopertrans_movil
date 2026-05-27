@@ -72,25 +72,25 @@ class _EmpleadoCard extends StatelessWidget {
                   Row(
                     children: [
                       const Icon(Icons.local_shipping,
-                          size: 11, color: Colors.white38),
+                          size: 11, color: AppColors.textDisabled),
                       const SizedBox(width: AppSpacing.xs),
                       Flexible(
                         child: Text(
                           tractor,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppType.eyebrow.copyWith(color: Colors.white54),
+                          style: AppType.eyebrow.copyWith(color: AppColors.textTertiary),
                         ),
                       ),
                       const SizedBox(width: AppSpacing.md),
-                      const Icon(Icons.link, size: 11, color: Colors.white38),
+                      const Icon(Icons.link, size: 11, color: AppColors.textDisabled),
                       const SizedBox(width: AppSpacing.xs),
                       Flexible(
                         child: Text(
                           enganche,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppType.eyebrow.copyWith(color: Colors.white54),
+                          style: AppType.eyebrow.copyWith(color: AppColors.textTertiary),
                         ),
                       ),
                     ],
@@ -99,14 +99,14 @@ class _EmpleadoCard extends StatelessWidget {
                   Row(
                     children: [
                       const Icon(Icons.factory_outlined,
-                          size: 11, color: Colors.white38),
+                          size: 11, color: AppColors.textDisabled),
                       const SizedBox(width: AppSpacing.xs),
                       Flexible(
                         child: Text(
                           AppAreas.etiquetas[area] ?? area,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppType.eyebrow.copyWith(color: Colors.white54),
+                          style: AppType.eyebrow.copyWith(color: AppColors.textTertiary),
                         ),
                       ),
                     ],
@@ -114,7 +114,7 @@ class _EmpleadoCard extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right, color: Colors.white24),
+          const Icon(Icons.chevron_right, color: AppColors.textHint),
         ],
       ),
     );
@@ -138,7 +138,7 @@ class _RolBadge extends StatelessWidget {
       case AppRoles.planta:
         return AppColors.info;
     }
-    return Colors.white60;
+    return AppColors.textSecondary;
   }
 
   @override
@@ -520,13 +520,13 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           Text(
             'Fecha: $bajaEnFmt',
-            style: AppType.label.copyWith(color: Colors.white70),
+            style: AppType.label.copyWith(color: AppColors.textSecondary),
           ),
           if (motivo.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Motivo: $motivo',
-              style: AppType.label.copyWith(color: Colors.white70),
+              style: AppType.label.copyWith(color: AppColors.textSecondary),
             ),
           ],
           const SizedBox(height: AppSpacing.md),
@@ -693,7 +693,7 @@ class _DatoEditableTexto extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(
         etiqueta,
-        style: AppType.eyebrow.copyWith(color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: AppColors.textDisabled),
       ),
       subtitle: Text(
         valor,
@@ -743,7 +743,7 @@ class _DatoEditableTexto extends StatelessWidget {
             hintText: 'Escriba aquí...',
             // Botón X para vaciar el campo de un toque.
             suffixIcon: IconButton(
-              icon: const Icon(Icons.clear, color: Colors.white54),
+              icon: const Icon(Icons.clear, color: AppColors.textTertiary),
               tooltip: 'Vaciar campo',
               onPressed: () => controller.clear(),
             ),
@@ -795,7 +795,7 @@ class _DatoEditableEmpresa extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(
         'EMPRESA',
-        style: AppType.eyebrow.copyWith(color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: AppColors.textDisabled),
       ),
       subtitle: Text(
         valor,
@@ -871,7 +871,7 @@ class _DatoEditableEnum extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       title: Text(
         etiqueta,
-        style: AppType.eyebrow.copyWith(color: Colors.white38),
+        style: AppType.eyebrow.copyWith(color: AppColors.textDisabled),
       ),
       subtitle: Text(
         label,
@@ -882,7 +882,7 @@ class _DatoEditableEnum extends StatelessWidget {
         size: 20,
         // Atenuamos el icono cuando no es editable para que se note
         // visualmente que el dato es solo-lectura.
-        color: editable ? AppColors.success : Colors.white24,
+        color: editable ? AppColors.success : AppColors.textHint,
       ),
       onTap: editable ? () => _mostrarSelector(context) : null,
     );
@@ -901,7 +901,7 @@ class _DatoEditableEnum extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               leading: Icon(
                 esActual ? Icons.radio_button_checked : Icons.radio_button_off,
-                color: esActual ? AppColors.success : Colors.white38,
+                color: esActual ? AppColors.success : AppColors.textDisabled,
                 size: 18,
               ),
               title: Text(
@@ -968,7 +968,7 @@ class _FilaVencimiento extends StatelessWidget {
                     etiqueta,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.eyebrow.copyWith(color: Colors.white54),
+                    style: AppType.eyebrow.copyWith(color: AppColors.textTertiary),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -989,7 +989,7 @@ class _FilaVencimiento extends StatelessWidget {
             VencimientoBadge(fecha: fecha),
             const SizedBox(width: AppSpacing.xs),
             const Icon(Icons.chevron_right,
-                color: Colors.white24, size: 18),
+                color: AppColors.textHint, size: 18),
           ],
         ),
       ),
@@ -1019,7 +1019,7 @@ class _AsignacionUnidad extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       leading: Icon(
         campo == 'VEHICULO' ? Icons.local_shipping : Icons.link,
-        color: tieneAsignacion ? AppColors.success : Colors.white24,
+        color: tieneAsignacion ? AppColors.success : AppColors.textHint,
       ),
       title: Text(
         '$label: ${tieneAsignacion ? actual : "—"}',
