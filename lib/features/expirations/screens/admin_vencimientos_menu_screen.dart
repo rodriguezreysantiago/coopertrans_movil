@@ -16,26 +16,26 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
     return AppScaffold(
       title: 'Auditoría de Vencimientos',
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 20),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 10, 16, 12),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.md, AppSpacing.lg, AppSpacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'AUDITORÍA PREVENTIVA (60 DÍAS)',
-                  style: AppType.eyebrow.copyWith(fontWeight: FontWeight.bold, color: AppColors.success, letterSpacing: 1.5),
+                  style: AppType.eyebrow,
                 ),
-                const SizedBox(height: AppSpacing.xs),
+                SizedBox(height: AppSpacing.xs),
                 Text(
                   'Control proactivo de documentación próxima a vencer.',
-                  style: AppType.label.copyWith(color: Colors.white54),
+                  style: AppType.label,
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.md),
           // REVISIONES movido acá 2026-05-24 (estaba como tab propio del
           // shell). Conceptualmente vive con vencimientos: el chofer carga
           // un trámite que vence pronto, el admin lo aprueba o lo rechaza
@@ -89,12 +89,9 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
           // Visualmente separado: arriba son auditorías por persona /
           // unidad; este es ABM de docs comunes a todos los empleados de
           // una misma razón social (Póliza ART y Formulario 931).
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 24, 16, 8),
-            child: Text(
-              'POR EMPRESA EMPLEADORA',
-              style: AppType.eyebrow.copyWith(fontWeight: FontWeight.bold, color: AppColors.info, letterSpacing: 1.5),
-            ),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.xl, AppSpacing.lg, AppSpacing.sm),
+            child: Text('POR EMPRESA EMPLEADORA', style: AppType.eyebrow),
           ),
           const _MenuTile(
             titulo: 'EMPRESAS Y SEGUROS',
@@ -104,17 +101,13 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
             ruta: AppRoutes.adminEmpresasEmpleadoras,
           ),
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 25, vertical: 30),
-            child: Divider(color: Colors.white10),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.xxl, vertical: AppSpacing.xxl),
+            child: Divider(color: AppColors.borderSubtle),
           ),
           const Center(
             child: Text(
               '${AppTexts.appName} — Gestión de Flota',
-              style: TextStyle(
-                color: Colors.white24,
-                fontSize: 10,
-                letterSpacing: 1,
-              ),
+              style: AppType.eyebrow,
             ),
           ),
         ],
@@ -153,7 +146,7 @@ class _MenuTile extends StatelessWidget {
     // surface3 (default) -> neutro, otro -> usar como antes.
     final esNeutro = colorIcono == AppColors.surface3;
     final iconoBase = Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: esNeutro ? AppColors.surface3 : colorIcono.withAlpha(30),
         shape: BoxShape.circle,
@@ -178,28 +171,23 @@ class _MenuTile extends StatelessWidget {
               right: -4,
               top: -4,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 2),
                 constraints: const BoxConstraints(
                   minWidth: 18,
                   minHeight: 18,
                 ),
                 decoration: BoxDecoration(
                   color: AppColors.error,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(AppRadius.md),
                   border: Border.all(
-                    color: Theme.of(context).colorScheme.surface,
+                    color: AppColors.surface2,
                     width: 1.5,
                   ),
                 ),
                 child: Text(
                   count > 99 ? '99+' : '$count',
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.eyebrow.copyWith(color: AppColors.textPrimary),
                 ),
               ),
             ),
@@ -212,10 +200,10 @@ class _MenuTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
       child: AppCard(
         onTap: () => Navigator.pushNamed(context, ruta),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl, vertical: AppSpacing.md),
         child: Row(
           children: [
             _buildIcono(context),
@@ -229,20 +217,23 @@ class _MenuTile extends StatelessWidget {
                     titulo,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+                    style: AppType.body.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     subtitulo,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.label.copyWith(color: Colors.white54),
+                    style: AppType.label,
                   ),
                 ],
               ),
             ),
             const Icon(Icons.arrow_forward_ios,
-                size: 16, color: Colors.white24),
+                size: 16, color: AppColors.textHint),
           ],
         ),
       ),
