@@ -97,7 +97,7 @@ class GomeriaHubScreen extends StatelessWidget {
                         titulo: 'RECAPADOS',
                         subtitulo: 'Envíos y recepciones',
                         icono: Icons.swap_horiz_outlined,
-                        color: AppColors.accentTeal,
+                        color: AppColors.brandSoft,
                         ruta: AppRoutes.adminGomeriaRecapados,
                       ),
                       _HubTile(

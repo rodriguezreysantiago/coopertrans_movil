@@ -76,17 +76,17 @@ class MiniMapaThumbnail extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: AppColors.accentTeal.withValues(alpha: 0.15),
+        color: AppColors.brandSoft.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-          color: AppColors.accentTeal.withValues(alpha: 0.4),
+          color: AppColors.brandSoft.withValues(alpha: 0.4),
           width: 1,
         ),
       ),
       child: const Center(
         child: Icon(
           Icons.place_outlined,
-          color: AppColors.accentTeal,
+          color: AppColors.brandSoft,
           size: 24,
         ),
       ),

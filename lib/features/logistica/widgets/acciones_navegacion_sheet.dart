@@ -103,7 +103,7 @@ class AccionesNavegacionSheet extends StatelessWidget {
           ),
           ListTile(
             leading: const Icon(Icons.navigation,
-                color: AppColors.accentTeal),
+                color: AppColors.brandSoft),
             title: const Text(
               'Navegar con Waze',
               style: TextStyle(color: Colors.white),

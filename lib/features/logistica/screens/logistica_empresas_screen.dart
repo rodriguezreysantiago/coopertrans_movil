@@ -661,7 +661,7 @@ class _BloqueUbicacionesDeEmpresa extends StatelessWidget {
               const Row(
                 children: [
                   Icon(Icons.place_outlined,
-                      color: AppColors.accentTeal, size: 16),
+                      color: AppColors.brandSoft, size: 16),
                   SizedBox(width: 6),
                   Text(
                     'UBICACIONES DE ESTA EMPRESA',
@@ -698,9 +698,9 @@ class _BloqueUbicacionesDeEmpresa extends StatelessWidget {
                         ),
                       ),
                       backgroundColor:
-                          AppColors.accentTeal.withValues(alpha: 0.25),
+                          AppColors.brandSoft.withValues(alpha: 0.25),
                       side: BorderSide(
-                        color: AppColors.accentTeal.withValues(alpha: 0.6),
+                        color: AppColors.brandSoft.withValues(alpha: 0.6),
                       ),
                       visualDensity: VisualDensity.compact,
                       materialTapTargetSize:
@@ -718,8 +718,8 @@ class _BloqueUbicacionesDeEmpresa extends StatelessWidget {
                       : 'EDITAR UBICACIONES',
                 ),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.accentTeal,
-                  side: const BorderSide(color: AppColors.accentTeal),
+                  foregroundColor: AppColors.brandSoft,
+                  side: const BorderSide(color: AppColors.brandSoft),
                   padding: const EdgeInsets.symmetric(vertical: 8),
                 ),
               ),
@@ -836,7 +836,7 @@ class _SeleccionUbicacionesSheetState
                       fontSize: 12,
                     ),
                   ),
-                  activeColor: AppColors.accentTeal,
+                  activeColor: AppColors.brandSoft,
                   dense: true,
                 );
               },
@@ -858,7 +858,7 @@ class _SeleccionUbicacionesSheetState
                   Expanded(
                     child: FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.accentTeal,
+                        backgroundColor: AppColors.brandSoft,
                       ),
                       onPressed: () =>
                           Navigator.of(context).pop(_seleccionadas),

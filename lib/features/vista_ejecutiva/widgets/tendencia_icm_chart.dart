@@ -37,7 +37,7 @@ class TendenciaIcmChart extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.trending_up,
-                  color: AppColors.accentTeal, size: 18),
+                  color: AppColors.brandSoft, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -154,7 +154,7 @@ class TendenciaIcmChart extends StatelessWidget {
         lineBarsData: [
           LineChartBarData(
             spots: spots,
-            color: AppColors.accentTeal,
+            color: AppColors.brandSoft,
             barWidth: 3,
             isCurved: true,
             isStrokeCapRound: true,
@@ -164,14 +164,14 @@ class TendenciaIcmChart extends StatelessWidget {
                 radius: 3.5,
                 // Color neutro: la flota no tiene banda de color oficial,
                 // así que no inventamos umbrales (igual que la card).
-                color: AppColors.accentTeal,
+                color: AppColors.brandSoft,
                 strokeColor: Colors.white,
                 strokeWidth: 1,
               ),
             ),
             belowBarData: BarAreaData(
               show: true,
-              color: AppColors.accentTeal.withValues(alpha: 0.12),
+              color: AppColors.brandSoft.withValues(alpha: 0.12),
             ),
           ),
         ],

@@ -1113,8 +1113,8 @@ class _DetalleTarifaSheet extends StatelessWidget {
                     icon: const Icon(Icons.navigation_outlined, size: 16),
                     label: const Text('IR AL DESTINO'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.accentTeal,
-                      side: const BorderSide(color: AppColors.accentTeal),
+                      foregroundColor: AppColors.brandSoft,
+                      side: const BorderSide(color: AppColors.brandSoft),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                   ),

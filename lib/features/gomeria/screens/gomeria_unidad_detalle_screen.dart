@@ -607,8 +607,8 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
             OutlinedButton(
               onPressed: _operando ? null : _abrirRotar,
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.accentTeal,
-                side: const BorderSide(color: AppColors.accentTeal),
+                foregroundColor: AppColors.brandSoft,
+                side: const BorderSide(color: AppColors.brandSoft),
               ),
               child: const Text('ROTAR'),
             ),
@@ -922,7 +922,7 @@ class _SelectorPosicionDestinoDialog extends StatelessWidget {
   Widget _opcion(BuildContext context, PosicionCubierta p,
       CubiertaInstalada? actual) {
     final ocupada = actual != null;
-    final color = ocupada ? AppColors.accentTeal : AppColors.success;
+    final color = ocupada ? AppColors.brandSoft : AppColors.success;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: InkWell(

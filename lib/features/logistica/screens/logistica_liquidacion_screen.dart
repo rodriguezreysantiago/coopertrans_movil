@@ -613,7 +613,7 @@ class _SeccionKPIs extends StatelessWidget {
           _LineaKPI(
             label: 'Ganancia chofer (redondeado)',
             valor: totalChofer,
-            color: AppColors.accentTeal,
+            color: AppColors.brandSoft,
           ),
           _LineaKPI(
             label: 'Adelantos entregados',

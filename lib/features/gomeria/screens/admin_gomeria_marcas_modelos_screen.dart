@@ -258,7 +258,7 @@ class _ModelosTab extends StatelessWidget {
                           _Chip(
                             m.recapable ? 'Recapable' : 'No recapable',
                             color: m.recapable
-                                ? AppColors.accentTeal
+                                ? AppColors.brandSoft
                                 : Colors.grey,
                           ),
                           if (m.presionRecomendadaPsi != null)

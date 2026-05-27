@@ -576,7 +576,7 @@ class _OpcionTile extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(8),
           border:
-              Border.all(color: AppColors.accentTeal.withValues(alpha: 0.4)),
+              Border.all(color: AppColors.brandSoft.withValues(alpha: 0.4)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -584,7 +584,7 @@ class _OpcionTile extends StatelessWidget {
             Row(
               children: [
                 const Icon(Icons.description_outlined,
-                    size: 16, color: AppColors.accentTeal),
+                    size: 16, color: AppColors.brandSoft),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(

@@ -248,7 +248,7 @@ class _FiltrosEstado extends StatelessWidget {
               label: 'EN RECAPADO',
               seleccionado: seleccionado == EstadoCubierta.enRecapado,
               onTap: () => onChanged(EstadoCubierta.enRecapado),
-              color: AppColors.accentTeal,
+              color: AppColors.brandSoft,
             ),
             const SizedBox(width: 6),
             _ChipFiltro(
@@ -434,7 +434,7 @@ class _CubiertaTile extends StatelessWidget {
       case EstadoCubierta.instalada:
         return AppColors.success;
       case EstadoCubierta.enRecapado:
-        return AppColors.accentTeal;
+        return AppColors.brandSoft;
       case EstadoCubierta.descartada:
         return AppColors.error;
     }

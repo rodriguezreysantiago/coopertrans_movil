@@ -34,7 +34,7 @@ class GomeriaRecapadosScreen extends StatelessWidget {
             Tab(text: 'EN PROCESO'),
             Tab(text: 'HISTÓRICO'),
           ],
-          indicatorColor: AppColors.accentTeal,
+          indicatorColor: AppColors.brandSoft,
         ),
         body: TabBarView(
           children: [
@@ -43,7 +43,7 @@ class GomeriaRecapadosScreen extends StatelessWidget {
           ],
         ),
         floatingActionButton: FloatingActionButton.extended(
-          backgroundColor: AppColors.accentTeal,
+          backgroundColor: AppColors.brandSoft,
           onPressed: () => _abrirEnvio(context, service),
           icon: const Icon(Icons.send_outlined),
           label: const Text('MANDAR A RECAPAR'),
@@ -214,7 +214,7 @@ class _ResumenHistorico extends StatelessWidget {
             spacing: 14,
             runSpacing: 6,
             children: [
-              _stat('Total', '$total', AppColors.accentTeal),
+              _stat('Total', '$total', AppColors.brandSoft),
               _stat('Recibidas', '$recibidas', AppColors.success),
               _stat('Descartadas', '$descartadas', AppColors.error),
               if (costoTotal > 0)
@@ -261,7 +261,7 @@ class _RecapadoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = !cerrado
-        ? AppColors.accentTeal
+        ? AppColors.brandSoft
         : r.resultado == ResultadoRecapado.recibida
             ? AppColors.success
             : AppColors.error;
@@ -445,7 +445,7 @@ class _EnviarRecapadoDialogState extends State<_EnviarRecapadoDialog> {
         ElevatedButton(
           onPressed: _guardando ? null : _guardar,
           style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentTeal),
+              backgroundColor: AppColors.brandSoft),
           child: _guardando
               ? const SizedBox(
                   width: 18, height: 18, child: CircularProgressIndicator())

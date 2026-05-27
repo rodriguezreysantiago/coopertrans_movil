@@ -129,7 +129,7 @@ class _GomeriaUnidadesListaScreenState
                                 : Icons.rv_hookup_outlined,
                             color: esTractor
                                 ? AppColors.warning
-                                : AppColors.accentTeal,
+                                : AppColors.brandSoft,
                           ),
                           const SizedBox(width: 12),
                           Expanded(

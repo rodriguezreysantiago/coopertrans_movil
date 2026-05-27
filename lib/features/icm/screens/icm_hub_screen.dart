@@ -312,7 +312,7 @@ class _GridSubpantallas extends StatelessWidget {
               titulo: 'JORNADA',
               subtitulo: 'Inicio, paradas y descansos por chofer + día',
               icono: Icons.timeline,
-              color: AppColors.accentTeal,
+              color: AppColors.brandSoft,
               ruta: AppRoutes.adminIcmJornadaDia,
             ),
           ],

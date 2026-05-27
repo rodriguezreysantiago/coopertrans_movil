@@ -635,12 +635,12 @@ class _DescargasDelRango extends StatelessWidget {
       children: [
         const Row(
           children: [
-            Icon(Icons.history, color: AppColors.accentTeal, size: 18),
+            Icon(Icons.history, color: AppColors.brandSoft, size: 18),
             SizedBox(width: 6),
             Text(
               'DESCARGAS DEL RANGO',
               style: TextStyle(
-                  color: AppColors.accentTeal,
+                  color: AppColors.brandSoft,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.5,
                   fontSize: 12),

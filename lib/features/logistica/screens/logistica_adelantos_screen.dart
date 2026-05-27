@@ -2159,7 +2159,7 @@ class _ChipMedioPago extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final esEfectivo = medio == MedioPagoAdelanto.efectivo;
-    final color = esEfectivo ? AppColors.accentTeal : AppColors.warning;
+    final color = esEfectivo ? AppColors.brandSoft : AppColors.warning;
     final icono = esEfectivo
         ? Icons.payments_outlined
         : Icons.account_balance_outlined;

@@ -412,7 +412,7 @@ class _RutaOrigenDestino extends StatelessWidget {
             etiqueta: 'DESTINO',
             empresa: tarifa.empresaDestinoNombre,
             ubicacion: tarifa.ubicacionDestinoEtiqueta,
-            color: AppColors.accentTeal,
+            color: AppColors.brandSoft,
           ),
         ),
       ],

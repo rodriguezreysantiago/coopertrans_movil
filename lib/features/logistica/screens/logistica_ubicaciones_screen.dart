@@ -71,7 +71,7 @@ class _LogisticaUbicacionesScreenState
       title: 'Ubicaciones',
       floatingActionButton: Builder(
         builder: (ctx) => FloatingActionButton.extended(
-          backgroundColor: AppColors.accentTeal,
+          backgroundColor: AppColors.brandSoft,
           onPressed: () => _abrirAlta(ctx),
           icon: const Icon(Icons.add),
           label: const Text('NUEVA UBICACIÓN'),
@@ -169,7 +169,7 @@ class _CardUbicacion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color =
-        ubicacion.activa ? AppColors.accentTeal : Colors.white24;
+        ubicacion.activa ? AppColors.brandSoft : Colors.white24;
     return AppCard(
       onTap: () => _abrirEdicion(context),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -239,7 +239,7 @@ class _CardUbicacion extends StatelessWidget {
                   Row(
                     children: [
                       const Icon(Icons.my_location,
-                          color: AppColors.accentTeal, size: 12),
+                          color: AppColors.brandSoft, size: 12),
                       const SizedBox(width: 4),
                       Flexible(
                         child: Text(
@@ -248,7 +248,7 @@ class _CardUbicacion extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: AppColors.accentTeal,
+                            color: AppColors.brandSoft,
                             fontSize: 11,
                             fontFamily: 'monospace',
                           ),
@@ -474,7 +474,7 @@ class _EditarUbicacionSheetState extends State<_EditarUbicacionSheet> {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             child: Row(
               children: [
-                const Icon(Icons.place, color: AppColors.accentTeal),
+                const Icon(Icons.place, color: AppColors.brandSoft),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -651,7 +651,7 @@ class _FilaCoords extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.my_location,
-                  color: AppColors.accentTeal, size: 18),
+                  color: AppColors.brandSoft, size: 18),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
@@ -668,7 +668,7 @@ class _FilaCoords extends StatelessWidget {
                 Text(
                   '${lat!.toStringAsFixed(5)}, ${lng!.toStringAsFixed(5)}',
                   style: const TextStyle(
-                    color: AppColors.accentTeal,
+                    color: AppColors.brandSoft,
                     fontSize: 12,
                     fontFamily: 'monospace',
                   ),
@@ -689,8 +689,8 @@ class _FilaCoords extends StatelessWidget {
             icon: const Icon(Icons.map_outlined),
             label: Text(tieneCoords ? 'CAMBIAR EN MAPA' : 'ELEGIR EN MAPA'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.accentTeal,
-              side: const BorderSide(color: AppColors.accentTeal),
+              foregroundColor: AppColors.brandSoft,
+              side: const BorderSide(color: AppColors.brandSoft),
             ),
           ),
           // Alternativa rápida: pegar el link de Google Maps. Lo
@@ -981,8 +981,8 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
                       icon: const Icon(Icons.map_outlined),
                       label: const Text('ELEGIR EN MAPA'),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.accentTeal,
-                        side: const BorderSide(color: AppColors.accentTeal),
+                        foregroundColor: AppColors.brandSoft,
+                        side: const BorderSide(color: AppColors.brandSoft),
                       ),
                     ),
                   ],

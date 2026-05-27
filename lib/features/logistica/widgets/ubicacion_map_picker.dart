@@ -607,7 +607,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                       icon: const Icon(Icons.my_location, size: 18),
                       label: const Text('USAR MI UBICACIÓN'),
                       style: TextButton.styleFrom(
-                        foregroundColor: AppColors.accentTeal,
+                        foregroundColor: AppColors.brandSoft,
                       ),
                     ),
                     TextButton.icon(

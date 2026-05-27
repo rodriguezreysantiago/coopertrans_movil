@@ -448,7 +448,7 @@ class _SeccionKmRecorridosState extends State<_SeccionKmRecorridos> {
                 height: 120,
                 child: Center(
                     child: CircularProgressIndicator(
-                        color: AppColors.accentTeal)));
+                        color: AppColors.brandSoft)));
           }
           if (snap.hasError || snap.data == null) {
             return Column(
@@ -515,7 +515,7 @@ class _KpisMes extends StatelessWidget {
             label: 'KM MES EN CURSO',
             valor: AppFormatters.formatearMiles(mesActual.kmTotal.toDouble()),
             sub: '${mesActual.diasConDato} días con dato',
-            color: AppColors.accentTeal),
+            color: AppColors.brandSoft),
         if (mesAnterior != null)
           _Kpi(
               label: 'KM MES ANTERIOR',
@@ -650,12 +650,12 @@ class _GraficoDias extends StatelessWidget {
             LineChartBarData(
               spots: spots,
               isCurved: false,
-              color: AppColors.accentTeal,
+              color: AppColors.brandSoft,
               barWidth: 2,
               dotData: const FlDotData(show: false),
               belowBarData: BarAreaData(
                 show: true,
-                color: AppColors.accentTeal.withValues(alpha: 0.15),
+                color: AppColors.brandSoft.withValues(alpha: 0.15),
               ),
             ),
           ],

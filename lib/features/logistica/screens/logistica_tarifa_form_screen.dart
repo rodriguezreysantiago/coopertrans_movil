@@ -1286,7 +1286,7 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                       child: Row(
                         children: [
                           const Icon(Icons.place,
-                              color: AppColors.accentTeal),
+                              color: AppColors.brandSoft),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(

@@ -215,7 +215,7 @@ const _reglas = <_GrupoReglas>[
   ),
   _GrupoReglas(
     label: 'CRONS DEL BOT (CADA 60 MIN)',
-    color: AppColors.accentTeal,
+    color: AppColors.brandSoft,
     reglas: [
       _Regla(
         key: 'serviceDiario',

@@ -52,7 +52,7 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
             titulo: 'REVISIONES',
             subtitulo: 'Aprobar/rechazar trámites cargados por choferes',
             icono: Icons.fact_check_outlined,
-            colorIcono: AppColors.accentTeal,
+            colorIcono: AppColors.brandSoft,
             ruta: AppRoutes.adminRevisiones,
             badgeStream: FirebaseFirestore.instance
                 .collection(AppCollections.revisiones)
@@ -85,7 +85,7 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
             titulo: 'VENCIMIENTOS DE ENGANCHES',
             subtitulo: 'Auditoría de bateas, tolvas, bivuelcos y tanques',
             icono: Icons.grid_view,
-            colorIcono: AppColors.accentTeal,
+            colorIcono: AppColors.brandSoft,
             ruta: '/vencimientos_acoplados',
           ),
           // ─── ABM por empresa empleadora ───

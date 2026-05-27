@@ -209,7 +209,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                     'Estado actual de la flota, histórico de recapados y '
                     'costo por km por modelo (cohort 2 cuando haya datos).',
                 icono: Icons.tire_repair_rounded,
-                color: AppColors.accentTeal,
+                color: AppColors.brandSoft,
                 onTap: _generando ? null : _ejecutarReporteGomeria,
               ),
               const SizedBox(height: 12),

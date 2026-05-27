@@ -182,7 +182,7 @@ class _Identidad extends StatelessWidget {
                       ? AppColors.warning
                       : AppColors.info),
               _Pill(c.vidas == 1 ? 'NUEVA' : 'V${c.vidas}',
-                  color: AppColors.accentTeal),
+                  color: AppColors.brandSoft),
               _Pill(
                 '${AppFormatters.formatearMiles(c.kmAcumulados)} km totales',
                 color: Colors.white54,
@@ -231,7 +231,7 @@ class _Identidad extends StatelessWidget {
       case EstadoCubierta.instalada:
         return AppColors.success;
       case EstadoCubierta.enRecapado:
-        return AppColors.accentTeal;
+        return AppColors.brandSoft;
       case EstadoCubierta.descartada:
         return AppColors.error;
     }
@@ -347,7 +347,7 @@ class _RecapadoTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final cerrado = r.fechaRetorno != null;
     final color = !cerrado
-        ? AppColors.accentTeal
+        ? AppColors.brandSoft
         : r.resultado == ResultadoRecapado.recibida
             ? AppColors.success
             : AppColors.error;
@@ -432,14 +432,14 @@ class _ControlTile extends StatelessWidget {
         color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(8),
         border:
-            Border.all(color: AppColors.accentTeal.withValues(alpha: 0.4)),
+            Border.all(color: AppColors.brandSoft.withValues(alpha: 0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.compress, size: 16, color: AppColors.accentTeal),
+              const Icon(Icons.compress, size: 16, color: AppColors.brandSoft),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(

@@ -421,14 +421,14 @@ class _CardResumenDia extends StatelessWidget {
                 _MiniKpi(
                   label: 'INICIO',
                   valor: _fmtHoraCorta(jornada.inicio),
-                  color: AppColors.accentTeal,
+                  color: AppColors.brandSoft,
                   icono: Icons.play_arrow,
                 ),
                 const SizedBox(width: 18),
                 _MiniKpi(
                   label: 'FIN',
                   valor: _fmtHoraCorta(jornada.fin),
-                  color: AppColors.accentTeal,
+                  color: AppColors.brandSoft,
                   icono: Icons.stop,
                 ),
                 const SizedBox(width: 18),
@@ -540,7 +540,7 @@ class _Selectores extends StatelessWidget {
             child: _PillButton(
               icono: Icons.date_range,
               label: rangoLabel,
-              color: AppColors.accentTeal,
+              color: AppColors.brandSoft,
               onTap: onRango,
             ),
           ),
@@ -731,7 +731,7 @@ class _ResumenCard extends StatelessWidget {
                   label: 'KM',
                   valor: j.kmTotal.toString(),
                   icono: Icons.route,
-                  color: AppColors.accentTeal),
+                  color: AppColors.brandSoft),
               _Kpi(
                   label: 'VEL MÁX',
                   valor: '${j.velocidadMax} km/h',
@@ -819,7 +819,7 @@ class _GraficoVelocidad extends StatelessWidget {
           const Row(
             children: [
               Icon(Icons.speed,
-                  color: AppColors.accentTeal, size: 18),
+                  color: AppColors.brandSoft, size: 18),
               SizedBox(width: 8),
               Text('Velocidad (km/h)',
                   style: TextStyle(
@@ -881,12 +881,12 @@ class _GraficoVelocidad extends StatelessWidget {
                   LineChartBarData(
                     spots: spots,
                     isCurved: false,
-                    color: AppColors.accentTeal,
+                    color: AppColors.brandSoft,
                     barWidth: 1.5,
                     dotData: const FlDotData(show: false),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: AppColors.accentTeal.withValues(alpha: 0.15),
+                      color: AppColors.brandSoft.withValues(alpha: 0.15),
                     ),
                   ),
                 ],
@@ -953,7 +953,7 @@ class _ParadaCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final color =
         p.cumple8h ? AppColors.success :
-        p.cumple15min ? AppColors.accentTeal :
+        p.cumple15min ? AppColors.brandSoft :
         AppColors.warning;
     final hint = p.cumple8h
         ? '✓ Descanso entre jornadas (≥ 8h)'

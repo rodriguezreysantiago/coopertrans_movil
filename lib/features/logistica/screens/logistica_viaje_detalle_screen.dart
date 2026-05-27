@@ -344,7 +344,7 @@ class _DetalleTramo extends StatelessWidget {
                 child: Row(
                   children: [
                     const Icon(Icons.add_circle_outline,
-                        size: 16, color: AppColors.accentTeal),
+                        size: 16, color: AppColors.brandSoft),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
@@ -358,7 +358,7 @@ class _DetalleTramo extends StatelessWidget {
                     Text(
                       '\$ ${AppFormatters.formatearMonto(g.monto)}',
                       style: const TextStyle(
-                        color: AppColors.accentTeal,
+                        color: AppColors.brandSoft,
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
                       ),

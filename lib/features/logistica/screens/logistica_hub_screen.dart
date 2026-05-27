@@ -115,13 +115,13 @@ class LogisticaHubScreen extends StatelessWidget {
                       titulo: 'UBICACIONES',
                       subtitulo: 'Carga / descarga',
                       icono: Icons.place_outlined,
-                      color: AppColors.accentTeal,
+                      color: AppColors.brandSoft,
                       ruta: AppRoutes.adminLogisticaUbicaciones,
                       contador: _StreamCount(
                         coleccion:
                             LogisticaService.ubicacionesCol,
                         soloActivas: true,
-                        color: AppColors.accentTeal,
+                        color: AppColors.brandSoft,
                       ),
                     ),
                     const _HubTile(
