@@ -121,9 +121,9 @@ class _AdminVolvoAlertasScreenState extends State<AdminVolvoAlertasScreen> {
       firstDate: DateTime(2024),
       lastDate: _truncarDia(ahora),
       helpText: 'Elegir fecha o rango de alertas',
-      cancelText: 'CANCELAR',
-      confirmText: 'VER',
-      saveText: 'VER',
+      cancelText: 'Cancelar',
+      confirmText: 'Ver',
+      saveText: 'Ver',
       locale: const Locale('es', 'AR'),
     );
     if (picked != null && mounted) {
@@ -174,7 +174,7 @@ class _AdminVolvoAlertasScreenState extends State<AdminVolvoAlertasScreen> {
           // mapa muestra los mismos eventos que el tablero, solo geo-
           // localizados — y tener dos accesos paralelos confundía.
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
             child: Row(
               children: [
                 Expanded(
@@ -348,30 +348,22 @@ class _BarraFiltros extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
       child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.sm,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          OutlinedButton.icon(
+          AppButton.secondary(
+            label: fechaEtiqueta,
+            icon: Icons.calendar_month_outlined,
             onPressed: onElegirFecha,
-            icon: const Icon(Icons.calendar_month_outlined, size: 18),
-            label: Text(fechaEtiqueta),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white,
-              side: BorderSide(
-                color: esHoy ? AppColors.success : Colors.white38,
-              ),
-            ),
           ),
           if (!esHoy)
-            TextButton.icon(
+            AppButton.ghost(
+              label: 'Ir a hoy',
+              icon: Icons.today_outlined,
               onPressed: onIrAHoy,
-              icon: const Icon(Icons.today_outlined, size: 18),
-              label: const Text('Ir a hoy'),
-              style: TextButton.styleFrom(
-                  foregroundColor: AppColors.success),
             ),
           FilterChip(
             label: Text(
@@ -435,7 +427,10 @@ class _ChipSeveridad extends StatelessWidget {
       label: Text(label),
       selected: seleccionado,
       onSelected: (_) => onTap(),
-      labelStyle: AppType.eyebrow.copyWith(color: seleccionado ? Colors.white : color, fontWeight: FontWeight.bold),
+      labelStyle: AppType.eyebrow.copyWith(
+        color: seleccionado ? AppColors.textPrimary : color,
+        fontWeight: FontWeight.bold,
+      ),
       backgroundColor: color.withAlpha(25),
       selectedColor: color,
       side: BorderSide(color: color, width: 1),
@@ -469,32 +464,32 @@ class _Paginador extends StatelessWidget {
     final desde = pagina * itemsPorPagina + 1;
     final hasta = ((pagina + 1) * itemsPorPagina).clamp(0, totalItems);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
       decoration: const BoxDecoration(
-        color: Color(0xFF0D1B2A),
-        border: Border(top: BorderSide(color: Colors.white12)),
+        color: AppColors.surface1,
+        border: Border(top: BorderSide(color: AppColors.borderSubtle)),
       ),
       child: Row(
         children: [
           Text(
             'Mostrando $desde-$hasta de $totalItems',
-            style: AppType.eyebrow.copyWith(color: Colors.white60),
+            style: AppType.eyebrow,
           ),
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.chevron_left),
             onPressed: onPrev,
-            color: onPrev == null ? Colors.white24 : Colors.white,
+            color: onPrev == null ? AppColors.textHint : AppColors.textPrimary,
             tooltip: 'Anterior',
           ),
           Text(
             'Pág. ${pagina + 1} / $totalPaginas',
-            style: AppType.label.copyWith(color: Colors.white),
+            style: AppType.label.copyWith(color: AppColors.textPrimary),
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
             onPressed: onNext,
-            color: onNext == null ? Colors.white24 : Colors.white,
+            color: onNext == null ? AppColors.textHint : AppColors.textPrimary,
             tooltip: 'Siguiente',
           ),
         ],
@@ -545,8 +540,8 @@ class _AlertaCard extends StatelessWidget {
                   Chip(
                     label: const Text('Atendida'),
                     avatar: const Icon(Icons.check_circle, size: 16),
-                    backgroundColor: const Color(0xFF1B5E20),
-                    labelStyle: AppType.eyebrow.copyWith(color: Colors.white),
+                    backgroundColor: AppColors.success,
+                    labelStyle: AppType.eyebrow.copyWith(color: AppColors.textPrimary),
                   ),
               ],
             ),
@@ -554,48 +549,47 @@ class _AlertaCard extends StatelessWidget {
             Row(
               children: [
                 const Icon(Icons.local_shipping_outlined,
-                    size: 16, color: Colors.white70),
+                    size: 16, color: AppColors.textSecondary),
                 const SizedBox(width: AppSpacing.xs),
                 Flexible(
-                  child: Text(patente,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, color: Colors.white)),
+                  child: Text(
+                    patente,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.body.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: AppSpacing.lg),
                 const Icon(Icons.access_time,
-                    size: 14, color: Colors.white54),
+                    size: 14, color: AppColors.textTertiary),
                 const SizedBox(width: AppSpacing.xs),
                 Flexible(
                   child: Text(
                     _formatTimestamp(creadoEn),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style:
-                        AppType.label.copyWith(color: Colors.white70),
+                    style: AppType.label.copyWith(color: AppColors.textSecondary),
                   ),
                 ),
               ],
             ),
             if (atendida) ...[
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpacing.xs),
               Text(
                 'Atendida por $atendidaPor — ${_formatTimestamp(atendidaEn)}',
-                style: AppType.eyebrow.copyWith(color: Colors.white54),
+                style: AppType.eyebrow,
               ),
             ] else ...[
               const SizedBox(height: AppSpacing.sm),
               Align(
                 alignment: Alignment.centerRight,
-                child: OutlinedButton.icon(
+                child: AppButton.secondary(
+                  label: 'Marcar atendida',
+                  icon: Icons.check,
                   onPressed: () => _marcarAtendida(context),
-                  icon: const Icon(Icons.check, size: 16),
-                  label: const Text('Marcar atendida'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.success,
-                    side: const BorderSide(color: AppColors.success),
-                  ),
                 ),
               ),
             ],
@@ -662,14 +656,14 @@ class _SeveridadChip extends StatelessWidget {
       _ => Colors.grey,
     };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Text(
         severidad.toUpperCase(),
-        style: AppType.eyebrow.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+        style: AppType.eyebrow.copyWith(color: AppColors.textPrimary),
       ),
     );
   }
