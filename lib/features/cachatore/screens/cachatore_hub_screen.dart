@@ -204,7 +204,7 @@ class _SeccionVigilados extends StatelessWidget {
                   icon: const Icon(Icons.add, size: 18),
                   label: const Text('Agregar'),
                   style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.accentCyan,
+                    backgroundColor: AppColors.brand,
                     foregroundColor: Colors.black,
                     padding:
                         const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -1033,7 +1033,7 @@ class _WizardSheetState extends State<_WizardSheet> {
                                 visualDensity: VisualDensity.compact,
                                 splashRadius: 18,
                                 icon: const Icon(Icons.manage_search,
-                                    color: AppColors.accentCyan, size: 22),
+                                    color: AppColors.brand, size: 22),
                                 onPressed: () =>
                                     _verificarTurnoExistente(dni, nombre),
                               ),
@@ -1071,7 +1071,7 @@ class _WizardSheetState extends State<_WizardSheet> {
             style: TextStyle(color: Colors.white60, fontSize: 13)),
         const SizedBox(height: 16),
         ListTile(
-          leading: const Icon(Icons.all_inclusive, color: AppColors.accentCyan),
+          leading: const Icon(Icons.all_inclusive, color: AppColors.brand),
           title: const Text('Cualquier fecha',
               style: TextStyle(color: Colors.white)),
           subtitle: const Text('Agarra el primero que se libere en el horario elegido',
@@ -1088,7 +1088,7 @@ class _WizardSheetState extends State<_WizardSheet> {
         const SizedBox(height: 10),
         ListTile(
           leading:
-              const Icon(Icons.calendar_month, color: AppColors.accentCyan),
+              const Icon(Icons.calendar_month, color: AppColors.brand),
           title: Text(
             _reIso.hasMatch((_fecha ?? '').trim())
                 ? 'Fecha: $_fechaLabel'
@@ -1148,14 +1148,14 @@ class _WizardSheetState extends State<_WizardSheet> {
             padding: const EdgeInsets.only(bottom: 10),
             child: ListTile(
               leading: esC
-                  ? const Icon(Icons.all_inclusive, color: AppColors.accentCyan)
+                  ? const Icon(Icons.all_inclusive, color: AppColors.brand)
                   : null,
               tileColor: Colors.white.withValues(alpha: 0.04),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
                 side: BorderSide(
                     color: sel
-                        ? AppColors.accentCyan.withValues(alpha: 0.6)
+                        ? AppColors.brand.withValues(alpha: 0.6)
                         : Colors.white12),
               ),
               // Comodín: mostramos la etiqueta arriba; las 4 franjas muestran el

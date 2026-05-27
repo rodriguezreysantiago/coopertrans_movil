@@ -46,7 +46,7 @@ class AdminZonasDescargaScreen extends StatelessWidget {
                       icon: const Icon(Icons.add, size: 18),
                       label: const Text('Nueva zona'),
                       style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.accentCyan,
+                        backgroundColor: AppColors.brand,
                         foregroundColor: Colors.black,
                       ),
                     ),

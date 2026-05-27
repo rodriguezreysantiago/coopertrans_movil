@@ -586,13 +586,13 @@ class _DetalleVehiculo extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppColors.accentCyan.withAlpha(20),
+                    color: AppColors.brand.withAlpha(20),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     (data['SINCRO_TIPO'] ?? '').toString(),
                     style: const TextStyle(
-                      color: AppColors.accentCyan,
+                      color: AppColors.brand,
                       fontSize: 9,
                       fontWeight: FontWeight.bold,
                     ),
@@ -900,7 +900,7 @@ class _TelemetriaCompacta extends StatelessWidget {
           if (auton != null)
             _ChipTelemetria(
               icono: Icons.route,
-              color: AppColors.accentCyan,
+              color: AppColors.brand,
               texto: '${auton.toStringAsFixed(0)} km',
             ),
         ],
@@ -1017,7 +1017,7 @@ class _PanelTelemetria extends StatelessWidget {
                       width: celdaWidth,
                       child: _CeldaTelemetria(
                         icono: Icons.route,
-                        color: AppColors.accentCyan,
+                        color: AppColors.brand,
                         valor: auton.toStringAsFixed(0),
                         unidad: 'km',
                         etiqueta: 'AUTONOMÍA',

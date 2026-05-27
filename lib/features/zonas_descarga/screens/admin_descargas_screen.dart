@@ -165,16 +165,16 @@ class _BotonRango extends StatelessWidget {
           padding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: AppColors.accentCyan.withValues(alpha: 0.10),
+            color: AppColors.brand.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: AppColors.accentCyan.withValues(alpha: 0.4),
+              color: AppColors.brand.withValues(alpha: 0.4),
             ),
           ),
           child: Row(
             children: [
               const Icon(Icons.date_range,
-                  color: AppColors.accentCyan, size: 22),
+                  color: AppColors.brand, size: 22),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -183,7 +183,7 @@ class _BotonRango extends StatelessWidget {
                     const Text(
                       'RANGO DE DESCARGAS',
                       style: TextStyle(
-                        color: AppColors.accentCyan,
+                        color: AppColors.brand,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1,
@@ -250,7 +250,7 @@ class _SinZonas extends StatelessWidget {
               icon: const Icon(Icons.add),
               label: const Text('Cargar zona'),
               style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accentCyan,
+                backgroundColor: AppColors.brand,
                 foregroundColor: Colors.black,
               ),
             ),
@@ -280,9 +280,9 @@ class _BotonGestionarZonas extends StatelessWidget {
           icon: const Icon(Icons.tune, size: 16),
           label: const Text('Gestionar zonas'),
           style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.accentCyan,
+            foregroundColor: AppColors.brand,
             side: BorderSide(
-              color: AppColors.accentCyan.withValues(alpha: 0.5),
+              color: AppColors.brand.withValues(alpha: 0.5),
             ),
             padding: const EdgeInsets.symmetric(
                 horizontal: 14, vertical: 8),

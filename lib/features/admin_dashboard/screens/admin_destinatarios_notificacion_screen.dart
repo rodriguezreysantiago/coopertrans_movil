@@ -246,7 +246,7 @@ const _reglas = <_GrupoReglas>[
   ),
   _GrupoReglas(
     label: 'CACHATORE — TURNOS YPF',
-    color: AppColors.accentCyan,
+    color: AppColors.brand,
     reglas: [
       _Regla(
         key: 'cachatoreEncargado',

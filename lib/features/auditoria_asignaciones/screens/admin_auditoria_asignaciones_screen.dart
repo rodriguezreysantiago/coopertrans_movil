@@ -177,15 +177,15 @@ class _BarraFiltros extends StatelessWidget {
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.accentCyan.withValues(alpha: 0.1),
+                color: AppColors.brand.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                    color: AppColors.accentCyan.withValues(alpha: 0.4)),
+                    color: AppColors.brand.withValues(alpha: 0.4)),
               ),
               child: Row(
                 children: [
                   const Icon(Icons.date_range,
-                      color: AppColors.accentCyan, size: 20),
+                      color: AppColors.brand, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(

@@ -545,7 +545,7 @@ class _BloqueTelemetria extends StatelessWidget {
                 Expanded(
                   child: _DatoTelemetria(
                     icono: Icons.route,
-                    color: AppColors.accentCyan,
+                    color: AppColors.brand,
                     valor: '${AppFormatters.formatearMiles(auton.toInt())} km',
                     etiqueta: 'AUTONOMÍA',
                   ),
