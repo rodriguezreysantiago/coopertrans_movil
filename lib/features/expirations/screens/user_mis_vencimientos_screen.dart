@@ -16,6 +16,7 @@ import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/fecha_input_formatter.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/utils/ocr_service.dart';
+import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../checklist/screens/user_checklist_form_screen.dart';
 
@@ -160,46 +161,44 @@ class _UserMisVencimientosScreenState
     showDialog(
       context: context,
       builder: (dCtx) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: AppColors.surface2,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: Colors.white.withAlpha(20)),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          side: const BorderSide(color: AppColors.borderSubtle),
         ),
         title: Text(
           'Actualizar $etiqueta',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
+          style: AppType.title,
         ),
         content: Form(
           key: formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
+              Text(
                 'Ingresá la fecha que figura en el nuevo carnet o certificado:',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
+                style: AppType.body.copyWith(color: AppColors.textSecondary),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               TextFormField(
                 controller: fechaCtrl,
                 keyboardType: TextInputType.number,
                 autofocus: true,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: AppType.heading.copyWith(
                   fontSize: 24,
-                  color: AppColors.success,
+                  color: AppColors.brand,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 2,
                 ),
                 decoration: InputDecoration(
                   hintText: 'DD/MM/AAAA',
-                  hintStyle: const TextStyle(
-                      color: Colors.white24, letterSpacing: 2),
+                  hintStyle: AppType.body.copyWith(
+                    color: AppColors.textHint,
+                    letterSpacing: 2,
+                  ),
                   filled: true,
-                  fillColor: Colors.black.withAlpha(80),
+                  fillColor: AppColors.surface0,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppRadius.md),
                     borderSide: BorderSide.none,
@@ -251,16 +250,12 @@ class _UserMisVencimientosScreenState
           ),
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.pop(dCtx),
-            child: const Text('CANCELAR',
-                style: TextStyle(color: Colors.white54)),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
+          AppButton(
+            label: 'Continuar',
             onPressed: () {
               if (formKey.currentState!.validate()) {
                 final partes = fechaCtrl.text.split('/');
@@ -288,8 +283,6 @@ class _UserMisVencimientosScreenState
                 );
               }
             },
-            child: const Text('CONTINUAR',
-                style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -308,32 +301,29 @@ class _UserMisVencimientosScreenState
       context: context,
       backgroundColor: Colors.transparent,
       builder: (sCtx) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
+        decoration: const BoxDecoration(
+          color: AppColors.surface2,
           borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(25)),
-          border: const Border(
-              top: BorderSide(color: AppColors.success, width: 2)),
+              BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+          // Sin border-top decorativo verde: la elevación del modal ya
+          // separa visualmente del contenido detrás (mismo criterio que
+          // aplicamos en user_mi_perfil_screen).
         ),
         child: SafeArea(
           child: Wrap(children: [
             const Padding(
-              padding: EdgeInsets.all(20),
+              padding: EdgeInsets.all(AppSpacing.xl),
               child: Text(
                 'FOTO DEL COMPROBANTE',
-                style: TextStyle(
-                  color: AppColors.success,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  letterSpacing: 1.2,
-                ),
+                style: AppType.eyebrow,
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.camera_alt, color: Colors.white70),
-              title: const Text('Tomar con la cámara',
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w500)),
+              leading: const Icon(Icons.camera_alt, color: AppColors.brand),
+              title: Text('Tomar con la cámara',
+                  style: AppType.body.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w500)),
               onTap: () async {
                 final img = await ImagePicker()
                     .pickImage(source: ImageSource.camera, imageQuality: 50);
@@ -356,10 +346,11 @@ class _UserMisVencimientosScreenState
               },
             ),
             ListTile(
-              leading: const Icon(Icons.upload_file, color: Colors.white70),
-              title: const Text('Cargar foto o PDF de la galería',
-                  style: TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w500)),
+              leading: const Icon(Icons.upload_file, color: AppColors.brand),
+              title: Text('Cargar foto o PDF de la galería',
+                  style: AppType.body.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w500)),
               onTap: () async {
                 // withData: true asegura que `bytes` venga poblado en todas
                 // las plataformas (en Web `path` no existe).
@@ -384,7 +375,7 @@ class _UserMisVencimientosScreenState
                 }
               },
             ),
-            const SizedBox(height: 25),
+            const SizedBox(height: AppSpacing.xxl),
           ]),
         ),
       ),
@@ -471,7 +462,10 @@ class _UserMisVencimientosScreenState
           final pEnganche = (data['ENGANCHE'] ?? '').toString().trim();
 
           return ListView(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
+            ),
             children: [
               // Banner "Próximo a vencer" — calcula el papel más urgente
               // del chofer + de su equipo y avisa arriba si hay alguno
@@ -524,7 +518,7 @@ class _UserMisVencimientosScreenState
                   nombreUsuario: nombreChofer,
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
 
               const _SectionHeader('COBERTURAS LABORALES'),
               // Estos 4 docs son a NIVEL EMPRESA — el mismo PDF lo
@@ -561,7 +555,7 @@ class _UserMisVencimientosScreenState
                 campoFecha: AppDocsEmpresa.campoFechaLibreDeudaSindical,
                 campoUrl: AppDocsEmpresa.campoArchivoLibreDeudaSindical,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
 
               const _SectionHeader('PAPELES Y CONTROLES DEL EQUIPO'),
               if (pVehiculo.isNotEmpty && pVehiculo != '-')
@@ -585,7 +579,7 @@ class _UserMisVencimientosScreenState
               else
                 const _CardInformativa(
                     'No tenés batea/tolva asignada'),
-              const SizedBox(height: 30),
+              const SizedBox(height: AppSpacing.xxl),
             ],
           );
         },
