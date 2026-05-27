@@ -272,7 +272,7 @@ class EmpleadoActions {
                 children: [
                   Text(
                     'DNI actual: $dniViejo',
-                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                    style: AppType.body,
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   TextFormField(
@@ -297,17 +297,17 @@ class EmpleadoActions {
               ),
             ),
             actions: [
-              TextButton(
+              AppButton.ghost(
+                label: 'Cancelar',
                 onPressed: () => Navigator.of(dCtx).pop(),
-                child: const Text('Cancelar'),
               ),
-              ElevatedButton(
+              AppButton(
+                label: 'Continuar',
                 onPressed: () {
                   if (formKey.currentState?.validate() ?? false) {
                     Navigator.of(dCtx).pop(ctrl.text.trim());
                   }
                 },
-                child: const Text('Continuar'),
               ),
             ],
           ),
@@ -347,20 +347,16 @@ class EmpleadoActions {
           'Volvo y mensajes pendientes. La operación NO se puede '
           'deshacer y el chofer va a tener que volver a loguear con el '
           'DNI nuevo.',
-          style: const TextStyle(color: Colors.white70, fontSize: 13),
+          style: AppType.body,
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.of(dCtx).pop(false),
-            child: const Text('Cancelar'),
           ),
-          ElevatedButton(
+          AppButton.danger(
+            label: 'Sí, actualizar',
             onPressed: () => Navigator.of(dCtx).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('SÍ, ACTUALIZAR'),
           ),
         ],
       ),
@@ -466,30 +462,19 @@ class EmpleadoActions {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (bCtx) => Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(25)),
-          border: const Border(
-              top: BorderSide(color: AppColors.success, width: 2)),
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        decoration: const BoxDecoration(
+          color: AppColors.surface2,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              'Foto de perfil',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 15),
+            const Text('Foto de perfil', style: AppType.heading),
+            const SizedBox(height: AppSpacing.md),
             ListTile(
-              leading: const Icon(Icons.visibility, color: AppColors.info),
-              title: const Text('Ver foto actual',
-                  style: TextStyle(color: Colors.white)),
+              leading: const Icon(Icons.visibility, color: AppColors.brand),
+              title: const Text('Ver foto actual'),
               enabled: urlActual != null &&
                   urlActual.isNotEmpty &&
                   urlActual != '-',
@@ -507,10 +492,8 @@ class EmpleadoActions {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library,
-                  color: AppColors.success),
-              title: const Text('Subir nueva desde galería',
-                  style: TextStyle(color: Colors.white)),
+              leading: const Icon(Icons.photo_library, color: AppColors.brand),
+              title: const Text('Subir nueva desde galería'),
               onTap: () async {
                 navigator.pop();
                 final image = await picker.pickImage(
@@ -591,54 +574,34 @@ class EmpleadoActions {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (sCtx) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(sCtx).colorScheme.surface,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(25)),
-          border: const Border(
-              top: BorderSide(color: AppColors.success, width: 2)),
+        decoration: const BoxDecoration(
+          color: AppColors.surface2,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
         ),
         child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  etiqueta,
-                  style: const TextStyle(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    letterSpacing: 1.2,
-                  ),
-                ),
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: Text(etiqueta.toUpperCase(), style: AppType.eyebrow),
               ),
               ListTile(
-                leading:
-                    const Icon(Icons.camera_alt, color: AppColors.success),
-                title: const Text('Tomar foto con la cámara',
-                    style: TextStyle(color: Colors.white)),
-                onTap: () =>
-                    Navigator.pop(sCtx, _FuenteArchivoChofer.camara),
+                leading: const Icon(Icons.camera_alt, color: AppColors.brand),
+                title: const Text('Tomar foto con la cámara'),
+                onTap: () => Navigator.pop(sCtx, _FuenteArchivoChofer.camara),
               ),
               ListTile(
-                leading:
-                    const Icon(Icons.photo_library, color: AppColors.info),
-                title: const Text('Foto desde la galería',
-                    style: TextStyle(color: Colors.white)),
-                onTap: () =>
-                    Navigator.pop(sCtx, _FuenteArchivoChofer.galeria),
+                leading: const Icon(Icons.photo_library, color: AppColors.brand),
+                title: const Text('Foto desde la galería'),
+                onTap: () => Navigator.pop(sCtx, _FuenteArchivoChofer.galeria),
               ),
               ListTile(
-                leading: const Icon(Icons.picture_as_pdf,
-                    color: AppColors.error),
-                title: const Text('PDF / archivo del dispositivo',
-                    style: TextStyle(color: Colors.white)),
-                onTap: () =>
-                    Navigator.pop(sCtx, _FuenteArchivoChofer.archivo),
+                leading: const Icon(Icons.picture_as_pdf, color: AppColors.brand),
+                title: const Text('PDF / archivo del dispositivo'),
+                onTap: () => Navigator.pop(sCtx, _FuenteArchivoChofer.archivo),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
             ],
           ),
         ),
@@ -706,40 +669,27 @@ class EmpleadoActions {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (bCtx) => Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(25)),
-          border: const Border(
-              top: BorderSide(color: AppColors.success, width: 2)),
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        decoration: const BoxDecoration(
+          color: AppColors.surface2,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              etiqueta,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            const SizedBox(height: 15),
+            Text(etiqueta, style: AppType.heading),
+            const SizedBox(height: AppSpacing.md),
             ListTile(
-              leading:
-                  const Icon(Icons.event_note, color: AppColors.info),
-              title: const Text('Editar fecha de vencimiento',
-                  style: TextStyle(color: Colors.white)),
+              leading: const Icon(Icons.event_note, color: AppColors.brand),
+              title: const Text('Editar fecha de vencimiento'),
               onTap: () {
                 navigator.pop();
                 _seleccionarFecha(context, dni, campoFecha, fechaActual);
               },
             ),
             ListTile(
-              leading: const Icon(Icons.visibility, color: AppColors.success),
-              title: const Text('Ver documento digital',
-                  style: TextStyle(color: Colors.white)),
+              leading: const Icon(Icons.visibility, color: AppColors.brand),
+              title: const Text('Ver documento digital'),
               enabled: urlActual != null &&
                   urlActual.isNotEmpty &&
                   urlActual != '-',
@@ -757,19 +707,17 @@ class EmpleadoActions {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.upload_file,
-                  color: AppColors.warning),
+              leading: const Icon(Icons.upload_file, color: AppColors.warning),
               title: Text(
                 urlActual != null &&
                         urlActual.isNotEmpty &&
                         urlActual != '-'
                     ? 'Reemplazar archivo cargado'
                     : 'Subir archivo nuevo',
-                style: const TextStyle(color: Colors.white),
               ),
-              subtitle: Text(
+              subtitle: const Text(
                 'Foto o PDF — sin pasar por el flujo de revisión',
-                style: AppType.eyebrow.copyWith(color: Colors.white38),
+                style: AppType.label,
               ),
               onTap: () {
                 navigator.pop();
@@ -837,8 +785,7 @@ class EmpleadoActions {
             builder: (ctx, snap) {
               if (!snap.hasData) {
                 return const Center(
-                  child: CircularProgressIndicator(
-                      color: AppColors.success),
+                  child: CircularProgressIndicator(color: AppColors.brand),
                 );
               }
 
@@ -989,10 +936,9 @@ class EmpleadoActions {
                 itemBuilder: (ctx, idx) {
                   if (idx == 0) {
                     return ListTile(
-                      leading:
-                          const Icon(Icons.link_off, color: AppColors.error),
+                      leading: const Icon(Icons.link_off, color: AppColors.error),
                       title: const Text(
-                        'DESVINCULAR',
+                        'Desvincular',
                         style: TextStyle(
                           color: AppColors.error,
                           fontWeight: FontWeight.bold,
@@ -1008,7 +954,7 @@ class EmpleadoActions {
                           title: '¿Desvincular $etiquetaUnidad?',
                           message:
                               'El chofer va a quedar sin $etiquetaUnidad asignado y la unidad vuelve a estado LIBRE.',
-                          confirmLabel: 'DESVINCULAR',
+                          confirmLabel: 'Desvincular',
                           destructive: true,
                           icon: Icons.link_off,
                         );
@@ -1032,11 +978,10 @@ class EmpleadoActions {
                   return ListTile(
                     title: Text(
                       patente,
-                      style: AppType.body.copyWith(color: Colors.white),
+                      style: AppType.body.copyWith(color: AppColors.textPrimary),
                     ),
                     trailing: patente == patenteActual.trim()
-                        ? const Icon(Icons.check_circle,
-                            color: AppColors.success)
+                        ? const Icon(Icons.check_circle, color: AppColors.success)
                         : null,
                     onTap: () => procesarCambio(patente),
                   );
@@ -1240,9 +1185,8 @@ class EmpleadoActions {
     final confirmado = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(ctx).colorScheme.surface,
-        title: const Text('Dar de baja al empleado',
-            style: TextStyle(color: Colors.white)),
+        backgroundColor: AppColors.surface2,
+        title: const Text('Dar de baja al empleado', style: AppType.heading),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1253,36 +1197,28 @@ class EmpleadoActions {
               'se borrarán todos sus vencimientos y archivos cargados.\n\n'
               'Al reactivarlo más adelante, los vencimientos quedan vacíos '
               'y hay que volver a cargar todo.',
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
+              style: AppType.body,
             ),
             const SizedBox(height: AppSpacing.lg),
             TextField(
               controller: motivoCtrl,
               maxLength: 200,
               maxLines: 2,
-              style: const TextStyle(color: Colors.white),
               decoration: const InputDecoration(
                 labelText: 'Motivo (opcional)',
                 hintText: 'Ej. renuncia, vacaciones largas, etc.',
-                labelStyle: TextStyle(color: Colors.white54),
-                hintStyle: TextStyle(color: Colors.white24),
               ),
             ),
           ],
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar',
-                style: TextStyle(color: Colors.white54)),
           ),
-          TextButton(
+          AppButton.danger(
+            label: 'Dar de baja',
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('DAR DE BAJA',
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontWeight: FontWeight.bold,
-                )),
           ),
         ],
       ),
@@ -1309,7 +1245,7 @@ class EmpleadoActions {
       message:
           '$nombreVisible va a volver a estar ACTIVO. Los vencimientos quedan '
           'vacíos hasta que los cargues. La unidad NO se restaura.',
-      confirmLabel: 'REACTIVAR',
+      confirmLabel: 'Reactivar',
     );
     if (ok != true) return;
     if (!context.mounted) return;
@@ -1382,11 +1318,8 @@ class EmpleadoActions {
       context: context,
       builder: (dCtx) => StatefulBuilder(
         builder: (sCtx, setSt) => AlertDialog(
-          backgroundColor: Theme.of(dCtx).colorScheme.surface,
-          title: const Text(
-            'Resetear contraseña',
-            style: TextStyle(color: Colors.white, fontSize: 18),
-          ),
+          backgroundColor: AppColors.surface2,
+          title: const Text('Resetear contraseña', style: AppType.heading),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1395,13 +1328,12 @@ class EmpleadoActions {
                 'Vas a setearle una contraseña nueva a $nombreVisible. '
                 'El chofer va a tener que re-loguear y vos le tenes que '
                 'pasar la pass nueva en persona o por WhatsApp privado.',
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                style: AppType.body,
               ),
               const SizedBox(height: AppSpacing.lg),
               TextField(
                 controller: nuevaCtrl,
                 obscureText: true,
-                style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
                   labelText: 'Nueva contraseña',
                 ),
@@ -1410,7 +1342,6 @@ class EmpleadoActions {
               TextField(
                 controller: repetirCtrl,
                 obscureText: true,
-                style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
                   labelText: 'Repetir contraseña',
                 ),
@@ -1425,16 +1356,12 @@ class EmpleadoActions {
             ],
           ),
           actions: [
-            TextButton(
+            AppButton.ghost(
+              label: 'Cancelar',
               onPressed: () => Navigator.pop(dCtx),
-              child: const Text('CANCELAR',
-                  style: TextStyle(color: Colors.white54)),
             ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.warning,
-                foregroundColor: Colors.black,
-              ),
+            AppButton(
+              label: 'Resetear',
               onPressed: () {
                 final a = nuevaCtrl.text;
                 final b = repetirCtrl.text;
@@ -1449,8 +1376,6 @@ class EmpleadoActions {
                 }
                 Navigator.pop(dCtx, a);
               },
-              child: const Text('RESETEAR',
-                  style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
