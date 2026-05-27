@@ -156,7 +156,7 @@ class _AdminVehiculoAltaScreenState
           child: Focus(
             autofocus: true,
             child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: Form(
             key: _formKey,
             child: Column(
@@ -170,7 +170,7 @@ class _AdminVehiculoAltaScreenState
                   isPatente: true,
                 ),
                 const _LabelCampo('Tipo de unidad'),
-                const SizedBox(height: 10),
+                const SizedBox(height: AppSpacing.sm),
                 _SelectorTipo(
                   tipo: _tipo,
                   enabled: !_guardando,
@@ -198,7 +198,7 @@ class _AdminVehiculoAltaScreenState
                     });
                   },
                 ),
-                const SizedBox(height: 25),
+                const SizedBox(height: AppSpacing.xl),
                 _VInput(
                   label: 'Marca',
                   controller: _marcaCtrl,
@@ -230,7 +230,7 @@ class _AdminVehiculoAltaScreenState
                     textInputAction: TextInputAction.done,
                   ),
                 const _LabelCampo('Empresa propietaria'),
-                const SizedBox(height: 10),
+                const SizedBox(height: AppSpacing.sm),
                 _DropdownEmpresa(
                   value: _empresa,
                   empresas: _empresas,
@@ -238,7 +238,7 @@ class _AdminVehiculoAltaScreenState
                   onChanged: (val) =>
                       setState(() => _empresa = val ?? _empresa),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: AppSpacing.xxl),
                 _BotonGuardar(
                   guardando: _guardando,
                   onPressed: _guardar,
@@ -266,7 +266,7 @@ class _LabelCampo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: AppType.eyebrow.copyWith(color: Colors.white70, fontWeight: FontWeight.bold),
+      style: AppType.eyebrow.copyWith(color: AppColors.textSecondary),
     );
   }
 }
@@ -301,7 +301,7 @@ class _VInput extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
       child: TextFormField(
         controller: controller,
         keyboardType:
@@ -316,16 +316,17 @@ class _VInput extends StatelessWidget {
         inputFormatters: isNumeric
             ? [DigitOnlyFormatter(maxLength: maxLength)]
             : null,
-        style: AppType.body.copyWith(color: readOnly ? Colors.white54 : Colors.white),
+        style: AppType.body.copyWith(
+            color: readOnly ? AppColors.textTertiary : AppColors.textPrimary),
         decoration: InputDecoration(
           counterText: '',
           labelText: label,
           hintText: hint,
-          hintStyle: AppType.eyebrow.copyWith(color: Colors.white24),
+          hintStyle: AppType.eyebrow.copyWith(color: AppColors.textHint),
           prefixIcon: Icon(
             icon,
             color: readOnly
-                ? Colors.white24
+                ? AppColors.textHint
                 : Theme.of(context).colorScheme.primary,
             size: 20,
           ),
@@ -394,8 +395,8 @@ class _SelectorTipo extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
+        spacing: AppSpacing.sm,
+        runSpacing: AppSpacing.sm,
         children: tipos.map((t) {
           final seleccionado = tipo == t;
           return ChoiceChip(
@@ -408,7 +409,10 @@ class _SelectorTipo extends StatelessWidget {
             ),
             label: Text(
               _label(t),
-              style: AppType.label.copyWith(color: seleccionado ? Colors.black : Colors.white, fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal),
+              style: AppType.label.copyWith(
+                  color: seleccionado ? Colors.black : AppColors.textPrimary,
+                  fontWeight:
+                      seleccionado ? FontWeight.bold : FontWeight.normal),
             ),
             selected: seleccionado,
             onSelected:
@@ -436,18 +440,19 @@ class _DropdownEmpresa extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.xs),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: Colors.white.withAlpha(15)),
+        border: Border.all(color: AppColors.borderSubtle),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
           isExpanded: true,
           dropdownColor: Theme.of(context).colorScheme.surface,
-          style: AppType.label.copyWith(color: Colors.white),
+          style: AppType.label.copyWith(color: AppColors.textPrimary),
           items: empresas
               .map((e) => DropdownMenuItem(
                     value: e,
@@ -472,34 +477,13 @@ class _BotonGuardar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 55,
-      child: ElevatedButton.icon(
-        onPressed: guardando ? null : onPressed,
-        icon: guardando
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.black,
-                ),
-              )
-            : const Icon(Icons.cloud_upload),
-        label: Text(
-          guardando ? 'REGISTRANDO...' : 'REGISTRAR EN FLOTA',
-          style: AppType.heading.copyWith(fontWeight: FontWeight.bold),
-        ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.success,
-          foregroundColor: Colors.black,
-          disabledBackgroundColor: AppColors.success.withAlpha(100),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.md),
-          ),
-        ),
-      ),
+    return AppButton(
+      label: guardando ? 'Registrando...' : 'Registrar en flota',
+      icon: Icons.cloud_upload,
+      onPressed: guardando ? null : onPressed,
+      isLoading: guardando,
+      expand: true,
+      size: AppButtonSize.lg,
     );
   }
 }
