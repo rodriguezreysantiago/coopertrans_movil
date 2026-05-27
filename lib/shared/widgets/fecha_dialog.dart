@@ -165,7 +165,7 @@ class _FechaDialogState extends State<_FechaDialog> {
             keyboardType: TextInputType.number,
             textAlign: TextAlign.center,
             style: const TextStyle(
-              color: AppColors.accentGreen,
+              color: AppColors.success,
               fontWeight: FontWeight.bold,
               fontSize: 26,
               letterSpacing: 3,

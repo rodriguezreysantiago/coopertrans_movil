@@ -42,7 +42,7 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
     return AppScaffold(
       title: 'Tarifas',
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.accentGreen,
+        backgroundColor: AppColors.success,
         onPressed: _abrirNueva,
         icon: const Icon(Icons.add),
         label: const Text('NUEVA TARIFA'),
@@ -187,7 +187,7 @@ class _BarraFiltros extends StatelessWidget {
             label: const Text('Activas'),
             selected: soloActivas,
             onSelected: onCambioActivas,
-            selectedColor: AppColors.accentGreen.withValues(alpha: 0.4),
+            selectedColor: AppColors.success.withValues(alpha: 0.4),
           ),
         ],
       ),
@@ -219,7 +219,7 @@ class _CardTarifa extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color =
-        tarifa.activa ? AppColors.accentGreen : Colors.white24;
+        tarifa.activa ? AppColors.success : Colors.white24;
     return AppCard(
       onTap: () => Navigator.pushNamed(
         context,
@@ -494,7 +494,7 @@ class _TarifasMontos extends StatelessWidget {
               etiqueta: 'TARIFA REAL',
               monto: tarifa.tarifaReal,
               sufijo: tarifa.unidadTarifa.sufijoMonto,
-              color: AppColors.accentGreen,
+              color: AppColors.success,
             ),
           ),
           Container(

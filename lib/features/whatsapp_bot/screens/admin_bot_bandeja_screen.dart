@@ -96,7 +96,7 @@ class AdminBotBandejaScreen extends StatelessWidget {
               child: Text(
                 '¿A QUÉ PAPEL CORRESPONDE?',
                 style: TextStyle(
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   fontWeight: FontWeight.bold,
                   fontSize: 11,
                   letterSpacing: 1.2,
@@ -107,7 +107,7 @@ class AdminBotBandejaScreen extends StatelessWidget {
               final cMap = c as Map<String, dynamic>;
               return ListTile(
                 leading: const Icon(Icons.event_note,
-                    color: AppColors.accentGreen),
+                    color: AppColors.success),
                 title: Text(
                   (cMap['campo_base'] ?? 'Documento').toString(),
                   style: const TextStyle(color: Colors.white),
@@ -329,7 +329,7 @@ class _ItemAmbiguo extends StatelessWidget {
             children: [
               if (fechaDet.isNotEmpty) ...[
                 const Icon(Icons.event_note,
-                    size: 12, color: AppColors.accentGreen),
+                    size: 12, color: AppColors.success),
                 const SizedBox(width: 4),
                 Flexible(
                   child: Text(
@@ -337,7 +337,7 @@ class _ItemAmbiguo extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      color: AppColors.accentGreen,
+                      color: AppColors.success,
                       fontSize: 11,
                     ),
                   ),

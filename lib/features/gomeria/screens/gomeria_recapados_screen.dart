@@ -215,7 +215,7 @@ class _ResumenHistorico extends StatelessWidget {
             runSpacing: 6,
             children: [
               _stat('Total', '$total', AppColors.accentTeal),
-              _stat('Recibidas', '$recibidas', AppColors.accentGreen),
+              _stat('Recibidas', '$recibidas', AppColors.success),
               _stat('Descartadas', '$descartadas', AppColors.accentRed),
               if (costoTotal > 0)
                 _stat('Costo total',
@@ -263,7 +263,7 @@ class _RecapadoTile extends StatelessWidget {
     final color = !cerrado
         ? AppColors.accentTeal
         : r.resultado == ResultadoRecapado.recibida
-            ? AppColors.accentGreen
+            ? AppColors.success
             : AppColors.accentRed;
     return AppCard(
       onTap: onTap,
@@ -654,7 +654,7 @@ class _CerrarRecapadoDialogState extends State<_CerrarRecapadoDialog> {
                     RadioListTile<ResultadoRecapado>(
                       value: ResultadoRecapado.recibida,
                       title: Text('Recibida (vuelve al depósito)'),
-                      activeColor: AppColors.accentGreen,
+                      activeColor: AppColors.success,
                     ),
                     RadioListTile<ResultadoRecapado>(
                       value: ResultadoRecapado.descartadaPorProveedor,

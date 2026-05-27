@@ -145,7 +145,7 @@ class KpiGrandeCard extends StatelessWidget {
     final color = !tieneDatos
         ? Colors.white54
         : (kpi.litrosPor100kmActual <= 30
-            ? AppColors.accentGreen
+            ? AppColors.success
             : (kpi.litrosPor100kmActual <= 40
                 ? AppColors.accentAmber
                 : AppColors.accentRed));
@@ -205,7 +205,7 @@ class KpiGrandeCard extends StatelessWidget {
       } else {
         final esBueno = mejorEsSubir ? esPositivo : !esPositivo;
         colorVariacion =
-            esBueno ? AppColors.accentGreen : AppColors.accentRed;
+            esBueno ? AppColors.success : AppColors.accentRed;
         iconoVariacion =
             esPositivo ? Icons.arrow_upward : Icons.arrow_downward;
       }

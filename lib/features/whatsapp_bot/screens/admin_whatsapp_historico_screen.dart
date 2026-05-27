@@ -398,7 +398,7 @@ class _ItemHistorico extends StatelessWidget {
     final m = doc.data();
     final estado = (m['estado'] ?? '').toString();
     final esError = estado == 'ERROR';
-    final color = esError ? AppColors.error : AppColors.accentGreen;
+    final color = esError ? AppColors.error : AppColors.success;
     final telefono = (m['telefono'] ?? '').toString();
     final mensaje = (m['mensaje'] ?? '').toString();
     final origen = (m['origen'] ?? '').toString();
@@ -505,7 +505,7 @@ class _DetalleHistoricoSheet extends StatelessWidget {
     final m = doc.data();
     final estado = (m['estado'] ?? '').toString();
     final esError = estado == 'ERROR';
-    final color = esError ? AppColors.error : AppColors.accentGreen;
+    final color = esError ? AppColors.error : AppColors.success;
     final telefono = (m['telefono'] ?? '').toString();
     final mensaje = (m['mensaje'] ?? '').toString();
     final origen = (m['origen'] ?? '').toString();

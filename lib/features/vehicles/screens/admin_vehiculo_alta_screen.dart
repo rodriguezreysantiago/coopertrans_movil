@@ -505,9 +505,9 @@ class _BotonGuardar extends StatelessWidget {
           ),
         ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.accentGreen,
+          backgroundColor: AppColors.success,
           foregroundColor: Colors.black,
-          disabledBackgroundColor: AppColors.accentGreen.withAlpha(100),
+          disabledBackgroundColor: AppColors.success.withAlpha(100),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),

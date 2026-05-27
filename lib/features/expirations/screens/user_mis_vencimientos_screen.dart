@@ -188,7 +188,7 @@ class _UserMisVencimientosScreenState
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 24,
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 2,
                 ),
@@ -311,7 +311,7 @@ class _UserMisVencimientosScreenState
           borderRadius:
               const BorderRadius.vertical(top: Radius.circular(25)),
           border: const Border(
-              top: BorderSide(color: AppColors.accentGreen, width: 2)),
+              top: BorderSide(color: AppColors.success, width: 2)),
         ),
         child: SafeArea(
           child: Wrap(children: [
@@ -320,7 +320,7 @@ class _UserMisVencimientosScreenState
               child: Text(
                 'FOTO DEL COMPROBANTE',
                 style: TextStyle(
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
                   letterSpacing: 1.2,

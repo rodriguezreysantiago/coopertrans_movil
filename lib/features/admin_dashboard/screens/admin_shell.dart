@@ -412,11 +412,11 @@ class _AdminShellState extends State<AdminShell> {
       labelType: NavigationRailLabelType.all,
       backgroundColor: Colors.transparent,
       selectedIconTheme:
-          const IconThemeData(color: AppColors.accentGreen, size: 26),
+          const IconThemeData(color: AppColors.success, size: 26),
       unselectedIconTheme:
           const IconThemeData(color: Colors.white54, size: 24),
       selectedLabelTextStyle: const TextStyle(
-        color: AppColors.accentGreen,
+        color: AppColors.success,
         fontWeight: FontWeight.bold,
         fontSize: 11,
       ),
@@ -424,7 +424,7 @@ class _AdminShellState extends State<AdminShell> {
         color: Colors.white54,
         fontSize: 11,
       ),
-      indicatorColor: AppColors.accentGreen.withAlpha(40),
+      indicatorColor: AppColors.success.withAlpha(40),
       destinations: _seccionesVisibles
           .asMap()
           .entries
@@ -586,7 +586,7 @@ class _AdminShellState extends State<AdminShell> {
                     child: Text(
                       'MÁS SECCIONES',
                       style: TextStyle(
-                        color: AppColors.accentGreen,
+                        color: AppColors.success,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1.5,

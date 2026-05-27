@@ -109,7 +109,7 @@ class VehiculoActions {
           color: Theme.of(context).colorScheme.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
           border: const Border(
-              top: BorderSide(color: AppColors.accentGreen, width: 2)),
+              top: BorderSide(color: AppColors.success, width: 2)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -135,7 +135,7 @@ class VehiculoActions {
             ),
             ListTile(
               leading:
-                  const Icon(Icons.visibility, color: AppColors.accentGreen),
+                  const Icon(Icons.visibility, color: AppColors.success),
               title: const Text('Ver documento digital',
                   style: TextStyle(color: Colors.white)),
               enabled: urlActual != null &&
@@ -224,7 +224,7 @@ class VehiculoActions {
           borderRadius:
               const BorderRadius.vertical(top: Radius.circular(25)),
           border: const Border(
-              top: BorderSide(color: AppColors.accentGreen, width: 2)),
+              top: BorderSide(color: AppColors.success, width: 2)),
         ),
         child: SafeArea(
           child: Column(
@@ -235,7 +235,7 @@ class VehiculoActions {
                 child: Text(
                   etiqueta,
                   style: const TextStyle(
-                    color: AppColors.accentGreen,
+                    color: AppColors.success,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                     letterSpacing: 1.2,
@@ -244,7 +244,7 @@ class VehiculoActions {
               ),
               ListTile(
                 leading:
-                    const Icon(Icons.camera_alt, color: AppColors.accentGreen),
+                    const Icon(Icons.camera_alt, color: AppColors.success),
                 title: const Text('Tomar foto con la cámara',
                     style: TextStyle(color: Colors.white)),
                 onTap: () =>

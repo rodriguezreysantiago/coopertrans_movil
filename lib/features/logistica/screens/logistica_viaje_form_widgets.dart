@@ -135,7 +135,7 @@ class _ResumenTarifa extends StatelessWidget {
     // igual, los cálculos van a dar 0 y se actualizan cuando se
     // edite la tarifa + se vuelva a guardar el viaje.
     final sinMonto = t.tarifaReal == 0 || t.tarifaChofer == 0;
-    final color = sinMonto ? AppColors.accentAmber : AppColors.accentGreen;
+    final color = sinMonto ? AppColors.accentAmber : AppColors.success;
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(

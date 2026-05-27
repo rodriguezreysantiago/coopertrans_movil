@@ -62,7 +62,7 @@ class _FotoUnidad extends StatelessWidget {
                     ),
                     child: const Center(
                       child: CircularProgressIndicator(
-                        color: AppColors.accentGreen,
+                        color: AppColors.success,
                         strokeWidth: 3,
                       ),
                     ),
@@ -76,12 +76,12 @@ class _FotoUnidad extends StatelessWidget {
             icon: Icon(
               tieneFoto ? Icons.edit : Icons.add_a_photo,
               size: 16,
-              color: AppColors.accentGreen,
+              color: AppColors.success,
             ),
             label: Text(
               tieneFoto ? 'Cambiar foto' : 'Agregar foto',
               style: const TextStyle(
-                color: AppColors.accentGreen,
+                color: AppColors.success,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -103,7 +103,7 @@ class _SectionTitle extends StatelessWidget {
       child: Text(
         label.toUpperCase(),
         style: const TextStyle(
-          color: AppColors.accentGreen,
+          color: AppColors.success,
           fontSize: 11,
           fontWeight: FontWeight.bold,
           letterSpacing: 1.5,
@@ -259,7 +259,7 @@ class _EmpresaTile extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          const Icon(Icons.business, color: AppColors.accentGreen),
+          const Icon(Icons.business, color: AppColors.success),
           const SizedBox(width: 15),
           Expanded(
             child: Column(
@@ -371,7 +371,7 @@ class _DateTile extends StatelessWidget {
               padding: const EdgeInsets.all(6),
               constraints: const BoxConstraints(),
               icon: const Icon(Icons.visibility,
-                  color: AppColors.accentGreen, size: 22),
+                  color: AppColors.success, size: 22),
               tooltip: 'Ver archivo',
               onPressed: () => Navigator.push(
                 context,
@@ -464,7 +464,7 @@ class _FechaTileSimple extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       child: Row(
         children: [
-          Icon(icono, color: AppColors.accentGreen),
+          Icon(icono, color: AppColors.success),
           const SizedBox(width: 15),
           Expanded(
             child: Column(

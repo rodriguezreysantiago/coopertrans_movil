@@ -102,7 +102,7 @@ class AppFileThumbnail extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.accentGreen.withAlpha(80)),
+        border: Border.all(color: AppColors.success.withAlpha(80)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Image.network(
@@ -118,7 +118,7 @@ class AppFileThumbnail extends StatelessWidget {
                 height: size * 0.4,
                 child: const CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                 ),
               ),
             ),

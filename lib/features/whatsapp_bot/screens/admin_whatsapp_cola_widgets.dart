@@ -65,7 +65,7 @@ class _ResumenContador extends StatelessWidget {
               _MiniContador(
                   label: 'Enviados',
                   count: enviados,
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   activo: filtroActivo == 'ENVIADO',
                   onTap: () => onTapEstado('ENVIADO')),
               const SizedBox(width: 8),
@@ -253,12 +253,12 @@ class _ItemCola extends StatelessWidget {
               ),
               if (enviadoTs != null) ...[
                 const SizedBox(width: 12),
-                const Icon(Icons.check, size: 11, color: AppColors.accentGreen),
+                const Icon(Icons.check, size: 11, color: AppColors.success),
                 const SizedBox(width: 4),
                 Text(
                   _formatTs(enviadoTs, prefijo: 'Enviado'),
                   style: const TextStyle(
-                      color: AppColors.accentGreen, fontSize: 10),
+                      color: AppColors.success, fontSize: 10),
                 ),
               ],
             ],
@@ -300,11 +300,11 @@ class _ItemCola extends StatelessWidget {
                 TextButton.icon(
                   onPressed: onReintentar,
                   icon: const Icon(Icons.refresh,
-                      color: AppColors.accentGreen, size: 16),
+                      color: AppColors.success, size: 16),
                   label: const Text(
                     'Reintentar',
                     style: TextStyle(
-                      color: AppColors.accentGreen,
+                      color: AppColors.success,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -339,7 +339,7 @@ class _ItemCola extends StatelessWidget {
       case 'PROCESANDO':
         return AppColors.accentBlue;
       case 'ENVIADO':
-        return AppColors.accentGreen;
+        return AppColors.success;
       case 'ERROR':
         return AppColors.accentRed;
       default:
@@ -599,7 +599,7 @@ class _SeccionTitulo extends StatelessWidget {
   const _SeccionTitulo({
     required this.icono,
     required this.texto,
-    this.color = AppColors.accentGreen,
+    this.color = AppColors.success,
   });
 
   @override
@@ -694,7 +694,7 @@ class _FilaItemAgrupado extends StatelessWidget {
         colorDias = AppColors.accentOrange;
       } else {
         estadoLegible = 'vence en ${d}d';
-        colorDias = d <= 7 ? AppColors.accentOrange : AppColors.accentGreen;
+        colorDias = d <= 7 ? AppColors.accentOrange : AppColors.success;
       }
     } else {
       estadoLegible = '-';

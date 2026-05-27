@@ -403,7 +403,7 @@ class _ViajeTile extends StatelessWidget {
               Text(
                 AppFormatters.formatearMonto(viaje.montoChoferRedondeado),
                 style: const TextStyle(
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
@@ -412,7 +412,7 @@ class _ViajeTile extends StatelessWidget {
               if (viaje.liquidado)
                 const _ChipMini(
                   label: 'LIQUIDADO',
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   icono: Icons.check,
                 ),
               if (!viaje.activo) ...[
@@ -497,7 +497,7 @@ class _ViajeTile extends StatelessWidget {
       case EstadoViaje.enCurso:
         return AppColors.accentAmber;
       case EstadoViaje.concluido:
-        return AppColors.accentGreen;
+        return AppColors.success;
     }
   }
 }

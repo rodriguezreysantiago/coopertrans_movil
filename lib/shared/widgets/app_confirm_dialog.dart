@@ -73,7 +73,7 @@ class AppConfirmDialog {
             if (icon != null) ...[
               Icon(
                 icon,
-                color: destructive ? AppColors.accentRed : AppColors.accentGreen,
+                color: destructive ? AppColors.accentRed : AppColors.success,
                 size: 22,
               ),
               const SizedBox(width: 10),

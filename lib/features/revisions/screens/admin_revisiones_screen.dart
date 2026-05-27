@@ -94,7 +94,7 @@ class _RevisionCard extends StatelessWidget {
     // Color del icono y borde según tipo de solicitud
     final tipoColor = esCambioEquipo
         ? AppColors.accentOrange
-        : (esVehiculo ? AppColors.accentBlue : AppColors.accentGreen);
+        : (esVehiculo ? AppColors.accentBlue : AppColors.success);
     final tipoIcon = esCambioEquipo
         ? Icons.swap_horiz
         : (esVehiculo ? Icons.local_shipping : Icons.person);
@@ -300,7 +300,7 @@ class _DetalleRevision extends StatelessWidget {
         _InfoCard(
           label: 'SOLICITA',
           valor: (data['patente'] ?? 'S/D').toString(),
-          valorColor: AppColors.accentGreen,
+          valorColor: AppColors.success,
           icon: Icons.add_link,
         ),
     ];
@@ -330,7 +330,7 @@ class _DetalleRevision extends StatelessWidget {
       _InfoCard(
         label: 'NUEVO VENCIMIENTO PROPUESTO',
         valor: AppFormatters.formatearFecha(data['fecha_vencimiento']),
-        valorColor: AppColors.accentGreen,
+        valorColor: AppColors.success,
         valorSize: 22,
         icon: Icons.event_note,
       ),
@@ -539,7 +539,7 @@ class _DetalleRevision extends StatelessWidget {
                               color: Colors.white54, fontSize: 12),
                         ),
                         trailing: const Icon(Icons.check_circle,
-                            color: AppColors.accentGreen),
+                            color: AppColors.success),
                         onTap: () => Navigator.pop(ctx, u.id),
                       );
                     },
@@ -722,7 +722,7 @@ class _PreviewArchivo extends StatelessWidget {
                       height: 220,
                       child: Center(
                         child: CircularProgressIndicator(
-                          color: AppColors.accentGreen,
+                          color: AppColors.success,
                         ),
                       ),
                     );

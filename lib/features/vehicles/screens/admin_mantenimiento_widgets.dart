@@ -403,7 +403,7 @@ class _BarraResumen extends StatelessWidget {
           _Chip(
             label: 'OK',
             count: resumen.ok,
-            color: AppColors.accentGreen,
+            color: AppColors.success,
             estado: MantenimientoEstado.ok,
             activo: filtroActivo == MantenimientoEstado.ok,
             onTap: onSeleccionar,

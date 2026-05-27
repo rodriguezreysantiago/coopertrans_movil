@@ -60,7 +60,7 @@ class _SeccionUnidad extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   letterSpacing: 2,
                 ),
               ),
@@ -378,7 +378,7 @@ class _ResumenVencimientosEquipo extends StatelessWidget {
       if (ok > 0)
         _ChipResumen(
           texto: '$ok OK',
-          color: AppColors.accentGreen,
+          color: AppColors.success,
         ),
       if (sinFecha > 0)
         _ChipResumen(
@@ -397,7 +397,7 @@ class _ResumenVencimientosEquipo extends StatelessWidget {
               const Text(
                 'PAPELES DEL EQUIPO',
                 style: TextStyle(
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.2,
@@ -627,7 +627,7 @@ class _DatoCombustible extends StatelessWidget {
   const _DatoCombustible({required this.porcentaje});
 
   Color get _color {
-    if (porcentaje >= 50) return AppColors.accentGreen;
+    if (porcentaje >= 50) return AppColors.success;
     if (porcentaje >= 20) return AppColors.accentOrange;
     return AppColors.accentRed;
   }

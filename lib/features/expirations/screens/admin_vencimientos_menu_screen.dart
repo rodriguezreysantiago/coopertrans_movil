@@ -26,7 +26,7 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.accentGreen,
+                    color: AppColors.success,
                     letterSpacing: 1.5,
                   ),
                 ),
@@ -64,7 +64,7 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
             titulo: 'CALENDARIO MENSUAL',
             subtitulo: 'Vista global con todos los vencimientos por día',
             icono: Icons.event_note,
-            colorIcono: AppColors.accentGreen,
+            colorIcono: AppColors.success,
             ruta: '/vencimientos_calendario',
           ),
           const _MenuTile(

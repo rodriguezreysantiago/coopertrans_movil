@@ -421,7 +421,7 @@ class _CardReglasNotificacion extends StatelessWidget {
         child: Text(
           _etiquetaCategoria(cat),
           style: const TextStyle(
-            color: AppColors.accentGreen,
+            color: AppColors.success,
             fontSize: 10,
             fontWeight: FontWeight.bold,
             letterSpacing: 1.2,
@@ -452,7 +452,7 @@ class _CardReglasNotificacion extends StatelessWidget {
           const Row(
             children: [
               Icon(Icons.rule_folder_outlined,
-                  color: AppColors.accentGreen, size: 18),
+                  color: AppColors.success, size: 18),
               SizedBox(width: 8),
               Text(
                 'Reglas de notificación',
@@ -798,7 +798,7 @@ class _DniResolver extends StatelessWidget {
           texto: texto,
           color: nombre.isEmpty
               ? AppColors.warning
-              : AppColors.accentGreen,
+              : AppColors.success,
         );
       },
     );
@@ -1074,7 +1074,7 @@ class _BloqueDatos extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icono, color: AppColors.accentGreen, size: 18),
+              Icon(icono, color: AppColors.success, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -1435,11 +1435,11 @@ class _BadgePausa extends StatelessWidget {
         TextButton.icon(
           onPressed: () => _confirmarReanudar(context),
           icon: const Icon(Icons.play_arrow,
-              size: 16, color: AppColors.accentGreen),
+              size: 16, color: AppColors.success),
           label: const Text(
             'Reanudar',
             style: TextStyle(
-              color: AppColors.accentGreen,
+              color: AppColors.success,
               fontWeight: FontWeight.bold,
               fontSize: 11,
             ),
@@ -1484,7 +1484,7 @@ class _BadgePausa extends StatelessWidget {
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text(
               'Reanudar',
-              style: TextStyle(color: AppColors.accentGreen),
+              style: TextStyle(color: AppColors.success),
             ),
           ),
         ],

@@ -197,10 +197,10 @@ class _MarkerCubierta extends StatelessWidget {
   }
 
   Color _colorVida(double? pct) {
-    if (pct == null) return AppColors.accentGreen;
+    if (pct == null) return AppColors.success;
     if (pct >= 100) return AppColors.accentRed;
     if (pct >= 80) return AppColors.accentOrange;
-    return AppColors.accentGreen;
+    return AppColors.success;
   }
 }
 

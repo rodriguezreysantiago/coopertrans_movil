@@ -66,7 +66,7 @@ class _ChoferActividadScreenState extends State<ChoferActividadScreen> {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(
-                        color: AppColors.accentGreen),
+                        color: AppColors.success),
                   );
                 }
                 if (snap.hasError) {
@@ -104,7 +104,7 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
       child: Row(
         children: [
-          const Icon(Icons.person, color: AppColors.accentGreen, size: 22),
+          const Icon(Icons.person, color: AppColors.success, size: 22),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -170,7 +170,7 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.accentGreen : Colors.white38;
+    final color = selected ? AppColors.success : Colors.white38;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
@@ -178,7 +178,7 @@ class _Chip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.accentGreen.withAlpha(25)
+              ? AppColors.success.withAlpha(25)
               : Colors.white.withAlpha(8),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: color.withAlpha(80)),
@@ -233,7 +233,7 @@ class _Resumen extends StatelessWidget {
                 label: 'KM RECORRIDOS',
                 valor: _formatearMiles(resumen.kmTotales),
                 unidad: 'km',
-                color: AppColors.accentGreen,
+                color: AppColors.success,
                 icono: Icons.straighten,
               ),
             ),
@@ -428,12 +428,12 @@ class _Titulo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Icon(icono, color: AppColors.accentGreen, size: 16),
+        Icon(icono, color: AppColors.success, size: 16),
         const SizedBox(width: 8),
         Text(
           label,
           style: const TextStyle(
-            color: AppColors.accentGreen,
+            color: AppColors.success,
             fontSize: 11,
             fontWeight: FontWeight.bold,
             letterSpacing: 1.2,
@@ -475,14 +475,14 @@ class _TractorTile extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: AppColors.accentGreen.withAlpha(25),
+                color: AppColors.success.withAlpha(25),
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: AppColors.accentGreen.withAlpha(80)),
+                border: Border.all(color: AppColors.success.withAlpha(80)),
               ),
               child: const Text(
                 'ACTUAL',
                 style: TextStyle(
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   fontSize: 9,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.6,
@@ -545,7 +545,7 @@ class _EventosPorSeveridadCard extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: _SeveridadMini(
-              label: 'LOW', valor: low, color: AppColors.accentGreen),
+              label: 'LOW', valor: low, color: AppColors.success),
         ),
       ],
     );

@@ -341,7 +341,7 @@ class _ItemVisita extends StatelessWidget {
     final km = (visita['km'] as num?)?.toDouble();
     final taller = (visita['taller'] ?? '').toString();
     final ops = (visita['operaciones'] as List?) ?? const [];
-    final color = esService ? AppColors.accentGreen : Colors.white38;
+    final color = esService ? AppColors.success : Colors.white38;
 
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),

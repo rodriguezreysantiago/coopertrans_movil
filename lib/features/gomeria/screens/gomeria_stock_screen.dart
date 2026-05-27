@@ -152,7 +152,7 @@ class _GomeriaStockScreenState extends State<GomeriaStockScreen> {
         content: Text(esLote
             ? '✓ $codigoCreado creadas.'
             : '✓ Cubierta $codigoCreado creada.'),
-        backgroundColor: AppColors.accentGreen,
+        backgroundColor: AppColors.success,
         duration: const Duration(seconds: 3),
       ));
     }
@@ -241,7 +241,7 @@ class _FiltrosEstado extends StatelessWidget {
               label: 'INSTALADAS',
               seleccionado: seleccionado == EstadoCubierta.instalada,
               onTap: () => onChanged(EstadoCubierta.instalada),
-              color: AppColors.accentGreen,
+              color: AppColors.success,
             ),
             const SizedBox(width: 6),
             _ChipFiltro(
@@ -432,7 +432,7 @@ class _CubiertaTile extends StatelessWidget {
       case EstadoCubierta.enDeposito:
         return AppColors.accentBlue;
       case EstadoCubierta.instalada:
-        return AppColors.accentGreen;
+        return AppColors.success;
       case EstadoCubierta.enRecapado:
         return AppColors.accentTeal;
       case EstadoCubierta.descartada:

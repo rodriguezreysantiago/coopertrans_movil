@@ -359,7 +359,7 @@ class _BarraFiltros extends StatelessWidget {
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.white,
               side: BorderSide(
-                color: esHoy ? AppColors.accentGreen : Colors.white38,
+                color: esHoy ? AppColors.success : Colors.white38,
               ),
             ),
           ),
@@ -369,7 +369,7 @@ class _BarraFiltros extends StatelessWidget {
               icon: const Icon(Icons.today_outlined, size: 18),
               label: const Text('Ir a hoy'),
               style: TextButton.styleFrom(
-                  foregroundColor: AppColors.accentGreen),
+                  foregroundColor: AppColors.success),
             ),
           FilterChip(
             label: Text(
@@ -599,8 +599,8 @@ class _AlertaCard extends StatelessWidget {
                   icon: const Icon(Icons.check, size: 16),
                   label: const Text('Marcar atendida'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accentGreen,
-                    side: const BorderSide(color: AppColors.accentGreen),
+                    foregroundColor: AppColors.success,
+                    side: const BorderSide(color: AppColors.success),
                   ),
                 ),
               ),

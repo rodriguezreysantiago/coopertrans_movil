@@ -63,7 +63,7 @@ class DatoEditableTexto extends StatelessWidget {
       trailing: Icon(
         Icons.edit_note,
         size: 22,
-        color: editable ? AppColors.accentGreen : Colors.white24,
+        color: editable ? AppColors.success : Colors.white24,
       ),
       onTap: editable ? () => _mostrarDialogo(context) : null,
     );
@@ -176,7 +176,7 @@ class DatoEditableMiles extends StatelessWidget {
       trailing: Icon(
         Icons.edit_note,
         size: 22,
-        color: editable ? AppColors.accentGreen : Colors.white24,
+        color: editable ? AppColors.success : Colors.white24,
       ),
       onTap: editable ? () => _mostrarDialogo(context) : null,
     );
@@ -271,7 +271,7 @@ class DatoEditableEnum extends StatelessWidget {
       trailing: Icon(
         icono,
         size: 20,
-        color: editable ? AppColors.accentGreen : Colors.white24,
+        color: editable ? AppColors.success : Colors.white24,
       ),
       onTap: editable ? () => _mostrarSelector(context) : null,
     );
@@ -295,7 +295,7 @@ class DatoEditableEnum extends StatelessWidget {
                       ? Icons.radio_button_checked
                       : Icons.radio_button_off,
                   color:
-                      esActual ? AppColors.accentGreen : Colors.white38,
+                      esActual ? AppColors.success : Colors.white38,
                   size: 18,
                 ),
                 title: Text(
@@ -363,7 +363,7 @@ class DatoEditableEnumExtensible extends StatelessWidget {
       trailing: Icon(
         icono,
         size: 20,
-        color: editable ? AppColors.accentGreen : Colors.white24,
+        color: editable ? AppColors.success : Colors.white24,
       ),
       onTap: editable ? () => _mostrarSelector(context) : null,
     );
@@ -389,7 +389,7 @@ class DatoEditableEnumExtensible extends StatelessWidget {
                           ? Icons.radio_button_checked
                           : Icons.radio_button_off,
                       color: esActual
-                          ? AppColors.accentGreen
+                          ? AppColors.success
                           : Colors.white38,
                       size: 18,
                     ),
@@ -408,12 +408,12 @@ class DatoEditableEnumExtensible extends StatelessWidget {
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   leading: const Icon(Icons.add_circle_outline,
-                      color: AppColors.accentGreen, size: 18),
+                      color: AppColors.success, size: 18),
                   title: const Text(
                     'Otro... (escribir nuevo)',
                     style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.accentGreen,
+                      color: AppColors.success,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

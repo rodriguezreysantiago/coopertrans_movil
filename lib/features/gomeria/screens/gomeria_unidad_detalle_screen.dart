@@ -219,13 +219,13 @@ class _Cabecera extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: (completo
-                          ? AppColors.accentGreen
+                          ? AppColors.success
                           : AppColors.accentOrange)
                       .withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: completo
-                        ? AppColors.accentGreen
+                        ? AppColors.success
                         : AppColors.accentOrange,
                   ),
                 ),
@@ -233,7 +233,7 @@ class _Cabecera extends StatelessWidget {
                   '$cantInstaladas / $cantPosiciones',
                   style: TextStyle(
                     color: completo
-                        ? AppColors.accentGreen
+                        ? AppColors.success
                         : AppColors.accentOrange,
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
@@ -420,7 +420,7 @@ class _InstalarCubiertaDialogState extends State<_InstalarCubiertaDialog> {
         ElevatedButton(
           onPressed: _guardando ? null : _guardar,
           style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentGreen),
+              backgroundColor: AppColors.success),
           child: _guardando
               ? const SizedBox(
                   width: 18, height: 18, child: CircularProgressIndicator())
@@ -519,7 +519,7 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                   Row(
                     children: [
                       const Icon(Icons.tire_repair,
-                          color: AppColors.accentGreen),
+                          color: AppColors.success),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -922,7 +922,7 @@ class _SelectorPosicionDestinoDialog extends StatelessWidget {
   Widget _opcion(BuildContext context, PosicionCubierta p,
       CubiertaInstalada? actual) {
     final ocupada = actual != null;
-    final color = ocupada ? AppColors.accentTeal : AppColors.accentGreen;
+    final color = ocupada ? AppColors.accentTeal : AppColors.success;
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: InkWell(
@@ -989,7 +989,7 @@ class _BarraVida extends StatelessWidget {
         ? AppColors.accentRed
         : porcentaje >= 80
             ? AppColors.accentOrange
-            : AppColors.accentGreen;
+            : AppColors.success;
     final etiqueta = porcentaje >= 100
         ? 'Pasó la vida estimada'
         : porcentaje >= 80

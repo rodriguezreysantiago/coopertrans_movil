@@ -197,7 +197,7 @@ class _Identidad extends StatelessWidget {
                   c.kmAcumulados > 0)
                 _Pill(
                   '\$${AppFormatters.formatearMonto(c.precioCompra! / c.kmAcumulados)} / km',
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                 ),
             ],
           ),
@@ -229,7 +229,7 @@ class _Identidad extends StatelessWidget {
       case EstadoCubierta.enDeposito:
         return AppColors.accentBlue;
       case EstadoCubierta.instalada:
-        return AppColors.accentGreen;
+        return AppColors.success;
       case EstadoCubierta.enRecapado:
         return AppColors.accentTeal;
       case EstadoCubierta.descartada:
@@ -258,7 +258,7 @@ class _InstalacionTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: i.esActiva
-              ? AppColors.accentGreen
+              ? AppColors.success
               : Colors.white.withValues(alpha: 0.08),
         ),
       ),
@@ -271,7 +271,7 @@ class _InstalacionTile extends StatelessWidget {
                 i.esActiva ? Icons.bolt : Icons.history,
                 size: 16,
                 color: i.esActiva
-                    ? AppColors.accentGreen
+                    ? AppColors.success
                     : Colors.white60,
               ),
               const SizedBox(width: 6),
@@ -286,7 +286,7 @@ class _InstalacionTile extends StatelessWidget {
                 ),
               ),
               if (i.esActiva)
-                const _Pill('ACTIVA', color: AppColors.accentGreen),
+                const _Pill('ACTIVA', color: AppColors.success),
             ],
           ),
           const SizedBox(height: 4),
@@ -349,7 +349,7 @@ class _RecapadoTile extends StatelessWidget {
     final color = !cerrado
         ? AppColors.accentTeal
         : r.resultado == ResultadoRecapado.recibida
-            ? AppColors.accentGreen
+            ? AppColors.success
             : AppColors.accentRed;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),

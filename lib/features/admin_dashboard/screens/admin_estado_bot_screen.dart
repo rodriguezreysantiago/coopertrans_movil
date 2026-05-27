@@ -100,7 +100,7 @@ class _AdminEstadoBotScreenState extends State<AdminEstadoBotScreen> {
           }
           if (!snap.hasData) {
             return const Center(
-              child: CircularProgressIndicator(color: AppColors.accentGreen),
+              child: CircularProgressIndicator(color: AppColors.success),
             );
           }
           if (!snap.data!.exists) {

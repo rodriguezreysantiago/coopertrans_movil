@@ -326,7 +326,7 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
           borderRadius:
               const BorderRadius.vertical(top: Radius.circular(20)),
           border: const Border(
-              top: BorderSide(color: AppColors.accentGreen, width: 2)),
+              top: BorderSide(color: AppColors.success, width: 2)),
         ),
         child: SafeArea(
           child: Column(
@@ -345,7 +345,7 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
               ),
               ListTile(
                 leading:
-                    const Icon(Icons.camera_alt, color: AppColors.accentGreen),
+                    const Icon(Icons.camera_alt, color: AppColors.success),
                 title: const Text('Tomar foto',
                     style: TextStyle(color: Colors.white)),
                 onTap: () => Navigator.pop(ctx, _FuenteArchivo.camera),

@@ -551,7 +551,7 @@ class _RoleSelector extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(_icono(r), size: 18, color: AppColors.accentGreen),
+              Icon(_icono(r), size: 18, color: AppColors.success),
               const SizedBox(width: 10),
               Flexible(
                 child: Text(
@@ -570,7 +570,7 @@ class _RoleSelector extends StatelessWidget {
           value: r,
           child: Row(
             children: [
-              Icon(_icono(r), size: 18, color: AppColors.accentGreen),
+              Icon(_icono(r), size: 18, color: AppColors.success),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(

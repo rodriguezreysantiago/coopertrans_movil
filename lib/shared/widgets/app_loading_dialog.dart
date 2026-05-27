@@ -59,7 +59,7 @@ class AppLoadingDialog {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const CircularProgressIndicator(color: AppColors.accentGreen),
+                const CircularProgressIndicator(color: AppColors.success),
                 if (mensaje != null) ...[
                   const SizedBox(height: 16),
                   Text(

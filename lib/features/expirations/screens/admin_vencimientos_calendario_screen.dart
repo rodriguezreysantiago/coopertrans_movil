@@ -154,7 +154,7 @@ class _AdminVencimientosCalendarioScreenState
     }
     if (minDias <= 7) return AppColors.accentRed;
     if (minDias <= 30) return AppColors.accentOrange;
-    return AppColors.accentGreen;
+    return AppColors.success;
   }
 
   @override
@@ -233,15 +233,15 @@ class _AdminVencimientosCalendarioScreenState
               weekendTextStyle:
                   const TextStyle(color: Colors.white54),
               todayDecoration: BoxDecoration(
-                color: AppColors.accentGreen.withAlpha(60),
+                color: AppColors.success.withAlpha(60),
                 shape: BoxShape.circle,
               ),
               todayTextStyle: const TextStyle(
-                color: AppColors.accentGreen,
+                color: AppColors.success,
                 fontWeight: FontWeight.bold,
               ),
               selectedDecoration: const BoxDecoration(
-                color: AppColors.accentGreen,
+                color: AppColors.success,
                 shape: BoxShape.circle,
               ),
               selectedTextStyle: const TextStyle(
@@ -258,13 +258,13 @@ class _AdminVencimientosCalendarioScreenState
                 fontWeight: FontWeight.bold,
               ),
               leftChevronIcon:
-                  Icon(Icons.chevron_left, color: AppColors.accentGreen),
+                  Icon(Icons.chevron_left, color: AppColors.success),
               rightChevronIcon:
-                  Icon(Icons.chevron_right, color: AppColors.accentGreen),
+                  Icon(Icons.chevron_right, color: AppColors.success),
             ),
             daysOfWeekStyle: const DaysOfWeekStyle(
               weekdayStyle: TextStyle(
-                color: AppColors.accentGreen,
+                color: AppColors.success,
                 fontWeight: FontWeight.bold,
                 fontSize: 11,
               ),

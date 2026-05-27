@@ -141,7 +141,7 @@ class EventoVolvoDetalleSheet extends StatelessWidget {
                     icon: const Icon(Icons.check, size: 16),
                     label: const Text('Marcar atendida'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accentGreen.withAlpha(180),
+                      backgroundColor: AppColors.success.withAlpha(180),
                       foregroundColor: Colors.black,
                     ),
                   ),
@@ -312,7 +312,7 @@ Color _colorSeveridad(String severidad) {
     case 'MEDIUM':
       return AppColors.accentOrange;
     case 'LOW':
-      return AppColors.accentGreen;
+      return AppColors.success;
     default:
       return Colors.white54;
   }

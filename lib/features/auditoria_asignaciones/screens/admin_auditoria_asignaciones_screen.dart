@@ -414,7 +414,7 @@ class _Resumen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Row(
         children: [
-          _ChipResumen(label: 'OK', valor: ok, color: AppColors.accentGreen),
+          _ChipResumen(label: 'OK', valor: ok, color: AppColors.success),
           const SizedBox(width: 10),
           _ChipResumen(
               label: 'DNI distinto', valor: dni, color: AppColors.accentRed),
@@ -478,7 +478,7 @@ class _FilaCruce extends StatelessWidget {
   Color get _color {
     switch (estado) {
       case _Estado.ok:
-        return AppColors.accentGreen;
+        return AppColors.success;
       case _Estado.dniDistinto:
         return AppColors.accentRed;
       case _Estado.sinAsignacion:
@@ -577,7 +577,7 @@ class _FilaCruce extends StatelessWidget {
               _LineaActor(
                 label: 'Sistema',
                 labelColor: estado == _Estado.ok
-                    ? AppColors.accentGreen
+                    ? AppColors.success
                     : AppColors.accentRed,
                 nombre: (asignacion!.choferNombre ?? '').isNotEmpty
                     ? asignacion!.choferNombre!

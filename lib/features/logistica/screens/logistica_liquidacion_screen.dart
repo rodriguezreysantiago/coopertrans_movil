@@ -434,7 +434,7 @@ class _ChipFiltro extends StatelessWidget {
         fontSize: 12,
         fontWeight: FontWeight.w600,
       ),
-      selectedColor: AppColors.accentGreen,
+      selectedColor: AppColors.success,
       backgroundColor: AppColors.background,
     );
   }
@@ -511,7 +511,7 @@ class _Contenido extends StatelessWidget {
             label: Text(
                 'MARCAR ${viajes.where((v) => !v.liquidado).length} VIAJE(S) COMO LIQUIDADOS'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentGreen,
+              backgroundColor: AppColors.success,
               foregroundColor: Colors.black,
               padding: const EdgeInsets.symmetric(vertical: 14),
               textStyle: const TextStyle(
@@ -587,7 +587,7 @@ class _SeccionKPIs extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.account_balance_wallet,
-                  size: 20, color: AppColors.accentGreen),
+                  size: 20, color: AppColors.success),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -630,7 +630,7 @@ class _SeccionKPIs extends StatelessWidget {
             label: 'NETO a pagar al chofer',
             valor: netoChofer,
             color:
-                netoChofer >= 0 ? AppColors.accentGreen : AppColors.accentRed,
+                netoChofer >= 0 ? AppColors.success : AppColors.accentRed,
             destacado: true,
           ),
         ],
@@ -860,7 +860,7 @@ class _MiniCelda extends StatelessWidget {
             style: TextStyle(
               color: destacado
                   ? (valor >= 0
-                      ? AppColors.accentGreen
+                      ? AppColors.success
                       : AppColors.accentRed)
                   : Colors.white,
               fontSize: destacado ? 13 : 12,
@@ -1038,7 +1038,7 @@ class _ViajeCardLiquidacionState extends State<_ViajeCardLiquidacion> {
               ),
               if (v.liquidado)
                 const Icon(Icons.check_circle,
-                    size: 14, color: AppColors.accentGreen)
+                    size: 14, color: AppColors.success)
               else
                 const Icon(Icons.schedule,
                     size: 14, color: AppColors.accentOrange),

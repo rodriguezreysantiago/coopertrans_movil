@@ -172,7 +172,7 @@ class _ZonaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = zona.activo ? AppColors.accentGreen : Colors.white24;
+    final color = zona.activo ? AppColors.success : Colors.white24;
     return AppCard(
       onTap: () =>
           AdminZonasDescargaScreen._abrirForm(context, zona),

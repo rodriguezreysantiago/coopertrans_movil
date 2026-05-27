@@ -60,7 +60,7 @@ class _EmpleadoCard extends StatelessWidget {
                               TextSpan(
                                 text: '  ($apodo)',
                                 style: const TextStyle(
-                                  color: AppColors.accentGreen,
+                                  color: AppColors.success,
                                   fontWeight: FontWeight.w500,
                                   fontSize: 12,
                                 ),
@@ -554,11 +554,11 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
                 nombreVisible: nombre,
               ),
               icon: const Icon(Icons.unarchive_outlined,
-                  color: AppColors.accentGreen),
+                  color: AppColors.success),
               label: const Text(
                 'Reactivar',
                 style: TextStyle(
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -631,7 +631,7 @@ class _HeaderDetalle extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: const BoxDecoration(
-                    color: AppColors.accentGreen,
+                    color: AppColors.success,
                     shape: BoxShape.circle,
                   ),
                   child:
@@ -670,12 +670,12 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(top: 16, bottom: 10),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.accentGreen, size: 16),
+          Icon(icon, color: AppColors.success, size: 16),
           const SizedBox(width: 8),
           Text(
             label.toUpperCase(),
             style: const TextStyle(
-              color: AppColors.accentGreen,
+              color: AppColors.success,
               fontSize: 11,
               fontWeight: FontWeight.bold,
               letterSpacing: 1.2,
@@ -725,7 +725,7 @@ class _DatoEditableTexto extends StatelessWidget {
         ),
       ),
       trailing:
-          const Icon(Icons.edit_note, size: 22, color: AppColors.accentGreen),
+          const Icon(Icons.edit_note, size: 22, color: AppColors.success),
       onTap: () => _mostrarDialogo(context),
     );
   }
@@ -832,7 +832,7 @@ class _DatoEditableEmpresa extends StatelessWidget {
         style: const TextStyle(fontSize: 12, color: Colors.white),
       ),
       trailing: const Icon(Icons.business_center,
-          size: 20, color: AppColors.accentGreen),
+          size: 20, color: AppColors.success),
       onTap: () => _mostrarSelector(context),
     );
   }
@@ -908,7 +908,7 @@ class _DatoEditableEnum extends StatelessWidget {
         size: 20,
         // Atenuamos el icono cuando no es editable para que se note
         // visualmente que el dato es solo-lectura.
-        color: editable ? AppColors.accentGreen : Colors.white24,
+        color: editable ? AppColors.success : Colors.white24,
       ),
       onTap: editable ? () => _mostrarSelector(context) : null,
     );
@@ -927,7 +927,7 @@ class _DatoEditableEnum extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               leading: Icon(
                 esActual ? Icons.radio_button_checked : Icons.radio_button_off,
-                color: esActual ? AppColors.accentGreen : Colors.white38,
+                color: esActual ? AppColors.success : Colors.white38,
                 size: 18,
               ),
               title: Text(
@@ -1046,7 +1046,7 @@ class _AsignacionUnidad extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       leading: Icon(
         campo == 'VEHICULO' ? Icons.local_shipping : Icons.link,
-        color: tieneAsignacion ? AppColors.accentGreen : Colors.white24,
+        color: tieneAsignacion ? AppColors.success : Colors.white24,
       ),
       title: Text(
         '$label: ${tieneAsignacion ? actual : "—"}',
@@ -1055,7 +1055,7 @@ class _AsignacionUnidad extends StatelessWidget {
         style: const TextStyle(color: Colors.white, fontSize: 14),
       ),
       trailing:
-          const Icon(Icons.sync_alt, size: 20, color: AppColors.accentGreen),
+          const Icon(Icons.sync_alt, size: 20, color: AppColors.success),
       onTap: () => EmpleadoActions.unidad(context, dni, campo, actual),
     );
   }

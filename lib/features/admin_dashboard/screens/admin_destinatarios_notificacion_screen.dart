@@ -179,7 +179,7 @@ class _GrupoReglas {
 const _reglas = <_GrupoReglas>[
   _GrupoReglas(
     label: 'RESÚMENES DIARIOS 08:00 ART (CLOUD FUNCTIONS)',
-    color: AppColors.accentGreen,
+    color: AppColors.success,
     reglas: [
       _Regla(
         key: 'mantenimientoBot',

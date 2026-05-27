@@ -286,7 +286,7 @@ class _ItemTarifaPicker extends StatelessWidget {
               const Padding(
                 padding: EdgeInsets.only(left: 8),
                 child: Icon(Icons.check_circle,
-                    color: AppColors.accentGreen, size: 20),
+                    color: AppColors.success, size: 20),
               ),
           ],
         ),

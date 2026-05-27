@@ -22,7 +22,7 @@ extension MantenimientoEstadoX on MantenimientoEstado {
         // pero conviene tenerlo en el radar".
         return const Color(0xFFC6FF00);
       case MantenimientoEstado.ok:
-        return AppColors.accentGreen;
+        return AppColors.success;
       case MantenimientoEstado.sinDato:
         return Colors.white24;
     }

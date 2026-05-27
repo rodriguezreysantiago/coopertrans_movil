@@ -195,7 +195,7 @@ class _PaletteDialogState extends State<_PaletteDialog> {
                 decoration: InputDecoration(
                   hintText: 'Buscar chofer, vehículo o trámite…',
                   prefixIcon: const Icon(Icons.search,
-                      color: AppColors.accentGreen),
+                      color: AppColors.success),
                   filled: true,
                   fillColor: Colors.black.withAlpha(80),
                   border: OutlineInputBorder(
@@ -215,7 +215,7 @@ class _PaletteDialogState extends State<_PaletteDialog> {
               child: _items == null && _loadError == null
                   ? const Center(
                       child: CircularProgressIndicator(
-                          color: AppColors.accentGreen))
+                          color: AppColors.success))
                   : _loadError != null
                       ? Center(
                           child: Padding(
@@ -272,7 +272,7 @@ class _PaletteDialogState extends State<_PaletteDialog> {
                   Text(
                     '${filtrados.length} resultado${filtrados.length == 1 ? '' : 's'}',
                     style: const TextStyle(
-                      color: AppColors.accentGreen,
+                      color: AppColors.success,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -297,7 +297,7 @@ class _ItemTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      leading: Icon(item.icon, color: AppColors.accentGreen, size: 20),
+      leading: Icon(item.icon, color: AppColors.success, size: 20),
       title: Text(
         item.titulo,
         style: const TextStyle(

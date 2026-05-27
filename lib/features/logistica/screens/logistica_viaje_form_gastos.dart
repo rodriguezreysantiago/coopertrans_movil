@@ -151,7 +151,7 @@ class _SeccionGastos extends StatelessWidget {
             child: Row(
               children: [
                 const Icon(Icons.add_circle_outline,
-                    size: 16, color: AppColors.accentGreen),
+                    size: 16, color: AppColors.success),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -164,7 +164,7 @@ class _SeccionGastos extends StatelessWidget {
                 Text(
                   '\$${AppFormatters.formatearMonto(g.monto)}',
                   style: const TextStyle(
-                    color: AppColors.accentGreen,
+                    color: AppColors.success,
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
                   ),
@@ -211,7 +211,7 @@ class _SeccionGastos extends StatelessWidget {
             Text(
               '\$${AppFormatters.formatearMonto(total)}',
               style: const TextStyle(
-                color: AppColors.accentGreen,
+                color: AppColors.success,
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
               ),

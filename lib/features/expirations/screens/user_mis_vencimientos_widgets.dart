@@ -22,7 +22,7 @@ class _SectionHeader extends StatelessWidget {
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.bold,
-          color: AppColors.accentGreen,
+          color: AppColors.success,
           letterSpacing: 2,
         ),
       ),
@@ -369,7 +369,7 @@ class _DetalleEquipo extends StatelessWidget {
                 child: Text(
                   '$tipo: $patente',
                   style: const TextStyle(
-                    color: AppColors.accentGreen,
+                    color: AppColors.success,
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1.5,
@@ -460,7 +460,7 @@ class _AccesoChecklist extends StatelessWidget {
         // estados decían "Control" o solo "Pendiente" y el chofer no
         // sabía a qué refería.
         if (completado) {
-          color = AppColors.accentGreen;
+          color = AppColors.success;
           // .toLocal() defensivo: Timestamp.toDate() en Dart suele
           // devolver local pero no esta garantizado en todos los runtimes.
           // Sin esto, format en zonas UTC podria mostrar dia anterior.
@@ -593,12 +593,12 @@ class _BotonDetectarFechaState extends State<_BotonDetectarFecha> {
       child: TextButton.icon(
         onPressed: _procesando ? null : _capturar,
         style: TextButton.styleFrom(
-          backgroundColor: AppColors.accentGreen.withAlpha(20),
-          foregroundColor: AppColors.accentGreen,
+          backgroundColor: AppColors.success.withAlpha(20),
+          foregroundColor: AppColors.success,
           padding: const EdgeInsets.symmetric(vertical: 10),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: AppColors.accentGreen.withAlpha(80)),
+            side: BorderSide(color: AppColors.success.withAlpha(80)),
           ),
         ),
         icon: _procesando
@@ -607,7 +607,7 @@ class _BotonDetectarFechaState extends State<_BotonDetectarFecha> {
                 height: 14,
                 child: CircularProgressIndicator(
                   strokeWidth: 2,
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                 ),
               )
             : const Icon(Icons.document_scanner_outlined, size: 18),

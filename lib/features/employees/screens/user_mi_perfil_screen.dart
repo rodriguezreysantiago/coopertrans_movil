@@ -245,7 +245,7 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
           borderRadius:
               const BorderRadius.vertical(top: Radius.circular(25)),
           border: const Border(
-              top: BorderSide(color: AppColors.accentGreen, width: 2)),
+              top: BorderSide(color: AppColors.success, width: 2)),
         ),
         child: SafeArea(
           child: Wrap(children: [
@@ -262,7 +262,7 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
             ),
             ListTile(
               leading:
-                  const Icon(Icons.camera_alt, color: AppColors.accentGreen),
+                  const Icon(Icons.camera_alt, color: AppColors.success),
               title: const Text('Tomar foto con la cámara',
                   style: TextStyle(color: Colors.white)),
               onTap: () {
@@ -272,7 +272,7 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.photo_library,
-                  color: AppColors.accentGreen),
+                  color: AppColors.success),
               title: const Text('Elegir de la galería',
                   style: TextStyle(color: Colors.white)),
               onTap: () {
@@ -449,7 +449,7 @@ class _Header extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppColors.accentGreen,
+                      color: AppColors.success,
                       shape: BoxShape.circle,
                       border: Border.all(
                         color: Theme.of(context).colorScheme.surface,
@@ -482,7 +482,7 @@ class _Header extends StatelessWidget {
         const Text(
           'CHOFER PROFESIONAL',
           style: TextStyle(
-            color: AppColors.accentGreen,
+            color: AppColors.success,
             fontSize: 11,
             fontWeight: FontWeight.bold,
             letterSpacing: 2,
@@ -537,7 +537,7 @@ class _DatoEquipo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Icon(icono, color: AppColors.accentGreen, size: 30),
+        Icon(icono, color: AppColors.success, size: 30),
         const SizedBox(height: 8),
         Text(
           label,
@@ -574,7 +574,7 @@ class _SectionTitle extends StatelessWidget {
       child: Text(
         label.toUpperCase(),
         style: const TextStyle(
-          color: AppColors.accentGreen,
+          color: AppColors.success,
           fontSize: 11,
           fontWeight: FontWeight.bold,
           letterSpacing: 1.5,
@@ -777,7 +777,7 @@ class _InfoTileEditable extends StatelessWidget {
       ),
       trailing: const Icon(
         Icons.edit_note,
-        color: AppColors.accentGreen,
+        color: AppColors.success,
         size: 22,
       ),
       dense: true,

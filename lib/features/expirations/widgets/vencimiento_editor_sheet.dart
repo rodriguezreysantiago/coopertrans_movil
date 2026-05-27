@@ -156,7 +156,7 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
         color: Theme.of(context).colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(25)),
         border: const Border(
-          top: BorderSide(color: AppColors.accentGreen, width: 2),
+          top: BorderSide(color: AppColors.success, width: 2),
         ),
       ),
       child: Column(
@@ -185,7 +185,7 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
           Text(
             widget.item.titulo,
             style: const TextStyle(
-              color: AppColors.accentGreen,
+              color: AppColors.success,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -207,7 +207,7 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
               ),
             ),
             trailing: const Icon(Icons.event_note,
-                color: AppColors.accentGreen, size: 28),
+                color: AppColors.success, size: 28),
             onTap: _seleccionarFecha,
           ),
 
@@ -225,7 +225,7 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
                 border: Border.all(
                   color: _archivoBytes == null
                       ? Colors.white10
-                      : AppColors.accentGreen,
+                      : AppColors.success,
                 ),
               ),
               child: Row(
@@ -236,7 +236,7 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
                         : Icons.check_circle,
                     color: _archivoBytes == null
                         ? Colors.white38
-                        : AppColors.accentGreen,
+                        : AppColors.success,
                     size: 28,
                   ),
                   const SizedBox(width: 15),
@@ -248,7 +248,7 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
                       style: TextStyle(
                         color: _archivoBytes == null
                             ? Colors.white54
-                            : AppColors.accentGreen,
+                            : AppColors.success,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
@@ -256,7 +256,7 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
                   ),
                   if (_archivoBytes == null)
                     const Icon(Icons.add_a_photo_outlined,
-                        color: AppColors.accentGreen, size: 20),
+                        color: AppColors.success, size: 20),
                 ],
               ),
             ),
@@ -268,7 +268,7 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
           if (_subiendo)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 14),
-              child: CircularProgressIndicator(color: AppColors.accentGreen),
+              child: CircularProgressIndicator(color: AppColors.success),
             )
           else
             Row(

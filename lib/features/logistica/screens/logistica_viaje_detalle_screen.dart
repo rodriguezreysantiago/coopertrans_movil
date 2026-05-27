@@ -131,7 +131,7 @@ class _Cabecera extends StatelessWidget {
                 const SizedBox(width: 6),
                 const _Chip(
                   label: 'LIQUIDADO',
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   icono: Icons.check,
                 ),
               ],
@@ -503,7 +503,7 @@ class _SeccionMontos extends StatelessWidget {
     return _Seccion(
       titulo: 'MONTOS Y LIQUIDACIÓN',
       icono: Icons.calculate_outlined,
-      iconColor: AppColors.accentGreen,
+      iconColor: AppColors.success,
       children: [
         _Linea(
           label: 'Monto Vecchi (factura)',
@@ -936,7 +936,7 @@ class _Linea extends StatelessWidget {
               valor,
               style: TextStyle(
                 color: highlight
-                    ? AppColors.accentGreen
+                    ? AppColors.success
                     : (sub ? Colors.white54 : Colors.white),
                 fontSize: highlight ? 16 : (sub ? 13 : 14),
                 fontWeight:
@@ -1018,7 +1018,7 @@ class _ChipEstado extends StatelessWidget {
     final color = switch (estado) {
       EstadoViaje.planeado => AppColors.accentBlue,
       EstadoViaje.enCurso => AppColors.accentAmber,
-      EstadoViaje.concluido => AppColors.accentGreen,
+      EstadoViaje.concluido => AppColors.success,
     };
     return _Chip(label: estado.etiqueta.toUpperCase(), color: color);
   }

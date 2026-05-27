@@ -90,7 +90,7 @@ class _LineaResumen extends StatelessWidget {
           Text(
             valor,
             style: TextStyle(
-              color: destacado ? AppColors.accentGreen : Colors.white,
+              color: destacado ? AppColors.success : Colors.white,
               fontSize: destacado ? 16 : 14,
               fontWeight: destacado ? FontWeight.bold : FontWeight.normal,
             ),
@@ -342,7 +342,7 @@ class _SeccionChoferState extends State<_SeccionChofer> {
                                         : Icons.person_outline,
                                     size: 16,
                                     color: esActual
-                                        ? AppColors.accentGreen
+                                        ? AppColors.success
                                         : Colors.white54,
                                   ),
                                   const SizedBox(width: 10),

@@ -397,7 +397,7 @@ class _TramoCard extends StatelessWidget {
           const SizedBox(height: 4),
           const Text(
             '✓ Comprobante ya cargado.',
-            style: TextStyle(color: AppColors.accentGreen, fontSize: 11),
+            style: TextStyle(color: AppColors.success, fontSize: 11),
           ),
         ],
         if (esTn) ...[

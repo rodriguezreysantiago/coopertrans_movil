@@ -72,7 +72,7 @@ class _BotStatusCard extends StatelessWidget {
         final vivo = e.vivo;
         final color = !vivo
             ? AppColors.accentRed
-            : (e.pausado ? AppColors.accentAmber : AppColors.accentGreen);
+            : (e.pausado ? AppColors.accentAmber : AppColors.success);
         final titulo = !vivo
             ? 'Bot sin responder'
             : (e.pausado ? 'Bot pausado' : 'Bot activo');
@@ -137,7 +137,7 @@ class _MasterSwitch extends StatelessWidget {
           child: SwitchListTile(
             contentPadding: EdgeInsets.zero,
             value: cfg.activo,
-            activeThumbColor: AppColors.accentGreen,
+            activeThumbColor: AppColors.success,
             title: const Text('Bot encendido',
                 style: TextStyle(
                     color: Colors.white,
@@ -317,7 +317,7 @@ class _VigiladoCard extends StatelessWidget {
                     o.activo
                         ? Icons.pause_circle_outline
                         : Icons.play_circle_outline,
-                    color: o.activo ? Colors.white54 : AppColors.accentGreen,
+                    color: o.activo ? Colors.white54 : AppColors.success,
                   ),
                   onPressed: () =>
                       CachatoreService.setObjetivoActivo(o.dni, !o.activo),
@@ -444,7 +444,7 @@ class _ConcretadoCard extends StatelessWidget {
         ? t.cuando!
         : 'Turno${t.hora != null ? ' ${t.hora}' : ''}';
     final reag = _reagendarPendiente;
-    final acento = reag ? AppColors.accentAmber : AppColors.accentGreen;
+    final acento = reag ? AppColors.accentAmber : AppColors.success;
     return AppCard(
       onTap: () => _abrirMenu(context),
       borderColor: reag ? AppColors.accentAmber.withValues(alpha: 0.55) : null,
@@ -472,7 +472,7 @@ class _ConcretadoCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                      color: reag ? Colors.white54 : AppColors.accentGreen,
+                      color: reag ? Colors.white54 : AppColors.success,
                       fontSize: 12),
                 ),
                 if (reag) ...[
@@ -656,7 +656,7 @@ class _EstadoBadge extends StatelessWidget {
     final est = objetivo.estado;
     final Color color;
     if (est.esOk) {
-      color = AppColors.accentGreen;
+      color = AppColors.success;
     } else if (est.esError) {
       color = AppColors.accentRed;
     } else if (est.esWarn) {
@@ -846,7 +846,7 @@ class _WizardSheetState extends State<_WizardSheet> {
             ? res.detalle!
             : 'un turno preexistente';
         messenger.showSnackBar(SnackBar(
-          backgroundColor: AppColors.accentGreen,
+          backgroundColor: AppColors.success,
           content: Text('$nombre ya tenía $cuando. '
               'Lo dejé en "Turnos concretados".'),
           duration: const Duration(seconds: 5),

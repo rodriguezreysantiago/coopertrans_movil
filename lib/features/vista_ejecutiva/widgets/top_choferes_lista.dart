@@ -100,7 +100,7 @@ class _ChoferRow extends StatelessWidget {
   Color get _colorBadge {
     switch (chofer.categoria) {
       case 'verde':
-        return AppColors.accentGreen;
+        return AppColors.success;
       case 'amarillo':
         return AppColors.accentAmber;
       case 'rojo':

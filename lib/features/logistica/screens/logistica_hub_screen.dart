@@ -89,13 +89,13 @@ class LogisticaHubScreen extends StatelessWidget {
                       titulo: 'TARIFAS',
                       subtitulo: 'Rutas con precio',
                       icono: Icons.price_change_outlined,
-                      color: AppColors.accentGreen,
+                      color: AppColors.success,
                       ruta: AppRoutes.adminLogisticaTarifas,
                       contador: _StreamCount(
                         coleccion:
                             LogisticaService.tarifasCol,
                         soloActivas: true,
-                        color: AppColors.accentGreen,
+                        color: AppColors.success,
                       ),
                     ),
                     _HubTile(
@@ -164,7 +164,7 @@ class LogisticaHubScreen extends StatelessWidget {
                       titulo: 'LIQUIDACIÓN',
                       subtitulo: 'Resumen mensual + facturación',
                       icono: Icons.account_balance_wallet_outlined,
-                      color: AppColors.accentGreen,
+                      color: AppColors.success,
                       ruta: AppRoutes.adminLogisticaLiquidacion,
                     ),
                   ],
@@ -189,14 +189,14 @@ class _BannerInfo extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.accentGreen.withValues(alpha: 0.1),
+        color: AppColors.success.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.4)),
+        border: Border.all(color: AppColors.success.withValues(alpha: 0.4)),
       ),
       child: const Row(
         children: [
           Icon(Icons.info_outline,
-              color: AppColors.accentGreen, size: 26),
+              color: AppColors.success, size: 26),
           SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -205,7 +205,7 @@ class _BannerInfo extends StatelessWidget {
                 Text(
                   'BASE DEL FUTURO PLANEAMIENTO DE VIAJES',
                   style: TextStyle(
-                    color: AppColors.accentGreen,
+                    color: AppColors.success,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1.2,

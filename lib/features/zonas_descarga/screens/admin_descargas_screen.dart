@@ -443,12 +443,12 @@ class _ColaEnVivo extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.queue, color: AppColors.accentGreen, size: 18),
+            const Icon(Icons.queue, color: AppColors.success, size: 18),
             const SizedBox(width: 6),
             Text(
               'COLA EN VIVO — ${zona.nombre.toUpperCase()}',
               style: const TextStyle(
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.5,
                   fontSize: 12),
@@ -709,7 +709,7 @@ class _FilaHistorico extends StatelessWidget {
     final salida = (data['salida_ts'] as Timestamp?)?.toDate();
     final colorDur = dur > 90
         ? AppColors.accentRed
-        : (dur > 60 ? AppColors.accentAmber : AppColors.accentGreen);
+        : (dur > 60 ? AppColors.accentAmber : AppColors.success);
     return Card(
       elevation: 0,
       margin: const EdgeInsets.symmetric(vertical: 2),

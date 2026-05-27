@@ -30,7 +30,7 @@ class AsignacionHistorialVehiculoScreen extends StatelessWidget {
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: AppColors.accentGreen),
+              child: CircularProgressIndicator(color: AppColors.success),
             );
           }
           if (snap.hasError) {
@@ -76,7 +76,7 @@ class _AsignacionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activa = asignacion.esActiva;
-    final color = activa ? AppColors.accentGreen : Colors.white38;
+    final color = activa ? AppColors.success : Colors.white38;
     final dias = asignacion.diasDuracion();
 
     return AppCard(
@@ -111,15 +111,15 @@ class _AsignacionCard extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: AppColors.accentGreen.withAlpha(30),
+                    color: AppColors.success.withAlpha(30),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                        color: AppColors.accentGreen.withAlpha(80)),
+                        color: AppColors.success.withAlpha(80)),
                   ),
                   child: const Text(
                     'ACTUAL',
                     style: TextStyle(
-                      color: AppColors.accentGreen,
+                      color: AppColors.success,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1,

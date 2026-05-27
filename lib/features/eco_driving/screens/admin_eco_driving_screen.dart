@@ -152,7 +152,7 @@ class _ResumenFleet extends StatelessWidget {
         );
 
         return AppCard(
-          borderColor: AppColors.accentGreen.withAlpha(50),
+          borderColor: AppColors.success.withAlpha(50),
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -160,7 +160,7 @@ class _ResumenFleet extends StatelessWidget {
               Text(
                 'FLOTA · score promedio últimos $diasRango días',
                 style: const TextStyle(
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   fontWeight: FontWeight.bold,
                   fontSize: 11,
                   letterSpacing: 2,
@@ -348,7 +348,7 @@ class _FilaRanking extends StatelessWidget {
     final s = item.scorePromedio;
     if (s < 60) return AppColors.accentRed;
     if (s < 80) return AppColors.accentOrange;
-    return AppColors.accentGreen;
+    return AppColors.success;
   }
 
   @override
@@ -428,7 +428,7 @@ class _ScoreGrande extends StatelessWidget {
             ? AppColors.accentRed
             : s < 80
                 ? AppColors.accentOrange
-                : AppColors.accentGreen;
+                : AppColors.success;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -512,7 +512,7 @@ class _MiniSubScore extends StatelessWidget {
             ? AppColors.accentRed
             : s < 80
                 ? AppColors.accentOrange
-                : AppColors.accentGreen;
+                : AppColors.success;
     return Row(
       children: [
         SizedBox(
@@ -578,7 +578,7 @@ class _SkeletonCard extends StatelessWidget {
       child: SizedBox(
         height: altura,
         child: const Center(
-          child: CircularProgressIndicator(color: AppColors.accentGreen),
+          child: CircularProgressIndicator(color: AppColors.success),
         ),
       ),
     );

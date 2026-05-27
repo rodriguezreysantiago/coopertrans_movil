@@ -40,7 +40,7 @@ class ScoreDrilldownSheet extends StatelessWidget {
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          border: Border.all(color: AppColors.accentGreen.withAlpha(40)),
+          border: Border.all(color: AppColors.success.withAlpha(40)),
         ),
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
         child: StreamBuilder<List<VolvoScoreDiario>>(
@@ -52,7 +52,7 @@ class ScoreDrilldownSheet extends StatelessWidget {
           builder: (ctx, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Center(
-                child: CircularProgressIndicator(color: AppColors.accentGreen),
+                child: CircularProgressIndicator(color: AppColors.success),
               );
             }
             final docs = snap.data ?? const <VolvoScoreDiario>[];
@@ -239,7 +239,7 @@ class _Header extends StatelessWidget {
             ? AppColors.accentRed
             : s < 80
                 ? AppColors.accentOrange
-                : AppColors.accentGreen;
+                : AppColors.success;
     return Row(
       children: [
         Expanded(
@@ -328,7 +328,7 @@ class _FilaDia extends StatelessWidget {
             ? AppColors.accentRed
             : s < 80
                 ? AppColors.accentOrange
-                : AppColors.accentGreen;
+                : AppColors.success;
     final chofer = asignacion?.choferNombre?.isNotEmpty == true
         ? asignacion!.choferNombre!
         : asignacion != null
@@ -401,7 +401,7 @@ class _BarraSubscore extends StatelessWidget {
             ? AppColors.accentRed
             : s < 80
                 ? AppColors.accentOrange
-                : AppColors.accentGreen;
+                : AppColors.success;
     final pct = (s ?? 0) / 100;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),

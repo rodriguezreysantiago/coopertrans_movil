@@ -83,7 +83,7 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
       builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: AppColors.accentGreen),
+              child: CircularProgressIndicator(color: AppColors.success),
             );
           }
           if (snap.hasError) {
@@ -248,7 +248,7 @@ class _Toolbar extends StatelessWidget {
                 _ContadorMini(
                     label: 'EN MARCHA',
                     valor: '$conIgnicionOn',
-                    color: AppColors.accentGreen),
+                    color: AppColors.success),
                 const SizedBox(width: 12),
                 _ContadorMini(
                     label: 'APAGADOS',
@@ -381,7 +381,7 @@ class _ChipFiltro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.accentGreen : Colors.white38;
+    final color = selected ? AppColors.success : Colors.white38;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
@@ -389,7 +389,7 @@ class _ChipFiltro extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.accentGreen.withAlpha(25)
+              ? AppColors.success.withAlpha(25)
               : Colors.white.withAlpha(8),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: color.withAlpha(80)),
@@ -592,7 +592,7 @@ class _Mapa extends StatelessWidget {
   }) {
     if (tieneDrift) return AppColors.accentOrange;
     if (minStale != null && minStale > 60) return AppColors.accentRed;
-    if (ignition) return AppColors.accentGreen;
+    if (ignition) return AppColors.success;
     return Colors.white60;
   }
 }
@@ -641,7 +641,7 @@ class _DetalleSheet extends StatelessWidget {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         border: Border.all(
           color: ignition
-              ? AppColors.accentGreen.withAlpha(60)
+              ? AppColors.success.withAlpha(60)
               : Colors.white24,
         ),
       ),
@@ -692,7 +692,7 @@ class _DetalleSheet extends StatelessWidget {
             label: 'Chofer',
             valor: choferTexto,
             icono: Icons.person_outline,
-            colorIcono: driverDni.isEmpty ? Colors.white38 : AppColors.accentGreen,
+            colorIcono: driverDni.isEmpty ? Colors.white38 : AppColors.success,
           ),
           if (driverDni.isNotEmpty)
             _Fila(label: 'DNI', valor: driverDni),
@@ -861,7 +861,7 @@ class _BadgeIgnicion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = on ? AppColors.accentGreen : Colors.white54;
+    final color = on ? AppColors.success : Colors.white54;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
@@ -948,7 +948,7 @@ class _TelemetriaVolvoFila extends StatelessWidget {
   /// Verde >50%, naranja 20-50%, rojo <20%. Mismo criterio que el
   /// listado de unidades.
   static Color _colorPorcentaje(double pct) {
-    if (pct > 50) return AppColors.accentGreen;
+    if (pct > 50) return AppColors.success;
     if (pct >= 20) return AppColors.accentOrange;
     return AppColors.accentRed;
   }

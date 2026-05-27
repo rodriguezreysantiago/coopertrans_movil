@@ -71,7 +71,7 @@ class _IcmHubScreenState extends State<IcmHubScreen> {
       title: 'ICM — Conducta de Manejo',
       body: RefreshIndicator(
         onRefresh: _refrescar,
-        color: AppColors.accentGreen,
+        color: AppColors.success,
         backgroundColor: AppColors.surface,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
@@ -92,7 +92,7 @@ class _IcmHubScreenState extends State<IcmHubScreen> {
                     padding: EdgeInsets.symmetric(vertical: 24),
                     child: Center(
                       child: CircularProgressIndicator(
-                          color: AppColors.accentGreen),
+                          color: AppColors.success),
                     ),
                   );
                 }
@@ -151,7 +151,7 @@ class _SeccionesIcm extends StatelessWidget {
                 child: TopChoferesLista(
                   titulo: 'TOP 5 — MEJORES CHOFERES',
                   icono: Icons.emoji_events,
-                  colorTitulo: AppColors.accentGreen,
+                  colorTitulo: AppColors.success,
                   items: kpis.top5Mejores,
                 ),
               ),
@@ -170,7 +170,7 @@ class _SeccionesIcm extends StatelessWidget {
           TopChoferesLista(
             titulo: 'TOP 5 — MEJORES CHOFERES',
             icono: Icons.emoji_events,
-            colorTitulo: AppColors.accentGreen,
+            colorTitulo: AppColors.success,
             items: kpis.top5Mejores,
           ),
           const SizedBox(height: 10),
@@ -217,7 +217,7 @@ class _SeccionLabel extends StatelessWidget {
       child: Text(
         texto.toUpperCase(),
         style: const TextStyle(
-          color: AppColors.accentGreen,
+          color: AppColors.success,
           fontSize: 11,
           fontWeight: FontWeight.bold,
           letterSpacing: 1.5,
@@ -298,7 +298,7 @@ class _GridSubpantallas extends StatelessWidget {
               titulo: 'REPORTE MENSUAL',
               subtitulo: 'Flota + severidad + top 5',
               icono: Icons.assessment_outlined,
-              color: AppColors.accentGreen,
+              color: AppColors.success,
               ruta: AppRoutes.adminIcmReporteSemanal,
             ),
             _HubTile(

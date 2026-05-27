@@ -140,7 +140,7 @@ class _VehiculoCard extends StatelessWidget {
                           ),
                         if (state.success)
                           const Icon(Icons.check_circle,
-                              color: AppColors.accentGreen, size: 16),
+                              color: AppColors.success, size: 16),
                         if (state.error != null)
                           const Icon(Icons.error_outline,
                               color: AppColors.accentRed, size: 16),
@@ -167,7 +167,7 @@ class _VehiculoCard extends StatelessWidget {
                         Text(
                           '${AppFormatters.formatearKilometraje(km)} km',
                           style: const TextStyle(
-                            color: AppColors.accentGreen,
+                            color: AppColors.success,
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
                           ),
@@ -301,7 +301,7 @@ class _AccionesVehiculoMenu extends StatelessWidget {
           value: 'form',
           child: ListTile(
             contentPadding: EdgeInsets.zero,
-            leading: Icon(Icons.event_note, color: AppColors.accentGreen),
+            leading: Icon(Icons.event_note, color: AppColors.success),
             title: Text('Editar fechas / comprobantes / foto'),
             subtitle: Text(
               'Form completo con vencimientos y archivos',
@@ -731,11 +731,11 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
                 patente: patente,
               ),
               icon: const Icon(Icons.unarchive_outlined,
-                  color: AppColors.accentGreen),
+                  color: AppColors.success),
               label: const Text(
                 'Reactivar',
                 style: TextStyle(
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -754,7 +754,7 @@ class _EstadoBadge extends StatelessWidget {
   Color get _color {
     switch (estado.toUpperCase()) {
       case 'LIBRE':
-        return AppColors.accentGreen;
+        return AppColors.success;
       case 'OCUPADO':
       case 'ASIGNADO':
         return AppColors.accentBlue;
@@ -824,12 +824,12 @@ class _SectionTitle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.accentGreen, size: 16),
+          Icon(icon, color: AppColors.success, size: 16),
           const SizedBox(width: 8),
           Text(
             label.toUpperCase(),
             style: const TextStyle(
-              color: AppColors.accentGreen,
+              color: AppColors.success,
               fontSize: 11,
               fontWeight: FontWeight.bold,
               letterSpacing: 1.2,
@@ -857,7 +857,7 @@ double? _toDouble(dynamic v) {
 
 /// Color para la barrita de combustible: verde > 50, naranja 20-50, rojo < 20.
 Color _colorCombustible(double pct) {
-  if (pct >= 50) return AppColors.accentGreen;
+  if (pct >= 50) return AppColors.success;
   if (pct >= 20) return AppColors.accentOrange;
   return AppColors.accentRed;
 }
@@ -966,9 +966,9 @@ class _PanelTelemetria extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       decoration: BoxDecoration(
-        color: AppColors.accentGreen.withAlpha(15),
+        color: AppColors.success.withAlpha(15),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.accentGreen.withAlpha(40)),
+        border: Border.all(color: AppColors.success.withAlpha(40)),
       ),
       child: hayTelemetria
           // Hasta 4 celdas (ODÓMETRO, COMBUSTIBLE, ADBLUE, AUTONOMÍA).
@@ -986,7 +986,7 @@ class _PanelTelemetria extends StatelessWidget {
                     width: celdaWidth,
                     child: _CeldaTelemetria(
                       icono: Icons.speed,
-                      color: AppColors.accentGreen,
+                      color: AppColors.success,
                       valor: km != null
                           ? AppFormatters.formatearKilometraje(km)
                           : '—',
@@ -1034,7 +1034,7 @@ class _PanelTelemetria extends StatelessWidget {
           // Fallback: igual que antes para unidades sin combustible/autonomía.
           : Row(
               children: [
-                const Icon(Icons.speed, color: AppColors.accentGreen),
+                const Icon(Icons.speed, color: AppColors.success),
                 const SizedBox(width: 10),
                 const Text('Kilometraje',
                     style: TextStyle(color: Colors.white60, fontSize: 12)),
@@ -1287,7 +1287,7 @@ class _DatoEditableEmpresa extends StatelessWidget {
         ),
       ),
       trailing: const Icon(Icons.business_center,
-          color: AppColors.accentGreen, size: 20),
+          color: AppColors.success, size: 20),
       onTap: () => _seleccionar(context),
     );
   }
@@ -1309,7 +1309,7 @@ class _DatoEditableEmpresa extends StatelessWidget {
                   esActual
                       ? Icons.radio_button_checked
                       : Icons.radio_button_off,
-                  color: esActual ? AppColors.accentGreen : Colors.white38,
+                  color: esActual ? AppColors.success : Colors.white38,
                   size: 18,
                 ),
                 title: Text(
@@ -1356,7 +1356,7 @@ class _DatoEditableAnio extends StatelessWidget {
         ),
       ),
       trailing: const Icon(Icons.calendar_view_month,
-          color: AppColors.accentGreen, size: 20),
+          color: AppColors.success, size: 20),
       onTap: () => _seleccionar(context),
     );
   }
@@ -1383,7 +1383,7 @@ class _DatoEditableAnio extends StatelessWidget {
                   esActual
                       ? Icons.radio_button_checked
                       : Icons.radio_button_off,
-                  color: esActual ? AppColors.accentGreen : Colors.white38,
+                  color: esActual ? AppColors.success : Colors.white38,
                   size: 18,
                 ),
                 title: Text(
@@ -1437,7 +1437,7 @@ class _ResumenService extends StatelessWidget {
             ? AppColors.accentRed
             : kmRestantes < 2000
                 ? AppColors.accentOrange
-                : AppColors.accentGreen;
+                : AppColors.success;
 
     final sinDatos = !hayFecha && ultimoKm == null;
 

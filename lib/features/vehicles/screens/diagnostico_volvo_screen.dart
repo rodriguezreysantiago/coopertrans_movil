@@ -142,7 +142,7 @@ class _ResumenRequest extends StatelessWidget {
   Color get _statusColor {
     if (diag.errorMessage != null) return AppColors.accentRed;
     final s = diag.statusCode ?? 0;
-    if (s >= 200 && s < 300) return AppColors.accentGreen;
+    if (s >= 200 && s < 300) return AppColors.success;
     if (s >= 400) return AppColors.accentOrange;
     return Colors.white54;
   }
@@ -158,7 +158,7 @@ class _ResumenRequest extends StatelessWidget {
           const Text(
             'REQUEST',
             style: TextStyle(
-              color: AppColors.accentGreen,
+              color: AppColors.success,
               fontSize: 10,
               fontWeight: FontWeight.bold,
               letterSpacing: 1.5,
@@ -407,7 +407,7 @@ class _AnalisisCampos extends StatelessWidget {
           const Text(
             'CAMPOS CRÍTICOS',
             style: TextStyle(
-              color: AppColors.accentGreen,
+              color: AppColors.success,
               fontSize: 10,
               fontWeight: FontWeight.bold,
               letterSpacing: 1.5,
@@ -442,7 +442,7 @@ class _CheckTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color =
-        check.encontrado ? AppColors.accentGreen : AppColors.accentOrange;
+        check.encontrado ? AppColors.success : AppColors.accentOrange;
     final icon =
         check.encontrado ? Icons.check_circle : Icons.cancel_outlined;
 
@@ -548,7 +548,7 @@ class _JsonViewerState extends State<_JsonViewer> {
               const Text(
                 'JSON CRUDO',
                 style: TextStyle(
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   fontSize: 10,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 1.5,
@@ -557,7 +557,7 @@ class _JsonViewerState extends State<_JsonViewer> {
               const Spacer(),
               IconButton(
                 icon: const Icon(Icons.copy,
-                    color: AppColors.accentGreen, size: 18),
+                    color: AppColors.success, size: 18),
                 tooltip: 'Copiar al portapapeles',
                 onPressed: () async {
                   await Clipboard.setData(ClipboardData(text: json));
@@ -616,17 +616,17 @@ class _BotonReintentar extends StatelessWidget {
       width: double.infinity,
       child: OutlinedButton.icon(
         onPressed: onPressed,
-        icon: const Icon(Icons.refresh, color: AppColors.accentGreen),
+        icon: const Icon(Icons.refresh, color: AppColors.success),
         label: const Text(
           'REINTENTAR',
           style: TextStyle(
-            color: AppColors.accentGreen,
+            color: AppColors.success,
             fontWeight: FontWeight.bold,
             letterSpacing: 1.2,
           ),
         ),
         style: OutlinedButton.styleFrom(
-          side: const BorderSide(color: AppColors.accentGreen),
+          side: const BorderSide(color: AppColors.success),
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),

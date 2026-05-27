@@ -431,7 +431,7 @@ class _LogisticaMapaTarifasScreenState
                         ? AppColors.accentOrange
                         : (inactiva
                             ? Colors.white24
-                            : AppColors.accentGreen.withValues(
+                            : AppColors.success.withValues(
                                 alpha: _tarifaResaltadaId == null
                                     ? 0.7
                                     : 0.25,
@@ -906,13 +906,13 @@ class _TarifaTile extends StatelessWidget {
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: resaltada
-              ? AppColors.accentGreen.withValues(alpha: 0.18)
+              ? AppColors.success.withValues(alpha: 0.18)
               : Colors.white10,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: resaltada
-                ? AppColors.accentGreen
-                : AppColors.accentGreen.withValues(alpha: 0.3),
+                ? AppColors.success
+                : AppColors.success.withValues(alpha: 0.3),
             width: resaltada ? 1.5 : 1,
           ),
         ),
@@ -961,7 +961,7 @@ class _TarifaTile extends StatelessWidget {
               '\$${AppFormatters.formatearMonto(t.tarifaReal)}'
               '/${t.unidadTarifa.codigo}',
               style: const TextStyle(
-                color: AppColors.accentGreen,
+                color: AppColors.success,
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
               ),
@@ -1004,7 +1004,7 @@ class _DetalleTarifaSheet extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.price_change_outlined,
-                  color: AppColors.accentGreen),
+                  color: AppColors.success),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

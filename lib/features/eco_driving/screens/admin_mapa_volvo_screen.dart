@@ -90,7 +90,7 @@ class _AdminMapaVolvoScreenState extends State<AdminMapaVolvoScreen> {
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const Center(
-              child: CircularProgressIndicator(color: AppColors.accentGreen),
+              child: CircularProgressIndicator(color: AppColors.success),
             );
           }
           if (snap.hasError) {
@@ -429,7 +429,7 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.accentGreen : Colors.white38;
+    final color = selected ? AppColors.success : Colors.white38;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
@@ -437,7 +437,7 @@ class _Chip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.accentGreen.withAlpha(25)
+              ? AppColors.success.withAlpha(25)
               : Colors.white.withAlpha(8),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(color: color.withAlpha(80)),
@@ -662,7 +662,7 @@ class _Mapa extends StatelessWidget {
     if (vel == null) return Colors.white38;
     if (vel > 100) return AppColors.accentRed;
     if (vel > 80) return AppColors.accentOrange;
-    return AppColors.accentGreen;
+    return AppColors.success;
   }
 
   Marker? _markerDeDoc(
@@ -684,7 +684,7 @@ class _Mapa extends StatelessWidget {
             ? AppColors.accentRed
             : severidad == 'MEDIUM'
                 ? AppColors.accentOrange
-                : AppColors.accentGreen;
+                : AppColors.success;
 
     return Marker(
       point: LatLng(lat, lng),

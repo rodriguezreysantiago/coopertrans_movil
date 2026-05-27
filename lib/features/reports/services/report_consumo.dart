@@ -761,7 +761,7 @@ class _LabelSeccion extends StatelessWidget {
       child: Text(
         texto.toUpperCase(),
         style: const TextStyle(
-          color: AppColors.accentGreen,
+          color: AppColors.success,
           fontSize: 10,
           fontWeight: FontWeight.bold,
           letterSpacing: 1.3,
@@ -815,16 +815,16 @@ class _BotonRangoFecha extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         decoration: BoxDecoration(
-          color: AppColors.accentGreen.withAlpha(20),
+          color: AppColors.success.withAlpha(20),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-              color: AppColors.accentGreen.withAlpha(120), width: 1.5),
+              color: AppColors.success.withAlpha(120), width: 1.5),
         ),
         child: Row(
           children: [
             const Icon(
               Icons.date_range,
-              color: AppColors.accentGreen,
+              color: AppColors.success,
               size: 26,
             ),
             const SizedBox(width: 12),
@@ -845,7 +845,7 @@ class _BotonRangoFecha extends StatelessWidget {
                   Text(
                     '${AppFormatters.formatearFecha(desde)}  a  ${AppFormatters.formatearFecha(hasta)}',
                     style: const TextStyle(
-                      color: AppColors.accentGreen,
+                      color: AppColors.success,
                       fontWeight: FontWeight.bold,
                       fontSize: 15,
                     ),

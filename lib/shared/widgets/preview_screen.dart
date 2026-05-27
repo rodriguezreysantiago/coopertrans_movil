@@ -255,7 +255,7 @@ class _PdfViewerRobustoState extends State<_PdfViewerRobusto> {
             height: 44,
             child: CircularProgressIndicator(
               value: _progreso,
-              color: AppColors.accentGreen,
+              color: AppColors.success,
               strokeWidth: 3,
             ),
           ),
@@ -290,7 +290,7 @@ class _PdfViewerRobustoState extends State<_PdfViewerRobusto> {
             ElevatedButton.icon(
               onPressed: widget.onAbrirExterno,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentGreen,
+                backgroundColor: AppColors.success,
                 foregroundColor: Colors.black,
               ),
               icon: const Icon(Icons.open_in_new),

@@ -133,7 +133,7 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
       title: 'Adelantos',
       floatingActionButton: Builder(
         builder: (ctx) => FloatingActionButton.extended(
-          backgroundColor: AppColors.accentGreen,
+          backgroundColor: AppColors.success,
           onPressed: () => _abrirAlta(ctx),
           icon: const Icon(Icons.add),
           label: const Text('NUEVO ADELANTO'),
@@ -779,7 +779,7 @@ class _BotonRangoFechas extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         foregroundColor: hayRango ? Colors.white : Colors.white60,
         side: BorderSide(
-          color: hayRango ? AppColors.accentGreen : Colors.white24,
+          color: hayRango ? AppColors.success : Colors.white24,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         visualDensity: VisualDensity.compact,
@@ -888,7 +888,7 @@ class _ResumenEmpleadoFiltrado extends StatelessWidget {
                   label: 'Entregado',
                   cant: entregados.length,
                   monto: totalEntregado,
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                 ),
               ),
             ],
@@ -1176,7 +1176,7 @@ class _CardAdelanto extends StatelessWidget {
                     width: 28,
                     height: 28,
                     child: Icon(Icons.check_circle,
-                        color: AppColors.accentGreen, size: 20),
+                        color: AppColors.success, size: 20),
                   )
                 else
                   SizedBox(
@@ -1191,7 +1191,7 @@ class _CardAdelanto extends StatelessWidget {
                   ),
                 const SizedBox(width: 4),
                 const Icon(Icons.payments_outlined,
-                    size: 20, color: AppColors.accentGreen),
+                    size: 20, color: AppColors.success),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -1208,7 +1208,7 @@ class _CardAdelanto extends StatelessWidget {
                 Text(
                   '\$ $montoFmt',
                   style: const TextStyle(
-                    color: AppColors.accentGreen,
+                    color: AppColors.success,
                     fontWeight: FontWeight.bold,
                     fontSize: 16,
                   ),
@@ -1922,7 +1922,7 @@ class _BotonImprimirComprobanteState
               width: 16,
               height: 16,
               child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.accentGreen),
+                  strokeWidth: 2, color: AppColors.success),
             )
           : Icon(esReimpresion ? Icons.refresh : Icons.print_outlined,
               size: 18),
@@ -1930,8 +1930,8 @@ class _BotonImprimirComprobanteState
           ? 'REIMPRIMIR COMPROBANTE'
           : 'IMPRIMIR COMPROBANTE'),
       style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.accentGreen,
-        side: const BorderSide(color: AppColors.accentGreen),
+        foregroundColor: AppColors.success,
+        side: const BorderSide(color: AppColors.success),
         padding: const EdgeInsets.symmetric(vertical: 10),
         textStyle:
             const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
@@ -2204,7 +2204,7 @@ class _ChipEstadoPago extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = pagado ? AppColors.accentGreen : AppColors.accentOrange;
+    final color = pagado ? AppColors.success : AppColors.accentOrange;
     final icono = pagado ? Icons.check_circle : Icons.schedule;
     final texto = pagado && pagadoEn != null
         ? 'PAGADO ${AppFormatters.formatearFecha(pagadoEn!)}'

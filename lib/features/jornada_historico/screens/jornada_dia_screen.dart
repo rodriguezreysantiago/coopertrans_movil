@@ -255,7 +255,7 @@ class _DetalleUnDia extends StatelessWidget {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(
               child: CircularProgressIndicator(
-                  color: AppColors.accentGreen));
+                  color: AppColors.success));
         }
         if (snap.hasError) {
           return _Placeholder(
@@ -302,7 +302,7 @@ class _ListaRango extends StatelessWidget {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(
               child: CircularProgressIndicator(
-                  color: AppColors.accentGreen));
+                  color: AppColors.success));
         }
         if (snap.hasError) {
           return _Placeholder(
@@ -390,12 +390,12 @@ class _CardResumenDia extends StatelessWidget {
             Row(
               children: [
                 const Icon(Icons.calendar_today,
-                    color: AppColors.accentGreen, size: 16),
+                    color: AppColors.success, size: 16),
                 const SizedBox(width: 8),
                 Text(
                   jornada.fecha,
                   style: const TextStyle(
-                    color: AppColors.accentGreen,
+                    color: AppColors.success,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                     letterSpacing: 0.5,
@@ -442,7 +442,7 @@ class _CardResumenDia extends StatelessWidget {
                 _MiniKpi(
                   label: 'KM',
                   valor: jornada.kmTotal.toString(),
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   icono: Icons.route,
                 ),
               ],
@@ -694,7 +694,7 @@ class _ResumenCard extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.local_shipping_outlined,
-                  color: AppColors.accentGreen, size: 20),
+                  color: AppColors.success, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -952,7 +952,7 @@ class _ParadaCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color =
-        p.cumple8h ? AppColors.accentGreen :
+        p.cumple8h ? AppColors.success :
         p.cumple15min ? AppColors.accentTeal :
         AppColors.accentOrange;
     final hint = p.cumple8h
@@ -1029,12 +1029,12 @@ class _SeccionLabel extends StatelessWidget {
       padding: const EdgeInsets.only(left: 4, top: 6),
       child: Row(
         children: [
-          Icon(icono, color: AppColors.accentGreen, size: 14),
+          Icon(icono, color: AppColors.success, size: 14),
           const SizedBox(width: 6),
           Text(
             texto,
             style: const TextStyle(
-                color: AppColors.accentGreen,
+                color: AppColors.success,
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.5),

@@ -214,7 +214,7 @@ class _LogisticaTarifaFormScreenState
                         }
                       },
                       selectedColor:
-                          AppColors.accentGreen.withValues(alpha: 0.4),
+                          AppColors.success.withValues(alpha: 0.4),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -433,7 +433,7 @@ class _LogisticaTarifaFormScreenState
                 _campoTarifa(
                   controller: _tarifaRealCtrl,
                   etiqueta: 'Tarifa real (lo que cobra Vecchi)',
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                 ),
                 const SizedBox(height: 16),
                 // Toggle pago al chofer: 18% sobre la tarifa chofer
@@ -558,7 +558,7 @@ class _LogisticaTarifaFormScreenState
                     _esEdicion ? 'GUARDAR CAMBIOS' : 'GUARDAR TARIFA',
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentGreen,
+                    backgroundColor: AppColors.success,
                   ),
                 ),
               ),
@@ -640,7 +640,7 @@ class _LogisticaTarifaFormScreenState
                   if (sel) onChange(op);
                 },
                 selectedColor:
-                    AppColors.accentGreen.withValues(alpha: 0.4),
+                    AppColors.success.withValues(alpha: 0.4),
               ),
           ],
         ),
@@ -1347,13 +1347,13 @@ class _SeccionTitulo extends StatelessWidget {
               height: 22,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: AppColors.accentGreen.withValues(alpha: 0.2),
+                color: AppColors.success.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
               child: Text(
                 '$numero',
                 style: const TextStyle(
-                  color: AppColors.accentGreen,
+                  color: AppColors.success,
                   fontSize: 11,
                   fontWeight: FontWeight.bold,
                 ),

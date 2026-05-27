@@ -169,7 +169,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 child: Text(
                   'INFORMES ESTRATÉGICOS',
                   style: TextStyle(
-                    color: AppColors.accentGreen,
+                    color: AppColors.success,
                     fontWeight: FontWeight.bold,
                     fontSize: 11,
                     letterSpacing: 2,
@@ -181,7 +181,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 descripcion:
                     'Reporte de novedades y roturas cargadas por choferes.',
                 icono: Icons.fact_check_rounded,
-                color: AppColors.accentGreen,
+                color: AppColors.success,
                 onTap: _generando ? null : _ejecutarReporteChecklist,
               ),
               const SizedBox(height: 12),

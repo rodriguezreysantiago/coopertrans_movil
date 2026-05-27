@@ -214,21 +214,21 @@ class _HeaderInfo extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.accentGreen.withAlpha(15),
+        color: AppColors.success.withAlpha(15),
         border: Border(
-          bottom: BorderSide(color: AppColors.accentGreen.withAlpha(40)),
+          bottom: BorderSide(color: AppColors.success.withAlpha(40)),
         ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.tag, color: AppColors.accentGreen, size: 18),
+          const Icon(Icons.tag, color: AppColors.success, size: 18),
           const SizedBox(width: 8),
           const Text('UNIDAD: ',
               style: TextStyle(color: Colors.white60, fontSize: 12)),
           Text(
             patente,
             style: const TextStyle(
-              color: AppColors.accentGreen,
+              color: AppColors.success,
               fontWeight: FontWeight.bold,
               fontSize: 14,
               letterSpacing: 1.5,
@@ -394,7 +394,7 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
   Color _colorEstado(String estado) {
     switch (estado) {
       case 'BUE':
-        return AppColors.accentGreen;
+        return AppColors.success;
       case 'REG':
         return AppColors.accentOrange;
       case 'MAL':
