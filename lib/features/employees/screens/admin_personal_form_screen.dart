@@ -15,6 +15,7 @@ import '../../../shared/utils/password_hasher.dart';
 import '../../../shared/utils/upper_case_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Form de alta de un nuevo legajo de personal (chofer o admin).
 class AdminPersonalFormScreen extends StatefulWidget {
@@ -181,7 +182,7 @@ class _AdminPersonalFormScreenState
           child: Focus(
             autofocus: true,
             child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: Form(
             key: _formKey,
             child: Column(
@@ -250,7 +251,7 @@ class _AdminPersonalFormScreenState
                   textInputAction: TextInputAction.done,
                   isPassword: true,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: AppSpacing.md),
                 const _CampoLabel('Empresa asignada'),
                 _DropdownEmpresa(
                   value: _empresa,
@@ -259,9 +260,9 @@ class _AdminPersonalFormScreenState
                   onChanged: (val) =>
                       setState(() => _empresa = val ?? _empresa),
                 ),
-                const SizedBox(height: 25),
+                const SizedBox(height: AppSpacing.xl),
                 const _CampoLabel('Rol en el sistema'),
-                const SizedBox(height: 10),
+                const SizedBox(height: AppSpacing.md),
                 _RoleSelector(
                   rol: _rol,
                   enabled: !_guardando,
@@ -274,7 +275,7 @@ class _AdminPersonalFormScreenState
                     _area = AppAreas.defaultParaRol(val);
                   }),
                 ),
-                const SizedBox(height: 25),
+                const SizedBox(height: AppSpacing.xl),
                 const _CampoLabel('Área en la empresa'),
                 _DropdownArea(
                   value: _area,
@@ -282,7 +283,7 @@ class _AdminPersonalFormScreenState
                   onChanged: (val) =>
                       setState(() => _area = val ?? _area),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: AppSpacing.xxxl),
                 _BotonGuardar(
                   guardando: _guardando,
                   onPressed: _guardar,
@@ -310,7 +311,10 @@ class _CampoLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: AppType.label.copyWith(color: Colors.white70, fontWeight: FontWeight.bold),
+      style: AppType.label.copyWith(
+        color: AppColors.textSecondary,
+        fontWeight: FontWeight.bold,
+      ),
     );
   }
 }
@@ -358,7 +362,7 @@ class _FormInput extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
       child: TextFormField(
         controller: controller,
         maxLength: maxLength,
@@ -388,7 +392,7 @@ class _FormInput extends StatelessWidget {
           if (!isNumeric && !isPassword && toUpperCase)
             UpperCaseInputFormatter(),
         ],
-        style: const TextStyle(color: Colors.white, fontSize: 15),
+        style: AppType.body.copyWith(color: AppColors.textPrimary),
         decoration: InputDecoration(
           counterText: '',
           labelText: label,
@@ -442,19 +446,19 @@ class _DropdownEmpresa extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(top: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      margin: const EdgeInsets.only(top: AppSpacing.md),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withAlpha(15)),
+        color: AppColors.surface2,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.borderSubtle),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
           isExpanded: true,
-          dropdownColor: Theme.of(context).colorScheme.surface,
-          style: const TextStyle(color: Colors.white, fontSize: 13),
+          dropdownColor: AppColors.surface2,
+          style: AppType.label.copyWith(color: AppColors.textPrimary),
           items: empresas
               .map(
                 (e) => DropdownMenuItem(
@@ -544,18 +548,18 @@ class _RoleSelector extends StatelessWidget {
       // del DROPDOWN abierto, que sí tienen width bounded del menú.
       selectedItemBuilder: (context) => roles.map((r) {
         return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(_icono(r), size: 18, color: AppColors.success),
-              const SizedBox(width: 10),
+              Icon(_icono(r), size: 18, color: AppColors.brand),
+              const SizedBox(width: AppSpacing.md),
               Flexible(
                 child: Text(
                   AppRoles.etiquetas[r] ?? r,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.body.copyWith(color: Colors.white),
+                  style: AppType.body.copyWith(color: AppColors.textPrimary),
                 ),
               ),
             ],
@@ -567,8 +571,8 @@ class _RoleSelector extends StatelessWidget {
           value: r,
           child: Row(
             children: [
-              Icon(_icono(r), size: 18, color: AppColors.success),
-              const SizedBox(width: 10),
+              Icon(_icono(r), size: 18, color: AppColors.brand),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -578,16 +582,13 @@ class _RoleSelector extends StatelessWidget {
                       AppRoles.etiquetas[r] ?? r,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.body.copyWith(color: Colors.white),
+                      style: AppType.body.copyWith(color: AppColors.textPrimary),
                     ),
                     Text(
                       _descripcion(r),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 10,
-                      ),
+                      style: AppType.eyebrow,
                     ),
                   ],
                 ),
@@ -626,7 +627,7 @@ class _DropdownArea extends StatelessWidget {
           value: a,
           child: Text(
             AppAreas.etiquetas[a] ?? a,
-            style: AppType.body.copyWith(color: Colors.white),
+            style: AppType.body.copyWith(color: AppColors.textPrimary),
           ),
         );
       }).toList(),
@@ -646,26 +647,13 @@ class _BotonGuardar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 55,
-      child: ElevatedButton.icon(
-        onPressed: guardando ? null : onPressed,
-        icon: guardando
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.black,
-                ),
-              )
-            : const Icon(Icons.person_add_alt_1),
-        label: Text(
-          guardando ? 'PROCESANDO...' : 'CREAR LEGAJO',
-          style: AppType.heading.copyWith(fontWeight: FontWeight.bold),
-        ),
-      ),
+    return AppButton(
+      label: 'Crear legajo',
+      icon: Icons.person_add_alt_1,
+      size: AppButtonSize.lg,
+      expand: true,
+      isLoading: guardando,
+      onPressed: guardando ? null : onPressed,
     );
   }
 }
