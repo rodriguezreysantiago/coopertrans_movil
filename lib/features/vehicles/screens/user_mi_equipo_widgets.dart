@@ -65,19 +65,16 @@ class _SeccionUnidad extends StatelessWidget {
                 // pedir cambios viendo qué había libre). Ahora solo REPORTA
                 // "esta no es mi unidad" → flag a Revisiones; el admin asigna
                 // la unidad correcta en el momento.
-                TextButton.icon(
+                AppButton.ghost(
+                  label: 'No es mi unidad',
+                  icon: Icons.report_problem_outlined,
+                  size: AppButtonSize.sm,
                   onPressed: () => _ReporteUnidad.reportar(
                     context,
                     titulo: titulo,
                     patenteActual: patente,
                     nombreChofer: nombreChofer,
                     dni: dni,
-                  ),
-                  icon: const Icon(Icons.report_problem_outlined,
-                      size: 16, color: AppColors.warning),
-                  label: Text(
-                    'ESTA NO ES MI UNIDAD',
-                    style: AppType.eyebrow.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold),
                   ),
                 ),
             ],
@@ -664,15 +661,13 @@ class _ReporteUnidad {
           'vos no la elegís.',
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancelar'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-                backgroundColor: AppColors.warning),
+          AppButton(
+            label: 'Sí, avisar a la oficina',
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sí, avisar a la oficina'),
           ),
         ],
       ),
