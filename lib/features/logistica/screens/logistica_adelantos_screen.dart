@@ -17,6 +17,7 @@ import '../services/adelantos_service.dart';
 import '../services/recibos_adelanto_service.dart';
 import '../services/report_adelantos.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// ABM de adelantos a chofer. Lista por fecha desc, alta vía dialog,
 /// edición inline al tocar la card, eliminar con confirmación,
 /// imprimir comprobante (asigna correlativo server-side la primera vez,
@@ -355,7 +356,7 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                             const EdgeInsets.fromLTRB(12, 4, 12, 90),
                         itemCount: filtrados.length,
                         separatorBuilder: (_, __) =>
-                            const SizedBox(height: 8),
+                            const SizedBox(height: AppSpacing.sm),
                         itemBuilder: (_, i) {
                           final a = filtrados[i];
                           return _CardAdelanto(
@@ -603,7 +604,7 @@ class _DialogSeleccionarEmpleadoState
               child: Row(
                 children: [
                   Icon(Icons.person_search, size: 20),
-                  SizedBox(width: 8),
+                  SizedBox(width: AppSpacing.sm),
                   Text(
                     'Filtrar por empleado',
                     style: TextStyle(
@@ -702,7 +703,7 @@ class _DialogSeleccionarEmpleadoState
                         ),
                       if (filtrados.isEmpty)
                         const Padding(
-                          padding: EdgeInsets.all(24),
+                          padding: EdgeInsets.all(AppSpacing.xl),
                           child: Text(
                             'Sin coincidencias.',
                             textAlign: TextAlign.center,
@@ -715,7 +716,7 @@ class _DialogSeleccionarEmpleadoState
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(AppSpacing.sm),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -838,7 +839,7 @@ class _ResumenEmpleadoFiltrado extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.info.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(
           color: AppColors.info.withValues(alpha: 0.4),
         ),
@@ -871,7 +872,7 @@ class _ResumenEmpleadoFiltrado extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Row(
             children: [
               Expanded(
@@ -882,7 +883,7 @@ class _ResumenEmpleadoFiltrado extends StatelessWidget {
                   color: AppColors.warning,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: _ChipResumen(
                   label: 'Entregado',
@@ -1012,7 +1013,7 @@ class _BarraSeleccion extends StatelessWidget {
               child: const Text('NINGUNO', style: TextStyle(fontSize: 11)),
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: AppSpacing.xs),
           ElevatedButton.icon(
             onPressed: onImprimir,
             icon: const Icon(Icons.print_outlined, size: 16),
@@ -1088,7 +1089,7 @@ class _CardAdelanto extends StatelessWidget {
                   context: context,
                   builder: (_) => _AdelantoFormDialog(adelanto: adelanto),
                 ),
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1147,7 +1148,7 @@ class _CardAdelanto extends StatelessWidget {
               ),
               if (adelanto.eliminadoMotivo != null &&
                   adelanto.eliminadoMotivo!.trim().isNotEmpty) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Motivo: ${adelanto.eliminadoMotivo!.trim()}',
                   style: const TextStyle(
@@ -1157,7 +1158,7 @@ class _CardAdelanto extends StatelessWidget {
                   ),
                 ),
               ],
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
             ],
             Row(
               children: [
@@ -1189,10 +1190,10 @@ class _CardAdelanto extends StatelessWidget {
                       activeColor: AppColors.info,
                     ),
                   ),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 const Icon(Icons.payments_outlined,
                     size: 20, color: AppColors.success),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     chofer,
@@ -1223,7 +1224,7 @@ class _CardAdelanto extends StatelessWidget {
                   ),
               ],
             ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Wrap(
             spacing: 12,
             runSpacing: 4,
@@ -1234,7 +1235,7 @@ class _CardAdelanto extends StatelessWidget {
                 children: [
                   const Icon(Icons.calendar_today_outlined,
                       size: 12, color: Colors.white54),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: AppSpacing.xs),
                   Text(
                     fechaFmt,
                     style:
@@ -1253,7 +1254,7 @@ class _CardAdelanto extends StatelessWidget {
                       horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: AppColors.info.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                     border: Border.all(
                         color: AppColors.info.withValues(alpha: 0.5)),
                   ),
@@ -1262,7 +1263,7 @@ class _CardAdelanto extends StatelessWidget {
                     children: [
                       const Icon(Icons.repeat,
                           size: 11, color: AppColors.info),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: AppSpacing.xs),
                       Text(
                         'CUOTA ${adelanto.cuotaNumero}/${adelanto.cuotasTotal}',
                         style: const TextStyle(
@@ -1293,7 +1294,7 @@ class _CardAdelanto extends StatelessWidget {
                   children: [
                     const Icon(Icons.receipt_long_outlined,
                         size: 12, color: AppColors.info),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: AppSpacing.xs),
                     Text(
                       'Recibo N° ${adelanto.numeroRecibo!.toString().padLeft(6, '0')}',
                       style: const TextStyle(
@@ -1307,7 +1308,7 @@ class _CardAdelanto extends StatelessWidget {
           ),
           if (adelanto.observacion != null &&
               adelanto.observacion!.trim().isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               adelanto.observacion!,
               style: const TextStyle(color: Colors.white70, fontSize: 12),
@@ -1320,7 +1321,7 @@ class _CardAdelanto extends StatelessWidget {
             // imprimirle un comprobante "queman" más papel sin sentido.
             // Las reimpresiones de adelantos válidos sí están OK.
             if (!eliminado) ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               SizedBox(
                 width: double.infinity,
                 child: _BotonImprimirComprobante(adelanto: adelanto),
@@ -1352,7 +1353,7 @@ class _CardAdelanto extends StatelessWidget {
               'a ${adelanto.choferNombre ?? "DNI ${adelanto.choferDni}"} '
               'del ${AppFormatters.formatearFecha(adelanto.fecha)}.',
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               adelanto.numeroRecibo != null
                   ? 'El número de recibo ${adelanto.numeroRecibo} queda '
@@ -1363,7 +1364,7 @@ class _CardAdelanto extends StatelessWidget {
               style:
                   const TextStyle(color: Colors.white70, fontSize: 12),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             TextField(
               controller: motivoCtrl,
               decoration: const InputDecoration(
@@ -1572,7 +1573,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                   );
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               // ─── Fecha ───
               InkWell(
                 onTap: _pickFecha,
@@ -1589,7 +1590,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               // ─── Monto ───
               TextField(
                 controller: _montoCtrl,
@@ -1605,7 +1606,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                 inputFormatters: [AppFormatters.inputMilesDecimal],
                 onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               // ─── Cuotas mensuales (solo en alta) ────────────────
               if (!_esEdicion) ...[
                 Row(
@@ -1654,7 +1655,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                     fechaPrimera: _fecha,
                   ),
                 ],
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
               ],
               // ─── Medio de pago ───
               // Toggle entre efectivo (default) y transferencia. Aparece
@@ -1687,7 +1688,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                   visualDensity: VisualDensity.compact,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               // ─── Observación ───
               TextField(
                 controller: _obsCtrl,
@@ -1699,7 +1700,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                 maxLines: 2,
               ),
               if (_error != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 Text(
                   _error!,
                   style: const TextStyle(color: AppColors.error),
@@ -1727,7 +1728,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                           strokeWidth: 2, color: Colors.white),
                     ),
                     if (_imprimiendo) ...[
-                      const SizedBox(width: 8),
+                      const SizedBox(width: AppSpacing.sm),
                       const Text('IMPRIMIENDO…'),
                     ],
                   ],
@@ -2086,7 +2087,7 @@ class _PreviewCuotas extends StatelessWidget {
         AppFormatters.parsearMonto(montoTotalRaw) ?? 0;
     if (monto <= 0) {
       return Container(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(AppSpacing.sm),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(6),
@@ -2102,7 +2103,7 @@ class _PreviewCuotas extends StatelessWidget {
       cuotas: cuotas,
     );
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(AppSpacing.sm),
       decoration: BoxDecoration(
         color: AppColors.info.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
@@ -2122,7 +2123,7 @@ class _PreviewCuotas extends StatelessWidget {
                     style: const TextStyle(
                         color: Colors.white70, fontSize: 12),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
                       AppFormatters.formatearFecha(
@@ -2167,14 +2168,14 @@ class _ChipMedioPago extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icono, size: 11, color: color),
-          const SizedBox(width: 4),
+          const SizedBox(width: AppSpacing.xs),
           Text(
             medio.etiqueta.toUpperCase(),
             style: TextStyle(
@@ -2215,14 +2216,14 @@ class _ChipEstadoPago extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: color.withValues(alpha: 0.6)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icono, size: 11, color: color),
-          const SizedBox(width: 4),
+          const SizedBox(width: AppSpacing.xs),
           Text(
             texto,
             style: TextStyle(

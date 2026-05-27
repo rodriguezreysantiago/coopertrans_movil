@@ -6,6 +6,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../models/zona_descarga.dart';
 import '../services/zonas_descarga_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla admin para crear/editar zonas de descarga. El operador
 /// define cada zona (YPF Añelo, otras plantas) con su geometría
 /// (círculo o polígono). La CF `zonaDescargaPoller` las consume cada
@@ -93,7 +94,7 @@ class _BannerExplicativo extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: AppColors.info.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(
           color: AppColors.info.withValues(alpha: 0.30),
         ),
@@ -124,13 +125,13 @@ class _EstadoVacio extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.add_location_alt_outlined,
                 color: Colors.white24, size: 64),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             const Text(
               'Sin zonas cargadas',
               style: TextStyle(
@@ -138,7 +139,7 @@ class _EstadoVacio extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                   fontSize: 16),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               'Cargá la primera zona (YPF Añelo) para que el módulo '
               '"Descargas" empiece a detectar entradas y salidas.',
@@ -221,7 +222,7 @@ class _ZonaCard extends StatelessWidget {
               style: const TextStyle(color: Colors.white38, fontSize: 11),
             ),
             if ((zona.notas ?? '').isNotEmpty) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: AppSpacing.xs),
               Text(
                 zona.notas!,
                 style: const TextStyle(
@@ -435,7 +436,7 @@ class _ZonaFormState extends State<_ZonaForm> {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               TextFormField(
                 controller: _nombre,
                 style: const TextStyle(color: Colors.white),
@@ -596,7 +597,7 @@ class _ZonaFormState extends State<_ZonaForm> {
                 onChanged: (v) => setState(() => _activo = v),
               ),
               if (_error != null) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 Text(_error!,
                     style: const TextStyle(
                         color: AppColors.error, fontSize: 13)),

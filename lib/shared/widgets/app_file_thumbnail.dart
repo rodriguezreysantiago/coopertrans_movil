@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import 'preview_screen.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Thumbnail unificado para archivos almacenados en Firebase Storage.
 /// Detecta automáticamente si es PDF o imagen, y al tocar abre [PreviewScreen].
 ///
@@ -46,7 +47,7 @@ class AppFileThumbnail extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         onTap: () => _abrirVisor(context),
         child: _esPdf ? _buildPdf() : _buildImagen(),
       ),
@@ -68,7 +69,7 @@ class AppFileThumbnail extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         color: Colors.white.withAlpha(10),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: Colors.white12),
       ),
       child: Icon(
@@ -85,7 +86,7 @@ class AppFileThumbnail extends StatelessWidget {
       height: size,
       decoration: BoxDecoration(
         color: AppColors.error.withAlpha(20),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: AppColors.error.withAlpha(80)),
       ),
       child: Icon(
@@ -101,7 +102,7 @@ class AppFileThumbnail extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: AppColors.success.withAlpha(80)),
       ),
       clipBehavior: Clip.antiAlias,

@@ -13,6 +13,7 @@ import '../services/adelantos_service.dart';
 import '../services/report_liquidacion.dart';
 import '../services/liquidacion_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla LIQUIDACIÓN — agregaciones financieras de los viajes
 /// del mes filtrados por **empresa empleadora del chofer** (no por
 /// cliente del flete) + chofer opcional.
@@ -327,7 +328,7 @@ class _BarraFiltros extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           // Fila 2: empresa empleadora dropdown
           DropdownButtonFormField<String?>(
             initialValue: empresaCuit,
@@ -353,7 +354,7 @@ class _BarraFiltros extends StatelessWidget {
             ],
             onChanged: onEmpresaChanged,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           // Fila 3: chofer dropdown (filtrado por empresa si aplica)
           DropdownButtonFormField<String?>(
             initialValue: choferDni,
@@ -381,7 +382,7 @@ class _BarraFiltros extends StatelessWidget {
             ],
             onChanged: onChoferChanged,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           // Fila 4: chips estado liquidación
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -503,7 +504,7 @@ class _Contenido extends StatelessWidget {
           cantViajes: viajes.length,
           cantAdelantos: adelantos.length,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         if (hayPendientes)
           ElevatedButton.icon(
             onPressed: onLiquidarBulk,
@@ -520,7 +521,7 @@ class _Contenido extends StatelessWidget {
               ),
             ),
           ),
-        if (hayPendientes) const SizedBox(height: 8),
+        if (hayPendientes) const SizedBox(height: AppSpacing.sm),
         // Exportar a Excel — siempre disponible si hay datos. Útil para
         // mandar al contador, imprimir o auditar offline. 3 hojas:
         // RESUMEN por chofer, VIAJES uno por uno, ADELANTOS uno por uno.
@@ -538,7 +539,7 @@ class _Contenido extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         // Si no hay chofer filtrado, mostrar tabla agregada por chofer.
         // Si hay chofer filtrado, mostrar lista de viajes individuales.
         if (choferDniFiltro == null)
@@ -588,7 +589,7 @@ class _SeccionKPIs extends StatelessWidget {
             children: [
               const Icon(Icons.account_balance_wallet,
                   size: 20, color: AppColors.success),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   'Resumen — $cantViajes viaje(s) · '
@@ -604,7 +605,7 @@ class _SeccionKPIs extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           _LineaKPI(
             label: 'Facturado a empresa',
             valor: totalFacturado,
@@ -903,7 +904,7 @@ class _ListaViajes extends StatelessWidget {
           ...viajes.map((v) => _ViajeCardLiquidacion(v: v)),
         ],
         if (adelantos.isNotEmpty) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           const Padding(
             padding: EdgeInsets.fromLTRB(4, 4, 4, 8),
             child: Text(
@@ -940,7 +941,7 @@ class _AdelantoCardLiquidacion extends StatelessWidget {
         children: [
           const Icon(Icons.payments_outlined,
               size: 18, color: AppColors.info),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -974,7 +975,7 @@ class _AdelantoCardLiquidacion extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Text(
             '−\$${AppFormatters.formatearMonto(a.monto)}',
             style: const TextStyle(
@@ -1044,7 +1045,7 @@ class _ViajeCardLiquidacionState extends State<_ViajeCardLiquidacion> {
                     size: 14, color: AppColors.warning),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           _MiniCelda(label: 'Facturado', valor: v.montoVecchi),
           _MiniCelda(
               label: 'Ganancia chofer', valor: v.montoChoferRedondeado),
@@ -1073,7 +1074,7 @@ class _ViajeCardLiquidacionState extends State<_ViajeCardLiquidacion> {
                     size: 16,
                     color: Colors.white54,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: AppSpacing.xs),
                   Text(
                     _expandido
                         ? 'Ocultar tramos'
@@ -1131,7 +1132,7 @@ class _DetalleTramoLiquidacion extends StatelessWidget {
         : null;
     return Container(
       margin: const EdgeInsets.only(top: 4),
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(AppSpacing.sm),
       decoration: BoxDecoration(
         color: Colors.white.withAlpha(8),
         borderRadius: BorderRadius.circular(6),

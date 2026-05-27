@@ -10,6 +10,7 @@ import '../../../shared/widgets/keyboard_shortcuts.dart';
 import '../models/viaje.dart';
 import '../services/viajes_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Lista de viajes — entry point del módulo. Filtros operativos
 /// (estado + liquidado) y FAB para crear viaje nuevo.
 ///
@@ -85,12 +86,12 @@ class _LogisticaViajesListaScreenState
                         ),
                   isDense: true,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                     borderSide:
                         const BorderSide(color: Colors.white24),
                   ),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                     borderSide:
                         const BorderSide(color: Colors.white24),
                   ),
@@ -119,7 +120,7 @@ class _LogisticaViajesListaScreenState
                   if (snap.hasError) {
                     return Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(24),
+                        padding: const EdgeInsets.all(AppSpacing.xl),
                         child: Text(
                           'Error: ${snap.error}',
                           style: const TextStyle(color: AppColors.error),
@@ -319,7 +320,7 @@ class _ChipFiltro<T> extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(label),
-          const SizedBox(width: 4),
+          const SizedBox(width: AppSpacing.xs),
           const Icon(Icons.arrow_drop_down, size: 18),
         ],
       ),
@@ -347,7 +348,7 @@ class _ViajeTile extends StatelessWidget {
         arguments: {'viajeId': viaje.id},
       ),
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -366,7 +367,7 @@ class _ViajeTile extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Text(
                   viaje.choferNombre ?? 'DNI ${viaje.choferDni}',
@@ -383,7 +384,7 @@ class _ViajeTile extends StatelessWidget {
             children: [
               const Icon(Icons.place_outlined,
                   size: 14, color: Colors.white38),
-              const SizedBox(width: 4),
+              const SizedBox(width: AppSpacing.xs),
               Expanded(
                 child: Text(
                   viaje.rutaEtiqueta,
@@ -393,7 +394,7 @@ class _ViajeTile extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           // Línea 3: monto chofer redondeado + flags.
           Row(
             children: [
@@ -408,7 +409,7 @@ class _ViajeTile extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               if (viaje.liquidado)
                 const _ChipMini(
                   label: 'LIQUIDADO',
@@ -420,7 +421,7 @@ class _ViajeTile extends StatelessWidget {
                   label: 'BORRADO',
                   color: AppColors.error,
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 // Botón rápido restaurar — evita abrir el detalle solo
                 // para reactivar. Confirmación inline en diálogo corto.
                 Builder(
@@ -430,7 +431,7 @@ class _ViajeTile extends StatelessWidget {
                     tooltip: 'Reactivar viaje',
                     visualDensity: VisualDensity.compact,
                     constraints: const BoxConstraints(),
-                    padding: const EdgeInsets.all(4),
+                    padding: const EdgeInsets.all(AppSpacing.xs),
                     onPressed: () => _confirmarReactivar(ctx, viaje),
                   ),
                 ),
@@ -547,13 +548,13 @@ class _EstadoVacio extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.route_outlined,
                 size: 64, color: Colors.white24),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             Text(
               haDatos
                   ? 'Ningún viaje coincide con los filtros aplicados.'

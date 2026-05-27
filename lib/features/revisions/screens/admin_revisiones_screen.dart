@@ -11,6 +11,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/revision_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla de Revisiones Pendientes (Admin).
 ///
 /// Lista todas las solicitudes que los choferes envían:
@@ -114,7 +115,7 @@ class _RevisionCard extends StatelessWidget {
             backgroundColor: tipoColor.withAlpha(30),
             child: Icon(tipoIcon, color: tipoColor, size: 22),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           // Info del item
           Expanded(
             child: Column(
@@ -129,7 +130,7 @@ class _RevisionCard extends StatelessWidget {
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   esCambioEquipo
                       ? ((data['patente'] ?? '').toString().trim().isEmpty
@@ -147,14 +148,14 @@ class _RevisionCard extends StatelessWidget {
           ),
           // Thumbnail del archivo si hay
           if (!esCambioEquipo && url.isNotEmpty) ...[
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             AppFileThumbnail(
               url: url,
               tituloVisor: '$etiqueta - $idAfectado',
               size: 32,
             ),
           ],
-          const SizedBox(width: 4),
+          const SizedBox(width: AppSpacing.xs),
           const Icon(Icons.chevron_right, color: Colors.white24, size: 18),
         ],
       ),
@@ -613,13 +614,13 @@ class _InfoCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white.withAlpha(8),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: Colors.white.withAlpha(15)),
       ),
       child: Row(
         children: [
           Icon(icon, color: Colors.white38, size: 20),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -782,7 +783,7 @@ class _BotonesAccion extends StatelessWidget {
                   side: const BorderSide(color: AppColors.error),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                   ),
                 ),
                 onPressed: onRechazar,
@@ -796,7 +797,7 @@ class _BotonesAccion extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
@@ -804,7 +805,7 @@ class _BotonesAccion extends StatelessWidget {
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                   ),
                 ),
                 onPressed: onAprobar,

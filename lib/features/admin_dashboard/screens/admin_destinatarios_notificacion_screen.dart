@@ -7,6 +7,7 @@ import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla "Destinatarios de notificación" — admin edita a quién le
 /// llega cada uno de los 9 resúmenes/avisos sin tocar código (M5,
 /// 2026-05-24).
@@ -120,7 +121,7 @@ class _AdminDestinatariosNotificacionScreenState
               ),
               for (final grupo in _reglas) ...[
                 _SeccionLabel(grupo.label, color: grupo.color),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 for (final regla in grupo.reglas)
                   _FilaEditable(
                     regla: regla,
@@ -289,7 +290,7 @@ class _FilaEditable extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: AppCard(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -341,7 +342,7 @@ class _FilaEditable extends StatelessWidget {
                                 : Colors.white54,
                             size: 16,
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: AppSpacing.sm),
                           Expanded(
                             child: Text(
                               tieneOverride
@@ -365,7 +366,7 @@ class _FilaEditable extends StatelessWidget {
                   ),
                 ),
                 if (tieneOverride) ...[
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpacing.sm),
                   IconButton(
                     icon: const Icon(Icons.restore,
                         color: Colors.white60, size: 18),

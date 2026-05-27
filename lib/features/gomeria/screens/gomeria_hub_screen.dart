@@ -8,6 +8,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../constants/posiciones.dart';
 import '../models/cubierta_instalada.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla de entrada del módulo Gomería. Muestra:
 ///
 /// - **Alertas activas** (en cabecera): cubiertas instaladas en
@@ -28,7 +29,7 @@ class GomeriaHubScreen extends StatelessWidget {
     return AppScaffold(
       title: 'Gomería',
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -160,7 +161,7 @@ class _HubTile extends StatelessWidget {
                     letterSpacing: 1.5,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   subtitulo,
                   maxLines: 2,
@@ -256,7 +257,7 @@ class _AlertasFinDeVida extends StatelessWidget {
                 child: Row(
                   children: [
                     Icon(Icons.warning_amber_rounded, color: color, size: 28),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,7 +351,7 @@ class _AlertasSheet extends StatelessWidget {
               controller: controller,
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
               itemCount: alertas.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
               itemBuilder: (_, i) {
                 final a = alertas[i];
                 final color = a.porcentaje >= 100
@@ -392,7 +393,7 @@ class _AlertasSheet extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,

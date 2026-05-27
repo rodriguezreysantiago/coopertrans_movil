@@ -12,6 +12,7 @@ import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../utils/etiquetas_alerta_volvo.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Bottom sheet con el detalle de UN evento de VOLVO_ALERTAS.
 ///
 /// Se muestra al tappear un marker en `AdminMapaVolvoScreen`. Permite
@@ -66,7 +67,7 @@ class EventoVolvoDetalleSheet extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Row(
             children: [
               Expanded(
@@ -100,7 +101,7 @@ class EventoVolvoDetalleSheet extends StatelessWidget {
               _SeveridadBadge(severidad: severidad, atendida: atendida),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           _Linea(
             label: 'Cuándo',
             valor: AppFormatters.formatearFechaHoraSinSegundos(creado),
@@ -114,7 +115,7 @@ class EventoVolvoDetalleSheet extends StatelessWidget {
               onTap: () => _abrirMaps(lat, lng),
             ),
           if (atendida) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             _Linea(
               label: 'Atendida por',
               valor: atendidaPor.isEmpty ? '—' : atendidaPor,
@@ -134,7 +135,7 @@ class EventoVolvoDetalleSheet extends StatelessWidget {
                 ),
               ),
               if (!atendida) ...[
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () => _marcarAtendida(context),
@@ -289,7 +290,7 @@ class _SeveridadBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withAlpha(30),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: color.withAlpha(120)),
       ),
       child: Text(

@@ -24,6 +24,7 @@ import '../services/logistica_geo_utils.dart';
 import '../services/logistica_service.dart';
 import '../widgets/acciones_navegacion_sheet.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 class LogisticaMapaTarifasScreen extends StatefulWidget {
   const LogisticaMapaTarifasScreen({super.key});
 
@@ -274,7 +275,7 @@ class _LogisticaMapaTarifasScreenState
                               fontSize: 13,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: AppSpacing.xs),
                           Text(
                             f.motivo,
                             style: const TextStyle(
@@ -345,7 +346,7 @@ class _LogisticaMapaTarifasScreenState
               children: [
                 const Icon(Icons.info_outline,
                     color: AppColors.warning, size: 16),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     'Mostrando ${tarifasConCoords.length} de '
@@ -489,9 +490,9 @@ class _LogisticaMapaTarifasScreenState
                   right: 12,
                   child: Material(
                     color: Colors.black.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
                       onTap: () => setState(
                           () => _modoSatelite = !_modoSatelite),
                       child: Padding(
@@ -532,9 +533,9 @@ class _LogisticaMapaTarifasScreenState
                   left: 12,
                   child: Material(
                     color: AppColors.warning.withValues(alpha: 0.92),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                     child: InkWell(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
                       onTap: () => _verPanoramica(tarifasConCoords, bbox),
                       child: const Padding(
                         padding: EdgeInsets.symmetric(
@@ -855,7 +856,7 @@ class _PanelLateralTarifasState extends State<_PanelLateralTarifas> {
             child: filtradas.isEmpty
                 ? const Center(
                     child: Padding(
-                      padding: EdgeInsets.all(24),
+                      padding: EdgeInsets.all(AppSpacing.xl),
                       child: Text(
                         'Sin tarifas que coincidan con la búsqueda.',
                         style: TextStyle(color: Colors.white54, fontSize: 12),
@@ -933,7 +934,7 @@ class _TarifaTile extends StatelessWidget {
               children: [
                 const Icon(Icons.arrow_downward,
                     size: 11, color: Colors.white38),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
                     t.ubicacionDestinoEtiqueta,
@@ -948,14 +949,14 @@ class _TarifaTile extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               '${t.empresaOrigenNombre} → ${t.empresaDestinoNombre}',
               style: const TextStyle(color: Colors.white54, fontSize: 10),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               '${tarifaConRuta.distanciaKm.toStringAsFixed(0)} km · '
               '\$${AppFormatters.formatearMonto(t.tarifaReal)}'
@@ -1005,7 +1006,7 @@ class _DetalleTarifaSheet extends StatelessWidget {
             children: [
               const Icon(Icons.price_change_outlined,
                   color: AppColors.success),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   '${t.ubicacionOrigenEtiqueta} → ${t.ubicacionDestinoEtiqueta}',
@@ -1020,7 +1021,7 @@ class _DetalleTarifaSheet extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             '${tarifaConRuta.nombreOrigen}  →  ${tarifaConRuta.nombreDestino}',
             maxLines: 2,
@@ -1101,7 +1102,7 @@ class _DetalleTarifaSheet extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () => AccionesNavegacionSheet.abrir(
@@ -1126,7 +1127,7 @@ class _DetalleTarifaSheet extends StatelessWidget {
               children: [
                 const Icon(Icons.alt_route,
                     color: AppColors.warning, size: 18),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 const Expanded(
                   child: Text(
                     'Recorrido marcado en el mapa.',
@@ -1162,7 +1163,7 @@ class _InfoFila extends StatelessWidget {
       child: Row(
         children: [
           Icon(icono, color: Colors.white54, size: 16),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               etiqueta,

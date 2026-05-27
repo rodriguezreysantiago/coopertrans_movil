@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
 import '../utils/fecha_input_formatter.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Diálogo de selección de fecha por **input directo** (`DD/MM/YYYY`),
 /// pensado como reemplazo del `showDatePicker` nativo de Material.
 ///
@@ -158,7 +159,7 @@ class _FechaDialogState extends State<_FechaDialog> {
             'Ingresá la fecha en formato DD/MM/AAAA',
             style: TextStyle(color: Colors.white60, fontSize: 12),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           TextField(
             controller: _ctrl,
             autofocus: true,
@@ -184,7 +185,7 @@ class _FechaDialogState extends State<_FechaDialog> {
               filled: true,
               fillColor: Colors.black.withAlpha(80),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.md),
                 borderSide: BorderSide.none,
               ),
               errorText: _error,

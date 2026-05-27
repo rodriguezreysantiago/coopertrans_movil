@@ -14,6 +14,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/vista_ejecutiva_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 class KpiGrandeCard extends StatelessWidget {
   final String label;
   final String valorTexto;
@@ -225,7 +226,7 @@ class KpiGrandeCard extends StatelessWidget {
                 padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
                   color: color.withAlpha(30),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
                 ),
                 child: Icon(icono, color: color, size: 18),
               ),
@@ -245,7 +246,7 @@ class KpiGrandeCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           // Número grande — FittedBox para que escale en mobile chico
           // sin overflowear.
           FittedBox(

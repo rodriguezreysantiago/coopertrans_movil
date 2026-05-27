@@ -23,29 +23,29 @@ class _DashboardBot extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       children: [
         _BannerEstado(salud: salud, estadoCliente: estadoCliente, ultimoHb: ultimoHb),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         const _ToggleKillSwitch(),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _CardCola(cola: (data['cola'] as Map?) ?? const {}),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _CardMensajes(mensajes: (data['mensajes'] as Map?) ?? const {}),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         const _CardSparklineEnviados(),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _CardCron(cron: (data['cron'] as Map?) ?? const {}),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _CardConfig(config: (data['config'] as Map?) ?? const {}),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _CardReglasNotificacion(
           reglas: (data['reglasNotificacion'] as Map?) ?? const {},
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _CardErroresRecientes(
           errores: (data['erroresRecientes'] as List?) ?? const [],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _CardBotInfo(bot: (data['bot'] as Map?) ?? const {}),
-        const SizedBox(height: 24),
+        const SizedBox(height: AppSpacing.xl),
       ],
     );
   }
@@ -117,7 +117,7 @@ class _BannerEstado extends StatelessWidget {
           Row(
             children: [
               Icon(icono, color: color, size: 32),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -148,18 +148,18 @@ class _BannerEstado extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.white.withAlpha(8),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
             child: Row(
               children: [
                 const Icon(Icons.access_time,
                     color: Colors.white54, size: 14),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Text(
                   ultimoHb == null
                       ? 'Sin heartbeat registrado'
@@ -445,7 +445,7 @@ class _CardReglasNotificacion extends StatelessWidget {
     }
 
     return AppCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -453,7 +453,7 @@ class _CardReglasNotificacion extends StatelessWidget {
             children: [
               Icon(Icons.rule_folder_outlined,
                   color: AppColors.success, size: 18),
-              SizedBox(width: 8),
+              SizedBox(width: AppSpacing.sm),
               Text(
                 'Reglas de notificación',
                 style: TextStyle(
@@ -465,9 +465,9 @@ class _CardReglasNotificacion extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           ...secciones,
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           const Text(
             'Catálogo completo de mensajes que la app manda por WhatsApp. '
             'Si querés cambiar quién recibe un resumen sin tocar código '
@@ -640,7 +640,7 @@ class _FilaReglaNotif extends StatelessWidget {
                 style: const TextStyle(color: Colors.white60, fontSize: 11),
               ),
             ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           if (destinatarioDni.isEmpty)
             const _BadgeDestinatario(
               icono: Icons.warning_amber_outlined,
@@ -926,7 +926,7 @@ class _CardErroresRecientes extends StatelessWidget {
             children: [
               const Icon(Icons.bug_report_outlined,
                   color: AppColors.error, size: 18),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Text(
                 'Errores recientes (${errores.length})',
                 style: const TextStyle(
@@ -979,7 +979,7 @@ class _FilaError extends StatelessWidget {
                     ),
                   ),
                 ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Text(
                 cuando == null ? '—' : _hace(cuando),
                 style: const TextStyle(
@@ -1075,7 +1075,7 @@ class _BloqueDatos extends StatelessWidget {
           Row(
             children: [
               Icon(icono, color: AppColors.success, size: 18),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   titulo,
@@ -1183,7 +1183,7 @@ class _Mensaje extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icono, color: color, size: 48),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             Text(
               texto,
               textAlign: TextAlign.center,
@@ -1431,7 +1431,7 @@ class _BadgePausa extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         TextButton.icon(
           onPressed: () => _confirmarReanudar(context),
           icon: const Icon(Icons.play_arrow,
@@ -1610,7 +1610,7 @@ class _BottomSheetPausaState extends State<_BottomSheetPausa> {
                     : AppColors.warning,
                 size: 22,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               const Text(
                 'Pausar canal',
                 style: TextStyle(
@@ -1621,7 +1621,7 @@ class _BottomSheetPausaState extends State<_BottomSheetPausa> {
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             widget.regKey,
             style: const TextStyle(
@@ -1630,20 +1630,20 @@ class _BottomSheetPausaState extends State<_BottomSheetPausa> {
               fontFamily: 'monospace',
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           if (widget.critico)
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: AppColors.error.withAlpha(30),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
                 border: Border.all(color: AppColors.error.withAlpha(120)),
               ),
               child: const Row(
                 children: [
                   Icon(Icons.warning_amber_outlined,
                       color: AppColors.error, size: 18),
-                  SizedBox(width: 8),
+                  SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
                       'Atención: este canal silencia un aviso de '
@@ -1658,7 +1658,7 @@ class _BottomSheetPausaState extends State<_BottomSheetPausa> {
                 ],
               ),
             ),
-          if (widget.critico) const SizedBox(height: 16),
+          if (widget.critico) const SizedBox(height: AppSpacing.lg),
           Row(
             children: [
               const Text('Pausa indefinida',
@@ -1674,12 +1674,12 @@ class _BottomSheetPausaState extends State<_BottomSheetPausa> {
             ],
           ),
           if (!_indefinida) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             const Text(
               'Hasta:',
               style: TextStyle(color: Colors.white60, fontSize: 12),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             InkWell(
               onTap: _guardando ? null : _pickDate,
               child: Container(
@@ -1693,7 +1693,7 @@ class _BottomSheetPausaState extends State<_BottomSheetPausa> {
                   children: [
                     const Icon(Icons.calendar_today,
                         color: AppColors.info, size: 16),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppSpacing.sm),
                     Text(
                       '${AppFormatters.formatearFechaCorta(_hasta)} '
                       '${_hasta.hour.toString().padLeft(2, '0')}:'
@@ -1710,7 +1710,7 @@ class _BottomSheetPausaState extends State<_BottomSheetPausa> {
               ),
             ),
           ],
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           TextField(
             controller: _motivoCtrl,
             enabled: !_guardando,
@@ -1725,7 +1725,7 @@ class _BottomSheetPausaState extends State<_BottomSheetPausa> {
               counterStyle: TextStyle(color: Colors.white30),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           Row(
             children: [
               TextButton(
@@ -1880,7 +1880,7 @@ class _CardSparklineEnviadosState extends State<_CardSparklineEnviados> {
             children: [
               const Icon(Icons.bar_chart,
                   color: AppColors.info, size: 18),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               const Expanded(
                 child: Text(
                   'Enviados últimos 7 días',
@@ -1901,7 +1901,7 @@ class _CardSparklineEnviadosState extends State<_CardSparklineEnviados> {
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           SizedBox(
             height: 110,
             child: _contenido(),

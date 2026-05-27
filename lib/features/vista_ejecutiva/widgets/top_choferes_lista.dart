@@ -9,6 +9,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/vista_ejecutiva_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 class TopChoferesLista extends StatelessWidget {
   final String titulo;
   final IconData icono;
@@ -36,7 +37,7 @@ class TopChoferesLista extends StatelessWidget {
           Row(
             children: [
               Icon(icono, color: colorTitulo, size: 18),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   titulo,
@@ -131,7 +132,7 @@ class _ChoferRow extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 4),
+            const SizedBox(width: AppSpacing.xs),
             // Nombre del chofer
             Expanded(
               child: Text(
@@ -145,7 +146,7 @@ class _ChoferRow extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             // Badge con ICM
             Container(
               padding: const EdgeInsets.symmetric(
@@ -168,7 +169,7 @@ class _ChoferRow extends StatelessWidget {
               ),
             ),
             if (onTap != null) ...[
-              const SizedBox(width: 4),
+              const SizedBox(width: AppSpacing.xs),
               const Icon(Icons.chevron_right,
                   color: Colors.white24, size: 16),
             ],

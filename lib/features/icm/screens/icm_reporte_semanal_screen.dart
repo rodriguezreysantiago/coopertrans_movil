@@ -10,6 +10,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/icm_oficial_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Reporte del ICM **oficial de Sitrack** (lo que audita YPF) de un mes:
 ///   - ICM de la flota + variación vs el mes anterior (más bajo = mejor).
 ///   - KPIs: choferes activos, distancia total, tiempo total.
@@ -106,7 +107,7 @@ class _IcmReporteSemanalScreenState extends State<IcmReporteSemanalScreen> {
                 if (snap.hasError) {
                   return Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(AppSpacing.xl),
                       child: Text('Error: ${snap.error}',
                           style: const TextStyle(color: AppColors.error)),
                     ),
@@ -131,7 +132,7 @@ class _IcmReporteSemanalScreenState extends State<IcmReporteSemanalScreen> {
                   );
                 }
                 return SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(AppSpacing.lg),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
@@ -141,24 +142,24 @@ class _IcmReporteSemanalScreenState extends State<IcmReporteSemanalScreen> {
                         labelPrev:
                             IcmOficialService.labelPeriodo(data.idPrev),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: AppSpacing.lg),
                       _KpisRow(periodo: p),
                       const SizedBox(height: 20),
                       const _SeccionTitulo('Infracciones de la flota'),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpacing.sm),
                       _InfraccionesFlota(periodo: p),
                       const SizedBox(height: 20),
                       const _SeccionTitulo(
                           'Choferes por severidad (con actividad)'),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpacing.sm),
                       _PieSeveridad(periodo: p),
                       const SizedBox(height: 20),
                       const _SeccionTitulo('Top 5 a abordar (peor ICM)'),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpacing.sm),
                       _ListaChoferes(choferes: p.peores(5)),
                       const SizedBox(height: 20),
                       const _SeccionTitulo('Top 5 mejores (mejor ICM)'),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: AppSpacing.sm),
                       _ListaChoferes(choferes: p.mejores(5)),
                     ],
                   ),
@@ -228,7 +229,7 @@ class _HeaderFlota extends StatelessWidget {
                     style: TextStyle(color: Colors.white60, fontSize: 11)),
               ],
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: AppSpacing.lg),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
@@ -251,7 +252,7 @@ class _HeaderFlota extends StatelessWidget {
                         fontSize: 12,
                         fontWeight: FontWeight.w600),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   const Text('más bajo = mejor',
                       style: TextStyle(
                           color: Colors.white38,
@@ -279,12 +280,12 @@ class _KpisRow extends StatelessWidget {
           label: 'Choferes rankeables',
           valor: '${periodo.choferesConActividad.length}',
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         _Kpi(
           label: 'Distancia',
           valor: '${AppFormatters.formatearMiles(periodo.distanciaTotalKm)} km',
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         _Kpi(
           label: 'Tiempo',
           valor: '${AppFormatters.formatearMiles(periodo.tiempoTotalH)} h',
@@ -313,7 +314,7 @@ class _Kpi extends StatelessWidget {
                       const TextStyle(color: Colors.white54, fontSize: 10),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 4),
+              const SizedBox(height: AppSpacing.xs),
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
@@ -342,11 +343,11 @@ class _InfraccionesFlota extends StatelessWidget {
         _Kpi(
             label: 'Altas',
             valor: AppFormatters.formatearMiles(periodo.infraccionesAltas)),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         _Kpi(
             label: 'Medias',
             valor: AppFormatters.formatearMiles(periodo.infraccionesMedias)),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         _Kpi(
             label: 'Leves',
             valor: AppFormatters.formatearMiles(periodo.infraccionesLeves)),
@@ -378,7 +379,7 @@ class _PieSeveridad extends StatelessWidget {
     }
     return AppCard(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Row(
           children: [
             SizedBox(
@@ -426,7 +427,7 @@ class _PieSeveridad extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: AppSpacing.lg),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -466,7 +467,7 @@ class _Leyenda extends StatelessWidget {
           height: 12,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Text('$label: $n',
             style: const TextStyle(color: Colors.white70, fontSize: 12)),
       ],

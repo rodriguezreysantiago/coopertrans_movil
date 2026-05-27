@@ -12,6 +12,7 @@ import '../services/report_flota.dart';
 import '../services/report_gomeria.dart';
 import '../services/report_icm.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Centro de Reportes (admin).
 ///
 /// Lista los informes que el admin puede generar y exportar a Excel/PDF.
@@ -184,7 +185,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 color: AppColors.success,
                 onTap: _generando ? null : _ejecutarReporteChecklist,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _ReportCard(
                 titulo: 'Estado de Flota (Volvo)',
                 descripcion:
@@ -193,7 +194,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 color: AppColors.info,
                 onTap: _generando ? null : _ejecutarReporteFlota,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _ReportCard(
                 titulo: 'Consumo de Combustible',
                 descripcion:
@@ -202,7 +203,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 color: AppColors.warning,
                 onTap: _generando ? null : _ejecutarReporteConsumo,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _ReportCard(
                 titulo: 'Gomería',
                 descripcion:
@@ -212,7 +213,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 color: AppColors.brandSoft,
                 onTap: _generando ? null : _ejecutarReporteGomeria,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _ReportCard(
                 titulo: 'ICM Semanal (Conducta de Manejo)',
                 descripcion:
@@ -263,7 +264,7 @@ class _ReportCard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(
               color: color.withAlpha(30),
               shape: BoxShape.circle,

@@ -11,6 +11,7 @@ import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 // 10 widgets visuales (seccion unidad, cards de revision/sin-asignacion/
 // unidad, bloque telemetria, datos, filas, selector de cambio, lista
 // libres) extraidos para mantener navegable este screen. Comparten
@@ -127,7 +128,7 @@ class _UserMiEquipoScreenState extends State<UserMiEquipoScreen> {
                     nombreChofer: nombreChofer,
                     dni: widget.dniUser,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: AppSpacing.xl),
                   _SeccionUnidad(
                     titulo: 'ENGANCHE (Batea/Tolva)',
                     icono: Icons.grid_view_rounded,
@@ -169,7 +170,7 @@ class _EquipoOfflineFallback extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: AppColors.warning.withAlpha(40),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.md),
             border: Border.all(color: AppColors.warning.withAlpha(120)),
           ),
           child: Row(
@@ -177,7 +178,7 @@ class _EquipoOfflineFallback extends StatelessWidget {
             children: [
               const Icon(Icons.signal_wifi_bad_outlined,
                   color: AppColors.warning),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,7 +191,7 @@ class _EquipoOfflineFallback extends StatelessWidget {
                         fontSize: 14,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       motivo ??
                           'No pudimos cargar los datos de tu unidad. '

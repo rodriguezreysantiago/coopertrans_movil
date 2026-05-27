@@ -8,6 +8,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../models/zona_descarga.dart';
 import '../services/zonas_descarga_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Módulo "Descargas" — cola en vivo + recién descargaron + KPIs.
 ///
 /// Reemplazó al detector PTO Volvo (eliminado 2026-05-24) que daba
@@ -113,16 +114,16 @@ class _AdminDescargasScreenState extends State<AdminDescargasScreen> {
               ),
               Expanded(
                 child: ListView(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(AppSpacing.md),
                   children: [
                     _KpisZona(
                       slug: zonaActual.slug,
                       desde: _desde,
                       hasta: _hasta,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     _ColaEnVivo(zona: zonaActual),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     _DescargasDelRango(
                       slug: zonaActual.slug,
                       desde: _desde,
@@ -160,13 +161,13 @@ class _BotonRango extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         child: Container(
           padding:
               const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: AppColors.brand.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
             border: Border.all(
               color: AppColors.brand.withValues(alpha: 0.4),
             ),
@@ -175,7 +176,7 @@ class _BotonRango extends StatelessWidget {
             children: [
               const Icon(Icons.date_range,
                   color: AppColors.brand, size: 22),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -218,13 +219,13 @@ class _SinZonas extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.add_location_alt_outlined,
                 color: Colors.white24, size: 72),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             const Text(
               'No hay zonas de descarga cargadas',
               style: TextStyle(
@@ -232,7 +233,7 @@ class _SinZonas extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                   fontSize: 16),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               'Cargá la primera zona (por ej. YPF Añelo) para que el '
               'sistema empiece a detectar entradas y salidas.',
@@ -371,14 +372,14 @@ class _KpisZona extends StatelessWidget {
               color: AppColors.info,
               icon: Icons.local_shipping,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             _KpiCard(
               label: 'Promedio',
               valor: '$promedio min',
               color: AppColors.warning,
               icon: Icons.timer,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             _KpiCard(
               label: maxPat.isEmpty ? 'Más lenta' : 'Más lenta · $maxPat',
               valor: maxDur > 0 ? '$maxDur min' : '—',
@@ -408,7 +409,7 @@ class _KpiCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: AppCard(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -455,7 +456,7 @@ class _ColaEnVivo extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           stream: FirebaseFirestore.instance
               .collection(AppCollections.zonaDescargaCola)
@@ -464,7 +465,7 @@ class _ColaEnVivo extends StatelessWidget {
           builder: (ctx, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Padding(
-                padding: EdgeInsets.all(24),
+                padding: EdgeInsets.all(AppSpacing.xl),
                 child: Center(child: CircularProgressIndicator()),
               );
             }
@@ -538,7 +539,7 @@ class _FilaCola extends StatelessWidget {
       elevation: 1,
       margin: const EdgeInsets.symmetric(vertical: 3),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         side: BorderSide(
             color: colorPos.withValues(alpha: 0.5), width: 1),
       ),
@@ -647,7 +648,7 @@ class _DescargasDelRango extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
           // Filtra por ENTRADA en el rango (cuándo empezó la descarga).
           // Si una descarga empezó dentro pero terminó después de "hasta",
@@ -666,7 +667,7 @@ class _DescargasDelRango extends StatelessWidget {
           builder: (ctx, snap) {
             if (snap.connectionState == ConnectionState.waiting) {
               return const Padding(
-                padding: EdgeInsets.all(24),
+                padding: EdgeInsets.all(AppSpacing.xl),
                 child: Center(child: CircularProgressIndicator()),
               );
             }
@@ -768,7 +769,7 @@ class _FilaHistorico extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

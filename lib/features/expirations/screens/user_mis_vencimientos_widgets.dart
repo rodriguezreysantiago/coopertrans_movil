@@ -84,7 +84,7 @@ class _CardVencimientoUser extends StatelessWidget {
                 url: urlArchivo,
                 tituloVisor: '$titulo - $idDoc',
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -99,7 +99,7 @@ class _CardVencimientoUser extends StatelessWidget {
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       enRevision
                           ? 'Validación pendiente...'
@@ -122,7 +122,7 @@ class _CardVencimientoUser extends StatelessWidget {
               ),
               if (!enRevision) ...[
                 VencimientoBadge(fecha: fecha),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 _BotonUpload(onTap: onUpload),
               ] else
                 const Icon(Icons.hourglass_top,
@@ -147,7 +147,7 @@ class _BotonUpload extends StatelessWidget {
         borderRadius: BorderRadius.circular(50),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(AppSpacing.sm),
           decoration: BoxDecoration(
             border: Border.all(color: Colors.white24),
             shape: BoxShape.circle,
@@ -218,7 +218,7 @@ class _CardVencimientoEmpresa extends StatelessWidget {
                 url: url,
                 tituloVisor: titulo,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -233,7 +233,7 @@ class _CardVencimientoEmpresa extends StatelessWidget {
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       tieneArchivo || fecha != null
                           ? 'Vence: ${AppFormatters.formatearFecha(fecha)}'
@@ -251,7 +251,7 @@ class _CardVencimientoEmpresa extends StatelessWidget {
                 ),
               ),
               VencimientoBadge(fecha: fecha),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               // Sin botón upload — el chofer no edita estos docs.
               // Lock icon visible para que se entienda que es view-only.
               const Icon(Icons.lock_outline,
@@ -271,7 +271,7 @@ class _CardVencimientoEmpresa extends StatelessWidget {
         children: [
           const Icon(Icons.warning_amber_rounded,
               color: Colors.white38, size: 22),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -359,7 +359,7 @@ class _DetalleEquipo extends StatelessWidget {
         final vData = vRaw;
 
         return AppCard(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           margin: EdgeInsets.zero,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -397,7 +397,7 @@ class _DetalleEquipo extends StatelessWidget {
                     nombreUsuario: nombreChofer,
                   ),
                 ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               _AccesoChecklist(patente: patente, tipoLabel: tipo),
             ],
           ),
@@ -486,13 +486,13 @@ class _AccesoChecklist extends StatelessWidget {
         return Container(
           decoration: BoxDecoration(
             color: color.withAlpha(20),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.md),
             border: Border.all(color: color.withAlpha(60)),
           ),
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(AppRadius.md),
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -597,7 +597,7 @@ class _BotonDetectarFechaState extends State<_BotonDetectarFecha> {
           foregroundColor: AppColors.success,
           padding: const EdgeInsets.symmetric(vertical: 10),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.md),
             side: BorderSide(color: AppColors.success.withAlpha(80)),
           ),
         ),
@@ -725,10 +725,10 @@ class _BannerProximoAVencerState extends State<_BannerProximoAVencer> {
 
         return Container(
           margin: const EdgeInsets.fromLTRB(0, 0, 0, 12),
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
             border: Border.all(color: color.withValues(alpha: 0.5)),
           ),
           child: Row(
@@ -832,7 +832,7 @@ class _VencimientoOfflineFallback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -841,7 +841,7 @@ class _VencimientoOfflineFallback extends StatelessWidget {
             color: AppColors.warning.withValues(alpha: 0.7),
             size: 64,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           Text(
             motivo == null ? 'Conexión lenta' : 'Sin datos',
             style: const TextStyle(
@@ -850,7 +850,7 @@ class _VencimientoOfflineFallback extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Text(
             motivo ??
                 'Estamos teniendo problemas para traer tus vencimientos. '

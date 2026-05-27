@@ -11,6 +11,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/utils/pdf_printer.dart';
 import '../models/adelanto_chofer.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Resumen de adelantos en PDF — pensado para imprimir, NO para
 /// enviar al contador en Excel. Pedido por Santiago 2026-05-13: el
 /// flujo físico es el mismo que el recibo individual (oficina entrega
@@ -187,7 +188,7 @@ class ReportAdelantosService {
                   height: 36,
                   child: pw.Image(logo, fit: pw.BoxFit.contain),
                 ),
-                pw.SizedBox(width: 12),
+                pw.SizedBox(width: AppSpacing.md),
               ],
               pw.Expanded(
                 child: pw.Column(
@@ -228,7 +229,7 @@ class ReportAdelantosService {
                 ),
             ],
           ),
-          pw.SizedBox(height: 8),
+          pw.SizedBox(height: AppSpacing.sm),
           pw.Container(
             padding:
                 const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -244,7 +245,7 @@ class ReportAdelantosService {
               ),
             ),
           ),
-          pw.SizedBox(height: 8),
+          pw.SizedBox(height: AppSpacing.sm),
         ],
       ),
     );
@@ -336,7 +337,7 @@ class ReportAdelantosService {
                   color: PdfColors.orange700,
                 ),
               ),
-              pw.SizedBox(width: 8),
+              pw.SizedBox(width: AppSpacing.sm),
               pw.Expanded(
                 child: _miniChipPdf(
                   label: 'ENTREGADO',
@@ -346,7 +347,7 @@ class ReportAdelantosService {
                 ),
               ),
               if (eliminados.isNotEmpty) ...[
-                pw.SizedBox(width: 8),
+                pw.SizedBox(width: AppSpacing.sm),
                 pw.Expanded(
                   child: _miniChipPdf(
                     label: 'ELIMINADO',

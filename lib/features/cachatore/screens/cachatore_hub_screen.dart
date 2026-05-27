@@ -14,6 +14,7 @@ import '../models/cachatore_turno.dart';
 import '../models/franja_carga.dart';
 import '../services/cachatore_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Panel de control del bot que reserva/reagenda turnos de carga YPF en
 /// iTurnos (corre 24/7 en la PC dedicada). Flujo:
 ///   1. Agregar: elegir chofer → fecha (calendario) → franja → "Vigilados".
@@ -29,16 +30,16 @@ class CachatoreHubScreen extends StatelessWidget {
     return AppScaffold(
       title: 'Cachatore — Turnos YPF',
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         children: const [
           _BotStatusCard(),
-          SizedBox(height: 12),
+          SizedBox(height: AppSpacing.md),
           _MasterSwitch(),
           SizedBox(height: 18),
           _SeccionVigilados(),
           SizedBox(height: 22),
           _SeccionConcretados(),
-          SizedBox(height: 24),
+          SizedBox(height: AppSpacing.xl),
         ],
       ),
     );
@@ -89,7 +90,7 @@ class _BotStatusCard extends StatelessWidget {
                 height: 14,
                 decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -212,10 +213,10 @@ class _SeccionVigilados extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             if (cargando)
               const Padding(
-                padding: EdgeInsets.all(24),
+                padding: EdgeInsets.all(AppSpacing.xl),
                 child: Center(child: CircularProgressIndicator()),
               )
             else if (vigilados.isEmpty)
@@ -224,13 +225,13 @@ class _SeccionVigilados extends StatelessWidget {
                   children: [
                     Icon(Icons.person_search_outlined,
                         color: Colors.white24, size: 40),
-                    SizedBox(height: 8),
+                    SizedBox(height: AppSpacing.sm),
                     Text('Sin choferes vigilados',
                         style: TextStyle(
                             color: Colors.white70,
                             fontWeight: FontWeight.bold,
                             fontSize: 14)),
-                    SizedBox(height: 4),
+                    SizedBox(height: AppSpacing.xs),
                     Text(
                       'Tocá "Agregar": elegís chofer, fecha y franja, y el bot le '
                       'busca turno.',
@@ -282,7 +283,7 @@ class _VigiladoCard extends StatelessWidget {
                       Row(
                         children: [
                           const Icon(Icons.event, size: 13, color: Colors.white38),
-                          const SizedBox(width: 4),
+                          const SizedBox(width: AppSpacing.xs),
                           Expanded(
                             child: Text(
                               o.objetivoLabel,
@@ -405,7 +406,7 @@ class _SeccionConcretados extends StatelessWidget {
                       letterSpacing: 0.5,
                       fontSize: 13),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 if (turnos.isEmpty)
                   const AppCard(
                     child: Text(
@@ -452,7 +453,7 @@ class _ConcretadoCard extends StatelessWidget {
         children: [
           Icon(reag ? Icons.event_repeat : Icons.event_available,
               color: acento, size: 26),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -476,12 +477,12 @@ class _ConcretadoCard extends StatelessWidget {
                       fontSize: 12),
                 ),
                 if (reag) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   Row(
                     children: [
                       const Icon(Icons.sync,
                           size: 13, color: AppColors.warning),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: AppSpacing.xs),
                       Expanded(
                         child: Text(
                           'Buscando reagendar a ${objetivo!.objetivoLabel}',
@@ -512,7 +513,7 @@ class _ConcretadoCard extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           const Column(
             children: [
               Icon(Icons.more_vert, color: Colors.white54, size: 20),
@@ -609,7 +610,7 @@ class _ConcretadoCard extends StatelessWidget {
                 _confirmarCancelarTurno(context);
               },
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
           ],
         ),
       ),
@@ -907,7 +908,7 @@ class _WizardSheetState extends State<_WizardSheet> {
               onPressed: () => setState(() => _paso -= 1),
             )
           else
-            const SizedBox(width: 48),
+            const SizedBox(width: AppSpacing.xxxl),
           Expanded(
             child: Column(
               children: [
@@ -949,7 +950,7 @@ class _WizardSheetState extends State<_WizardSheet> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: TextField(
             autofocus: true,
             textCapitalization: TextCapitalization.characters,
@@ -1059,17 +1060,17 @@ class _WizardSheetState extends State<_WizardSheet> {
   // ── Paso 1: elegir fecha ──
   Widget _pasoFecha() {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         Text(
           _nombre ?? _dni ?? '',
           style: const TextStyle(
               color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: AppSpacing.xs),
         const Text('¿Para qué fecha buscamos el turno?',
             style: TextStyle(color: Colors.white60, fontSize: 13)),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         ListTile(
           leading: const Icon(Icons.all_inclusive, color: AppColors.brand),
           title: const Text('Cualquier fecha',
@@ -1130,17 +1131,17 @@ class _WizardSheetState extends State<_WizardSheet> {
   // ── Paso 2: elegir franja (con los números) ──
   Widget _pasoFranja() {
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         Text('$_fechaLabel · ${_nombre ?? _dni ?? ''}',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(color: Colors.white60, fontSize: 13)),
-        const SizedBox(height: 4),
+        const SizedBox(height: AppSpacing.xs),
         const Text('Elegí el horario',
             style: TextStyle(
                 color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         ...FranjaCarga.values.map((f) {
           final sel = f == widget.franjaInicial;
           final esC = f.esCualquiera;
@@ -1250,7 +1251,7 @@ class _ChequeoDialogState extends State<_ChequeoDialog> {
               width: 22,
               height: 22,
               child: CircularProgressIndicator(strokeWidth: 2)),
-          SizedBox(width: 12),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Text('Verificando…',
                 style: TextStyle(color: Colors.white, fontSize: 16)),

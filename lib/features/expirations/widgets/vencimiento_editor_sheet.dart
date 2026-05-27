@@ -11,6 +11,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/fecha_dialog.dart';
 import 'vencimiento_item.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Bottom sheet para editar un vencimiento puntual.
 ///
 /// Permite al admin:
@@ -218,7 +219,7 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
             onTap: _seleccionarArchivo,
             borderRadius: BorderRadius.circular(15),
             child: Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(
                 color: Colors.black12,
                 borderRadius: BorderRadius.circular(15),
@@ -279,7 +280,7 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
                       side: const BorderSide(color: Colors.white24),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(AppRadius.md)),
                     ),
                     onPressed: () => Navigator.pop(context),
                     child: const Text(
@@ -297,7 +298,7 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(AppRadius.md)),
                     ),
                     // Disabled mientras sube — antes el doble tap rapido
                     // disparaba 2 uploads paralelos (auditoria 2026-05-17).

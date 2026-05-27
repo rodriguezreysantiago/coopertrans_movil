@@ -7,6 +7,7 @@ import '../../asignaciones/services/asignacion_vehiculo_service.dart';
 import '../models/volvo_score_diario.dart';
 import '../services/eco_driving_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Bottom sheet de drill-down de un vehículo específico.
 ///
 /// Muestra:
@@ -105,9 +106,9 @@ class _ListaSinData extends StatelessWidget {
       controller: scrollCtrl,
       children: [
         const _DragHandle(),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         _Header(patente: patente, scorePromedio: null),
-        const SizedBox(height: 24),
+        const SizedBox(height: AppSpacing.xl),
         const Center(
           child: Text(
             'Sin scores en este rango.\n'
@@ -154,11 +155,11 @@ class _ContenidoDrilldown extends StatelessWidget {
       controller: scrollCtrl,
       children: [
         const _DragHandle(),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         _Header(patente: patente, scorePromedio: scorePromedio),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         const _Seccion('EVOLUCIÓN DIARIA'),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         ...docs.map((d) {
           final asig = _asignacionEnFecha(d.fechaTs);
           return _FilaDia(
@@ -168,7 +169,7 @@ class _ContenidoDrilldown extends StatelessWidget {
         }),
         const SizedBox(height: 20),
         const _Seccion('SUB-SCORES PROMEDIO'),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         ...VolvoSubScoreLabels.etiquetas.entries.map((e) {
           final v = subScoresProm[e.key];
           return _BarraSubscore(label: e.value, score: v);
@@ -360,7 +361,7 @@ class _FilaDia extends StatelessWidget {
               style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13),
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -434,7 +435,7 @@ class _BarraSubscore extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           SizedBox(
             width: 30,
             child: Text(

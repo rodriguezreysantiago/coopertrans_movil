@@ -298,9 +298,9 @@ class _TramoCard extends StatelessWidget {
           ),
         ),
         if (tarifa != null) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _ResumenTarifa(t: tarifa),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           // Override del pago al chofer para ESTE tramo. Útil cuando
           // la tarifa está cargada al 18% pero este viaje paga un
           // monto distinto al chofer (acuerdo a mano). El cambio NO
@@ -308,11 +308,11 @@ class _TramoCard extends StatelessWidget {
           // tramo, así el catálogo de tarifas queda intacto.
           _OverridePagoChofer(state: state, onCambio: onCambio),
         ],
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
 
         // CARGA — fecha + kg + producto + descripción libre.
         const _SubseccionTitulo('CARGA'),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         _BotonFecha(
           label: 'Fecha de carga',
           fecha: state.fechaCarga,
@@ -322,7 +322,7 @@ class _TramoCard extends StatelessWidget {
           },
         ),
         if (esTn) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           TextField(
             controller: state.kgCargadosCtrl,
             decoration: const InputDecoration(
@@ -335,7 +335,7 @@ class _TramoCard extends StatelessWidget {
             onChanged: (_) => onCambio(),
           ),
         ],
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         // Producto — dropdown poblado con productos de la empresa
         // origen de la tarifa. Si no hay tarifa, queda deshabilitado.
         // Si la empresa NO tiene productos catalogados, cae a texto
@@ -349,7 +349,7 @@ class _TramoCard extends StatelessWidget {
             onCambio();
           },
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         TextField(
           controller: state.descripcionCargaCtrl,
           decoration: const InputDecoration(
@@ -359,11 +359,11 @@ class _TramoCard extends StatelessWidget {
           maxLines: 2,
           onChanged: (_) => onCambio(),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
 
         // DESCARGA — fecha + remito + comprobante + kg descargados.
         const _SubseccionTitulo('DESCARGA'),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         _BotonFecha(
           label: 'Fecha de descarga',
           fecha: state.fechaDescarga,
@@ -372,7 +372,7 @@ class _TramoCard extends StatelessWidget {
             onCambio();
           },
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         TextField(
           controller: state.remitoNumeroCtrl,
           decoration: const InputDecoration(
@@ -381,7 +381,7 @@ class _TramoCard extends StatelessWidget {
           ),
           onChanged: (_) => onCambio(),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         OutlinedButton.icon(
           onPressed: () => _pickRemito(context),
           icon: const Icon(Icons.attach_file, size: 18),
@@ -394,14 +394,14 @@ class _TramoCard extends StatelessWidget {
           ),
         ),
         if (state.remitoUrl != null && state.remitoNombreLocal == null) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           const Text(
             '✓ Comprobante ya cargado.',
             style: TextStyle(color: AppColors.success, fontSize: 11),
           ),
         ],
         if (esTn) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           TextField(
             controller: state.kgDescargadosCtrl,
             decoration: const InputDecoration(
@@ -421,7 +421,7 @@ class _TramoCard extends StatelessWidget {
         // Cada tramo tiene sus propios gastos (refactor 2026-05-13).
         // Antes vivían a nivel viaje pero un viaje multi-tramo tiene
         // peajes / lavados distintos por tramo, así que se separan.
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         _SeccionGastos(
           gastos: state.gastos,
           onChanged: (l) {
@@ -498,7 +498,7 @@ class _OverridePagoChofer extends StatelessWidget {
           ],
         ),
         if (state.montoFijoChoferActivo) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           TextField(
             controller: state.montoFijoChoferCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -561,7 +561,7 @@ class _BannerEncadenamiento extends StatelessWidget {
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppColors.warning.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(
             color: AppColors.warning.withValues(alpha: 0.5)),
       ),
@@ -570,7 +570,7 @@ class _BannerEncadenamiento extends StatelessWidget {
         children: [
           const Icon(Icons.warning_amber_outlined,
               size: 18, color: AppColors.warning),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               mensaje,

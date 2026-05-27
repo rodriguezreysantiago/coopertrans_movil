@@ -75,13 +75,13 @@ class _EmpleadoCard extends StatelessWidget {
                     if (rol != AppRoles.chofer) _RolBadge(rol: rol),
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 if (mostrarFlota)
                   Row(
                     children: [
                       const Icon(Icons.local_shipping,
                           size: 11, color: Colors.white38),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: AppSpacing.xs),
                       Flexible(
                         child: Text(
                           tractor,
@@ -91,9 +91,9 @@ class _EmpleadoCard extends StatelessWidget {
                               color: Colors.white54, fontSize: 11),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: AppSpacing.md),
                       const Icon(Icons.link, size: 11, color: Colors.white38),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: AppSpacing.xs),
                       Flexible(
                         child: Text(
                           enganche,
@@ -110,7 +110,7 @@ class _EmpleadoCard extends StatelessWidget {
                     children: [
                       const Icon(Icons.factory_outlined,
                           size: 11, color: Colors.white38),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: AppSpacing.xs),
                       Flexible(
                         child: Text(
                           AppAreas.etiquetas[area] ?? area,
@@ -427,7 +427,7 @@ class _DetalleChofer extends StatelessWidget {
               v.trim().isEmpty ? null : v.trim().toUpperCase(),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           // Botón "Ver actividad": abre tablero con km manejados,
           // tractores usados y eventos Volvo del chofer en los
           // últimos 7/30/90 días.
@@ -508,10 +508,10 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
         : '?';
     final motivo = (data[AppActivo.campoBajaMotivo] ?? '').toString();
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: AppColors.warning.withAlpha(20),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: AppColors.warning.withAlpha(80)),
       ),
       child: Column(
@@ -521,7 +521,7 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
             children: [
               Icon(Icons.archive_outlined,
                   color: AppColors.warning, size: 18),
-              SizedBox(width: 8),
+              SizedBox(width: AppSpacing.sm),
               Text(
                 'EMPLEADO DADO DE BAJA',
                 style: TextStyle(
@@ -533,19 +533,19 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Text(
             'Fecha: $bajaEnFmt',
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
           if (motivo.isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               'Motivo: $motivo',
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Center(
             child: TextButton.icon(
               onPressed: () => EmpleadoActions.confirmarYReactivar(
@@ -629,7 +629,7 @@ class _HeaderDetalle extends StatelessWidget {
               child: GestureDetector(
                 onTap: () => EmpleadoActions.fotoPerfil(context, dni, urlPerfil),
                 child: Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(AppSpacing.sm),
                   decoration: const BoxDecoration(
                     color: AppColors.success,
                     shape: BoxShape.circle,
@@ -641,7 +641,7 @@ class _HeaderDetalle extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         Text(
           (data['NOMBRE'] ?? 'Sin nombre').toString(),
           style: const TextStyle(
@@ -671,7 +671,7 @@ class _SectionTitle extends StatelessWidget {
       child: Row(
         children: [
           Icon(icon, color: AppColors.success, size: 16),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Text(
             label.toUpperCase(),
             style: const TextStyle(
@@ -985,7 +985,7 @@ class _FilaVencimiento extends StatelessWidget {
               url: url,
               tituloVisor: '$etiqueta - $dni',
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1014,7 +1014,7 @@ class _FilaVencimiento extends StatelessWidget {
               ),
             ),
             VencimientoBadge(fecha: fecha),
-            const SizedBox(width: 4),
+            const SizedBox(width: AppSpacing.xs),
             const Icon(Icons.chevron_right,
                 color: Colors.white24, size: 18),
           ],

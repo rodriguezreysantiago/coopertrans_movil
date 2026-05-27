@@ -12,6 +12,7 @@ import '../../features/revisions/screens/admin_revisiones_screen.dart'
 import '../../features/vehicles/screens/admin_vehiculos_lista_screen.dart'
     show abrirDetalleVehiculo;
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Palette de búsqueda global estilo VS Code.
 ///
 /// Pensado como atajo del admin en desktop / Web: Ctrl+K abre este
@@ -176,7 +177,7 @@ class _PaletteDialogState extends State<_PaletteDialog> {
     return Dialog(
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         side: BorderSide(color: Colors.white.withAlpha(25)),
       ),
       insetPadding: const EdgeInsets.symmetric(horizontal: 80, vertical: 80),
@@ -199,7 +200,7 @@ class _PaletteDialogState extends State<_PaletteDialog> {
                   filled: true,
                   fillColor: Colors.black.withAlpha(80),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                     borderSide: BorderSide.none,
                   ),
                 ),
@@ -219,7 +220,7 @@ class _PaletteDialogState extends State<_PaletteDialog> {
                   : _loadError != null
                       ? Center(
                           child: Padding(
-                            padding: const EdgeInsets.all(24),
+                            padding: const EdgeInsets.all(AppSpacing.xl),
                             child: Text(
                               'No se pudieron cargar los datos:\n$_loadError',
                               textAlign: TextAlign.center,
@@ -261,7 +262,7 @@ class _PaletteDialogState extends State<_PaletteDialog> {
                   const Text('Enter para abrir',
                       style:
                           TextStyle(color: Colors.white54, fontSize: 11)),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: AppSpacing.lg),
                   const Icon(Icons.keyboard_alt_outlined,
                       size: 14, color: Colors.white54),
                   const SizedBox(width: 6),

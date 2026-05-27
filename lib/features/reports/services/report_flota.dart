@@ -10,6 +10,7 @@ import '../../../shared/utils/formatters.dart';
 import 'excel_utils.dart' as xu;
 import 'report_save_helper.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Reporte de Estado de Flota (admin).
 ///
 /// Vista general de TODA la flota — tractores y enganches —
@@ -58,7 +59,7 @@ class ReportFlotaService {
               style: TextStyle(
                   color: Colors.white, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 4),
+            SizedBox(height: AppSpacing.xs),
             Text(
               'Estado actual: vencimientos, services y asignaciones',
               style: TextStyle(color: Colors.white54, fontSize: 11),

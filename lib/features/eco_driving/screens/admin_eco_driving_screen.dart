@@ -7,6 +7,7 @@ import '../models/volvo_score_diario.dart';
 import '../services/eco_driving_service.dart';
 import '../widgets/score_drilldown_sheet.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla "Eco-Driving" del admin/supervisor.
 ///
 /// Muestra los scores de eco-driving que pollea diariamente
@@ -69,7 +70,7 @@ class _AdminEcoDrivingScreenState extends State<AdminEcoDrivingScreen> {
         ),
       ],
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         children: [
           _ResumenFleet(
             service: _service,
@@ -166,11 +167,11 @@ class _ResumenFleet extends StatelessWidget {
                   letterSpacing: 2,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _ScoreGrande(score: scoreTotal),
               const SizedBox(height: 20),
               const _DivisorChico(),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               const Text(
                 'SUB-SCORES PRINCIPALES',
                 style: TextStyle(
@@ -180,7 +181,7 @@ class _ResumenFleet extends StatelessWidget {
                   letterSpacing: 1.5,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               GridView.count(
                 physics: const NeverScrollableScrollPhysics(),
                 shrinkWrap: true,
@@ -197,7 +198,7 @@ class _ResumenFleet extends StatelessWidget {
               ),
               const SizedBox(height: 20),
               const _DivisorChico(),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               const Text(
                 'OPERACIÓN ACUMULADA',
                 style: TextStyle(
@@ -207,14 +208,14 @@ class _ResumenFleet extends StatelessWidget {
                   letterSpacing: 1.5,
                 ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               Row(
                 children: [
                   _MetricaOp(label: 'KM totales', valor: NumberFormat.decimalPattern('es_AR').format(kmTotales.round())),
                   _MetricaOp(label: 'L/100km prom', valor: consumoProm == null ? '—' : consumoProm.toStringAsFixed(1)),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               Row(
                 children: [
                   _MetricaOp(label: 'CO₂ (ton)', valor: co2Total.toStringAsFixed(1)),
@@ -293,14 +294,14 @@ class _RankingVehiculos extends StatelessWidget {
 
         return AppCard(
           borderColor: AppColors.info.withAlpha(40),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   const Icon(Icons.leaderboard, color: AppColors.info, size: 18),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpacing.sm),
                   Text(
                     'RANKING POR VEHÍCULO · $diasRango DÍAS',
                     style: const TextStyle(
@@ -312,7 +313,7 @@ class _RankingVehiculos extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               ...ranking.map((r) => _FilaRanking(
                     item: r,
                     onTap: () => _abrirDrilldown(context, r.patente),
@@ -355,7 +356,7 @@ class _FilaRanking extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(

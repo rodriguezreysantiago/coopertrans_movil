@@ -17,6 +17,7 @@ import '../../asignaciones/screens/asignacion_historial_vehiculo_screen.dart';
 import '../services/volvo_api_service.dart';
 import 'diagnostico_volvo_screen.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 // Componentes visuales del form (8 widgets _X) extraídos para bajar de
 // 1093 a ~630 lineas el archivo principal. Comparten privacidad y los
 // imports de arriba via `part of`.
@@ -693,7 +694,7 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
                 subiendo: _subiendoFoto,
                 onTap: _cambiarFotoVehiculo,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: AppSpacing.xl),
               const _SectionTitle('Información técnica'),
               _FInput(
                 controller: _marcaCtrl,
@@ -712,14 +713,14 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
                 isNumber: true,
               ),
               if (esVolvo) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 _BloqueVolvo(
                   vinController: _vinCtrl,
                   isSyncing: _isSyncing,
                   onSync: _sincronizarConVolvo,
                   onDiagnostico: _abrirDiagnostico,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
               ],
               _FInput(
                 controller: _kmCtrl,
@@ -728,7 +729,7 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
                 isNumber: true,
                 textInputAction: TextInputAction.done,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               _EmpresaTile(
                 empresa: _empresaCtrl.text,
                 onTap: _seleccionarEmpresa,
@@ -744,14 +745,14 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
                     style: TextStyle(color: Colors.white54, fontSize: 11),
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 _FInput(
                   controller: _ultimoServiceKmCtrl,
                   label: 'KM al hacer el último service',
                   icon: Icons.build,
                   isNumber: true,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 _FechaTileSimple(
                   label: 'Fecha del último service',
                   fecha: _ultimoServiceFecha,
@@ -777,7 +778,7 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
                 if (i < _vencimientos.length - 1)
                   const Divider(color: Colors.white10, height: 1),
               ],
-              const SizedBox(height: 32),
+              const SizedBox(height: AppSpacing.xxl),
               _BotonGuardar(
                 guardando: _isSaving,
                 onPressed: _guardar,

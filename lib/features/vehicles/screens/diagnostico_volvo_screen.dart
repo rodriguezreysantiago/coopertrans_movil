@@ -8,6 +8,7 @@ import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/volvo_api_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla de diagnóstico de la API de Volvo.
 ///
 /// Pega al endpoint `/vehiclestatuses?vin=...&additionalContent=VOLVOGROUPSNAPSHOT`
@@ -68,13 +69,13 @@ class _DiagnosticoVolvoScreenState extends State<DiagnosticoVolvoScreen> {
                   padding: const EdgeInsets.all(20),
                   children: [
                     _Header(patente: widget.patente, vin: widget.vin),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     _ResumenRequest(diag: _resultado!),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     _AnalisisCampos(diag: _resultado!),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     _JsonViewer(diag: _resultado!),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     _BotonReintentar(onPressed: _ejecutar),
                   ],
                 ),
@@ -99,7 +100,7 @@ class _Header extends StatelessWidget {
       child: Row(
         children: [
           const Icon(Icons.bug_report, color: AppColors.warning, size: 28),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -184,12 +185,12 @@ class _ResumenRequest extends StatelessWidget {
             multiline: true,
           ),
           if (diag.errorMessage != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: AppColors.error.withAlpha(20),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
                 border: Border.all(color: AppColors.error.withAlpha(60)),
               ),
               child: Text(
@@ -467,7 +468,7 @@ class _CheckTile extends StatelessWidget {
                         fontSize: 13,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppSpacing.sm),
                     Text(
                       check.path,
                       style: const TextStyle(
@@ -568,14 +569,14 @@ class _JsonViewerState extends State<_JsonViewer> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           // El JSON puede ser largo: contenedor con altura limitada y
           // scroll independiente para que no rompa la pantalla.
           Container(
             constraints: const BoxConstraints(maxHeight: 380),
             decoration: BoxDecoration(
               color: Colors.black.withAlpha(150),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               border: Border.all(color: Colors.white12),
             ),
             child: Scrollbar(
@@ -583,7 +584,7 @@ class _JsonViewerState extends State<_JsonViewer> {
               thumbVisibility: true,
               child: SingleChildScrollView(
                 controller: _ctrl,
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(AppSpacing.md),
                 child: SelectableText(
                   json,
                   style: const TextStyle(
@@ -629,7 +630,7 @@ class _BotonReintentar extends StatelessWidget {
           side: const BorderSide(color: AppColors.success),
           padding: const EdgeInsets.symmetric(vertical: 14),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.md),
           ),
         ),
       ),

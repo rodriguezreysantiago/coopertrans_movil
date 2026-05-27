@@ -13,6 +13,7 @@ import '../models/empresa_logistica.dart';
 import '../models/ubicacion_logistica.dart';
 import '../services/logistica_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// ABM de empresas con tabs (CLIENTES / DADORES). Cada tipo en una
 /// solapa distinta para evitar que el operador se confunda al armar
 /// tarifas — un cliente nunca debería figurar en el dropdown de
@@ -159,7 +160,7 @@ class _ListaEmpresasState extends State<_ListaEmpresas> {
                   return ListView.separated(
                     padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
                     itemCount: filtrados.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
                     itemBuilder: (_, i) => _CardEmpresa(empresa: filtrados[i]),
                   );
                 },
@@ -212,7 +213,7 @@ class _CardEmpresa extends StatelessWidget {
           Row(
             children: [
               Icon(Icons.business, color: color),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -567,12 +568,12 @@ class _EditarEmpresaSheetBody extends StatelessWidget {
                     PhoneFormatter.paraGuardar(v),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 _BloqueProductos(
                   empresaId: empresa.id,
                   productos: empresa.productos,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 _BloqueUbicacionesDeEmpresa(
                   empresaId: empresa.id,
                   empresaNombre: empresa.nombre,
@@ -649,10 +650,10 @@ class _BloqueUbicacionesDeEmpresa extends StatelessWidget {
         final asociadasIds = asociadas.map((u) => u.id).toSet();
 
         return Container(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
             color: Colors.white.withValues(alpha: 0.04),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
             border: Border.all(color: Colors.white12),
           ),
           child: Column(
@@ -674,7 +675,7 @@ class _BloqueUbicacionesDeEmpresa extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               if (asociadas.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 6),
@@ -708,7 +709,7 @@ class _BloqueUbicacionesDeEmpresa extends StatelessWidget {
                     );
                   }).toList(),
                 ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               OutlinedButton.icon(
                 onPressed: () => _editar(context, todas, asociadasIds),
                 icon: const Icon(Icons.add, size: 16),
@@ -854,7 +855,7 @@ class _SeleccionUbicacionesSheetState
                       child: const Text('CANCELAR'),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: FilledButton(
                       style: FilledButton.styleFrom(
@@ -933,7 +934,7 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
                 hintText: 'Ej. ACOPIO LARTIRIGOYEN SRL',
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             TextField(
               controller: _apodoCtrl,
               decoration: const InputDecoration(
@@ -941,7 +942,7 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
                 hintText: 'Ej. Lartirigoyen',
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             TextField(
               controller: _cuitCtrl,
               keyboardType: TextInputType.number,
@@ -951,7 +952,7 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
                 hintText: 'XX-XXXXXXXX-X',
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             TextField(
               controller: _nombreContactoCtrl,
               decoration: const InputDecoration(
@@ -959,7 +960,7 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
                 hintText: 'Ej. Juan Pérez',
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             TextField(
               controller: _contactoCtrl,
               keyboardType: TextInputType.phone,
@@ -973,7 +974,7 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
               ),
             ),
             if (_error != null) ...[
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               Text(
                 _error!,
                 style: const TextStyle(color: AppColors.error),
@@ -1161,10 +1162,10 @@ class _BloqueProductos extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: Colors.white12),
       ),
       child: Column(
@@ -1186,7 +1187,7 @@ class _BloqueProductos extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           if (productos.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 4),
@@ -1222,7 +1223,7 @@ class _BloqueProductos extends StatelessWidget {
                 );
               }),
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           OutlinedButton.icon(
             onPressed: () => _agregar(context),
             icon: const Icon(Icons.add, size: 16),

@@ -11,6 +11,7 @@ import '../../../shared/constants/map_constants.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla "Mapa flota en vivo" del admin.
 ///
 /// Muestra la última posición conocida de TODA la flota (no solo Volvo)
@@ -244,22 +245,22 @@ class _Toolbar extends StatelessWidget {
                     label: 'TOTAL',
                     valor: '$total',
                     color: AppColors.info),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 _ContadorMini(
                     label: 'EN MARCHA',
                     valor: '$conIgnicionOn',
                     color: AppColors.success),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 _ContadorMini(
                     label: 'APAGADOS',
                     valor: '$conIgnicionOff',
                     color: Colors.white54),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 _ContadorMini(
                     label: '> 1H',
                     valor: '$stale',
                     color: AppColors.error),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 _ContadorMini(
                     label: 'DRIFT',
                     valor: '$drifts',
@@ -269,7 +270,7 @@ class _Toolbar extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Align(
             alignment: Alignment.centerRight,
             child: Text(
@@ -292,19 +293,19 @@ class _Toolbar extends StatelessWidget {
                   selected: filtroIgnicion == null,
                   onTap: () => onFiltroIgnicion(null),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 _ChipFiltro(
                   label: 'EN MARCHA',
                   selected: filtroIgnicion == true,
                   onTap: () => onFiltroIgnicion(true),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 _ChipFiltro(
                   label: 'APAGADOS',
                   selected: filtroIgnicion == false,
                   onTap: () => onFiltroIgnicion(false),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 _ToggleChip(
                   label: 'OCULTAR > 1H',
                   icono: Icons.timer_off_outlined,
@@ -312,7 +313,7 @@ class _Toolbar extends StatelessWidget {
                   colorActivo: AppColors.error,
                   onChange: onOcultarStaleToggle,
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 _ToggleChip(
                   label: 'SOLO DRIFT',
                   icono: Icons.warning_amber_outlined,
@@ -442,7 +443,7 @@ class _ToggleChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icono, size: 14, color: color),
-            const SizedBox(width: 4),
+            const SizedBox(width: AppSpacing.xs),
             Text(
               label,
               style: TextStyle(
@@ -660,7 +661,7 @@ class _DetalleSheet extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Row(
             children: [
               Expanded(
@@ -678,7 +679,7 @@ class _DetalleSheet extends StatelessWidget {
             ],
           ),
           if (driftTipo.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             _DriftBanner(
               tipo: driftTipo,
               sitrackDni: driverDni,
@@ -687,7 +688,7 @@ class _DetalleSheet extends StatelessWidget {
               asignacionNombre: asignacionNombre,
             ),
           ],
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           _Fila(
             label: 'Chofer',
             valor: choferTexto,
@@ -737,7 +738,7 @@ class _DetalleSheet extends StatelessWidget {
               icono: Icons.bolt,
             ),
           if (location.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             _Fila(
               label: 'Dirección',
               valor: location,
@@ -759,7 +760,7 @@ class _DetalleSheet extends StatelessWidget {
                 ),
               ),
               if (lat != null && lng != null) ...[
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () => _abrirMaps(lat, lng),
@@ -866,7 +867,7 @@ class _BadgeIgnicion extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: color.withAlpha(30),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: color.withAlpha(120)),
       ),
       child: Text(
@@ -1021,7 +1022,7 @@ class _DriftBanner extends StatelessWidget {
         children: [
           const Icon(Icons.warning_amber,
               color: AppColors.warning, size: 18),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1035,7 +1036,7 @@ class _DriftBanner extends StatelessWidget {
                     letterSpacing: 0.4,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   detalle,
                   style: const TextStyle(color: Colors.white, fontSize: 12),

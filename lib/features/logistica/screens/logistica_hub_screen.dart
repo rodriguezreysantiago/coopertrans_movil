@@ -7,6 +7,7 @@ import '../../../shared/utils/responsive_grid.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/logistica_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Hub del módulo Logística. 4 catálogos + 1 vista de mapa que arman
 /// la base del futuro sistema de planeamiento de viajes:
 ///
@@ -32,12 +33,12 @@ class LogisticaHubScreen extends StatelessWidget {
     return AppScaffold(
       title: 'Logística',
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const _BannerInfo(),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             // El grid llena todo el alto disponible: número de columnas
             // según ancho + ratio de cada cell calculado según las
             // filas que toquen y el alto que sobre. Si no entra cómodo
@@ -197,7 +198,7 @@ class _BannerInfo extends StatelessWidget {
         children: [
           Icon(Icons.info_outline,
               color: AppColors.success, size: 26),
-          SizedBox(width: 12),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -211,7 +212,7 @@ class _BannerInfo extends StatelessWidget {
                     letterSpacing: 1.2,
                   ),
                 ),
-                SizedBox(height: 4),
+                SizedBox(height: AppSpacing.xs),
                 Text(
                   'Cargá empresas y ubicaciones, después armá tarifas '
                   '(rutas con precio). Cuando arranque el módulo de '
@@ -248,7 +249,7 @@ class _HubTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppCard(
       onTap: () => Navigator.pushNamed(context, ruta),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -261,7 +262,7 @@ class _HubTile extends StatelessWidget {
               if (contador != null) contador!,
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

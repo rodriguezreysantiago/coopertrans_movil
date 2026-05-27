@@ -12,6 +12,7 @@ import '../models/ubicacion_logistica.dart';
 import '../services/logistica_geo_utils.dart';
 import '../services/logistica_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Lista de tarifas con buscador. Cada tarifa = una "ruta con precio"
 /// que el módulo de viajes (futuro) va a poder seleccionar como base.
 class LogisticaTarifasScreen extends StatefulWidget {
@@ -103,7 +104,7 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
                     return ListView.separated(
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
                       itemCount: filtradas.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
                       itemBuilder: (_, i) => _CardTarifa(
                         tarifa: filtradas[i],
                         ubicacionesPorId: ubicacionesPorId,
@@ -182,7 +183,7 @@ class _BarraFiltros extends StatelessWidget {
               style: const TextStyle(color: Colors.white),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           FilterChip(
             label: const Text('Activas'),
             selected: soloActivas,
@@ -240,7 +241,7 @@ class _CardTarifa extends StatelessWidget {
                 color: color,
                 size: 22,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               _ChipTipo(tarifa: tarifa),
               const SizedBox(width: 6),
               _ChipFlete(flete: tarifa.flete),
@@ -281,7 +282,7 @@ class _CardTarifa extends StatelessWidget {
               children: [
                 const Icon(Icons.inventory_2_outlined,
                     color: AppColors.warning, size: 14),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
                     tarifa.producto!,
@@ -303,12 +304,12 @@ class _CardTarifa extends StatelessWidget {
           // Línea 3: tarifas
           _TarifasMontos(tarifa: tarifa),
           if (tarifa.dadorNombre != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
                 const Icon(Icons.business_outlined,
                     color: Colors.white54, size: 14),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
                     'Dador: ${tarifa.dadorNombre}'

@@ -8,6 +8,7 @@ import '../../../shared/utils/phone_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/whatsapp_cola_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 // 9 widgets visuales (resumen contadores, item de cola, badge estado,
 // detalle sheet, filas de dato, etc) extraidos para mantener navegable
 // este screen. Comparten privacidad via `part of`.
@@ -168,7 +169,7 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
                   });
                 },
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               // Búsqueda free-form (M2, 2026-05-24): DNI / patente /
               // teléfono / origen / texto. Útil cuando un chofer reclama
               // "no me llegó X" y hay que ver qué pasó con el mensaje.
@@ -198,7 +199,7 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
                 ),
                 onChanged: (v) => setState(() => _query = v),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               if (filtrados.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 40),

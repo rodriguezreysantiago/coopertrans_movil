@@ -8,6 +8,7 @@ import '../../../shared/constants/map_constants.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/icm_oficial_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Mapa de calor de infracciones — hotspots agregados por ubicación
 /// cartográfica única, igual al "Mapa de calor de infracciones" de
 /// Sitrack. Los popula el scraper Python (`get_top_infractions`,
@@ -231,7 +232,7 @@ class _MapaHotspots extends StatelessWidget {
               children: [
                 Icon(Icons.warning,
                     color: _colorPorCantidad(h.cantidad, h.cantidad), size: 22),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     h.infraccion,
@@ -252,18 +253,18 @@ class _MapaHotspots extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               h.ubicacion,
               style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               '${h.porcentaje.toStringAsFixed(1)}% del total de infracciones '
               '· puntaje ${h.puntaje.toStringAsFixed(2)} c/u',
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             Text(
               'Lat/Lng: ${h.latitud.toStringAsFixed(5)}, '
               '${h.longitud.toStringAsFixed(5)}',

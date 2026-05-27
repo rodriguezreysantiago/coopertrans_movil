@@ -10,6 +10,7 @@ import '../models/cubierta_instalada.dart';
 import '../models/cubierta_recapado.dart';
 import '../services/gomeria_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla detalle de UNA cubierta — accede desde el Stock al tappear
 /// un tile o desde la búsqueda global por código. Muestra:
 ///
@@ -46,7 +47,7 @@ class GomeriaCubiertaDetalleScreen extends StatelessWidget {
           if (c == null) {
             return const Center(
               child: Padding(
-                padding: EdgeInsets.all(32),
+                padding: EdgeInsets.all(AppSpacing.xxl),
                 child: Text(
                   'No se encontró la cubierta.',
                   style: TextStyle(color: Colors.white60),
@@ -60,7 +61,7 @@ class GomeriaCubiertaDetalleScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _Identidad(c: c),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 const _SeccionTitulo('Historial de instalaciones'),
                 StreamBuilder<List<CubiertaInstalada>>(
                   stream: service.streamHistorialInstalacionesPorCubierta(
@@ -77,7 +78,7 @@ class GomeriaCubiertaDetalleScreen extends StatelessWidget {
                     );
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 const _SeccionTitulo('Historial de recapados'),
                 StreamBuilder<List<CubiertaRecapado>>(
                   stream: service
@@ -94,7 +95,7 @@ class GomeriaCubiertaDetalleScreen extends StatelessWidget {
                     );
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 const _SeccionTitulo('Histórico de controles'),
                 StreamBuilder<List<CubiertaControl>>(
                   stream: service.streamControlesPorCubierta(cubiertaId),
@@ -148,7 +149,7 @@ class _Identidad extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Icon(Icons.tire_repair, color: colorEstado, size: 28),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -171,7 +172,7 @@ class _Identidad extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -202,9 +203,9 @@ class _Identidad extends StatelessWidget {
             ],
           ),
           if (c.observaciones != null && c.observaciones!.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(AppSpacing.sm),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.04),
                 borderRadius: BorderRadius.circular(6),
@@ -252,10 +253,10 @@ class _InstalacionTile extends StatelessWidget {
     final etiquetaPos = pos?.etiqueta ?? i.posicion;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(
           color: i.esActiva
               ? AppColors.success
@@ -289,14 +290,14 @@ class _InstalacionTile extends StatelessWidget {
                 const _Pill('ACTIVA', color: AppColors.success),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             i.hasta == null
                 ? 'Desde ${AppFormatters.formatearFecha(i.desde)}'
                 : '${AppFormatters.formatearFecha(i.desde)} → ${AppFormatters.formatearFecha(i.hasta!)}',
             style: const TextStyle(color: Colors.white60, fontSize: 11),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Wrap(
             spacing: 12,
             runSpacing: 4,
@@ -323,7 +324,7 @@ class _InstalacionTile extends StatelessWidget {
             ],
           ),
           if (i.motivo != null && i.motivo!.isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               'Motivo: ${i.motivo}',
               style: const TextStyle(
@@ -353,10 +354,10 @@ class _RecapadoTile extends StatelessWidget {
             : AppColors.error;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Column(
@@ -386,7 +387,7 @@ class _RecapadoTile extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             cerrado
                 ? '${AppFormatters.formatearFecha(r.fechaEnvio)} → ${AppFormatters.formatearFecha(r.fechaRetorno!)} (${r.diasEnRecapado()} días)'
@@ -394,14 +395,14 @@ class _RecapadoTile extends StatelessWidget {
             style: const TextStyle(color: Colors.white60, fontSize: 11),
           ),
           if (r.costo != null) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               'Costo: \$${AppFormatters.formatearMonto(r.costo)}',
               style: const TextStyle(color: Colors.white70, fontSize: 11),
             ),
           ],
           if (r.notas != null && r.notas!.isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               r.notas!,
               style: const TextStyle(
@@ -427,10 +428,10 @@ class _ControlTile extends StatelessWidget {
     final etiquetaPos = pos?.etiqueta ?? c.posicion;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border:
             Border.all(color: AppColors.brandSoft.withValues(alpha: 0.4)),
       ),
@@ -453,7 +454,7 @@ class _ControlTile extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Flexible(
                 child: Text(
                   '${c.unidadId} · $etiquetaPos',
@@ -486,7 +487,7 @@ class _ControlTile extends StatelessWidget {
           ),
           if (c.registradoPorNombre != null &&
               c.registradoPorNombre!.isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               'Registrado por ${c.registradoPorNombre}',
               style: const TextStyle(color: Colors.white38, fontSize: 11),
@@ -533,7 +534,7 @@ class _Vacio extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Text(
         texto,

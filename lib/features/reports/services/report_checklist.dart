@@ -11,6 +11,7 @@ import '../../../shared/utils/formatters.dart';
 import 'excel_utils.dart' as xu;
 import 'report_save_helper.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Reporte de Novedades (admin) — exporta solo respuestas REG y MAL
 /// de los CHECKLISTS de los últimos 45 días.
 ///
@@ -58,7 +59,7 @@ class ReportChecklistService {
               style: TextStyle(
                   color: Colors.white, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 4),
+            SizedBox(height: AppSpacing.xs),
             Text(
               'Items con estado REG o MAL en los últimos $_diasHistorico días',
               style: TextStyle(color: AppColors.warning, fontSize: 11),

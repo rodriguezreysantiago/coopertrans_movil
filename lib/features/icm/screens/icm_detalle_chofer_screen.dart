@@ -6,6 +6,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/icm_oficial_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Detalle ICM individual de un chofer, con el número **oficial de Sitrack**
 /// (lo que audita YPF, MÁS BAJO = MEJOR):
 ///   - Header: nombre + DNI + ICM del mes + severidad.
@@ -79,7 +80,7 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
         title: 'Detalle ICM',
         body: Center(
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding: EdgeInsets.all(AppSpacing.xl),
             child: Text(
               'Vení desde el ranking — el detalle requiere un chofer '
               'seleccionado.',
@@ -101,7 +102,7 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
           if (snap.hasError) {
             return Center(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.all(AppSpacing.xl),
                 child: Text('Error: ${snap.error}',
                     style: const TextStyle(color: AppColors.error)),
               ),
@@ -129,7 +130,7 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
               : (c.nombre.isNotEmpty ? c.nombre : 'DNI $_dni');
           final esActual = data.actual != null;
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -141,7 +142,7 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
                       esActual ? data.idActual : data.idAnterior),
                   esMesActual: esActual,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 _ComparativaMeses(
                   actual: data.actual,
                   anterior: data.anterior,
@@ -150,52 +151,52 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
                   labelAnterior:
                       IcmOficialService.labelPeriodo(data.idAnterior),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 const _SeccionTitulo('ICM por tipo de vía'),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [
                     _StatCard(
                       label: 'Urbano',
                       valor: c.icmUrbano.toStringAsFixed(1),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppSpacing.sm),
                     _StatCard(
                       label: 'No urbano (ruta)',
                       valor: c.icmNoUrbano.toStringAsFixed(1),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 const _SeccionTitulo('Recorrido del período'),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [
                     _StatCard(
                       label: 'Distancia',
                       valor: '${AppFormatters.formatearMiles(c.distanciaKm)} km',
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppSpacing.sm),
                     _StatCard(
                       label: 'Tiempo de manejo',
                       valor: '${c.tiempoH.toStringAsFixed(0)} h',
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 const _SeccionTitulo('Infracciones'),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 _Infracciones(chofer: c),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 const _SeccionTitulo('Otros indicadores'),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [
                     _StatCard(
                       label: 'Excesos de velocidad',
                       valor: '${c.excesosVelocidad}',
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppSpacing.sm),
                     _StatCard(
                       label: 'Conducción agresiva',
                       valor: '${c.conduccionAgresiva}',
@@ -204,7 +205,7 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
                 ),
                 const SizedBox(height: 18),
                 const _SeccionTitulo('Detalle de infracciones'),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 _ListaInfracciones(infracciones: c.infracciones),
                 const SizedBox(height: 20),
                 const _NotaFuente(),
@@ -253,7 +254,7 @@ class _Header extends StatelessWidget {
     final color = colorSeveridadIcm(chofer.severidad);
     return AppCard(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Row(
           children: [
             Container(
@@ -261,7 +262,7 @@ class _Header extends StatelessWidget {
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
                 color: color,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
               child: Column(
                 children: [
@@ -297,13 +298,13 @@ class _Header extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     'DNI ${AppFormatters.formatearDNI(dni)}',
                     style: const TextStyle(
                         color: Colors.white54, fontSize: 12),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     '${chofer.severidadLabel} · $periodoLabel'
                     '${esMesActual ? '' : ' (último con datos)'}',
@@ -346,7 +347,7 @@ class _ComparativaMeses extends StatelessWidget {
     if (actual!.sinActividad || anterior!.sinActividad) {
       return AppCard(
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: Row(
             children: [
               const Icon(Icons.info_outline, color: Colors.white38, size: 20),
@@ -382,7 +383,7 @@ class _ComparativaMeses extends StatelessWidget {
             '(${b.toStringAsFixed(1)})';
     return AppCard(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Row(
           children: [
             Icon(icono, color: color, size: 22),
@@ -414,13 +415,13 @@ class _Infracciones extends StatelessWidget {
           valor: '${chofer.infAltas}',
           color: Colors.red.shade600,
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         _StatCard(
           label: 'Medias',
           valor: '${chofer.infMedias}',
           color: Colors.amber.shade700,
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         _StatCard(
           label: 'Leves',
           valor: '${chofer.infLeves}',
@@ -452,7 +453,7 @@ class _StatCard extends StatelessWidget {
                       const TextStyle(color: Colors.white54, fontSize: 10),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis),
-              const SizedBox(height: 4),
+              const SizedBox(height: AppSpacing.xs),
               FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
@@ -555,7 +556,7 @@ class _ListaInfraccionesState extends State<_ListaInfracciones> {
           'Suma de puntaje: ${sumaPuntaje.toStringAsFixed(2)}',
           style: const TextStyle(color: Colors.white60, fontSize: 11),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         SizedBox(
           height: 36,
           child: ListView(
@@ -587,7 +588,7 @@ class _ListaInfraccionesState extends State<_ListaInfracciones> {
         const SizedBox(height: 10),
         ...visibles.map((i) => _InfraccionCard(infraccion: i)),
         if (hayMas) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Center(
             child: TextButton.icon(
               onPressed: () => setState(() => _maxVisibles += 50),
@@ -677,7 +678,7 @@ class _InfraccionCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Container(
                   padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 3),
@@ -697,13 +698,13 @@ class _InfraccionCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             // Fila 2: fecha + patente
             Row(
               children: [
                 const Icon(Icons.access_time,
                     size: 12, color: Colors.white38),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 Text(
                   i.fecha,
                   style: const TextStyle(
@@ -713,7 +714,7 @@ class _InfraccionCard extends StatelessWidget {
                   const SizedBox(width: 14),
                   const Icon(Icons.local_shipping,
                       size: 12, color: Colors.white38),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: AppSpacing.xs),
                   Text(
                     i.patente,
                     style: const TextStyle(
@@ -726,7 +727,7 @@ class _InfraccionCard extends StatelessWidget {
                   const SizedBox(width: 14),
                   const Icon(Icons.timer,
                       size: 12, color: Colors.white38),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: AppSpacing.xs),
                   Text(
                     i.tiempo!,
                     style: const TextStyle(
@@ -737,12 +738,12 @@ class _InfraccionCard extends StatelessWidget {
             ),
             // Fila 3: ubicación
             if (i.ubicacion.isNotEmpty) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: AppSpacing.xs),
               Row(
                 children: [
                   const Icon(Icons.place,
                       size: 12, color: Colors.white38),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: AppSpacing.xs),
                   Expanded(
                     child: Text(
                       i.ubicacion,
@@ -757,12 +758,12 @@ class _InfraccionCard extends StatelessWidget {
             ],
             // Fila 4: velocidades (sólo si están)
             if (i.velMaxima != null || i.velLimite != null) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: AppSpacing.xs),
               Row(
                 children: [
                   const Icon(Icons.speed,
                       size: 12, color: Colors.white38),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: AppSpacing.xs),
                   Text(
                     i.velLimite != null && i.velMaxima != null
                         ? 'Pico ${i.velMaxima!.toStringAsFixed(0)} km/h '

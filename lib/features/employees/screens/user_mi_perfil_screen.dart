@@ -18,6 +18,7 @@ import '../../../shared/utils/phone_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../../shared/widgets/foto_perfil_avatar.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Perfil del chofer (vista del usuario, no admin).
 ///
 /// Migrada al sistema de diseño unificado.
@@ -380,7 +381,7 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
               _EquipoCard(data: data),
               const SizedBox(height: 30),
               const _SectionTitle(label: 'Datos personales'),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               _DatosCard(
                 dni: widget.dni,
                 data: data,
@@ -447,7 +448,7 @@ class _Header extends StatelessWidget {
                   borderRadius: BorderRadius.circular(50),
                   onTap: onEditarFoto,
                   child: Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(AppSpacing.sm),
                     decoration: BoxDecoration(
                       color: AppColors.success,
                       shape: BoxShape.circle,
@@ -478,7 +479,7 @@ class _Header extends StatelessWidget {
             color: Colors.white,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: AppSpacing.xs),
         const Text(
           'CHOFER PROFESIONAL',
           style: TextStyle(
@@ -538,7 +539,7 @@ class _DatoEquipo extends StatelessWidget {
     return Column(
       children: [
         Icon(icono, color: AppColors.success, size: 30),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         Text(
           label,
           style: const TextStyle(
@@ -900,7 +901,7 @@ class _PerfilOfflineFallback extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: AppColors.warning.withAlpha(40),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.md),
             border: Border.all(color: AppColors.warning.withAlpha(120)),
           ),
           child: Row(
@@ -908,7 +909,7 @@ class _PerfilOfflineFallback extends StatelessWidget {
             children: [
               const Icon(Icons.signal_wifi_bad_outlined,
                   color: AppColors.warning),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -923,7 +924,7 @@ class _PerfilOfflineFallback extends StatelessWidget {
                         fontSize: 14,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       motivo ??
                           'Estamos mostrando los datos básicos mientras '
@@ -941,7 +942,7 @@ class _PerfilOfflineFallback extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: AppSpacing.xl),
 
         // Header básico con avatar + nombre. Sin foto (no la tenemos
         // del Prefs, solo del legajo Firestore).
@@ -975,7 +976,7 @@ class _PerfilOfflineFallback extends StatelessWidget {
                 textAlign: TextAlign.center,
               ),
               if (apodo.isNotEmpty && nombre.isNotEmpty) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   nombre,
                   style: const TextStyle(

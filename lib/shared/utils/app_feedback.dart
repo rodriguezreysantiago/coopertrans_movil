@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Helper centralizado para mostrar SnackBars con paleta y duración
 /// consistentes en toda la app.
 ///
@@ -179,7 +180,7 @@ class AppFeedback {
       content: Row(
         children: [
           Icon(icono, color: Colors.white, size: 20),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Text(
               mensaje,

@@ -15,6 +15,7 @@ import '../widgets/acciones_navegacion_sheet.dart';
 import '../widgets/mini_mapa_thumbnail.dart';
 import '../widgets/ubicacion_map_picker.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// ABM de ubicaciones físicas (puntos de carga / descarga). Reusable
 /// entre tarifas: una misma ubicación puede ser origen de una tarifa y
 /// destino de otra.
@@ -141,7 +142,7 @@ class _LogisticaUbicacionesScreenState
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
                   itemCount: filtrados.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
                   itemBuilder: (_, i) =>
                       _CardUbicacion(ubicacion: filtrados[i]),
                 );
@@ -184,7 +185,7 @@ class _CardUbicacion extends StatelessWidget {
             )
           else
             Icon(Icons.place, color: color, size: 28),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -209,7 +210,7 @@ class _CardUbicacion extends StatelessWidget {
                     children: [
                       const Icon(Icons.business_outlined,
                           color: AppColors.info, size: 12),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: AppSpacing.xs),
                       Expanded(
                         child: Text(
                           ubicacion.etiquetaEmpresas,
@@ -235,12 +236,12 @@ class _CardUbicacion extends StatelessWidget {
                   ),
                 ),
                 if (ubicacion.lat != null && ubicacion.lng != null) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   Row(
                     children: [
                       const Icon(Icons.my_location,
                           color: AppColors.brandSoft, size: 12),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: AppSpacing.xs),
                       Flexible(
                         child: Text(
                           '${ubicacion.lat!.toStringAsFixed(4)}, '
@@ -254,7 +255,7 @@ class _CardUbicacion extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: AppSpacing.sm),
                       InkWell(
                         onTap: () => AccionesNavegacionSheet.abrir(
                           context,
@@ -531,7 +532,7 @@ class _EditarUbicacionSheetState extends State<_EditarUbicacionSheet> {
                     v.trim().isEmpty ? null : v.trim(),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 _FilaCoords(
                   lat: _ubicacion.lat,
                   lng: _ubicacion.lng,
@@ -539,7 +540,7 @@ class _EditarUbicacionSheetState extends State<_EditarUbicacionSheet> {
                   onLatManual: (v) => _setCampo('lat', v),
                   onLngManual: (v) => _setCampo('lng', v),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: AppSpacing.xl),
                 // Botón de eliminación con check de referencias en
                 // tarifas. Si la ubicación está en uso, el service
                 // tira StateError con un mensaje accionable que
@@ -639,10 +640,10 @@ class _FilaCoords extends StatelessWidget {
   Widget build(BuildContext context) {
     final tieneCoords = lat != null && lng != null;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: Colors.white10,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: Colors.white12),
       ),
       child: Column(
@@ -652,7 +653,7 @@ class _FilaCoords extends StatelessWidget {
             children: [
               const Icon(Icons.my_location,
                   color: AppColors.brandSoft, size: 18),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               const Expanded(
                 child: Text(
                   'COORDENADAS GEOGRÁFICAS',
@@ -735,7 +736,7 @@ class _FilaCoords extends StatelessWidget {
                 'Pegá el link completo de Google Maps o las coordenadas:',
                 style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: AppSpacing.xs),
               const Text(
                 'Ej. "https://www.google.com/maps/place/.../@-38.71,-62.27,15z" '
                 'o "-38.71, -62.27".',
@@ -886,7 +887,7 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
                   hintText: 'Ej. ACOPIO LARTIRIGOYEN — TRES ARROYOS',
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               // [removido 2026-05-12] Selector de empresas removido
               // del alta de ubicación — la asociación N:M se gestiona
               // SOLO desde el sheet de empresa ("UBICACIONES DE ESTA
@@ -900,7 +901,7 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
                   labelText: 'Localidad *',
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               TextField(
                 controller: _provinciaCtrl,
                 textCapitalization: TextCapitalization.words,
@@ -908,7 +909,7 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
                   labelText: 'Provincia *',
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               TextField(
                 controller: _direccionCtrl,
                 decoration: const InputDecoration(
@@ -937,7 +938,7 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
                         letterSpacing: 1.2,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppSpacing.sm),
                     Row(
                       children: [
                         Expanded(
@@ -956,7 +957,7 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
                             ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: AppSpacing.sm),
                         Expanded(
                           child: TextField(
                             controller: _lngCtrl,
@@ -975,7 +976,7 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppSpacing.sm),
                     OutlinedButton.icon(
                       onPressed: _abrirPicker,
                       icon: const Icon(Icons.map_outlined),
@@ -989,7 +990,7 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
                 ),
               ),
               if (_error != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 Text(_error!,
                     style: const TextStyle(color: AppColors.error)),
               ],

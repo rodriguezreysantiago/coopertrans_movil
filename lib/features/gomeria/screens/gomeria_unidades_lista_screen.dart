@@ -6,6 +6,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../constants/posiciones.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Lista de unidades (tractores + enganches). Tap → vista detalle de
 /// la unidad con grid de posiciones para cambiar cubiertas.
 ///
@@ -98,7 +99,7 @@ class _GomeriaUnidadesListaScreenState
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
                   itemCount: filtrados.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
                   itemBuilder: (_, i) {
                     final doc = filtrados[i];
                     final data = doc.data();
@@ -131,7 +132,7 @@ class _GomeriaUnidadesListaScreenState
                                 ? AppColors.warning
                                 : AppColors.brandSoft,
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,

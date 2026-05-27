@@ -150,7 +150,7 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
                   if (snap.hasError) {
                     return Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(16),
+                        padding: const EdgeInsets.all(AppSpacing.lg),
                         child: Text(
                           'Error: ${snap.error}',
                           style: const TextStyle(color: AppColors.error),
@@ -165,7 +165,7 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
                   if (filtradas.isEmpty) {
                     return Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(24),
+                        padding: const EdgeInsets.all(AppSpacing.xl),
                         child: Text(
                           _filtro.isEmpty
                               ? 'No hay tarifas activas cargadas.'

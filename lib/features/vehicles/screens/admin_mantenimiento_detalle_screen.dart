@@ -10,6 +10,7 @@ import '../services/odometros_service.dart';
 import '../utils/volvo_telltales_es.dart';
 import '../widgets/mantenimiento_badge.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Detalle de mantenimiento de UNA unidad — todo junto: service, advertencias
 /// del tablero, telemetría e historial de taller completo. Lee 3 fuentes por
 /// patente: VEHICULOS (service), VOLVO_ESTADO (tell-tales + telemetría) y
@@ -51,13 +52,13 @@ class AdminMantenimientoDetalleScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
             children: [
               _SeccionService(vehiculo: vehiculo),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _SeccionAdvertencias(volvo: volvo),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _SeccionTelemetria(vehiculo: vehiculo, volvo: volvo),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _SeccionKmRecorridos(patente: patente),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _SeccionHistorial(taller: taller),
             ],
           );
@@ -92,7 +93,7 @@ class _TituloSeccion extends StatelessWidget {
       child: Row(
         children: [
           Icon(icon, size: 18, color: Colors.white60),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Text(
             texto.toUpperCase(),
             style: const TextStyle(
@@ -187,7 +188,7 @@ class _SeccionService extends StatelessWidget {
           if (ultimoKm != null && kmActual != null)
             _Fila('Recorrido desde el último',
                 '${AppFormatters.formatearMiles(kmActual - ultimoKm)} km'),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           const Text(
             'Intervalo 50.000 km · dato automático desde Volvo Connect',
             style: TextStyle(
@@ -231,7 +232,7 @@ class _SeccionAdvertencias extends StatelessWidget {
                 child: Row(
                   children: [
                     Icon(Icons.circle, size: 10, color: color),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(a.nombre,
                           style: const TextStyle(
@@ -481,7 +482,7 @@ class _SeccionKmRecorridosState extends State<_SeccionKmRecorridos> {
               _KpisMes(meses: data.meses),
               const SizedBox(height: 14),
               _GraficoDias(dias: data.dias),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _TablaMeses(meses: data.meses),
             ],
           );

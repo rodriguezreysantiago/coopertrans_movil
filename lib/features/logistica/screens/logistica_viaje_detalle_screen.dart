@@ -13,6 +13,7 @@ import '../utils/calculos_viaje.dart';
 import '../services/adelantos_service.dart';
 import '../services/viajes_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Detalle read-only de un viaje. Vista resumida para consulta rápida
 /// — el operador entra acá desde la lista para revisar antes de
 /// liquidar o editar.
@@ -47,7 +48,7 @@ class LogisticaViajeDetalleScreen extends StatelessWidget {
           if (v == null) {
             return const Center(
               child: Padding(
-                padding: EdgeInsets.all(32),
+                padding: EdgeInsets.all(AppSpacing.xxl),
                 child: Text(
                   'Viaje no encontrado.',
                   style: TextStyle(color: Colors.white60),
@@ -61,20 +62,20 @@ class LogisticaViajeDetalleScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _Cabecera(v: v),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 // Botonera ARRIBA — Santiago 2026-05-14: que las
                 // acciones EDITAR/BORRAR estén accesibles sin scroll.
                 // Antes vivían al final de la columna, después de
                 // tramos+gastos+montos = el operador tenía que bajar
                 // toda la pantalla para borrar/editar.
                 _BotoneraAcciones(v: v),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 _SeccionAsignacion(v: v),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 _SeccionAdelantoAsociado(viajeId: v.id),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 _SeccionTramos(v: v),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 _SeccionMontos(v: v),
                 // Sección "GASTOS EXTRAORDINARIOS" viaje-level
                 // eliminada el 2026-05-13. Los gastos ahora se muestran
@@ -83,11 +84,11 @@ class LogisticaViajeDetalleScreen extends StatelessWidget {
                 // `_SeccionMontos` (línea "Gastos extraordinarios").
                 if (v.motivoCancelacion != null ||
                     v.fechaPostergadoA != null) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   _SeccionMotivo(v: v),
                 ],
                 if (!v.activo) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   _SeccionBorrado(v: v),
                 ],
               ],
@@ -253,7 +254,7 @@ class _DetalleTramo extends StatelessWidget {
           ? null
           : BoxDecoration(
               border: Border.all(color: Colors.white12),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
       padding: numero == null ? EdgeInsets.zero : const EdgeInsets.all(10),
       child: Column(
@@ -712,7 +713,7 @@ class _BotoneraAcciones extends StatelessWidget {
               'comprobantes de remito también se borran de Storage.',
               style: TextStyle(color: Colors.white70),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               'Chofer: ${v.choferNombre ?? v.choferDni}',
               style: const TextStyle(
@@ -777,7 +778,7 @@ class _BotoneraAcciones extends StatelessWidget {
               'El viaje queda como borrado pero la información se '
               'mantiene para auditoría. Podés reactivarlo después.',
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             TextField(
               controller: motivoCtrl,
               decoration: const InputDecoration(
@@ -889,7 +890,7 @@ class _Seccion extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           ...children,
         ],
       ),
@@ -987,7 +988,7 @@ class _LineaLink extends StatelessWidget {
                 children: [
                   const Icon(Icons.open_in_new,
                       size: 14, color: AppColors.info),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: AppSpacing.xs),
                   Flexible(
                     child: Text(
                       etiqueta,

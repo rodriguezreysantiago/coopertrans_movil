@@ -10,6 +10,7 @@ import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/widgets/coopertrans_logo.dart';
 import '../services/auth_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla de login.
 ///
 /// A diferencia del resto de la app, NO usa AppScaffold porque necesita
@@ -238,7 +239,7 @@ class _LogoYTitulo extends StatelessWidget {
           size: CoopertransLogoSize.xl,
           centered: true,
         ),
-        SizedBox(height: 8),
+        SizedBox(height: AppSpacing.sm),
         Text(
           AppTexts.tagline,
           style: TextStyle(

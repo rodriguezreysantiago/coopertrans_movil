@@ -5,6 +5,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Menú principal de auditoría de vencimientos.
 class AdminVencimientosMenuScreen extends StatelessWidget {
   const AdminVencimientosMenuScreen({super.key});
@@ -30,7 +31,7 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
                     letterSpacing: 1.5,
                   ),
                 ),
-                SizedBox(height: 4),
+                SizedBox(height: AppSpacing.xs),
                 Text(
                   'Control proactivo de documentación próxima a vencer.',
                   style: TextStyle(color: Colors.white54, fontSize: 12),
@@ -227,7 +228,7 @@ class _MenuTile extends StatelessWidget {
         child: Row(
           children: [
             _buildIcono(context),
-            const SizedBox(width: 16),
+            const SizedBox(width: AppSpacing.lg),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -243,7 +244,7 @@ class _MenuTile extends StatelessWidget {
                       fontSize: 14,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     subtitulo,
                     maxLines: 2,

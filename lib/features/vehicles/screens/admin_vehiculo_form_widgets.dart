@@ -177,7 +177,7 @@ class _BloqueVolvo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: AppColors.info.withAlpha(20),
         borderRadius: BorderRadius.circular(14),
@@ -218,7 +218,7 @@ class _BloqueVolvo extends StatelessWidget {
                 ),
               ),
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           // Botón de diagnóstico — abre una pantalla con el JSON crudo
           // del response de Volvo y un análisis automático de qué campos
           // están viniendo. Útil cuando algún dato no aparece en la UI.
@@ -256,7 +256,7 @@ class _EmpresaTile extends StatelessWidget {
     return AppCard(
       onTap: onTap,
       margin: EdgeInsets.zero,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
           const Icon(Icons.business, color: AppColors.success),
@@ -269,7 +269,7 @@ class _EmpresaTile extends StatelessWidget {
                   'Empresa titular',
                   style: TextStyle(color: Colors.white54, fontSize: 11),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   empresa,
                   // Razón social larga ("VECCHI ARIEL Y …") rompía
@@ -326,11 +326,11 @@ class _DateTile extends StatelessWidget {
             tituloVisor: tituloVisor,
             size: 40,
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: InkWell(
               onTap: onTapDate,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               child: Padding(
                 padding:
                     const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
@@ -361,7 +361,7 @@ class _DateTile extends StatelessWidget {
             ),
           ),
           VencimientoBadge(fecha: fecha),
-          const SizedBox(width: 4),
+          const SizedBox(width: AppSpacing.xs),
           // visualDensity.compact: cada IconButton pasa de 48 dp a ~36 dp.
           // Con 2 botones + thumb 40 + badge ~70 + Expanded label, el ancho
           // disponible para la fecha en mobile se ajusta y deja de chocar.
@@ -381,7 +381,7 @@ class _DateTile extends StatelessWidget {
                 ),
               ),
             ),
-          const SizedBox(width: 4),
+          const SizedBox(width: AppSpacing.xs),
           IconButton(
             visualDensity: VisualDensity.compact,
             padding: const EdgeInsets.all(6),
@@ -461,7 +461,7 @@ class _FechaTileSimple extends StatelessWidget {
     return AppCard(
       onTap: onTap,
       margin: EdgeInsets.zero,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
           Icon(icono, color: AppColors.success),
@@ -474,7 +474,7 @@ class _FechaTileSimple extends StatelessWidget {
                   label,
                   style: const TextStyle(color: Colors.white54, fontSize: 11),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   tiene
                       ? AppFormatters.formatearFecha(fecha!)

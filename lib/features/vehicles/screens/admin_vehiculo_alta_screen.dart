@@ -12,6 +12,7 @@ import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/digit_only_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Form de alta de un nuevo vehículo (tractor / batea / tolva).
 class AdminVehiculoAltaScreen extends StatefulWidget {
   const AdminVehiculoAltaScreen({super.key});
@@ -449,7 +450,7 @@ class _DropdownEmpresa extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: Colors.white.withAlpha(15)),
       ),
       child: DropdownButtonHideUnderline(
@@ -509,7 +510,7 @@ class _BotonGuardar extends StatelessWidget {
           foregroundColor: Colors.black,
           disabledBackgroundColor: AppColors.success.withAlpha(100),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppRadius.md),
           ),
         ),
       ),

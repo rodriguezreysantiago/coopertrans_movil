@@ -13,6 +13,7 @@ import '../../../shared/utils/formatters.dart';
 import 'excel_utils.dart' as xu;
 import 'report_save_helper.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Reporte de Consumo de Combustible (admin).
 ///
 /// Cruza la flota de Firestore con dos fuentes de telemetría:
@@ -174,7 +175,7 @@ class ReportConsumoService {
                 style: TextStyle(
                     color: Colors.white, fontWeight: FontWeight.bold),
               ),
-              SizedBox(height: 4),
+              SizedBox(height: AppSpacing.xs),
               Text(
                 "Litros y promedio L/100km por unidad",
                 style: TextStyle(color: Colors.white54, fontSize: 11),
@@ -209,7 +210,7 @@ class ReportConsumoService {
                   },
                 ),
                 _WarningHistoricoLimitado(desdeSeleccionado: localDesde),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 4),
                   child: Text(
@@ -827,7 +828,7 @@ class _BotonRangoFecha extends StatelessWidget {
               color: AppColors.success,
               size: 26,
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -841,7 +842,7 @@ class _BotonRangoFecha extends StatelessWidget {
                       letterSpacing: 1.2,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     '${AppFormatters.formatearFecha(desde)}  a  ${AppFormatters.formatearFecha(hasta)}',
                     style: const TextStyle(
@@ -900,7 +901,7 @@ class _WarningHistoricoLimitado extends StatelessWidget {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: AppColors.warning.withAlpha(30),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               border: Border.all(color: AppColors.warning.withAlpha(120)),
             ),
             child: Row(
@@ -908,7 +909,7 @@ class _WarningHistoricoLimitado extends StatelessWidget {
               children: [
                 const Icon(Icons.info_outline,
                     color: AppColors.warning, size: 18),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     'El histórico de telemetría arranca el ${AppFormatters.formatearFecha(fechaMin)}. '

@@ -163,7 +163,7 @@ class _VehiculoCard extends StatelessWidget {
                         ),
                         Icon(Icons.speed,
                             size: 12, color: Colors.white.withAlpha(120)),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: AppSpacing.xs),
                         Text(
                           '${AppFormatters.formatearKilometraje(km)} km',
                           style: const TextStyle(
@@ -494,7 +494,7 @@ class _DetalleVehiculo extends StatelessWidget {
             _EstadoBadge(estado: estado),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
 
         // Panel de telemetría: KM + combustible + autonomía. Si la unidad
         // no tiene combustible/autonomía reportados, el panel cae a una
@@ -580,7 +580,7 @@ class _DetalleVehiculo extends StatelessWidget {
                 style:
                     const TextStyle(color: Colors.white70, fontSize: 12),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               if ((data['SINCRO_TIPO'] ?? '') != '')
                 Container(
                   padding: const EdgeInsets.symmetric(
@@ -686,10 +686,10 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
         : '?';
     final motivo = (data[AppActivo.campoBajaMotivo] ?? '').toString();
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: AppColors.warning.withAlpha(20),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: AppColors.warning.withAlpha(80)),
       ),
       child: Column(
@@ -699,7 +699,7 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
             children: [
               Icon(Icons.archive_outlined,
                   color: AppColors.warning, size: 18),
-              SizedBox(width: 8),
+              SizedBox(width: AppSpacing.sm),
               Text(
                 'UNIDAD DADA DE BAJA',
                 style: TextStyle(
@@ -711,19 +711,19 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Text(
             'Fecha: $bajaEnFmt',
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
           if (motivo.isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               'Motivo: $motivo',
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Center(
             child: TextButton.icon(
               onPressed: () => VehiculoActions.confirmarYReactivar(
@@ -802,7 +802,7 @@ class _MiniVencimiento extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         const Icon(Icons.event_note, size: 12, color: Colors.white38),
-        const SizedBox(width: 4),
+        const SizedBox(width: AppSpacing.xs),
         Text(label,
             style:
                 const TextStyle(color: Colors.white54, fontSize: 11)),
@@ -825,7 +825,7 @@ class _SectionTitle extends StatelessWidget {
       child: Row(
         children: [
           Icon(icon, color: AppColors.success, size: 16),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Text(
             label.toUpperCase(),
             style: const TextStyle(
@@ -926,14 +926,14 @@ class _ChipTelemetria extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: color.withAlpha(60)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icono, color: color, size: 12),
-          const SizedBox(width: 4),
+          const SizedBox(width: AppSpacing.xs),
           Text(
             texto,
             style: TextStyle(
@@ -967,7 +967,7 @@ class _PanelTelemetria extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       decoration: BoxDecoration(
         color: AppColors.success.withAlpha(15),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: AppColors.success.withAlpha(40)),
       ),
       child: hayTelemetria
@@ -1144,7 +1144,7 @@ class _CeldaPorcentaje extends StatelessWidget {
             fontSize: 16,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: AppSpacing.xs),
         SizedBox(
           width: 60,
           height: 4,
@@ -1207,13 +1207,13 @@ class _VencimientoRow extends StatelessWidget {
         fechaActual: fecha?.toString(),
         urlActual: url,
       ),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
         child: Row(
           children: [
             AppFileThumbnail(url: url, tituloVisor: tituloVisor),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             SizedBox(
               // 90 → 110 para acomodar etiquetas largas tipo
               // "EXTINTOR EXTERIOR" o "INSPECCIÓN TÉCNICA" en mobile.
@@ -1238,7 +1238,7 @@ class _VencimientoRow extends StatelessWidget {
               ),
             ),
             VencimientoBadge(fecha: fecha),
-            const SizedBox(width: 4),
+            const SizedBox(width: AppSpacing.xs),
             const Icon(Icons.edit_outlined,
                 size: 14, color: Colors.white38),
           ],

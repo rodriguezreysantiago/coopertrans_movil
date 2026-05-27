@@ -26,6 +26,7 @@ import '../../vehicles/screens/admin_vehiculos_lista_screen.dart';
 import 'admin_estado_bot_screen.dart';
 import 'admin_panel_screen.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Shell principal del admin con navegación lateral.
 ///
 /// - **Desktop (≥ 800px)**: NavigationRail a la izquierda con labels.
@@ -593,7 +594,7 @@ class _AdminShellState extends State<AdminShell> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppSpacing.sm),
                   // Lista scrollable de secciones. Flexible la cappea al
                   // alto disponible despues del handle + titulo.
                   Flexible(

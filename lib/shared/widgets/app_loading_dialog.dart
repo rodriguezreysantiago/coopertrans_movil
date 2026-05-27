@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../constants/app_colors.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Diálogo modal de "cargando..." reutilizable.
 ///
 /// Encapsula el patrón:
@@ -61,7 +62,7 @@ class AppLoadingDialog {
               children: [
                 const CircularProgressIndicator(color: AppColors.success),
                 if (mensaje != null) ...[
-                  const SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.lg),
                   Text(
                     mensaje,
                     style: const TextStyle(

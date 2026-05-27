@@ -9,6 +9,7 @@ import '../constants/posiciones.dart';
 import '../models/cubierta_marca.dart';
 import '../models/cubierta_modelo.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// ABM de marcas y modelos de cubiertas. 2 tabs:
 /// - **Marcas**: solo nombre + activo (soft-delete).
 /// - **Modelos**: marca + modelo + medida + tipo_uso + km_vida_estimada
@@ -79,7 +80,7 @@ class _MarcasTab extends StatelessWidget {
             return ListView.separated(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
               itemCount: marcas.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
               itemBuilder: (_, i) {
                 final m = marcas[i];
                 return AppCard(
@@ -91,7 +92,7 @@ class _MarcasTab extends StatelessWidget {
                         Icons.label_outline,
                         color: m.activo ? AppColors.brand : Colors.grey,
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: Text(
                           m.nombre,
@@ -207,7 +208,7 @@ class _ModelosTab extends StatelessWidget {
             return ListView.separated(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
               itemCount: modelos.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 8),
+              separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
               itemBuilder: (_, i) {
                 final m = modelos[i];
                 return AppCard(
@@ -225,7 +226,7 @@ class _ModelosTab extends StatelessWidget {
                                 ? AppColors.brand
                                 : Colors.grey,
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: Text(
                               m.etiqueta,
@@ -713,7 +714,7 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
                 );
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             TextField(
               controller: _modeloCtrl,
               decoration: const InputDecoration(
@@ -721,7 +722,7 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
                 hintText: 'Ej. R268, M788',
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             TextField(
               controller: _medidaCtrl,
               decoration: const InputDecoration(
@@ -729,7 +730,7 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
                 hintText: 'Ej. 295/80R22.5',
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             DropdownButtonFormField<TipoUsoCubierta>(
               initialValue: _tipoUso,
               decoration: const InputDecoration(labelText: 'Tipo de uso'),
@@ -741,7 +742,7 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
                   .toList(),
               onChanged: (v) => setState(() => _tipoUso = v ?? _tipoUso),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             TextField(
               controller: _kmNuevaCtrl,
               decoration: const InputDecoration(
@@ -751,7 +752,7 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
               keyboardType: TextInputType.number,
               inputFormatters: [AppFormatters.inputMiles],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             TextField(
               controller: _kmRecapadaCtrl,
               decoration: const InputDecoration(
@@ -761,7 +762,7 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
               keyboardType: TextInputType.number,
               inputFormatters: [AppFormatters.inputMiles],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             TextField(
               controller: _presionCtrl,
               decoration: const InputDecoration(
@@ -771,7 +772,7 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
               keyboardType: TextInputType.number,
               inputFormatters: [AppFormatters.inputMiles],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             TextField(
               controller: _profundidadCtrl,
               decoration: const InputDecoration(
@@ -781,7 +782,7 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             SwitchListTile(
               value: _recapable,
               title: const Text('Recapable'),

@@ -13,6 +13,7 @@ import '../models/cubierta_instalada.dart';
 import '../services/gomeria_service.dart';
 import '../widgets/esquema_unidad_view.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla detalle de una unidad — el corazón del flujo del operador
 /// de gomería. Muestra un esquema visual de la unidad desde arriba
 /// (CustomPainter en `EsquemaUnidadView`) con cada cubierta en su
@@ -102,7 +103,7 @@ class _GomeriaUnidadDetalleScreenState
                       kmActual: kmActual,
                       cantLegacy: cantLegacy,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: AppSpacing.lg),
                     EsquemaUnidadView(
                       tipo: widget.unidadTipo,
                       instaladas: mapa,
@@ -193,7 +194,7 @@ class _Cabecera extends StatelessWidget {
                 color: AppColors.warning,
                 size: 32,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -261,7 +262,7 @@ class _Cabecera extends StatelessWidget {
             ),
           ],
           if (cantLegacy > 0) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
                 Container(
@@ -286,7 +287,7 @@ class _Cabecera extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     '$cantLegacy ${cantLegacy == 1 ? "cubierta sin datos previos" : "cubiertas sin datos previos"} (carga inicial)',
@@ -371,7 +372,7 @@ class _InstalarCubiertaDialogState extends State<_InstalarCubiertaDialog> {
                   final cubiertas = snap.data ?? const <Cubierta>[];
                   if (cubiertas.isEmpty) {
                     return Padding(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(AppSpacing.sm),
                       child: Text(
                         'No hay cubiertas '
                         '${widget.posicion.tipoUsoRequerido.etiqueta.toUpperCase()} '
@@ -400,7 +401,7 @@ class _InstalarCubiertaDialogState extends State<_InstalarCubiertaDialog> {
                   );
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               TextField(
                 controller: _motivoCtrl,
                 decoration: const InputDecoration(
@@ -520,7 +521,7 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                     children: [
                       const Icon(Icons.tire_repair,
                           color: AppColors.success),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Text(
                           i.cubiertaCodigo,
@@ -534,14 +535,14 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                     ],
                   ),
                   if (i.modeloEtiqueta != null) ...[
-                    const SizedBox(height: 4),
+                    const SizedBox(height: AppSpacing.xs),
                     Text(
                       i.modeloEtiqueta!,
                       style: const TextStyle(
                           color: Colors.white70, fontSize: 12),
                     ),
                   ],
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   _info('Vida al instalar', '${i.vidaAlInstalar}'),
                   _info('Días instalada', '${i.diasDuracion()}'),
                   if (i.kmUnidadAlInstalar != null)
@@ -566,7 +567,7 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                     const SizedBox(height: 10),
                     _BarraVida(porcentaje: pct),
                   ],
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppSpacing.sm),
                   TextButton.icon(
                     onPressed: _operando ? null : _abrirRegistroControl,
                     icon: const Icon(Icons.fact_check_outlined,
@@ -577,7 +578,7 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                           color: AppColors.brand, fontSize: 11),
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   TextField(
                     controller: _motivoCtrl,
                     decoration: const InputDecoration(
@@ -802,7 +803,7 @@ class _RegistrarControlDialogState extends State<_RegistrarControlDialog> {
               keyboardType: TextInputType.number,
               inputFormatters: [AppFormatters.inputMiles],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             TextField(
               controller: _bandaCtrl,
               decoration: const InputDecoration(
@@ -812,7 +813,7 @@ class _RegistrarControlDialogState extends State<_RegistrarControlDialog> {
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             const Text(
               'Completá al menos uno de los dos.',
               style: TextStyle(color: Colors.white60, fontSize: 11),
@@ -926,14 +927,14 @@ class _SelectorPosicionDestinoDialog extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: InkWell(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         onTap: () => Navigator.pop(context, p),
         child: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.06),
             border: Border.all(color: color.withValues(alpha: 0.4)),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
           ),
           child: Row(
             children: [
@@ -942,7 +943,7 @@ class _SelectorPosicionDestinoDialog extends StatelessWidget {
                 color: color,
                 size: 18,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1019,7 +1020,7 @@ class _BarraVida extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: AppSpacing.xs),
         ClipRRect(
           borderRadius: BorderRadius.circular(3),
           child: LinearProgressIndicator(

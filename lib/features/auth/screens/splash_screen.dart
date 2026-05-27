@@ -7,6 +7,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/coopertrans_logo.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Splash inicial al abrir la app.
 ///
 /// Es 100% cosmético: muestra el logo grande sobre un gradient oscuro
@@ -102,7 +103,7 @@ class _SplashScreenState extends State<SplashScreen> {
                       valueColor: AlwaysStoppedAnimation(AppColors.brand),
                     ),
                   ),
-                  SizedBox(height: 16),
+                  SizedBox(height: AppSpacing.lg),
                   Text(
                     AppTexts.tagline,
                     style: TextStyle(

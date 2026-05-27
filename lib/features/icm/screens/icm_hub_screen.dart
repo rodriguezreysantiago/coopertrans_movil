@@ -9,6 +9,7 @@ import '../../vista_ejecutiva/widgets/tendencia_icm_chart.dart';
 import '../../vista_ejecutiva/widgets/top_choferes_lista.dart';
 import '../services/icm_hub_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Hub del módulo ICM (Índice de Conducta de Manejo).
 ///
 /// Layout (de arriba abajo):
@@ -75,7 +76,7 @@ class _IcmHubScreenState extends State<IcmHubScreen> {
         backgroundColor: AppColors.surface,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
             // Orden 2026-05-24: primero los iconos de acceso (Ranking,
             // Reporte mensual, Mapa de calor, Jornada), después Personas
@@ -181,7 +182,7 @@ class _SeccionesIcm extends StatelessWidget {
             items: kpis.top5Peores,
           ),
         ],
-        const SizedBox(height: 24),
+        const SizedBox(height: AppSpacing.xl),
         // ─── ICM flota + Tendencias (lado a lado en desktop) — AL FINAL ───
         const _SeccionLabel('Panorama'),
         const SizedBox(height: 10),
@@ -191,14 +192,14 @@ class _SeccionesIcm extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SizedBox(width: 280, child: cardIcm),
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(child: chartTendencia),
               ],
             ),
           )
         else ...[
           cardIcm,
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           chartTendencia,
         ],
       ],
@@ -240,7 +241,7 @@ class _ErrorReintentar extends StatelessWidget {
         children: [
           const Icon(Icons.error_outline,
               color: AppColors.error, size: 36),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           const Text(
             'No se pudieron cargar los KPIs del ICM',
             style: TextStyle(color: Colors.white70),
@@ -254,7 +255,7 @@ class _ErrorReintentar extends StatelessWidget {
               style: const TextStyle(color: Colors.white38, fontSize: 11),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           ElevatedButton.icon(
             onPressed: onReintentar,
             icon: const Icon(Icons.refresh),
@@ -360,7 +361,7 @@ class _HubTile extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             subtitulo,
             textAlign: TextAlign.center,

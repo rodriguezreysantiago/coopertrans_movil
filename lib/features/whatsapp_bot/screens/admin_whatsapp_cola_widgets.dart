@@ -54,21 +54,21 @@ class _ResumenContador extends StatelessWidget {
                   color: AppColors.warning,
                   activo: filtroActivo == 'PENDIENTE',
                   onTap: () => onTapEstado('PENDIENTE')),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               _MiniContador(
                   label: 'En envío',
                   count: procesando,
                   color: AppColors.info,
                   activo: filtroActivo == 'PROCESANDO',
                   onTap: () => onTapEstado('PROCESANDO')),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               _MiniContador(
                   label: 'Enviados',
                   count: enviados,
                   color: AppColors.success,
                   activo: filtroActivo == 'ENVIADO',
                   onTap: () => onTapEstado('ENVIADO')),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               _MiniContador(
                   label: 'Con error',
                   count: errores,
@@ -110,12 +110,12 @@ class _MiniContador extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
             decoration: BoxDecoration(
               color: color.withAlpha(fondoAlpha),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               border: Border.all(
                 color: color.withAlpha(bordeAlpha),
                 width: activo ? 2 : 1,
@@ -235,7 +235,7 @@ class _ItemCola extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Text(
             mensaje,
             style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
@@ -246,15 +246,15 @@ class _ItemCola extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.schedule, size: 11, color: Colors.white38),
-              const SizedBox(width: 4),
+              const SizedBox(width: AppSpacing.xs),
               Text(
                 _formatTs(encoladoTs, prefijo: 'Encolado'),
                 style: const TextStyle(color: Colors.white38, fontSize: 10),
               ),
               if (enviadoTs != null) ...[
-                const SizedBox(width: 12),
+                const SizedBox(width: AppSpacing.md),
                 const Icon(Icons.check, size: 11, color: AppColors.success),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 Text(
                   _formatTs(enviadoTs, prefijo: 'Enviado'),
                   style: const TextStyle(
@@ -264,9 +264,9 @@ class _ItemCola extends StatelessWidget {
             ],
           ),
           if (esError && error.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Container(
-              padding: const EdgeInsets.all(8),
+              padding: const EdgeInsets.all(AppSpacing.sm),
               decoration: BoxDecoration(
                 color: AppColors.error.withAlpha(15),
                 borderRadius: BorderRadius.circular(6),
@@ -281,7 +281,7 @@ class _ItemCola extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
@@ -296,7 +296,7 @@ class _ItemCola extends StatelessWidget {
                   ),
                 ),
               if (esError) ...[
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 TextButton.icon(
                   onPressed: onReintentar,
                   icon: const Icon(Icons.refresh,
@@ -323,10 +323,10 @@ class _ItemCola extends StatelessWidget {
     if (onTap == null) return card;
     return Material(
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppRadius.md),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         child: card,
       ),
     );
@@ -498,23 +498,23 @@ class _DetalleColaSheet extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             if (itemsAgrupados.isNotEmpty) ...[
               const _SeccionTitulo(
                   icono: Icons.list_alt, texto: 'Papeles incluidos'),
               const SizedBox(height: 6),
               ...itemsAgrupados.map((it) => _FilaItemAgrupado(item: it)),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
             ],
             const _SeccionTitulo(
                 icono: Icons.message_outlined, texto: 'Mensaje enviado'),
             const SizedBox(height: 6),
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppSpacing.md),
               decoration: BoxDecoration(
                 color: Colors.white.withAlpha(8),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
                 border: Border.all(color: Colors.white12),
               ),
               child: SelectableText(
@@ -526,7 +526,7 @@ class _DetalleColaSheet extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             const _SeccionTitulo(
                 icono: Icons.access_time, texto: 'Linea de tiempo'),
             const SizedBox(height: 6),
@@ -543,7 +543,7 @@ class _DetalleColaSheet extends StatelessWidget {
                   label: 'Proximo reintento',
                   valor: _ItemCola._formatTs(proximoTs)),
             _FilaDato(label: 'Intentos', valor: '$intentos'),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             const _SeccionTitulo(
                 icono: Icons.info_outline, texto: 'Metadata'),
             const SizedBox(height: 6),
@@ -560,7 +560,7 @@ class _DetalleColaSheet extends StatelessWidget {
                     : '$adminNombre ($adminDni)'),
             _FilaDato(label: 'ID del doc', valor: doc.id, copiable: true),
             if (error.isNotEmpty) ...[
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               const _SeccionTitulo(
                   icono: Icons.error_outline,
                   texto: 'Error',
@@ -568,10 +568,10 @@ class _DetalleColaSheet extends StatelessWidget {
               const SizedBox(height: 6),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(12),
+                padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
                   color: AppColors.error.withAlpha(15),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
                   border: Border.all(color: AppColors.error.withAlpha(80)),
                 ),
                 child: SelectableText(
@@ -607,7 +607,7 @@ class _SeccionTitulo extends StatelessWidget {
     return Row(
       children: [
         Icon(icono, color: color, size: 16),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Text(
           texto.toUpperCase(),
           style: TextStyle(

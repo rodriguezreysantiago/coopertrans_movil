@@ -29,6 +29,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/constants/map_constants.dart';
 import '../services/logistica_geo_utils.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 class UbicacionMapPickerResultado {
   final LatLng punto;
   final String? localidad;
@@ -177,7 +178,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                     'Buscá el lugar en Google Maps web, copiá el enlace y pegalo acá. Se extraen automáticamente las coordenadas.',
                     style: TextStyle(color: Colors.white60, fontSize: 12),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: AppSpacing.md),
                   TextField(
                     controller: ctrl,
                     autofocus: true,
@@ -188,7 +189,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                           'https://maps.app.goo.gl/... o https://www.google.com/maps/...',
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppSpacing.sm),
                   const Text(
                     'Acepta links largos (con @lat,lng) y links cortos (maps.app.goo.gl).',
                     style: TextStyle(color: Colors.white38, fontSize: 11),
@@ -400,7 +401,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                 prefixIcon: const Icon(Icons.search, color: Colors.white54),
                 suffixIcon: _buscando
                     ? const Padding(
-                        padding: EdgeInsets.all(12),
+                        padding: EdgeInsets.all(AppSpacing.md),
                         child: SizedBox(
                           width: 16,
                           height: 16,
@@ -423,7 +424,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                 filled: true,
                 fillColor: Colors.white10,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
                   borderSide: BorderSide.none,
                 ),
               ),
@@ -443,7 +444,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
               margin: const EdgeInsets.fromLTRB(16, 6, 16, 0),
               decoration: BoxDecoration(
                 color: Colors.white10,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
               child: ListView.separated(
                 shrinkWrap: true,
@@ -469,7 +470,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                 },
               ),
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           // Mapa con crosshair fijo
           Expanded(
             child: Stack(
@@ -513,9 +514,9 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                     right: 12,
                     child: Material(
                       color: Colors.black.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
                         onTap: () => setState(
                             () => _modoSatelite = !_modoSatelite),
                         child: Padding(
@@ -566,7 +567,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                       ),
                       // Espacio igual a la mitad de la altura del pin
                       // para alinear con la base del marker visual.
-                      const SizedBox(height: 4),
+                      const SizedBox(height: AppSpacing.xs),
                     ],
                   ),
                 ),
@@ -592,7 +593,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                     textAlign: TextAlign.center,
                   );
                 }),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 // 2 atajos: GPS (solo mobile) + pegar link de Google
                 // Maps. El segundo es la salvación para puntos rurales
                 // que Mapbox / Nominatim no encuentran — el operador
@@ -632,7 +633,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                         child: const Text('CANCELAR'),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: ElevatedButton.icon(
                         onPressed: _confirmando ? null : _confirmar,

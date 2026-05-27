@@ -8,6 +8,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../widgets/mantenimiento_badge.dart';
 import 'admin_mantenimiento_detalle_screen.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 // Modelos privados (_FuenteServiceDistance enum, _ResolucionServiceDistance,
 // _Resumen) y widgets (_TractorCard, _BarraResumen, _Chip) extraidos para
 // mantener navegable el screen principal. Comparten privacidad via `part of`.

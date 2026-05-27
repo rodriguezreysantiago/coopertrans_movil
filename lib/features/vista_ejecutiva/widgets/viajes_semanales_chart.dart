@@ -9,6 +9,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/vista_ejecutiva_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 class ViajesSemanalesChart extends StatelessWidget {
   final List<PuntoTendencia> puntos;
   final String titulo;
@@ -32,7 +33,7 @@ class ViajesSemanalesChart extends StatelessWidget {
             children: [
               const Icon(Icons.local_shipping,
                   color: AppColors.brand, size: 18),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   titulo,
@@ -47,7 +48,7 @@ class ViajesSemanalesChart extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           SizedBox(
             height: 180,
             child: hayDatos

@@ -11,6 +11,7 @@ import '../widgets/vencimiento_editor_sheet.dart';
 import '../widgets/vencimiento_item.dart';
 import '../widgets/vencimiento_item_card.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Vista calendario de TODOS los vencimientos (personal + flota).
 ///
 /// Diferencia con las pantallas de auditoría existentes:
@@ -287,7 +288,7 @@ class _AdminVencimientosCalendarioScreenState
                         horizontal: 5, vertical: 1),
                     decoration: BoxDecoration(
                       color: color,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
                     ),
                     child: Text(
                       // Cap visual: con celdas estrechas (375/7 ≈ 53 dp)
@@ -337,13 +338,13 @@ class _ListaVacia extends StatelessWidget {
         : 'Sin vencimientos el ${AppFormatters.formatearFecha(dia!)}';
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(Icons.event_available,
                 size: 56, color: Colors.white24),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             Text(
               texto,
               textAlign: TextAlign.center,

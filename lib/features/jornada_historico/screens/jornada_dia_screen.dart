@@ -8,6 +8,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../models/jornada_dia.dart';
 import '../services/jornada_historico_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla "Jornada del día" — muestra la jornada reconstruida de un
 /// chofer en una fecha específica:
 ///
@@ -391,7 +392,7 @@ class _CardResumenDia extends StatelessWidget {
               children: [
                 const Icon(Icons.calendar_today,
                     color: AppColors.success, size: 16),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Text(
                   jornada.fecha,
                   style: const TextStyle(
@@ -410,7 +411,7 @@ class _CardResumenDia extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 const Icon(Icons.arrow_forward_ios,
                     color: Colors.white24, size: 12),
               ],
@@ -472,7 +473,7 @@ class _MiniKpi extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icono, color: color, size: 14),
-        const SizedBox(width: 4),
+        const SizedBox(width: AppSpacing.xs),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -566,18 +567,18 @@ class _PillButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           border: Border.all(color: color.withValues(alpha: 0.4)),
         ),
         child: Row(
           children: [
             Icon(icono, color: color, size: 18),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Text(
                 label,
@@ -615,7 +616,7 @@ class _Placeholder extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icono, color: Colors.white38, size: 48),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             Text(
               titulo,
               textAlign: TextAlign.center,
@@ -624,7 +625,7 @@ class _Placeholder extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                   fontSize: 14),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               subtitulo,
               textAlign: TextAlign.center,
@@ -647,21 +648,21 @@ class _Contenido extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
       children: [
         _ResumenCard(j: jornada),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         _GraficoVelocidad(j: jornada),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         _SeccionLabel(
           icono: Icons.timeline,
           texto: 'TRAMOS DE MANEJO (${jornada.tramos.length})',
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         for (final t in jornada.tramos) _TramoCard(t: t),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         _SeccionLabel(
           icono: Icons.local_parking,
           texto: 'PARADAS (${jornada.paradas.length})',
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         if (jornada.paradas.isEmpty)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
@@ -695,7 +696,7 @@ class _ResumenCard extends StatelessWidget {
             children: [
               const Icon(Icons.local_shipping_outlined,
                   color: AppColors.success, size: 20),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   patentes,
@@ -712,7 +713,7 @@ class _ResumenCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Wrap(
             spacing: 18,
             runSpacing: 10,
@@ -792,7 +793,7 @@ class _GraficoVelocidad extends StatelessWidget {
   Widget build(BuildContext context) {
     if (j.serieVelocidad.length < 2) {
       return const AppCard(
-        padding: EdgeInsets.all(16),
+        padding: EdgeInsets.all(AppSpacing.lg),
         child: Center(
           child: Text(
             'Sin serie de velocidad suficiente para graficar.',
@@ -820,7 +821,7 @@ class _GraficoVelocidad extends StatelessWidget {
             children: [
               Icon(Icons.speed,
                   color: AppColors.brandSoft, size: 18),
-              SizedBox(width: 8),
+              SizedBox(width: AppSpacing.sm),
               Text('Velocidad (km/h)',
                   style: TextStyle(
                       color: Colors.white,
@@ -910,7 +911,7 @@ class _TramoCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.info.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
       ),
       child: Row(
@@ -965,7 +966,7 @@ class _ParadaCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
@@ -985,7 +986,7 @@ class _ParadaCard extends StatelessWidget {
                           fontWeight: FontWeight.bold,
                           fontSize: 13),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppSpacing.sm),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 2),

@@ -5,6 +5,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../../eco_driving/utils/etiquetas_alerta_volvo.dart';
 import '../services/chofer_actividad_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Tablero personal del chofer: km manejados, tractores que usó y
 /// eventos Volvo asociados, en una ventana de 7/30/90 días.
 ///
@@ -154,7 +155,7 @@ class _SelectorPeriodo extends StatelessWidget {
         children: [
           for (final d in _opciones) ...[
             Expanded(child: _Chip(dias: d, selected: d == diasActuales, onTap: () => onCambio(d))),
-            if (d != _opciones.last) const SizedBox(width: 8),
+            if (d != _opciones.last) const SizedBox(width: AppSpacing.sm),
           ],
         ],
       ),
@@ -237,7 +238,7 @@ class _Resumen extends StatelessWidget {
                 icono: Icons.straighten,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: _KpiCard(
                 label: 'EVENTOS VOLVO',
@@ -250,7 +251,7 @@ class _Resumen extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         Row(
           children: [
             Expanded(
@@ -261,7 +262,7 @@ class _Resumen extends StatelessWidget {
                 icono: Icons.swap_horiz,
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: _KpiCard(
                 label: 'TRACTORES',
@@ -275,18 +276,18 @@ class _Resumen extends StatelessWidget {
 
         // Aviso de datos parciales si hay asignaciones legacy.
         if (resumen.asignacionesSinTelemetria > 0) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.white.withAlpha(8),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               border: Border.all(color: Colors.white24),
             ),
             child: Row(
               children: [
                 const Icon(Icons.info_outline, size: 14, color: Colors.white54),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     '${resumen.asignacionesSinTelemetria} asignación'
@@ -302,22 +303,22 @@ class _Resumen extends StatelessWidget {
           ),
         ],
 
-        const SizedBox(height: 24),
+        const SizedBox(height: AppSpacing.xl),
 
         // ─── Tractores manejados ───
         if (resumen.tractores.isNotEmpty) ...[
           const _Titulo(label: 'TRACTORES MANEJADOS', icono: Icons.local_shipping),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           ...resumen.tractores.map((t) => _TractorTile(tractor: t)),
-          const SizedBox(height: 24),
+          const SizedBox(height: AppSpacing.xl),
         ],
 
         // ─── Eventos por severidad ───
         if (resumen.totalEventos > 0) ...[
           const _Titulo(label: 'EVENTOS VOLVO', icono: Icons.bolt),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _EventosPorSeveridadCard(eventos: resumen.eventosPorSeveridad),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           if (resumen.eventosPorTipo.isNotEmpty)
             _EventosPorTipoCard(eventos: resumen.eventosPorTipo),
         ],
@@ -367,7 +368,7 @@ class _KpiCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: color.withAlpha(60)),
       ),
       child: Column(
@@ -388,7 +389,7 @@ class _KpiCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
@@ -402,7 +403,7 @@ class _KpiCard extends StatelessWidget {
                 ),
               ),
               if (unidad != null) ...[
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 Text(
                   unidad!,
                   style: TextStyle(
@@ -429,7 +430,7 @@ class _Titulo extends StatelessWidget {
     return Row(
       children: [
         Icon(icono, color: AppColors.success, size: 16),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Text(
           label,
           style: const TextStyle(
@@ -456,7 +457,7 @@ class _TractorTile extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white.withAlpha(8),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: Colors.white12),
       ),
       child: Row(
@@ -470,7 +471,7 @@ class _TractorTile extends StatelessWidget {
               letterSpacing: 0.8,
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           if (tractor.activaActual)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -509,7 +510,7 @@ class _TractorTile extends StatelessWidget {
               ),
             ),
             if (tractor.esParcial) ...[
-              const SizedBox(width: 4),
+              const SizedBox(width: AppSpacing.xs),
               const Tooltip(
                 message: 'Asignación en curso — km parcial',
                 child: Icon(Icons.history, size: 13, color: Colors.white38),
@@ -537,12 +538,12 @@ class _EventosPorSeveridadCard extends StatelessWidget {
           child: _SeveridadMini(
               label: 'HIGH', valor: high, color: AppColors.error),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: _SeveridadMini(
               label: 'MEDIUM', valor: medium, color: AppColors.warning),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: _SeveridadMini(
               label: 'LOW', valor: low, color: AppColors.success),
@@ -568,7 +569,7 @@ class _SeveridadMini extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
         color: valor > 0 ? color.withAlpha(20) : Colors.white.withAlpha(8),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(
           color: valor > 0 ? color.withAlpha(80) : Colors.white12,
         ),
@@ -609,7 +610,7 @@ class _EventosPorTipoCard extends StatelessWidget {
     final aMostrar = eventos.take(maxItems).toList();
     final restantes = eventos.length - aMostrar.length;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: Colors.white.withAlpha(8),
         borderRadius: BorderRadius.circular(10),
@@ -627,7 +628,7 @@ class _EventosPorTipoCard extends StatelessWidget {
               letterSpacing: 0.6,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           for (final e in aMostrar)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 3),
@@ -653,7 +654,7 @@ class _EventosPorTipoCard extends StatelessWidget {
               ),
             ),
           if (restantes > 0) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               'Y $restantes tipo${restantes == 1 ? '' : 's'} más',
               style: const TextStyle(color: Colors.white54, fontSize: 11),

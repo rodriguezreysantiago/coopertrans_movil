@@ -20,6 +20,7 @@ import '../../../shared/widgets/fecha_dialog.dart';
 import '../../asignaciones/services/asignacion_enganche_service.dart';
 import '../../asignaciones/services/asignacion_vehiculo_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 // =============================================================================
 // SERVICIO DE ACTUALIZACIÓN — NAMESPACE VehiculoActions
 //
@@ -570,7 +571,7 @@ class VehiculoActions {
               'Al reactivarlo más adelante hay que volver a cargar todo.',
               style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             TextField(
               controller: motivoCtrl,
               maxLength: 200,

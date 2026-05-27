@@ -92,7 +92,7 @@ class _SeccionUnidad extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
 
         // Contenido según estado
         if (tienePendiente)
@@ -159,7 +159,7 @@ class _CardEnRevision extends StatelessWidget {
                     fontSize: 14,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   subtitulo,
                   style: const TextStyle(
@@ -187,7 +187,7 @@ class _CardSinAsignacion extends StatelessWidget {
       child: Row(
         children: [
           Icon(Icons.info_outline, color: Colors.white24),
-          SizedBox(width: 12),
+          SizedBox(width: AppSpacing.md),
           Text(
             'Sin unidad asignada',
             style: TextStyle(color: Colors.white38, fontSize: 14),
@@ -216,7 +216,7 @@ class _CardUnidad extends StatelessWidget {
         if (snap.hasError) {
           return AppCard(
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppSpacing.md),
               child: Text(
                 'Error cargando $patente: ${snap.error}',
                 style: const TextStyle(color: AppColors.error),
@@ -251,7 +251,7 @@ class _CardUnidad extends StatelessWidget {
                 child: Row(
                   children: [
                     Icon(icono, color: Colors.white70, size: 32),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: AppSpacing.lg),
                     Expanded(
                       child: Text(
                         patente.toUpperCase(),
@@ -299,7 +299,7 @@ class _CardUnidad extends StatelessWidget {
               // y un link a MIS VENCIMIENTOS para ver el detalle.
               const Divider(color: Colors.white10, height: 1),
               _ResumenVencimientosEquipo(data: v),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
             ],
           ),
         );
@@ -413,9 +413,9 @@ class _ResumenVencimientosEquipo extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Wrap(spacing: 6, runSpacing: 6, children: chips),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           const Text(
             'Mirá el detalle en "Mis Vencimientos".',
             style: TextStyle(
@@ -553,7 +553,7 @@ class _BloqueTelemetria extends StatelessWidget {
             ],
           ),
           if (hintStaleness != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               hintStaleness,
               style: TextStyle(
@@ -647,7 +647,7 @@ class _DatoCombustible extends StatelessWidget {
             fontSize: 14,
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: AppSpacing.xs),
         // Barra horizontal mini que refuerza visualmente el nivel.
         SizedBox(
           width: 60,

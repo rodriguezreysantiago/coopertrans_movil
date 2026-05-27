@@ -19,6 +19,7 @@ import '../../../shared/utils/ocr_service.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../checklist/screens/user_checklist_form_screen.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 // Componentes visuales (header, card, boton upload, detalle equipo,
 // boton OCR, etc) extraidos para mantener navegable este screen.
 // Comparten privacidad via `part of`.
@@ -199,7 +200,7 @@ class _UserMisVencimientosScreenState
                   filled: true,
                   fillColor: Colors.black.withAlpha(80),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                     borderSide: BorderSide.none,
                   ),
                 ),
@@ -236,7 +237,7 @@ class _UserMisVencimientosScreenState
               // mobile (Android/iOS), donde ML Kit funciona. El OCR es
               // best-effort: si falla, el chofer tipea como siempre.
               if (OcrService.soportado) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 _BotonDetectarFecha(
                   onFechaDetectada: (fecha) {
                     final dd = fecha.day.toString().padLeft(2, '0');
@@ -572,7 +573,7 @@ class _UserMisVencimientosScreenState
               else
                 const _CardInformativa(
                     'No tenés un camión asignado'),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               if (pEnganche.isNotEmpty && pEnganche != '-')
                 _DetalleEquipo(
                   patente: pEnganche,

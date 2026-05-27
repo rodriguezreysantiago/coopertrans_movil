@@ -11,6 +11,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/vista_ejecutiva_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 class TendenciaIcmChart extends StatelessWidget {
   final List<PuntoTendencia> puntos;
   final String titulo;
@@ -38,7 +39,7 @@ class TendenciaIcmChart extends StatelessWidget {
             children: [
               const Icon(Icons.trending_up,
                   color: AppColors.brandSoft, size: 18),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   titulo,
@@ -53,7 +54,7 @@ class TendenciaIcmChart extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           SizedBox(
             height: 180,
             child: mostrarChart

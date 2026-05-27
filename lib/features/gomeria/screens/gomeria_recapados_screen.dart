@@ -13,6 +13,7 @@ import '../models/cubierta_proveedor.dart';
 import '../models/cubierta_recapado.dart';
 import '../services/gomeria_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla de recapados — tabs:
 /// - **EN PROCESO**: cubiertas que están ahora en el proveedor.
 /// - **HISTÓRICO**: las últimas 100 ya cerradas.
@@ -98,7 +99,7 @@ class _EnProcesoTab extends StatelessWidget {
         return ListView.separated(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
           itemCount: recapados.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
           itemBuilder: (_, i) => _RecapadoTile(
             r: recapados[i],
             onTap: () => _abrirCierre(context, service, recapados[i]),
@@ -162,7 +163,7 @@ class _HistoricoTab extends StatelessWidget {
         return ListView.separated(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
           itemCount: recs.length + 1,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
+          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
           itemBuilder: (_, i) {
             if (i == 0) {
               return _ResumenHistorico(
@@ -274,7 +275,7 @@ class _RecapadoTile extends StatelessWidget {
           Row(
             children: [
               Icon(Icons.swap_horiz_outlined, color: color),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Text(
                 r.cubiertaCodigo,
                 style: const TextStyle(
@@ -319,14 +320,14 @@ class _RecapadoTile extends StatelessWidget {
             style: const TextStyle(color: Colors.white60, fontSize: 11),
           ),
           if (r.costo != null) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               'Costo: \$${AppFormatters.formatearMonto(r.costo)}',
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ],
           if (r.notas != null && r.notas!.isNotEmpty) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               r.notas!,
               style: const TextStyle(
@@ -397,7 +398,7 @@ class _EnviarRecapadoDialogState extends State<_EnviarRecapadoDialog> {
                         ..sort((a, b) => a.codigo.compareTo(b.codigo));
                   if (candidatas.isEmpty) {
                     return const Padding(
-                      padding: EdgeInsets.all(8),
+                      padding: EdgeInsets.all(AppSpacing.sm),
                       child: Text(
                         'No hay cubiertas en depósito para recapar.',
                         style: TextStyle(color: Colors.amber),
@@ -423,9 +424,9 @@ class _EnviarRecapadoDialogState extends State<_EnviarRecapadoDialog> {
                   );
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               _selectorProveedor(),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               TextField(
                 controller: _notasCtrl,
                 maxLines: 2,
@@ -665,7 +666,7 @@ class _CerrarRecapadoDialogState extends State<_CerrarRecapadoDialog> {
                   ],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               TextField(
                 controller: _costoCtrl,
                 decoration: const InputDecoration(
@@ -675,7 +676,7 @@ class _CerrarRecapadoDialogState extends State<_CerrarRecapadoDialog> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [AppFormatters.inputMiles],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               TextField(
                 controller: _notasCtrl,
                 maxLines: 2,

@@ -27,6 +27,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../../../shared/widgets/fecha_dialog.dart';
 import '../services/empresa_empleadora_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 class AdminEmpresasEmpleadorasScreen extends StatelessWidget {
   const AdminEmpresasEmpleadorasScreen({super.key});
 
@@ -76,7 +77,7 @@ class _CardEmpresa extends StatelessWidget {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(AppSpacing.sm),
                     decoration: BoxDecoration(
                       color: AppColors.info.withAlpha(35),
                       shape: BoxShape.circle,
@@ -84,7 +85,7 @@ class _CardEmpresa extends StatelessWidget {
                     child: const Icon(Icons.business,
                         color: AppColors.info, size: 20),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -186,7 +187,7 @@ class _FilaDocEmpresa extends StatelessWidget {
               url: url,
               tituloVisor: '$etiqueta - $cuit',
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,7 +216,7 @@ class _FilaDocEmpresa extends StatelessWidget {
               ),
             ),
             VencimientoBadge(fecha: fecha),
-            const SizedBox(width: 4),
+            const SizedBox(width: AppSpacing.xs),
             const Icon(Icons.chevron_right,
                 color: Colors.white24, size: 18),
           ],

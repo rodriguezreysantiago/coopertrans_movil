@@ -21,6 +21,7 @@ import '../services/logistica_service.dart';
 import '../services/viajes_service.dart';
 import '../utils/calculos_viaje.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 // ─── Split del archivo principal (refactor 2026-05-18) ───
 //
 // Originalmente este archivo tenia 2823 LOC con 24 classes en un solo lugar.
@@ -569,7 +570,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
                   'chofer en las últimas 24h con alguna tarifa en común:',
                   style: const TextStyle(fontSize: 13),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 ...candidatos.map((v) {
                   final fecha = v.fechaReferencia == null
                       ? 's/fecha'
@@ -594,7 +595,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
                     ),
                   );
                 }),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 const Text(
                   '¿Es un viaje distinto?',
                   style: TextStyle(
@@ -883,7 +884,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
         title: 'Viaje',
         body: Center(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(AppSpacing.xl),
             child: Text(
               _errorCarga!,
               style: const TextStyle(color: AppColors.error),
@@ -913,7 +914,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
           children: [
             // 1. RESUMEN (arriba — totales en vivo).
             _SeccionResumen(montos: _montosCalc),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
 
             // 2. ESTADO.
             _SeccionEstado(
@@ -930,7 +931,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
               },
               onCambio: _programarGuardadoBorrador,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
 
             // 3. CHOFER + UNIDAD.
             _SeccionChofer(
@@ -956,7 +957,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
                 // tiene sentido sugerir el adelanto del último viaje.
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             _SeccionUnidad(
               vehiculoCtrl: _vehiculoCtrl,
               engancheCtrl: _engancheCtrl,
@@ -965,7 +966,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
                 _programarGuardadoBorrador();
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
 
             // 4. ADELANTO ASOCIADO (opcional). Si el operador ya
             // creó un adelanto antes de armar el viaje (caso típico:
@@ -982,7 +983,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
                 _programarGuardadoBorrador();
               },
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
 
             // GASTOS EXTRAORDINARIOS: removidos del nivel viaje el
             // 2026-05-13. Cada tramo ahora carga sus propios gastos
@@ -1034,7 +1035,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
               _agregarTramo();
               _programarGuardadoBorrador();
             }),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.xl),
 
             _BotonesGuardar(
               guardando: _guardando,

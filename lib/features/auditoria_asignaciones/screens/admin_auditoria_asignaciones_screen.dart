@@ -8,6 +8,7 @@ import '../../asignaciones/models/asignacion_vehiculo.dart';
 import '../models/tramo_ibutton.dart';
 import '../services/historico_ibutton_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Auditoría de asignaciones: cruza el HISTÓRICO REAL del iButton físico
 /// (`SITRACK_IBUTTONS_HISTORICO` — qué iButton estuvo en qué patente y
 /// cuándo, reconstruido desde SITRACK_EVENTOS) contra
@@ -116,7 +117,7 @@ class _BannerInfo extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: AppColors.info.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: AppColors.info.withValues(alpha: 0.30)),
       ),
       child: const Row(
@@ -172,13 +173,13 @@ class _BarraFiltros extends StatelessWidget {
         children: [
           InkWell(
             onTap: onRango,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
             child: Container(
               padding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: AppColors.brand.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
                 border: Border.all(
                     color: AppColors.brand.withValues(alpha: 0.4)),
               ),
@@ -202,7 +203,7 @@ class _BarraFiltros extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               Expanded(
@@ -217,7 +218,7 @@ class _BarraFiltros extends StatelessWidget {
                   onChanged: onPatente,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: TextField(
                   keyboardType: TextInputType.number,
@@ -232,7 +233,7 @@ class _BarraFiltros extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           SwitchListTile(
             dense: true,
             contentPadding: EdgeInsets.zero,
@@ -278,7 +279,7 @@ class _ListadoCruce extends StatelessWidget {
         if (snap.hasError) {
           return Center(
             child: Padding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(AppSpacing.xl),
               child: Text('Error: ${snap.error}',
                   style: const TextStyle(color: AppColors.error)),
             ),
@@ -288,17 +289,17 @@ class _ListadoCruce extends StatelessWidget {
         if (tramos.isEmpty) {
           return const Center(
             child: Padding(
-              padding: EdgeInsets.all(32),
+              padding: EdgeInsets.all(AppSpacing.xxl),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.history, color: Colors.white24, size: 64),
-                  SizedBox(height: 12),
+                  SizedBox(height: AppSpacing.md),
                   Text(
                     'Sin tramos en el rango seleccionado.',
                     style: TextStyle(color: Colors.white54),
                   ),
-                  SizedBox(height: 4),
+                  SizedBox(height: AppSpacing.xs),
                   Text(
                     'El histórico se reconstruye 06:00 ART procesando '
                     'el día anterior — el día actual recién se ve mañana.',
@@ -340,7 +341,7 @@ class _ListadoCruce extends StatelessWidget {
               );
             }
             return ListView(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppSpacing.md),
               children: [
                 _Resumen(filas: filas),
                 const SizedBox(height: 10),
@@ -446,7 +447,7 @@ class _ChipResumen extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           border: Border.all(color: color.withValues(alpha: 0.5)),
         ),
         child: Column(
@@ -514,11 +515,11 @@ class _FilaCruce extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 3),
       color: Colors.white.withValues(alpha: 0.04),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         side: BorderSide(color: _color.withValues(alpha: 0.4)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -546,7 +547,7 @@ class _FilaCruce extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(_icono, color: _color, size: 12),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: AppSpacing.xs),
                       Text(_etiqueta,
                           style: TextStyle(
                               color: _color,
@@ -563,7 +564,7 @@ class _FilaCruce extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             // Sitrack iButton
             _LineaActor(
               label: 'iButton (real)',
@@ -571,7 +572,7 @@ class _FilaCruce extends StatelessWidget {
               nombre: tramo.nombreLegible,
               dni: tramo.choferDni,
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             // Asignación sistema
             if (asignacion != null)
               _LineaActor(
@@ -597,7 +598,7 @@ class _FilaCruce extends StatelessWidget {
               children: [
                 const Icon(Icons.access_time,
                     size: 12, color: Colors.white38),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 Text(
                   '${AppFormatters.formatearFechaHoraSinSegundos(tramo.desde)} → '
                   '${AppFormatters.formatearFechaHoraSinSegundos(tramo.hasta)}',

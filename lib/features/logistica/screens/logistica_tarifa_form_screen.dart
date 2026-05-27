@@ -9,6 +9,7 @@ import '../models/tarifa_logistica.dart';
 import '../models/ubicacion_logistica.dart';
 import '../services/logistica_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Form full-screen para alta y edición de tarifas. Diseñado como un
 /// flujo lineal arriba-abajo:
 ///
@@ -192,7 +193,7 @@ class _LogisticaTarifaFormScreenState
           // ─── 1. TIPO DE CARGA ───────────────────────────────────────
           const _SeccionTitulo(numero: 1, texto: 'Tipo de carga'),
           AppCard(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppSpacing.md),
             child: Row(
               children: [
                 for (final t in TipoCargaLogistica.values) ...[
@@ -217,14 +218,14 @@ class _LogisticaTarifaFormScreenState
                           AppColors.success.withValues(alpha: 0.4),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpacing.sm),
                 ],
               ],
             ),
           ),
           // ─── 1.b DADOR + COMISIÓN (solo si TERCEROS) ────────────────
           if (_tipoCarga == TipoCargaLogistica.terceros) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             const _SeccionTitulo(numero: null, texto: 'Dador de transporte'),
             _SelectorEmpresa(
               etiqueta: 'Dador de transporte',
@@ -232,9 +233,9 @@ class _LogisticaTarifaFormScreenState
               soloTipo: TipoEmpresaLogistica.dadorTransporte,
               onChange: (e) => setState(() => _dador = e),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             AppCard(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppSpacing.md),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -312,7 +313,7 @@ class _LogisticaTarifaFormScreenState
           ],
 
           // ─── 2. ORIGEN ──────────────────────────────────────────────
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           const _SeccionTitulo(numero: 2, texto: 'Origen'),
           _SelectorEmpresa(
             etiqueta: 'Origen',
@@ -320,7 +321,7 @@ class _LogisticaTarifaFormScreenState
             soloTipo: TipoEmpresaLogistica.cliente,
             onChange: (e) => setState(() => _empOrigen = e),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _SelectorUbicacion(
             etiqueta: 'Ubicación origen',
             valor: _ubicOrigen,
@@ -329,7 +330,7 @@ class _LogisticaTarifaFormScreenState
           ),
 
           // ─── 3. DESTINO ─────────────────────────────────────────────
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           const _SeccionTitulo(numero: 3, texto: 'Destino'),
           _SelectorEmpresa(
             etiqueta: 'Destino',
@@ -337,7 +338,7 @@ class _LogisticaTarifaFormScreenState
             soloTipo: TipoEmpresaLogistica.cliente,
             onChange: (e) => setState(() => _empDestino = e),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _SelectorUbicacion(
             etiqueta: 'Ubicación destino',
             valor: _ubicDestino,
@@ -350,7 +351,7 @@ class _LogisticaTarifaFormScreenState
           // producto que se transporta. Las opciones vienen del
           // catálogo de productos de la empresa origen.
           if (_empOrigen != null && _empOrigen!.productos.isNotEmpty) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             _SelectorProducto(
               productos: _empOrigen!.productos,
               valor: _producto,
@@ -359,10 +360,10 @@ class _LogisticaTarifaFormScreenState
           ],
 
           // ─── 4. MODALIDAD ───────────────────────────────────────────
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           const _SeccionTitulo(numero: 4, texto: 'Modalidad'),
           AppCard(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppSpacing.md),
             child: Column(
               children: [
                 // Si origen y destino son la MISMA empresa (ej. de un
@@ -388,7 +389,7 @@ class _LogisticaTarifaFormScreenState
                       children: [
                         const Icon(Icons.info_outline,
                             size: 18, color: AppColors.info),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: AppSpacing.sm),
                         Expanded(
                           child: Text(
                             'Flete a cargo de ${_empOrigen!.nombre} '
@@ -410,7 +411,7 @@ class _LogisticaTarifaFormScreenState
                     etiquetaFn: (f) => f.etiqueta,
                     onChange: (f) => setState(() => _flete = f),
                   ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 _filaSelector<UnidadTarifa>(
                   etiqueta: 'Unidad de tarifa',
                   opciones: UnidadTarifa.values,
@@ -423,10 +424,10 @@ class _LogisticaTarifaFormScreenState
           ),
 
           // ─── 5. TARIFAS ─────────────────────────────────────────────
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           const _SeccionTitulo(numero: 5, texto: 'Tarifas'),
           AppCard(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppSpacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -435,7 +436,7 @@ class _LogisticaTarifaFormScreenState
                   etiqueta: 'Tarifa real (lo que cobra Vecchi)',
                   color: AppColors.success,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 // Toggle pago al chofer: 18% sobre la tarifa chofer
                 // (default histórico) o monto fijo por viaje (pedido
                 // Santiago 2026-05-19 para viajes cortos donde el 18%
@@ -477,7 +478,7 @@ class _LogisticaTarifaFormScreenState
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 if (_modoMontoFijoChofer) ...[
                   _campoMontoFijoChofer(),
                   // En modo monto fijo NO se muestra la tarifa chofer (%): el
@@ -496,10 +497,10 @@ class _LogisticaTarifaFormScreenState
           ),
 
           // ─── 6. NOTAS ───────────────────────────────────────────────
-          const SizedBox(height: 16),
+          const SizedBox(height: AppSpacing.lg),
           const _SeccionTitulo(numero: 6, texto: 'Notas (opcional)'),
           AppCard(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(AppSpacing.md),
             child: TextField(
               controller: _notasCtrl,
               maxLines: 3,
@@ -513,7 +514,7 @@ class _LogisticaTarifaFormScreenState
 
           // ─── ERROR ──────────────────────────────────────────────────
           if (_error != null) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -541,7 +542,7 @@ class _LogisticaTarifaFormScreenState
                   child: const Text('CANCELAR'),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 flex: 2,
                 child: ElevatedButton.icon(
@@ -847,7 +848,7 @@ class _SelectorEmpresa extends StatelessWidget {
         children: [
           const Icon(Icons.business_outlined,
               color: Colors.white54, size: 22),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -922,7 +923,7 @@ class _BuscadorField extends StatelessWidget {
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           borderSide: BorderSide.none,
         ),
       ),
@@ -1019,7 +1020,7 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
                   controller: controller,
                   padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
                   itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 4),
+                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.xs),
                   itemBuilder: (_, i) {
                     final e = items[i];
                     return AppCard(
@@ -1030,7 +1031,7 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
                         children: [
                           const Icon(Icons.business,
                               color: AppColors.info),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1099,7 +1100,7 @@ class _SelectorUbicacion extends StatelessWidget {
         children: [
           const Icon(Icons.place_outlined,
               color: Colors.white54, size: 22),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1276,7 +1277,7 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                   controller: controller,
                   padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
                   itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 4),
+                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.xs),
                   itemBuilder: (_, i) {
                     final u = items[i];
                     return AppCard(
@@ -1287,7 +1288,7 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                         children: [
                           const Icon(Icons.place,
                               color: AppColors.brandSoft),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1359,7 +1360,7 @@ class _SeccionTitulo extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
           ],
           Text(
             texto.toUpperCase(),
@@ -1416,7 +1417,7 @@ class _SelectorProducto extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Wrap(
             spacing: 6,
             runSpacing: 6,

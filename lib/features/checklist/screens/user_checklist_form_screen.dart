@@ -11,6 +11,7 @@ import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../data/checklist_data.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Checklist mensual del chofer (sobre tractor o batea/tolva).
 ///
 /// El chofer responde BUE/REG/MAL para cada item. Si elige REG o MAL,
@@ -222,7 +223,7 @@ class _HeaderInfo extends StatelessWidget {
       child: Row(
         children: [
           const Icon(Icons.tag, color: AppColors.success, size: 18),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           const Text('UNIDAD: ',
               style: TextStyle(color: Colors.white60, fontSize: 12)),
           Text(
@@ -250,7 +251,7 @@ class _AvisoObligatorio extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: AppColors.warning.withAlpha(20),
         borderRadius: BorderRadius.circular(10),
@@ -313,7 +314,7 @@ class _Seccion extends StatelessWidget {
           decoration: BoxDecoration(
             color:
                 Theme.of(context).colorScheme.primary.withAlpha(30),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
             border: Border.all(
               color: Theme.of(context).colorScheme.primary.withAlpha(50),
             ),
@@ -327,7 +328,7 @@ class _Seccion extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: AppSpacing.md),
         ...items.map(
           (item) => _ItemPregunta(
             item: item,
@@ -412,10 +413,10 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(
           color: widget.tieneError
               ? AppColors.error
@@ -499,11 +500,11 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
                         filled: true,
                         fillColor: Colors.black.withAlpha(100),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(AppRadius.md),
                           borderSide: BorderSide.none,
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(AppRadius.md),
                           borderSide: BorderSide(
                             color: _colorEstado(widget.respuesta!),
                           ),

@@ -11,6 +11,7 @@ import '../models/cubierta.dart';
 import '../models/cubierta_modelo.dart';
 import '../services/gomeria_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Stock de cubiertas — la pantalla central de gestión del inventario.
 ///
 /// Presenta TODAS las cubiertas (no solo EN_DEPOSITO). Filtros:
@@ -107,7 +108,7 @@ class _GomeriaStockScreenState extends State<GomeriaStockScreen> {
                 return ListView.separated(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
                   itemCount: cubiertas.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
                   itemBuilder: (_, i) => _CubiertaTile(
                     c: cubiertas[i],
                     onTap: () => Navigator.pushNamed(
@@ -198,7 +199,7 @@ class _BarraBusqueda extends StatelessWidget {
           filled: true,
           fillColor: Colors.white.withValues(alpha: 0.04),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
             borderSide: BorderSide.none,
           ),
           contentPadding:
@@ -352,13 +353,13 @@ class _CubiertaTile extends StatelessWidget {
             height: 48,
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               border: Border.all(color: color),
             ),
             alignment: Alignment.center,
             child: Icon(Icons.tire_repair, color: color),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -373,7 +374,7 @@ class _CubiertaTile extends StatelessWidget {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: AppSpacing.sm),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 6, vertical: 1),
@@ -402,7 +403,7 @@ class _CubiertaTile extends StatelessWidget {
                   style:
                       const TextStyle(color: Colors.white70, fontSize: 12),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Wrap(
                   spacing: 8,
                   children: [
@@ -528,7 +529,7 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
                   );
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               TextField(
                 controller: _cantidadCtrl,
                 decoration: const InputDecoration(
@@ -540,7 +541,7 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
                 keyboardType: TextInputType.number,
                 onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               TextField(
                 controller: _precioCtrl,
                 decoration: const InputDecoration(
@@ -551,7 +552,7 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [AppFormatters.inputMiles],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               TextField(
                 controller: _obsCtrl,
                 maxLines: 2,
@@ -560,7 +561,7 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
                   hintText: 'Ej. Comprada en oferta de mayo 2026',
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               const Text(
                 'El código (CUB-XXXX) se asigna automáticamente.',
                 style: TextStyle(color: Colors.white60, fontSize: 11),
@@ -568,7 +569,7 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
               // Barra de progreso del lote: solo visible mientras se
               // crean cubiertas en lote y muestra "X de Y creadas".
               if (_guardando && _total > 1) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 LinearProgressIndicator(
                   value: _creadas / _total,
                   minHeight: 6,
@@ -576,7 +577,7 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
                   valueColor:
                       const AlwaysStoppedAnimation(AppColors.info),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Creando $_creadas de $_total…',
                   style: const TextStyle(
@@ -584,7 +585,7 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
                 ),
               ],
               if (_error != null) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(

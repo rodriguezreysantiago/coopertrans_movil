@@ -27,6 +27,7 @@ import '../../../shared/widgets/fecha_dialog.dart';
 import '../../asignaciones/services/asignacion_enganche_service.dart';
 import '../../asignaciones/services/asignacion_vehiculo_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 // =============================================================================
 // SERVICIOS DE ACTUALIZACIÓN — NAMESPACE EmpleadoActions
 //
@@ -272,7 +273,7 @@ class EmpleadoActions {
                     'DNI actual: $dniViejo',
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.lg),
                   TextFormField(
                     controller: ctrl,
                     autofocus: true,
@@ -1254,7 +1255,7 @@ class EmpleadoActions {
               'y hay que volver a cargar todo.',
               style: const TextStyle(color: Colors.white70, fontSize: 13),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             TextField(
               controller: motivoCtrl,
               maxLength: 200,
@@ -1396,7 +1397,7 @@ class EmpleadoActions {
                 'pasar la pass nueva en persona o por WhatsApp privado.',
                 style: const TextStyle(color: Colors.white70, fontSize: 13),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               TextField(
                 controller: nuevaCtrl,
                 obscureText: true,
@@ -1405,7 +1406,7 @@ class EmpleadoActions {
                   labelText: 'Nueva contraseña',
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               TextField(
                 controller: repetirCtrl,
                 obscureText: true,
@@ -1415,7 +1416,7 @@ class EmpleadoActions {
                 ),
               ),
               if (errorTxt != null) ...[
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 Text(
                   errorTxt!,
                   style: const TextStyle(color: AppColors.error, fontSize: 12),

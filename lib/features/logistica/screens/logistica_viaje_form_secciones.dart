@@ -311,7 +311,7 @@ class _SeccionChoferState extends State<_SeccionChofer> {
                     elevation: 6,
                     color: Theme.of(context).colorScheme.surface,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
                       side: BorderSide(color: Colors.white.withAlpha(20)),
                     ),
                     child: ConstrainedBox(
@@ -411,7 +411,7 @@ class _SeccionUnidad extends StatelessWidget {
           maxLength: 7,
           onChanged: (_) => onChanged(),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         TextField(
           controller: engancheCtrl,
           decoration: const InputDecoration(
@@ -525,7 +525,7 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
                       style:
                           TextStyle(color: Colors.white60, fontSize: 12),
                     ),
-                    SizedBox(height: 4),
+                    SizedBox(height: AppSpacing.xs),
                     Text(
                       'Si necesitás crear uno, andá a LOGÍSTICA → '
                       'ADELANTOS y volvé.',

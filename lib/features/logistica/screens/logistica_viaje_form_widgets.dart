@@ -31,7 +31,7 @@ class _SeccionCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white.withAlpha(10),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: Colors.white.withAlpha(20)),
       ),
       padding: const EdgeInsets.all(14),
@@ -41,7 +41,7 @@ class _SeccionCard extends StatelessWidget {
           Row(
             children: [
               Icon(icono, color: AppColors.info, size: 20),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   titulo,
@@ -56,7 +56,7 @@ class _SeccionCard extends StatelessWidget {
               if (trailing != null) trailing!,
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.md),
           ...children,
         ],
       ),
@@ -137,7 +137,7 @@ class _ResumenTarifa extends StatelessWidget {
     final sinMonto = t.tarifaReal == 0 || t.tarifaChofer == 0;
     final color = sinMonto ? AppColors.warning : AppColors.success;
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(AppSpacing.sm),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(6),
@@ -150,7 +150,7 @@ class _ResumenTarifa extends StatelessWidget {
             '${t.empresaOrigenNombre} → ${t.empresaDestinoNombre}',
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           Text(
             'Vecchi: \$${AppFormatters.formatearMonto(t.tarifaReal)}'
             '${t.unidadTarifa.sufijoMonto}  ·  '
@@ -163,12 +163,12 @@ class _ResumenTarifa extends StatelessWidget {
             ),
           ),
           if (sinMonto) ...[
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             const Row(
               children: [
                 Icon(Icons.warning_amber_outlined,
                     size: 14, color: AppColors.warning),
-                SizedBox(width: 4),
+                SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
                     'Tarifa pendiente de definir — actualizá la tarifa '
@@ -209,7 +209,7 @@ class _BotonesGuardar extends StatelessWidget {
             child: const Text('CANCELAR'),
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: AppSpacing.md),
         Expanded(
           child: FilledButton(
             onPressed: guardando ? null : onGuardar,

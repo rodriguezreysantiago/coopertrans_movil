@@ -11,6 +11,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../utils/etiquetas_alerta_volvo.dart';
 import '../widgets/evento_volvo_detalle_sheet.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla "Mapa Volvo" — visualización geográfica de eventos del
 /// Vehicle Alerts API sobre OpenStreetMap.
 ///
@@ -366,7 +367,7 @@ class _Toolbar extends StatelessWidget {
                   selected: filtroTipo == null,
                   onTap: () => onTipoChange(null),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 for (final t in tipos)
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
@@ -385,7 +386,7 @@ class _Toolbar extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: AppSpacing.xs),
           // Filtros de patente.
           SizedBox(
             height: 30,
@@ -397,7 +398,7 @@ class _Toolbar extends StatelessWidget {
                   selected: filtroPatente == null,
                   onTap: () => onPatenteChange(null),
                 ),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 for (final p in patentes)
                   Padding(
                     padding: const EdgeInsets.only(right: 4),
@@ -489,7 +490,7 @@ class _ToggleChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icono, size: 14, color: color),
-            const SizedBox(width: 4),
+            const SizedBox(width: AppSpacing.xs),
             Text(
               label,
               style: TextStyle(

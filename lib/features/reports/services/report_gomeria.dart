@@ -13,6 +13,7 @@ import '../../../shared/utils/formatters.dart';
 import 'excel_utils.dart' as xu;
 import 'report_save_helper.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Reportes Excel del módulo Gomería. 3 informes:
 ///
 /// 1. **Estado actual** — 1 fila por posición ocupada de toda la flota.
@@ -68,7 +69,7 @@ class ReportGomeriaService {
                   'cubierta, modelo, vidas, km, última lectura.',
               onTap: () => Navigator.pop(dCtx, _ReporteGomeria.estadoFlota),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             _OpcionTile(
               titulo: 'Histórico de recapados',
               detalle:
@@ -76,7 +77,7 @@ class ReportGomeriaService {
                   'fechas, días en taller, costo, resultado.',
               onTap: () => Navigator.pop(dCtx, _ReporteGomeria.recapados),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             _OpcionTile(
               titulo: 'Costo por km por modelo',
               detalle:
@@ -569,12 +570,12 @@ class _OpcionTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(AppRadius.sm),
           border:
               Border.all(color: AppColors.brandSoft.withValues(alpha: 0.4)),
         ),
@@ -598,7 +599,7 @@ class _OpcionTile extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text(
               detalle,
               style: const TextStyle(

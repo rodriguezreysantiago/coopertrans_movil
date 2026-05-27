@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:flutter/services.dart'; // ✅ Necesario para el feedback háptico
 
 class MenuCard extends StatelessWidget {
@@ -51,7 +52,7 @@ class MenuCard extends StatelessWidget {
                 children: [
                   // Contenedor del ícono con acento de color
                   Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(AppSpacing.lg),
                     decoration: BoxDecoration(
                       color: color.withAlpha(25), 
                       shape: BoxShape.circle,

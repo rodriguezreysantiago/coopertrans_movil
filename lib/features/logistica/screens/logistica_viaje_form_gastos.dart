@@ -94,7 +94,7 @@ class _SeccionGastos extends StatelessWidget {
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [AppFormatters.inputMilesDecimal],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             TextField(
               controller: detalleCtrl,
               decoration: const InputDecoration(
@@ -102,7 +102,7 @@ class _SeccionGastos extends StatelessWidget {
                 border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             _BotonFecha(
               label: 'Fecha del gasto',
               fecha: fecha,
@@ -219,7 +219,7 @@ class _SeccionGastos extends StatelessWidget {
           ],
         ),
       ],
-      const SizedBox(height: 8),
+      const SizedBox(height: AppSpacing.sm),
       OutlinedButton.icon(
         onPressed: () => _agregar(context),
         icon: const Icon(Icons.add, size: 18),
@@ -233,7 +233,7 @@ class _SeccionGastos extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const _SubseccionTitulo('GASTOS EXTRAORDINARIOS'),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           ...children,
         ],
       );

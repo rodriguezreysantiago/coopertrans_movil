@@ -165,7 +165,7 @@ class _TractorCard extends StatelessWidget {
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   estado.etiqueta,
                   style: TextStyle(
@@ -176,7 +176,7 @@ class _TractorCard extends StatelessWidget {
                   ),
                 ),
                 if (faltaCargaInicial) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   const Text(
                     'Cargá el último service desde la ficha para ver KM al próximo',
                     maxLines: 2,
@@ -190,7 +190,7 @@ class _TractorCard extends StatelessWidget {
                 ] else if (ultimoServiceKm != null ||
                     ultimoServiceFecha != null ||
                     kmRecorridos != null) ...[
-                  const SizedBox(height: 4),
+                  const SizedBox(height: AppSpacing.xs),
                   Text(
                     _formatearUltimoService(
                       km: ultimoServiceKm,

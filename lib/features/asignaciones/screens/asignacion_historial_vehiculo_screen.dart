@@ -6,6 +6,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../models/asignacion_vehiculo.dart';
 import '../services/asignacion_vehiculo_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Línea de tiempo de quién manejó este vehículo.
 ///
 /// Se accede desde la ficha del vehículo (`AdminVehiculoFormScreen`).
@@ -54,7 +55,7 @@ class AsignacionHistorialVehiculoScreen extends StatelessWidget {
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             itemCount: items.length,
             itemBuilder: (_, i) => _AsignacionCard(
               asignacion: items[i],
@@ -82,7 +83,7 @@ class _AsignacionCard extends StatelessWidget {
     return AppCard(
       borderColor: color.withAlpha(50),
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -128,7 +129,7 @@ class _AsignacionCard extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           _Linea(
             label: 'Desde',
             valor: AppFormatters.formatearFechaHoraSinSegundos(asignacion.desde),

@@ -7,6 +7,7 @@ import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Bandeja de respuestas que el bot recibió pero no pudo asociar
 /// automáticamente a un aviso (Fase 3).
 ///
@@ -268,7 +269,7 @@ class _ItemAmbiguo extends StatelessWidget {
             children: [
               const Icon(Icons.smart_toy_outlined,
                   size: 18, color: AppColors.warning),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   nombre,
@@ -298,7 +299,7 @@ class _ItemAmbiguo extends StatelessWidget {
           const SizedBox(height: 10),
           if (urlArchivo.isNotEmpty)
             ClipRRect(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
               child: AppFileThumbnail(
                 url: urlArchivo,
                 tituloVisor: 'Comprobante de $nombre',
@@ -311,7 +312,7 @@ class _ItemAmbiguo extends StatelessWidget {
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: Colors.white.withAlpha(8),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
               child: Text(
                 mensaje,
@@ -330,7 +331,7 @@ class _ItemAmbiguo extends StatelessWidget {
               if (fechaDet.isNotEmpty) ...[
                 const Icon(Icons.event_note,
                     size: 12, color: AppColors.success),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 Flexible(
                   child: Text(
                     'Fecha detectada: $fechaDet',
@@ -342,7 +343,7 @@ class _ItemAmbiguo extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
               ],
               const Spacer(),
               _BadgeRazon(razon: razon, candidatos: candidatos),
@@ -361,7 +362,7 @@ class _ItemAmbiguo extends StatelessWidget {
                   style: TextStyle(color: Colors.white54, fontSize: 11),
                 ),
               ),
-              const SizedBox(width: 4),
+              const SizedBox(width: AppSpacing.xs),
               ElevatedButton.icon(
                 onPressed: onConvertir,
                 icon: const Icon(Icons.check, size: 16),

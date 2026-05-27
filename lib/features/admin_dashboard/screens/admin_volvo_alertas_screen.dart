@@ -12,6 +12,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../../eco_driving/screens/admin_mapa_volvo_screen.dart';
 import '../../eco_driving/utils/etiquetas_alerta_volvo.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Pantalla "Alertas Volvo" del admin/supervisor.
 ///
 /// Lista los eventos del Vehicle Alerts API que el `volvoAlertasPoller`
@@ -189,13 +190,13 @@ class _AdminVolvoAlertasScreenState extends State<AdminVolvoAlertasScreen> {
                               onPressed: () => _searchCtl.clear(),
                             ),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
                       ),
                       isDense: true,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 IconButton.filledTonal(
                   icon: const Icon(Icons.map_outlined),
                   tooltip: 'Ver en mapa',
@@ -268,7 +269,7 @@ class _AdminVolvoAlertasScreenState extends State<AdminVolvoAlertasScreen> {
                   children: [
                     Expanded(
                       child: ListView.builder(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(AppSpacing.md),
                         itemCount: pagina.length,
                         itemBuilder: (_, i) => _AlertaCard(doc: pagina[i]),
                       ),
@@ -529,14 +530,14 @@ class _AlertaCard extends StatelessWidget {
 
     return AppCard(
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 _SeveridadChip(severidad: severidad),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     etiqueta,
@@ -555,12 +556,12 @@ class _AlertaCard extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
                 const Icon(Icons.local_shipping_outlined,
                     size: 16, color: Colors.white70),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 Flexible(
                   child: Text(patente,
                       maxLines: 1,
@@ -568,10 +569,10 @@ class _AlertaCard extends StatelessWidget {
                       style: const TextStyle(
                           fontWeight: FontWeight.w600, color: Colors.white)),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: AppSpacing.lg),
                 const Icon(Icons.access_time,
                     size: 14, color: Colors.white54),
-                const SizedBox(width: 4),
+                const SizedBox(width: AppSpacing.xs),
                 Flexible(
                   child: Text(
                     _formatTimestamp(creadoEn),
@@ -591,7 +592,7 @@ class _AlertaCard extends StatelessWidget {
                     fontSize: 11, color: Colors.white54),
               ),
             ] else ...[
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               Align(
                 alignment: Alignment.centerRight,
                 child: OutlinedButton.icon(

@@ -8,6 +8,7 @@ import '../../../shared/utils/phone_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/whatsapp_historico_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// M8 + M10 — Pantalla "Historial WhatsApp": auditar mensajes pasados
 /// del bot (ENVIADO / ERROR) con filtros y buscador.
 ///
@@ -171,9 +172,9 @@ class _AdminWhatsappHistoricoScreenState
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _filtrosCard(),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             _busquedaInput(),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Expanded(child: _lista()),
           ],
         ),
@@ -185,7 +186,7 @@ class _AdminWhatsappHistoricoScreenState
     final formatRango = '${AppFormatters.formatearFechaCorta(_desde)} → '
         '${AppFormatters.formatearFechaCorta(_hasta)}';
     return AppCard(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -213,12 +214,12 @@ class _AdminWhatsappHistoricoScreenState
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               const Text('Estado:',
                   style: TextStyle(color: Colors.white60, fontSize: 12)),
-              const SizedBox(width: 8),
+              const SizedBox(width: AppSpacing.sm),
               _chipEstado(null, 'Todos'),
               const SizedBox(width: 6),
               _chipEstado('ENVIADO', 'Enviados'),
@@ -226,7 +227,7 @@ class _AdminWhatsappHistoricoScreenState
               _chipEstado('ERROR', 'Errores'),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               Expanded(
@@ -469,7 +470,7 @@ class _ItemHistorico extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: AppSpacing.xs),
               Text(
                 preview,
                 style:
@@ -478,7 +479,7 @@ class _ItemHistorico extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               if (origen.isNotEmpty) ...[
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
                   origen,
                   style: const TextStyle(
@@ -542,7 +543,7 @@ class _DetalleHistoricoSheet extends StatelessWidget {
                     color: color,
                     size: 22,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpacing.sm),
                   Text(
                     estado,
                     style: TextStyle(
@@ -558,7 +559,7 @@ class _DetalleHistoricoSheet extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               _fila('Teléfono', PhoneFormatter.paraMostrar(telefono)),
               _fila('Enviado', fechaTxt),
               if (entregadoTxt.isNotEmpty)
@@ -572,7 +573,7 @@ class _DetalleHistoricoSheet extends StatelessWidget {
                 _fila('Colección', destinatarioColec),
               if (alertPatente.isNotEmpty) _fila('Patente', alertPatente),
               if (waId.isNotEmpty) _fila('WhatsApp ID', waId),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               const Text(
                 'Mensaje',
                 style: TextStyle(
@@ -582,7 +583,7 @@ class _DetalleHistoricoSheet extends StatelessWidget {
                   letterSpacing: 1,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: AppSpacing.xs),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
@@ -599,7 +600,7 @@ class _DetalleHistoricoSheet extends StatelessWidget {
                 ),
               ),
               if (error.isNotEmpty) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 const Text(
                   'Error',
                   style: TextStyle(
@@ -609,7 +610,7 @@ class _DetalleHistoricoSheet extends StatelessWidget {
                     letterSpacing: 1,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.xs),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
@@ -625,7 +626,7 @@ class _DetalleHistoricoSheet extends StatelessWidget {
                   ),
                 ),
               ],
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               Center(
                 child: TextButton.icon(
                   onPressed: () {

@@ -9,6 +9,7 @@ import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/icm_oficial_service.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Ranking de choferes según el ICM **oficial de Sitrack** (lo que audita
 /// YPF). Escala MÁS BAJO = MEJOR. Se ordena MEJOR arriba (#1 = mejor
 /// chofer del período, gamification estilo podio). Los "sin actividad"
@@ -241,12 +242,12 @@ class _Buscador extends StatelessWidget {
           contentPadding:
               const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
             borderSide:
                 const BorderSide(color: Colors.white24, width: 1),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
             borderSide:
                 const BorderSide(color: Colors.white24, width: 1),
           ),
@@ -349,7 +350,7 @@ class _HeaderFlota extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: AppSpacing.lg),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -381,7 +382,7 @@ class _HeaderFlota extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Wrap(
               spacing: 6,
               runSpacing: 6,
@@ -469,7 +470,7 @@ class _FilaChofer extends StatelessWidget {
       elevation: 1,
       margin: const EdgeInsets.symmetric(vertical: 4),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         side: BorderSide(color: color.withValues(alpha: 0.40), width: 1),
       ),
       child: ListTile(

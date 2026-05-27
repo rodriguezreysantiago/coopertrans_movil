@@ -10,6 +10,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../../../shared/utils/formatters.dart';
 import '../models/adelanto_chofer.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 /// Resultado de la asignación de número de recibo.
 class AsignarReciboResult {
   final int numero;
@@ -428,7 +429,7 @@ class _Mitad {
                       ),
                     ),
                   ),
-                  pw.SizedBox(height: 4),
+                  pw.SizedBox(height: AppSpacing.xs),
                   pw.Text(
                     copia,
                     style: pw.TextStyle(
@@ -461,7 +462,7 @@ class _Mitad {
               ),
             ],
           ),
-          pw.SizedBox(height: 12),
+          pw.SizedBox(height: AppSpacing.md),
           pw.Divider(color: PdfColors.grey400, height: 1, thickness: 0.5),
           pw.SizedBox(height: 10),
           // ─── Datos del adelanto ───
@@ -490,7 +491,7 @@ class _Mitad {
             valor: adelanto.medioPago.etiqueta.toUpperCase(),
             destacado: true,
           ),
-          pw.SizedBox(height: 8),
+          pw.SizedBox(height: AppSpacing.sm),
           // ─── Observación ───
           pw.Text(
             'Observación / Concepto:',
@@ -499,7 +500,7 @@ class _Mitad {
           pw.SizedBox(height: 3),
           pw.Container(
             width: double.infinity,
-            padding: const pw.EdgeInsets.all(8),
+            padding: const pw.EdgeInsets.all(AppSpacing.sm),
             decoration: pw.BoxDecoration(
               color: PdfColors.grey100,
               borderRadius: pw.BorderRadius.circular(2),
@@ -576,7 +577,7 @@ class _MitadPlanCuotas {
     final reciboPad = numeroRecibo.toString().padLeft(6, '0');
     final obs = primera.observacion?.trim() ?? '';
     return pw.Container(
-      padding: const pw.EdgeInsets.all(12),
+      padding: const pw.EdgeInsets.all(AppSpacing.md),
       decoration: pw.BoxDecoration(
         border: pw.Border.all(color: PdfColors.grey400, width: 0.6),
       ),
@@ -592,7 +593,7 @@ class _MitadPlanCuotas {
                   width: 50, height: 50,
                   child: pw.Image(logo),
                 ),
-              pw.SizedBox(width: 12),
+              pw.SizedBox(width: AppSpacing.md),
               pw.Expanded(
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -651,7 +652,7 @@ class _MitadPlanCuotas {
               ),
             ],
           ),
-          pw.SizedBox(height: 8),
+          pw.SizedBox(height: AppSpacing.sm),
           // ─── Datos del chofer ──────────────────────────────────
           _Linea(label: 'Empleado',
               valor: primera.choferNombre?.trim().isNotEmpty == true
@@ -722,7 +723,7 @@ class _MitadPlanCuotas {
                   ],
                 ),
               ),
-              pw.SizedBox(width: 12),
+              pw.SizedBox(width: AppSpacing.md),
               pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
