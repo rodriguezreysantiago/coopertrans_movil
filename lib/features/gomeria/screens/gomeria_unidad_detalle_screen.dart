@@ -90,7 +90,12 @@ class _GomeriaUnidadDetalleScreenState
                 if (i.legacyInicial) cantLegacy++;
               }
               return SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                  AppSpacing.lg,
+                  AppSpacing.xl,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -182,7 +187,7 @@ class _Cabecera extends StatelessWidget {
     final completo = cantInstaladas == cantPosiciones;
     final esTractor = unidadTipo == TipoUnidadCubierta.tractor;
     return AppCard(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.lg - 2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -202,22 +207,25 @@ class _Cabecera extends StatelessWidget {
                   children: [
                     Text(
                       unidadId,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: AppType.heading.copyWith(
+                        color: AppColors.textPrimary,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     Text(
                       '$tipoVehiculo${modelo.isNotEmpty ? " · $modelo" : ""}',
-                      style: AppType.label.copyWith(color: Colors.white60),
+                      style: AppType.label
+                          .copyWith(color: AppColors.textSecondary),
                     ),
                   ],
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md - 2,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: (completo
                           ? AppColors.success
@@ -247,16 +255,17 @@ class _Cabecera extends StatelessWidget {
           // tienen KM_ACTUAL propio; sus km vienen del cruce con
           // ASIGNACIONES_ENGANCHE en Fase 2).
           if (esTractor) ...[
-            const SizedBox(height: 10),
+            const SizedBox(height: AppSpacing.md - 2),
             Row(
               children: [
-                const Icon(Icons.speed, size: 16, color: Colors.white60),
+                const Icon(Icons.speed,
+                    size: 16, color: AppColors.textSecondary),
                 const SizedBox(width: 6),
                 Text(
                   kmActual != null
                       ? '${AppFormatters.formatearMiles(kmActual)} km actuales'
                       : 'Sin lectura de odómetro',
-                  style: AppType.label.copyWith(color: Colors.white70),
+                  style: AppType.label.copyWith(color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -270,17 +279,17 @@ class _Cabecera extends StatelessWidget {
                   height: 16,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.65),
+                    color: AppColors.surface0,
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.85),
+                      color: AppColors.textPrimary,
                       width: 1,
                     ),
                   ),
                   child: const Text(
                     'L',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.textPrimary,
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
                       height: 1.0,
@@ -291,7 +300,8 @@ class _Cabecera extends StatelessWidget {
                 Expanded(
                   child: Text(
                     '$cantLegacy ${cantLegacy == 1 ? "cubierta sin datos previos" : "cubiertas sin datos previos"} (carga inicial)',
-                    style: AppType.label.copyWith(color: Colors.white60),
+                    style: AppType.label
+                        .copyWith(color: AppColors.textSecondary),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -374,7 +384,7 @@ class _InstalarCubiertaDialogState extends State<_InstalarCubiertaDialog> {
                         'No hay cubiertas '
                         '${widget.posicion.tipoUsoRequerido.etiqueta.toUpperCase()} '
                         'en depósito.',
-                        style: const TextStyle(color: Colors.amber),
+                        style: const TextStyle(color: AppColors.warning),
                       ),
                     );
                   }
@@ -411,18 +421,14 @@ class _InstalarCubiertaDialogState extends State<_InstalarCubiertaDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        AppButton.ghost(
+          label: 'Cancelar',
           onPressed: _guardando ? null : () => Navigator.pop(context),
-          child: const Text('CANCELAR'),
         ),
-        ElevatedButton(
+        AppButton(
+          label: 'Instalar',
+          isLoading: _guardando,
           onPressed: _guardando ? null : _guardar,
-          style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success),
-          child: _guardando
-              ? const SizedBox(
-                  width: 18, height: 18, child: CircularProgressIndicator())
-              : const Text('INSTALAR'),
         ),
       ],
     );
@@ -522,8 +528,8 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                       Expanded(
                         child: Text(
                           i.cubiertaCodigo,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: AppType.heading.copyWith(
+                            color: AppColors.textPrimary,
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -535,7 +541,8 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       i.modeloEtiqueta!,
-                      style: AppType.label.copyWith(color: Colors.white70),
+                      style: AppType.label
+                          .copyWith(color: AppColors.textSecondary),
                     ),
                   ],
                   const SizedBox(height: AppSpacing.md),
@@ -560,18 +567,14 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                     _info('Última banda',
                         '${i.ultimaProfundidadBandaMm} mm'),
                   if (pct != null) ...[
-                    const SizedBox(height: 10),
+                    const SizedBox(height: AppSpacing.md - 2),
                     _BarraVida(porcentaje: pct),
                   ],
                   const SizedBox(height: AppSpacing.sm),
-                  TextButton.icon(
+                  AppButton.ghost(
+                    label: 'Registrar control (presión / banda)',
+                    icon: Icons.fact_check_outlined,
                     onPressed: _operando ? null : _abrirRegistroControl,
-                    icon: const Icon(Icons.fact_check_outlined,
-                        color: AppColors.brand, size: 18),
-                    label: Text(
-                      'REGISTRAR CONTROL (presión / banda)',
-                      style: AppType.eyebrow.copyWith(color: AppColors.brand),
-                    ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   TextField(
@@ -586,40 +589,26 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
             ),
           ),
           actions: [
-            TextButton(
+            AppButton.ghost(
+              label: 'Cancelar',
               onPressed: _operando ? null : () => Navigator.pop(context),
-              child: const Text('CANCELAR'),
             ),
-            OutlinedButton(
+            AppButton.danger(
+              label: 'Descartar',
               onPressed: _operando
                   ? null
                   : () => _retirar(EstadoCubierta.descartada),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.error,
-                side: const BorderSide(color: AppColors.error),
-              ),
-              child: const Text('DESCARTAR'),
             ),
-            OutlinedButton(
+            AppButton.secondary(
+              label: 'Rotar',
               onPressed: _operando ? null : _abrirRotar,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.brandSoft,
-                side: const BorderSide(color: AppColors.brandSoft),
-              ),
-              child: const Text('ROTAR'),
             ),
-            ElevatedButton(
+            AppButton(
+              label: 'Al depósito',
+              isLoading: _operando,
               onPressed: _operando
                   ? null
                   : () => _retirar(EstadoCubierta.enDeposito),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.info),
-              child: _operando
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator())
-                  : const Text('AL DEPÓSITO'),
             ),
           ],
         );
@@ -708,7 +697,7 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style:
-                    AppType.label.copyWith(color: Colors.white60),
+                    AppType.label.copyWith(color: AppColors.textSecondary),
               ),
             ),
             Expanded(
@@ -716,7 +705,7 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                 valor,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: AppType.label.copyWith(color: Colors.white),
+                style: AppType.label.copyWith(color: AppColors.textPrimary),
               ),
             ),
           ],
@@ -811,17 +800,18 @@ class _RegistrarControlDialogState extends State<_RegistrarControlDialog> {
             const SizedBox(height: AppSpacing.sm),
             Text(
               'Completá al menos uno de los dos.',
-              style: AppType.eyebrow.copyWith(color: Colors.white60),
+              style: AppType.label.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(
+        AppButton.ghost(
+          label: 'Cancelar',
           onPressed: () => Navigator.pop(context),
-          child: const Text('CANCELAR'),
         ),
-        ElevatedButton(
+        AppButton(
+          label: 'Guardar',
           onPressed: () {
             final lectura = _Lectura(
               presionPsi: AppFormatters.parsearMiles(_presionCtrl.text),
@@ -837,7 +827,6 @@ class _RegistrarControlDialogState extends State<_RegistrarControlDialog> {
             }
             Navigator.pop(context, lectura);
           },
-          child: const Text('GUARDAR'),
         ),
       ],
     );
@@ -891,11 +880,12 @@ class _SelectorPosicionDestinoDialog extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                     child: Text(
                       'Elegí la posición destino. Si está ocupada, '
                       'se hace un intercambio (swap).',
-                      style: AppType.label.copyWith(color: Colors.white60),
+                      style: AppType.label
+                          .copyWith(color: AppColors.textSecondary),
                     ),
                   ),
                   for (final p in posiciones)
@@ -907,9 +897,9 @@ class _SelectorPosicionDestinoDialog extends StatelessWidget {
         ),
       ),
       actions: [
-        TextButton(
+        AppButton.ghost(
+          label: 'Cancelar',
           onPressed: () => Navigator.pop(context),
-          child: const Text('CANCELAR'),
         ),
       ],
     );
@@ -925,7 +915,7 @@ class _SelectorPosicionDestinoDialog extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.sm),
         onTap: () => Navigator.pop(context, p),
         child: Container(
-          padding: const EdgeInsets.all(10),
+          padding: const EdgeInsets.all(AppSpacing.md - 2),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.06),
             border: Border.all(color: color.withValues(alpha: 0.4)),
@@ -945,8 +935,8 @@ class _SelectorPosicionDestinoDialog extends StatelessWidget {
                   children: [
                     Text(
                       p.etiqueta,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: AppType.label.copyWith(
+                        color: AppColors.textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
                       ),
@@ -954,19 +944,20 @@ class _SelectorPosicionDestinoDialog extends StatelessWidget {
                     if (ocupada)
                       Text(
                         'Tiene ${actual.cubiertaCodigo} — se intercambian.',
-                        style:
-                            AppType.eyebrow.copyWith(color: Colors.white60),
+                        style: AppType.label
+                            .copyWith(color: AppColors.textSecondary),
                       )
                     else
                       Text(
                         'Vacía',
-                        style:
-                            AppType.eyebrow.copyWith(color: Colors.white60),
+                        style: AppType.label
+                            .copyWith(color: AppColors.textSecondary),
                       ),
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: Colors.white38),
+              const Icon(Icons.chevron_right,
+                  color: AppColors.textDisabled),
             ],
           ),
         ),
@@ -1013,7 +1004,7 @@ class _BarraVida extends StatelessWidget {
           child: LinearProgressIndicator(
             value: (porcentaje / 100).clamp(0, 1).toDouble(),
             minHeight: 6,
-            backgroundColor: Colors.white12,
+            backgroundColor: AppColors.borderSubtle,
             valueColor: AlwaysStoppedAnimation(color),
           ),
         ),
