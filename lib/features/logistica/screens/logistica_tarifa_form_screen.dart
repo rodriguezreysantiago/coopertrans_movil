@@ -260,7 +260,7 @@ class _LogisticaTarifaFormScreenState
                           }
                         },
                         selectedColor:
-                            AppColors.accentBlue.withValues(alpha: 0.4),
+                            AppColors.info.withValues(alpha: 0.4),
                       ),
                       ChoiceChip(
                         label: const Text('Monto fijo por viaje'),
@@ -378,23 +378,23 @@ class _LogisticaTarifaFormScreenState
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color:
-                          AppColors.accentBlue.withValues(alpha: 0.12),
+                          AppColors.info.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(6),
                       border: Border.all(
-                          color: AppColors.accentBlue
+                          color: AppColors.info
                               .withValues(alpha: 0.4)),
                     ),
                     child: Row(
                       children: [
                         const Icon(Icons.info_outline,
-                            size: 18, color: AppColors.accentBlue),
+                            size: 18, color: AppColors.info),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'Flete a cargo de ${_empOrigen!.nombre} '
                             '(origen y destino son la misma empresa).',
                             style: const TextStyle(
-                              color: AppColors.accentBlue,
+                              color: AppColors.info,
                               fontSize: 12,
                             ),
                           ),
@@ -462,7 +462,7 @@ class _LogisticaTarifaFormScreenState
                         }
                       },
                       selectedColor:
-                          AppColors.accentBlue.withValues(alpha: 0.4),
+                          AppColors.info.withValues(alpha: 0.4),
                     ),
                     ChoiceChip(
                       label: const Text('Monto fijo por viaje'),
@@ -488,7 +488,7 @@ class _LogisticaTarifaFormScreenState
                   _campoTarifa(
                     controller: _tarifaChoferCtrl,
                     etiqueta: 'Tarifa chofer (lo que se le paga)',
-                    color: AppColors.accentBlue,
+                    color: AppColors.info,
                   ),
                 ],
               ],
@@ -1029,7 +1029,7 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
                       child: Row(
                         children: [
                           const Icon(Icons.business,
-                              color: AppColors.accentBlue),
+                              color: AppColors.info),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -1212,7 +1212,7 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                     onSelected: (v) =>
                         setState(() => _mostrarTodas = v),
                     selectedColor:
-                        AppColors.accentBlue.withValues(alpha: 0.4),
+                        AppColors.info.withValues(alpha: 0.4),
                   ),
               ],
             ),

@@ -75,7 +75,7 @@ class AccionesNavegacionSheet extends StatelessWidget {
           const Divider(color: Colors.white12, height: 1),
           ListTile(
             leading: const Icon(Icons.map_outlined,
-                color: AppColors.accentBlue),
+                color: AppColors.info),
             title: const Text(
               'Abrir en Google Maps',
               style: TextStyle(color: Colors.white),

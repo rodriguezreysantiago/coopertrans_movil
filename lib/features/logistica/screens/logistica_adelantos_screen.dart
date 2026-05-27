@@ -532,7 +532,7 @@ class _ChipFiltroEmpleado extends StatelessWidget {
       avatar: Icon(
         hayFiltro ? Icons.person : Icons.people_outline,
         size: 16,
-        color: hayFiltro ? AppColors.accentBlue : Colors.white60,
+        color: hayFiltro ? AppColors.info : Colors.white60,
       ),
       label: Text(
         label,
@@ -543,11 +543,11 @@ class _ChipFiltroEmpleado extends StatelessWidget {
         ),
       ),
       backgroundColor: hayFiltro
-          ? AppColors.accentBlue.withValues(alpha: 0.2)
+          ? AppColors.info.withValues(alpha: 0.2)
           : null,
       side: BorderSide(
         color: hayFiltro
-            ? AppColors.accentBlue
+            ? AppColors.info
             : Colors.white24,
       ),
       onPressed: () async {
@@ -684,7 +684,7 @@ class _DialogSeleccionarEmpleadoState
                         ListTile(
                           dense: true,
                           leading: const Icon(Icons.person,
-                              size: 18, color: AppColors.accentBlue),
+                              size: 18, color: AppColors.info),
                           title: Text(
                             (d.data()['NOMBRE'] ?? d.id).toString(),
                             style: const TextStyle(fontSize: 13),
@@ -837,10 +837,10 @@ class _ResumenEmpleadoFiltrado extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.accentBlue.withValues(alpha: 0.1),
+        color: AppColors.info.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: AppColors.accentBlue.withValues(alpha: 0.4),
+          color: AppColors.info.withValues(alpha: 0.4),
         ),
       ),
       child: Column(
@@ -848,7 +848,7 @@ class _ResumenEmpleadoFiltrado extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.person, size: 16, color: AppColors.accentBlue),
+              const Icon(Icons.person, size: 16, color: AppColors.info),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
@@ -1023,7 +1023,7 @@ class _BarraSeleccion extends StatelessWidget {
               style: const TextStyle(fontSize: 11),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentBlue,
+              backgroundColor: AppColors.info,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 10),
               minimumSize: const Size(0, 32),
@@ -1137,7 +1137,7 @@ class _CardAdelanto extends StatelessWidget {
                       icon: const Icon(Icons.restore, size: 14),
                       label: const Text('RESTAURAR'),
                       style: TextButton.styleFrom(
-                        foregroundColor: AppColors.accentBlue,
+                        foregroundColor: AppColors.info,
                         visualDensity: VisualDensity.compact,
                         padding: const EdgeInsets.symmetric(horizontal: 6),
                       ),
@@ -1186,7 +1186,7 @@ class _CardAdelanto extends StatelessWidget {
                       value: seleccionado,
                       onChanged: (_) => onToggleSeleccion(),
                       visualDensity: VisualDensity.compact,
-                      activeColor: AppColors.accentBlue,
+                      activeColor: AppColors.info,
                     ),
                   ),
                 const SizedBox(width: 4),
@@ -1252,21 +1252,21 @@ class _CardAdelanto extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppColors.accentBlue.withValues(alpha: 0.15),
+                    color: AppColors.info.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                        color: AppColors.accentBlue.withValues(alpha: 0.5)),
+                        color: AppColors.info.withValues(alpha: 0.5)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(Icons.repeat,
-                          size: 11, color: AppColors.accentBlue),
+                          size: 11, color: AppColors.info),
                       const SizedBox(width: 4),
                       Text(
                         'CUOTA ${adelanto.cuotaNumero}/${adelanto.cuotasTotal}',
                         style: const TextStyle(
-                          color: AppColors.accentBlue,
+                          color: AppColors.info,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 0.6,
@@ -1292,12 +1292,12 @@ class _CardAdelanto extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(Icons.receipt_long_outlined,
-                        size: 12, color: AppColors.accentBlue),
+                        size: 12, color: AppColors.info),
                     const SizedBox(width: 4),
                     Text(
                       'Recibo N° ${adelanto.numeroRecibo!.toString().padLeft(6, '0')}',
                       style: const TextStyle(
-                        color: AppColors.accentBlue,
+                        color: AppColors.info,
                         fontSize: 12,
                       ),
                     ),
@@ -2104,10 +2104,10 @@ class _PreviewCuotas extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: AppColors.accentBlue.withValues(alpha: 0.1),
+        color: AppColors.info.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
-            color: AppColors.accentBlue.withValues(alpha: 0.3)),
+            color: AppColors.info.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

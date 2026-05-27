@@ -243,7 +243,7 @@ class _Toolbar extends StatelessWidget {
                 _ContadorMini(
                     label: 'TOTAL',
                     valor: '$total',
-                    color: AppColors.accentBlue),
+                    color: AppColors.info),
                 const SizedBox(width: 12),
                 _ContadorMini(
                     label: 'EN MARCHA',
@@ -766,7 +766,7 @@ class _DetalleSheet extends StatelessWidget {
                     icon: const Icon(Icons.open_in_new, size: 16),
                     label: const Text('Ver en Maps'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accentBlue.withAlpha(180),
+                      backgroundColor: AppColors.info.withAlpha(180),
                       foregroundColor: Colors.white,
                     ),
                   ),

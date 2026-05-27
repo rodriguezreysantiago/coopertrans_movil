@@ -371,7 +371,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
             padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
             child: Row(
               children: [
-                Icon(Icons.map_outlined, color: AppColors.accentBlue),
+                Icon(Icons.map_outlined, color: AppColors.info),
                 SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -406,7 +406,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                           height: 16,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: AppColors.accentBlue,
+                            color: AppColors.info,
                           ),
                         ),
                       )
@@ -557,9 +557,9 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                         height: 32,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: AppColors.accentBlue.withValues(alpha: 0.2),
+                          color: AppColors.info.withValues(alpha: 0.2),
                           border: Border.all(
-                            color: AppColors.accentBlue,
+                            color: AppColors.info,
                             width: 2,
                           ),
                         ),
@@ -616,7 +616,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                       icon: const Icon(Icons.link, size: 18),
                       label: const Text('PEGAR LINK GOOGLE MAPS'),
                       style: TextButton.styleFrom(
-                        foregroundColor: AppColors.accentBlue,
+                        foregroundColor: AppColors.info,
                       ),
                     ),
                   ],
@@ -648,7 +648,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
                             : const Icon(Icons.check),
                         label: const Text('CONFIRMAR'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accentBlue,
+                          backgroundColor: AppColors.info,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),

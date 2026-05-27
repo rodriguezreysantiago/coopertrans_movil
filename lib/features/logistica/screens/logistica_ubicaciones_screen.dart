@@ -208,13 +208,13 @@ class _CardUbicacion extends StatelessWidget {
                   Row(
                     children: [
                       const Icon(Icons.business_outlined,
-                          color: AppColors.accentBlue, size: 12),
+                          color: AppColors.info, size: 12),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           ubicacion.etiquetaEmpresas,
                           style: const TextStyle(
-                            color: AppColors.accentBlue,
+                            color: AppColors.info,
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),
@@ -266,7 +266,7 @@ class _CardUbicacion extends StatelessWidget {
                           padding: EdgeInsets.all(2),
                           child: Icon(
                             Icons.navigation_outlined,
-                            color: AppColors.accentBlue,
+                            color: AppColors.info,
                             size: 16,
                           ),
                         ),

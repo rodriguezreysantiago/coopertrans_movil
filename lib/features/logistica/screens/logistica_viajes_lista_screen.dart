@@ -493,7 +493,7 @@ class _ViajeTile extends StatelessWidget {
   Color _colorEstado(EstadoViaje e) {
     switch (e) {
       case EstadoViaje.planeado:
-        return AppColors.accentBlue;
+        return AppColors.info;
       case EstadoViaje.enCurso:
         return AppColors.warning;
       case EstadoViaje.concluido:

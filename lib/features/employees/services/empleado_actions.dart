@@ -485,7 +485,7 @@ class EmpleadoActions {
             ),
             const SizedBox(height: 15),
             ListTile(
-              leading: const Icon(Icons.visibility, color: AppColors.accentBlue),
+              leading: const Icon(Icons.visibility, color: AppColors.info),
               title: const Text('Ver foto actual',
                   style: TextStyle(color: Colors.white)),
               enabled: urlActual != null &&
@@ -622,7 +622,7 @@ class EmpleadoActions {
               ),
               ListTile(
                 leading:
-                    const Icon(Icons.photo_library, color: AppColors.accentBlue),
+                    const Icon(Icons.photo_library, color: AppColors.info),
                 title: const Text('Foto desde la galería',
                     style: TextStyle(color: Colors.white)),
                 onTap: () =>
@@ -726,7 +726,7 @@ class EmpleadoActions {
             const SizedBox(height: 15),
             ListTile(
               leading:
-                  const Icon(Icons.event_note, color: AppColors.accentBlue),
+                  const Icon(Icons.event_note, color: AppColors.info),
               title: const Text('Editar fecha de vencimiento',
                   style: TextStyle(color: Colors.white)),
               onTap: () {

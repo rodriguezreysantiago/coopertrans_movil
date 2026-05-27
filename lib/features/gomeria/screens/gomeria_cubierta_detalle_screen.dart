@@ -180,7 +180,7 @@ class _Identidad extends StatelessWidget {
               _Pill(c.tipoUso.etiqueta.toUpperCase(),
                   color: c.tipoUso == TipoUsoCubierta.direccion
                       ? AppColors.warning
-                      : AppColors.accentBlue),
+                      : AppColors.info),
               _Pill(c.vidas == 1 ? 'NUEVA' : 'V${c.vidas}',
                   color: AppColors.accentTeal),
               _Pill(
@@ -190,7 +190,7 @@ class _Identidad extends StatelessWidget {
               if (c.precioCompra != null && c.precioCompra! > 0)
                 _Pill(
                   'Compra: \$${AppFormatters.formatearMonto(c.precioCompra)}',
-                  color: AppColors.accentBlue,
+                  color: AppColors.info,
                 ),
               if (c.precioCompra != null &&
                   c.precioCompra! > 0 &&
@@ -227,7 +227,7 @@ class _Identidad extends StatelessWidget {
   static Color _colorPorEstado(EstadoCubierta e) {
     switch (e) {
       case EstadoCubierta.enDeposito:
-        return AppColors.accentBlue;
+        return AppColors.info;
       case EstadoCubierta.instalada:
         return AppColors.success;
       case EstadoCubierta.enRecapado:

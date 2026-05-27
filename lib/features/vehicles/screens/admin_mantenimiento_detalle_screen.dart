@@ -529,7 +529,7 @@ class _KpisMes extends StatelessWidget {
                 ? mesActual.litros100km.toStringAsFixed(1)
                 : '—',
             sub: '${mesActual.litrosTotal.toStringAsFixed(0)} L consumidos',
-            color: AppColors.accentBlue),
+            color: AppColors.info),
       ],
     );
   }

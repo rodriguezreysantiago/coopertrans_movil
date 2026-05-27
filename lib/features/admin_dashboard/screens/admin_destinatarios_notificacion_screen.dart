@@ -320,13 +320,13 @@ class _FilaEditable extends StatelessWidget {
                           horizontal: 10, vertical: 10),
                       decoration: BoxDecoration(
                         color: (tieneOverride
-                                ? AppColors.accentBlue
+                                ? AppColors.info
                                 : Colors.white)
                             .withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
                           color: tieneOverride
-                              ? AppColors.accentBlue.withValues(alpha: 0.4)
+                              ? AppColors.info.withValues(alpha: 0.4)
                               : Colors.white24,
                         ),
                       ),
@@ -337,7 +337,7 @@ class _FilaEditable extends StatelessWidget {
                                 ? Icons.swap_horiz
                                 : Icons.settings_outlined,
                             color: tieneOverride
-                                ? AppColors.accentBlue
+                                ? AppColors.info
                                 : Colors.white54,
                             size: 16,
                           ),

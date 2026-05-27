@@ -40,7 +40,7 @@ class _SeccionCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icono, color: AppColors.accentBlue, size: 20),
+              Icon(icono, color: AppColors.info, size: 20),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(

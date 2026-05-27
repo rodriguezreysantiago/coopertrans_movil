@@ -265,10 +265,10 @@ class _LineaConAccion extends StatelessWidget {
             Expanded(
               child: Text(
                 valor,
-                style: const TextStyle(color: AppColors.accentBlue, fontSize: 13),
+                style: const TextStyle(color: AppColors.info, fontSize: 13),
               ),
             ),
-            Icon(icono, color: AppColors.accentBlue, size: 14),
+            Icon(icono, color: AppColors.info, size: 14),
           ],
         ),
       ),

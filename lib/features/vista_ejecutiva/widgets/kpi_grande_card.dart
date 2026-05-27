@@ -105,7 +105,7 @@ class KpiGrandeCard extends StatelessWidget {
       label: label,
       valorTexto: kpi.actual > 0 ? kpi.actual.toStringAsFixed(1) : '—',
       icono: icono,
-      color: AppColors.accentBlue,
+      color: AppColors.info,
       sublabel: sublabel ??
           (kpi.choferesEnPromedio > 0
               ? '${kpi.choferesEnPromedio} choferes · más bajo = mejor'

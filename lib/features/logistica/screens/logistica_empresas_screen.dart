@@ -31,7 +31,7 @@ class LogisticaEmpresasScreen extends StatelessWidget {
             Tab(text: 'CLIENTES'),
             Tab(text: 'DADORES'),
           ],
-          indicatorColor: AppColors.accentBlue,
+          indicatorColor: AppColors.info,
         ),
         body: TabBarView(
           children: [
@@ -172,7 +172,7 @@ class _ListaEmpresasState extends State<_ListaEmpresas> {
           bottom: 16,
           child: FloatingActionButton.extended(
             heroTag: 'fab_empresa_${widget.tipo.codigo}',
-            backgroundColor: AppColors.accentBlue,
+            backgroundColor: AppColors.info,
             onPressed: _abrirAlta,
             icon: const Icon(Icons.add),
             label: Text(
@@ -202,7 +202,7 @@ class _CardEmpresa extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color =
-        empresa.activa ? AppColors.accentBlue : Colors.white24;
+        empresa.activa ? AppColors.info : Colors.white24;
     return AppCard(
       onTap: () => _abrirEdicion(context),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -256,7 +256,7 @@ class _CardEmpresa extends StatelessWidget {
                   id: empresa.id,
                   cambios: {'activa': v},
                 ),
-                activeTrackColor: AppColors.accentBlue,
+                activeTrackColor: AppColors.info,
               ),
               // Botón eliminar al lado del switch. El check de
               // referencias en tarifas + ubicaciones se hace
@@ -438,7 +438,7 @@ class _EditarEmpresaSheetBody extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
             child: Row(
               children: [
-                const Icon(Icons.business, color: AppColors.accentBlue),
+                const Icon(Icons.business, color: AppColors.info),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(

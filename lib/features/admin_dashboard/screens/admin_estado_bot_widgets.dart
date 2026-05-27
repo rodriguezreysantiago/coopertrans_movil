@@ -481,17 +481,17 @@ class _CardReglasNotificacion extends StatelessWidget {
               onPressed: () => Navigator.pushNamed(
                   context, AppRoutes.adminDestinatariosNotificacion),
               icon: const Icon(Icons.edit_outlined,
-                  size: 16, color: AppColors.accentBlue),
+                  size: 16, color: AppColors.info),
               label: const Text(
                 'EDITAR DESTINATARIOS',
                 style: TextStyle(
-                  color: AppColors.accentBlue,
+                  color: AppColors.info,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.8,
                 ),
               ),
               style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: AppColors.accentBlue),
+                side: const BorderSide(color: AppColors.info),
                 padding: const EdgeInsets.symmetric(
                     horizontal: 16, vertical: 8),
               ),
@@ -651,7 +651,7 @@ class _FilaReglaNotif extends StatelessWidget {
             _BadgeDestinatario(
               icono: Icons.person_outline,
               texto: _etiquetaChoferDinamico(destinatarioDni),
-              color: AppColors.accentBlue,
+              color: AppColors.info,
             )
           else
             _DniResolver(dni: destinatarioDni),
@@ -698,11 +698,11 @@ class _FilaReglaNotif extends StatelessWidget {
                     );
                   },
                   icon: const Icon(Icons.history,
-                      size: 13, color: AppColors.accentBlue),
+                      size: 13, color: AppColors.info),
                   label: const Text(
                     'Ver último enviado',
                     style: TextStyle(
-                      color: AppColors.accentBlue,
+                      color: AppColors.info,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -1686,13 +1686,13 @@ class _BottomSheetPausaState extends State<_BottomSheetPausa> {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 12, vertical: 10),
                 decoration: BoxDecoration(
-                  border: Border.all(color: AppColors.accentBlue),
+                  border: Border.all(color: AppColors.info),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Row(
                   children: [
                     const Icon(Icons.calendar_today,
-                        color: AppColors.accentBlue, size: 16),
+                        color: AppColors.info, size: 16),
                     const SizedBox(width: 8),
                     Text(
                       '${AppFormatters.formatearFechaCorta(_hasta)} '
@@ -1879,7 +1879,7 @@ class _CardSparklineEnviadosState extends State<_CardSparklineEnviados> {
           Row(
             children: [
               const Icon(Icons.bar_chart,
-                  color: AppColors.accentBlue, size: 18),
+                  color: AppColors.info, size: 18),
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
@@ -1966,7 +1966,7 @@ class _CardSparklineEnviadosState extends State<_CardSparklineEnviados> {
                 BarChartRodData(
                   toY: c[i].toDouble(),
                   color: c[i] > 0
-                      ? AppColors.accentBlue
+                      ? AppColors.info
                       : Colors.white12,
                   width: 16,
                   borderRadius: const BorderRadius.vertical(

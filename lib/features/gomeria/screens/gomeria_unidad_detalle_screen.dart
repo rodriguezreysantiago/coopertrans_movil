@@ -617,7 +617,7 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                   ? null
                   : () => _retirar(EstadoCubierta.enDeposito),
               style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentBlue),
+                  backgroundColor: AppColors.info),
               child: _operando
                   ? const SizedBox(
                       width: 18,

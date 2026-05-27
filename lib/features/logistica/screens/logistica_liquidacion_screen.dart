@@ -529,8 +529,8 @@ class _Contenido extends StatelessWidget {
           icon: const Icon(Icons.file_download_outlined),
           label: const Text('EXPORTAR A EXCEL'),
           style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.accentBlue,
-            side: const BorderSide(color: AppColors.accentBlue),
+            foregroundColor: AppColors.info,
+            side: const BorderSide(color: AppColors.info),
             padding: const EdgeInsets.symmetric(vertical: 12),
             textStyle: const TextStyle(
               fontWeight: FontWeight.bold,
@@ -608,7 +608,7 @@ class _SeccionKPIs extends StatelessWidget {
           _LineaKPI(
             label: 'Facturado a empresa',
             valor: totalFacturado,
-            color: AppColors.accentBlue,
+            color: AppColors.info,
           ),
           _LineaKPI(
             label: 'Ganancia chofer (redondeado)',
@@ -784,7 +784,7 @@ class _TablaPorChofer extends StatelessWidget {
                       Text(
                         '·  ${ads.length} adel.',
                         style: const TextStyle(
-                          color: AppColors.accentBlue,
+                          color: AppColors.info,
                           fontSize: 11,
                         ),
                       ),
@@ -939,7 +939,7 @@ class _AdelantoCardLiquidacion extends StatelessWidget {
       child: Row(
         children: [
           const Icon(Icons.payments_outlined,
-              size: 18, color: AppColors.accentBlue),
+              size: 18, color: AppColors.info),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -1143,7 +1143,7 @@ class _DetalleTramoLiquidacion extends StatelessWidget {
           Text(
             'TRAMO $numero · ${ts.origenEtiqueta} → ${ts.destinoEtiqueta}',
             style: const TextStyle(
-              color: AppColors.accentBlue,
+              color: AppColors.info,
               fontSize: 10,
               fontWeight: FontWeight.bold,
               letterSpacing: 0.8,

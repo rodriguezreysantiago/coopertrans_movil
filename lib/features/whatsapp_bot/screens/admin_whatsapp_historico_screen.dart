@@ -192,7 +192,7 @@ class _AdminWhatsappHistoricoScreenState
           Row(
             children: [
               const Icon(Icons.calendar_today,
-                  color: AppColors.accentBlue, size: 16),
+                  color: AppColors.info, size: 16),
               const SizedBox(width: 6),
               Expanded(
                 child: InkWell(
@@ -262,7 +262,7 @@ class _AdminWhatsappHistoricoScreenState
               ),
               const SizedBox(width: 6),
               IconButton(
-                icon: const Icon(Icons.search, color: AppColors.accentBlue),
+                icon: const Icon(Icons.search, color: AppColors.info),
                 tooltip: 'Buscar',
                 onPressed: _ejecutarConsulta,
               ),
@@ -292,10 +292,10 @@ class _AdminWhatsappHistoricoScreenState
         setState(() => _filtroEstado = value);
         _ejecutarConsulta();
       },
-      selectedColor: AppColors.accentBlue.withAlpha(80),
+      selectedColor: AppColors.info.withAlpha(80),
       backgroundColor: AppColors.surface,
       labelStyle: TextStyle(
-        color: selected ? AppColors.accentBlue : Colors.white70,
+        color: selected ? AppColors.info : Colors.white70,
         fontWeight: selected ? FontWeight.bold : FontWeight.normal,
       ),
     );
@@ -692,7 +692,7 @@ class _AckIcon extends StatelessWidget {
     if (entregadoEn == null && leidoEn == null) {
       return const Icon(Icons.check, size: 14, color: Colors.white38);
     }
-    final color = leidoEn != null ? AppColors.accentBlue : Colors.white60;
+    final color = leidoEn != null ? AppColors.info : Colors.white60;
     return Icon(Icons.done_all, size: 14, color: color);
   }
 }

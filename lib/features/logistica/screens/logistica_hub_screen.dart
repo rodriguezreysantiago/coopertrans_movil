@@ -102,13 +102,13 @@ class LogisticaHubScreen extends StatelessWidget {
                       titulo: 'EMPRESAS',
                       subtitulo: 'Clientes y dadores',
                       icono: Icons.business_outlined,
-                      color: AppColors.accentBlue,
+                      color: AppColors.info,
                       ruta: AppRoutes.adminLogisticaEmpresas,
                       contador: _StreamCount(
                         coleccion:
                             LogisticaService.empresasCol,
                         soloActivas: true,
-                        color: AppColors.accentBlue,
+                        color: AppColors.info,
                       ),
                     ),
                     _HubTile(
@@ -149,7 +149,7 @@ class LogisticaHubScreen extends StatelessWidget {
                       titulo: 'ADELANTOS',
                       subtitulo: 'Entregas al chofer',
                       icono: Icons.payments_outlined,
-                      color: AppColors.accentBlue,
+                      color: AppColors.info,
                       ruta: AppRoutes.adminLogisticaAdelantos,
                       // Adelantos no tiene flag "activa" — todos los
                       // docs son activos. Mostramos count total.
@@ -157,7 +157,7 @@ class LogisticaHubScreen extends StatelessWidget {
                         coleccion: FirebaseFirestore.instance
                             .collection(AppCollections.adelantosChofer),
                         soloActivas: false,
-                        color: AppColors.accentBlue,
+                        color: AppColors.info,
                       ),
                     ),
                     const _HubTile(

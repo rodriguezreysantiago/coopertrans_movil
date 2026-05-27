@@ -466,7 +466,7 @@ class _LogisticaMapaTarifasScreenState
                   builder: (ctx, markers) => Container(
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
-                      color: AppColors.accentBlue,
+                      color: AppColors.info,
                     ),
                     child: Center(
                       child: Text(
@@ -596,7 +596,7 @@ class _LogisticaMapaTarifasScreenState
           message: e.value,
           child: const Icon(
             Icons.location_on,
-            color: AppColors.accentBlue,
+            color: AppColors.info,
             size: 30,
           ),
         ),
@@ -1095,8 +1095,8 @@ class _DetalleTarifaSheet extends StatelessWidget {
                     icon: const Icon(Icons.navigation_outlined, size: 16),
                     label: const Text('IR AL ORIGEN'),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.accentBlue,
-                      side: const BorderSide(color: AppColors.accentBlue),
+                      foregroundColor: AppColors.info,
+                      side: const BorderSide(color: AppColors.info),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                     ),
                   ),

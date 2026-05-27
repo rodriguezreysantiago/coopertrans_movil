@@ -71,7 +71,7 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
             titulo: 'VENCIMIENTOS DE PERSONAL',
             subtitulo: 'Seguimiento de carnets, preocupacional y ART',
             icono: Icons.person_search,
-            colorIcono: AppColors.accentBlue,
+            colorIcono: AppColors.info,
             ruta: '/vencimientos_choferes',
           ),
           const _MenuTile(
@@ -99,7 +99,7 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.bold,
-                color: AppColors.accentBlue,
+                color: AppColors.info,
                 letterSpacing: 1.5,
               ),
             ),
@@ -108,7 +108,7 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
             titulo: 'EMPRESAS Y SEGUROS',
             subtitulo: 'Póliza ART y Formulario 931 por razón social',
             icono: Icons.business_outlined,
-            colorIcono: AppColors.accentBlue,
+            colorIcono: AppColors.info,
             ruta: AppRoutes.adminEmpresasEmpleadoras,
           ),
           const Padding(

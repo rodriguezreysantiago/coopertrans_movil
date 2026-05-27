@@ -229,7 +229,7 @@ class _EquipoOfflineFallback extends StatelessWidget {
                   height: 22,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: AppColors.accentBlue,
+                    color: AppColors.info,
                   ),
                 ),
                 SizedBox(height: 10),

@@ -593,8 +593,8 @@ class _BotonVerActividad extends StatelessWidget {
       icon: const Icon(Icons.insights, size: 18),
       label: const Text('Ver actividad'),
       style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.accentBlue,
-        side: BorderSide(color: AppColors.accentBlue.withAlpha(120)),
+        foregroundColor: AppColors.info,
+        side: BorderSide(color: AppColors.info.withAlpha(120)),
         minimumSize: const Size(double.infinity, 44),
       ),
     );

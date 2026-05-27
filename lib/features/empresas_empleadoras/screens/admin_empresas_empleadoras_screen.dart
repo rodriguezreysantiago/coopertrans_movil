@@ -78,11 +78,11 @@ class _CardEmpresa extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppColors.accentBlue.withAlpha(35),
+                      color: AppColors.info.withAlpha(35),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.business,
-                        color: AppColors.accentBlue, size: 20),
+                        color: AppColors.info, size: 20),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -261,7 +261,7 @@ class _FilaDocEmpresa extends StatelessWidget {
             const SizedBox(height: 15),
             ListTile(
               leading: const Icon(Icons.event_note,
-                  color: AppColors.accentBlue),
+                  color: AppColors.info),
               title: const Text('Editar fecha de vencimiento',
                   style: TextStyle(color: Colors.white)),
               onTap: () {
@@ -379,7 +379,7 @@ class _FilaDocEmpresa extends StatelessWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.photo_library,
-                    color: AppColors.accentBlue),
+                    color: AppColors.info),
                 title: const Text('Foto desde la galería',
                     style: TextStyle(color: Colors.white)),
                 onTap: () => Navigator.pop(sCtx, _Fuente.galeria),

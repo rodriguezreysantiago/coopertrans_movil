@@ -291,7 +291,7 @@ class _GridSubpantallas extends StatelessWidget {
               titulo: 'RANKING',
               subtitulo: 'Choferes ordenados por ICM (#1 = mejor)',
               icono: Icons.leaderboard_outlined,
-              color: AppColors.accentBlue,
+              color: AppColors.info,
               ruta: AppRoutes.adminIcmRanking,
             ),
             _HubTile(

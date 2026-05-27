@@ -263,7 +263,7 @@ class _DetalleTramo extends StatelessWidget {
             Text(
               'TRAMO $numero',
               style: const TextStyle(
-                color: AppColors.accentBlue,
+                color: AppColors.info,
                 fontWeight: FontWeight.bold,
                 fontSize: 14,
                 letterSpacing: 1.2,
@@ -449,7 +449,7 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
         return _Seccion(
           titulo: 'ADELANTO ASOCIADO',
           icono: Icons.payments_outlined,
-          iconColor: AppColors.accentBlue,
+          iconColor: AppColors.info,
           children: [
             _Linea(label: 'Fecha', valor: fechaFmt),
             _Linea(label: 'Monto', valor: '\$ $montoFmt'),
@@ -641,7 +641,7 @@ class _BotoneraAcciones extends StatelessWidget {
           icon: const Icon(Icons.edit, size: 18),
           label: const Text('EDITAR'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.accentBlue,
+            backgroundColor: AppColors.info,
             foregroundColor: Colors.white,
           ),
         ),
@@ -986,13 +986,13 @@ class _LineaLink extends StatelessWidget {
               child: Row(
                 children: [
                   const Icon(Icons.open_in_new,
-                      size: 14, color: AppColors.accentBlue),
+                      size: 14, color: AppColors.info),
                   const SizedBox(width: 4),
                   Flexible(
                     child: Text(
                       etiqueta,
                       style: const TextStyle(
-                        color: AppColors.accentBlue,
+                        color: AppColors.info,
                         fontSize: 12,
                         decoration: TextDecoration.underline,
                       ),
@@ -1016,7 +1016,7 @@ class _ChipEstado extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = switch (estado) {
-      EstadoViaje.planeado => AppColors.accentBlue,
+      EstadoViaje.planeado => AppColors.info,
       EstadoViaje.enCurso => AppColors.warning,
       EstadoViaje.concluido => AppColors.success,
     };

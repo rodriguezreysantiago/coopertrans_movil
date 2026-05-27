@@ -315,7 +315,7 @@ class _AccionesVehiculoMenu extends StatelessWidget {
             value: 'sync',
             child: ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.sync, color: AppColors.accentBlue),
+              leading: Icon(Icons.sync, color: AppColors.info),
               title: Text('Forzar sincro Volvo'),
               subtitle: Text(
                 'Refrescar KM desde el API',
@@ -757,7 +757,7 @@ class _EstadoBadge extends StatelessWidget {
         return AppColors.success;
       case 'OCUPADO':
       case 'ASIGNADO':
-        return AppColors.accentBlue;
+        return AppColors.info;
       case 'TALLER':
       case 'MANTENIMIENTO':
         return AppColors.warning;

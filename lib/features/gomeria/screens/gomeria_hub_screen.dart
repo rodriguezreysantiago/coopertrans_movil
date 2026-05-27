@@ -90,7 +90,7 @@ class GomeriaHubScreen extends StatelessWidget {
                         titulo: 'STOCK',
                         subtitulo: 'Cubiertas + buscar por código',
                         icono: Icons.inventory_2_outlined,
-                        color: AppColors.accentBlue,
+                        color: AppColors.info,
                         ruta: AppRoutes.adminGomeriaStock,
                       ),
                       _HubTile(

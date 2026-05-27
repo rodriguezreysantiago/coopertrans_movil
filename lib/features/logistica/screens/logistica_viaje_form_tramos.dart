@@ -480,7 +480,7 @@ class _OverridePagoChofer extends StatelessWidget {
                   onCambio();
                 }
               },
-              selectedColor: AppColors.accentBlue.withValues(alpha: 0.4),
+              selectedColor: AppColors.info.withValues(alpha: 0.4),
               visualDensity: VisualDensity.compact,
             ),
             ChoiceChip(
@@ -534,8 +534,8 @@ class _BotonAgregarTramo extends StatelessWidget {
       icon: const Icon(Icons.add),
       label: const Text('AGREGAR TRAMO'),
       style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.accentBlue,
-        side: const BorderSide(color: AppColors.accentBlue),
+        foregroundColor: AppColors.info,
+        side: const BorderSide(color: AppColors.info),
         padding: const EdgeInsets.symmetric(vertical: 14),
         textStyle: const TextStyle(
           fontWeight: FontWeight.bold,

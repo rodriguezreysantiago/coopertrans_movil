@@ -179,9 +179,9 @@ class _BloqueVolvo extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.accentBlue.withAlpha(20),
+        color: AppColors.info.withAlpha(20),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.accentBlue.withAlpha(50)),
+        border: Border.all(color: AppColors.info.withAlpha(50)),
       ),
       child: Column(
         children: [
@@ -195,23 +195,23 @@ class _BloqueVolvo extends StatelessWidget {
           if (isSyncing)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 8),
-              child: CircularProgressIndicator(color: AppColors.accentBlue),
+              child: CircularProgressIndicator(color: AppColors.info),
             )
           else
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
                 onPressed: onSync,
-                icon: const Icon(Icons.sync, color: AppColors.accentBlue),
+                icon: const Icon(Icons.sync, color: AppColors.info),
                 label: const Text(
                   'FORZAR SINCRO VOLVO',
                   style: TextStyle(
-                    color: AppColors.accentBlue,
+                    color: AppColors.info,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.accentBlue),
+                  side: const BorderSide(color: AppColors.info),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),
@@ -388,7 +388,7 @@ class _DateTile extends StatelessWidget {
             constraints: const BoxConstraints(),
             icon: Icon(
               tieneArchivo ? Icons.file_upload_outlined : Icons.upload_file,
-              color: tieneArchivo ? AppColors.accentBlue : Colors.white54,
+              color: tieneArchivo ? AppColors.info : Colors.white54,
               size: 22,
             ),
             tooltip:

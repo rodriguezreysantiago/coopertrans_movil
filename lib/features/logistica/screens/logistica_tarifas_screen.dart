@@ -390,7 +390,7 @@ class _RutaOrigenDestino extends StatelessWidget {
             etiqueta: 'ORIGEN',
             empresa: tarifa.empresaOrigenNombre,
             ubicacion: tarifa.ubicacionOrigenEtiqueta,
-            color: AppColors.accentBlue,
+            color: AppColors.info,
           ),
         ),
         Padding(
@@ -507,7 +507,7 @@ class _TarifasMontos extends StatelessWidget {
               etiqueta: 'CHOFER',
               monto: tarifa.tarifaChofer,
               sufijo: tarifa.unidadTarifa.sufijoMonto,
-              color: AppColors.accentBlue,
+              color: AppColors.info,
             ),
           ),
           Container(
@@ -597,7 +597,7 @@ class _ChipTipo extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: (esTerceros ? AppColors.warning : AppColors.accentBlue)
+        color: (esTerceros ? AppColors.warning : AppColors.info)
             .withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(3),
       ),
@@ -605,7 +605,7 @@ class _ChipTipo extends StatelessWidget {
         tarifa.tipoCarga.etiqueta.toUpperCase(),
         style: TextStyle(
           color:
-              esTerceros ? AppColors.warning : AppColors.accentBlue,
+              esTerceros ? AppColors.warning : AppColors.info,
           fontSize: 9,
           fontWeight: FontWeight.bold,
           letterSpacing: 1.0,

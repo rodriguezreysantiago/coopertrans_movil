@@ -58,7 +58,7 @@ class _ResumenContador extends StatelessWidget {
               _MiniContador(
                   label: 'En envío',
                   count: procesando,
-                  color: AppColors.accentBlue,
+                  color: AppColors.info,
                   activo: filtroActivo == 'PROCESANDO',
                   onTap: () => onTapEstado('PROCESANDO')),
               const SizedBox(width: 8),
@@ -337,7 +337,7 @@ class _ItemCola extends StatelessWidget {
       case 'PENDIENTE':
         return AppColors.warning;
       case 'PROCESANDO':
-        return AppColors.accentBlue;
+        return AppColors.info;
       case 'ENVIADO':
         return AppColors.success;
       case 'ERROR':

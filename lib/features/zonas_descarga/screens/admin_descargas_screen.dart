@@ -368,7 +368,7 @@ class _KpisZona extends StatelessWidget {
             _KpiCard(
               label: 'Descargas',
               valor: '$count',
-              color: AppColors.accentBlue,
+              color: AppColors.info,
               icon: Icons.local_shipping,
             ),
             const SizedBox(width: 8),

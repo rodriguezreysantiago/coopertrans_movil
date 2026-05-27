@@ -352,7 +352,7 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
               ),
               ListTile(
                 leading:
-                    const Icon(Icons.file_present, color: AppColors.accentBlue),
+                    const Icon(Icons.file_present, color: AppColors.info),
                 title: const Text('Seleccionar archivo (PDF/imagen)',
                     style: TextStyle(color: Colors.white)),
                 onTap: () => Navigator.pop(ctx, _FuenteArchivo.fileSystem),

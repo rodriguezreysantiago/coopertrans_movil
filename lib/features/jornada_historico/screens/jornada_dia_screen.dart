@@ -435,7 +435,7 @@ class _CardResumenDia extends StatelessWidget {
                 _MiniKpi(
                   label: 'MANEJO',
                   valor: _fmtHM(jornada.manejoMin),
-                  color: AppColors.accentBlue,
+                  color: AppColors.info,
                   icono: Icons.directions_car,
                 ),
                 const SizedBox(width: 18),
@@ -531,7 +531,7 @@ class _Selectores extends StatelessWidget {
                   ? Icons.hourglass_empty
                   : Icons.person_outline,
               label: choferLabel,
-              color: AppColors.accentBlue,
+              color: AppColors.info,
               onTap: cargandoChoferes ? null : onChofer,
             ),
           ),
@@ -721,7 +721,7 @@ class _ResumenCard extends StatelessWidget {
                   label: 'MANEJO',
                   valor: _fmtHM(j.manejoMin),
                   icono: Icons.directions_car,
-                  color: AppColors.accentBlue),
+                  color: AppColors.info),
               _Kpi(
                   label: 'PARADAS',
                   valor: _fmtHM(j.paradasMin),
@@ -909,14 +909,14 @@ class _TramoCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.accentBlue.withValues(alpha: 0.08),
+        color: AppColors.info.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.accentBlue.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
           const Icon(Icons.directions_car,
-              color: AppColors.accentBlue, size: 22),
+              color: AppColors.info, size: 22),
           const SizedBox(width: 10),
           Expanded(
             child: Column(

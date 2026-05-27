@@ -94,7 +94,7 @@ class _RevisionCard extends StatelessWidget {
     // Color del icono y borde según tipo de solicitud
     final tipoColor = esCambioEquipo
         ? AppColors.warning
-        : (esVehiculo ? AppColors.accentBlue : AppColors.success);
+        : (esVehiculo ? AppColors.info : AppColors.success);
     final tipoIcon = esCambioEquipo
         ? Icons.swap_horiz
         : (esVehiculo ? Icons.local_shipping : Icons.person);

@@ -190,7 +190,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 descripcion:
                     'Sincroniza consumo, KMs y posición con Volvo Connect.',
                 icono: Icons.cloud_sync_rounded,
-                color: AppColors.accentBlue,
+                color: AppColors.info,
                 onTap: _generando ? null : _ejecutarReporteFlota,
               ),
               const SizedBox(height: 12),
@@ -330,17 +330,17 @@ class _CargandoOverlay extends StatelessWidget {
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.accentBlue.withAlpha(50)),
+                border: Border.all(color: AppColors.info.withAlpha(50)),
               ),
               child: const Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(color: AppColors.accentBlue),
+                  CircularProgressIndicator(color: AppColors.info),
                   SizedBox(height: 25),
                   Text(
                     'CONECTANDO CON VOLVO',
                     style: TextStyle(
-                      color: AppColors.accentBlue,
+                      color: AppColors.info,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1,
                     ),

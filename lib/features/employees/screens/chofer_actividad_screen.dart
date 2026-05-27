@@ -257,7 +257,7 @@ class _Resumen extends StatelessWidget {
               child: _KpiCard(
                 label: 'ASIGNACIONES',
                 valor: '${resumen.asignaciones}',
-                color: AppColors.accentBlue,
+                color: AppColors.info,
                 icono: Icons.swap_horiz,
               ),
             ),
@@ -266,7 +266,7 @@ class _Resumen extends StatelessWidget {
               child: _KpiCard(
                 label: 'TRACTORES',
                 valor: '${resumen.tractores.length}',
-                color: AppColors.accentBlue,
+                color: AppColors.info,
                 icono: Icons.local_shipping,
               ),
             ),

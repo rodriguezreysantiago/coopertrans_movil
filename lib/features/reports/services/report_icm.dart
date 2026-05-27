@@ -73,7 +73,7 @@ class ReportIcmService {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentBlue,
+              backgroundColor: AppColors.info,
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.pop(ctx, 0),

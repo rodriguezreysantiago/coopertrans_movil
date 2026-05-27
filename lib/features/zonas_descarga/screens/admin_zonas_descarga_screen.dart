@@ -92,15 +92,15 @@ class _BannerExplicativo extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: AppColors.accentBlue.withValues(alpha: 0.10),
+        color: AppColors.info.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: AppColors.accentBlue.withValues(alpha: 0.30),
+          color: AppColors.info.withValues(alpha: 0.30),
         ),
       ),
       child: const Row(
         children: [
-          Icon(Icons.info_outline, color: AppColors.accentBlue, size: 20),
+          Icon(Icons.info_outline, color: AppColors.info, size: 20),
           SizedBox(width: 10),
           Expanded(
             child: Text(

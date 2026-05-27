@@ -125,7 +125,7 @@ class _ResumenFleet extends StatelessWidget {
         if (docs.isEmpty) {
           return const _AvisoCard(
             icono: Icons.info_outline,
-            color: AppColors.accentBlue,
+            color: AppColors.info,
             titulo: 'Sin data en este rango',
             mensaje: 'El poller diario empezó a correr el día que '
                 'se deployó. Si recién se activó, los datos aparecen '
@@ -292,19 +292,19 @@ class _RankingVehiculos extends StatelessWidget {
         }
 
         return AppCard(
-          borderColor: AppColors.accentBlue.withAlpha(40),
+          borderColor: AppColors.info.withAlpha(40),
           padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  const Icon(Icons.leaderboard, color: AppColors.accentBlue, size: 18),
+                  const Icon(Icons.leaderboard, color: AppColors.info, size: 18),
                   const SizedBox(width: 8),
                   Text(
                     'RANKING POR VEHÍCULO · $diasRango DÍAS',
                     style: const TextStyle(
-                      color: AppColors.accentBlue,
+                      color: AppColors.info,
                       fontWeight: FontWeight.bold,
                       fontSize: 11,
                       letterSpacing: 1.5,

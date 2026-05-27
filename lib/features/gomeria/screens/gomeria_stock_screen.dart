@@ -123,7 +123,7 @@ class _GomeriaStockScreenState extends State<GomeriaStockScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.accentBlue,
+        backgroundColor: AppColors.info,
         onPressed: () => _abrirAlta(context),
         icon: const Icon(Icons.add),
         label: const Text('NUEVA CUBIERTA'),
@@ -234,7 +234,7 @@ class _FiltrosEstado extends StatelessWidget {
               label: 'DEPÓSITO',
               seleccionado: seleccionado == EstadoCubierta.enDeposito,
               onTap: () => onChanged(EstadoCubierta.enDeposito),
-              color: AppColors.accentBlue,
+              color: AppColors.info,
             ),
             const SizedBox(width: 6),
             _ChipFiltro(
@@ -280,7 +280,7 @@ class _FiltrosTipoUso extends StatelessWidget {
             label: 'TIPO: TODOS',
             seleccionado: seleccionado == null,
             onTap: () => onChanged(null),
-            color: AppColors.accentBlue,
+            color: AppColors.info,
           ),
           for (final t in TipoUsoCubierta.values)
             _ChipFiltro(
@@ -289,7 +289,7 @@ class _FiltrosTipoUso extends StatelessWidget {
               onTap: () => onChanged(t),
               color: t == TipoUsoCubierta.direccion
                   ? AppColors.warning
-                  : AppColors.accentBlue,
+                  : AppColors.info,
             ),
         ],
       ),
@@ -341,7 +341,7 @@ class _CubiertaTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = c.tipoUso == TipoUsoCubierta.direccion
         ? AppColors.warning
-        : AppColors.accentBlue;
+        : AppColors.info;
     return AppCard(
       onTap: onTap,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
@@ -430,7 +430,7 @@ class _CubiertaTile extends StatelessWidget {
   static Color _colorEstado(EstadoCubierta e) {
     switch (e) {
       case EstadoCubierta.enDeposito:
-        return AppColors.accentBlue;
+        return AppColors.info;
       case EstadoCubierta.instalada:
         return AppColors.success;
       case EstadoCubierta.enRecapado:
@@ -574,7 +574,7 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
                   minHeight: 6,
                   backgroundColor: Colors.white12,
                   valueColor:
-                      const AlwaysStoppedAnimation(AppColors.accentBlue),
+                      const AlwaysStoppedAnimation(AppColors.info),
                 ),
                 const SizedBox(height: 4),
                 Text(
