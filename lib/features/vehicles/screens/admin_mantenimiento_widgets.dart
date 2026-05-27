@@ -130,7 +130,7 @@ class _TractorCard extends StatelessWidget {
         children: [
           // Avatar con icono según estado.
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(AppSpacing.sm),
             decoration: BoxDecoration(
               color: estado.color.withAlpha(25),
               shape: BoxShape.circle,
@@ -141,39 +141,37 @@ class _TractorCard extends StatelessWidget {
               size: 22,
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   patente,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
+                  style: AppType.heading.copyWith(fontSize: 15),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '$marca $modelo'.trim().isEmpty
                       ? 'Sin marca/modelo'
                       : '$marca $modelo',
-                  style: AppType.label.copyWith(color: Colors.white54),
+                  style:
+                      AppType.label.copyWith(color: AppColors.textTertiary),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   estado.etiqueta,
-                  style: AppType.eyebrow.copyWith(color: estado.color, fontWeight: FontWeight.w600, letterSpacing: 0.6),
+                  style: AppType.eyebrow.copyWith(
+                      color: estado.color, letterSpacing: 0.6),
                 ),
                 if (faltaCargaInicial) ...[
                   const SizedBox(height: AppSpacing.xs),
-                  const Text(
+                  Text(
                     'Cargá el último service desde la ficha para ver KM al próximo',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
+                    style: AppType.eyebrow.copyWith(
                       color: AppColors.warning,
                       fontSize: 10,
                       fontStyle: FontStyle.italic,
@@ -192,8 +190,8 @@ class _TractorCard extends StatelessWidget {
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white38,
+                    style: AppType.eyebrow.copyWith(
+                      color: AppColors.textHint,
                       fontSize: 10,
                       fontStyle: FontStyle.italic,
                     ),
@@ -207,7 +205,8 @@ class _TractorCard extends StatelessWidget {
             children: [
               MantenimientoBadge(serviceDistanceKm: serviceDistanceKm),
               const SizedBox(height: 6),
-              const Icon(Icons.chevron_right, color: Colors.white24, size: 20),
+              const Icon(Icons.chevron_right,
+                  color: AppColors.textHint, size: 20),
             ],
           ),
         ],
@@ -349,15 +348,17 @@ class _BarraResumen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      margin: const EdgeInsets.fromLTRB(
+          AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
-        color: Colors.white.withAlpha(8),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white12),
+        color: AppColors.borderSubtle,
+        borderRadius: BorderRadius.circular(AppSpacing.sm + 2),
+        border: Border.all(color: AppColors.borderSubtle),
       ),
       child: Wrap(
-        spacing: 12,
+        spacing: AppSpacing.md,
         runSpacing: 6,
         children: [
           _Chip(
@@ -404,7 +405,7 @@ class _BarraResumen extends StatelessWidget {
             _Chip(
               label: 'Sin datos',
               count: resumen.sinDato,
-              color: Colors.white24,
+              color: AppColors.textHint,
               estado: MantenimientoEstado.sinDato,
               activo: filtroActivo == MantenimientoEstado.sinDato,
               onTap: onSeleccionar,
@@ -442,14 +443,14 @@ class _Chip extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppSpacing.xl),
         onTap: () => onTap(estado),
         child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
           decoration: BoxDecoration(
             color: color.withAlpha(fondoAlpha),
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(AppSpacing.xl),
             border: Border.all(
               color: color.withAlpha(bordeAlpha),
               width: bordeWidth,
@@ -460,7 +461,7 @@ class _Chip extends StatelessWidget {
             children: [
               Text(
                 '$count',
-                style: TextStyle(
+                style: AppType.body.copyWith(
                   color: color,
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
@@ -469,7 +470,12 @@ class _Chip extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 label,
-                style: AppType.eyebrow.copyWith(color: activo ? Colors.white : Colors.white70, fontWeight: activo ? FontWeight.w600 : FontWeight.normal),
+                style: AppType.eyebrow.copyWith(
+                    color: activo
+                        ? AppColors.textPrimary
+                        : AppColors.textSecondary,
+                    fontWeight:
+                        activo ? FontWeight.w600 : FontWeight.normal),
               ),
             ],
           ),
