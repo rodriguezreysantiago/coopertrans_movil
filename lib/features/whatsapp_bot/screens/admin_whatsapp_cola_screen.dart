@@ -110,7 +110,7 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
       title: '¿Eliminar de la cola?',
       message:
           'El mensaje se borra del historial. Si todavía no se envió, no se va a enviar.',
-      confirmLabel: 'ELIMINAR',
+      confirmLabel: 'Eliminar',
       destructive: true,
       icon: Icons.delete_outline,
     );
@@ -159,7 +159,8 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
           }
           final filtrados = _filtrarPorQuery(docs);
           return ListView(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md, AppSpacing.sm, AppSpacing.md, 80),
             children: [
               _ResumenContador(
                 filtroActivo: _filtroEstado,
@@ -195,7 +196,7 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
                   hintStyle: AppType.label.copyWith(color: Colors.white38),
                   border: const OutlineInputBorder(),
                   contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 10),
+                      horizontal: AppSpacing.md, vertical: 10),
                 ),
                 onChanged: (v) => setState(() => _query = v),
               ),
