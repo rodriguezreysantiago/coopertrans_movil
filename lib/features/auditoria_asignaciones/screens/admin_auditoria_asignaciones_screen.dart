@@ -1,32 +1,31 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
+
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../asignaciones/models/asignacion_vehiculo.dart';
-import '../models/tramo_ibutton.dart';
-import '../services/historico_ibutton_service.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
-/// Auditoría de asignaciones: cruza el HISTÓRICO REAL del iButton físico
-/// (`SITRACK_IBUTTONS_HISTORICO` — qué iButton estuvo en qué patente y
-/// cuándo, reconstruido desde SITRACK_EVENTOS) contra
-/// `ASIGNACIONES_VEHICULO` (lo que el sistema dice por las altas/bajas
-/// manuales del admin).
+/// "¿Quién manejaba esta unidad este día?"
 ///
-/// Para cada tramo Sitrack, busca la asignación del sistema activa en
-/// ese mismo momento + patente. Si los DNI coinciden → OK. Si no
-/// coinciden o no había asignación → discrepancia (highlighted rojo).
+/// REFACTOR 2026-05-27 (decisión Santiago): la pantalla anterior cruzaba
+/// `SITRACK_IBUTTONS_HISTORICO` (iButton físico) vs `ASIGNACIONES_VEHICULO`
+/// (lo que decía el sistema) para detectar discrepancias. Esa información
+/// no la usaba operativamente. Lo que sí necesita Santiago: dada una
+/// **unidad** y una **fecha**, saber qué chofer la tenía asignada según
+/// el sistema, más el rango (desde / hasta) en que la usó.
 ///
-/// Casos típicos:
-///   - **DNI distinto**: el iButton lo usó otro chofer (no el asignado).
-///     Útil para multas tardías ("¿quién manejaba realmente el día X?").
-///   - **Sin asignación**: el sistema no tenía a NADIE asignado pero el
-///     iButton se pasó → falta dar de alta la asignación.
-///   - **OK**: confirma que la asignación del sistema coincide con la
-///     realidad. Útil para auditoría positiva.
+/// Query: `ASIGNACIONES_VEHICULO where vehiculoId == X` y filtramos
+/// en memoria por `desde <= fecha && (hasta == null || hasta >= fecha)`.
+/// Normalmente devuelve 1 asignación (no debería haber 2 choferes a la
+/// vez en la misma unidad); si devuelve 0, ese día no había nadie
+/// asignado a esa unidad.
+///
+/// La colección iButton queda viva por si en el futuro se reactiva el
+/// cruce, pero esta pantalla ya no la usa.
 class AdminAuditoriaAsignacionesScreen extends StatefulWidget {
   const AdminAuditoriaAsignacionesScreen({super.key});
 
@@ -37,76 +36,64 @@ class AdminAuditoriaAsignacionesScreen extends StatefulWidget {
 
 class _AdminAuditoriaAsignacionesScreenState
     extends State<AdminAuditoriaAsignacionesScreen> {
-  late DateTime _desde;
-  late DateTime _hasta;
-  String _filtroPatente = '';
-  String _filtroDni = '';
-  bool _soloDiscrepancias = false;
+  late DateTime _fecha;
+  String _patente = '';
 
   @override
   void initState() {
     super.initState();
-    final ahora = DateTime.now();
-    _desde = ahora.subtract(const Duration(days: 7));
-    _hasta = ahora;
+    _fecha = DateTime.now();
   }
 
-  Future<void> _elegirRango() async {
+  Future<void> _elegirFecha() async {
     final ahora = DateTime.now();
-    final r = await showDateRangePicker(
+    final f = await showDatePicker(
       context: context,
-      firstDate: ahora.subtract(const Duration(days: 365)),
+      initialDate: _fecha,
+      firstDate: DateTime(2024, 1, 1),
       lastDate: ahora,
-      initialDateRange: DateTimeRange(start: _desde, end: _hasta),
       locale: const Locale('es', 'AR'),
-      helpText: 'Rango a auditar',
-      saveText: 'Aplicar',
+      helpText: 'Fecha a consultar',
+      confirmText: 'Aplicar',
+      cancelText: 'Cancelar',
     );
-    if (r == null) return;
-    setState(() {
-      _desde = DateTime(r.start.year, r.start.month, r.start.day);
-      final esHoy = r.end.year == ahora.year &&
-          r.end.month == ahora.month &&
-          r.end.day == ahora.day;
-      _hasta = esHoy
-          ? ahora
-          : DateTime(r.end.year, r.end.month, r.end.day, 23, 59, 59);
-    });
+    if (f == null) return;
+    setState(() => _fecha = DateTime(f.year, f.month, f.day, 23, 59, 59));
   }
 
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      title: 'Auditoría asignaciones',
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      title: 'Chofer por unidad y fecha',
+      body: ListView(
+        padding: const EdgeInsets.all(AppSpacing.md),
         children: [
           const _BannerInfo(),
-          _BarraFiltros(
-            desde: _desde,
-            hasta: _hasta,
-            patente: _filtroPatente,
-            dni: _filtroDni,
-            soloDiscrepancias: _soloDiscrepancias,
-            onRango: _elegirRango,
-            onPatente: (v) => setState(() => _filtroPatente = v.toUpperCase()),
-            onDni: (v) => setState(() => _filtroDni = v),
-            onSoloDiscrepancias: (v) => setState(() => _soloDiscrepancias = v),
+          const SizedBox(height: AppSpacing.md),
+          _SelectorFecha(fecha: _fecha, onTap: _elegirFecha),
+          const SizedBox(height: AppSpacing.sm),
+          _DropdownPatente(
+            value: _patente,
+            onChanged: (v) => setState(() => _patente = v),
           ),
-          Expanded(
-            child: _ListadoCruce(
-              desde: _desde,
-              hasta: _hasta,
-              filtroPatente: _filtroPatente,
-              filtroDni: _filtroDni,
-              soloDiscrepancias: _soloDiscrepancias,
-            ),
-          ),
+          const SizedBox(height: AppSpacing.lg),
+          if (_patente.isEmpty)
+            const _Placeholder(
+              icono: Icons.local_shipping_outlined,
+              titulo: 'Elegí una unidad',
+              subtitulo: 'Seleccioná un tractor y la fecha para ver quién lo manejaba.',
+            )
+          else
+            _ResultadoAsignacion(patente: _patente, fecha: _fecha),
         ],
       ),
     );
   }
 }
+
+// ============================================================================
+// BANNER + selectores
+// ============================================================================
 
 class _BannerInfo extends StatelessWidget {
   const _BannerInfo();
@@ -114,7 +101,6 @@ class _BannerInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: AppColors.info.withValues(alpha: 0.10),
@@ -127,9 +113,9 @@ class _BannerInfo extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'Compara el iButton que físicamente se pasó (Sitrack) contra '
-              'la asignación cargada en el sistema. Útil para multas tardías, '
-              'investigaciones y reconciliación. Histórico desde 2026-05-23.',
+              'Mostramos qué chofer tenía asignada la unidad elegida en la '
+              'fecha que selecciones, según el historial de asignaciones del '
+              'sistema. Sirve para multas tardías y reconciliación.',
               style: AppType.label.copyWith(color: Colors.white70),
             ),
           ),
@@ -139,508 +125,57 @@ class _BannerInfo extends StatelessWidget {
   }
 }
 
-class _BarraFiltros extends StatelessWidget {
-  final DateTime desde;
-  final DateTime hasta;
-  final String patente;
-  final String dni;
-  final bool soloDiscrepancias;
-  final VoidCallback onRango;
-  final ValueChanged<String> onPatente;
-  final ValueChanged<String> onDni;
-  final ValueChanged<bool> onSoloDiscrepancias;
-
-  const _BarraFiltros({
-    required this.desde,
-    required this.hasta,
-    required this.patente,
-    required this.dni,
-    required this.soloDiscrepancias,
-    required this.onRango,
-    required this.onPatente,
-    required this.onDni,
-    required this.onSoloDiscrepancias,
-  });
+class _SelectorFecha extends StatelessWidget {
+  final DateTime fecha;
+  final VoidCallback onTap;
+  const _SelectorFecha({required this.fecha, required this.onTap});
 
   String _fmt(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}-${d.month.toString().padLeft(2, '0')}-${d.year}';
+      '${d.day.toString().padLeft(2, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-${d.year}';
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            onTap: onRango,
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.brand.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                border: Border.all(
-                    color: AppColors.brand.withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.date_range,
-                      color: AppColors.brand, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      '${_fmt(desde)} → ${_fmt(hasta)}',
-                      style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  const Icon(Icons.calendar_today,
-                      color: Colors.white54, size: 16),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              Expanded(
-                child: _DropdownPatente(value: patente, onChanged: onPatente),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: _DropdownChofer(value: dni, onChanged: onDni),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          SwitchListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Solo discrepancias',
-                style: TextStyle(color: Colors.white70, fontSize: 13)),
-            value: soloDiscrepancias,
-            onChanged: onSoloDiscrepancias,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ListadoCruce extends StatelessWidget {
-  final DateTime desde;
-  final DateTime hasta;
-  final String filtroPatente;
-  final String filtroDni;
-  final bool soloDiscrepancias;
-
-  const _ListadoCruce({
-    required this.desde,
-    required this.hasta,
-    required this.filtroPatente,
-    required this.filtroDni,
-    required this.soloDiscrepancias,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<List<TramoIButton>>(
-      stream: HistoricoIButtonService.streamPorRango(
-        desde: desde,
-        hasta: hasta,
-        patente: filtroPatente.isEmpty ? null : filtroPatente,
-        choferDni: filtroDni.isEmpty ? null : filtroDni,
-      ),
-      builder: (ctx, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snap.hasError) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.xl),
-              child: Text('Error: ${snap.error}',
-                  style: const TextStyle(color: AppColors.error)),
-            ),
-          );
-        }
-        final tramos = snap.data ?? const <TramoIButton>[];
-        if (tramos.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.xxl),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.history, color: Colors.white24, size: 64),
-                  const SizedBox(height: AppSpacing.md),
-                  const Text(
-                    'Sin tramos en el rango seleccionado.',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    'El histórico se reconstruye 06:00 ART procesando '
-                    'el día anterior — el día actual recién se ve mañana.',
-                    textAlign: TextAlign.center,
-                    style: AppType.eyebrow.copyWith(color: Colors.white38),
-                  ),
-                ],
-              ),
-            ),
-          );
-        }
-        // Cargar TODAS las asignaciones del rango para cruzar. Una sola
-        // query por re-render — el stream del tramo refresca al cambio.
-        return FutureBuilder<List<AsignacionVehiculo>>(
-          future: _cargarAsignacionesRango(desde, hasta),
-          builder: (ctx, asnap) {
-            if (asnap.connectionState != ConnectionState.done) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final asignaciones = asnap.data ?? const <AsignacionVehiculo>[];
-            final filas = tramos.map((t) {
-              final asig = _buscarAsignacion(asignaciones, t);
-              final estado = _clasificar(t, asig);
-              return _FilaCruce(tramo: t, asignacion: asig, estado: estado);
-            }).where((f) {
-              if (soloDiscrepancias && f.estado == _Estado.ok) return false;
-              return true;
-            }).toList();
-            if (filas.isEmpty) {
-              return const Center(
-                child: Padding(
-                  padding: EdgeInsets.all(28),
-                  child: Text(
-                    'No hay discrepancias en el rango y filtros seleccionados.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                ),
-              );
-            }
-            return ListView(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              children: [
-                _Resumen(filas: filas),
-                const SizedBox(height: 10),
-                ...filas,
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  static Future<List<AsignacionVehiculo>> _cargarAsignacionesRango(
-      DateTime desde, DateTime hasta) async {
-    // Traemos asignaciones que se SOLAPAN con el rango: desde <= hasta_filtro
-    // && (hasta == null || hasta >= desde_filtro). Firestore no permite
-    // dos rangos en distintos campos, así que filtramos client-side luego
-    // de traer todas las que arrancaron antes de hasta_filtro.
-    final snap = await FirebaseFirestore.instance
-        .collection('ASIGNACIONES_VEHICULO')
-        .where('desde', isLessThanOrEqualTo: Timestamp.fromDate(hasta))
-        .get();
-    final l = snap.docs.map(AsignacionVehiculo.fromDoc).toList();
-    return l.where((a) {
-      if (a.hasta == null) return true;
-      return a.hasta!.isAfter(desde);
-    }).toList();
-  }
-
-  /// Busca la asignación del sistema que CUBRE el momento del tramo
-  /// (mismo vehículo, desde <= tramo.desde, hasta == null || hasta >=
-  /// tramo.desde). Si hay varias (no debería pero por race), preferimos
-  /// la más reciente.
-  static AsignacionVehiculo? _buscarAsignacion(
-      List<AsignacionVehiculo> all, TramoIButton t) {
-    final candidatas = all.where((a) =>
-        a.vehiculoId.toUpperCase() == t.patente &&
-        !a.desde.isAfter(t.desde) &&
-        (a.hasta == null || !a.hasta!.isBefore(t.desde))).toList();
-    if (candidatas.isEmpty) return null;
-    candidatas.sort((x, y) => y.desde.compareTo(x.desde));
-    return candidatas.first;
-  }
-
-  static _Estado _clasificar(TramoIButton t, AsignacionVehiculo? a) {
-    if (a == null) return _Estado.sinAsignacion;
-    if (a.choferDni != t.choferDni) return _Estado.dniDistinto;
-    return _Estado.ok;
-  }
-}
-
-enum _Estado { ok, dniDistinto, sinAsignacion }
-
-class _Resumen extends StatelessWidget {
-  final List<_FilaCruce> filas;
-  const _Resumen({required this.filas});
-
-  @override
-  Widget build(BuildContext context) {
-    int ok = 0, dni = 0, sin = 0;
-    for (final f in filas) {
-      if (f.estado == _Estado.ok) {
-        ok++;
-      } else if (f.estado == _Estado.dniDistinto) {
-        dni++;
-      } else {
-        sin++;
-      }
-    }
-    return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      child: Row(
-        children: [
-          _ChipResumen(label: 'OK', valor: ok, color: AppColors.success),
-          const SizedBox(width: 10),
-          _ChipResumen(
-              label: 'DNI distinto', valor: dni, color: AppColors.error),
-          const SizedBox(width: 10),
-          _ChipResumen(
-              label: 'Sin asignación',
-              valor: sin,
-              color: AppColors.warning),
-        ],
-      ),
-    );
-  }
-}
-
-class _ChipResumen extends StatelessWidget {
-  final String label;
-  final int valor;
-  final Color color;
-  const _ChipResumen({
-    required this.label,
-    required this.valor,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
+          color: AppColors.brand.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(AppRadius.sm),
-          border: Border.all(color: color.withValues(alpha: 0.5)),
+          border: Border.all(color: AppColors.brand.withValues(alpha: 0.40)),
         ),
-        child: Column(
+        child: Row(
           children: [
-            Text('$valor',
-                style: TextStyle(
-                    color: color,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold)),
-            Text(label,
-                style: AppType.eyebrow.copyWith(color: Colors.white70)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FilaCruce extends StatelessWidget {
-  final TramoIButton tramo;
-  final AsignacionVehiculo? asignacion;
-  final _Estado estado;
-  const _FilaCruce({
-    required this.tramo,
-    required this.asignacion,
-    required this.estado,
-  });
-
-  Color get _color {
-    switch (estado) {
-      case _Estado.ok:
-        return AppColors.success;
-      case _Estado.dniDistinto:
-        return AppColors.error;
-      case _Estado.sinAsignacion:
-        return AppColors.warning;
-    }
-  }
-
-  IconData get _icono {
-    switch (estado) {
-      case _Estado.ok:
-        return Icons.check_circle;
-      case _Estado.dniDistinto:
-        return Icons.error;
-      case _Estado.sinAsignacion:
-        return Icons.warning_amber;
-    }
-  }
-
-  String get _etiqueta {
-    switch (estado) {
-      case _Estado.ok:
-        return 'OK';
-      case _Estado.dniDistinto:
-        return 'DNI DISTINTO';
-      case _Estado.sinAsignacion:
-        return 'SIN ASIGNACIÓN';
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      color: Colors.white.withValues(alpha: 0.04),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        side: BorderSide(color: _color.withValues(alpha: 0.4)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header: patente + estado
-            Row(
-              children: [
-                Text(
-                  tramo.patente,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      letterSpacing: 1),
-                ),
-                const SizedBox(width: 10),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: _color.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: _color.withValues(alpha: 0.5)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(_icono, color: _color, size: 12),
-                      const SizedBox(width: AppSpacing.xs),
-                      Text(_etiqueta,
-                          style: TextStyle(
-                              color: _color,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold)),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  '${tramo.duracionMin} min',
-                  style: AppType.eyebrow.copyWith(color: Colors.white54),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            // Sitrack iButton
-            _LineaActor(
-              label: 'iButton (real)',
-              labelColor: AppColors.info,
-              nombre: tramo.nombreLegible,
-              dni: tramo.choferDni,
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            // Asignación sistema
-            if (asignacion != null)
-              _LineaActor(
-                label: 'Sistema',
-                labelColor: estado == _Estado.ok
-                    ? AppColors.success
-                    : AppColors.error,
-                nombre: (asignacion!.choferNombre ?? '').isNotEmpty
-                    ? asignacion!.choferNombre!
-                    : 'DNI ${asignacion!.choferDni}',
-                dni: asignacion!.choferDni,
-              )
-            else
-              const _LineaActor(
-                label: 'Sistema',
-                labelColor: AppColors.warning,
-                nombre: '(sin asignación cargada)',
-                dni: '',
+            const Icon(Icons.calendar_today, color: AppColors.brand, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('FECHA',
+                      style: AppType.eyebrow.copyWith(color: AppColors.brand)),
+                  const SizedBox(height: 2),
+                  Text(_fmt(fecha),
+                      style: AppType.body.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15)),
+                ],
               ),
-            const SizedBox(height: 6),
-            // Fechas
-            Row(
-              children: [
-                const Icon(Icons.access_time,
-                    size: 12, color: Colors.white38),
-                const SizedBox(width: AppSpacing.xs),
-                Text(
-                  '${AppFormatters.formatearFechaHoraSinSegundos(tramo.desde)} → '
-                  '${AppFormatters.formatearFechaHoraSinSegundos(tramo.hasta)}',
-                  style: AppType.eyebrow.copyWith(color: Colors.white54),
-                ),
-                const SizedBox(width: 10),
-                Text(
-                  '${tramo.eventosCount} eventos',
-                  style: AppType.eyebrow.copyWith(color: Colors.white38),
-                ),
-              ],
             ),
+            const Icon(Icons.edit, color: Colors.white54, size: 16),
           ],
         ),
       ),
-    );
-  }
-}
-
-class _LineaActor extends StatelessWidget {
-  final String label;
-  final Color labelColor;
-  final String nombre;
-  final String dni;
-  const _LineaActor({
-    required this.label,
-    required this.labelColor,
-    required this.nombre,
-    required this.dni,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 95,
-          child: Text(
-            label,
-            style: AppType.eyebrow.copyWith(color: labelColor, fontWeight: FontWeight.bold),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            nombre,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white, fontSize: 13),
-          ),
-        ),
-        if (dni.isNotEmpty)
-          Text(
-            'DNI $dni',
-            style: AppType.eyebrow.copyWith(color: Colors.white38),
-          ),
-      ],
     );
   }
 }
 
 /// Dropdown de patentes (solo TIPO=TRACTOR — las únicas que se asignan
-/// a chofer). Stream contra VEHICULOS, sin filtro de ESTADO porque la
-/// auditoría puede interesarse en unidades que ya estén dadas de baja.
+/// a chofer). Stream de VEHICULOS sin filtro de ESTADO porque la auditoría
+/// puede interesarse en unidades que hoy estén dadas de baja.
 class _DropdownPatente extends StatelessWidget {
   final String value;
   final ValueChanged<String> onChanged;
@@ -654,7 +189,8 @@ class _DropdownPatente extends StatelessWidget {
           .where('TIPO', isEqualTo: 'TRACTOR')
           .snapshots(),
       builder: (ctx, snap) {
-        final patentes = (snap.data?.docs ?? <QueryDocumentSnapshot<Map<String, dynamic>>>[])
+        final patentes = (snap.data?.docs ??
+                <QueryDocumentSnapshot<Map<String, dynamic>>>[])
             .map((d) => d.id)
             .toList()
           ..sort();
@@ -662,33 +198,28 @@ class _DropdownPatente extends StatelessWidget {
           isDense: true,
           isExpanded: true,
           decoration: const InputDecoration(
-            labelText: 'Filtrar por patente',
+            labelText: 'Unidad (tractor)',
             border: OutlineInputBorder(),
             isDense: true,
+            prefixIcon:
+                Icon(Icons.local_shipping_outlined, color: Colors.white54),
           ),
-          style: const TextStyle(color: Colors.white, fontSize: 13),
+          style: const TextStyle(color: Colors.white, fontSize: 14),
           dropdownColor: AppColors.surface2,
           initialValue: value.isEmpty ? null : value,
-          hint: const Text('Todas',
-              style: TextStyle(color: Colors.white54, fontSize: 13)),
-          items: [
-            const DropdownMenuItem<String>(
-              value: '',
-              child: Text('Todas',
-                  style: TextStyle(
-                      color: Colors.white70,
-                      fontStyle: FontStyle.italic,
-                      fontSize: 13)),
-            ),
-            ...patentes.map((p) => DropdownMenuItem<String>(
-                  value: p,
-                  child: Text(p,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          letterSpacing: 0.5)),
-                )),
-          ],
+          hint: const Text('Elegí una unidad…',
+              style: TextStyle(color: Colors.white54, fontSize: 14)),
+          items: patentes
+              .map((p) => DropdownMenuItem<String>(
+                    value: p,
+                    child: Text(p,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            letterSpacing: 0.5,
+                            fontWeight: FontWeight.w600)),
+                  ))
+              .toList(),
           onChanged: (v) => onChanged(v ?? ''),
         );
       },
@@ -696,66 +227,245 @@ class _DropdownPatente extends StatelessWidget {
   }
 }
 
-/// Dropdown de choferes (EMPLEADOS where ROL=CHOFER). Ordenado por
-/// NOMBRE alfabético. El value es el DNI (lo que espera el filtro).
-class _DropdownChofer extends StatelessWidget {
-  final String value;
-  final ValueChanged<String> onChanged;
-  const _DropdownChofer({required this.value, required this.onChanged});
+class _Placeholder extends StatelessWidget {
+  final IconData icono;
+  final String titulo;
+  final String subtitulo;
+  const _Placeholder({
+    required this.icono,
+    required this.titulo,
+    required this.subtitulo,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('EMPLEADOS')
-          .where('ROL', isEqualTo: 'CHOFER')
-          .snapshots(),
-      builder: (ctx, snap) {
-        final docs = (snap.data?.docs ??
-                <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-            .toList()
-          ..sort((a, b) {
-            final na = (a.data()['NOMBRE'] ?? '').toString();
-            final nb = (b.data()['NOMBRE'] ?? '').toString();
-            return na.compareTo(nb);
-          });
-        return DropdownButtonFormField<String>(
-          isDense: true,
-          isExpanded: true,
-          decoration: const InputDecoration(
-            labelText: 'Filtrar por chofer',
-            border: OutlineInputBorder(),
-            isDense: true,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 40),
+      child: Column(
+        children: [
+          Icon(icono, color: Colors.white24, size: 64),
+          const SizedBox(height: AppSpacing.md),
+          Text(titulo,
+              style: AppType.heading.copyWith(color: Colors.white70)),
+          const SizedBox(height: AppSpacing.xs),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(subtitulo,
+                textAlign: TextAlign.center,
+                style: AppType.label.copyWith(color: Colors.white38)),
           ),
-          style: const TextStyle(color: Colors.white, fontSize: 13),
-          dropdownColor: AppColors.surface2,
-          initialValue: value.isEmpty ? null : value,
-          hint: const Text('Todos',
-              style: TextStyle(color: Colors.white54, fontSize: 13)),
-          items: [
-            const DropdownMenuItem<String>(
-              value: '',
-              child: Text('Todos',
-                  style: TextStyle(
-                      color: Colors.white70,
-                      fontStyle: FontStyle.italic,
-                      fontSize: 13)),
-            ),
-            ...docs.map((d) {
-              final dni = d.id;
-              final nombre = (d.data()['NOMBRE'] ?? dni).toString();
-              return DropdownMenuItem<String>(
-                value: dni,
-                child: Text(nombre,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 13)),
-              );
-            }),
-          ],
-          onChanged: (v) => onChanged(v ?? ''),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// RESULTADO: chofer asignado a la patente en la fecha
+// ============================================================================
+
+class _ResultadoAsignacion extends StatelessWidget {
+  final String patente;
+  final DateTime fecha;
+  const _ResultadoAsignacion({required this.patente, required this.fecha});
+
+  @override
+  Widget build(BuildContext context) {
+    // Traemos TODAS las asignaciones de la patente (suelen ser pocas
+    // por unidad). Filtrar `desde <= fecha && hasta >= fecha` en
+    // Firestore requeriría index compuesto y dos rangos (no se puede
+    // en una sola query). Lo hacemos en memoria — la cardinalidad
+    // por patente es chica.
+    final stream = FirebaseFirestore.instance
+        .collection('ASIGNACIONES_VEHICULO')
+        .where('vehiculo_id', isEqualTo: patente)
+        .snapshots();
+
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: stream,
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (snap.hasError) {
+          return AppErrorState(
+              title: 'Error', subtitle: snap.error.toString());
+        }
+        final asignaciones = (snap.data?.docs ?? [])
+            .map(AsignacionVehiculo.fromDoc)
+            .where((a) => _activaEn(a, fecha))
+            .toList();
+
+        if (asignaciones.isEmpty) {
+          return const _Placeholder(
+            icono: Icons.person_off_outlined,
+            titulo: 'Sin chofer asignado',
+            subtitulo:
+                'No hay registros de asignación a esta unidad para la fecha '
+                'seleccionada. Puede que la unidad estuviera libre o '
+                'que falte cargar el alta.',
+          );
+        }
+
+        // Caso normal: 1 asignación matching. Caso raro (overlap): mostramos
+        // todas para que el admin las vea.
+        return Column(
+          children: asignaciones
+              .map((a) => _AsignacionCard(asignacion: a))
+              .toList(),
         );
       },
+    );
+  }
+
+  bool _activaEn(AsignacionVehiculo a, DateTime fecha) {
+    if (a.desde.isAfter(fecha)) return false;
+    if (a.hasta == null) return true;
+    return !a.hasta!.isBefore(fecha);
+  }
+}
+
+class _AsignacionCard extends StatelessWidget {
+  final AsignacionVehiculo asignacion;
+  const _AsignacionCard({required this.asignacion});
+
+  @override
+  Widget build(BuildContext context) {
+    final nombre = (asignacion.choferNombre ?? '').trim().isNotEmpty
+        ? asignacion.choferNombre!.trim()
+        : 'DNI ${asignacion.choferDni}';
+    final esActual = asignacion.hasta == null;
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: const BoxDecoration(
+                    color: AppColors.brand,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.person,
+                      color: Colors.white, size: 24),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(nombre,
+                          style: AppType.heading.copyWith(
+                              color: Colors.white, fontSize: 17)),
+                      Text('DNI ${asignacion.choferDni}',
+                          style: AppType.label.copyWith(
+                              color: Colors.white54)),
+                    ],
+                  ),
+                ),
+                if (esActual)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.20),
+                      borderRadius:
+                          BorderRadius.circular(AppRadius.sm),
+                      border: Border.all(
+                          color: AppColors.success
+                              .withValues(alpha: 0.50)),
+                    ),
+                    child: Text('ACTUAL',
+                        style: AppType.eyebrow.copyWith(
+                            color: AppColors.success)),
+                  ),
+              ],
+            ),
+            const Divider(color: Colors.white12, height: 24),
+            _Fila(
+              label: 'Asignado desde',
+              valor: AppFormatters.formatearFecha(asignacion.desde),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            _Fila(
+              label: esActual ? 'Hasta' : 'Asignado hasta',
+              valor: esActual
+                  ? 'En uso (sin fecha de fin)'
+                  : AppFormatters.formatearFecha(asignacion.hasta!),
+              colorValor: esActual ? AppColors.success : Colors.white,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            _Fila(
+              label: 'Duración',
+              valor: _duracion(asignacion),
+              colorValor: Colors.white70,
+            ),
+            if ((asignacion.motivo ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.xs),
+              _Fila(label: 'Motivo', valor: asignacion.motivo!.trim()),
+            ],
+            if ((asignacion.asignadoPorNombre ?? '').trim().isNotEmpty ||
+                asignacion.asignadoPorDni.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.xs),
+              _Fila(
+                label: 'Asignado por',
+                valor: (asignacion.asignadoPorNombre ?? '').isNotEmpty
+                    ? asignacion.asignadoPorNombre!
+                    : 'DNI ${asignacion.asignadoPorDni}',
+                colorValor: Colors.white54,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _duracion(AsignacionVehiculo a) {
+    final fin = a.hasta ?? DateTime.now();
+    final dias = fin.difference(a.desde).inDays;
+    if (dias == 0) return 'Menos de un día';
+    if (dias == 1) return '1 día';
+    if (dias < 30) return '$dias días';
+    final meses = (dias / 30).floor();
+    if (meses == 1) return '~1 mes ($dias días)';
+    if (meses < 12) return '~$meses meses ($dias días)';
+    final anios = (dias / 365).floor();
+    return anios == 1
+        ? '~1 año ($dias días)'
+        : '~$anios años ($dias días)';
+  }
+}
+
+class _Fila extends StatelessWidget {
+  final String label;
+  final String valor;
+  final Color? colorValor;
+  const _Fila({required this.label, required this.valor, this.colorValor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 120,
+          child: Text(label,
+              style: AppType.label.copyWith(color: Colors.white54)),
+        ),
+        Expanded(
+          child: Text(valor,
+              style: AppType.body.copyWith(
+                  color: colorValor ?? Colors.white,
+                  fontWeight: FontWeight.w500)),
+        ),
+      ],
     );
   }
 }
