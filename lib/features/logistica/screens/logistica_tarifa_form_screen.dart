@@ -517,15 +517,15 @@ class _LogisticaTarifaFormScreenState
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.accentRed.withValues(alpha: 0.1),
+                color: AppColors.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: AppColors.accentRed.withValues(alpha: 0.4),
+                  color: AppColors.error.withValues(alpha: 0.4),
                 ),
               ),
               child: Text(
                 _error!,
-                style: const TextStyle(color: AppColors.accentRed),
+                style: const TextStyle(color: AppColors.error),
               ),
             ),
           ],

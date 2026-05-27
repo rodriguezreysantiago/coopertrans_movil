@@ -661,7 +661,7 @@ class _AdminShellState extends State<AdminShell> {
                   minHeight: 18,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.accentRed,
+                  color: AppColors.error,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: Theme.of(context).colorScheme.surface,
@@ -741,7 +741,7 @@ class _IconoMas extends StatelessWidget {
                 width: 9,
                 height: 9,
                 decoration: BoxDecoration(
-                  color: AppColors.accentRed,
+                  color: AppColors.error,
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: Theme.of(context).colorScheme.surface,

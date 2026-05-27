@@ -346,7 +346,7 @@ class _FilaRanking extends StatelessWidget {
 
   Color get _colorScore {
     final s = item.scorePromedio;
-    if (s < 60) return AppColors.accentRed;
+    if (s < 60) return AppColors.error;
     if (s < 80) return AppColors.warning;
     return AppColors.success;
   }
@@ -425,7 +425,7 @@ class _ScoreGrande extends StatelessWidget {
     final colorScore = s == null
         ? Colors.white38
         : s < 60
-            ? AppColors.accentRed
+            ? AppColors.error
             : s < 80
                 ? AppColors.warning
                 : AppColors.success;
@@ -509,7 +509,7 @@ class _MiniSubScore extends StatelessWidget {
     final color = s == null
         ? Colors.white38
         : s < 60
-            ? AppColors.accentRed
+            ? AppColors.error
             : s < 80
                 ? AppColors.warning
                 : AppColors.success;
@@ -633,7 +633,7 @@ class _ErrorCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return _AvisoCard(
       icono: Icons.error_outline,
-      color: AppColors.accentRed,
+      color: AppColors.error,
       titulo: titulo,
       mensaje: error?.toString() ?? 'Error desconocido',
     );

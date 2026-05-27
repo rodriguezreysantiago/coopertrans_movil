@@ -263,7 +263,7 @@ class _CardTarifa extends StatelessWidget {
               // borrar. Si hay alguno, muestra mensaje accionable.
               IconButton(
                 icon: const Icon(Icons.delete_outline,
-                    color: AppColors.accentRed),
+                    color: AppColors.error),
                 tooltip: 'Eliminar tarifa',
                 onPressed: () => _confirmarEliminar(context),
                 visualDensity: VisualDensity.compact,
@@ -350,7 +350,7 @@ class _CardTarifa extends StatelessWidget {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.accentRed,
+              backgroundColor: AppColors.error,
             ),
             onPressed: () => Navigator.of(dCtx).pop(true),
             child: const Text('ELIMINAR'),

@@ -599,8 +599,8 @@ class _PosicionOcupadaDialogState extends State<_PosicionOcupadaDialog> {
                   ? null
                   : () => _retirar(EstadoCubierta.descartada),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.accentRed,
-                side: const BorderSide(color: AppColors.accentRed),
+                foregroundColor: AppColors.error,
+                side: const BorderSide(color: AppColors.error),
               ),
               child: const Text('DESCARTAR'),
             ),
@@ -986,7 +986,7 @@ class _BarraVida extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = porcentaje >= 100
-        ? AppColors.accentRed
+        ? AppColors.error
         : porcentaje >= 80
             ? AppColors.warning
             : AppColors.success;

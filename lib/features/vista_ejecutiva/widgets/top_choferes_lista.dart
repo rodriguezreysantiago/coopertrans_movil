@@ -104,7 +104,7 @@ class _ChoferRow extends StatelessWidget {
       case 'amarillo':
         return AppColors.warning;
       case 'rojo':
-        return AppColors.accentRed;
+        return AppColors.error;
       default:
         return Colors.white24;
     }

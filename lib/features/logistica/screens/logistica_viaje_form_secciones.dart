@@ -497,7 +497,7 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
                 return Text(
                   'Error cargando adelantos: ${snap.error}',
                   style: const TextStyle(
-                      color: AppColors.accentRed, fontSize: 12),
+                      color: AppColors.error, fontSize: 12),
                 );
               }
               if (!snap.hasData) {

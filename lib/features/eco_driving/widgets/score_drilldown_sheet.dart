@@ -236,7 +236,7 @@ class _Header extends StatelessWidget {
     final color = s == null
         ? Colors.white38
         : s < 60
-            ? AppColors.accentRed
+            ? AppColors.error
             : s < 80
                 ? AppColors.warning
                 : AppColors.success;
@@ -325,7 +325,7 @@ class _FilaDia extends StatelessWidget {
     final color = s == null
         ? Colors.white38
         : s < 60
-            ? AppColors.accentRed
+            ? AppColors.error
             : s < 80
                 ? AppColors.warning
                 : AppColors.success;
@@ -398,7 +398,7 @@ class _BarraSubscore extends StatelessWidget {
     final color = s == null
         ? Colors.white24
         : s < 60
-            ? AppColors.accentRed
+            ? AppColors.error
             : s < 80
                 ? AppColors.warning
                 : AppColors.success;

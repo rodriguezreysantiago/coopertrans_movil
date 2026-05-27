@@ -12,7 +12,7 @@ extension MantenimientoEstadoX on MantenimientoEstado {
   Color get color {
     switch (this) {
       case MantenimientoEstado.vencido:
-        return AppColors.accentRed;
+        return AppColors.error;
       case MantenimientoEstado.urgente:
         return AppColors.warning;
       case MantenimientoEstado.programar:

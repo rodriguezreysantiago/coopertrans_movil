@@ -258,7 +258,7 @@ class _Toolbar extends StatelessWidget {
                 _ContadorMini(
                     label: '> 1H',
                     valor: '$stale',
-                    color: AppColors.accentRed),
+                    color: AppColors.error),
                 const SizedBox(width: 12),
                 _ContadorMini(
                     label: 'DRIFT',
@@ -309,7 +309,7 @@ class _Toolbar extends StatelessWidget {
                   label: 'OCULTAR > 1H',
                   icono: Icons.timer_off_outlined,
                   activo: ocultarStale,
-                  colorActivo: AppColors.accentRed,
+                  colorActivo: AppColors.error,
                   onChange: onOcultarStaleToggle,
                 ),
                 const SizedBox(width: 4),
@@ -591,7 +591,7 @@ class _Mapa extends StatelessWidget {
     required bool tieneDrift,
   }) {
     if (tieneDrift) return AppColors.warning;
-    if (minStale != null && minStale > 60) return AppColors.accentRed;
+    if (minStale != null && minStale > 60) return AppColors.error;
     if (ignition) return AppColors.success;
     return Colors.white60;
   }
@@ -950,7 +950,7 @@ class _TelemetriaVolvoFila extends StatelessWidget {
   static Color _colorPorcentaje(double pct) {
     if (pct > 50) return AppColors.success;
     if (pct >= 20) return AppColors.warning;
-    return AppColors.accentRed;
+    return AppColors.error;
   }
 }
 

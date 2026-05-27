@@ -736,7 +736,7 @@ class _ResumenCard extends StatelessWidget {
                   label: 'VEL MÁX',
                   valor: '${j.velocidadMax} km/h',
                   icono: Icons.speed,
-                  color: AppColors.accentRed),
+                  color: AppColors.error),
             ],
           ),
         ],

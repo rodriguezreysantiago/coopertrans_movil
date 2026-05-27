@@ -70,7 +70,7 @@ class AdminMantenimientoDetalleScreen extends StatelessWidget {
 Color _colorSeveridad(SeveridadAdvertencia s) {
   switch (s) {
     case SeveridadAdvertencia.critico:
-      return AppColors.accentRed;
+      return AppColors.error;
     case SeveridadAdvertencia.alto:
       return AppColors.warning;
     case SeveridadAdvertencia.medio:

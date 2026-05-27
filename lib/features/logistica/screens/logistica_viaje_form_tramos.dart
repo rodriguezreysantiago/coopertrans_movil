@@ -231,7 +231,7 @@ class _TramoCard extends StatelessWidget {
       trailing: puedeEliminar
           ? IconButton(
               icon: const Icon(Icons.delete_outline,
-                  color: AppColors.accentRed, size: 18),
+                  color: AppColors.error, size: 18),
               onPressed: onEliminar,
               tooltip: 'Eliminar tramo',
               visualDensity: VisualDensity.compact,

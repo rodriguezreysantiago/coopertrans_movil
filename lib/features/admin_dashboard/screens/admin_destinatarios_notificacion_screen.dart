@@ -233,7 +233,7 @@ const _reglas = <_GrupoReglas>[
   ),
   _GrupoReglas(
     label: 'BYPASS SEGURIDAD VOLVO (V5)',
-    color: AppColors.accentRed,
+    color: AppColors.error,
     reglas: [
       _Regla(
         key: 'bypassSeguridad',

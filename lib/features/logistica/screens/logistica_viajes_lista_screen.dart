@@ -122,7 +122,7 @@ class _LogisticaViajesListaScreenState
                         padding: const EdgeInsets.all(24),
                         child: Text(
                           'Error: ${snap.error}',
-                          style: const TextStyle(color: AppColors.accentRed),
+                          style: const TextStyle(color: AppColors.error),
                         ),
                       ),
                     );
@@ -247,7 +247,7 @@ class _BarraFiltros extends StatelessWidget {
             label: const Text('Mostrar eliminados'),
             selected: verBorrados,
             onSelected: onVerBorradosChanged,
-            selectedColor: AppColors.accentRed.withValues(alpha: 0.4),
+            selectedColor: AppColors.error.withValues(alpha: 0.4),
             avatar: Icon(
               verBorrados ? Icons.visibility : Icons.visibility_off,
               size: 16,
@@ -418,7 +418,7 @@ class _ViajeTile extends StatelessWidget {
               if (!viaje.activo) ...[
                 const _ChipMini(
                   label: 'BORRADO',
-                  color: AppColors.accentRed,
+                  color: AppColors.error,
                 ),
                 const SizedBox(width: 4),
                 // Botón rápido restaurar — evita abrir el detalle solo

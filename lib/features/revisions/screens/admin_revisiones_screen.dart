@@ -283,7 +283,7 @@ class _DetalleRevision extends StatelessWidget {
       _InfoCard(
         label: 'SUELTA',
         valor: (data['unidad_actual'] ?? 'NINGUNA').toString(),
-        valorColor: AppColors.accentRed,
+        valorColor: AppColors.error,
         icon: Icons.link_off,
       ),
       const SizedBox(height: 10),
@@ -684,22 +684,22 @@ class _PreviewArchivo extends StatelessWidget {
             ? Container(
                 height: 180,
                 decoration: BoxDecoration(
-                  color: AppColors.accentRed.withAlpha(15),
+                  color: AppColors.error.withAlpha(15),
                   borderRadius: BorderRadius.circular(15),
                   border: Border.all(
-                      color: AppColors.accentRed.withAlpha(80)),
+                      color: AppColors.error.withAlpha(80)),
                 ),
                 child: const Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.picture_as_pdf,
-                          size: 60, color: AppColors.accentRed),
+                          size: 60, color: AppColors.error),
                       SizedBox(height: 10),
                       Text(
                         'Tocar para ver PDF',
                         style: TextStyle(
-                          color: AppColors.accentRed,
+                          color: AppColors.error,
                           fontWeight: FontWeight.bold,
                           fontSize: 12,
                           letterSpacing: 0.8,
@@ -779,18 +779,18 @@ class _BotonesAccion extends StatelessWidget {
             Expanded(
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: AppColors.accentRed),
+                  side: const BorderSide(color: AppColors.error),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
                 onPressed: onRechazar,
-                icon: const Icon(Icons.close, color: AppColors.accentRed),
+                icon: const Icon(Icons.close, color: AppColors.error),
                 label: const Text(
                   'RECHAZAR',
                   style: TextStyle(
-                    color: AppColors.accentRed,
+                    color: AppColors.error,
                     fontWeight: FontWeight.bold,
                   ),
                 ),

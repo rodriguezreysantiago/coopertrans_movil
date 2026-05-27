@@ -73,7 +73,7 @@ class AppConfirmDialog {
             if (icon != null) ...[
               Icon(
                 icon,
-                color: destructive ? AppColors.accentRed : AppColors.success,
+                color: destructive ? AppColors.error : AppColors.success,
                 size: 22,
               ),
               const SizedBox(width: 10),
@@ -110,7 +110,7 @@ class AppConfirmDialog {
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor:
-                  destructive ? AppColors.accentRed : Colors.green,
+                  destructive ? AppColors.error : Colors.green,
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.pop(dCtx, true),

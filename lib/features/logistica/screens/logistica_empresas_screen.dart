@@ -264,7 +264,7 @@ class _CardEmpresa extends StatelessWidget {
               // y mostramos un mensaje accionable.
               IconButton(
                 icon: const Icon(Icons.delete_outline,
-                    color: AppColors.accentRed),
+                    color: AppColors.error),
                 tooltip: 'Eliminar empresa',
                 onPressed: () => _confirmarEliminar(context),
                 visualDensity: VisualDensity.compact,
@@ -340,7 +340,7 @@ class _CardEmpresa extends StatelessWidget {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.accentRed,
+              backgroundColor: AppColors.error,
             ),
             onPressed: () => Navigator.of(dCtx).pop(true),
             child: const Text('ELIMINAR'),
@@ -976,7 +976,7 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
               const SizedBox(height: 12),
               Text(
                 _error!,
-                style: const TextStyle(color: AppColors.accentRed),
+                style: const TextStyle(color: AppColors.error),
               ),
             ],
           ],

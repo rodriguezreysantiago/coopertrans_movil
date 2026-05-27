@@ -71,7 +71,7 @@ class _BotStatusCard extends StatelessWidget {
         final e = snap.data ?? const CachatoreEstadoBot();
         final vivo = e.vivo;
         final color = !vivo
-            ? AppColors.accentRed
+            ? AppColors.error
             : (e.pausado ? AppColors.warning : AppColors.success);
         final titulo = !vivo
             ? 'Bot sin responder'
@@ -326,7 +326,7 @@ class _VigiladoCard extends StatelessWidget {
                   tooltip: 'Quitar de la lista',
                   visualDensity: VisualDensity.compact,
                   icon: const Icon(Icons.delete_outline,
-                      color: AppColors.accentRed),
+                      color: AppColors.error),
                   onPressed: () => _confirmarBorrar(context, o),
                 ),
               ],
@@ -361,7 +361,7 @@ class _VigiladoCard extends StatelessWidget {
               onPressed: () => Navigator.pop(context, false),
               child: const Text('Cancelar')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.accentRed),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Quitar'),
           ),
@@ -599,9 +599,9 @@ class _ConcretadoCard extends StatelessWidget {
             ),
             ListTile(
               leading:
-                  const Icon(Icons.delete_outline, color: AppColors.accentRed),
+                  const Icon(Icons.delete_outline, color: AppColors.error),
               title: const Text('Cancelar turno',
-                  style: TextStyle(color: AppColors.accentRed)),
+                  style: TextStyle(color: AppColors.error)),
               subtitle: const Text('Lo cancela también en iTurnos (libera el cupo)',
                   style: TextStyle(color: AppColors.textTertiary)),
               onTap: () {
@@ -632,7 +632,7 @@ class _ConcretadoCard extends StatelessWidget {
               onPressed: () => Navigator.pop(context, false),
               child: const Text('No')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.accentRed),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Sí, cancelar turno'),
           ),
@@ -658,7 +658,7 @@ class _EstadoBadge extends StatelessWidget {
     if (est.esOk) {
       color = AppColors.success;
     } else if (est.esError) {
-      color = AppColors.accentRed;
+      color = AppColors.error;
     } else if (est.esWarn) {
       color = AppColors.warning;
     } else {
@@ -864,7 +864,7 @@ class _WizardSheetState extends State<_WizardSheet> {
         break;
       case CachatoreChequeoResultado.error:
         messenger.showSnackBar(SnackBar(
-          backgroundColor: AppColors.accentRed,
+          backgroundColor: AppColors.error,
           content: Text(
               'No pude verificar a $nombre: ${res.detalle ?? "error desconocido"}'),
           duration: const Duration(seconds: 6),

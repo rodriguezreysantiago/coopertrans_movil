@@ -153,7 +153,7 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
                         padding: const EdgeInsets.all(16),
                         child: Text(
                           'Error: ${snap.error}',
-                          style: const TextStyle(color: AppColors.accentRed),
+                          style: const TextStyle(color: AppColors.error),
                         ),
                       ),
                     );

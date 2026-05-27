@@ -143,7 +143,7 @@ class _RolBadge extends StatelessWidget {
   Color _color() {
     switch (rol) {
       case AppRoles.admin:
-        return AppColors.accentRed;
+        return AppColors.error;
       case AppRoles.supervisor:
         return AppColors.warning;
       case AppRoles.planta:
@@ -487,11 +487,11 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
                 nombreVisible: nombre,
               ),
               icon: const Icon(Icons.person_off_outlined,
-                  color: AppColors.accentRed),
+                  color: AppColors.error),
               label: const Text(
                 'Dar de baja',
                 style: TextStyle(
-                  color: AppColors.accentRed,
+                  color: AppColors.error,
                   fontWeight: FontWeight.bold,
                 ),
               ),

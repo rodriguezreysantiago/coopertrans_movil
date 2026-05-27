@@ -198,7 +198,7 @@ class _MarkerCubierta extends StatelessWidget {
 
   Color _colorVida(double? pct) {
     if (pct == null) return AppColors.success;
-    if (pct >= 100) return AppColors.accentRed;
+    if (pct >= 100) return AppColors.error;
     if (pct >= 80) return AppColors.warning;
     return AppColors.success;
   }

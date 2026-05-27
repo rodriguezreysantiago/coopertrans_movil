@@ -280,7 +280,7 @@ class _ListadoCruce extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Text('Error: ${snap.error}',
-                  style: const TextStyle(color: AppColors.accentRed)),
+                  style: const TextStyle(color: AppColors.error)),
             ),
           );
         }
@@ -417,7 +417,7 @@ class _Resumen extends StatelessWidget {
           _ChipResumen(label: 'OK', valor: ok, color: AppColors.success),
           const SizedBox(width: 10),
           _ChipResumen(
-              label: 'DNI distinto', valor: dni, color: AppColors.accentRed),
+              label: 'DNI distinto', valor: dni, color: AppColors.error),
           const SizedBox(width: 10),
           _ChipResumen(
               label: 'Sin asignación',
@@ -480,7 +480,7 @@ class _FilaCruce extends StatelessWidget {
       case _Estado.ok:
         return AppColors.success;
       case _Estado.dniDistinto:
-        return AppColors.accentRed;
+        return AppColors.error;
       case _Estado.sinAsignacion:
         return AppColors.warning;
     }
@@ -578,7 +578,7 @@ class _FilaCruce extends StatelessWidget {
                 label: 'Sistema',
                 labelColor: estado == _Estado.ok
                     ? AppColors.success
-                    : AppColors.accentRed,
+                    : AppColors.error,
                 nombre: (asignacion!.choferNombre ?? '').isNotEmpty
                     ? asignacion!.choferNombre!
                     : 'DNI ${asignacion!.choferDni}',

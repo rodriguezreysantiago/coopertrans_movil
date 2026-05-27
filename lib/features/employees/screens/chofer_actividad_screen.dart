@@ -535,7 +535,7 @@ class _EventosPorSeveridadCard extends StatelessWidget {
       children: [
         Expanded(
           child: _SeveridadMini(
-              label: 'HIGH', valor: high, color: AppColors.accentRed),
+              label: 'HIGH', valor: high, color: AppColors.error),
         ),
         const SizedBox(width: 8),
         Expanded(

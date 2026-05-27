@@ -84,13 +84,13 @@ class AppFileThumbnail extends StatelessWidget {
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: AppColors.accentRed.withAlpha(20),
+        color: AppColors.error.withAlpha(20),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.accentRed.withAlpha(80)),
+        border: Border.all(color: AppColors.error.withAlpha(80)),
       ),
       child: Icon(
         Icons.picture_as_pdf,
-        color: AppColors.accentRed,
+        color: AppColors.error,
         size: size * 0.55,
       ),
     );

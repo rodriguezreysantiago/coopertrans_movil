@@ -470,7 +470,7 @@ class _AccesoChecklist extends StatelessWidget {
               'Checklist realizado (${AppFormatters.formatearFechaCorta(fechaDoc)})';
           icono = Icons.check_circle;
         } else if (dia > 15) {
-          color = AppColors.accentRed;
+          color = AppColors.error;
           mensaje = 'Checklist VENCIDO: realizar YA';
           icono = Icons.warning_amber_rounded;
         } else if (dia > 10) {

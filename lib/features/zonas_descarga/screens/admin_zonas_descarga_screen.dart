@@ -247,7 +247,7 @@ class _ZonaCard extends StatelessWidget {
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete_outline,
-                      color: AppColors.accentRed),
+                      color: AppColors.error),
                   tooltip: 'Eliminar zona',
                   onPressed: () => _confirmarBorrar(context, zona),
                 ),
@@ -273,7 +273,7 @@ class _ZonaCard extends StatelessWidget {
               child: const Text('Cancelar')),
           FilledButton(
             style:
-                FilledButton.styleFrom(backgroundColor: AppColors.accentRed),
+                FilledButton.styleFrom(backgroundColor: AppColors.error),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Eliminar'),
           ),
@@ -599,7 +599,7 @@ class _ZonaFormState extends State<_ZonaForm> {
                 const SizedBox(height: 8),
                 Text(_error!,
                     style: const TextStyle(
-                        color: AppColors.accentRed, fontSize: 13)),
+                        color: AppColors.error, fontSize: 13)),
               ],
               const SizedBox(height: 18),
               FilledButton.icon(

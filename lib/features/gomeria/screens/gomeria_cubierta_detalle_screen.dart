@@ -233,7 +233,7 @@ class _Identidad extends StatelessWidget {
       case EstadoCubierta.enRecapado:
         return AppColors.accentTeal;
       case EstadoCubierta.descartada:
-        return AppColors.accentRed;
+        return AppColors.error;
     }
   }
 }
@@ -350,7 +350,7 @@ class _RecapadoTile extends StatelessWidget {
         ? AppColors.accentTeal
         : r.resultado == ResultadoRecapado.recibida
             ? AppColors.success
-            : AppColors.accentRed;
+            : AppColors.error;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),

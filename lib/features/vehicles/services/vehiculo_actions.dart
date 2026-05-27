@@ -260,7 +260,7 @@ class VehiculoActions {
               ),
               ListTile(
                 leading: const Icon(Icons.picture_as_pdf,
-                    color: AppColors.accentRed),
+                    color: AppColors.error),
                 title: const Text('PDF / archivo del dispositivo',
                     style: TextStyle(color: Colors.white)),
                 onTap: () =>
@@ -595,7 +595,7 @@ class VehiculoActions {
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('DAR DE BAJA',
                 style: TextStyle(
-                  color: AppColors.accentRed,
+                  color: AppColors.error,
                   fontWeight: FontWeight.bold,
                 )),
           ),

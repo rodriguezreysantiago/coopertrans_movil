@@ -233,7 +233,7 @@ class _AlertasFinDeVida extends StatelessWidget {
             alertas.sort((a, b) => b.porcentaje.compareTo(a.porcentaje));
             final criticas = alertas.where((a) => a.porcentaje >= 100).length;
             final color = criticas > 0
-                ? AppColors.accentRed
+                ? AppColors.error
                 : AppColors.warning;
             final etiqueta = criticas > 0
                 ? '$criticas cubierta${criticas == 1 ? "" : "s"} pasaron su vida útil'
@@ -354,7 +354,7 @@ class _AlertasSheet extends StatelessWidget {
               itemBuilder: (_, i) {
                 final a = alertas[i];
                 final color = a.porcentaje >= 100
-                    ? AppColors.accentRed
+                    ? AppColors.error
                     : AppColors.warning;
                 final pos = a.instalada.posicionTipada;
                 return AppCard(

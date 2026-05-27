@@ -355,7 +355,7 @@ class EmpleadoActions {
           ElevatedButton(
             onPressed: () => Navigator.of(dCtx).pop(true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentRed,
+              backgroundColor: AppColors.error,
               foregroundColor: Colors.white,
             ),
             child: const Text('SÍ, ACTUALIZAR'),
@@ -630,7 +630,7 @@ class EmpleadoActions {
               ),
               ListTile(
                 leading: const Icon(Icons.picture_as_pdf,
-                    color: AppColors.accentRed),
+                    color: AppColors.error),
                 title: const Text('PDF / archivo del dispositivo',
                     style: TextStyle(color: Colors.white)),
                 onTap: () =>
@@ -988,11 +988,11 @@ class EmpleadoActions {
                   if (idx == 0) {
                     return ListTile(
                       leading:
-                          const Icon(Icons.link_off, color: AppColors.accentRed),
+                          const Icon(Icons.link_off, color: AppColors.error),
                       title: const Text(
                         'DESVINCULAR',
                         style: TextStyle(
-                          color: AppColors.accentRed,
+                          color: AppColors.error,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -1279,7 +1279,7 @@ class EmpleadoActions {
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('DAR DE BAJA',
                 style: TextStyle(
-                  color: AppColors.accentRed,
+                  color: AppColors.error,
                   fontWeight: FontWeight.bold,
                 )),
           ),
@@ -1418,7 +1418,7 @@ class EmpleadoActions {
                 const SizedBox(height: 8),
                 Text(
                   errorTxt!,
-                  style: const TextStyle(color: AppColors.accentRed, fontSize: 12),
+                  style: const TextStyle(color: AppColors.error, fontSize: 12),
                 ),
               ],
             ],

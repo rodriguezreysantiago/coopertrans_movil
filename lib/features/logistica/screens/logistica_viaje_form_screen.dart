@@ -886,7 +886,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
             padding: const EdgeInsets.all(24),
             child: Text(
               _errorCarga!,
-              style: const TextStyle(color: AppColors.accentRed),
+              style: const TextStyle(color: AppColors.error),
             ),
           ),
         ),

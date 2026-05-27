@@ -601,7 +601,7 @@ class _SeccionBorrado extends StatelessWidget {
     return _Seccion(
       titulo: 'VIAJE BORRADO (SOFT-DELETE)',
       icono: Icons.delete_outline,
-      iconColor: AppColors.accentRed,
+      iconColor: AppColors.error,
       children: [
         if (v.borradoEn != null)
           _Linea(
@@ -657,8 +657,8 @@ class _BotoneraAcciones extends StatelessWidget {
             icon: const Icon(Icons.delete_outline, size: 18),
             label: const Text('BORRAR'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.accentRed,
-              side: const BorderSide(color: AppColors.accentRed),
+              foregroundColor: AppColors.error,
+              side: const BorderSide(color: AppColors.error),
             ),
           ),
         ] else ...[
@@ -681,8 +681,8 @@ class _BotoneraAcciones extends StatelessWidget {
             icon: const Icon(Icons.delete_forever, size: 18),
             label: const Text('ELIMINAR DEFINITIVO'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.accentRed,
-              side: const BorderSide(color: AppColors.accentRed),
+              foregroundColor: AppColors.error,
+              side: const BorderSide(color: AppColors.error),
             ),
           ),
         ],
@@ -734,7 +734,7 @@ class _BotoneraAcciones extends StatelessWidget {
           FilledButton(
             onPressed: () => Navigator.pop(dCtx, true),
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.accentRed,
+              backgroundColor: AppColors.error,
             ),
             child: const Text('ELIMINAR DEFINITIVO'),
           ),
@@ -796,7 +796,7 @@ class _BotoneraAcciones extends StatelessWidget {
           ElevatedButton(
             onPressed: () => Navigator.pop(dCtx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentRed,
+              backgroundColor: AppColors.error,
               foregroundColor: Colors.white,
             ),
             child: const Text('BORRAR'),

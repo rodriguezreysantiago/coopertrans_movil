@@ -349,7 +349,7 @@ class _Toolbar extends StatelessWidget {
                 label: 'HEATMAP',
                 icono: Icons.local_fire_department,
                 activo: heatmapActivo,
-                colorActivo: AppColors.accentRed,
+                colorActivo: AppColors.error,
                 onChange: onHeatmapToggle,
               ),
             ],
@@ -629,7 +629,7 @@ class _Mapa extends StatelessWidget {
           // círculos vecinos se solapan formando una mancha.
           radius: 250,
           useRadiusInMeter: true,
-          color: AppColors.accentRed.withAlpha(alpha),
+          color: AppColors.error.withAlpha(alpha),
           borderStrokeWidth: 0,
         );
       }).toList(),
@@ -660,7 +660,7 @@ class _Mapa extends StatelessWidget {
 
   static Color _colorVelocidad(double? vel) {
     if (vel == null) return Colors.white38;
-    if (vel > 100) return AppColors.accentRed;
+    if (vel > 100) return AppColors.error;
     if (vel > 80) return AppColors.warning;
     return AppColors.success;
   }
@@ -681,7 +681,7 @@ class _Mapa extends StatelessWidget {
     final color = atendida
         ? Colors.white38
         : severidad == 'HIGH'
-            ? AppColors.accentRed
+            ? AppColors.error
             : severidad == 'MEDIUM'
                 ? AppColors.warning
                 : AppColors.success;

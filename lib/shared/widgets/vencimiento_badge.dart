@@ -17,7 +17,7 @@ extension VencimientoEstadoX on VencimientoEstado {
   Color get color {
     switch (this) {
       case VencimientoEstado.vencido:
-        return AppColors.accentRed;
+        return AppColors.error;
       case VencimientoEstado.critico:
         return AppColors.warning;
       case VencimientoEstado.proximo:
@@ -27,7 +27,7 @@ extension VencimientoEstadoX on VencimientoEstado {
       case VencimientoEstado.sinFecha:
         return Colors.white24;
       case VencimientoEstado.invalida:
-        return AppColors.accentRed;
+        return AppColors.error;
     }
   }
 }

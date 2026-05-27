@@ -36,7 +36,7 @@ class VencimientoItemCard extends StatelessWidget {
       onTap: onTap,
       highlighted: esInvalida || esCritica,
       borderColor: esInvalida || esVencida
-          ? AppColors.accentRed.withAlpha(120)
+          ? AppColors.error.withAlpha(120)
           : esCritica
               ? AppColors.warning.withAlpha(120)
               : null,

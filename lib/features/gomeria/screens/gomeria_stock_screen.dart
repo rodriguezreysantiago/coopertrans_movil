@@ -255,7 +255,7 @@ class _FiltrosEstado extends StatelessWidget {
               label: 'DESCARTADAS',
               seleccionado: seleccionado == EstadoCubierta.descartada,
               onTap: () => onChanged(EstadoCubierta.descartada),
-              color: AppColors.accentRed,
+              color: AppColors.error,
             ),
           ],
         ),
@@ -436,7 +436,7 @@ class _CubiertaTile extends StatelessWidget {
       case EstadoCubierta.enRecapado:
         return AppColors.accentTeal;
       case EstadoCubierta.descartada:
-        return AppColors.accentRed;
+        return AppColors.error;
     }
   }
 }
@@ -588,14 +588,14 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppColors.accentRed.withValues(alpha: 0.15),
-                    border: Border.all(color: AppColors.accentRed),
+                    color: AppColors.error.withValues(alpha: 0.15),
+                    border: Border.all(color: AppColors.error),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     _error!,
                     style: const TextStyle(
-                        color: AppColors.accentRed, fontSize: 12),
+                        color: AppColors.error, fontSize: 12),
                   ),
                 ),
               ],

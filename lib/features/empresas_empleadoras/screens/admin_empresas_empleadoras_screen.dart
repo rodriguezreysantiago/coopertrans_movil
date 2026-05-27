@@ -386,7 +386,7 @@ class _FilaDocEmpresa extends StatelessWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.picture_as_pdf,
-                    color: AppColors.accentRed),
+                    color: AppColors.error),
                 title: const Text('PDF / archivo del dispositivo',
                     style: TextStyle(color: Colors.white)),
                 onTap: () => Navigator.pop(sCtx, _Fuente.archivo),

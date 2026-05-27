@@ -434,7 +434,7 @@ class _UbicacionMapPickerState extends State<UbicacionMapPicker> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
               child: Text(
                 _errorBusqueda!,
-                style: const TextStyle(color: AppColors.accentRed, fontSize: 12),
+                style: const TextStyle(color: AppColors.error, fontSize: 12),
               ),
             ),
           if (_resultados.isNotEmpty)

@@ -38,7 +38,7 @@ class AsignacionHistorialVehiculoScreen extends StatelessWidget {
               child: Text(
                 'Error al cargar el historial:\n${snap.error}',
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.accentRed),
+                style: const TextStyle(color: AppColors.error),
               ),
             );
           }

@@ -630,7 +630,7 @@ class _SeccionKPIs extends StatelessWidget {
             label: 'NETO a pagar al chofer',
             valor: netoChofer,
             color:
-                netoChofer >= 0 ? AppColors.success : AppColors.accentRed,
+                netoChofer >= 0 ? AppColors.success : AppColors.error,
             destacado: true,
           ),
         ],
@@ -861,7 +861,7 @@ class _MiniCelda extends StatelessWidget {
               color: destacado
                   ? (valor >= 0
                       ? AppColors.success
-                      : AppColors.accentRed)
+                      : AppColors.error)
                   : Colors.white,
               fontSize: destacado ? 13 : 12,
               fontWeight: FontWeight.w600,

@@ -220,7 +220,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                     'peores. Basado en los mismos eventos Sitrack que YPF '
                     'audita en su Tablero ICM.',
                 icono: Icons.leaderboard_rounded,
-                color: AppColors.accentRed,
+                color: AppColors.error,
                 onTap: _generando ? null : _ejecutarReporteIcm,
               ),
             ],

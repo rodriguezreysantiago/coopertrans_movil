@@ -284,7 +284,7 @@ class _CardUbicacion extends StatelessWidget {
           // del service evita borrar algo que esté en uso.
           IconButton(
             icon: const Icon(Icons.delete_outline,
-                color: AppColors.accentRed),
+                color: AppColors.error),
             tooltip: 'Eliminar ubicación',
             onPressed: () => _confirmarEliminar(context),
           ),
@@ -324,7 +324,7 @@ class _CardUbicacion extends StatelessWidget {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.accentRed,
+              backgroundColor: AppColors.error,
             ),
             onPressed: () => Navigator.of(dCtx).pop(true),
             child: const Text('ELIMINAR'),
@@ -549,8 +549,8 @@ class _EditarUbicacionSheetState extends State<_EditarUbicacionSheet> {
                   icon: const Icon(Icons.delete_outline, size: 18),
                   label: const Text('ELIMINAR UBICACIÓN'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accentRed,
-                    side: const BorderSide(color: AppColors.accentRed),
+                    foregroundColor: AppColors.error,
+                    side: const BorderSide(color: AppColors.error),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     textStyle: const TextStyle(
                       fontWeight: FontWeight.bold,
@@ -589,7 +589,7 @@ class _EditarUbicacionSheetState extends State<_EditarUbicacionSheet> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.accentRed,
+              backgroundColor: AppColors.error,
             ),
             onPressed: () => Navigator.of(dCtx).pop(true),
             child: const Text('ELIMINAR'),
@@ -991,7 +991,7 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
               if (_error != null) ...[
                 const SizedBox(height: 12),
                 Text(_error!,
-                    style: const TextStyle(color: AppColors.accentRed)),
+                    style: const TextStyle(color: AppColors.error)),
               ],
             ],
           ),

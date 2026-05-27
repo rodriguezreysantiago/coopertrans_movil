@@ -308,7 +308,7 @@ class _SeveridadBadge extends StatelessWidget {
 Color _colorSeveridad(String severidad) {
   switch (severidad) {
     case 'HIGH':
-      return AppColors.accentRed;
+      return AppColors.error;
     case 'MEDIUM':
       return AppColors.warning;
     case 'LOW':

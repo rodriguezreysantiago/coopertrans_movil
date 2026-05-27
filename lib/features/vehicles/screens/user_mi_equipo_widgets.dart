@@ -219,7 +219,7 @@ class _CardUnidad extends StatelessWidget {
               padding: const EdgeInsets.all(12),
               child: Text(
                 'Error cargando $patente: ${snap.error}',
-                style: const TextStyle(color: AppColors.accentRed),
+                style: const TextStyle(color: AppColors.error),
               ),
             ),
           );
@@ -363,7 +363,7 @@ class _ResumenVencimientosEquipo extends StatelessWidget {
       if (vencidos > 0)
         _ChipResumen(
           texto: '$vencidos vencido${vencidos == 1 ? "" : "s"}',
-          color: AppColors.accentRed,
+          color: AppColors.error,
         ),
       if (criticos > 0)
         _ChipResumen(
@@ -629,7 +629,7 @@ class _DatoCombustible extends StatelessWidget {
   Color get _color {
     if (porcentaje >= 50) return AppColors.success;
     if (porcentaje >= 20) return AppColors.warning;
-    return AppColors.accentRed;
+    return AppColors.error;
   }
 
   @override

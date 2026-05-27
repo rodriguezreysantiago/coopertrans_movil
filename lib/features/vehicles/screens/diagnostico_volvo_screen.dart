@@ -140,7 +140,7 @@ class _ResumenRequest extends StatelessWidget {
   const _ResumenRequest({required this.diag});
 
   Color get _statusColor {
-    if (diag.errorMessage != null) return AppColors.accentRed;
+    if (diag.errorMessage != null) return AppColors.error;
     final s = diag.statusCode ?? 0;
     if (s >= 200 && s < 300) return AppColors.success;
     if (s >= 400) return AppColors.warning;
@@ -188,14 +188,14 @@ class _ResumenRequest extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: AppColors.accentRed.withAlpha(20),
+                color: AppColors.error.withAlpha(20),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.accentRed.withAlpha(60)),
+                border: Border.all(color: AppColors.error.withAlpha(60)),
               ),
               child: Text(
                 diag.errorMessage!,
                 style: const TextStyle(
-                  color: AppColors.accentRed,
+                  color: AppColors.error,
                   fontSize: 12,
                   fontFamily: 'monospace',
                 ),

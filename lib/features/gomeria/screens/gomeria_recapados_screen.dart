@@ -216,7 +216,7 @@ class _ResumenHistorico extends StatelessWidget {
             children: [
               _stat('Total', '$total', AppColors.accentTeal),
               _stat('Recibidas', '$recibidas', AppColors.success),
-              _stat('Descartadas', '$descartadas', AppColors.accentRed),
+              _stat('Descartadas', '$descartadas', AppColors.error),
               if (costoTotal > 0)
                 _stat('Costo total',
                     '\$${AppFormatters.formatearMonto(costoTotal)}',
@@ -264,7 +264,7 @@ class _RecapadoTile extends StatelessWidget {
         ? AppColors.accentTeal
         : r.resultado == ResultadoRecapado.recibida
             ? AppColors.success
-            : AppColors.accentRed;
+            : AppColors.error;
     return AppCard(
       onTap: onTap,
       padding: const EdgeInsets.all(14),
@@ -660,7 +660,7 @@ class _CerrarRecapadoDialogState extends State<_CerrarRecapadoDialog> {
                       value: ResultadoRecapado.descartadaPorProveedor,
                       title: Text(
                           'Descartada por el proveedor (estructura dañada)'),
-                      activeColor: AppColors.accentRed,
+                      activeColor: AppColors.error,
                     ),
                   ],
                 ),

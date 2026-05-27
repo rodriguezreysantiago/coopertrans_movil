@@ -72,7 +72,7 @@ class _ResumenContador extends StatelessWidget {
               _MiniContador(
                   label: 'Con error',
                   count: errores,
-                  color: AppColors.accentRed,
+                  color: AppColors.error,
                   activo: filtroActivo == 'ERROR',
                   onTap: () => onTapEstado('ERROR')),
             ],
@@ -268,13 +268,13 @@ class _ItemCola extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppColors.accentRed.withAlpha(15),
+                color: AppColors.error.withAlpha(15),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
                 error,
                 style: const TextStyle(
-                  color: AppColors.accentRed,
+                  color: AppColors.error,
                   fontSize: 11,
                   height: 1.3,
                 ),
@@ -341,7 +341,7 @@ class _ItemCola extends StatelessWidget {
       case 'ENVIADO':
         return AppColors.success;
       case 'ERROR':
-        return AppColors.accentRed;
+        return AppColors.error;
       default:
         return Colors.white38;
     }
@@ -564,20 +564,20 @@ class _DetalleColaSheet extends StatelessWidget {
               const _SeccionTitulo(
                   icono: Icons.error_outline,
                   texto: 'Error',
-                  color: AppColors.accentRed),
+                  color: AppColors.error),
               const SizedBox(height: 6),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.accentRed.withAlpha(15),
+                  color: AppColors.error.withAlpha(15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.accentRed.withAlpha(80)),
+                  border: Border.all(color: AppColors.error.withAlpha(80)),
                 ),
                 child: SelectableText(
                   error,
                   style: const TextStyle(
-                    color: AppColors.accentRed,
+                    color: AppColors.error,
                     fontSize: 12,
                     fontFamily: 'monospace',
                     height: 1.4,
@@ -688,7 +688,7 @@ class _FilaItemAgrupado extends StatelessWidget {
       final d = dias.toInt();
       if (d < 0) {
         estadoLegible = 'vencido hace ${d.abs()}d';
-        colorDias = AppColors.accentRed;
+        colorDias = AppColors.error;
       } else if (d == 0) {
         estadoLegible = 'vence hoy';
         colorDias = AppColors.warning;

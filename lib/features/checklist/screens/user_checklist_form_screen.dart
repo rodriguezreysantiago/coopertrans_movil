@@ -398,7 +398,7 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
       case 'REG':
         return AppColors.warning;
       case 'MAL':
-        return AppColors.accentRed;
+        return AppColors.error;
       default:
         return Colors.white24;
     }
@@ -418,14 +418,14 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: widget.tieneError
-              ? AppColors.accentRed
+              ? AppColors.error
               : Colors.white.withAlpha(15),
           width: widget.tieneError ? 2 : 1,
         ),
         boxShadow: widget.tieneError
             ? [
                 BoxShadow(
-                  color: AppColors.accentRed.withAlpha(50),
+                  color: AppColors.error.withAlpha(50),
                   blurRadius: 8,
                   spreadRadius: 1,
                 )

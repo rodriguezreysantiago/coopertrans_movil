@@ -382,7 +382,7 @@ class _KpisZona extends StatelessWidget {
             _KpiCard(
               label: maxPat.isEmpty ? 'Más lenta' : 'Más lenta · $maxPat',
               valor: maxDur > 0 ? '$maxDur min' : '—',
-              color: AppColors.accentRed,
+              color: AppColors.error,
               icon: Icons.priority_high,
             ),
           ],
@@ -532,7 +532,7 @@ class _FilaCola extends StatelessWidget {
     final chofer = (data['chofer_nombre'] ?? '').toString().trim();
     final dni = (data['chofer_dni'] ?? '').toString();
     final colorPos = posicion == 1
-        ? AppColors.accentRed
+        ? AppColors.error
         : (posicion <= 3 ? AppColors.warning : Colors.white54);
     return Card(
       elevation: 1,
@@ -708,7 +708,7 @@ class _FilaHistorico extends StatelessWidget {
     final entrada = (data['entrada_ts'] as Timestamp?)?.toDate();
     final salida = (data['salida_ts'] as Timestamp?)?.toDate();
     final colorDur = dur > 90
-        ? AppColors.accentRed
+        ? AppColors.error
         : (dur > 60 ? AppColors.warning : AppColors.success);
     return Card(
       elevation: 0,

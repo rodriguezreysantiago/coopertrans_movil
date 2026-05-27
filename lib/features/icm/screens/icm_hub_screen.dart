@@ -160,7 +160,7 @@ class _SeccionesIcm extends StatelessWidget {
                 child: TopChoferesLista(
                   titulo: 'TOP 5 — A MEJORAR',
                   icono: Icons.priority_high,
-                  colorTitulo: AppColors.accentRed,
+                  colorTitulo: AppColors.error,
                   items: kpis.top5Peores,
                 ),
               ),
@@ -177,7 +177,7 @@ class _SeccionesIcm extends StatelessWidget {
           TopChoferesLista(
             titulo: 'TOP 5 — A MEJORAR',
             icono: Icons.priority_high,
-            colorTitulo: AppColors.accentRed,
+            colorTitulo: AppColors.error,
             items: kpis.top5Peores,
           ),
         ],
@@ -239,7 +239,7 @@ class _ErrorReintentar extends StatelessWidget {
       child: Column(
         children: [
           const Icon(Icons.error_outline,
-              color: AppColors.accentRed, size: 36),
+              color: AppColors.error, size: 36),
           const SizedBox(height: 8),
           const Text(
             'No se pudieron cargar los KPIs del ICM',

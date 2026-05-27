@@ -1100,21 +1100,21 @@ class _CardAdelanto extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.accentRed.withValues(alpha: 0.18),
+                  color: AppColors.error.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(4),
                   border: Border.all(
                       color:
-                          AppColors.accentRed.withValues(alpha: 0.4)),
+                          AppColors.error.withValues(alpha: 0.4)),
                 ),
                 child: Row(
                   children: [
                     const Icon(Icons.delete_forever,
-                        size: 14, color: AppColors.accentRed),
+                        size: 14, color: AppColors.error),
                     const SizedBox(width: 6),
                     const Text(
                       'ELIMINADO',
                       style: TextStyle(
-                        color: AppColors.accentRed,
+                        color: AppColors.error,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1,
@@ -1169,7 +1169,7 @@ class _CardAdelanto extends StatelessWidget {
                     width: 28,
                     height: 28,
                     child: Icon(Icons.delete_outline,
-                        color: AppColors.accentRed, size: 20),
+                        color: AppColors.error, size: 20),
                   )
                 else if (pagado)
                   const SizedBox(
@@ -1216,7 +1216,7 @@ class _CardAdelanto extends StatelessWidget {
                 if (!eliminado)
                   IconButton(
                     icon: const Icon(Icons.delete_outline,
-                        color: AppColors.accentRed),
+                        color: AppColors.error),
                     tooltip: 'Eliminar adelanto',
                     onPressed: () => _confirmarEliminar(context),
                     visualDensity: VisualDensity.compact,
@@ -1384,7 +1384,7 @@ class _CardAdelanto extends StatelessWidget {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.accentRed,
+              backgroundColor: AppColors.error,
             ),
             onPressed: () => Navigator.of(dCtx).pop(true),
             child: const Text('ELIMINAR'),
@@ -1702,7 +1702,7 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                 const SizedBox(height: 12),
                 Text(
                   _error!,
-                  style: const TextStyle(color: AppColors.accentRed),
+                  style: const TextStyle(color: AppColors.error),
                 ),
               ],
             ],

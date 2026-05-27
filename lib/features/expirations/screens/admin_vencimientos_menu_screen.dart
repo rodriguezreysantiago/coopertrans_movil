@@ -182,7 +182,7 @@ class _MenuTile extends StatelessWidget {
                   minHeight: 18,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.accentRed,
+                  color: AppColors.error,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: Theme.of(context).colorScheme.surface,

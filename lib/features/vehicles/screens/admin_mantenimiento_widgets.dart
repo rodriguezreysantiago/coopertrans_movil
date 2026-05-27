@@ -371,7 +371,7 @@ class _BarraResumen extends StatelessWidget {
           _Chip(
             label: 'Vencidos',
             count: resumen.vencidos,
-            color: AppColors.accentRed,
+            color: AppColors.error,
             estado: MantenimientoEstado.vencido,
             activo: filtroActivo == MantenimientoEstado.vencido,
             onTap: onSeleccionar,

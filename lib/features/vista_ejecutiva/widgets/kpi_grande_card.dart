@@ -148,7 +148,7 @@ class KpiGrandeCard extends StatelessWidget {
             ? AppColors.success
             : (kpi.litrosPor100kmActual <= 40
                 ? AppColors.warning
-                : AppColors.accentRed));
+                : AppColors.error));
     final sublabel = !tieneDatos
         ? 'Sin datos Volvo en los últimos 30 días'
         : '${kpi.kmTotalesActual.toStringAsFixed(0)} km · '
@@ -205,7 +205,7 @@ class KpiGrandeCard extends StatelessWidget {
       } else {
         final esBueno = mejorEsSubir ? esPositivo : !esPositivo;
         colorVariacion =
-            esBueno ? AppColors.success : AppColors.accentRed;
+            esBueno ? AppColors.success : AppColors.error;
         iconoVariacion =
             esPositivo ? Icons.arrow_upward : Icons.arrow_downward;
       }

@@ -143,7 +143,7 @@ class _VehiculoCard extends StatelessWidget {
                               color: AppColors.success, size: 16),
                         if (state.error != null)
                           const Icon(Icons.error_outline,
-                              color: AppColors.accentRed, size: 16),
+                              color: AppColors.error, size: 16),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -668,11 +668,11 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
             patente: patente,
           ),
           icon: const Icon(Icons.do_not_disturb_on_outlined,
-              color: AppColors.accentRed),
+              color: AppColors.error),
           label: const Text(
             'Dar de baja',
             style: TextStyle(
-              color: AppColors.accentRed,
+              color: AppColors.error,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -763,7 +763,7 @@ class _EstadoBadge extends StatelessWidget {
         return AppColors.warning;
       case 'BAJA':
       case 'INACTIVO':
-        return AppColors.accentRed;
+        return AppColors.error;
       default:
         return Colors.white54;
     }
@@ -859,7 +859,7 @@ double? _toDouble(dynamic v) {
 Color _colorCombustible(double pct) {
   if (pct >= 50) return AppColors.success;
   if (pct >= 20) return AppColors.warning;
-  return AppColors.accentRed;
+  return AppColors.error;
 }
 
 /// Versión compacta de la telemetría para usar dentro del card de la lista.
@@ -1434,7 +1434,7 @@ class _ResumenService extends StatelessWidget {
     final colorRestantes = kmRestantes == null
         ? Colors.white60
         : kmRestantes < 0
-            ? AppColors.accentRed
+            ? AppColors.error
             : kmRestantes < 2000
                 ? AppColors.warning
                 : AppColors.success;

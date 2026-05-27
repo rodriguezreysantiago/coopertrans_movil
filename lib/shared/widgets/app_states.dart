@@ -113,7 +113,7 @@ class AppErrorState extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 60, color: AppColors.accentRed),
+            const Icon(Icons.error_outline, size: 60, color: AppColors.error),
             const SizedBox(height: 16),
             Text(
               title,
@@ -130,7 +130,7 @@ class AppErrorState extends StatelessWidget {
                 subtitle!,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: AppColors.accentRed,
+                  color: AppColors.error,
                   fontSize: 12,
                 ),
               ),
