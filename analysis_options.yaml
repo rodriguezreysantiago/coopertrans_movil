@@ -24,6 +24,11 @@ analyzer:
     - "whatsapp-bot/**"
     - "build/**"
     - "**/.dart_tool/**"
+    # island_cleanup/: pack de cleanup del design-system (final 5%).
+    # El único archivo (user_mi_perfil_screen.dart) se copió a lib/ vía
+    # Step 1 del sweep. Mientras tanto está suelto sin imports resueltos.
+    # Borrar el directorio cuando termine el sweep completo.
+    - "island_cleanup/**"
 
 linter:
   # Lints adicionales habilitados (2026-04-28) sobre la base de

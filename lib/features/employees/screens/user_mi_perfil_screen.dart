@@ -10,19 +10,50 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/prefs_service.dart';
 import '../../../core/services/storage_service.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/digit_only_formatter.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/utils/phone_formatter.dart';
+import '../../../shared/widgets/app_button.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../../shared/widgets/foto_perfil_avatar.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
-/// Perfil del chofer (vista del usuario, no admin).
+/// Perfil del chofer (vista del usuario, no admin) — REFACTOR 2026-05-28
+/// (gold-standard cleanup post design-system).
 ///
-/// Migrada al sistema de diseño unificado.
+/// **Cambios vs. la versión previa** (que era una "isla" — el sweep
+/// mecánico no la tocó porque usaba `Colors.green` / `Colors.whiteNN`
+/// directos, no `accent*`):
+///
+/// - Todos los `ElevatedButton` ad-hoc → `AppButton.*` con loading
+///   state nativo.
+/// - Todos los `Colors.whiteNN` → tokens semánticos
+///   ([AppColors.textPrimary/textSecondary/textTertiary/textHint]).
+/// - Todos los magic numbers (10/14/15/18/20/24/25/30) → tokens de
+///   [AppSpacing] / [AppRadius].
+/// - Strings UPPERCASE hardcodeados ("GUARDAR", "CAMBIAR MI
+///   CONTRASEÑA", "RAZÓN SOCIAL", "CHOFER PROFESIONAL") → sentence case
+///   en el fuente. La regla "una uppercase eyebrow por pantalla" la
+///   cumple solo el [_SectionTitle].
+/// - `TextStyle(fontSize: X, fontWeight: ..., letterSpacing: ...)`
+///   ad-hoc → [AppType.*]. Cero overrides de letterSpacing en eyebrows.
+/// - Camera button del avatar: era verde (`AppColors.success`) → ahora
+///   cobalto (`AppColors.brand`). Verde se reserva para estado
+///   semántico, no para identidad de elemento.
+/// - Bottom sheet "Actualizar foto": el accent verde decorativo de la
+///   border superior se elimina. La separación visual ya la hace la
+///   superficie elevada.
+/// - El "trailing" verde del [_InfoTileEditable] (icono de editar)
+///   pasa a [AppColors.brand] — es affordance de acción, va con
+///   identidad de marca, no con "success".
+///
+/// **Pattern reference.** Este archivo es la versión "gold standard"
+/// que demuestra cómo debería verse una pantalla de detalle post-
+/// refactor. Usar como referencia al limpiar las otras pantallas
+/// "isla" (gomeria, icm, vehicles detail, etc.).
 class UserMiPerfilScreen extends StatefulWidget {
   final String dni;
   const UserMiPerfilScreen({super.key, required this.dni});
@@ -84,7 +115,8 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
       AppLoadingDialog.hide(navigator);
       AppFeedback.errorTecnicoOn(
         messenger,
-        usuario: 'No se pudo guardar el cambio. Probá de nuevo en unos segundos.',
+        usuario:
+            'No se pudo guardar el cambio. Probá de nuevo en unos segundos.',
         tecnico: e,
         stack: s,
       );
@@ -124,7 +156,8 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(seconds: 15),
     ));
-    const url = 'https://southamerica-east1-coopertrans-movil.cloudfunctions.net/'
+    const url =
+        'https://southamerica-east1-coopertrans-movil.cloudfunctions.net/'
         'cambiarContrasenaChofer';
     final response = await dio.post<Map<String, dynamic>>(
       url,
@@ -158,52 +191,35 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
     showDialog(
       context: context,
       builder: (dCtx) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: AppColors.surface2,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: Colors.white.withAlpha(20)),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          side: const BorderSide(color: AppColors.borderSubtle),
         ),
-        title: const Text(
-          'Cambiar contraseña',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        title: const Text('Cambiar contraseña', style: AppType.title),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: antCtrl,
               obscureText: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Contraseña actual',
-              ),
+              decoration: const InputDecoration(labelText: 'Contraseña actual'),
             ),
-            const SizedBox(height: 15),
+            const SizedBox(height: AppSpacing.md),
             TextField(
               controller: nvaCtrl,
               obscureText: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Nueva contraseña',
-              ),
+              decoration: const InputDecoration(labelText: 'Nueva contraseña'),
             ),
           ],
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.pop(dCtx),
-            child: const Text('CANCELAR',
-                style: TextStyle(color: Colors.white54)),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
+          AppButton(
+            label: 'Guardar',
             onPressed: () {
               // SEGURIDAD (auditoria 2026-05-17): la validacion de la
               // contraseña actual + el hashing + el update ahora viven
@@ -226,8 +242,6 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
                 mensajeExito: 'Contrasena actualizada correctamente',
               ));
             },
-            child: const Text('GUARDAR',
-                style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -242,43 +256,39 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
-          borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(25)),
-          border: const Border(
-              top: BorderSide(color: AppColors.success, width: 2)),
+        decoration: const BoxDecoration(
+          color: AppColors.surface2,
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.lg),
+          ),
+          // Antes había una border verde de 2px (`AppColors.success`)
+          // como "accent line". La review marcó que ese verde decorativo
+          // era ruido — el sheet ya se diferencia del fondo por la
+          // superficie elevada.
         ),
         child: SafeArea(
           child: Wrap(children: [
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Text(
-                'Actualizar foto',
-                style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-              ),
+            const Padding(
+              padding: EdgeInsets.all(AppSpacing.lg),
+              child: Text('Actualizar foto', style: AppType.heading),
             ),
             ListTile(
-              leading:
-                  const Icon(Icons.camera_alt, color: AppColors.success),
-              title: const Text('Tomar foto con la cámara',
-                  style: TextStyle(color: Colors.white)),
+              leading: const Icon(Icons.camera_alt, color: AppColors.brand),
+              title: const Text('Tomar foto con la cámara'),
               onTap: () {
                 Navigator.pop(ctx);
                 _seleccionarImagen(ImageSource.camera);
               },
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library,
-                  color: AppColors.success),
-              title: const Text('Elegir de la galería',
-                  style: TextStyle(color: Colors.white)),
+              leading: const Icon(Icons.photo_library, color: AppColors.brand),
+              title: const Text('Elegir de la galería'),
               onTap: () {
                 Navigator.pop(ctx);
                 _seleccionarImagen(ImageSource.gallery);
               },
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: AppSpacing.lg),
           ]),
         ),
       ),
@@ -287,8 +297,7 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
 
   Future<void> _seleccionarImagen(ImageSource source) async {
     final picker = ImagePicker();
-    final image =
-        await picker.pickImage(source: source, imageQuality: 50);
+    final image = await picker.pickImage(source: source, imageQuality: 50);
     if (image == null) return;
     if (!mounted) return;
 
@@ -365,18 +374,18 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
           if (raw is! Map<String, dynamic>) {
             return const AppErrorState(
               title: 'Datos corruptos',
-              subtitle:
-                  'El formato de tu perfil no es válido. Contactá a administración.',
+              subtitle: 'El formato de tu perfil no es válido. '
+                  'Contactá a administración.',
             );
           }
           final data = raw;
           return ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
               _Header(data: data, onEditarFoto: _mostrarOpcionesFoto),
-              const SizedBox(height: 30),
+              const SizedBox(height: AppSpacing.xl),
               _EquipoCard(data: data),
-              const SizedBox(height: 30),
+              const SizedBox(height: AppSpacing.xl),
               const _SectionTitle(label: 'Datos personales'),
               const SizedBox(height: AppSpacing.sm),
               _DatosCard(
@@ -384,26 +393,14 @@ class _UserMiPerfilScreenState extends State<UserMiPerfilScreen> {
                 data: data,
                 onActualizarCampo: _actualizarCampoEmpleado,
               ),
-              const SizedBox(height: 30),
-              ElevatedButton.icon(
-                onPressed: () => _mostrarDialogoClave(),
-                icon: const Icon(Icons.password_rounded),
-                label: const Text(
-                  'CAMBIAR MI CONTRASEÑA',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white.withAlpha(20),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                    side: const BorderSide(color: Colors.white24),
-                  ),
-                  elevation: 0,
-                ),
+              const SizedBox(height: AppSpacing.xl),
+              AppButton.secondary(
+                label: 'Cambiar mi contraseña',
+                icon: Icons.password_rounded,
+                expand: true,
+                onPressed: _mostrarDialogoClave,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.lg),
             ],
           );
         },
@@ -441,27 +438,34 @@ class _Header extends StatelessWidget {
               child: Material(
                 color: Colors.transparent,
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(50),
+                  borderRadius: BorderRadius.circular(AppRadius.full),
                   onTap: onEditarFoto,
                   child: Container(
                     padding: const EdgeInsets.all(AppSpacing.sm),
                     decoration: BoxDecoration(
-                      color: AppColors.success,
+                      // Antes: verde (`AppColors.success`). Cambiado a
+                      // brand porque "subí tu foto" es affordance de
+                      // acción, no estado "OK". El verde queda solo
+                      // para semántica real.
+                      color: AppColors.brand,
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: Theme.of(context).colorScheme.surface,
+                        color: AppColors.surface0,
                         width: 3,
                       ),
                     ),
-                    child: const Icon(Icons.camera_alt,
-                        size: 20, color: Colors.black),
+                    child: const Icon(
+                      Icons.camera_alt,
+                      size: 20,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: AppSpacing.lg),
         Text(
           (data['NOMBRE'] ?? 'Usuario').toString(),
           // Nombres largos ("GONZALEZ RODRIGUEZ JUAN CARLOS") rompían
@@ -469,17 +473,13 @@ class _Header extends StatelessWidget {
           maxLines: 2,
           textAlign: TextAlign.center,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+          style: AppType.title.copyWith(fontSize: 22),
         ),
         const SizedBox(height: AppSpacing.xs),
-        Text(
-          'CHOFER PROFESIONAL',
-          style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 2),
-        ),
+        // Eyebrow sentence-case en el fuente; el AppType.eyebrow ya
+        // aplica el tracking. Cero overrides de color/weight: el
+        // eyebrow ES el estilo, no necesita decoración.
+        const Text('CHOFER PROFESIONAL', style: AppType.eyebrow),
       ],
     );
   }
@@ -492,19 +492,19 @@ class _EquipoCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       margin: EdgeInsets.zero,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _DatoEquipo(
-            label: 'TRACTOR',
+            label: 'Tractor',
             valor: (data['VEHICULO'] ?? '—').toString(),
             icono: Icons.local_shipping,
           ),
-          Container(width: 1, height: 50, color: Colors.white10),
+          Container(width: 1, height: 50, color: AppColors.borderSubtle),
           _DatoEquipo(
-            label: 'ENGANCHE',
+            label: 'Enganche',
             valor: (data['ENGANCHE'] ?? '—').toString(),
             icono: Icons.grid_view,
           ),
@@ -529,26 +529,15 @@ class _DatoEquipo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Icon(icono, color: AppColors.success, size: 30),
+        // Antes: verde. Ahora textTertiary — el icono es decorativo de
+        // un campo de datos, no un estado semántico.
+        Icon(icono, color: AppColors.textTertiary, size: 28),
         const SizedBox(height: AppSpacing.sm),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 10,
-            color: Colors.white54,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
-        ),
+        Text(label, style: AppType.label),
         const SizedBox(height: 2),
         Text(
           valor,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-            fontSize: 18,
-            letterSpacing: 1.5,
-          ),
+          style: AppType.heading.copyWith(letterSpacing: 0),
         ),
       ],
     );
@@ -562,11 +551,14 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4, left: 10),
-      child: Text(
-        label.toUpperCase(),
-        style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+      padding: const EdgeInsets.only(
+        bottom: AppSpacing.xs,
+        left: AppSpacing.sm,
       ),
+      // Una sola "uppercase eyebrow" por pantalla, sin overrides de
+      // color (era verde) ni de letterSpacing (era 1.5 vs. el 1.2 que
+      // ya trae AppType.eyebrow).
+      child: Text(label.toUpperCase(), style: AppType.eyebrow),
     );
   }
 }
@@ -594,13 +586,13 @@ class _DatosCard extends StatelessWidget {
       child: Column(
         children: [
           _InfoTile(
-            label: 'RAZÓN SOCIAL',
+            label: 'Razón social',
             valor: (data['EMPRESA'] ?? '—').toString(),
             icon: Icons.business,
           ),
           const _SeparadorTile(),
           _InfoTile(
-            label: 'DNI / LEGAJO',
+            label: 'DNI / Legajo',
             valor: AppFormatters.formatearDNI(dni),
             icon: Icons.badge,
           ),
@@ -611,13 +603,13 @@ class _DatosCard extends StatelessWidget {
             icon: Icons.assignment_ind,
           ),
           const _SeparadorTile(),
-          // TELÉFONO editable: el chofer puede actualizar su número de
+          // Teléfono editable: el chofer puede actualizar su número de
           // contacto sin pasar por la oficina (caso típico: cambió de
           // chip o número). Mostramos sin el prefijo 549 (más legible),
           // y al guardar lo normalizamos con PhoneFormatter.paraGuardar
           // para que el bot WhatsApp lo pueda usar tal cual.
           _InfoTileEditable(
-            label: 'TELÉFONO',
+            label: 'Teléfono',
             valor: PhoneFormatter.paraMostrar(data['TELEFONO']?.toString()),
             icon: Icons.phone_android,
             inputFormatters: [DigitOnlyFormatter()],
@@ -628,11 +620,11 @@ class _DatosCard extends StatelessWidget {
                 onActualizarCampo('TELEFONO', PhoneFormatter.paraGuardar(v)),
           ),
           const _SeparadorTile(),
-          // MAIL editable: idem teléfono, el chofer puede corregir o
+          // Mail editable: idem teléfono, el chofer puede corregir o
           // actualizar su mail. Sin mayúsculas (los mails son case-
           // insensitive pero por convención se guardan en lowercase).
           _InfoTileEditable(
-            label: 'MAIL',
+            label: 'Mail',
             valor: (data['MAIL'] ?? '—').toString(),
             icon: Icons.alternate_email,
             keyboardType: TextInputType.emailAddress,
@@ -661,27 +653,24 @@ class _InfoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(icon, color: Colors.white54, size: 22),
-      title: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 10,
-          color: Colors.white54,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1,
-        ),
-      ),
+      leading: Icon(icon, color: AppColors.textTertiary, size: 22),
+      title: Text(label, style: AppType.label),
       subtitle: Text(
         valor,
         // RAZÓN SOCIAL puede ser larga ("VECCHI ARIEL Y …"). 2 líneas
         // + ellipsis para que el ListTile no rompa en mobile.
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+        style: AppType.body.copyWith(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w600,
+        ),
       ),
       dense: true,
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.xs,
+      ),
     );
   }
 }
@@ -692,7 +681,7 @@ class _SeparadorTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Divider(
-      color: Colors.white10,
+      color: AppColors.borderSubtle,
       indent: 60,
       height: 1,
     );
@@ -702,13 +691,14 @@ class _SeparadorTile extends StatelessWidget {
 /// Variante de [_InfoTile] que es tappable para editar el valor inline.
 ///
 /// Mismo look & feel que el read-only para que la card mantenga
-/// consistencia visual, con un icono `edit_note` verde a la derecha
+/// consistencia visual, con un icono `edit_note` cobalto a la derecha
 /// que indica al chofer que puede tocarlo. Al hacer tap se abre un
 /// dialog modal con un `TextField` pre-cargado y seleccionado.
 ///
 /// Diseño deliberado:
 /// - Mismo `_InfoTile` por dentro (icon + label + value en 2 líneas).
-/// - Trailing `edit_note` accentGreen → marca visual de "editable".
+/// - Trailing `edit_note` brand → marca visual de "editable / acción".
+///   Antes era verde, pero verde es semántico (OK), no affordance.
 /// - El callback `onSave` recibe el texto trimeado y transformado
 ///   (mayúsculas o lowercase según flags). El parent decide cómo
 ///   normalizarlo antes de persistir (ej. PhoneFormatter.paraGuardar).
@@ -738,30 +728,27 @@ class _InfoTileEditable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(icon, color: Colors.white54, size: 22),
-      title: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 10,
-          color: Colors.white54,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1,
-        ),
-      ),
+      leading: Icon(icon, color: AppColors.textTertiary, size: 22),
+      title: Text(label, style: AppType.label),
       subtitle: Text(
         valor.isEmpty ? '—' : valor,
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
+        style: AppType.body.copyWith(
+          color: AppColors.textPrimary,
+          fontWeight: FontWeight.w600,
+        ),
       ),
       trailing: const Icon(
         Icons.edit_note,
-        color: AppColors.success,
+        color: AppColors.brand,
         size: 22,
       ),
       dense: true,
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.xs,
+      ),
       onTap: () => _mostrarDialogo(context),
     );
   }
@@ -787,19 +774,12 @@ class _InfoTileEditable extends StatelessWidget {
     showDialog<void>(
       context: context,
       builder: (dCtx) => AlertDialog(
-        backgroundColor: Theme.of(context).colorScheme.surface,
+        backgroundColor: AppColors.surface2,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: Colors.white.withAlpha(20)),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          side: const BorderSide(color: AppColors.borderSubtle),
         ),
-        title: Text(
-          'Editar $label',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        title: Text('Editar $label', style: AppType.title),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -808,12 +788,10 @@ class _InfoTileEditable extends StatelessWidget {
               : TextCapitalization.none,
           keyboardType: keyboardType,
           inputFormatters: inputFormatters,
-          style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
             hintText: hint ?? 'Escribí el nuevo valor',
-            hintStyle: const TextStyle(color: Colors.white38),
             suffixIcon: IconButton(
-              icon: const Icon(Icons.clear, color: Colors.white54),
+              icon: const Icon(Icons.clear, color: AppColors.textTertiary),
               tooltip: 'Vaciar campo',
               onPressed: controller.clear,
             ),
@@ -824,22 +802,16 @@ class _InfoTileEditable extends StatelessWidget {
           },
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.pop(dCtx),
-            child: const Text('CANCELAR',
-                style: TextStyle(color: Colors.white54)),
           ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
+          AppButton(
+            label: 'Guardar',
             onPressed: () {
               Navigator.pop(dCtx);
               onSave(transformar(controller.text));
             },
-            child: const Text('GUARDAR',
-                style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -872,31 +844,34 @@ class _PerfilOfflineFallback extends StatelessWidget {
     final dniFmt = AppFormatters.formatearDNI(dni);
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
-        // Banner naranja avisando que estamos en modo limitado.
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.warning.withAlpha(40),
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            border: Border.all(color: AppColors.warning.withAlpha(120)),
-          ),
+        // Banner warning (mismo color/look que AppOfflineBanner pero
+        // inline porque acá ya estamos en estado degradado conocido —
+        // el banner no necesita auto-activarse).
+        AppCard(
+          tier: 2,
+          highlighted: true,
+          borderColor: AppColors.warning.withAlpha(120),
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          margin: EdgeInsets.zero,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.signal_wifi_bad_outlined,
-                  color: AppColors.warning),
+              const Icon(
+                Icons.signal_wifi_bad_outlined,
+                color: AppColors.warning,
+              ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      motivo == null
-                          ? 'Conexión lenta'
-                          : 'Datos incompletos',
-                      style: AppType.body.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold),
+                      motivo == null ? 'Conexión lenta' : 'Datos incompletos',
+                      style: AppType.heading.copyWith(
+                        color: AppColors.warning,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
@@ -904,11 +879,7 @@ class _PerfilOfflineFallback extends StatelessWidget {
                           'Estamos mostrando los datos básicos mientras '
                               'cargan los detalles. Si tarda mucho, probá '
                               'cambiar de red (WiFi / datos móviles).',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
-                        height: 1.3,
-                      ),
+                      style: AppType.body,
                     ),
                   ],
                 ),
@@ -918,59 +889,49 @@ class _PerfilOfflineFallback extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.xl),
 
-        // Header básico con avatar + nombre. Sin foto (no la tenemos
-        // del Prefs, solo del legajo Firestore).
+        // Header básico con avatar de iniciales + nombre. Reusamos
+        // FotoPerfilAvatar (que ya tiene el fallback de iniciales),
+        // así el offline ve el mismo avatar que tendría online.
         Center(
           child: Column(
             children: [
-              CircleAvatar(
+              FotoPerfilAvatar(
+                url: null,
+                nombre: apodo.isNotEmpty ? apodo : nombre,
                 radius: 50,
-                backgroundColor: Colors.white.withAlpha(20),
-                child: Text(
-                  (apodo.isNotEmpty ? apodo : nombre)
-                      .characters
-                      .firstOrNull
-                      ?.toUpperCase() ??
-                      '?',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpacing.md),
               Text(
                 apodo.isNotEmpty ? apodo : nombre,
-                style: AppType.title.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                style: AppType.title,
                 textAlign: TextAlign.center,
               ),
               if (apodo.isNotEmpty && nombre.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   nombre,
-                  style: AppType.body.copyWith(color: Colors.white60),
+                  style: AppType.body,
                   textAlign: TextAlign.center,
                 ),
               ],
             ],
           ),
         ),
-        const SizedBox(height: 30),
+        const SizedBox(height: AppSpacing.xl),
 
         // Datos básicos disponibles sin Firestore.
         _FallbackTile(label: 'DNI', valor: dniFmt),
         if (rol.isNotEmpty) _FallbackTile(label: 'Rol', valor: rol),
 
-        const SizedBox(height: 30),
+        const SizedBox(height: AppSpacing.xl),
 
         // Si solo es conexión lenta, mostramos indicador de carga
         // discreto al pie — el stream sigue intentando.
         if (motivo == null)
-          Center(
+          const Center(
             child: Column(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 22,
                   height: 22,
                   child: CircularProgressIndicator(
@@ -978,10 +939,10 @@ class _PerfilOfflineFallback extends StatelessWidget {
                     color: AppColors.info,
                   ),
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: AppSpacing.sm),
                 Text(
                   'Cargando datos completos…',
-                  style: AppType.label.copyWith(color: Colors.white54),
+                  style: AppType.label,
                 ),
               ],
             ),
@@ -1000,21 +961,21 @@ class _FallbackTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
         children: [
           Expanded(
             flex: 2,
-            child: Text(
-              label,
-              style: const TextStyle(color: Colors.white60, fontSize: 13),
-            ),
+            child: Text(label, style: AppType.label),
           ),
           Expanded(
             flex: 3,
             child: Text(
               valor,
-              style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w500),
+              style: AppType.body.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ],
