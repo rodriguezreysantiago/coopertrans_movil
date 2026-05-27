@@ -152,12 +152,14 @@ class _AdminMantenimientoScreenState extends State<AdminMantenimientoScreen> {
                 },
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.xs),
                 child: TextField(
                   controller: _searchCtl,
                   decoration: const InputDecoration(
                     hintText: 'Buscar patente, marca o modelo...',
-                    prefixIcon: Icon(Icons.search, color: Colors.white38),
+                    prefixIcon:
+                        Icon(Icons.search, color: AppColors.textHint),
                     isDense: true,
                   ),
                 ),
@@ -170,7 +172,8 @@ class _AdminMantenimientoScreenState extends State<AdminMantenimientoScreen> {
                         icon: Icons.search_off,
                       )
                     : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(10, 4, 10, 80),
+                        padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.sm, AppSpacing.xs, AppSpacing.sm, 80),
                         itemCount: filtrados.length,
                         itemBuilder: (ctx, idx) =>
                             _TractorCard(doc: filtrados[idx]),
