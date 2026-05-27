@@ -31,7 +31,8 @@ class AdminZonasDescargaScreen extends StatelessWidget {
             children: [
               const _BannerExplicativo(),
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.xs),
                 child: Row(
                   children: [
                     Expanded(
@@ -42,14 +43,11 @@ class AdminZonasDescargaScreen extends StatelessWidget {
                         style: AppType.label.copyWith(color: Colors.white60),
                       ),
                     ),
-                    FilledButton.icon(
+                    AppButton(
+                      label: 'Nueva zona',
+                      icon: Icons.add,
+                      size: AppButtonSize.sm,
                       onPressed: () => _abrirForm(context, null),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Nueva zona'),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.brand,
-                        foregroundColor: Colors.black,
-                      ),
                     ),
                   ],
                 ),
@@ -59,7 +57,7 @@ class AdminZonasDescargaScreen extends StatelessWidget {
                     ? const _EstadoVacio()
                     : ListView.builder(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
+                            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                         itemCount: zonas.length,
                         itemBuilder: (c, i) => _ZonaCard(zona: zonas[i]),
                       ),
@@ -90,8 +88,10 @@ class _BannerExplicativo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      margin: const EdgeInsets.fromLTRB(
+          AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
+      padding: const EdgeInsets.symmetric(
+          horizontal: 14, vertical: AppSpacing.md),
       decoration: BoxDecoration(
         color: AppColors.info.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -225,17 +225,14 @@ class _ZonaCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton.icon(
+                AppButton.ghost(
+                  label: zona.activo ? 'Pausar' : 'Reanudar',
+                  icon: zona.activo
+                      ? Icons.pause_circle_outline
+                      : Icons.play_circle_outline,
+                  size: AppButtonSize.sm,
                   onPressed: () =>
                       ZonasDescargaService.setActivo(zona.slug, !zona.activo),
-                  icon: Icon(
-                      zona.activo
-                          ? Icons.pause_circle_outline
-                          : Icons.play_circle_outline,
-                      size: 18),
-                  label: Text(zona.activo ? 'Pausar' : 'Reanudar'),
-                  style: TextButton.styleFrom(
-                      foregroundColor: Colors.white70),
                 ),
                 IconButton(
                   icon: const Icon(Icons.delete_outline,
@@ -260,14 +257,13 @@ class _ZonaCard extends StatelessWidget {
             'Vas a eliminar "${z.nombre}". La cola activa y el histórico '
             'no se borran pero quedan huérfanos. ¿Confirmás?'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          FilledButton(
-            style:
-                FilledButton.styleFrom(backgroundColor: AppColors.error),
+          AppButton.ghost(
+            label: 'Cancelar',
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          AppButton.danger(
+            label: 'Eliminar',
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Eliminar'),
           ),
         ],
       ),
@@ -593,17 +589,12 @@ class _ZonaFormState extends State<_ZonaForm> {
                         color: AppColors.error, fontSize: 13)),
               ],
               const SizedBox(height: 18),
-              FilledButton.icon(
+              AppButton(
+                label: _esEdicion ? 'Guardar cambios' : 'Crear zona',
+                icon: Icons.save,
+                isLoading: _guardando,
+                expand: true,
                 onPressed: _guardando ? null : _guardar,
-                icon: _guardando
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Icon(Icons.save),
-                label: Text(_esEdicion ? 'Guardar cambios' : 'Crear zona'),
-                style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14)),
               ),
             ],
           ),
