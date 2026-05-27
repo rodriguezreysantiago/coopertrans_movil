@@ -80,7 +80,7 @@ class _AdminEcoDrivingScreenState extends State<AdminEcoDrivingScreen> {
             diasRango: _diasRango,
             subScoresPrincipales: _subScoresPrincipales,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: AppSpacing.xl),
           _RankingVehiculos(
             service: _service,
             desde: _desde,
@@ -155,35 +155,34 @@ class _ResumenFleet extends StatelessWidget {
 
         return AppCard(
           borderColor: AppColors.success.withAlpha(50),
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(AppSpacing.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'FLOTA · score promedio últimos $diasRango días',
-                style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 2),
+                style: AppType.eyebrow.copyWith(
+                    color: AppColors.success, letterSpacing: 2),
               ),
               const SizedBox(height: AppSpacing.md),
               _ScoreGrande(score: scoreTotal),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               const _DivisorChico(),
               const SizedBox(height: AppSpacing.lg),
-              const Text(
+              Text(
                 'SUB-SCORES PRINCIPALES',
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10,
-                  letterSpacing: 1.5,
-                ),
+                style: AppType.eyebrow.copyWith(
+                    color: AppColors.textTertiary,
+                    fontSize: 10,
+                    letterSpacing: 1.5),
               ),
               const SizedBox(height: AppSpacing.md),
               GridView.count(
                 physics: const NeverScrollableScrollPhysics(),
                 shrinkWrap: true,
                 crossAxisCount: 2,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 8,
+                crossAxisSpacing: AppSpacing.md,
+                mainAxisSpacing: AppSpacing.sm,
                 // 4.2 → 3.5: tile menos plano. En 4.2 el alto era ~39 dp,
                 // justo para texto fontSize 11 + número fontSize 16. iOS
                 // line-height de Cupertino lo zafaba.
@@ -192,17 +191,15 @@ class _ResumenFleet extends StatelessWidget {
                     .map((k) => _MiniSubScore(label: VolvoSubScoreLabels.label(k), score: promedios[k]))
                     .toList(),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
               const _DivisorChico(),
               const SizedBox(height: AppSpacing.lg),
-              const Text(
+              Text(
                 'OPERACIÓN ACUMULADA',
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10,
-                  letterSpacing: 1.5,
-                ),
+                style: AppType.eyebrow.copyWith(
+                    color: AppColors.textTertiary,
+                    fontSize: 10,
+                    letterSpacing: 1.5),
               ),
               const SizedBox(height: AppSpacing.md),
               Row(
@@ -282,7 +279,7 @@ class _RankingVehiculos extends StatelessWidget {
         if (ranking.isEmpty) {
           return const _AvisoCard(
             icono: Icons.local_shipping_outlined,
-            color: Colors.white38,
+            color: AppColors.textHint,
             titulo: 'Sin scores por vehículo',
             mensaje: 'El poller diario aún no acumuló data por vehículo en este rango.',
           );
@@ -300,7 +297,8 @@ class _RankingVehiculos extends StatelessWidget {
                   const SizedBox(width: AppSpacing.sm),
                   Text(
                     'RANKING POR VEHÍCULO · $diasRango DÍAS',
-                    style: AppType.eyebrow.copyWith(color: AppColors.info, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                    style: AppType.eyebrow.copyWith(
+                        color: AppColors.info, letterSpacing: 1.5),
                   ),
                 ],
               ),
@@ -349,22 +347,24 @@ class _FilaRanking extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.sm),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: Row(
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
               decoration: BoxDecoration(
                 color: _colorScore.withAlpha(30),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
                 border: Border.all(color: _colorScore.withAlpha(120)),
               ),
               child: Text(
                 item.scorePromedio.toStringAsFixed(0),
-                style: AppType.body.copyWith(color: _colorScore, fontWeight: FontWeight.bold),
+                style: AppType.body.copyWith(
+                    color: _colorScore, fontWeight: FontWeight.bold),
               ),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -373,7 +373,9 @@ class _FilaRanking extends StatelessWidget {
                     item.patente,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: AppType.body.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -382,12 +384,14 @@ class _FilaRanking extends StatelessWidget {
                     '${item.consumoPromedioLPor100Km != null ? ' · ${item.consumoPromedioLPor100Km!.toStringAsFixed(1)} L/100km' : ''}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.eyebrow.copyWith(color: Colors.white54),
+                    style: AppType.eyebrow
+                        .copyWith(color: AppColors.textTertiary),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: Colors.white38, size: 22),
+            const Icon(Icons.chevron_right,
+                color: AppColors.textHint, size: 22),
           ],
         ),
       ),
@@ -407,7 +411,7 @@ class _ScoreGrande extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = score;
     final colorScore = s == null
-        ? Colors.white38
+        ? AppColors.textHint
         : s < 60
             ? AppColors.error
             : s < 80
@@ -429,32 +433,33 @@ class _ScoreGrande extends StatelessWidget {
             children: [
               Text(
                 s == null ? '—' : s.toStringAsFixed(0),
-                style: TextStyle(
+                style: AppType.display.copyWith(
                   color: colorScore,
-                  fontWeight: FontWeight.bold,
                   fontSize: 36,
                 ),
               ),
-              const Text(
+              Text(
                 '/ 100',
-                style: TextStyle(color: Colors.white54, fontSize: 10),
+                style: AppType.label
+                    .copyWith(color: AppColors.textTertiary, fontSize: 10),
               ),
             ],
           ),
         ),
-        const SizedBox(width: 18),
+        const SizedBox(width: AppSpacing.lg),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 _interpretacion(s),
-                style: AppType.heading.copyWith(color: colorScore, fontWeight: FontWeight.bold),
+                style: AppType.heading.copyWith(color: colorScore),
               ),
               const SizedBox(height: 6),
               Text(
                 _detalleInterpretacion(s),
-                style: AppType.label.copyWith(color: Colors.white70, height: 1.3),
+                style: AppType.label
+                    .copyWith(color: AppColors.textSecondary, height: 1.3),
               ),
             ],
           ),
@@ -487,7 +492,7 @@ class _MiniSubScore extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = score;
     final color = s == null
-        ? Colors.white38
+        ? AppColors.textHint
         : s < 60
             ? AppColors.error
             : s < 80
@@ -499,14 +504,14 @@ class _MiniSubScore extends StatelessWidget {
           width: 40,
           child: Text(
             s == null ? '—' : s.toStringAsFixed(0),
-            style: AppType.heading.copyWith(color: color, fontWeight: FontWeight.bold),
+            style: AppType.heading.copyWith(color: color),
           ),
         ),
         Expanded(
           child: Text(
             label,
             overflow: TextOverflow.ellipsis,
-            style: AppType.eyebrow.copyWith(color: Colors.white70),
+            style: AppType.eyebrow.copyWith(color: AppColors.textSecondary),
           ),
         ),
       ],
@@ -525,9 +530,12 @@ class _MetricaOp extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10)),
+          Text(label,
+              style: AppType.label
+                  .copyWith(color: AppColors.textTertiary, fontSize: 10)),
           const SizedBox(height: 2),
-          Text(valor, style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.w600)),
+          Text(valor,
+              style: AppType.heading.copyWith(color: AppColors.textPrimary)),
         ],
       ),
     );
@@ -539,7 +547,7 @@ class _DivisorChico extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(height: 1, color: Colors.white.withAlpha(15));
+    return Container(height: 1, color: AppColors.borderSubtle);
   }
 }
 
@@ -550,7 +558,7 @@ class _SkeletonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: SizedBox(
         height: altura,
         child: const Center(
@@ -578,19 +586,23 @@ class _AvisoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppCard(
       borderColor: color.withAlpha(50),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icono, color: color, size: 28),
-          const SizedBox(width: 14),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(titulo, style: AppType.body.copyWith(color: color, fontWeight: FontWeight.bold)),
+                Text(titulo,
+                    style: AppType.body
+                        .copyWith(color: color, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                Text(mensaje, style: AppType.label.copyWith(color: Colors.white70, height: 1.4)),
+                Text(mensaje,
+                    style: AppType.label.copyWith(
+                        color: AppColors.textSecondary, height: 1.4)),
               ],
             ),
           ),
