@@ -588,18 +588,13 @@ class VehiculoActions {
           ],
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar',
-                style: TextStyle(color: Colors.white54)),
           ),
-          TextButton(
+          AppButton.danger(
+            label: 'Dar de baja',
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('DAR DE BAJA',
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontWeight: FontWeight.bold,
-                )),
           ),
         ],
       ),
@@ -625,7 +620,7 @@ class VehiculoActions {
       message:
           '$patente va a volver a estar ACTIVO. Los vencimientos quedan vacíos '
           'hasta que los cargues. La asignación con chofer NO se restaura.',
-      confirmLabel: 'REACTIVAR',
+      confirmLabel: 'Reactivar',
     );
     if (ok != true) return;
     if (!context.mounted) return;
