@@ -43,9 +43,10 @@ class _GomeriaUnidadesListaScreenState
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
             child: Wrap(
-              spacing: 8,
+              spacing: AppSpacing.sm,
               children: [
                 _Chip(
                   label: 'TODAS',
@@ -90,17 +91,20 @@ class _GomeriaUnidadesListaScreenState
                 final filtrados = docs.toList()
                   ..sort((a, b) => a.id.compareTo(b.id));
                 if (filtrados.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Text(
                       'No hay unidades para este filtro.',
-                      style: TextStyle(color: Colors.white60),
+                      style: AppType.body
+                          .copyWith(color: AppColors.textSecondary),
                     ),
                   );
                 }
                 return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.xl),
                   itemCount: filtrados.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: AppSpacing.sm),
                   itemBuilder: (_, i) {
                     final doc = filtrados[i];
                     final data = doc.data();
@@ -122,7 +126,7 @@ class _GomeriaUnidadesListaScreenState
                         },
                       ),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 14),
+                          horizontal: AppSpacing.md, vertical: AppSpacing.md),
                       child: Row(
                         children: [
                           Icon(
@@ -140,18 +144,19 @@ class _GomeriaUnidadesListaScreenState
                               children: [
                                 Text(
                                   doc.id,
-                                  style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                                  style: AppType.heading,
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   '$tipo${modelo.isNotEmpty ? " · $modelo" : ""}',
-                                  style: AppType.label.copyWith(color: Colors.white60),
+                                  style: AppType.label.copyWith(
+                                      color: AppColors.textSecondary),
                                 ),
                               ],
                             ),
                           ),
                           const Icon(Icons.chevron_right,
-                              color: Colors.white38),
+                              color: AppColors.textHint),
                         ],
                       ),
                     );
@@ -184,7 +189,8 @@ class _Chip extends StatelessWidget {
       selected: seleccionado,
       onSelected: (_) => onTap(),
       selectedColor: AppColors.warning,
-      labelStyle: AppType.eyebrow.copyWith(color: seleccionado ? Colors.black : Colors.white, fontWeight: FontWeight.bold),
+      labelStyle: AppType.eyebrow.copyWith(
+          color: seleccionado ? Colors.black : AppColors.textPrimary),
       backgroundColor: AppColors.background,
     );
   }
