@@ -76,12 +76,12 @@ class _AsignacionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activa = asignacion.esActiva;
-    final color = activa ? AppColors.success : Colors.white38;
+    final color = activa ? AppColors.success : AppColors.textHint;
     final dias = asignacion.diasDuracion();
 
     return AppCard(
       borderColor: color.withAlpha(50),
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -93,35 +93,30 @@ class _AsignacionCard extends StatelessWidget {
                 color: color,
                 size: 22,
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   asignacion.choferNombre?.isNotEmpty == true
                       ? asignacion.choferNombre!
                       : 'DNI ${asignacion.choferDni}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
+                  style: AppType.heading.copyWith(fontSize: 15),
                 ),
               ),
               if (activa)
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                      horizontal: AppSpacing.sm, vertical: 3),
                   decoration: BoxDecoration(
                     color: AppColors.success.withAlpha(30),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                     border: Border.all(
                         color: AppColors.success.withAlpha(80)),
                   ),
-                  child: const Text(
+                  child: Text(
                     'ACTUAL',
-                    style: TextStyle(
+                    style: AppType.eyebrow.copyWith(
                       color: AppColors.success,
                       fontSize: 10,
-                      fontWeight: FontWeight.bold,
                       letterSpacing: 1,
                     ),
                   ),
@@ -173,13 +168,14 @@ class _Linea extends StatelessWidget {
             width: 100,
             child: Text(
               label,
-              style: AppType.label.copyWith(color: Colors.white54),
+              style: AppType.label.copyWith(color: AppColors.textTertiary),
             ),
           ),
           Expanded(
             child: Text(
               valor,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+              style: AppType.body.copyWith(
+                  color: AppColors.textPrimary, fontSize: 13),
             ),
           ),
         ],
