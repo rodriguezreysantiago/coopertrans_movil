@@ -30,7 +30,7 @@ class AdminBotBandejaScreen extends StatelessWidget {
       title: '¿Descartar este mensaje?',
       message:
           'Se elimina de la bandeja. La foto sigue en Storage hasta que se borre manualmente.',
-      confirmLabel: 'DESCARTAR',
+      confirmLabel: 'Descartar',
       destructive: true,
       icon: Icons.delete_outline,
     );
@@ -85,34 +85,29 @@ class AdminBotBandejaScreen extends StatelessWidget {
     // pendientes de respuesta para este chofer).
     final elegido = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: AppColors.surface2,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
       ),
       builder: (sCtx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Text(
-                '¿A QUÉ PAPEL CORRESPONDE?',
-                style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-              ),
+            const Padding(
+              padding: EdgeInsets.all(AppSpacing.xl),
+              child: Text('¿A QUÉ PAPEL CORRESPONDE?', style: AppType.eyebrow),
             ),
             ...candidatos.map((c) {
               final cMap = c as Map<String, dynamic>;
               return ListTile(
-                leading: const Icon(Icons.event_note,
-                    color: AppColors.success),
+                leading: const Icon(Icons.event_note, color: AppColors.brand),
                 title: Text(
                   (cMap['campo_base'] ?? 'Documento').toString(),
-                  style: const TextStyle(color: Colors.white),
                 ),
                 onTap: () => Navigator.pop(sCtx, cMap),
               );
             }),
-            const SizedBox(height: 10),
+            const SizedBox(height: AppSpacing.md),
           ],
         ),
       ),
@@ -199,17 +194,17 @@ class AdminBotBandejaScreen extends StatelessWidget {
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 16, vertical: 10),
-                  color: Colors.amber.withAlpha(30),
+                      horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+                  color: AppColors.warning.withAlpha(30),
                   child: Text(
-                    '⚠️ Mostrando los 200 más recientes. Procesá los antiguos para ver más.',
+                    'Mostrando los 200 más recientes. Procesá los antiguos para ver más.',
                     style: AppType.label.copyWith(color: AppColors.warning),
                     textAlign: TextAlign.center,
                   ),
                 ),
               Expanded(
                 child: ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.xxxl),
                   itemCount: docs.length,
                   itemBuilder: (ctx, i) => _ItemAmbiguo(
                     doc: docs[i],
@@ -257,7 +252,7 @@ class _ItemAmbiguo extends StatelessWidget {
 
     return AppCard(
       borderColor: AppColors.warning.withAlpha(80),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -269,14 +264,17 @@ class _ItemAmbiguo extends StatelessWidget {
               Expanded(
                 child: Text(
                   nombre,
-                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: AppType.body.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               Text(
                 _formatTs(data['creado_en']),
-                style: const TextStyle(color: Colors.white38, fontSize: 10),
+                style: AppType.eyebrow.copyWith(color: AppColors.textDisabled),
               ),
             ],
           ),
@@ -285,10 +283,10 @@ class _ItemAmbiguo extends StatelessWidget {
               padding: const EdgeInsets.only(left: 26, top: 2),
               child: Text(
                 'DNI $dni',
-                style: const TextStyle(color: Colors.white38, fontSize: 10),
+                style: AppType.eyebrow.copyWith(color: AppColors.textDisabled),
               ),
             ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.md),
           if (urlArchivo.isNotEmpty)
             ClipRRect(
               borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -298,22 +296,22 @@ class _ItemAmbiguo extends StatelessWidget {
                 size: 80,
               ),
             ),
-          if (urlArchivo.isNotEmpty) const SizedBox(height: 10),
+          if (urlArchivo.isNotEmpty) const SizedBox(height: AppSpacing.md),
           if (mensaje.isNotEmpty)
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(AppSpacing.md),
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha(8),
+                color: AppColors.borderSubtle,
                 borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
               child: Text(
                 mensaje,
-                style: AppType.label.copyWith(color: Colors.white70, height: 1.4),
+                style: AppType.label.copyWith(color: AppColors.textSecondary, height: 1.4),
                 maxLines: 4,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.md),
           Row(
             children: [
               if (fechaDet.isNotEmpty) ...[
@@ -334,28 +332,20 @@ class _ItemAmbiguo extends StatelessWidget {
               _BadgeRazon(razon: razon, candidatos: candidatos),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.md),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton.icon(
+              AppButton.ghost(
+                label: 'Descartar',
+                icon: Icons.delete_outline,
                 onPressed: onDescartar,
-                icon: const Icon(Icons.delete_outline,
-                    color: Colors.white54, size: 16),
-                label: Text(
-                  'Descartar',
-                  style: AppType.eyebrow.copyWith(color: Colors.white54),
-                ),
               ),
               const SizedBox(width: AppSpacing.xs),
-              ElevatedButton.icon(
+              AppButton(
+                label: 'Convertir en revisión',
+                icon: Icons.check,
                 onPressed: onConvertir,
-                icon: const Icon(Icons.check, size: 16),
-                label: const Text('Convertir en revisión'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 8),
-                ),
               ),
             ],
           ),
@@ -378,20 +368,15 @@ class _BadgeRazon extends StatelessWidget {
             ? 'sin aviso'
             : razon;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 2),
       decoration: BoxDecoration(
         color: AppColors.warning.withAlpha(20),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: AppColors.warning.withAlpha(80)),
       ),
       child: Text(
         etiqueta.toUpperCase(),
-        style: const TextStyle(
-          color: AppColors.warning,
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.6,
-        ),
+        style: AppType.eyebrow.copyWith(color: AppColors.warning),
       ),
     );
   }
