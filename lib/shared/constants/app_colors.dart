@@ -17,10 +17,11 @@ import 'package:flutter/material.dart';
 ///    Si una cosa "tiene que destacarse" use semántico (warning/error)
 ///    porque ahí el color significa algo, no decora.
 ///
-/// **Migración.** Los tokens `accentXxx` quedan como aliases @Deprecated
-/// apuntando al equivalente semántico, así el código existente compila
-/// y se va migrando incremental. El CI guard de `Colors.<accent>` sigue
-/// vigente para no agregar nuevos.
+/// **Histórico.** Hasta 2026-05-27 había 11 `accentXxx` aliases marcados
+/// @Deprecated apuntando a los semánticos para soportar migración
+/// incremental. El sweep de Phase 6 del refactor de design-system migró
+/// los ~1000 call-sites a tokens semánticos y borró los aliases. El CI
+/// guard de `Colors.<accent>` sigue vigente para no reintroducirlos.
 class AppColors {
   AppColors._();
 
@@ -118,45 +119,4 @@ class AppColors {
   /// Borde un poco más visible — separadores entre secciones.
   static const Color borderStrong = Color(0x1FFFFFFF); // white ~12%
 
-  // ============================================================================
-  // DEPRECATED — aliases hacia los semánticos
-  // ============================================================================
-  //
-  // Existen solo para que el código viejo siga compilando. La migración
-  // es find-and-replace; ver `refactor/MIGRATION.md` para el mapping.
-  // Borrar todo este bloque cuando el grep de `accentGreen|accentOrange|...`
-  // devuelva 0 hits.
-
-  @Deprecated('Usar AppColors.success')
-  static const Color accentGreen = success;
-
-  @Deprecated('Usar AppColors.warning')
-  static const Color accentOrange = warning;
-
-  @Deprecated('Usar AppColors.error')
-  static const Color accentRed = error;
-
-  @Deprecated('Usar AppColors.info')
-  static const Color accentBlue = info;
-
-  @Deprecated('Usar AppColors.brand (era el cyan de Volvo telemetry)')
-  static const Color accentCyan = brand;
-
-  @Deprecated('Usar AppColors.warning')
-  static const Color accentAmber = warning;
-
-  @Deprecated('Usar AppColors.brandSoft (era el teal de enganches)')
-  static const Color accentTeal = brandSoft;
-
-  @Deprecated('Usar AppColors.brand (era el purple de Flota)')
-  static const Color accentPurple = brand;
-
-  @Deprecated('Usar AppColors.warning')
-  static const Color accentDeepOrange = warning;
-
-  @Deprecated('Usar AppColors.success')
-  static const Color accentLightGreen = success;
-
-  @Deprecated('Usar AppColors.info')
-  static const Color accentLightBlue = info;
 }
