@@ -132,20 +132,39 @@ export function reconstruirJornadaDia(
   let bufferCount = 0;
   let bufferOdometroInicio: number | undefined;
 
-  const cerrarTramo = () => {
+  // `eventoQueRompe` (opcional): cuando el algoritmo detecta una transición
+  // (parado → moviendo o viceversa), el evento que dispara el cambio se
+  // pasa al cerrador. Lo usamos como `hasta` del tramo/parada, para que
+  // la duración refleje "lo que realmente pasó entre transiciones" y no
+  // "lo que vimos entre eventos del mismo estado".
+  //
+  // Caso del bug original (FLORES JUAN DOMINGO, 25/5 20:06-20:20): Sitrack
+  // mandó UN solo evento con speed=0 a las 20:06:56 y después nada por
+  // 14 min hasta el siguiente con speed=48 a las 20:21:14. Antes
+  // bufferDesde == bufferUltimo (mismo evento) → durMs=0 → la parada se
+  // descartaba. Ahora usamos el ts del evento moviendo siguiente como
+  // fin → durMs=14 min → la parada se registra correctamente.
+  const cerrarTramo = (eventoQueRompe?: EventoIn) => {
     if (!bufferDesde || !bufferUltimo) return;
-    const durMs = bufferUltimo.ts.getTime() - bufferDesde.ts.getTime();
+    const tsFin = eventoQueRompe?.ts ?? bufferUltimo.ts;
+    const durMs = tsFin.getTime() - bufferDesde.ts.getTime();
     if (durMs >= 60_000) {
-      const odoFin = bufferUltimo.odometer;
+      // Odómetro final: preferir el del evento que rompe (más reciente,
+      // pero ya en estado parado — su odo es el final real del tramo).
+      // Si no está, caer al último evento moviendo conocido.
+      const odoFin = eventoQueRompe?.odometer ?? bufferUltimo.odometer;
       const odoIni = bufferOdometroInicio;
       const km = (odoFin != null && odoIni != null && odoFin >= odoIni) ?
         Math.round(odoFin - odoIni) :
         0;
       tramos.push({
         desde: bufferDesde.ts,
-        hasta: bufferUltimo.ts,
+        hasta: tsFin,
         duracion_min: Math.round(durMs / 60_000),
         km_aprox: km,
+        // Velocidades: solo de los eventos en estado "moviendo" puros.
+        // El evento que rompe (speed < 15) NO entra al promedio/máx,
+        // sino arruinaríamos las estadísticas del tramo.
         velocidad_max: Math.round(bufferSpeedMax),
         velocidad_prom: bufferCount > 0 ?
           Math.round(bufferSpeedSum / bufferCount) :
@@ -160,13 +179,14 @@ export function reconstruirJornadaDia(
     bufferOdometroInicio = undefined;
   };
 
-  const cerrarParada = () => {
-    if (!bufferDesde || !bufferUltimo) return;
-    const durMs = bufferUltimo.ts.getTime() - bufferDesde.ts.getTime();
+  const cerrarParada = (eventoQueRompe?: EventoIn) => {
+    if (!bufferDesde) return;
+    const tsFin = eventoQueRompe?.ts ?? bufferUltimo?.ts ?? bufferDesde.ts;
+    const durMs = tsFin.getTime() - bufferDesde.ts.getTime();
     if (durMs >= 60_000) {
       paradas.push({
         desde: bufferDesde.ts,
-        hasta: bufferUltimo.ts,
+        hasta: tsFin,
         duracion_min: Math.round(durMs / 60_000),
         lat: bufferDesde.lat,
         lng: bufferDesde.lng,
@@ -181,7 +201,7 @@ export function reconstruirJornadaDia(
   for (const e of eventos) {
     const moviendo = e.speed >= VEL_MOVIMIENTO;
     if (moviendo) {
-      if (estado === "parado") cerrarParada();
+      if (estado === "parado") cerrarParada(e);
       if (estado !== "moviendo") {
         bufferDesde = e;
         bufferOdometroInicio = e.odometer;
@@ -196,7 +216,7 @@ export function reconstruirJornadaDia(
       }
       bufferUltimo = e;
     } else {
-      if (estado === "moviendo") cerrarTramo();
+      if (estado === "moviendo") cerrarTramo(e);
       if (estado !== "parado") {
         bufferDesde = e;
         estado = "parado";
@@ -204,6 +224,8 @@ export function reconstruirJornadaDia(
       bufferUltimo = e;
     }
   }
+  // Cierre final del día: no hay evento siguiente, así que medimos
+  // hasta el último evento del estado (comportamiento original).
   if (estado === "moviendo") cerrarTramo();
   else if (estado === "parado") cerrarParada();
 
