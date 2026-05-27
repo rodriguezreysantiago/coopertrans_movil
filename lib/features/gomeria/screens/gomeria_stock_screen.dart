@@ -100,13 +100,18 @@ class _GomeriaStockScreenState extends State<GomeriaStockScreen> {
                             ? 'No hay cubiertas para este filtro.\nTocá + para agregar una.'
                             : 'No se encontró "$_busqueda".',
                         textAlign: TextAlign.center,
-                        style: AppType.body.copyWith(color: Colors.white60),
+                        style: AppType.body.copyWith(color: AppColors.textSecondary),
                       ),
                     ),
                   );
                 }
                 return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    AppSpacing.md,
+                    AppSpacing.md,
+                    80,
+                  ),
                   itemCount: cubiertas.length,
                   separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
                   itemBuilder: (_, i) => _CubiertaTile(
@@ -127,7 +132,7 @@ class _GomeriaStockScreenState extends State<GomeriaStockScreen> {
         backgroundColor: AppColors.info,
         onPressed: () => _abrirAlta(context),
         icon: const Icon(Icons.add),
-        label: const Text('NUEVA CUBIERTA'),
+        label: const Text('Nueva cubierta'),
       ),
     );
   }
@@ -173,23 +178,31 @@ class _BarraBusqueda extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.md,
+        AppSpacing.xs,
+      ),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
         textCapitalization: TextCapitalization.characters,
-        style: const TextStyle(color: Colors.white),
+        style: const TextStyle(color: AppColors.textPrimary),
         decoration: InputDecoration(
           isDense: true,
-          prefixIcon:
-              const Icon(Icons.search, color: Colors.white60, size: 20),
+          prefixIcon: const Icon(Icons.search,
+              color: AppColors.textSecondary, size: 20),
           hintText: 'Buscar por código (CUB-XXXX) o modelo…',
-          hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+          hintStyle: const TextStyle(
+            color: AppColors.textDisabled,
+            fontSize: 13,
+          ),
           suffixIcon: controller.text.isEmpty
               ? null
               : IconButton(
                   icon: const Icon(Icons.clear,
-                      color: Colors.white60, size: 18),
+                      color: AppColors.textSecondary, size: 18),
                   tooltip: 'Limpiar búsqueda',
                   onPressed: () {
                     controller.clear();
@@ -197,13 +210,15 @@ class _BarraBusqueda extends StatelessWidget {
                   },
                 ),
           filled: true,
-          fillColor: Colors.white.withValues(alpha: 0.04),
+          fillColor: AppColors.borderSubtle,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppRadius.sm),
             borderSide: BorderSide.none,
           ),
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.md - 2,
+          ),
         ),
       ),
     );
@@ -318,7 +333,10 @@ class _ChipFiltro extends StatelessWidget {
       selected: seleccionado,
       onSelected: (_) => onTap(),
       selectedColor: color,
-      labelStyle: AppType.eyebrow.copyWith(color: seleccionado ? Colors.black : Colors.white, fontWeight: FontWeight.bold),
+      labelStyle: AppType.eyebrow.copyWith(
+        color: seleccionado ? Colors.black : AppColors.textPrimary,
+        fontWeight: FontWeight.bold,
+      ),
       backgroundColor: AppColors.background,
       visualDensity: VisualDensity.compact,
     );
@@ -341,7 +359,10 @@ class _CubiertaTile extends StatelessWidget {
         : AppColors.info;
     return AppCard(
       onTap: onTap,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg - 2,
+        vertical: AppSpacing.md,
+      ),
       child: Row(
         children: [
           Container(
@@ -364,7 +385,10 @@ class _CubiertaTile extends StatelessWidget {
                   children: [
                     Text(
                       c.codigo,
-                      style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                      style: AppType.heading.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     Container(
@@ -392,12 +416,11 @@ class _CubiertaTile extends StatelessWidget {
                   c.modeloEtiqueta,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style:
-                      AppType.label.copyWith(color: Colors.white70),
+                  style: AppType.label.copyWith(color: AppColors.textSecondary),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Wrap(
-                  spacing: 8,
+                  spacing: AppSpacing.sm,
                   children: [
                     Text(
                       c.vidas == 1 ? 'Nueva' : '${c.vidas - 1}× recapada',
@@ -406,14 +429,15 @@ class _CubiertaTile extends StatelessWidget {
                     if (c.kmAcumulados > 0)
                       Text(
                         '${AppFormatters.formatearMiles(c.kmAcumulados)} km totales',
-                        style: AppType.eyebrow.copyWith(color: Colors.white60),
+                        style: AppType.eyebrow
+                            .copyWith(color: AppColors.textSecondary),
                       ),
                   ],
                 ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right, color: Colors.white38),
+          const Icon(Icons.chevron_right, color: AppColors.textDisabled),
         ],
       ),
     );
@@ -500,7 +524,7 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
                     return const Text(
                       'No hay modelos cargados.\n'
                       'Cargá los modelos antes (Marcas y Modelos → Modelos).',
-                      style: TextStyle(color: Colors.amber),
+                      style: TextStyle(color: AppColors.warning),
                     );
                   }
                   return DropdownButtonFormField<CubiertaModelo>(
@@ -555,7 +579,7 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
               const SizedBox(height: AppSpacing.sm),
               Text(
                 'El código (CUB-XXXX) se asigna automáticamente.',
-                style: AppType.eyebrow.copyWith(color: Colors.white60),
+                style: AppType.label.copyWith(color: AppColors.textSecondary),
               ),
               // Barra de progreso del lote: solo visible mientras se
               // crean cubiertas en lote y muestra "X de Y creadas".
@@ -564,20 +588,20 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
                 LinearProgressIndicator(
                   value: _creadas / _total,
                   minHeight: 6,
-                  backgroundColor: Colors.white12,
+                  backgroundColor: AppColors.borderSubtle,
                   valueColor:
                       const AlwaysStoppedAnimation(AppColors.info),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Creando $_creadas de $_total…',
-                  style: AppType.label.copyWith(color: Colors.white70),
+                  style: AppType.label.copyWith(color: AppColors.textSecondary),
                 ),
               ],
               if (_error != null) ...[
                 const SizedBox(height: AppSpacing.md),
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(AppSpacing.md - 2),
                   decoration: BoxDecoration(
                     color: AppColors.error.withValues(alpha: 0.15),
                     border: Border.all(color: AppColors.error),
@@ -594,18 +618,16 @@ class _AltaCubiertaDialogState extends State<_AltaCubiertaDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        AppButton.ghost(
+          label: 'Cancelar',
           onPressed: _guardando ? null : () => Navigator.pop(context),
-          child: const Text('CANCELAR'),
         ),
-        ElevatedButton(
+        AppButton(
+          label: _cantidadParsed > 1
+              ? 'Crear $_cantidadParsed cubiertas'
+              : 'Guardar',
+          isLoading: _guardando,
           onPressed: _guardando ? null : _guardar,
-          child: _guardando
-              ? const SizedBox(
-                  width: 18, height: 18, child: CircularProgressIndicator())
-              : Text(_cantidadParsed > 1
-                  ? 'CREAR $_cantidadParsed CUBIERTAS'
-                  : 'GUARDAR'),
         ),
       ],
     );
