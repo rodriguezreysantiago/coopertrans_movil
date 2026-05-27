@@ -74,7 +74,7 @@ Color _colorSeveridad(SeveridadAdvertencia s) {
     case SeveridadAdvertencia.alto:
       return AppColors.warning;
     case SeveridadAdvertencia.medio:
-      return AppColors.accentAmber;
+      return AppColors.warning;
     case SeveridadAdvertencia.bajo:
       return Colors.white54;
   }

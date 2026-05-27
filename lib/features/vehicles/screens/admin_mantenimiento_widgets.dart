@@ -182,7 +182,7 @@ class _TractorCard extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: AppColors.accentAmber,
+                      color: AppColors.warning,
                       fontSize: 10,
                       fontStyle: FontStyle.italic,
                     ),
@@ -387,7 +387,7 @@ class _BarraResumen extends StatelessWidget {
           _Chip(
             label: 'Programar',
             count: resumen.programar,
-            color: AppColors.accentAmber,
+            color: AppColors.warning,
             estado: MantenimientoEstado.programar,
             activo: filtroActivo == MantenimientoEstado.programar,
             onTap: onSeleccionar,

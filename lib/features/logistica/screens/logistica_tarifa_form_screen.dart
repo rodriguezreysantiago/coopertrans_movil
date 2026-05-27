@@ -1403,7 +1403,7 @@ class _SelectorProducto extends StatelessWidget {
           const Row(
             children: [
               Icon(Icons.inventory_2_outlined,
-                  color: AppColors.accentAmber, size: 16),
+                  color: AppColors.warning, size: 16),
               SizedBox(width: 6),
               Text(
                 'PRODUCTO (OPCIONAL)',
@@ -1428,7 +1428,7 @@ class _SelectorProducto extends StatelessWidget {
                   if (v) onChange(null);
                 },
                 selectedColor:
-                    AppColors.accentAmber.withValues(alpha: 0.4),
+                    AppColors.warning.withValues(alpha: 0.4),
               ),
               ...productos.map(
                 (p) => ChoiceChip(
@@ -1438,7 +1438,7 @@ class _SelectorProducto extends StatelessWidget {
                     if (v) onChange(p);
                   },
                   selectedColor:
-                      AppColors.accentAmber.withValues(alpha: 0.4),
+                      AppColors.warning.withValues(alpha: 0.4),
                 ),
               ),
             ],

@@ -258,7 +258,7 @@ const _reglas = <_GrupoReglas>[
   ),
   _GrupoReglas(
     label: 'SISTEMA / ADMIN',
-    color: AppColors.accentAmber,
+    color: AppColors.warning,
     reglas: [
       _Regla(
         key: 'colaCreciente',

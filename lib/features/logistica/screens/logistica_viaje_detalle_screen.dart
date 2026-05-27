@@ -572,7 +572,7 @@ class _SeccionMotivo extends StatelessWidget {
     return _Seccion(
       titulo: 'DATOS LEGACY',
       icono: Icons.warning_amber_outlined,
-      iconColor: AppColors.accentAmber,
+      iconColor: AppColors.warning,
       children: [
         if (v.motivoCancelacion != null && v.motivoCancelacion!.isNotEmpty)
           Text(
@@ -667,8 +667,8 @@ class _BotoneraAcciones extends StatelessWidget {
             icon: const Icon(Icons.restore, size: 18),
             label: const Text('REACTIVAR'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.accentAmber,
-              side: const BorderSide(color: AppColors.accentAmber),
+              foregroundColor: AppColors.warning,
+              side: const BorderSide(color: AppColors.warning),
             ),
           ),
           // Eliminar DEFINITIVO: solo aparece cuando el viaje ya está
@@ -1017,7 +1017,7 @@ class _ChipEstado extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = switch (estado) {
       EstadoViaje.planeado => AppColors.accentBlue,
-      EstadoViaje.enCurso => AppColors.accentAmber,
+      EstadoViaje.enCurso => AppColors.warning,
       EstadoViaje.concluido => AppColors.success,
     };
     return _Chip(label: estado.etiqueta.toUpperCase(), color: color);

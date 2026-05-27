@@ -147,7 +147,7 @@ class KpiGrandeCard extends StatelessWidget {
         : (kpi.litrosPor100kmActual <= 30
             ? AppColors.success
             : (kpi.litrosPor100kmActual <= 40
-                ? AppColors.accentAmber
+                ? AppColors.warning
                 : AppColors.accentRed));
     final sublabel = !tieneDatos
         ? 'Sin datos Volvo en los últimos 30 días'

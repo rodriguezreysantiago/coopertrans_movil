@@ -582,7 +582,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Icon(Icons.warning_amber_outlined,
-                            size: 16, color: AppColors.accentAmber),
+                            size: 16, color: AppColors.warning),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(

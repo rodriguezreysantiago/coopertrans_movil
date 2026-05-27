@@ -426,7 +426,7 @@ class _ViajeTile extends StatelessWidget {
                 Builder(
                   builder: (ctx) => IconButton(
                     icon: const Icon(Icons.restore,
-                        size: 18, color: AppColors.accentAmber),
+                        size: 18, color: AppColors.warning),
                     tooltip: 'Reactivar viaje',
                     visualDensity: VisualDensity.compact,
                     constraints: const BoxConstraints(),
@@ -464,7 +464,7 @@ class _ViajeTile extends StatelessWidget {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.accentAmber,
+              backgroundColor: AppColors.warning,
               foregroundColor: Colors.black,
             ),
             onPressed: () => Navigator.pop(dCtx, true),
@@ -495,7 +495,7 @@ class _ViajeTile extends StatelessWidget {
       case EstadoViaje.planeado:
         return AppColors.accentBlue;
       case EstadoViaje.enCurso:
-        return AppColors.accentAmber;
+        return AppColors.warning;
       case EstadoViaje.concluido:
         return AppColors.success;
     }

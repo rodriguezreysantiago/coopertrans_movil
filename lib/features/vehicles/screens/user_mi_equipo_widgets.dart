@@ -373,7 +373,7 @@ class _ResumenVencimientosEquipo extends StatelessWidget {
       if (proximos > 0)
         _ChipResumen(
           texto: '$proximos próximo${proximos == 1 ? "" : "s"}',
-          color: AppColors.accentAmber,
+          color: AppColors.warning,
         ),
       if (ok > 0)
         _ChipResumen(
@@ -558,7 +558,7 @@ class _BloqueTelemetria extends StatelessWidget {
               hintStaleness,
               style: TextStyle(
                 color: hintStaleness.startsWith('⚠')
-                    ? AppColors.accentAmber
+                    ? AppColors.warning
                     : Colors.white38,
                 fontSize: 10,
                 fontStyle: FontStyle.italic,

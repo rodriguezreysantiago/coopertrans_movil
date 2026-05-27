@@ -422,7 +422,7 @@ class _Resumen extends StatelessWidget {
           _ChipResumen(
               label: 'Sin asignación',
               valor: sin,
-              color: AppColors.accentAmber),
+              color: AppColors.warning),
         ],
       ),
     );
@@ -482,7 +482,7 @@ class _FilaCruce extends StatelessWidget {
       case _Estado.dniDistinto:
         return AppColors.accentRed;
       case _Estado.sinAsignacion:
-        return AppColors.accentAmber;
+        return AppColors.warning;
     }
   }
 
@@ -587,7 +587,7 @@ class _FilaCruce extends StatelessWidget {
             else
               const _LineaActor(
                 label: 'Sistema',
-                labelColor: AppColors.accentAmber,
+                labelColor: AppColors.warning,
                 nombre: '(sin asignación cargada)',
                 dni: '',
               ),

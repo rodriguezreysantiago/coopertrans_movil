@@ -560,22 +560,22 @@ class _BannerEncadenamiento extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.accentAmber.withValues(alpha: 0.12),
+        color: AppColors.warning.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-            color: AppColors.accentAmber.withValues(alpha: 0.5)),
+            color: AppColors.warning.withValues(alpha: 0.5)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Icon(Icons.warning_amber_outlined,
-              size: 18, color: AppColors.accentAmber),
+              size: 18, color: AppColors.warning),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               mensaje,
               style: const TextStyle(
-                color: AppColors.accentAmber,
+                color: AppColors.warning,
                 fontSize: 12,
               ),
             ),

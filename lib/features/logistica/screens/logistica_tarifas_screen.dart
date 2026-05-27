@@ -280,13 +280,13 @@ class _CardTarifa extends StatelessWidget {
             Row(
               children: [
                 const Icon(Icons.inventory_2_outlined,
-                    color: AppColors.accentAmber, size: 14),
+                    color: AppColors.warning, size: 14),
                 const SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     tarifa.producto!,
                     style: const TextStyle(
-                      color: AppColors.accentAmber,
+                      color: AppColors.warning,
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
                     ),

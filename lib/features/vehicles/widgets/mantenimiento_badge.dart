@@ -16,7 +16,7 @@ extension MantenimientoEstadoX on MantenimientoEstado {
       case MantenimientoEstado.urgente:
         return AppColors.warning;
       case MantenimientoEstado.programar:
-        return AppColors.accentAmber;
+        return AppColors.warning;
       case MantenimientoEstado.atencion:
         // Lima/limón — más claro que amber, indica "todavía hay margen
         // pero conviene tenerlo en el radar".

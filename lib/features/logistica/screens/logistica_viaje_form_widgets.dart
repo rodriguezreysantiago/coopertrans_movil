@@ -135,7 +135,7 @@ class _ResumenTarifa extends StatelessWidget {
     // igual, los cálculos van a dar 0 y se actualizan cuando se
     // edite la tarifa + se vuelva a guardar el viaje.
     final sinMonto = t.tarifaReal == 0 || t.tarifaChofer == 0;
-    final color = sinMonto ? AppColors.accentAmber : AppColors.success;
+    final color = sinMonto ? AppColors.warning : AppColors.success;
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -167,14 +167,14 @@ class _ResumenTarifa extends StatelessWidget {
             const Row(
               children: [
                 Icon(Icons.warning_amber_outlined,
-                    size: 14, color: AppColors.accentAmber),
+                    size: 14, color: AppColors.warning),
                 SizedBox(width: 4),
                 Expanded(
                   child: Text(
                     'Tarifa pendiente de definir — actualizá la tarifa '
                     'y volvé a guardar el viaje cuando sepas el monto.',
                     style: TextStyle(
-                      color: AppColors.accentAmber,
+                      color: AppColors.warning,
                       fontSize: 11,
                     ),
                   ),

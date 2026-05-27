@@ -233,7 +233,7 @@ class _CardCola extends StatelessWidget {
             onTap: () => _abrirCola(context, 'PROCESANDO')),
         _Fila('Reintentando', '$reintentando',
             color:
-                reintentando > 0 ? AppColors.accentAmber : Colors.white70,
+                reintentando > 0 ? AppColors.warning : Colors.white70,
             onTap: () => _abrirCola(context, 'PENDIENTE')),
         _Fila('Con error', '$error',
             color: error > 0 ? AppColors.error : Colors.white70,

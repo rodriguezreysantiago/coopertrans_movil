@@ -344,7 +344,7 @@ class _LogisticaMapaTarifasScreenState
             child: Row(
               children: [
                 const Icon(Icons.info_outline,
-                    color: AppColors.accentAmber, size: 16),
+                    color: AppColors.warning, size: 16),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(

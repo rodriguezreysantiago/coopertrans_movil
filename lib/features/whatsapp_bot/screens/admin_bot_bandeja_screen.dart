@@ -206,7 +206,7 @@ class AdminBotBandejaScreen extends StatelessWidget {
                   color: Colors.amber.withAlpha(30),
                   child: const Text(
                     '⚠️ Mostrando los 200 más recientes. Procesá los antiguos para ver más.',
-                    style: TextStyle(color: AppColors.accentAmber, fontSize: 12),
+                    style: TextStyle(color: AppColors.warning, fontSize: 12),
                     textAlign: TextAlign.center,
                   ),
                 ),

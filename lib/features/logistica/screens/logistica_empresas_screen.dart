@@ -1173,7 +1173,7 @@ class _BloqueProductos extends StatelessWidget {
           const Row(
             children: [
               Icon(Icons.inventory_2_outlined,
-                  color: AppColors.accentAmber, size: 16),
+                  color: AppColors.warning, size: 16),
               SizedBox(width: 6),
               Text(
                 'PRODUCTOS QUE CARGA',
@@ -1209,9 +1209,9 @@ class _BloqueProductos extends StatelessWidget {
                     ),
                   ),
                   backgroundColor:
-                      AppColors.accentAmber.withValues(alpha: 0.2),
+                      AppColors.warning.withValues(alpha: 0.2),
                   side: BorderSide(
-                    color: AppColors.accentAmber.withValues(alpha: 0.5),
+                    color: AppColors.warning.withValues(alpha: 0.5),
                   ),
                   deleteIcon: const Icon(Icons.close, size: 14),
                   deleteIconColor: Colors.white70,
@@ -1228,8 +1228,8 @@ class _BloqueProductos extends StatelessWidget {
             icon: const Icon(Icons.add, size: 16),
             label: const Text('AGREGAR PRODUCTO'),
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.accentAmber,
-              side: const BorderSide(color: AppColors.accentAmber),
+              foregroundColor: AppColors.warning,
+              side: const BorderSide(color: AppColors.warning),
               padding: const EdgeInsets.symmetric(vertical: 8),
             ),
           ),

@@ -838,7 +838,7 @@ class _VencimientoOfflineFallback extends StatelessWidget {
         children: [
           Icon(
             Icons.cloud_off_outlined,
-            color: AppColors.accentAmber.withValues(alpha: 0.7),
+            color: AppColors.warning.withValues(alpha: 0.7),
             size: 64,
           ),
           const SizedBox(height: 16),

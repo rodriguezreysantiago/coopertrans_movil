@@ -72,7 +72,7 @@ class _BotStatusCard extends StatelessWidget {
         final vivo = e.vivo;
         final color = !vivo
             ? AppColors.accentRed
-            : (e.pausado ? AppColors.accentAmber : AppColors.success);
+            : (e.pausado ? AppColors.warning : AppColors.success);
         final titulo = !vivo
             ? 'Bot sin responder'
             : (e.pausado ? 'Bot pausado' : 'Bot activo');
@@ -444,10 +444,10 @@ class _ConcretadoCard extends StatelessWidget {
         ? t.cuando!
         : 'Turno${t.hora != null ? ' ${t.hora}' : ''}';
     final reag = _reagendarPendiente;
-    final acento = reag ? AppColors.accentAmber : AppColors.success;
+    final acento = reag ? AppColors.warning : AppColors.success;
     return AppCard(
       onTap: () => _abrirMenu(context),
-      borderColor: reag ? AppColors.accentAmber.withValues(alpha: 0.55) : null,
+      borderColor: reag ? AppColors.warning.withValues(alpha: 0.55) : null,
       child: Row(
         children: [
           Icon(reag ? Icons.event_repeat : Icons.event_available,
@@ -480,7 +480,7 @@ class _ConcretadoCard extends StatelessWidget {
                   Row(
                     children: [
                       const Icon(Icons.sync,
-                          size: 13, color: AppColors.accentAmber),
+                          size: 13, color: AppColors.warning),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
@@ -488,7 +488,7 @@ class _ConcretadoCard extends StatelessWidget {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                              color: AppColors.accentAmber,
+                              color: AppColors.warning,
                               fontSize: 12,
                               fontWeight: FontWeight.w600),
                         ),
@@ -502,7 +502,7 @@ class _ConcretadoCard extends StatelessWidget {
                       icon: const Icon(Icons.cancel_outlined, size: 15),
                       label: const Text('Cancelar reagendar'),
                       style: TextButton.styleFrom(
-                        foregroundColor: AppColors.accentAmber,
+                        foregroundColor: AppColors.warning,
                         padding: const EdgeInsets.symmetric(horizontal: 6),
                         visualDensity: VisualDensity.compact,
                       ),
@@ -587,7 +587,7 @@ class _ConcretadoCard extends StatelessWidget {
             ),
             ListTile(
               leading:
-                  const Icon(Icons.event_repeat, color: AppColors.accentAmber),
+                  const Icon(Icons.event_repeat, color: AppColors.warning),
               title:
                   const Text('Reagendar', style: TextStyle(color: Colors.white)),
               subtitle: const Text('Mover el turno a otra fecha/franja',
@@ -660,7 +660,7 @@ class _EstadoBadge extends StatelessWidget {
     } else if (est.esError) {
       color = AppColors.accentRed;
     } else if (est.esWarn) {
-      color = AppColors.accentAmber;
+      color = AppColors.warning;
     } else {
       color = Colors.white54;
     }
@@ -1014,7 +1014,7 @@ class _WizardSheetState extends State<_WizardSheet> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                           color:
-                              yaEsta ? AppColors.accentAmber : Colors.white38,
+                              yaEsta ? AppColors.warning : Colors.white38,
                           fontSize: 11),
                     ),
                     // 🔍 = chequear iTurnos por turno preexistente sacado por

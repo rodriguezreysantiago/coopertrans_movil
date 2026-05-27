@@ -1431,7 +1431,7 @@ class EmpleadoActions {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.accentAmber,
+                backgroundColor: AppColors.warning,
                 foregroundColor: Colors.black,
               ),
               onPressed: () {

@@ -375,7 +375,7 @@ class _KpisZona extends StatelessWidget {
             _KpiCard(
               label: 'Promedio',
               valor: '$promedio min',
-              color: AppColors.accentAmber,
+              color: AppColors.warning,
               icon: Icons.timer,
             ),
             const SizedBox(width: 8),
@@ -533,7 +533,7 @@ class _FilaCola extends StatelessWidget {
     final dni = (data['chofer_dni'] ?? '').toString();
     final colorPos = posicion == 1
         ? AppColors.accentRed
-        : (posicion <= 3 ? AppColors.accentAmber : Colors.white54);
+        : (posicion <= 3 ? AppColors.warning : Colors.white54);
     return Card(
       elevation: 1,
       margin: const EdgeInsets.symmetric(vertical: 3),
@@ -709,7 +709,7 @@ class _FilaHistorico extends StatelessWidget {
     final salida = (data['salida_ts'] as Timestamp?)?.toDate();
     final colorDur = dur > 90
         ? AppColors.accentRed
-        : (dur > 60 ? AppColors.accentAmber : AppColors.success);
+        : (dur > 60 ? AppColors.warning : AppColors.success);
     return Card(
       elevation: 0,
       margin: const EdgeInsets.symmetric(vertical: 2),

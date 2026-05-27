@@ -469,11 +469,11 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
                 nombreVisible: nombre,
               ),
               icon: const Icon(Icons.lock_reset,
-                  color: AppColors.accentAmber),
+                  color: AppColors.warning),
               label: const Text(
                 'Resetear contraseña',
                 style: TextStyle(
-                  color: AppColors.accentAmber,
+                  color: AppColors.warning,
                   fontWeight: FontWeight.bold,
                 ),
               ),

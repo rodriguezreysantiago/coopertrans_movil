@@ -623,7 +623,7 @@ class _SeccionKPIs extends StatelessWidget {
           _LineaKPI(
             label: 'Gastos a reembolsar',
             valor: totalGastos,
-            color: AppColors.accentAmber,
+            color: AppColors.warning,
           ),
           const Divider(color: Colors.white24, height: 24),
           _LineaKPI(
