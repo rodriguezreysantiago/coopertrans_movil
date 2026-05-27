@@ -23,3 +23,19 @@
 //
 // Verificado en Builds 32, 38, 39 — todos rompieron en este mismo paso.
 STRIP_INSTALLED_PRODUCT = NO
+
+// Build 40: con STRIP_INSTALLED_PRODUCT=NO el Strip no corre, pero como
+// Xcode combina Strip + CodeSign del binario interno en el MISMO build
+// phase, apagar Strip también apaga la firma del binario. Resultado:
+// `Contents/MacOS/Coopertrans Móvil` queda sin firma, y el CodeSign final
+// del .app raíz falla con "code object is not signed at all".
+//
+// Fix: agregar --deep al codesign del .app raíz para que firme
+// recursivamente todos los subcomponentes (binario interno + frameworks
+// que pudieran haber quedado sin firmar por el orden del archive).
+//
+// --deep tiene una mala reputación porque en distribución manual puede
+// "esconder" frameworks sin firmar legítimos. Acá es seguro porque
+// estamos en Xcode Cloud con firma ad-hoc por diseño — la firma real
+// la pone el step "Distribute Build" post-archive con cert + profile.
+OTHER_CODE_SIGN_FLAGS = --deep
