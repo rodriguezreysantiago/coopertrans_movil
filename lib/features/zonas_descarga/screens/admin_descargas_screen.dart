@@ -159,13 +159,14 @@ class _BotonRango extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadius.sm),
         child: Container(
           padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              const EdgeInsets.symmetric(horizontal: 14, vertical: AppSpacing.md),
           decoration: BoxDecoration(
             color: AppColors.brand.withValues(alpha: 0.10),
             borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -239,15 +240,11 @@ class _SinZonas extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-            FilledButton.icon(
+            AppButton(
+              label: 'Cargar zona',
+              icon: Icons.add,
               onPressed: () => Navigator.pushNamed(
                   context, AppRoutes.adminZonasDescarga),
-              icon: const Icon(Icons.add),
-              label: const Text('Cargar zona'),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.brand,
-                foregroundColor: Colors.black,
-              ),
             ),
           ],
         ),
@@ -267,22 +264,15 @@ class _BotonGestionarZonas extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
       child: Align(
         alignment: Alignment.centerRight,
-        child: OutlinedButton.icon(
+        child: AppButton.secondary(
+          label: 'Gestionar zonas',
+          icon: Icons.tune,
+          size: AppButtonSize.sm,
           onPressed: onTap,
-          icon: const Icon(Icons.tune, size: 16),
-          label: const Text('Gestionar zonas'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.brand,
-            side: BorderSide(
-              color: AppColors.brand.withValues(alpha: 0.5),
-            ),
-            padding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 8),
-            textStyle: AppType.label.copyWith(fontWeight: FontWeight.w600),
-          ),
         ),
       ),
     );
@@ -302,7 +292,8 @@ class _SelectorZona extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
       child: Wrap(
         spacing: 8,
         children: zonas
@@ -692,7 +683,8 @@ class _FilaHistorico extends StatelessWidget {
         side: const BorderSide(color: Colors.white12),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         child: Row(
           children: [
             Expanded(
