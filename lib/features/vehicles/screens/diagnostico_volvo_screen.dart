@@ -98,7 +98,7 @@ class _Header extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       child: Row(
         children: [
-          const Icon(Icons.bug_report, color: AppColors.accentOrange, size: 28),
+          const Icon(Icons.bug_report, color: AppColors.warning, size: 28),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -143,7 +143,7 @@ class _ResumenRequest extends StatelessWidget {
     if (diag.errorMessage != null) return AppColors.accentRed;
     final s = diag.statusCode ?? 0;
     if (s >= 200 && s < 300) return AppColors.success;
-    if (s >= 400) return AppColors.accentOrange;
+    if (s >= 400) return AppColors.warning;
     return Colors.white54;
   }
 
@@ -442,7 +442,7 @@ class _CheckTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color =
-        check.encontrado ? AppColors.success : AppColors.accentOrange;
+        check.encontrado ? AppColors.success : AppColors.warning;
     final icon =
         check.encontrado ? Icons.check_circle : Icons.cancel_outlined;
 

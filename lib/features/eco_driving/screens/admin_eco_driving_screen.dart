@@ -347,7 +347,7 @@ class _FilaRanking extends StatelessWidget {
   Color get _colorScore {
     final s = item.scorePromedio;
     if (s < 60) return AppColors.accentRed;
-    if (s < 80) return AppColors.accentOrange;
+    if (s < 80) return AppColors.warning;
     return AppColors.success;
   }
 
@@ -427,7 +427,7 @@ class _ScoreGrande extends StatelessWidget {
         : s < 60
             ? AppColors.accentRed
             : s < 80
-                ? AppColors.accentOrange
+                ? AppColors.warning
                 : AppColors.success;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -511,7 +511,7 @@ class _MiniSubScore extends StatelessWidget {
         : s < 60
             ? AppColors.accentRed
             : s < 80
-                ? AppColors.accentOrange
+                ? AppColors.warning
                 : AppColors.success;
     return Row(
       children: [

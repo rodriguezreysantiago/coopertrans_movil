@@ -145,7 +145,7 @@ class _LogisticaViajesListaScreenState
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _abrirNuevoViaje,
-        backgroundColor: AppColors.accentOrange,
+        backgroundColor: AppColors.warning,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add),
         label: const Text('NUEVO VIAJE'),
@@ -324,7 +324,7 @@ class _ChipFiltro<T> extends StatelessWidget {
         ],
       ),
       backgroundColor: seleccionado
-          ? AppColors.accentOrange.withValues(alpha: 0.2)
+          ? AppColors.warning.withValues(alpha: 0.2)
           : null,
       onPressed: onSelected,
     );

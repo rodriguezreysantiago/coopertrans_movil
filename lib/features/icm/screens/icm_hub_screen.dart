@@ -305,7 +305,7 @@ class _GridSubpantallas extends StatelessWidget {
               titulo: 'MAPA DE CALOR',
               subtitulo: 'Lugares y horarios con más infracciones',
               icono: Icons.map_outlined,
-              color: AppColors.accentOrange,
+              color: AppColors.warning,
               ruta: AppRoutes.adminIcmMapaCalor,
             ),
             _HubTile(

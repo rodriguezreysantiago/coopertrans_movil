@@ -238,7 +238,7 @@ class _Header extends StatelessWidget {
         : s < 60
             ? AppColors.accentRed
             : s < 80
-                ? AppColors.accentOrange
+                ? AppColors.warning
                 : AppColors.success;
     return Row(
       children: [
@@ -327,7 +327,7 @@ class _FilaDia extends StatelessWidget {
         : s < 60
             ? AppColors.accentRed
             : s < 80
-                ? AppColors.accentOrange
+                ? AppColors.warning
                 : AppColors.success;
     final chofer = asignacion?.choferNombre?.isNotEmpty == true
         ? asignacion!.choferNombre!
@@ -400,7 +400,7 @@ class _BarraSubscore extends StatelessWidget {
         : s < 60
             ? AppColors.accentRed
             : s < 80
-                ? AppColors.accentOrange
+                ? AppColors.warning
                 : AppColors.success;
     final pct = (s ?? 0) / 100;
     return Padding(

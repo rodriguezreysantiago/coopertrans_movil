@@ -328,7 +328,7 @@ class _AccionesVehiculoMenu extends StatelessWidget {
             child: ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(Icons.bug_report_outlined,
-                  color: AppColors.accentOrange),
+                  color: AppColors.warning),
               title: Text('Diagnóstico Volvo'),
               subtitle: Text(
                 'Inspeccionar última respuesta del API',
@@ -688,9 +688,9 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.accentOrange.withAlpha(20),
+        color: AppColors.warning.withAlpha(20),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.accentOrange.withAlpha(80)),
+        border: Border.all(color: AppColors.warning.withAlpha(80)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -698,12 +698,12 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
           const Row(
             children: [
               Icon(Icons.archive_outlined,
-                  color: AppColors.accentOrange, size: 18),
+                  color: AppColors.warning, size: 18),
               SizedBox(width: 8),
               Text(
                 'UNIDAD DADA DE BAJA',
                 style: TextStyle(
-                  color: AppColors.accentOrange,
+                  color: AppColors.warning,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                   letterSpacing: 1.2,
@@ -760,7 +760,7 @@ class _EstadoBadge extends StatelessWidget {
         return AppColors.accentBlue;
       case 'TALLER':
       case 'MANTENIMIENTO':
-        return AppColors.accentOrange;
+        return AppColors.warning;
       case 'BAJA':
       case 'INACTIVO':
         return AppColors.accentRed;
@@ -858,7 +858,7 @@ double? _toDouble(dynamic v) {
 /// Color para la barrita de combustible: verde > 50, naranja 20-50, rojo < 20.
 Color _colorCombustible(double pct) {
   if (pct >= 50) return AppColors.success;
-  if (pct >= 20) return AppColors.accentOrange;
+  if (pct >= 20) return AppColors.warning;
   return AppColors.accentRed;
 }
 
@@ -1436,7 +1436,7 @@ class _ResumenService extends StatelessWidget {
         : kmRestantes < 0
             ? AppColors.accentRed
             : kmRestantes < 2000
-                ? AppColors.accentOrange
+                ? AppColors.warning
                 : AppColors.success;
 
     final sinDatos = !hayFecha && ultimoKm == null;

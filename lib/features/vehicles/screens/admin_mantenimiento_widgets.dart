@@ -379,7 +379,7 @@ class _BarraResumen extends StatelessWidget {
           _Chip(
             label: 'Urgentes',
             count: resumen.urgentes,
-            color: AppColors.accentOrange,
+            color: AppColors.warning,
             estado: MantenimientoEstado.urgente,
             activo: filtroActivo == MantenimientoEstado.urgente,
             onTap: onSeleccionar,

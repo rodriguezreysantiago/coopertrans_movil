@@ -190,7 +190,7 @@ class _Cabecera extends StatelessWidget {
                 esTractor
                     ? Icons.local_shipping_outlined
                     : Icons.rv_hookup_outlined,
-                color: AppColors.accentOrange,
+                color: AppColors.warning,
                 size: 32,
               ),
               const SizedBox(width: 12),
@@ -220,13 +220,13 @@ class _Cabecera extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: (completo
                           ? AppColors.success
-                          : AppColors.accentOrange)
+                          : AppColors.warning)
                       .withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: completo
                         ? AppColors.success
-                        : AppColors.accentOrange,
+                        : AppColors.warning,
                   ),
                 ),
                 child: Text(
@@ -234,7 +234,7 @@ class _Cabecera extends StatelessWidget {
                   style: TextStyle(
                     color: completo
                         ? AppColors.success
-                        : AppColors.accentOrange,
+                        : AppColors.warning,
                     fontSize: 13,
                     fontWeight: FontWeight.bold,
                   ),
@@ -988,7 +988,7 @@ class _BarraVida extends StatelessWidget {
     final color = porcentaje >= 100
         ? AppColors.accentRed
         : porcentaje >= 80
-            ? AppColors.accentOrange
+            ? AppColors.warning
             : AppColors.success;
     final etiqueta = porcentaje >= 100
         ? 'Pasó la vida estimada'

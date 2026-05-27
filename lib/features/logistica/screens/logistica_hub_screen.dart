@@ -135,13 +135,13 @@ class LogisticaHubScreen extends StatelessWidget {
                       titulo: 'VIAJES',
                       subtitulo: 'Ejecución de cada viaje',
                       icono: Icons.route_outlined,
-                      color: AppColors.accentOrange,
+                      color: AppColors.warning,
                       ruta: AppRoutes.adminLogisticaViajes,
                       contador: _StreamCount(
                         coleccion: FirebaseFirestore.instance
                             .collection(AppCollections.viajesLogistica),
                         soloActivas: false,
-                        color: AppColors.accentOrange,
+                        color: AppColors.warning,
                         campoActivo: 'activo',
                       ),
                     ),

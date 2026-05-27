@@ -492,7 +492,7 @@ class _OverridePagoChofer extends StatelessWidget {
                   onCambio();
                 }
               },
-              selectedColor: AppColors.accentOrange.withValues(alpha: 0.4),
+              selectedColor: AppColors.warning.withValues(alpha: 0.4),
               visualDensity: VisualDensity.compact,
             ),
           ],
@@ -507,7 +507,7 @@ class _OverridePagoChofer extends StatelessWidget {
               labelText: 'Monto al chofer (por viaje)',
               prefixText: '\$ ',
               prefixStyle: TextStyle(
-                color: AppColors.accentOrange,
+                color: AppColors.warning,
                 fontWeight: FontWeight.bold,
               ),
               suffixText: '/viaje',

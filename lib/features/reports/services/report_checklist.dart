@@ -61,7 +61,7 @@ class ReportChecklistService {
             SizedBox(height: 4),
             Text(
               'Items con estado REG o MAL en los últimos $_diasHistorico días',
-              style: TextStyle(color: AppColors.accentOrange, fontSize: 11),
+              style: TextStyle(color: AppColors.warning, fontSize: 11),
             ),
           ],
         ),

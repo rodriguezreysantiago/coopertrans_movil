@@ -271,7 +271,7 @@ class _LogisticaTarifaFormScreenState
                           }
                         },
                         selectedColor:
-                            AppColors.accentOrange.withValues(alpha: 0.4),
+                            AppColors.warning.withValues(alpha: 0.4),
                       ),
                     ],
                   ),
@@ -473,7 +473,7 @@ class _LogisticaTarifaFormScreenState
                         }
                       },
                       selectedColor:
-                          AppColors.accentOrange.withValues(alpha: 0.4),
+                          AppColors.warning.withValues(alpha: 0.4),
                     ),
                   ],
                 ),
@@ -600,7 +600,7 @@ class _LogisticaTarifaFormScreenState
         labelText: 'Monto fijo al chofer (por viaje)',
         prefixText: '\$ ',
         prefixStyle: TextStyle(
-          color: AppColors.accentOrange,
+          color: AppColors.warning,
           fontWeight: FontWeight.bold,
         ),
         suffixText: '/viaje',

@@ -153,7 +153,7 @@ class _AdminVencimientosCalendarioScreenState
       if (d != null && d < minDias) minDias = d;
     }
     if (minDias <= 7) return AppColors.accentRed;
-    if (minDias <= 30) return AppColors.accentOrange;
+    if (minDias <= 30) return AppColors.warning;
     return AppColors.success;
   }
 

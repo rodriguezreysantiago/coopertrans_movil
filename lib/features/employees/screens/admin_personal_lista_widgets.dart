@@ -145,7 +145,7 @@ class _RolBadge extends StatelessWidget {
       case AppRoles.admin:
         return AppColors.accentRed;
       case AppRoles.supervisor:
-        return AppColors.accentOrange;
+        return AppColors.warning;
       case AppRoles.planta:
         return AppColors.accentLightBlue;
     }
@@ -510,9 +510,9 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.accentOrange.withAlpha(20),
+        color: AppColors.warning.withAlpha(20),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.accentOrange.withAlpha(80)),
+        border: Border.all(color: AppColors.warning.withAlpha(80)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -520,12 +520,12 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
           const Row(
             children: [
               Icon(Icons.archive_outlined,
-                  color: AppColors.accentOrange, size: 18),
+                  color: AppColors.warning, size: 18),
               SizedBox(width: 8),
               Text(
                 'EMPLEADO DADO DE BAJA',
                 style: TextStyle(
-                  color: AppColors.accentOrange,
+                  color: AppColors.warning,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                   letterSpacing: 1.2,

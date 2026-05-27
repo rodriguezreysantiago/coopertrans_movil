@@ -288,7 +288,7 @@ class _FiltrosTipoUso extends StatelessWidget {
               seleccionado: seleccionado == t,
               onTap: () => onChanged(t),
               color: t == TipoUsoCubierta.direccion
-                  ? AppColors.accentOrange
+                  ? AppColors.warning
                   : AppColors.accentBlue,
             ),
         ],
@@ -340,7 +340,7 @@ class _CubiertaTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = c.tipoUso == TipoUsoCubierta.direccion
-        ? AppColors.accentOrange
+        ? AppColors.warning
         : AppColors.accentBlue;
     return AppCard(
       onTap: onTap,

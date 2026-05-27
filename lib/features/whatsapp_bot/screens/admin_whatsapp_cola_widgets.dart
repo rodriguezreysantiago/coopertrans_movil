@@ -51,7 +51,7 @@ class _ResumenContador extends StatelessWidget {
               _MiniContador(
                   label: 'Pendientes',
                   count: pendientes,
-                  color: AppColors.accentOrange,
+                  color: AppColors.warning,
                   activo: filtroActivo == 'PENDIENTE',
                   onTap: () => onTapEstado('PENDIENTE')),
               const SizedBox(width: 8),
@@ -335,7 +335,7 @@ class _ItemCola extends StatelessWidget {
   static Color _colorEstado(String estado) {
     switch (estado) {
       case 'PENDIENTE':
-        return AppColors.accentOrange;
+        return AppColors.warning;
       case 'PROCESANDO':
         return AppColors.accentBlue;
       case 'ENVIADO':
@@ -691,10 +691,10 @@ class _FilaItemAgrupado extends StatelessWidget {
         colorDias = AppColors.accentRed;
       } else if (d == 0) {
         estadoLegible = 'vence hoy';
-        colorDias = AppColors.accentOrange;
+        colorDias = AppColors.warning;
       } else {
         estadoLegible = 'vence en ${d}d';
-        colorDias = d <= 7 ? AppColors.accentOrange : AppColors.success;
+        colorDias = d <= 7 ? AppColors.warning : AppColors.success;
       }
     } else {
       estadoLegible = '-';

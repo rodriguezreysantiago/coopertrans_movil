@@ -259,7 +259,7 @@ class _ItemAmbiguo extends StatelessWidget {
         (data['candidatos'] as List<dynamic>? ?? const []).length;
 
     return AppCard(
-      borderColor: AppColors.accentOrange.withAlpha(80),
+      borderColor: AppColors.warning.withAlpha(80),
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -267,7 +267,7 @@ class _ItemAmbiguo extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.smart_toy_outlined,
-                  size: 18, color: AppColors.accentOrange),
+                  size: 18, color: AppColors.warning),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -394,14 +394,14 @@ class _BadgeRazon extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: AppColors.accentOrange.withAlpha(20),
+        color: AppColors.warning.withAlpha(20),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: AppColors.accentOrange.withAlpha(80)),
+        border: Border.all(color: AppColors.warning.withAlpha(80)),
       ),
       child: Text(
         etiqueta.toUpperCase(),
         style: const TextStyle(
-          color: AppColors.accentOrange,
+          color: AppColors.warning,
           fontSize: 9,
           fontWeight: FontWeight.bold,
           letterSpacing: 0.6,

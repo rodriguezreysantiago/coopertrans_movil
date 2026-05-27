@@ -243,7 +243,7 @@ class _Resumen extends StatelessWidget {
                 label: 'EVENTOS VOLVO',
                 valor: '${resumen.totalEventos}',
                 color: resumen.totalEventos > 0
-                    ? AppColors.accentOrange
+                    ? AppColors.warning
                     : Colors.white54,
                 icono: Icons.bolt,
               ),
@@ -540,7 +540,7 @@ class _EventosPorSeveridadCard extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: _SeveridadMini(
-              label: 'MEDIUM', valor: medium, color: AppColors.accentOrange),
+              label: 'MEDIUM', valor: medium, color: AppColors.warning),
         ),
         const SizedBox(width: 8),
         Expanded(

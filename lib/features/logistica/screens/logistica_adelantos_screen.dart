@@ -879,7 +879,7 @@ class _ResumenEmpleadoFiltrado extends StatelessWidget {
                   label: 'Pendiente',
                   cant: pendientes.length,
                   monto: totalPendiente,
-                  color: AppColors.accentOrange,
+                  color: AppColors.warning,
                 ),
               ),
               const SizedBox(width: 8),
@@ -2204,7 +2204,7 @@ class _ChipEstadoPago extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = pagado ? AppColors.success : AppColors.accentOrange;
+    final color = pagado ? AppColors.success : AppColors.warning;
     final icono = pagado ? Icons.check_circle : Icons.schedule;
     final texto = pagado && pagadoEn != null
         ? 'PAGADO ${AppFormatters.formatearFecha(pagadoEn!)}'

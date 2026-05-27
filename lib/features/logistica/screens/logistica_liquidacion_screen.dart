@@ -618,7 +618,7 @@ class _SeccionKPIs extends StatelessWidget {
           _LineaKPI(
             label: 'Adelantos entregados',
             valor: -totalAdelantos,
-            color: AppColors.accentOrange,
+            color: AppColors.warning,
           ),
           _LineaKPI(
             label: 'Gastos a reembolsar',
@@ -795,15 +795,15 @@ class _TablaPorChofer extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: AppColors.accentOrange.withValues(alpha: 0.2),
+                          color: AppColors.warning.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
-                              color: AppColors.accentOrange, width: 0.6),
+                              color: AppColors.warning, width: 0.6),
                         ),
                         child: Text(
                           '$pendientes pend.',
                           style: const TextStyle(
-                            color: AppColors.accentOrange,
+                            color: AppColors.warning,
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                           ),
@@ -978,7 +978,7 @@ class _AdelantoCardLiquidacion extends StatelessWidget {
           Text(
             '−\$${AppFormatters.formatearMonto(a.monto)}',
             style: const TextStyle(
-              color: AppColors.accentOrange,
+              color: AppColors.warning,
               fontWeight: FontWeight.bold,
               fontSize: 14,
             ),
@@ -1041,7 +1041,7 @@ class _ViajeCardLiquidacionState extends State<_ViajeCardLiquidacion> {
                     size: 14, color: AppColors.success)
               else
                 const Icon(Icons.schedule,
-                    size: 14, color: AppColors.accentOrange),
+                    size: 14, color: AppColors.warning),
             ],
           ),
           const SizedBox(height: 4),

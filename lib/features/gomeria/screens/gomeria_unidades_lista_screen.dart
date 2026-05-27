@@ -128,7 +128,7 @@ class _GomeriaUnidadesListaScreenState
                                 ? Icons.local_shipping_outlined
                                 : Icons.rv_hookup_outlined,
                             color: esTractor
-                                ? AppColors.accentOrange
+                                ? AppColors.warning
                                 : AppColors.accentTeal,
                           ),
                           const SizedBox(width: 12),
@@ -186,7 +186,7 @@ class _Chip extends StatelessWidget {
       label: Text(label),
       selected: seleccionado,
       onSelected: (_) => onTap(),
-      selectedColor: AppColors.accentOrange,
+      selectedColor: AppColors.warning,
       labelStyle: TextStyle(
         color: seleccionado ? Colors.black : Colors.white,
         fontWeight: FontWeight.bold,

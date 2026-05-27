@@ -661,7 +661,7 @@ class _Mapa extends StatelessWidget {
   static Color _colorVelocidad(double? vel) {
     if (vel == null) return Colors.white38;
     if (vel > 100) return AppColors.accentRed;
-    if (vel > 80) return AppColors.accentOrange;
+    if (vel > 80) return AppColors.warning;
     return AppColors.success;
   }
 
@@ -683,7 +683,7 @@ class _Mapa extends StatelessWidget {
         : severidad == 'HIGH'
             ? AppColors.accentRed
             : severidad == 'MEDIUM'
-                ? AppColors.accentOrange
+                ? AppColors.warning
                 : AppColors.success;
 
     return Marker(

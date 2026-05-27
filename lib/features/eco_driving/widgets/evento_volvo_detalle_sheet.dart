@@ -310,7 +310,7 @@ Color _colorSeveridad(String severidad) {
     case 'HIGH':
       return AppColors.accentRed;
     case 'MEDIUM':
-      return AppColors.accentOrange;
+      return AppColors.warning;
     case 'LOW':
       return AppColors.success;
     default:

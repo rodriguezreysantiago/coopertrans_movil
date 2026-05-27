@@ -93,7 +93,7 @@ class _RevisionCard extends StatelessWidget {
 
     // Color del icono y borde según tipo de solicitud
     final tipoColor = esCambioEquipo
-        ? AppColors.accentOrange
+        ? AppColors.warning
         : (esVehiculo ? AppColors.accentBlue : AppColors.success);
     final tipoIcon = esCambioEquipo
         ? Icons.swap_horiz
@@ -104,7 +104,7 @@ class _RevisionCard extends StatelessWidget {
       // Cambios de equipo destacados con borde naranja para que llamen la atención
       highlighted: esCambioEquipo,
       borderColor: esCambioEquipo
-          ? AppColors.accentOrange.withAlpha(150)
+          ? AppColors.warning.withAlpha(150)
           : null,
       child: Row(
         children: [
@@ -277,7 +277,7 @@ class _DetalleRevision extends StatelessWidget {
       const SizedBox(height: 10),
       const Center(
         child: Icon(Icons.swap_vert_circle,
-            size: 70, color: AppColors.accentOrange),
+            size: 70, color: AppColors.warning),
       ),
       const SizedBox(height: 20),
       _InfoCard(
@@ -293,7 +293,7 @@ class _DetalleRevision extends StatelessWidget {
         const _InfoCard(
           label: 'EL CHOFER REPORTA QUE NO ES SU UNIDAD',
           valor: 'Elegí la unidad correcta al aprobar',
-          valorColor: AppColors.accentOrange,
+          valorColor: AppColors.warning,
           icon: Icons.report_problem_outlined,
         )
       else

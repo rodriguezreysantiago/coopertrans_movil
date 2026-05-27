@@ -179,7 +179,7 @@ class _Identidad extends StatelessWidget {
               _Pill(c.estado.codigo, color: colorEstado),
               _Pill(c.tipoUso.etiqueta.toUpperCase(),
                   color: c.tipoUso == TipoUsoCubierta.direccion
-                      ? AppColors.accentOrange
+                      ? AppColors.warning
                       : AppColors.accentBlue),
               _Pill(c.vidas == 1 ? 'NUEVA' : 'V${c.vidas}',
                   color: AppColors.accentTeal),

@@ -236,7 +236,7 @@ class _LogisticaMapaTarifasScreenState
                   child: Row(
                     children: [
                       Icon(Icons.warning_amber_outlined,
-                          color: AppColors.accentOrange),
+                          color: AppColors.warning),
                       SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -278,7 +278,7 @@ class _LogisticaMapaTarifasScreenState
                           Text(
                             f.motivo,
                             style: const TextStyle(
-                              color: AppColors.accentOrange,
+                              color: AppColors.warning,
                               fontSize: 12,
                             ),
                           ),
@@ -319,8 +319,8 @@ class _LogisticaMapaTarifasScreenState
                 icon: const Icon(Icons.warning_amber_outlined),
                 label: const Text('VER DIAGNÓSTICO'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.accentOrange,
-                  side: const BorderSide(color: AppColors.accentOrange),
+                  foregroundColor: AppColors.warning,
+                  side: const BorderSide(color: AppColors.warning),
                 ),
               ),
       );
@@ -366,7 +366,7 @@ class _LogisticaMapaTarifasScreenState
                     style: TextStyle(fontSize: 11),
                   ),
                   style: TextButton.styleFrom(
-                    foregroundColor: AppColors.accentOrange,
+                    foregroundColor: AppColors.warning,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
                       vertical: 0,
@@ -428,7 +428,7 @@ class _LogisticaMapaTarifasScreenState
                     final esResaltada =
                         _tarifaResaltadaId == t.tarifa.id;
                     final color = esResaltada
-                        ? AppColors.accentOrange
+                        ? AppColors.warning
                         : (inactiva
                             ? Colors.white24
                             : AppColors.success.withValues(
@@ -531,7 +531,7 @@ class _LogisticaMapaTarifasScreenState
                   top: 12,
                   left: 12,
                   child: Material(
-                    color: AppColors.accentOrange.withValues(alpha: 0.92),
+                    color: AppColors.warning.withValues(alpha: 0.92),
                     borderRadius: BorderRadius.circular(8),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(8),
@@ -1125,7 +1125,7 @@ class _DetalleTarifaSheet extends StatelessWidget {
             Row(
               children: [
                 const Icon(Icons.alt_route,
-                    color: AppColors.accentOrange, size: 18),
+                    color: AppColors.warning, size: 18),
                 const SizedBox(width: 8),
                 const Expanded(
                   child: Text(

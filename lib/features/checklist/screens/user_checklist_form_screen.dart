@@ -252,14 +252,14 @@ class _AvisoObligatorio extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.accentOrange.withAlpha(20),
+        color: AppColors.warning.withAlpha(20),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.accentOrange.withAlpha(50)),
+        border: Border.all(color: AppColors.warning.withAlpha(50)),
       ),
       child: const Row(
         children: [
           Icon(Icons.info_outline,
-              color: AppColors.accentOrange, size: 20),
+              color: AppColors.warning, size: 20),
           SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -396,7 +396,7 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
       case 'BUE':
         return AppColors.success;
       case 'REG':
-        return AppColors.accentOrange;
+        return AppColors.warning;
       case 'MAL':
         return AppColors.accentRed;
       default:

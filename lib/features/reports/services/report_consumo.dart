@@ -899,15 +899,15 @@ class _WarningHistoricoLimitado extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppColors.accentOrange.withAlpha(30),
+              color: AppColors.warning.withAlpha(30),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppColors.accentOrange.withAlpha(120)),
+              border: Border.all(color: AppColors.warning.withAlpha(120)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Icon(Icons.info_outline,
-                    color: AppColors.accentOrange, size: 18),
+                    color: AppColors.warning, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -915,7 +915,7 @@ class _WarningHistoricoLimitado extends StatelessWidget {
                     'Los días anteriores al ${AppFormatters.formatearFecha(fechaMin)} no van a tener '
                     'data en el reporte (se reportan como "(acum.)" o vacíos).',
                     style: const TextStyle(
-                      color: AppColors.accentOrange,
+                      color: AppColors.warning,
                       fontSize: 11,
                       height: 1.4,
                     ),

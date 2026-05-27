@@ -199,7 +199,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
                 descripcion:
                     'Litros, KM y promedio L/100km por unidad, con ranking visual de top consumidores.',
                 icono: Icons.local_gas_station_rounded,
-                color: AppColors.accentOrange,
+                color: AppColors.warning,
                 onTap: _generando ? null : _ejecutarReporteConsumo,
               ),
               const SizedBox(height: 12),

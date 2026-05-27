@@ -520,7 +520,7 @@ class _TarifasMontos extends StatelessWidget {
               etiqueta: 'BRUTO',
               monto: tarifa.diferenciaBruta,
               sufijo: tarifa.unidadTarifa.sufijoMonto,
-              color: AppColors.accentOrange,
+              color: AppColors.warning,
             ),
           ),
         ],
@@ -597,7 +597,7 @@ class _ChipTipo extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: (esTerceros ? AppColors.accentOrange : AppColors.accentBlue)
+        color: (esTerceros ? AppColors.warning : AppColors.accentBlue)
             .withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(3),
       ),
@@ -605,7 +605,7 @@ class _ChipTipo extends StatelessWidget {
         tarifa.tipoCarga.etiqueta.toUpperCase(),
         style: TextStyle(
           color:
-              esTerceros ? AppColors.accentOrange : AppColors.accentBlue,
+              esTerceros ? AppColors.warning : AppColors.accentBlue,
           fontSize: 9,
           fontWeight: FontWeight.bold,
           letterSpacing: 1.0,

@@ -77,7 +77,7 @@ class _CardVencimientoUser extends StatelessWidget {
           margin: const EdgeInsets.symmetric(vertical: 4),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           highlighted: enRevision,
-          borderColor: enRevision ? AppColors.accentOrange.withAlpha(150) : null,
+          borderColor: enRevision ? AppColors.warning.withAlpha(150) : null,
           child: Row(
             children: [
               AppFileThumbnail(
@@ -109,7 +109,7 @@ class _CardVencimientoUser extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 11,
                         color: enRevision
-                            ? AppColors.accentOrange
+                            ? AppColors.warning
                             : Colors.white60,
                         fontWeight: enRevision
                             ? FontWeight.bold
@@ -126,7 +126,7 @@ class _CardVencimientoUser extends StatelessWidget {
                 _BotonUpload(onTap: onUpload),
               ] else
                 const Icon(Icons.hourglass_top,
-                    color: AppColors.accentOrange, size: 20),
+                    color: AppColors.warning, size: 20),
             ],
           ),
         );
@@ -474,7 +474,7 @@ class _AccesoChecklist extends StatelessWidget {
           mensaje = 'Checklist VENCIDO: realizar YA';
           icono = Icons.warning_amber_rounded;
         } else if (dia > 10) {
-          color = AppColors.accentOrange;
+          color = AppColors.warning;
           mensaje = 'Checklist pendiente (vence el día 15)';
           icono = Icons.fact_check_outlined;
         } else {

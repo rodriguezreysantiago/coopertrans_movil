@@ -79,11 +79,11 @@ class _SeccionUnidad extends StatelessWidget {
                     dni: dni,
                   ),
                   icon: const Icon(Icons.report_problem_outlined,
-                      size: 16, color: AppColors.accentOrange),
+                      size: 16, color: AppColors.warning),
                   label: const Text(
                     'ESTA NO ES MI UNIDAD',
                     style: TextStyle(
-                      color: AppColors.accentOrange,
+                      color: AppColors.warning,
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -141,11 +141,11 @@ class _CardEnRevision extends StatelessWidget {
 
     return AppCard(
       highlighted: true,
-      borderColor: AppColors.accentOrange.withAlpha(150),
+      borderColor: AppColors.warning.withAlpha(150),
       child: Row(
         children: [
           const Icon(Icons.history_toggle_off,
-              color: AppColors.accentOrange, size: 30),
+              color: AppColors.warning, size: 30),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -163,7 +163,7 @@ class _CardEnRevision extends StatelessWidget {
                 Text(
                   subtitulo,
                   style: const TextStyle(
-                    color: AppColors.accentOrange,
+                    color: AppColors.warning,
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1,
@@ -368,7 +368,7 @@ class _ResumenVencimientosEquipo extends StatelessWidget {
       if (criticos > 0)
         _ChipResumen(
           texto: '$criticos por vencer',
-          color: AppColors.accentOrange,
+          color: AppColors.warning,
         ),
       if (proximos > 0)
         _ChipResumen(
@@ -628,7 +628,7 @@ class _DatoCombustible extends StatelessWidget {
 
   Color get _color {
     if (porcentaje >= 50) return AppColors.success;
-    if (porcentaje >= 20) return AppColors.accentOrange;
+    if (porcentaje >= 20) return AppColors.warning;
     return AppColors.accentRed;
   }
 
@@ -707,7 +707,7 @@ class _ReporteUnidad {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-                backgroundColor: AppColors.accentOrange),
+                backgroundColor: AppColors.warning),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Sí, avisar a la oficina'),
           ),

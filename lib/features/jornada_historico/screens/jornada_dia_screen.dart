@@ -726,7 +726,7 @@ class _ResumenCard extends StatelessWidget {
                   label: 'PARADAS',
                   valor: _fmtHM(j.paradasMin),
                   icono: Icons.local_parking,
-                  color: AppColors.accentOrange),
+                  color: AppColors.warning),
               _Kpi(
                   label: 'KM',
                   valor: j.kmTotal.toString(),
@@ -954,7 +954,7 @@ class _ParadaCard extends StatelessWidget {
     final color =
         p.cumple8h ? AppColors.success :
         p.cumple15min ? AppColors.accentTeal :
-        AppColors.accentOrange;
+        AppColors.warning;
     final hint = p.cumple8h
         ? '✓ Descanso entre jornadas (≥ 8h)'
         : p.cumple15min

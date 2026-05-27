@@ -78,7 +78,7 @@ class AdminVencimientosMenuScreen extends StatelessWidget {
             titulo: 'VENCIMIENTOS DE TRACTORES',
             subtitulo: 'Control de RTO y seguros de camiones',
             icono: Icons.local_shipping,
-            colorIcono: AppColors.accentOrange,
+            colorIcono: AppColors.warning,
             ruta: '/vencimientos_chasis',
           ),
           const _MenuTile(

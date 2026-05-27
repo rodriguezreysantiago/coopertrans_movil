@@ -83,7 +83,7 @@ class GomeriaHubScreen extends StatelessWidget {
                         titulo: 'UNIDADES',
                         subtitulo: 'Cambiar cubiertas por posición',
                         icono: Icons.local_shipping_outlined,
-                        color: AppColors.accentOrange,
+                        color: AppColors.warning,
                         ruta: AppRoutes.adminGomeriaUnidades,
                       ),
                       _HubTile(
@@ -234,7 +234,7 @@ class _AlertasFinDeVida extends StatelessWidget {
             final criticas = alertas.where((a) => a.porcentaje >= 100).length;
             final color = criticas > 0
                 ? AppColors.accentRed
-                : AppColors.accentOrange;
+                : AppColors.warning;
             final etiqueta = criticas > 0
                 ? '$criticas cubierta${criticas == 1 ? "" : "s"} pasaron su vida útil'
                 : '${alertas.length} cubierta${alertas.length == 1 ? "" : "s"} próxima${alertas.length == 1 ? "" : "s"} a fin de vida';
@@ -355,7 +355,7 @@ class _AlertasSheet extends StatelessWidget {
                 final a = alertas[i];
                 final color = a.porcentaje >= 100
                     ? AppColors.accentRed
-                    : AppColors.accentOrange;
+                    : AppColors.warning;
                 final pos = a.instalada.posicionTipada;
                 return AppCard(
                   onTap: () {

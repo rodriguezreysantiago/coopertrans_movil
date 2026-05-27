@@ -156,7 +156,7 @@ class VehiculoActions {
             ),
             ListTile(
               leading: const Icon(Icons.upload_file,
-                  color: AppColors.accentOrange),
+                  color: AppColors.warning),
               title: Text(
                 urlActual != null &&
                         urlActual.isNotEmpty &&

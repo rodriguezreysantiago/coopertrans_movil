@@ -72,7 +72,7 @@ Color _colorSeveridad(SeveridadAdvertencia s) {
     case SeveridadAdvertencia.critico:
       return AppColors.accentRed;
     case SeveridadAdvertencia.alto:
-      return AppColors.accentOrange;
+      return AppColors.warning;
     case SeveridadAdvertencia.medio:
       return AppColors.accentAmber;
     case SeveridadAdvertencia.bajo:

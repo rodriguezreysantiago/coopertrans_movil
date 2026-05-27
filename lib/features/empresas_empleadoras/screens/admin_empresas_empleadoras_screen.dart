@@ -290,7 +290,7 @@ class _FilaDocEmpresa extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.upload_file,
-                  color: AppColors.accentOrange),
+                  color: AppColors.warning),
               title: Text(
                 tieneArchivo
                     ? 'Reemplazar archivo cargado'

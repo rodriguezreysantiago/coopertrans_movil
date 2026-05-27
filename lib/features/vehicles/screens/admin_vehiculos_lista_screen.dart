@@ -89,7 +89,7 @@ class _AdminVehiculosListaScreenState
                     ? Icons.shield_moon_outlined
                     : Icons.shield_outlined,
                 color: _mostrarExcluidos
-                    ? AppColors.accentOrange
+                    ? AppColors.warning
                     : Colors.white70,
               ),
               onPressed: () =>
@@ -104,7 +104,7 @@ class _AdminVehiculosListaScreenState
                   ? Icons.visibility_off_outlined
                   : Icons.archive_outlined,
               color: _mostrarInactivos
-                  ? AppColors.accentOrange
+                  ? AppColors.warning
                   : Colors.white70,
             ),
             onPressed: () =>

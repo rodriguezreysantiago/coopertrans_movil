@@ -168,15 +168,15 @@ class _EquipoOfflineFallback extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppColors.accentOrange.withAlpha(40),
+            color: AppColors.warning.withAlpha(40),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.accentOrange.withAlpha(120)),
+            border: Border.all(color: AppColors.warning.withAlpha(120)),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Icon(Icons.signal_wifi_bad_outlined,
-                  color: AppColors.accentOrange),
+                  color: AppColors.warning),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -185,7 +185,7 @@ class _EquipoOfflineFallback extends StatelessWidget {
                     Text(
                       motivo == null ? 'Conexión lenta' : 'Datos incompletos',
                       style: const TextStyle(
-                        color: AppColors.accentOrange,
+                        color: AppColors.warning,
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
                       ),

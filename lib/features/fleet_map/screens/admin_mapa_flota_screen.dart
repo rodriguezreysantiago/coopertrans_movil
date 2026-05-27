@@ -264,7 +264,7 @@ class _Toolbar extends StatelessWidget {
                     label: 'DRIFT',
                     valor: '$drifts',
                     color: drifts > 0
-                        ? AppColors.accentOrange
+                        ? AppColors.warning
                         : Colors.white38),
               ],
             ),
@@ -317,7 +317,7 @@ class _Toolbar extends StatelessWidget {
                   label: 'SOLO DRIFT',
                   icono: Icons.warning_amber_outlined,
                   activo: soloDrift,
-                  colorActivo: AppColors.accentOrange,
+                  colorActivo: AppColors.warning,
                   onChange: onSoloDriftToggle,
                 ),
               ],
@@ -590,7 +590,7 @@ class _Mapa extends StatelessWidget {
     required int? minStale,
     required bool tieneDrift,
   }) {
-    if (tieneDrift) return AppColors.accentOrange;
+    if (tieneDrift) return AppColors.warning;
     if (minStale != null && minStale > 60) return AppColors.accentRed;
     if (ignition) return AppColors.success;
     return Colors.white60;
@@ -949,7 +949,7 @@ class _TelemetriaVolvoFila extends StatelessWidget {
   /// listado de unidades.
   static Color _colorPorcentaje(double pct) {
     if (pct > 50) return AppColors.success;
-    if (pct >= 20) return AppColors.accentOrange;
+    if (pct >= 20) return AppColors.warning;
     return AppColors.accentRed;
   }
 }
@@ -1012,15 +1012,15 @@ class _DriftBanner extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: AppColors.accentOrange.withAlpha(30),
+        color: AppColors.warning.withAlpha(30),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.accentOrange.withAlpha(120)),
+        border: Border.all(color: AppColors.warning.withAlpha(120)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Icon(Icons.warning_amber,
-              color: AppColors.accentOrange, size: 18),
+              color: AppColors.warning, size: 18),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -1029,7 +1029,7 @@ class _DriftBanner extends StatelessWidget {
                 Text(
                   titulo,
                   style: const TextStyle(
-                    color: AppColors.accentOrange,
+                    color: AppColors.warning,
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 0.4,

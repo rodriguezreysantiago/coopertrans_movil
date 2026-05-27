@@ -19,7 +19,7 @@ extension VencimientoEstadoX on VencimientoEstado {
       case VencimientoEstado.vencido:
         return AppColors.accentRed;
       case VencimientoEstado.critico:
-        return AppColors.accentOrange;
+        return AppColors.warning;
       case VencimientoEstado.proximo:
         return AppColors.accentAmber;
       case VencimientoEstado.ok:

@@ -227,11 +227,11 @@ class _BloqueVolvo extends StatelessWidget {
             child: TextButton.icon(
               onPressed: onDiagnostico,
               icon: const Icon(Icons.bug_report,
-                  color: AppColors.accentOrange, size: 18),
+                  color: AppColors.warning, size: 18),
               label: const Text(
                 'DIAGNÓSTICO',
                 style: TextStyle(
-                  color: AppColors.accentOrange,
+                  color: AppColors.warning,
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                   letterSpacing: 1,

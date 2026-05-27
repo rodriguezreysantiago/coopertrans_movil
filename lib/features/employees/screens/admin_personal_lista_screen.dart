@@ -88,7 +88,7 @@ class _AdminPersonalListaScreenState
                   ? Icons.shield_moon_outlined
                   : Icons.shield_outlined,
               color: _mostrarExcluidos
-                  ? AppColors.accentOrange
+                  ? AppColors.warning
                   : Colors.white70,
             ),
             onPressed: () =>
@@ -125,7 +125,7 @@ class _AdminPersonalListaScreenState
                   onSelected: (v) =>
                       setState(() => _mostrarInactivos = v),
                   selectedColor:
-                      AppColors.accentOrange.withValues(alpha: 0.6),
+                      AppColors.warning.withValues(alpha: 0.6),
                   avatar: Icon(
                     _mostrarInactivos
                         ? Icons.visibility
