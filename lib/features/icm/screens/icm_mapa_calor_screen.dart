@@ -78,7 +78,7 @@ class _IcmMapaCalorScreenState extends State<IcmMapaCalorScreen> {
                 if (snap.hasError) {
                   return _MensajeCentro(
                     'Error cargando el mapa: ${snap.error}',
-                    color: Colors.redAccent,
+                    color: AppColors.error,
                   );
                 }
                 final per = snap.data;

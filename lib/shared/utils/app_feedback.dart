@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 /// consistentes en toda la app.
 ///
 /// Antes cada pantalla armaba su `SnackBar` con `Colors.green`,
-/// `Colors.greenAccent`, `Colors.redAccent`, etc. de forma ad-hoc, lo
+/// `AppColors.success`, `AppColors.error`, etc. de forma ad-hoc, lo
 /// que producía tonos ligeramente distintos y duraciones inconsistentes.
 /// Esto unifica todo en cuatro variantes semánticas:
 ///
@@ -34,7 +34,7 @@ class AppFeedback {
 
   // Paleta semántica. Todas las pantallas que necesiten estos colores
   // (badges, bordes, etc.) deberían referenciar estas constantes en vez
-  // de hardcodear `Colors.green` / `Colors.redAccent`.
+  // de hardcodear `Colors.green` / `AppColors.error`.
   static const Color colorSuccess = Color(0xFF2E7D32); // green 800
   static const Color colorError = Color(0xFFD32F2F);   // red 700
   static const Color colorWarning = Color(0xFFEF6C00); // orange 800

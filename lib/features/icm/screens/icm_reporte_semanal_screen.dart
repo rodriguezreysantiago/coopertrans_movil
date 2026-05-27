@@ -1,3 +1,4 @@
+import 'package:coopertrans_movil/shared/constants/app_colors.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -107,7 +108,7 @@ class _IcmReporteSemanalScreenState extends State<IcmReporteSemanalScreen> {
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text('Error: ${snap.error}',
-                          style: const TextStyle(color: Colors.redAccent)),
+                          style: const TextStyle(color: AppColors.error)),
                     ),
                   );
                 }
@@ -199,7 +200,7 @@ class _HeaderFlota extends StatelessWidget {
     final mejoro = delta < 0; // más bajo = mejor
     final deltaColor = !tienePrev || igual
         ? Colors.white54
-        : (mejoro ? Colors.greenAccent : Colors.redAccent);
+        : (mejoro ? AppColors.success : AppColors.error);
     final deltaTxt = !tienePrev
         ? 'Sin mes anterior para comparar'
         : igual

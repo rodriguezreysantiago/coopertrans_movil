@@ -1,3 +1,4 @@
+import 'package:coopertrans_movil/shared/constants/app_colors.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -102,7 +103,7 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text('Error: ${snap.error}',
-                    style: const TextStyle(color: Colors.redAccent)),
+                    style: const TextStyle(color: AppColors.error)),
               ),
             );
           }
@@ -370,7 +371,7 @@ class _ComparativaMeses extends StatelessWidget {
     final igual = delta.abs() < 0.05;
     final color = igual
         ? Colors.white54
-        : (mejoro ? Colors.greenAccent : Colors.redAccent);
+        : (mejoro ? AppColors.success : AppColors.error);
     final icono = igual
         ? Icons.remove
         : (mejoro ? Icons.arrow_downward : Icons.arrow_upward);
@@ -771,7 +772,7 @@ class _InfraccionCard extends StatelessWidget {
                             : 'Límite ${i.velLimite!.toStringAsFixed(0)} km/h',
                     style: TextStyle(
                       color: i.esExcesoVelocidad
-                          ? Colors.redAccent
+                          ? AppColors.error
                           : Colors.white60,
                       fontSize: 11,
                       fontWeight: i.esExcesoVelocidad

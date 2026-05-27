@@ -1,3 +1,4 @@
+import 'package:coopertrans_movil/shared/constants/app_colors.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -137,7 +138,7 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
                 if (snap.hasError) {
                   return _MensajeCentro(
                     'Error cargando el ranking: ${snap.error}',
-                    color: Colors.redAccent,
+                    color: AppColors.error,
                   );
                 }
                 final periodo = snap.data;

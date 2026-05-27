@@ -12,7 +12,7 @@ import '../constants/app_colors.dart';
 ///   context: context,
 ///   barrierDismissible: false,
 ///   builder: (_) => const Center(
-///     child: CircularProgressIndicator(color: Colors.greenAccent),
+///     child: CircularProgressIndicator(color: AppColors.success),
 ///   ),
 /// ));
 /// ```
