@@ -1,148 +1,162 @@
 import 'package:flutter/material.dart';
 
-/// Paleta de colores centralizada de la app.
+/// Paleta de colores centralizada — REFACTOR 2026-05-24.
 ///
-/// **Cuándo usar esto vs `Theme.of(context)` vs `Colors.greenAccent`:**
+/// **Antes:** brand cobalto + 11 `Colors.<accent>` neon de la era prototipo.
+/// **Ahora:** brand cobalto + 4 semánticos + 3 niveles de superficie.
 ///
-/// - Para colores que cambian con el tema (primary, surface, etc.) usar
-///   `Theme.of(context).colorScheme.primary`. El [AppTheme] ya configura
-///   esos tokens.
-/// - Para colores semánticos puntuales (un badge de éxito en una card,
-///   un border de warning, etc.) usar las constantes de `AppColors`.
-/// - **NO** usar `Colors.greenAccent` / `Colors.redAccent` / `Colors.orangeAccent`
-///   / `Colors.blueAccent` / `Colors.cyanAccent` / `Colors.amberAccent`
-///   directo en código nuevo. Son los mismos valores pero descentralizados —
-///   cuando cambies la paleta vas a tener que buscarlos archivo por archivo.
+/// **Reglas de uso (de memoria):**
 ///
-/// **El CI gatea esto** (`.github/workflows/ci.yml` step "No nuevos colors
-/// hardcoded"): si introducís en un commit/PR un `Colors.<accent>` nuevo
-/// en `lib/`, el job falla con un error claro. Esto previene que la deuda
-/// histórica siga creciendo.
+/// 1. **Identidad (brand).** Solo para acciones primarias, focus, nav activa,
+///    superficies de marca (login, splash, ilustraciones de empty state).
+///    **Nunca** como "color de categoría" de un tile.
+/// 2. **Estado (semántico).** [success] / [warning] / [error] / [info].
+///    Son los únicos colores que pueden aparecer dentro de un número KPI,
+///    badge o barra de gráfico.
+/// 3. **Categoría de módulo.** Usar el icono + label. No el color.
+///    Si una cosa "tiene que destacarse" use semántico (warning/error)
+///    porque ahí el color significa algo, no decora.
 ///
-/// **`Colors.white` / `Colors.black` / `Colors.transparent` / `Colors.whiteXX`
-/// SÍ siguen siendo válidos** — son tokens del design system de Material,
-/// no marca propia. El guard del CI los ignora.
-///
-/// El código existente todavía usa `Colors.*<accent>` en ~820 lugares; la
-/// migración es incremental — cada vez que toques un archivo por otro
-/// motivo, aprovechá para reemplazar.
+/// **Migración.** Los tokens `accentXxx` quedan como aliases @Deprecated
+/// apuntando al equivalente semántico, así el código existente compila
+/// y se va migrando incremental. El CI guard de `Colors.<accent>` sigue
+/// vigente para no agregar nuevos.
 class AppColors {
   AppColors._();
 
-  // ===========================================================================
-  // SEMÁNTICOS (alineados con AppFeedback)
-  // ===========================================================================
-  /// Verde "guardado/exitoso" para snackbars, confirmaciones, badges.
-  /// Mismo valor que [AppFeedback.colorSuccess] — referenciar uno u otro
-  /// según contexto (helper de feedback vs. paleta visual).
-  static const Color success = Color(0xFF2E7D32); // green 800
+  // ============================================================================
+  // BRAND (Coopertrans Móvil — cobalto)
+  // ============================================================================
 
-  /// Rojo "falló/destructivo" para errores, botones de borrado,
-  /// confirmaciones destructivas.
-  static const Color error = Color(0xFFD32F2F); // red 700
-
-  /// Naranja "atención sin error" para warnings, estados intermedios,
-  /// info que el usuario necesita ver pero no es bloqueante.
-  static const Color warning = Color(0xFFEF6C00); // orange 800
-
-  /// Azul "informativo" para tooltips, hints, mensajes neutros.
-  static const Color info = Color(0xFF1565C0); // blue 800
-
-  // ===========================================================================
-  // BRAND (Coopertrans Móvil — rebrand 2026-05-02)
-  // ===========================================================================
-  /// Color principal de marca — azul cobalto. Tono moderno que diferencia
-  /// la app del verde-accent default de Flutter. Usar en: logo grande,
-  /// splash, botones primarios, énfasis principal.
+  /// Color principal de marca — azul cobalto. Usar en:
+  /// - Botones primarios (`AppButton.primary`)
+  /// - Focus rings de inputs
+  /// - Nav activa (NavigationRail / BottomNav selectedItemColor)
+  /// - Splash, login, ilustraciones de empty state
   ///
-  /// Coopertrans no tiene paleta de marca histórica — esta paleta es
-  /// definición nueva del rebrand. Si el cliente decide otro color,
-  /// se cambia acá y propaga a toda la app.
-  static const Color brand = Color(0xFF0EA5E9); // sky-500 / cobalto
+  /// **NO** usar como color de categoría / tile.
+  static const Color brand = Color(0xFF0EA5E9);
 
-  /// Variante suave del brand para fondos, hover states, badges.
-  /// Mismo hue, menos saturación — útil cuando el [brand] sería muy fuerte.
-  static const Color brandSoft = Color(0xFF38BDF8); // sky-400
+  /// Variante suave del brand — para hovers, badges, fondos de hint.
+  static const Color brandSoft = Color(0xFF38BDF8);
 
-  /// Variante oscura del brand para gradients (login, splash).
-  /// Acompaña al [brand] en transiciones hacia el [background].
-  static const Color brandDark = Color(0xFF075985); // sky-800
+  /// Variante oscura del brand — para gradients (login, splash).
+  static const Color brandDark = Color(0xFF075985);
 
-  // ===========================================================================
-  // ACCENT (los que se usan dispersos en el código actual)
-  // ===========================================================================
-  /// Verde accent — color primario de la marca. Es el mismo que el
-  /// `colorScheme.primary` del tema. Útil para íconos secundarios y
-  /// detalles cuando no querés depender de `Theme.of(context)`.
-  static const Color accentGreen = Colors.greenAccent;
+  // ============================================================================
+  // SEMÁNTICOS (estado)
+  // ============================================================================
 
-  /// Naranja accent — usado para warnings visuales en badges y avatares
-  /// (más vibrante que [warning] que va en fondos sólidos).
-  static const Color accentOrange = Colors.orangeAccent;
+  /// Verde "OK / al día / guardado". Único verde de la app.
+  /// Reemplaza a [accentGreen] y [accentLightGreen].
+  static const Color success = Color(0xFF1F8A5B);
 
-  /// Rojo accent — para íconos destructivos, borders de alerta.
-  static const Color accentRed = Colors.redAccent;
+  /// Naranja "atención sin error / vence pronto / advertencia".
+  /// Reemplaza a [accentOrange], [accentAmber], [accentDeepOrange].
+  static const Color warning = Color(0xFFC46A14);
 
-  /// Azul accent — para íconos informativos, links, tooltips.
-  static const Color accentBlue = Colors.blueAccent;
+  /// Rojo "vencido / falló / destructivo".
+  /// Reemplaza a [accentRed].
+  static const Color error = Color(0xFFB3261E);
 
-  /// Cyan accent — específico del Sync Dashboard / telemetría Volvo.
-  static const Color accentCyan = Colors.cyanAccent;
+  /// Azul "informativo" para tooltips, hints, badges neutros.
+  /// Reemplaza a [accentBlue] y [accentLightBlue] cuando son informativos
+  /// (cuando se usaban como "categoría", usar surface3 + label).
+  static const Color info = Color(0xFF0B6DA4);
 
-  /// Amber accent — usado en alertas intermedias del bot, indicador
-  /// "atención" que no llega a warning sólido.
-  static const Color accentAmber = Colors.amberAccent;
+  // ============================================================================
+  // SUPERFICIE (3 niveles de elevación)
+  // ============================================================================
 
-  /// Teal accent — categoría visual para enganches/bateas en
-  /// admin_vencimientos_menu y panel admin (diferenciar de tractores).
-  static const Color accentTeal = Colors.tealAccent;
+  /// **surface-0** — fondo del scaffold. La capa más profunda.
+  /// Sin contenido encima directamente; siempre hay al menos un
+  /// surface-1 o surface-2 mediando.
+  static const Color surface0 = Color(0xFF09141F);
 
-  /// Purple accent — categoría visual del bot WhatsApp / status
-  /// "diferenciador" en admin_panel.
-  static const Color accentPurple = Colors.purpleAccent;
+  /// **surface-1** — secciones, listas grandes, contenedores de varias cards.
+  static const Color surface1 = Color(0xFF0E1A26);
 
-  /// Deep orange — variante más fuerte de [accentOrange]. Usado para
-  /// diferenciar visualmente el tile SERVICE del tile GOMERÍA en el
-  /// panel admin (ambos son del rubro mantenimiento pero distintos).
-  static const Color accentDeepOrange = Colors.deepOrangeAccent;
+  /// **surface-2** — cards, sheets, dialogs, KPIs. La que se ve más.
+  /// Equivale al viejo `surface` del AppTheme.
+  static const Color surface2 = Color(0xFF132538);
 
-  /// Light green — variante suave de [accentGreen]. Usado para el tile
-  /// ESTADO BOT en el panel admin (no es alerta, es info de servicio).
-  static const Color accentLightGreen = Colors.lightGreenAccent;
+  /// **surface-3** — elemento elevado sobre una card (badge, icon disc,
+  /// hover state, raised button bg en card oscura).
+  static const Color surface3 = Color(0xFF1A2E45);
 
-  /// Light blue — variante suave de [accentBlue]. Usado para el badge
-  /// del rol PLANTA (info de jerarquía, no atención ni acción).
-  static const Color accentLightBlue = Colors.lightBlueAccent;
+  /// Alias retrocompatible — el viejo `background` del AppTheme apuntaba
+  /// al scaffold. Migración incremental: cambiar a [surface0] cuando se
+  /// toque el archivo.
+  static const Color background = surface0;
 
-  // ===========================================================================
-  // BACKGROUND / SURFACE
-  // ===========================================================================
-  /// Fondo principal de la app (oscuro). Coincide con
-  /// `scaffoldBackgroundColor` del [AppTheme].
-  static const Color background = Color(0xFF09141F);
+  /// Alias retrocompatible — el viejo `surface` del AppTheme apuntaba a
+  /// las cards. Migración incremental: cambiar a [surface2].
+  static const Color surface = surface2;
 
-  /// Fondo de cards, sheets, dialogs. Coincide con
-  /// `colorScheme.surface` del [AppTheme].
-  static const Color surface = Color(0xFF132538);
+  // ============================================================================
+  // TEXTO (jerarquía sobre fondo oscuro)
+  // ============================================================================
 
-  // ===========================================================================
-  // TEXT (jerarquía)
-  // ===========================================================================
-  /// Texto principal: títulos, valores destacados.
-  static const Color textPrimary = Colors.white;
+  /// Texto principal — títulos, valores destacados.
+  static const Color textPrimary = Color(0xFFFFFFFF);
 
-  /// Texto secundario: subtítulos, descripciones, body.
-  static const Color textSecondary = Colors.white70;
+  /// Texto secundario — subtítulos, body, descripciones.
+  static const Color textSecondary = Color(0xB3FFFFFF); // white 70%
 
-  /// Texto terciario: labels, captions, info de menor jerarquía.
-  static const Color textTertiary = Colors.white54;
+  /// Texto terciario — labels, captions, info de menor jerarquía.
+  static const Color textTertiary = Color(0x8AFFFFFF); // white 54%
 
-  /// Texto disabled / placeholder / hint.
-  static const Color textDisabled = Colors.white38;
+  /// Texto disabled / hint / placeholder.
+  static const Color textDisabled = Color(0x61FFFFFF); // white 38%
 
-  /// Texto extremadamente sutil — íconos decorativos, separators.
-  static const Color textHint = Colors.white24;
+  /// Texto extremadamente sutil — íconos decorativos, separadores.
+  static const Color textHint = Color(0x3DFFFFFF); // white 24%
 
-  /// Borders muy sutiles (ej. shadow internas de cards).
-  static const Color borderSubtle = Color(0x1AFFFFFF); // white con alpha 10%
+  /// Borde sutil de cards (1px, 6% white).
+  static const Color borderSubtle = Color(0x0FFFFFFF); // white ~6%
+
+  /// Borde un poco más visible — separadores entre secciones.
+  static const Color borderStrong = Color(0x1FFFFFFF); // white ~12%
+
+  // ============================================================================
+  // DEPRECATED — aliases hacia los semánticos
+  // ============================================================================
+  //
+  // Existen solo para que el código viejo siga compilando. La migración
+  // es find-and-replace; ver `refactor/MIGRATION.md` para el mapping.
+  // Borrar todo este bloque cuando el grep de `accentGreen|accentOrange|...`
+  // devuelva 0 hits.
+
+  @Deprecated('Usar AppColors.success')
+  static const Color accentGreen = success;
+
+  @Deprecated('Usar AppColors.warning')
+  static const Color accentOrange = warning;
+
+  @Deprecated('Usar AppColors.error')
+  static const Color accentRed = error;
+
+  @Deprecated('Usar AppColors.info')
+  static const Color accentBlue = info;
+
+  @Deprecated('Usar AppColors.brand (era el cyan de Volvo telemetry)')
+  static const Color accentCyan = brand;
+
+  @Deprecated('Usar AppColors.warning')
+  static const Color accentAmber = warning;
+
+  @Deprecated('Usar AppColors.brandSoft (era el teal de enganches)')
+  static const Color accentTeal = brandSoft;
+
+  @Deprecated('Usar AppColors.brand (era el purple de Flota)')
+  static const Color accentPurple = brand;
+
+  @Deprecated('Usar AppColors.warning')
+  static const Color accentDeepOrange = warning;
+
+  @Deprecated('Usar AppColors.success')
+  static const Color accentLightGreen = success;
+
+  @Deprecated('Usar AppColors.info')
+  static const Color accentLightBlue = info;
 }
