@@ -326,7 +326,7 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
           borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(20)),
+              const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
           border: const Border(
               top: BorderSide(color: AppColors.success, width: 2)),
         ),
@@ -334,28 +334,28 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Padding(
-                padding: const EdgeInsets.all(15),
+              const Padding(
+                padding: EdgeInsets.all(AppSpacing.md),
                 child: Text(
                   'Adjuntar documento',
-                  style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: AppType.heading,
                 ),
               ),
               ListTile(
                 leading:
                     const Icon(Icons.camera_alt, color: AppColors.success),
                 title: const Text('Tomar foto',
-                    style: TextStyle(color: Colors.white)),
+                    style: TextStyle(color: AppColors.textPrimary)),
                 onTap: () => Navigator.pop(ctx, _FuenteArchivo.camera),
               ),
               ListTile(
                 leading:
                     const Icon(Icons.file_present, color: AppColors.info),
                 title: const Text('Seleccionar archivo (PDF/imagen)',
-                    style: TextStyle(color: Colors.white)),
+                    style: TextStyle(color: AppColors.textPrimary)),
                 onTap: () => Navigator.pop(ctx, _FuenteArchivo.fileSystem),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: AppSpacing.sm),
             ],
           ),
         ),
@@ -452,8 +452,8 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
                     contentPadding: EdgeInsets.zero,
                     title: Text(
                       e,
-                      style: const TextStyle(
-                          color: Colors.white, fontSize: 13),
+                      style: AppType.body.copyWith(
+                          color: AppColors.textPrimary, fontSize: 13),
                     ),
                     onTap: () {
                       setState(() => _empresaCtrl.text = e);
@@ -681,7 +681,7 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
             child: Form(
           key: _formKey,
           child: ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.all(AppSpacing.xl),
             children: [
               // Identificación visual: foto circular grande + botón
               // "Cambiar foto". Para que el admin reconozca la unidad
@@ -732,14 +732,15 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
                 onTap: _seleccionarEmpresa,
               ),
               if (esTractor) ...[
-                const SizedBox(height: 28),
+                const SizedBox(height: AppSpacing.xxl),
                 const _SectionTitle('Mantenimiento preventivo'),
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                   child: Text(
                     'Cargá los datos del último service realizado en el taller. '
                     'La distancia al próximo service la calcula Volvo automáticamente.',
-                    style: AppType.eyebrow.copyWith(color: Colors.white54),
+                    style: AppType.eyebrow
+                        .copyWith(color: AppColors.textTertiary),
                   ),
                 ),
                 const SizedBox(height: AppSpacing.sm),
@@ -757,7 +758,7 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
                   onTap: _seleccionarFechaUltimoService,
                 ),
               ],
-              const SizedBox(height: 28),
+              const SizedBox(height: AppSpacing.xxl),
               const _SectionTitle('Auditoría de vencimientos'),
               // Tiles generados desde la lista de specs: sumar un
               // VencimientoSpec a AppVencimientos.tractor / .enganche y
@@ -773,14 +774,14 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
                       '${_vencimientos[i].etiqueta} ${widget.vehiculoId}',
                 ),
                 if (i < _vencimientos.length - 1)
-                  const Divider(color: Colors.white10, height: 1),
+                  const Divider(color: AppColors.borderSubtle, height: 1),
               ],
               const SizedBox(height: AppSpacing.xxl),
               _BotonGuardar(
                 guardando: _isSaving,
                 onPressed: _guardar,
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: AppSpacing.xl),
             ],
           ),
         ),
