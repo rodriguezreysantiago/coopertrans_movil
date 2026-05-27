@@ -58,10 +58,15 @@ class _UserChecklistFormScreenState
             _HeaderInfo(patente: widget.patente),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.sm,
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                ),
                 children: [
                   const _AvisoObligatorio(),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: AppSpacing.xl),
                   ..._secciones.entries.map(
                     (sec) => _Seccion(
                       titulo: sec.key,
@@ -214,7 +219,10 @@ class _HeaderInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.lg,
+        vertical: AppSpacing.xs + 2,
+      ),
       decoration: BoxDecoration(
         color: AppColors.success.withAlpha(15),
         border: Border(
@@ -225,11 +233,15 @@ class _HeaderInfo extends StatelessWidget {
         children: [
           const Icon(Icons.tag, color: AppColors.success, size: 18),
           const SizedBox(width: AppSpacing.sm),
-          Text('UNIDAD: ',
-              style: AppType.label.copyWith(color: Colors.white60)),
+          Text('Unidad: ',
+              style: AppType.label.copyWith(color: AppColors.textSecondary)),
           Text(
             patente,
-            style: AppType.body.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.5),
+            style: AppType.body.copyWith(
+              color: AppColors.success,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.5,
+            ),
           ),
         ],
       ),
@@ -250,18 +262,21 @@ class _AvisoObligatorio extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: AppColors.warning.withAlpha(20),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         border: Border.all(color: AppColors.warning.withAlpha(50)),
       ),
       child: Row(
         children: [
           const Icon(Icons.info_outline,
               color: AppColors.warning, size: 20),
-          const SizedBox(width: 10),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Text(
               'Es obligatorio completar todos los puntos. Detalle cualquier novedad en el campo de texto.',
-              style: AppType.label.copyWith(color: Colors.white70, fontStyle: FontStyle.italic),
+              style: AppType.label.copyWith(
+                color: AppColors.textSecondary,
+                fontStyle: FontStyle.italic,
+              ),
             ),
           ),
         ],
@@ -301,23 +316,20 @@ class _Seccion extends StatelessWidget {
         // Header de la sección
         Container(
           padding: const EdgeInsets.symmetric(
-              vertical: 10, horizontal: 15),
+            vertical: AppSpacing.md,
+            horizontal: AppSpacing.lg,
+          ),
           width: double.infinity,
           decoration: BoxDecoration(
-            color:
-                Theme.of(context).colorScheme.primary.withAlpha(30),
+            color: AppColors.brand.withAlpha(30),
             borderRadius: BorderRadius.circular(AppRadius.sm),
             border: Border.all(
-              color: Theme.of(context).colorScheme.primary.withAlpha(50),
+              color: AppColors.brand.withAlpha(50),
             ),
           ),
           child: Text(
             titulo.toUpperCase(),
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
-            ),
+            style: AppType.eyebrow.copyWith(color: AppColors.brand),
           ),
         ),
         const SizedBox(height: AppSpacing.md),
@@ -331,7 +343,7 @@ class _Seccion extends StatelessWidget {
             onObservacion: (obs) => onObservacion(item, obs),
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: AppSpacing.xl),
       ],
     );
   }
@@ -393,7 +405,7 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
       case 'MAL':
         return AppColors.error;
       default:
-        return Colors.white24;
+        return AppColors.textHint;
     }
   }
 
@@ -404,15 +416,15 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+        color: AppColors.surface2,
         borderRadius: BorderRadius.circular(AppRadius.lg),
         border: Border.all(
           color: widget.tieneError
               ? AppColors.error
-              : Colors.white.withAlpha(15),
+              : AppColors.borderSubtle,
           width: widget.tieneError ? 2 : 1,
         ),
         boxShadow: widget.tieneError
@@ -430,18 +442,18 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
         children: [
           Text(
             widget.item,
-            style: const TextStyle(
-              color: Colors.white,
+            style: AppType.body.copyWith(
+              color: AppColors.textPrimary,
               fontSize: 15,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: AppSpacing.lg - 2),
           // Wrap en lugar de Row: si en pantalla angosta los 3 chips
           // no entran, se reacomodan en lugar de overflowing.
           Wrap(
-            spacing: 12,
-            runSpacing: 8,
+            spacing: AppSpacing.md,
+            runSpacing: AppSpacing.sm,
             alignment: WrapAlignment.spaceEvenly,
             children: ['BUE', 'REG', 'MAL'].map((estado) {
               final seleccionado = widget.respuesta == estado;
@@ -451,17 +463,22 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
                   child: Center(
                     child: Text(
                       estado,
-                      style: AppType.label.copyWith(color: seleccionado ? Colors.black : Colors.white, fontWeight: FontWeight.bold),
+                      style: AppType.label.copyWith(
+                        color: seleccionado
+                            ? Colors.black
+                            : AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
                 selected: seleccionado,
                 selectedColor: _colorEstado(estado),
-                backgroundColor: Colors.black26,
+                backgroundColor: AppColors.surface0,
                 side: BorderSide(
                   color: seleccionado
                       ? _colorEstado(estado)
-                      : Colors.white24,
+                      : AppColors.textHint,
                 ),
                 onSelected: (_) => widget.onEstado(estado),
               );
@@ -472,23 +489,29 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
             curve: Curves.easeInOut,
             child: mostrarObservacion
                 ? Padding(
-                    padding: const EdgeInsets.only(top: 14),
+                    padding: const EdgeInsets.only(top: AppSpacing.lg - 2),
                     child: TextField(
                       controller: _obsController,
-                      style: AppType.body.copyWith(color: Colors.white),
+                      style: AppType.body.copyWith(
+                        color: AppColors.textPrimary,
+                      ),
                       maxLines: 2,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
                         hintText: 'Explique la novedad encontrada...',
-                        hintStyle: const TextStyle(color: Colors.white38),
+                        hintStyle: const TextStyle(
+                          color: AppColors.textDisabled,
+                        ),
                         filled: true,
-                        fillColor: Colors.black.withAlpha(100),
+                        fillColor: AppColors.surface0,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.md),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.md),
                           borderSide: BorderSide.none,
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(AppRadius.md),
+                          borderRadius:
+                              BorderRadius.circular(AppRadius.md),
                           borderSide: BorderSide(
                             color: _colorEstado(widget.respuesta!),
                           ),
@@ -521,46 +544,25 @@ class _BotonEnviar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: const BoxDecoration(
+        color: AppColors.surface2,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha(100),
+            color: AppColors.surface0,
             blurRadius: 10,
-            offset: const Offset(0, -5),
+            offset: Offset(0, -5),
           ),
         ],
       ),
       child: SafeArea(
         top: false,
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.green,
-            minimumSize: const Size(double.infinity, 55),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
+        child: AppButton(
+          label: 'Guardar registro final',
+          size: AppButtonSize.lg,
+          expand: true,
+          isLoading: enviando,
           onPressed: enviando ? null : onPressed,
-          child: enviando
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
-              : const Text(
-                  'GUARDAR REGISTRO FINAL',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                    letterSpacing: 1,
-                  ),
-                ),
         ),
       ),
     );
