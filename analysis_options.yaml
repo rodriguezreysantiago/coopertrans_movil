@@ -24,17 +24,6 @@ analyzer:
     - "whatsapp-bot/**"
     - "build/**"
     - "**/.dart_tool/**"
-    # refactor/: kit del rebrand design-system pendiente de aplicar
-    # (TASK.md en G:/Drive). Es código no integrado al codebase activo
-    # — referencia clases (PrefsService, AppCollections, AppRoutes)
-    # que existen en lib/ pero el refactor/ no las importa. Hasta que
-    # se haga el merge oficial via TASK.md fases 1-8, queda excluido.
-    - "refactor/**"
-    # design_polish/: pack de follow-ups del design-review (login,
-    # avatar initials, AppOfflineBanner, AppSkeleton). Los archivos se
-    # copian uno por uno a lib/ vía Phases A-D. Mientras tanto los
-    # originales están sueltos sin imports resueltos — no integran.
-    - "design_polish/**"
 
 linter:
   # Lints adicionales habilitados (2026-04-28) sobre la base de
