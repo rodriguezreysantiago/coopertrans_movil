@@ -92,7 +92,7 @@ class _IcmMapaCalorScreenState extends State<IcmMapaCalorScreen> {
                   return const _MensajeCentro(
                     'Aún no hay datos del mapa de calor para este período.\n'
                     'Se sincroniza una vez al día desde Sitrack.',
-                    color: Colors.white54,
+                    color: AppColors.textTertiary,
                   );
                 }
                 final esDesktop = MediaQuery.of(context).size.width >= 900;
@@ -201,11 +201,10 @@ class _MapaHotspots extends StatelessWidget {
                   child: Center(
                     child: Text(
                       '${h.cantidad}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
+                      style: AppType.label.copyWith(
+                        color: AppColors.textPrimary,
                         fontWeight: FontWeight.bold,
-                        shadows: [
+                        shadows: const [
                           Shadow(offset: Offset(0, 1), blurRadius: 2),
                         ],
                       ),
@@ -222,9 +221,9 @@ class _MapaHotspots extends StatelessWidget {
   void _mostrarPopup(BuildContext context, HotspotInfraccion h) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: AppColors.surface2,
       builder: (_) => Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,33 +234,24 @@ class _MapaHotspots extends StatelessWidget {
                     color: _colorPorCantidad(h.cantidad, h.cantidad), size: 22),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
-                  child: Text(
-                    h.infraccion,
-                    style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-                  ),
+                  child: Text(h.infraccion, style: AppType.heading),
                 ),
-                Text(
-                  '${h.cantidad}',
-                  style: AppType.title.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
+                Text('${h.cantidad}', style: AppType.title),
               ],
             ),
             const SizedBox(height: AppSpacing.sm),
-            Text(
-              h.ubicacion,
-              style: const TextStyle(color: Colors.white70, fontSize: 13),
-            ),
+            Text(h.ubicacion, style: AppType.body),
             const SizedBox(height: AppSpacing.sm),
             Text(
               '${h.porcentaje.toStringAsFixed(1)}% del total de infracciones '
               '· puntaje ${h.puntaje.toStringAsFixed(2)} c/u',
-              style: AppType.label.copyWith(color: Colors.white54),
+              style: AppType.label,
             ),
             const SizedBox(height: AppSpacing.lg),
             Text(
               'Lat/Lng: ${h.latitud.toStringAsFixed(5)}, '
               '${h.longitud.toStringAsFixed(5)}',
-              style: AppType.eyebrow.copyWith(color: Colors.white38),
+              style: AppType.eyebrow,
             ),
           ],
         ),
@@ -281,15 +271,15 @@ class _ListaHotspots extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppColors.surface.withValues(alpha: 0.4),
+      color: AppColors.surface2.withValues(alpha: 0.4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xs),
             child: Text(
               'HOTSPOTS (${hotspots.length})',
-              style: AppType.label.copyWith(color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+              style: AppType.eyebrow,
             ),
           ),
           Expanded(
@@ -305,26 +295,26 @@ class _ListaHotspots extends StatelessWidget {
                         hotspots.first.cantidad),
                     child: Text(
                       '${h.cantidad}',
-                      style: AppType.eyebrow.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                      style: AppType.eyebrow.copyWith(color: AppColors.textPrimary),
                     ),
                   ),
                   title: Text(
                     h.infraccion,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600),
+                    style: AppType.body.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   subtitle: Text(
                     '${h.porcentaje.toStringAsFixed(1)}% · ${h.ubicacion}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.eyebrow.copyWith(color: Colors.white54),
+                    style: AppType.eyebrow,
                   ),
                   trailing: const Icon(Icons.center_focus_strong,
-                      size: 18, color: Colors.white38),
+                      size: 18, color: AppColors.textDisabled),
                   onTap: () => onTap(h),
                 );
               },
@@ -353,9 +343,9 @@ class _BarraPeriodo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.xs),
       child: Wrap(
-        spacing: 8,
+        spacing: AppSpacing.sm,
         children: [
           ChoiceChip(
             label: const Text('Mes actual'),
@@ -382,7 +372,7 @@ class _MensajeCentro extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(28),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Text(
           texto,
           textAlign: TextAlign.center,
