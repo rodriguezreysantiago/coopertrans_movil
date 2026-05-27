@@ -79,26 +79,36 @@ class _MarcasTab extends StatelessWidget {
               );
             }
             return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md,
+                80,
+              ),
               itemCount: marcas.length,
               separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
               itemBuilder: (_, i) {
                 final m = marcas[i];
                 return AppCard(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 12),
+                    horizontal: AppSpacing.lg - 2,
+                    vertical: AppSpacing.md,
+                  ),
                   child: Row(
                     children: [
                       Icon(
                         Icons.label_outline,
-                        color: m.activo ? AppColors.brand : Colors.grey,
+                        color:
+                            m.activo ? AppColors.brand : AppColors.textTertiary,
                       ),
                       const SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: Text(
                           m.nombre,
-                          style: TextStyle(
-                            color: m.activo ? Colors.white : Colors.grey,
+                          style: AppType.body.copyWith(
+                            color: m.activo
+                                ? AppColors.textPrimary
+                                : AppColors.textTertiary,
                             fontSize: 15,
                             decoration: m.activo
                                 ? TextDecoration.none
@@ -119,14 +129,14 @@ class _MarcasTab extends StatelessWidget {
           },
         ),
         Positioned(
-          right: 16,
-          bottom: 16,
+          right: AppSpacing.lg,
+          bottom: AppSpacing.lg,
           child: FloatingActionButton.extended(
             heroTag: 'fab_marca',
             backgroundColor: AppColors.brand,
             onPressed: () => _abrirAltaMarca(context),
             icon: const Icon(Icons.add),
-            label: const Text('NUEVA MARCA'),
+            label: const Text('Nueva marca'),
           ),
         ),
       ],
@@ -152,12 +162,13 @@ class _MarcasTab extends StatelessWidget {
             textCapitalization: TextCapitalization.words,
           ),
           actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('CANCELAR')),
-            ElevatedButton(
+            AppButton.ghost(
+              label: 'Cancelar',
+              onPressed: () => Navigator.pop(ctx),
+            ),
+            AppButton(
+              label: 'Guardar',
               onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-              child: const Text('GUARDAR'),
             ),
           ],
         ),
@@ -207,7 +218,12 @@ class _ModelosTab extends StatelessWidget {
               );
             }
             return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md,
+                AppSpacing.md,
+                AppSpacing.md,
+                80,
+              ),
               itemCount: modelos.length,
               separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
               itemBuilder: (_, i) {
@@ -215,7 +231,9 @@ class _ModelosTab extends StatelessWidget {
                 return AppCard(
                   onTap: () => _abrirEdicion(context, m),
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 12),
+                    horizontal: AppSpacing.lg - 2,
+                    vertical: AppSpacing.md,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -225,13 +243,18 @@ class _ModelosTab extends StatelessWidget {
                             Icons.tire_repair,
                             color: m.activo
                                 ? AppColors.brand
-                                : Colors.grey,
+                                : AppColors.textTertiary,
                           ),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: Text(
                               m.etiqueta,
-                              style: AppType.body.copyWith(color: m.activo ? Colors.white : Colors.grey, fontWeight: FontWeight.bold),
+                              style: AppType.body.copyWith(
+                                color: m.activo
+                                    ? AppColors.textPrimary
+                                    : AppColors.textTertiary,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                           Switch(
@@ -244,8 +267,8 @@ class _ModelosTab extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Wrap(
-                        spacing: 12,
-                        runSpacing: 4,
+                        spacing: AppSpacing.md,
+                        runSpacing: AppSpacing.xs,
                         children: [
                           _Chip(
                             'Vida nueva: ${_kmStr(m.kmVidaEstimadaNueva)}',
@@ -257,7 +280,7 @@ class _ModelosTab extends StatelessWidget {
                             m.recapable ? 'Recapable' : 'No recapable',
                             color: m.recapable
                                 ? AppColors.brandSoft
-                                : Colors.grey,
+                                : AppColors.textTertiary,
                           ),
                           if (m.presionRecomendadaPsi != null)
                             _Chip('${m.presionRecomendadaPsi} PSI'),
@@ -274,14 +297,14 @@ class _ModelosTab extends StatelessWidget {
           },
         ),
         Positioned(
-          right: 16,
-          bottom: 16,
+          right: AppSpacing.lg,
+          bottom: AppSpacing.lg,
           child: FloatingActionButton.extended(
             heroTag: 'fab_modelo',
             backgroundColor: AppColors.brand,
             onPressed: () => _abrirAltaModelo(context),
             icon: const Icon(Icons.add),
-            label: const Text('NUEVO MODELO'),
+            label: const Text('Nuevo modelo'),
           ),
         ),
       ],
@@ -338,26 +361,31 @@ class _EditarModeloSheet extends StatelessWidget {
       builder: (ctx, controller) => Column(
         children: [
           Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
+            margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white24,
+              color: AppColors.textHint,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.xs,
+              AppSpacing.lg,
+              AppSpacing.md,
+            ),
             child: Row(
               children: [
                 const Icon(Icons.tire_repair,
                     color: AppColors.brand),
-                const SizedBox(width: 10),
+                const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Text(
                     modelo.etiqueta,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: AppType.body.copyWith(
+                      color: AppColors.textPrimary,
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
                     ),
@@ -369,7 +397,12 @@ class _EditarModeloSheet extends StatelessWidget {
           Expanded(
             child: ListView(
               controller: controller,
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 24),
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.sm,
+                0,
+                AppSpacing.sm,
+                AppSpacing.xl,
+              ),
               children: [
                 _campoTexto(
                   context,
@@ -425,7 +458,7 @@ class _EditarModeloSheet extends StatelessWidget {
                 SwitchListTile(
                   value: modelo.recapable,
                   title: const Text('Recapable',
-                      style: TextStyle(color: Colors.white)),
+                      style: TextStyle(color: AppColors.textPrimary)),
                   onChanged: (v) => setCampo('recapable', v),
                   activeTrackColor: AppColors.brand,
                 ),
@@ -443,10 +476,11 @@ class _EditarModeloSheet extends StatelessWidget {
       required Future<void> Function(String) onSave}) {
     return ListTile(
       title: Text(etiqueta,
-          style: AppType.label.copyWith(color: Colors.white60)),
+          style: AppType.label.copyWith(color: AppColors.textSecondary)),
       subtitle: Text(valor.isEmpty ? '—' : valor,
-          style: AppType.body.copyWith(color: Colors.white)),
-      trailing: const Icon(Icons.edit, color: Colors.white38, size: 18),
+          style: AppType.body.copyWith(color: AppColors.textPrimary)),
+      trailing:
+          const Icon(Icons.edit, color: AppColors.textDisabled, size: 18),
       onTap: () async {
         final ctrl = TextEditingController(text: valor);
         final String? res;
@@ -458,13 +492,13 @@ class _EditarModeloSheet extends StatelessWidget {
               title: Text(etiqueta),
               content: TextField(controller: ctrl, autofocus: true),
               actions: [
-                TextButton(
+                AppButton.ghost(
+                  label: 'Cancelar',
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('CANCELAR'),
                 ),
-                ElevatedButton(
+                AppButton(
+                  label: 'Guardar',
                   onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-                  child: const Text('GUARDAR'),
                 ),
               ],
             ),
@@ -484,11 +518,12 @@ class _EditarModeloSheet extends StatelessWidget {
       required Future<void> Function(int?) onSave}) {
     return ListTile(
       title: Text(etiqueta,
-          style: AppType.label.copyWith(color: Colors.white60)),
+          style: AppType.label.copyWith(color: AppColors.textSecondary)),
       subtitle: Text(
           valor == null ? '—' : '${AppFormatters.formatearMiles(valor)} $sufijo',
-          style: AppType.body.copyWith(color: Colors.white)),
-      trailing: const Icon(Icons.edit, color: Colors.white38, size: 18),
+          style: AppType.body.copyWith(color: AppColors.textPrimary)),
+      trailing:
+          const Icon(Icons.edit, color: AppColors.textDisabled, size: 18),
       onTap: () async {
         final ctrl = TextEditingController(
             text: valor == null ? '' : AppFormatters.formatearMiles(valor));
@@ -507,18 +542,18 @@ class _EditarModeloSheet extends StatelessWidget {
                 decoration: InputDecoration(suffixText: sufijo),
               ),
               actions: [
-                TextButton(
+                AppButton.ghost(
+                  label: 'Cancelar',
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('CANCELAR'),
                 ),
-                TextButton(
+                AppButton.danger(
+                  label: 'Borrar',
                   onPressed: () => Navigator.pop(ctx, _Sentinela.borrar),
-                  child: const Text('BORRAR'),
                 ),
-                ElevatedButton(
+                AppButton(
+                  label: 'Guardar',
                   onPressed: () => Navigator.pop(
                       ctx, AppFormatters.parsearMiles(ctrl.text)),
-                  child: const Text('GUARDAR'),
                 ),
               ],
             ),
@@ -542,10 +577,11 @@ class _EditarModeloSheet extends StatelessWidget {
       required Future<void> Function(double?) onSave}) {
     return ListTile(
       title: Text(etiqueta,
-          style: AppType.label.copyWith(color: Colors.white60)),
+          style: AppType.label.copyWith(color: AppColors.textSecondary)),
       subtitle: Text(valor == null ? '—' : '$valor $sufijo',
-          style: AppType.body.copyWith(color: Colors.white)),
-      trailing: const Icon(Icons.edit, color: Colors.white38, size: 18),
+          style: AppType.body.copyWith(color: AppColors.textPrimary)),
+      trailing:
+          const Icon(Icons.edit, color: AppColors.textDisabled, size: 18),
       onTap: () async {
         final ctrl = TextEditingController(
             text: valor == null ? '' : valor.toString());
@@ -564,20 +600,20 @@ class _EditarModeloSheet extends StatelessWidget {
                 decoration: InputDecoration(suffixText: sufijo),
               ),
               actions: [
-                TextButton(
+                AppButton.ghost(
+                  label: 'Cancelar',
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('CANCELAR'),
                 ),
-                TextButton(
+                AppButton.danger(
+                  label: 'Borrar',
                   onPressed: () => Navigator.pop(ctx, _Sentinela.borrar),
-                  child: const Text('BORRAR'),
                 ),
-                ElevatedButton(
+                AppButton(
+                  label: 'Guardar',
                   onPressed: () => Navigator.pop(
                       ctx,
                       double.tryParse(
                           ctrl.text.trim().replaceAll(',', '.'))),
-                  child: const Text('GUARDAR'),
                 ),
               ],
             ),
@@ -601,10 +637,11 @@ class _EditarModeloSheet extends StatelessWidget {
       required Future<void> Function(String) onSave}) {
     return ListTile(
       title: Text(etiqueta,
-          style: AppType.label.copyWith(color: Colors.white60)),
+          style: AppType.label.copyWith(color: AppColors.textSecondary)),
       subtitle: Text(opciones[valorActual] ?? valorActual,
-          style: AppType.body.copyWith(color: Colors.white)),
-      trailing: const Icon(Icons.edit, color: Colors.white38, size: 18),
+          style: AppType.body.copyWith(color: AppColors.textPrimary)),
+      trailing:
+          const Icon(Icons.edit, color: AppColors.textDisabled, size: 18),
       onTap: () async {
         final res = await showDialog<String>(
           context: context,
@@ -618,7 +655,7 @@ class _EditarModeloSheet extends StatelessWidget {
                       style: TextStyle(
                         color: e.key == valorActual
                             ? AppColors.brand
-                            : Colors.white,
+                            : AppColors.textPrimary,
                       )),
                   onPressed: () => Navigator.pop(ctx, e.key),
                 ),
@@ -695,7 +732,7 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
                 if (marcas.isEmpty) {
                   return const Text(
                     'Cargá primero al menos una marca activa.',
-                    style: TextStyle(color: Colors.amber),
+                    style: TextStyle(color: AppColors.warning),
                   );
                 }
                 return DropdownButtonFormField<CubiertaMarca>(
@@ -785,7 +822,7 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
               title: const Text('Recapable'),
               subtitle: Text(
                 'Si está apagado, no se va a poder mandar a recapar.',
-                style: AppType.eyebrow.copyWith(color: Colors.white60),
+                style: AppType.label.copyWith(color: AppColors.textSecondary),
               ),
               onChanged: (v) => setState(() => _recapable = v),
               activeTrackColor: AppColors.brand,
@@ -794,16 +831,14 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
         ),
       ),
       actions: [
-        TextButton(
+        AppButton.ghost(
+          label: 'Cancelar',
           onPressed: _guardando ? null : () => Navigator.pop(context),
-          child: const Text('CANCELAR'),
         ),
-        ElevatedButton(
+        AppButton(
+          label: 'Guardar',
+          isLoading: _guardando,
           onPressed: _guardando ? null : _guardar,
-          child: _guardando
-              ? const SizedBox(
-                  width: 18, height: 18, child: CircularProgressIndicator())
-              : const Text('GUARDAR'),
         ),
       ],
     );
@@ -867,7 +902,7 @@ class _Vacio extends StatelessWidget {
         child: Text(
           texto,
           textAlign: TextAlign.center,
-          style: AppType.body.copyWith(color: Colors.white60),
+          style: AppType.body.copyWith(color: AppColors.textSecondary),
         ),
       ),
     );
@@ -883,10 +918,13 @@ class _Chip extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = color ?? AppColors.info;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 3,
+      ),
       decoration: BoxDecoration(
         color: c.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(AppRadius.sm / 2),
         border: Border.all(color: c, width: 1),
       ),
       child: Text(
