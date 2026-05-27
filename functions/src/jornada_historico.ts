@@ -335,7 +335,7 @@ async function persistirJornada(j: JornadaDia): Promise<void> {
 // Procesar un día completo
 // ============================================================================
 
-async function procesarDia(
+export async function procesarDia(
   desde: Date, hasta: Date, fechaLabel: string,
 ): Promise<{ eventos: number; choferes: number; jornadas: number }> {
   const snap = await db.collection("SITRACK_EVENTOS")
