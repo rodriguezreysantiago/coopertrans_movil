@@ -33,7 +33,7 @@ Future<TarifaLogistica?> _abrirSelectorTarifa(
     isScrollControlled: true,
     backgroundColor: AppColors.background,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
     ),
     builder: (_) => _TarifaPickerSheet(tarifaActualId: tarifaActual?.id),
   );
@@ -94,21 +94,22 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
             Container(
               width: 40,
               height: 4,
-              margin: const EdgeInsets.only(top: 8, bottom: 4),
+              margin: const EdgeInsets.only(
+                  top: AppSpacing.sm, bottom: AppSpacing.xs),
               decoration: BoxDecoration(
-                color: Colors.white24,
+                color: AppColors.borderStrong,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.xs),
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
                   'ELEGIR TARIFA',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                  style: AppType.eyebrow.copyWith(
+                    color: AppColors.textPrimary,
                     fontSize: 13,
                     letterSpacing: 1.4,
                   ),
@@ -117,7 +118,8 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
             ),
             // Buscador.
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
               child: TextField(
                 controller: _ctrl,
                 autofocus: true,
@@ -127,7 +129,7 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
                   border: const OutlineInputBorder(),
                   isDense: true,
                   contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 12),
+                      horizontal: AppSpacing.md, vertical: AppSpacing.md),
                   suffixIcon: _filtro.isEmpty
                       ? null
                       : IconButton(
@@ -170,18 +172,19 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
                           _filtro.isEmpty
                               ? 'No hay tarifas activas cargadas.'
                               : 'Sin coincidencias con "$_filtro".',
-                          style: const TextStyle(
-                              color: Colors.white60, fontSize: 13),
+                          style: AppType.body.copyWith(
+                              color: AppColors.textSecondary, fontSize: 13),
                           textAlign: TextAlign.center,
                         ),
                       ),
                     );
                   }
                   return ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.sm, 0, AppSpacing.sm, AppSpacing.lg),
                     itemCount: filtradas.length,
-                    separatorBuilder: (_, __) =>
-                        const Divider(height: 1, color: Colors.white12),
+                    separatorBuilder: (_, __) => const Divider(
+                        height: 1, color: AppColors.borderSubtle),
                     itemBuilder: (_, i) {
                       final t = filtradas[i];
                       final esActual = t.id == widget.tarifaActualId;
@@ -228,7 +231,8 @@ class _ItemTarifaPicker extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
         child: Row(
           children: [
             Expanded(
@@ -240,11 +244,7 @@ class _ItemTarifaPicker extends StatelessWidget {
                       Expanded(
                         child: Text(
                           '$origen → $destino',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: AppType.heading.copyWith(fontSize: 13),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -254,7 +254,8 @@ class _ItemTarifaPicker extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     '$unidad · Vecchi \$ $montoReal$sufijo · Chofer \$ $montoChofer$sufijo',
-                    style: AppType.eyebrow.copyWith(color: Colors.white60),
+                    style: AppType.eyebrow
+                        .copyWith(color: AppColors.textSecondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -268,7 +269,8 @@ class _ItemTarifaPicker extends StatelessWidget {
                         if (tarifa.producto?.isNotEmpty == true)
                           'Producto: ${tarifa.producto}',
                       ].join(' · '),
-                      style: AppType.eyebrow.copyWith(color: Colors.white38),
+                      style: AppType.eyebrow
+                          .copyWith(color: AppColors.textHint),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -278,7 +280,7 @@ class _ItemTarifaPicker extends StatelessWidget {
             ),
             if (esActual)
               const Padding(
-                padding: EdgeInsets.only(left: 8),
+                padding: EdgeInsets.only(left: AppSpacing.sm),
                 child: Icon(Icons.check_circle,
                     color: AppColors.success, size: 20),
               ),
