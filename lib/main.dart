@@ -268,6 +268,22 @@ void main() async {
             return null;
           }
 
+          // ─── Capa 1f: PlatformException de permisos denegados ───
+          // (auditoría 2026-05-27). El usuario rechaza un permiso del
+          // sistema (cámara, mic, ubicación, galería). El SDK del plugin
+          // (image_picker, geolocator, etc.) lanza PlatformException con
+          // un code tipo `*_access_denied`. NO es bug — es decisión del
+          // usuario. FLUTTER-26 era un solo evento iOS de camera_access_
+          // denied desde ImagePickerApi.pickImages. Si en el futuro los
+          // plugins agregan nuevos codes, el patron `_access_denied` los
+          // cubre. Si se agregan códigos sin `_access_` (ej. `denied`
+          // pelado), endurecer este filtro.
+          if (errType.contains('platformexception') &&
+              (texto.contains('_access_denied') ||
+               texto.contains('permission_denied'))) {
+            return null;
+          }
+
           // ─── Capa 2: Rate limiter (anti event storm) ───
           // Red de seguridad para CUALQUIER error que entre en loop
           // (callback que se ejecuta 60-120 veces por segundo, listener
