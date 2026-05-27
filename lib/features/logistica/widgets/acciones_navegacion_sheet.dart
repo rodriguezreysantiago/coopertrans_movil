@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../services/map_navigation_helper.dart';
 
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
 class AccionesNavegacionSheet extends StatelessWidget {
   final double lat;
@@ -46,40 +47,40 @@ class AccionesNavegacionSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (label != null)
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.md),
               child: Text(
                 label!,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppType.heading.copyWith(fontSize: 15),
               ),
             ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.md),
             child: Text(
               '${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)}',
-              style: AppType.label.copyWith(color: Colors.white60, fontFamily: 'monospace'),
+              style: AppType.label.copyWith(
+                  color: AppColors.textSecondary, fontFamily: 'monospace'),
             ),
           ),
-          const Divider(color: Colors.white12, height: 1),
+          const Divider(color: AppColors.borderSubtle, height: 1),
           ListTile(
             leading: const Icon(Icons.map_outlined,
                 color: AppColors.info),
             title: const Text(
               'Abrir en Google Maps',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: AppColors.textPrimary),
             ),
             subtitle: Text(
               'Ver ubicación en Google Maps',
-              style: AppType.label.copyWith(color: Colors.white60),
+              style:
+                  AppType.label.copyWith(color: AppColors.textSecondary),
             ),
             onTap: () async {
               final ok = await MapNavigationHelper.abrirEnGoogleMaps(
@@ -103,11 +104,12 @@ class AccionesNavegacionSheet extends StatelessWidget {
                 color: AppColors.brandSoft),
             title: const Text(
               'Navegar con Waze',
-              style: TextStyle(color: Colors.white),
+              style: TextStyle(color: AppColors.textPrimary),
             ),
             subtitle: Text(
               'Iniciar navegación en Waze',
-              style: AppType.label.copyWith(color: Colors.white60),
+              style:
+                  AppType.label.copyWith(color: AppColors.textSecondary),
             ),
             onTap: () async {
               final ok = await MapNavigationHelper.abrirEnWaze(
