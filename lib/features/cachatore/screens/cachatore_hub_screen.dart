@@ -36,9 +36,9 @@ class CachatoreHubScreen extends StatelessWidget {
           _BotStatusCard(),
           SizedBox(height: AppSpacing.md),
           _MasterSwitch(),
-          SizedBox(height: 18),
+          SizedBox(height: AppSpacing.lg),
           _SeccionVigilados(),
-          SizedBox(height: 22),
+          SizedBox(height: AppSpacing.xl),
           _SeccionConcretados(),
           SizedBox(height: AppSpacing.xl),
         ],
@@ -107,7 +107,7 @@ class _BotStatusCard extends StatelessWidget {
                       detalle,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.label.copyWith(color: Colors.white60),
+                      style: AppType.label,
                     ),
                   ],
                 ),
@@ -137,16 +137,12 @@ class _MasterSwitch extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
             value: cfg.activo,
             activeThumbColor: AppColors.success,
-            title: const Text('Bot encendido',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15)),
+            title: const Text('Bot encendido', style: AppType.heading),
             subtitle: Text(
               cfg.activo
                   ? 'Buscando turnos para los choferes vigilados'
                   : 'Pausado — no reserva ni reagenda nada',
-              style: AppType.label.copyWith(color: Colors.white54),
+              style: AppType.label,
             ),
             onChanged: (v) => CachatoreService.setActivo(v),
           ),
@@ -180,14 +176,13 @@ class _SeccionVigilados extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'CHOFERES VIGILADOS (${vigilados.length})',
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                        fontSize: 13),
+                    style: AppType.eyebrow,
                   ),
                 ),
-                FilledButton.icon(
+                AppButton(
+                  label: 'Agregar',
+                  icon: Icons.add,
+                  size: AppButtonSize.sm,
                   onPressed: () => _abrirWizard(
                     context,
                     titulo: 'Agregar chofer',
@@ -199,14 +194,6 @@ class _SeccionVigilados extends StatelessWidget {
                       fecha: fecha,
                       franja: franja,
                     ),
-                  ),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Agregar'),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.brand,
-                    foregroundColor: Colors.black,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   ),
                 ),
               ],
@@ -222,16 +209,21 @@ class _SeccionVigilados extends StatelessWidget {
                 child: Column(
                   children: [
                     const Icon(Icons.person_search_outlined,
-                        color: Colors.white24, size: 40),
+                        color: AppColors.textHint, size: 40),
                     const SizedBox(height: AppSpacing.sm),
-                    Text('Sin choferes vigilados',
-                        style: AppType.body.copyWith(color: Colors.white70, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: AppSpacing.xs),
                     Text(
+                      'Sin choferes vigilados',
+                      style: AppType.body.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    const Text(
                       'Tocá "Agregar": elegís chofer, fecha y franja, y el bot le '
                       'busca turno.',
                       textAlign: TextAlign.center,
-                      style: AppType.label.copyWith(color: Colors.white38),
+                      style: AppType.label,
                     ),
                   ],
                 ),
@@ -269,19 +261,22 @@ class _VigiladoCard extends StatelessWidget {
                         o.nombre ?? o.dni,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                        style: AppType.body.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: AppSpacing.xs),
                       Row(
                         children: [
-                          const Icon(Icons.event, size: 13, color: Colors.white38),
+                          const Icon(Icons.event, size: 13, color: AppColors.textTertiary),
                           const SizedBox(width: AppSpacing.xs),
                           Expanded(
                             child: Text(
                               o.objetivoLabel,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppType.label.copyWith(color: Colors.white60),
+                              style: AppType.label,
                             ),
                           ),
                         ],
@@ -292,15 +287,14 @@ class _VigiladoCard extends StatelessWidget {
                 _EstadoBadge(objetivo: o),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: AppSpacing.xs),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                TextButton.icon(
+                AppButton.ghost(
+                  label: 'Fecha/franja',
+                  icon: Icons.edit_calendar,
                   onPressed: () => _editar(context, o),
-                  icon: const Icon(Icons.edit_calendar, size: 16),
-                  label: const Text('Fecha/franja'),
-                  style: TextButton.styleFrom(foregroundColor: Colors.white70),
                 ),
                 IconButton(
                   tooltip: o.activo ? 'Pausar este chofer' : 'Reanudar',
@@ -309,7 +303,7 @@ class _VigiladoCard extends StatelessWidget {
                     o.activo
                         ? Icons.pause_circle_outline
                         : Icons.play_circle_outline,
-                    color: o.activo ? Colors.white54 : AppColors.success,
+                    color: o.activo ? AppColors.textTertiary : AppColors.success,
                   ),
                   onPressed: () =>
                       CachatoreService.setObjetivoActivo(o.dni, !o.activo),
@@ -349,13 +343,13 @@ class _VigiladoCard extends StatelessWidget {
         title: const Text('Quitar chofer'),
         content: Text('El bot deja de buscarle turno a ${o.nombre ?? o.dni}.'),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancelar')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          AppButton.ghost(
+            label: 'Cancelar',
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          AppButton.danger(
+            label: 'Quitar',
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Quitar'),
           ),
         ],
       ),
@@ -391,18 +385,14 @@ class _SeccionConcretados extends StatelessWidget {
               children: [
                 Text(
                   'TURNOS CONCRETADOS (${turnos.length})',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
-                      fontSize: 13),
+                  style: AppType.eyebrow,
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 if (turnos.isEmpty)
-                  AppCard(
+                  const AppCard(
                     child: Text(
                       'No hay turnos sacados.',
-                      style: AppType.label.copyWith(color: Colors.white38),
+                      style: AppType.label,
                     ),
                   )
                 else
@@ -453,14 +443,19 @@ class _ConcretadoCard extends StatelessWidget {
                   t.nombre ?? t.dni,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: AppType.body.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   reag ? 'Turno actual: $cuando' : cuando,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.label.copyWith(color: reag ? Colors.white54 : AppColors.success),
+                  style: AppType.label.copyWith(
+                    color: reag ? AppColors.textTertiary : AppColors.success,
+                  ),
                 ),
                 if (reag) ...[
                   const SizedBox(height: AppSpacing.xs),
@@ -474,22 +469,21 @@ class _ConcretadoCard extends StatelessWidget {
                           'Buscando reagendar a ${objetivo!.objetivoLabel}',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: AppType.label.copyWith(color: AppColors.warning, fontWeight: FontWeight.w600),
+                          style: AppType.label.copyWith(
+                            color: AppColors.warning,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
+                    child: AppButton.ghost(
+                      label: 'Cancelar reagendar',
+                      icon: Icons.cancel_outlined,
+                      size: AppButtonSize.sm,
                       onPressed: () => _cancelarReagendar(context),
-                      icon: const Icon(Icons.cancel_outlined, size: 15),
-                      label: const Text('Cancelar reagendar'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.warning,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        visualDensity: VisualDensity.compact,
-                      ),
                     ),
                   ),
                 ],
@@ -499,10 +493,9 @@ class _ConcretadoCard extends StatelessWidget {
           const SizedBox(width: AppSpacing.sm),
           const Column(
             children: [
-              Icon(Icons.more_vert, color: Colors.white54, size: 20),
+              Icon(Icons.more_vert, color: AppColors.textTertiary, size: 20),
               SizedBox(height: 2),
-              Text('Opciones',
-                  style: TextStyle(color: Colors.white38, fontSize: 10)),
+              Text('Opciones', style: AppType.eyebrow),
             ],
           ),
         ],
@@ -531,12 +524,13 @@ class _ConcretadoCard extends StatelessWidget {
           '${turno.nombre ?? turno.dni} y le mantiene el turno actual.',
         ),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('No')),
-          FilledButton(
+          AppButton.ghost(
+            label: 'No',
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          AppButton(
+            label: 'Sí, cancelar',
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sí, cancelar'),
           ),
         ],
       ),
@@ -548,43 +542,36 @@ class _ConcretadoCard extends StatelessWidget {
   void _abrirMenu(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.surface,
+      backgroundColor: AppColors.surface2,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
       ),
       builder: (_) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xs),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text(
-                  turno.nombre ?? turno.dni,
-                  style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
+                child: Text(turno.nombre ?? turno.dni, style: AppType.heading),
               ),
             ),
             ListTile(
-              leading:
-                  const Icon(Icons.event_repeat, color: AppColors.warning),
-              title:
-                  const Text('Reagendar', style: TextStyle(color: Colors.white)),
-              subtitle: const Text('Mover el turno a otra fecha/franja',
-                  style: TextStyle(color: AppColors.textTertiary)),
+              leading: const Icon(Icons.event_repeat, color: AppColors.warning),
+              title: const Text('Reagendar'),
+              subtitle: const Text('Mover el turno a otra fecha/franja', style: AppType.label),
               onTap: () {
                 Navigator.pop(context);
                 _reagendar(context);
               },
             ),
             ListTile(
-              leading:
-                  const Icon(Icons.delete_outline, color: AppColors.error),
+              leading: const Icon(Icons.delete_outline, color: AppColors.error),
               title: const Text('Cancelar turno',
                   style: TextStyle(color: AppColors.error)),
               subtitle: const Text('Lo cancela también en iTurnos (libera el cupo)',
-                  style: TextStyle(color: AppColors.textTertiary)),
+                  style: AppType.label),
               onTap: () {
                 Navigator.pop(context);
                 _confirmarCancelarTurno(context);
@@ -609,13 +596,13 @@ class _ConcretadoCard extends StatelessWidget {
           'también en iTurnos. El cupo queda libre y no se puede deshacer.',
         ),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('No')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
+          AppButton.ghost(
+            label: 'No',
+            onPressed: () => Navigator.pop(context, false),
+          ),
+          AppButton.danger(
+            label: 'Sí, cancelar turno',
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sí, cancelar turno'),
           ),
         ],
       ),
@@ -643,13 +630,13 @@ class _EstadoBadge extends StatelessWidget {
     } else if (est.esWarn) {
       color = AppColors.warning;
     } else {
-      color = Colors.white54;
+      color = AppColors.textTertiary;
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(AppRadius.full),
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Text(
@@ -681,9 +668,9 @@ Future<void> _abrirWizard(
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: AppColors.surface,
+    backgroundColor: AppColors.surface2,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
     ),
     builder: (_) => _WizardSheet(
       titulo: titulo,
@@ -868,7 +855,7 @@ class _WizardSheetState extends State<_WizardSheet> {
         child: Column(
           children: [
             _header(),
-            const Divider(height: 1, color: Colors.white12),
+            const Divider(height: 1, color: AppColors.borderSubtle),
             Expanded(child: _cuerpo()),
           ],
         ),
@@ -879,12 +866,12 @@ class _WizardSheetState extends State<_WizardSheet> {
   Widget _header() {
     final pasos = ['Chofer', 'Fecha', 'Horario'];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(8, 10, 8, 8),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.sm, AppSpacing.md, AppSpacing.sm, AppSpacing.sm),
       child: Row(
         children: [
           if (_paso > _pasoInicial)
             IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white70),
+              icon: const Icon(Icons.arrow_back, color: AppColors.textSecondary),
               onPressed: () => setState(() => _paso -= 1),
             )
           else
@@ -892,21 +879,19 @@ class _WizardSheetState extends State<_WizardSheet> {
           Expanded(
             child: Column(
               children: [
-                Text(widget.titulo,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15)),
+                Text(
+                  widget.titulo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.heading,
+                ),
                 Text('Paso ${_paso + 1} de 3 · ${pasos[_paso]}',
-                    style:
-                        AppType.eyebrow.copyWith(color: Colors.white38)),
+                    style: AppType.eyebrow),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close, color: Colors.white70),
+            icon: const Icon(Icons.close, color: AppColors.textSecondary),
             onPressed: () => Navigator.pop(context),
           ),
         ],
@@ -934,7 +919,6 @@ class _WizardSheetState extends State<_WizardSheet> {
           child: TextField(
             autofocus: true,
             textCapitalization: TextCapitalization.characters,
-            style: const TextStyle(color: Colors.white),
             decoration: const InputDecoration(
               hintText: 'Buscar chofer por nombre (ej. PEREZ)',
               prefixIcon: Icon(Icons.search),
@@ -966,8 +950,7 @@ class _WizardSheetState extends State<_WizardSheet> {
                         (b.data()['NOMBRE'] ?? '').toString().toUpperCase()));
               if (docs.isEmpty) {
                 return const Center(
-                  child: Text('Sin resultados',
-                      style: TextStyle(color: Colors.white38)),
+                  child: Text('Sin resultados', style: AppType.label),
                 );
               }
               return ListView.builder(
@@ -981,27 +964,30 @@ class _WizardSheetState extends State<_WizardSheet> {
                   return ListTile(
                     dense: true,
                     leading: const Icon(Icons.person_outline,
-                        color: Colors.white38),
-                    title: Text(nombre,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style:
-                            AppType.body.copyWith(color: Colors.white)),
+                        color: AppColors.textTertiary),
+                    title: Text(
+                      nombre,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.body.copyWith(color: AppColors.textPrimary),
+                    ),
                     subtitle: Text(
                       'DNI $dni'
                       '${unidad != null && unidad.isNotEmpty ? ' · $unidad' : ''}'
                       '${yaEsta ? ' · ya en la lista' : ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.eyebrow.copyWith(color: yaEsta ? AppColors.warning : Colors.white38),
+                      style: AppType.eyebrow.copyWith(
+                        color: yaEsta ? AppColors.warning : AppColors.textDisabled,
+                      ),
                     ),
-                    // 🔍 = chequear iTurnos por turno preexistente sacado por
-                    // la web (caso: un compañero sacó turno sin pasar por el
-                    // bot). Chevron = elegir y seguir el wizard normal
-                    // (fecha → franja → vigilar).
+                    // Lupa = chequear iTurnos por turno preexistente sacado
+                    // por la web (caso: un compañero sacó turno sin pasar por
+                    // el bot). Chevron = elegir y seguir el wizard normal
+                    // (fecha -> franja -> vigilar).
                     trailing: yaEsta
                         ? const Icon(Icons.chevron_right,
-                            color: Colors.white24)
+                            color: AppColors.textHint)
                         : Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -1016,7 +1002,7 @@ class _WizardSheetState extends State<_WizardSheet> {
                                     _verificarTurnoExistente(dni, nombre),
                               ),
                               const Icon(Icons.chevron_right,
-                                  color: Colors.white24),
+                                  color: AppColors.textHint),
                             ],
                           ),
                     onTap: () => setState(() {
@@ -1039,46 +1025,42 @@ class _WizardSheetState extends State<_WizardSheet> {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
-        Text(
-          _nombre ?? _dni ?? '',
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-        ),
+        Text(_nombre ?? _dni ?? '', style: AppType.heading),
         const SizedBox(height: AppSpacing.xs),
-        const Text('¿Para qué fecha buscamos el turno?',
-            style: TextStyle(color: Colors.white60, fontSize: 13)),
+        const Text(
+          '¿Para qué fecha buscamos el turno?',
+          style: AppType.body,
+        ),
         const SizedBox(height: AppSpacing.lg),
         ListTile(
           leading: const Icon(Icons.all_inclusive, color: AppColors.brand),
-          title: const Text('Cualquier fecha',
-              style: TextStyle(color: Colors.white)),
-          subtitle: Text('Agarra el primero que se libere en el horario elegido',
-              style: AppType.label.copyWith(color: Colors.white38)),
-          tileColor: Colors.white.withValues(alpha: 0.04),
+          title: const Text('Cualquier fecha'),
+          subtitle: const Text(
+            'Agarra el primero que se libere en el horario elegido',
+            style: AppType.label,
+          ),
+          tileColor: AppColors.borderSubtle,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(color: Colors.white12)),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              side: const BorderSide(color: AppColors.borderSubtle)),
           onTap: () => setState(() {
             _fecha = null;
             _paso = 2;
           }),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: AppSpacing.md),
         ListTile(
-          leading:
-              const Icon(Icons.calendar_month, color: AppColors.brand),
+          leading: const Icon(Icons.calendar_month, color: AppColors.brand),
           title: Text(
             _reIso.hasMatch((_fecha ?? '').trim())
                 ? 'Fecha: $_fechaLabel'
                 : 'Elegir una fecha del calendario',
-            style: const TextStyle(color: Colors.white),
           ),
-          subtitle: Text('Solo turnos de ese día',
-              style: AppType.label.copyWith(color: Colors.white38)),
-          tileColor: Colors.white.withValues(alpha: 0.04),
+          subtitle: const Text('Solo turnos de ese día', style: AppType.label),
+          tileColor: AppColors.borderSubtle,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-              side: const BorderSide(color: Colors.white12)),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              side: const BorderSide(color: AppColors.borderSubtle)),
           onTap: _elegirDelCalendario,
         ),
       ],
@@ -1110,48 +1092,48 @@ class _WizardSheetState extends State<_WizardSheet> {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
-        Text('$_fechaLabel · ${_nombre ?? _dni ?? ''}',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white60, fontSize: 13)),
+        Text(
+          '$_fechaLabel · ${_nombre ?? _dni ?? ''}',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.body,
+        ),
         const SizedBox(height: AppSpacing.xs),
-        const Text('Elegí el horario',
-            style: TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+        const Text('Elegí el horario', style: AppType.heading),
         const SizedBox(height: AppSpacing.md),
         ...FranjaCarga.values.map((f) {
           final sel = f == widget.franjaInicial;
           final esC = f.esCualquiera;
           return Padding(
-            padding: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.only(bottom: AppSpacing.md),
             child: ListTile(
               leading: esC
                   ? const Icon(Icons.all_inclusive, color: AppColors.brand)
                   : null,
-              tileColor: Colors.white.withValues(alpha: 0.04),
+              tileColor: AppColors.borderSubtle,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(AppRadius.md),
                 side: BorderSide(
                     color: sel
                         ? AppColors.brand.withValues(alpha: 0.6)
-                        : Colors.white12),
+                        : AppColors.borderSubtle),
               ),
-              // Comodín: mostramos la etiqueta arriba; las 4 franjas muestran el
-              // rango horario (los números) arriba y la etiqueta abajo.
-              title: Text(esC ? f.etiqueta : f.rango,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 17)),
+              // Comodin: mostramos la etiqueta arriba; las 4 franjas
+              // muestran el rango horario arriba y la etiqueta abajo.
+              title: Text(
+                esC ? f.etiqueta : f.rango,
+                style: AppType.heading,
+              ),
               subtitle: Text(
-                  esC ? 'El primero que se libere, a cualquier hora' : f.etiqueta,
-                  style: AppType.label.copyWith(color: Colors.white54)),
+                esC ? 'El primero que se libere, a cualquier hora' : f.etiqueta,
+                style: AppType.label,
+              ),
               trailing: _guardando
                   ? const SizedBox(
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.chevron_right, color: Colors.white24),
+                  : const Icon(Icons.chevron_right, color: AppColors.textHint),
               onTap: _guardando ? null : () => _confirmar(f),
             ),
           );
@@ -1221,30 +1203,28 @@ class _ChequeoDialogState extends State<_ChequeoDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: AppColors.surface,
-      title: Row(
+      backgroundColor: AppColors.surface2,
+      title: const Row(
         children: [
-          const SizedBox(
+          SizedBox(
               width: 22,
               height: 22,
               child: CircularProgressIndicator(strokeWidth: 2)),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
-            child: Text('Verificando…',
-                style: AppType.heading.copyWith(color: Colors.white)),
+            child: Text('Verificando…', style: AppType.heading),
           ),
         ],
       ),
       content: Text(
         'Consultando iTurnos para ${widget.nombre} '
         '(si ya tiene turno sacado, lo agarro y lo paso a Concretados).',
-        style: const TextStyle(color: Colors.white70, fontSize: 13),
+        style: AppType.body,
       ),
       actions: [
-        TextButton(
+        AppButton.ghost(
+          label: 'Cancelar',
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancelar',
-              style: TextStyle(color: Colors.white54)),
         ),
       ],
     );
