@@ -90,6 +90,15 @@ class _AdminDescargasScreenState extends State<AdminDescargasScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Acceso permanente al CRUD de zonas — visible aunque ya
+              // haya zonas cargadas. Sin esto, una vez que existe la
+              // primera zona el _SinZonas (con su CTA "Cargar zona")
+              // desaparece y no quedaba forma de crear/editar/desactivar
+              // más zonas desde acá.
+              _BotonGestionarZonas(
+                onTap: () => Navigator.pushNamed(
+                    context, AppRoutes.adminZonasDescarga),
+              ),
               if (zonas.length > 1)
                 _SelectorZona(
                   zonas: zonas,
@@ -246,6 +255,42 @@ class _SinZonas extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Botón compacto arriba a la derecha — acceso permanente al CRUD de
+/// zonas (`AdminZonasDescargaScreen`). Se renderiza siempre que hay
+/// al menos una zona; cuando no hay ninguna, el `_SinZonas` cubre el
+/// caso con su propio CTA.
+class _BotonGestionarZonas extends StatelessWidget {
+  final VoidCallback onTap;
+  const _BotonGestionarZonas({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: OutlinedButton.icon(
+          onPressed: onTap,
+          icon: const Icon(Icons.tune, size: 16),
+          label: const Text('Gestionar zonas'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppColors.accentCyan,
+            side: BorderSide(
+              color: AppColors.accentCyan.withValues(alpha: 0.5),
+            ),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 8),
+            textStyle: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
       ),
     );
