@@ -168,7 +168,8 @@ class _AdminWhatsappHistoricoScreenState
     return AppScaffold(
       title: 'Historial WhatsApp',
       body: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -209,9 +210,10 @@ class _AdminWhatsappHistoricoScreenState
                   ),
                 ),
               ),
-              TextButton(
+              AppButton.ghost(
+                label: 'Cambiar',
+                size: AppButtonSize.sm,
                 onPressed: _elegirRango,
-                child: const Text('Cambiar'),
               ),
             ],
           ),
@@ -241,7 +243,7 @@ class _AdminWhatsappHistoricoScreenState
                     labelStyle: AppType.eyebrow.copyWith(color: Colors.white60),
                     border: const OutlineInputBorder(),
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
+                        horizontal: AppSpacing.sm + 2, vertical: AppSpacing.sm),
                   ),
                   onSubmitted: (_) => _ejecutarConsulta(),
                 ),
@@ -257,7 +259,7 @@ class _AdminWhatsappHistoricoScreenState
                     labelStyle: AppType.eyebrow.copyWith(color: Colors.white60),
                     border: const OutlineInputBorder(),
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
+                        horizontal: AppSpacing.sm + 2, vertical: AppSpacing.sm),
                   ),
                   onSubmitted: (_) => _ejecutarConsulta(),
                 ),
@@ -326,7 +328,7 @@ class _AdminWhatsappHistoricoScreenState
             AppType.label.copyWith(color: Colors.white38),
         border: const OutlineInputBorder(),
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 10),
       ),
       onChanged: (v) => setState(() => _query = v),
     );
@@ -354,7 +356,7 @@ class _AdminWhatsappHistoricoScreenState
       itemBuilder: (ctx, i) {
         if (i == 0) {
           return Padding(
-            padding: const EdgeInsets.only(bottom: 8, left: 4),
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm, left: AppSpacing.xs),
             child: Text(
               '${filtrados.length} mensaje(s)'
               '${_query.isNotEmpty || _filtrosServerActivos > 0 ? " coinciden" : ""}',
@@ -606,7 +608,10 @@ class _DetalleHistoricoSheet extends StatelessWidget {
               ],
               const SizedBox(height: AppSpacing.lg),
               Center(
-                child: TextButton.icon(
+                child: AppButton.ghost(
+                  label: doc.id,
+                  icon: Icons.copy,
+                  size: AppButtonSize.sm,
                   onPressed: () {
                     final messenger = ScaffoldMessenger.of(context);
                     AppFeedback.successOn(
@@ -614,11 +619,6 @@ class _DetalleHistoricoSheet extends StatelessWidget {
                       'Doc ID copiado: ${doc.id}',
                     );
                   },
-                  icon: const Icon(Icons.copy, size: 14),
-                  label: Text(
-                    doc.id,
-                    style: AppType.eyebrow.copyWith(fontFamily: 'monospace'),
-                  ),
                 ),
               ),
             ],
