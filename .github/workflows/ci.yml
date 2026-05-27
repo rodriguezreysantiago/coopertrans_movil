@@ -42,7 +42,7 @@ jobs:
           # esto (Flutter activó SPM por default → 'Module cloud_firestore
           # not found'). Update manual cuando se decida adoptar nueva
           # versión + smoke test local antes.
-          flutter-version: 3.41.7
+          flutter-version: 3.45.0
           channel: stable
           cache: true
 
