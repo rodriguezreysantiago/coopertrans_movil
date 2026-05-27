@@ -26,7 +26,7 @@ echo "===== Xcode Cloud post-clone (Flutter setup) ====="
 # "Module cloud_firestore not found"). Update manual cuando se decida
 # adoptar nueva version + smoke test local antes. Mantener sincronizado
 # con .github/workflows/ci.yml.
-FLUTTER_VERSION="3.45.0"
+FLUTTER_VERSION="3.44.0"
 echo "==> Clonando Flutter SDK $FLUTTER_VERSION..."
 git clone https://github.com/flutter/flutter.git -b "$FLUTTER_VERSION" --depth 1 "$HOME/flutter"
 export PATH="$HOME/flutter/bin:$PATH"

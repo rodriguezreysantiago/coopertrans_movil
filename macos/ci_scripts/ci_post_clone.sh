@@ -25,7 +25,7 @@ echo "===== Xcode Cloud post-clone macOS (Flutter setup) ====="
 # 1. Instalar Flutter en HOME (unico path persistente entre passes)
 # MISMA VERSION que iOS — mantener sincronizado con
 # ios/ci_scripts/ci_post_clone.sh y .github/workflows/ci.yml.
-FLUTTER_VERSION="3.45.0"
+FLUTTER_VERSION="3.44.0"
 echo "==> Clonando Flutter SDK $FLUTTER_VERSION..."
 git clone https://github.com/flutter/flutter.git -b "$FLUTTER_VERSION" --depth 1 "$HOME/flutter"
 export PATH="$HOME/flutter/bin:$PATH"
