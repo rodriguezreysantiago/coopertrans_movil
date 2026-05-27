@@ -187,7 +187,7 @@ class _LogisticaTarifaFormScreenState
 
   Widget _buildForm() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -216,7 +216,7 @@ class _LogisticaTarifaFormScreenState
                         }
                       },
                       selectedColor:
-                          AppColors.success.withValues(alpha: 0.4),
+                          AppColors.brand.withValues(alpha: 0.4),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.sm),
@@ -240,16 +240,8 @@ class _LogisticaTarifaFormScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'COMISIÓN DEL DADOR',
-                    style: TextStyle(
-                      color: Colors.white54,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
+                  const Text('COMISIÓN DEL DADOR', style: AppType.eyebrow),
+                  const SizedBox(height: AppSpacing.xs),
                   Wrap(
                     spacing: 8,
                     children: [
@@ -277,7 +269,7 @@ class _LogisticaTarifaFormScreenState
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: AppSpacing.md),
                   if (_modoMontoFijoDador)
                     TextField(
                       controller: _montoFijoDadorCtrl,
@@ -290,7 +282,7 @@ class _LogisticaTarifaFormScreenState
                         prefixText: '\$ ',
                         suffixText: '/viaje',
                       ),
-                      style: AppType.heading.copyWith(color: Colors.white),
+                      style: AppType.heading,
                     )
                   else
                     TextField(
@@ -376,14 +368,12 @@ class _LogisticaTarifaFormScreenState
                     _empOrigen!.id == _empDestino!.id)
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(AppSpacing.md),
                     decoration: BoxDecoration(
-                      color:
-                          AppColors.info.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
+                      color: AppColors.info.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AppRadius.sm),
                       border: Border.all(
-                          color: AppColors.info
-                              .withValues(alpha: 0.4)),
+                          color: AppColors.info.withValues(alpha: 0.4)),
                     ),
                     child: Row(
                       children: [
@@ -438,16 +428,8 @@ class _LogisticaTarifaFormScreenState
                 // (default histórico) o monto fijo por viaje (pedido
                 // Santiago 2026-05-19 para viajes cortos donde el 18%
                 // no cuadra y se acuerda un monto a mano).
-                const Text(
-                  'PAGO AL CHOFER',
-                  style: TextStyle(
-                    color: Colors.white54,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                const SizedBox(height: 6),
+                const Text('PAGO AL CHOFER', style: AppType.eyebrow),
+                const SizedBox(height: AppSpacing.xs),
                 Wrap(
                   spacing: 8,
                   children: [
@@ -513,51 +495,42 @@ class _LogisticaTarifaFormScreenState
           if (_error != null) ...[
             const SizedBox(height: AppSpacing.md),
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(AppSpacing.md),
               decoration: BoxDecoration(
                 color: AppColors.error.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
                 border: Border.all(
                   color: AppColors.error.withValues(alpha: 0.4),
                 ),
               ),
               child: Text(
                 _error!,
-                style: const TextStyle(color: AppColors.error),
+                style: AppType.body.copyWith(color: AppColors.error),
               ),
             ),
           ],
 
           // ─── ACCIONES ───────────────────────────────────────────────
-          const SizedBox(height: 20),
+          const SizedBox(height: AppSpacing.xl),
           Row(
             children: [
               Expanded(
-                child: OutlinedButton(
+                child: AppButton.secondary(
+                  label: 'Cancelar',
+                  expand: true,
                   onPressed:
                       _guardando ? null : () => Navigator.pop(context),
-                  child: const Text('CANCELAR'),
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 flex: 2,
-                child: ElevatedButton.icon(
+                child: AppButton(
+                  label: _esEdicion ? 'Guardar cambios' : 'Guardar tarifa',
+                  icon: Icons.save_outlined,
+                  expand: true,
+                  isLoading: _guardando,
                   onPressed: _guardando ? null : _guardar,
-                  icon: _guardando
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.save_outlined),
-                  label: Text(
-                    _esEdicion ? 'GUARDAR CAMBIOS' : 'GUARDAR TARIFA',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.success,
-                  ),
                 ),
               ),
             ],
@@ -582,7 +555,7 @@ class _LogisticaTarifaFormScreenState
         prefixStyle: TextStyle(color: color, fontWeight: FontWeight.bold),
         suffixText: _unidad.sufijoMonto,
       ),
-      style: AppType.heading.copyWith(color: Colors.white),
+      style: AppType.heading,
     );
   }
 
@@ -603,7 +576,7 @@ class _LogisticaTarifaFormScreenState
         ),
         suffixText: '/viaje',
       ),
-      style: AppType.heading.copyWith(color: Colors.white),
+      style: AppType.heading,
     );
   }
 
@@ -617,18 +590,10 @@ class _LogisticaTarifaFormScreenState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          etiqueta.toUpperCase(),
-          style: const TextStyle(
-            color: Colors.white54,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.2,
-          ),
-        ),
-        const SizedBox(height: 6),
+        Text(etiqueta.toUpperCase(), style: AppType.eyebrow),
+        const SizedBox(height: AppSpacing.xs),
         Wrap(
-          spacing: 8,
+          spacing: AppSpacing.sm,
           children: [
             for (final op in opciones)
               ChoiceChip(
@@ -637,8 +602,7 @@ class _LogisticaTarifaFormScreenState
                 onSelected: (sel) {
                   if (sel) onChange(op);
                 },
-                selectedColor:
-                    AppColors.success.withValues(alpha: 0.4),
+                selectedColor: AppColors.brand.withValues(alpha: 0.4),
               ),
           ],
         ),
@@ -840,42 +804,37 @@ class _SelectorEmpresa extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppCard(
       onTap: () => _abrirSelector(context),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       child: Row(
         children: [
           const Icon(Icons.business_outlined,
-              color: Colors.white54, size: 22),
+              color: AppColors.textTertiary, size: 22),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  etiqueta.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
-                ),
+                Text(etiqueta.toUpperCase(), style: AppType.eyebrow),
                 const SizedBox(height: 2),
                 Text(
                   valor?.etiquetaPrincipal ?? 'Seleccionar...',
-                  style: AppType.body.copyWith(color: valor == null ? Colors.white38 : Colors.white, fontWeight: FontWeight.bold),
+                  style: AppType.body.copyWith(
+                    color: valor == null ? AppColors.textDisabled : AppColors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 if (valor?.etiquetaSecundaria != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       valor!.etiquetaSecundaria!,
-                      style: AppType.eyebrow.copyWith(color: Colors.white54),
+                      style: AppType.eyebrow,
                     ),
                   ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right, color: Colors.white38),
+          const Icon(Icons.chevron_right, color: AppColors.textDisabled),
         ],
       ),
     );
@@ -884,7 +843,7 @@ class _SelectorEmpresa extends StatelessWidget {
   Future<void> _abrirSelector(BuildContext context) async {
     final res = await showModalBottomSheet<EmpresaLogistica>(
       context: context,
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.surface0,
       isScrollControlled: true,
       builder: (_) => _ListaSelectorEmpresa(soloTipo: soloTipo),
     );
@@ -902,16 +861,16 @@ class _BuscadorField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       onChanged: onChanged,
-      style: AppType.body.copyWith(color: Colors.white),
+      style: AppType.body.copyWith(color: AppColors.textPrimary),
       decoration: InputDecoration(
         hintText: hint,
         prefixIcon:
-            const Icon(Icons.search, color: Colors.white54, size: 20),
+            const Icon(Icons.search, color: AppColors.textTertiary, size: 20),
         isDense: true,
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: AppColors.surface2,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.sm),
           borderSide: BorderSide.none,
@@ -953,30 +912,25 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
       builder: (ctx, controller) => Column(
         children: [
           Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
+            margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(2),
+              color: AppColors.textHint,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
             child: Text(
               soloTipo == TipoEmpresaLogistica.dadorTransporte
                   ? 'SELECCIONAR DADOR'
                   : 'SELECCIONAR EMPRESA',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.2,
-              ),
+              style: AppType.heading,
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.sm),
             child: _BuscadorField(
               hint: 'Buscar empresa...',
               onChanged: (v) => setState(() => _q = v),
@@ -1008,7 +962,7 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
                 }
                 return ListView.separated(
                   controller: controller,
-                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.sm, AppSpacing.xs, AppSpacing.sm, AppSpacing.xl),
                   itemCount: items.length,
                   separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.xs),
                   itemBuilder: (_, i) {
@@ -1016,7 +970,7 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
                     return AppCard(
                       onTap: () => Navigator.pop(ctx, e),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
+                          horizontal: AppSpacing.lg, vertical: AppSpacing.md),
                       child: Row(
                         children: [
                           const Icon(Icons.business,
@@ -1028,21 +982,24 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
                               children: [
                                 Text(
                                   e.etiquetaPrincipal,
-                                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                                  style: AppType.body.copyWith(
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                                 if (e.etiquetaSecundaria != null)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 2),
                                     child: Text(
                                       e.etiquetaSecundaria!,
-                                      style: AppType.eyebrow.copyWith(color: Colors.white54),
+                                      style: AppType.eyebrow,
                                     ),
                                   ),
                               ],
                             ),
                           ),
                           const Icon(Icons.chevron_right,
-                              color: Colors.white38),
+                              color: AppColors.textDisabled),
                         ],
                       ),
                     );
@@ -1078,41 +1035,36 @@ class _SelectorUbicacion extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppCard(
       onTap: () => _abrir(context),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       child: Row(
         children: [
           const Icon(Icons.place_outlined,
-              color: Colors.white54, size: 22),
+              color: AppColors.textTertiary, size: 22),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  etiqueta.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white54,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
-                ),
+                Text(etiqueta.toUpperCase(), style: AppType.eyebrow),
                 const SizedBox(height: 2),
                 Text(
                   valor?.nombre ?? 'Seleccionar...',
-                  style: AppType.body.copyWith(color: valor == null ? Colors.white38 : Colors.white, fontWeight: FontWeight.bold),
+                  style: AppType.body.copyWith(
+                    color: valor == null ? AppColors.textDisabled : AppColors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 if (valor != null) ...[
                   const SizedBox(height: 2),
                   Text(
                     valor!.etiquetaCompleta,
-                    style: AppType.eyebrow.copyWith(color: Colors.white60),
+                    style: AppType.eyebrow,
                   ),
                 ],
               ],
             ),
           ),
-          const Icon(Icons.chevron_right, color: Colors.white38),
+          const Icon(Icons.chevron_right, color: AppColors.textDisabled),
         ],
       ),
     );
@@ -1121,7 +1073,7 @@ class _SelectorUbicacion extends StatelessWidget {
   Future<void> _abrir(BuildContext context) async {
     final res = await showModalBottomSheet<UbicacionLogistica>(
       context: context,
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.surface0,
       isScrollControlled: true,
       builder: (_) => _ListaSelectorUbicacion(
         filtroEmpresaId: filtroEmpresaId,
@@ -1157,27 +1109,19 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
       builder: (ctx, controller) => Column(
         children: [
           Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
+            margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(2),
+              color: AppColors.textHint,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
             child: Row(
               children: [
-                const Text(
-                  'SELECCIONAR UBICACIÓN',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                  ),
-                ),
+                const Text('SELECCIONAR UBICACIÓN', style: AppType.heading),
                 const Spacer(),
                 if (widget.filtroEmpresaId != null)
                   FilterChip(
@@ -1195,7 +1139,7 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.sm),
             child: _BuscadorField(
               hint: 'Buscar ubicación...',
               onChanged: (v) => setState(() => _q = v),
@@ -1251,7 +1195,7 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                 }
                 return ListView.separated(
                   controller: controller,
-                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 24),
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.sm, AppSpacing.xs, AppSpacing.sm, AppSpacing.xl),
                   itemCount: items.length,
                   separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.xs),
                   itemBuilder: (_, i) {
@@ -1259,11 +1203,10 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                     return AppCard(
                       onTap: () => Navigator.pop(ctx, u),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
+                          horizontal: AppSpacing.lg, vertical: AppSpacing.md),
                       child: Row(
                         children: [
-                          const Icon(Icons.place,
-                              color: AppColors.brandSoft),
+                          const Icon(Icons.place, color: AppColors.brandSoft),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: Column(
@@ -1271,17 +1214,17 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                               children: [
                                 Text(
                                   u.nombre,
-                                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                                  style: AppType.body.copyWith(
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
-                                Text(
-                                  u.etiquetaCompleta,
-                                  style: AppType.eyebrow.copyWith(color: Colors.white60),
-                                ),
+                                Text(u.etiquetaCompleta, style: AppType.eyebrow),
                               ],
                             ),
                           ),
                           const Icon(Icons.chevron_right,
-                              color: Colors.white38),
+                              color: AppColors.textDisabled),
                         ],
                       ),
                     );
@@ -1308,7 +1251,7 @@ class _SeccionTitulo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 6),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.xs, 0, AppSpacing.xs, AppSpacing.xs),
       child: Row(
         children: [
           if (numero != null) ...[
@@ -1316,21 +1259,18 @@ class _SeccionTitulo extends StatelessWidget {
               width: 22,
               height: 22,
               alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppColors.success.withValues(alpha: 0.2),
+              decoration: const BoxDecoration(
+                color: AppColors.surface3,
                 shape: BoxShape.circle,
               ),
               child: Text(
                 '$numero',
-                style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
+                style: AppType.eyebrow.copyWith(color: AppColors.brand),
               ),
             ),
             const SizedBox(width: AppSpacing.sm),
           ],
-          Text(
-            texto.toUpperCase(),
-            style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.3),
-          ),
+          Text(texto.toUpperCase(), style: AppType.eyebrow),
         ],
       ),
     );
@@ -1357,7 +1297,7 @@ class _SelectorProducto extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1365,22 +1305,14 @@ class _SelectorProducto extends StatelessWidget {
             children: [
               Icon(Icons.inventory_2_outlined,
                   color: AppColors.warning, size: 16),
-              SizedBox(width: 6),
-              Text(
-                'PRODUCTO (OPCIONAL)',
-                style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
-              ),
+              SizedBox(width: AppSpacing.xs),
+              Text('PRODUCTO (OPCIONAL)', style: AppType.eyebrow),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
           Wrap(
-            spacing: 6,
-            runSpacing: 6,
+            spacing: AppSpacing.xs,
+            runSpacing: AppSpacing.xs,
             children: [
               ChoiceChip(
                 label: const Text('Sin especificar'),
@@ -1388,8 +1320,7 @@ class _SelectorProducto extends StatelessWidget {
                 onSelected: (v) {
                   if (v) onChange(null);
                 },
-                selectedColor:
-                    AppColors.warning.withValues(alpha: 0.4),
+                selectedColor: AppColors.warning.withValues(alpha: 0.4),
               ),
               ...productos.map(
                 (p) => ChoiceChip(
@@ -1398,18 +1329,17 @@ class _SelectorProducto extends StatelessWidget {
                   onSelected: (v) {
                     if (v) onChange(p);
                   },
-                  selectedColor:
-                      AppColors.warning.withValues(alpha: 0.4),
+                  selectedColor: AppColors.warning.withValues(alpha: 0.4),
                 ),
               ),
             ],
           ),
           if (valor == null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
+            const Padding(
+              padding: EdgeInsets.only(top: AppSpacing.xs),
               child: Text(
                 'Tarifa general para esta ruta (cualquier producto).',
-                style: AppType.eyebrow.copyWith(color: Colors.white54),
+                style: AppType.eyebrow,
               ),
             ),
         ],
