@@ -846,9 +846,9 @@ choferes + activación transmisión por unidad.
 `icm_historico_service` + cron `recomputeIcmSemanalScheduled` + colección
 `ICM_SEMANAL` + sus tests. La UI usa solo el ICM oficial de Sitrack. Queda como
 pendiente cosmético: iconos custom para ICM verde/amarillo/rojo (hoy
-`Icons.leaderboard` + color de fondo). **Falta en PROD**: eliminar la function
-`recomputeIcmSemanalScheduled` (`firebase deploy --only functions`) + deploy de
-`firestore:rules` (ya sin el bloque ICM_SEMANAL).
+`Icons.leaderboard` + color de fondo). ✅ PROD cerrado 2026-05-28: function
+`recomputeIcmSemanalScheduled` eliminada + `firestore:rules` deployadas +
+colección `ICM_SEMANAL` borrada (firestore:delete).
 
 ### Sitrack P4 — ranking + outliers de descarga
 El tiempo promedio de descarga ya lo muestra la pantalla Descargas. Falta el
