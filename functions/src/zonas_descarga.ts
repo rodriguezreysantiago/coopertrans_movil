@@ -147,8 +147,14 @@ export const zonaDescargaPoller = onSchedule(
         const m = doc.data();
         const ts = m.report_date as Timestamp | undefined;
         if (!ts || ts.toMillis() < limiteMs) continue;
-        const lat = m.latitude;
-        const lng = m.longitude;
+        // Nombres de campo según los persiste `sitrackPosicionPoller`
+        // en `SITRACK_POSICIONES`: `lat`/`lng` (no `latitude`/`longitude`)
+        // y `driver_nombre` (no `driver_name`). Mismatch viejo que hacía
+        // que TODAS las unidades fueran skipeadas silencioso — la cola
+        // de descargas quedaba siempre vacía aunque las unidades sí
+        // estaban en zona. Fix 2026-05-28.
+        const lat = m.lat;
+        const lng = m.lng;
         if (typeof lat !== "number" || typeof lng !== "number") continue;
         if (lat === 0 && lng === 0) continue;
         posiciones.push({
@@ -157,7 +163,7 @@ export const zonaDescargaPoller = onSchedule(
           lng,
           ts,
           driverDni: m.driver_dni as string | undefined,
-          driverNombre: m.driver_name as string | undefined,
+          driverNombre: m.driver_nombre as string | undefined,
         });
       }
       logger.info("[zonaDescargaPoller] iniciando", {
