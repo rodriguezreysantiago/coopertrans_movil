@@ -1,6 +1,6 @@
 # RUNBOOK — macOS signing en Xcode Cloud
 
-**Estado:** ✅ RESUELTO + CONFIRMADO EN XCODE CLOUD 2026-05-28. **Build 46** (primero con el fix): `** ARCHIVE SUCCEEDED **` + `** EXPORT SUCCEEDED **` en app-store y development export, **CERO** errores de codesign. En el log se ve la firma de `Coopertrans Móvil.app/Contents/MacOS/CoopertransMovil` (binario ASCII). Causa raíz validada en Mac local (Xcode 16.4 / SDK 15.5) y confirmada en la nube. Queda confirmar que el build suba/aparezca en App Store Connect (upload = post-action; el codesign que bloqueaba ya está resuelto).
+**Estado:** ✅ CODESIGN RESUELTO (Build 46, 2026-05-28: `** ARCHIVE SUCCEEDED **` + `** EXPORT SUCCEEDED **`, CERO errores de firma; se ve `Coopertrans Móvil.app/Contents/MacOS/CoopertransMovil` ASCII). El muro de los 8 builds cayó. **⚠️ PERO el paso posterior "Prepare Build for App Store Connect" FALLA** por autenticación: `App Store Connect request for store configuration failed — Session Proxy Provider: Unable to authenticate with App Store Connect (Error Code=1)` (en `IDEDistribution.critical.log`). NO es assets/íconos. Es el MISMO síntoma que tuvo iOS en sus primeros 8 builds (cuenta nueva / Session Proxy). **Causa probable:** la app de **macOS no está dada de alta en App Store Connect** (el record `com.coopertrans.movil` quizás solo tiene iOS) → el build no tiene destino. Acciones: (1) verificar/crear la plataforma macOS en App Store Connect; (2) re-trigger por si transient; (3) revisar integración App Store Connect del workflow macOS. EN CURSO.
 
 ## TL;DR — qué era y cómo se arregló
 
