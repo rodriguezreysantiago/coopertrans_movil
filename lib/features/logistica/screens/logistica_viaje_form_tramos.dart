@@ -285,12 +285,17 @@ class _TramoCard extends StatelessWidget {
               ),
             ),
             isEmpty: tarifa == null,
+            // Consistente con el picker (commit 2026-05-28): mostrar
+            // dador + ruta. El detalle (precios, unidad, producto) está
+            // en `_ResumenTarifa` abajo, no hace falta repetirlo acá.
             child: tarifa == null
                 ? null
                 : Text(
-                    '${tarifa.ubicacionOrigenEtiqueta} → '
-                    '${tarifa.ubicacionDestinoEtiqueta} '
-                    '(${tarifa.unidadTarifa.etiqueta})',
+                    [
+                      if ((tarifa.dadorNombre ?? '').trim().isNotEmpty)
+                        tarifa.dadorNombre!.trim(),
+                      '${tarifa.origenDisplay} → ${tarifa.destinoDisplay}',
+                    ].join(' · '),
                     style: const TextStyle(color: Colors.white),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,

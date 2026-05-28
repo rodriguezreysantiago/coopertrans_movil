@@ -205,10 +205,21 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
   }
 }
 
-/// Item del listado de tarifas en el picker. Muestra la ruta + dador
-/// + tarifas (real / chofer) + producto, con look compacto pero
-/// legible. Si es la tarifa ya elegida actualmente, se marca con
-/// un check verde.
+/// Item del listado de tarifas en el picker. Muestra **dador** (empresa
+/// que paga la tarifa) como línea principal y **alias origen → destino**
+/// como subtítulo. Sin precios, sin unidad, sin producto — esos datos
+/// los ve el operador en el resumen del tramo después de elegir.
+///
+/// Si la tarifa no tiene dador (campo nullable), la ruta pasa a ser la
+/// línea principal sin subtítulo, así el item nunca queda "huérfano".
+///
+/// El filtro del picker sigue buscando contra TODOS los campos (incluso
+/// los que no se muestran), así seguís pudiendo encontrar tarifas por
+/// producto, unidad, empresa origen, etc.
+///
+/// Decisión 2026-05-28: antes el item tenía 3 líneas (ruta + precios +
+/// dador/producto) y se saturaba visualmente al recorrer una lista
+/// de 30+ tarifas. Se simplificó por pedido del operador.
 class _ItemTarifaPicker extends StatelessWidget {
   final TarifaLogistica tarifa;
   final bool esActual;
@@ -222,55 +233,32 @@ class _ItemTarifaPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final origen = tarifa.origenDisplay;
-    final destino = tarifa.destinoDisplay;
-    final unidad = tarifa.unidadTarifa.etiqueta;
-    final sufijo = tarifa.unidadTarifa.sufijoMonto;
-    final montoReal = AppFormatters.formatearMonto(tarifa.tarifaReal);
-    final montoChofer = AppFormatters.formatearMonto(tarifa.tarifaChofer);
+    final dador = tarifa.dadorNombre?.trim();
+    final tieneDador = dador != null && dador.isNotEmpty;
+    final ruta = '${tarifa.origenDisplay} → ${tarifa.destinoDisplay}';
     return InkWell(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
+            horizontal: AppSpacing.sm, vertical: AppSpacing.md),
         child: Row(
           children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '$origen → $destino',
-                          style: AppType.heading.copyWith(fontSize: 13),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
                   Text(
-                    '$unidad · Vecchi \$ $montoReal$sufijo · Chofer \$ $montoChofer$sufijo',
-                    style: AppType.eyebrow
-                        .copyWith(color: AppColors.textSecondary),
+                    tieneDador ? dador : ruta,
+                    style: AppType.heading.copyWith(fontSize: 14),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (tarifa.dadorNombre?.isNotEmpty == true ||
-                      tarifa.producto?.isNotEmpty == true) ...[
+                  if (tieneDador) ...[
                     const SizedBox(height: 2),
                     Text(
-                      [
-                        if (tarifa.dadorNombre?.isNotEmpty == true)
-                          'Dador: ${tarifa.dadorNombre}',
-                        if (tarifa.producto?.isNotEmpty == true)
-                          'Producto: ${tarifa.producto}',
-                      ].join(' · '),
-                      style: AppType.eyebrow
-                          .copyWith(color: AppColors.textHint),
+                      ruta,
+                      style: AppType.label
+                          .copyWith(color: AppColors.textSecondary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
