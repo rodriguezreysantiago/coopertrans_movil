@@ -179,13 +179,32 @@ foreach ($item in $Items) {
                 # (borra del destino lo que no este en origen, copia lo
                 # nuevo). Es lo correcto para .wwebjs_auth donde la
                 # sesion vieja se reemplaza por la nueva.
-                $null = robocopy $src $dst /MIR /NFL /NDL /NJH /NJS /NP /R:2 /W:5
-                if ($LASTEXITCODE -ge 8) {
-                    Write-Host "  - $($lbl): robocopy exit $LASTEXITCODE" -ForegroundColor Red
+                #
+                # /R:1 /W:1 = 1 retry de 1s en archivos ocupados (no
+                # gastar minutos esperando archivos que estan lockeados
+                # mientras el bot corre).
+                $null = robocopy $src $dst /MIR /NFL /NDL /NJH /NJS /NP /R:1 /W:1
+                # Exit codes robocopy:
+                #   0-7  = OK (con o sin copias/extras/mismatches)
+                #   8-15 = OK PARCIAL (algunos archivos no se pudieron
+                #          copiar -- tipicamente lockeados por proceso
+                #          activo, en este caso Chromium del bot
+                #          mientras corre. Los archivos lockeados son
+                #          cache de Chrome que se regenera; los archivos
+                #          criticos de sesion WhatsApp (keys/tokens)
+                #          NO suelen estar lockeados y SI pasan).
+                #   16+  = error fatal (acceso denegado total, disco
+                #          lleno, etc.)
+                if ($LASTEXITCODE -ge 16) {
+                    Write-Host "  - $($lbl): robocopy ERROR FATAL exit $LASTEXITCODE" -ForegroundColor Red
                     $errores++
                     continue
                 }
-                Write-Host "  OK $lbl (dir)" -ForegroundColor Green
+                if ($LASTEXITCODE -ge 8) {
+                    Write-Host "  ! $lbl (dir): copia parcial -- algunos archivos lockeados (exit $LASTEXITCODE). OK para sesion WhatsApp -- caches de Chrome se regeneran." -ForegroundColor Yellow
+                } else {
+                    Write-Host "  OK $lbl (dir)" -ForegroundColor Green
+                }
             }
         } else {
             if ($DryRun) {
