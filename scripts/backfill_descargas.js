@@ -1,0 +1,149 @@
+// Backfill one-shot del histórico de descargas (ZONA_DESCARGA_HISTORICO).
+//
+// Reconstruye las descargas de un rango de fechas leyendo SITRACK_EVENTOS
+// (que tiene historia real) y aplicando el mismo chequeo de zonas que
+// usa el cron en vivo. Sirve para tapar huecos cuando el cron
+// `zonaDescargaPoller` no detectó descargas en tiempo real (caso 2026-05-28:
+// bug de mismatch de campos `m.latitude` vs `m.lat` skipeaba todas las
+// unidades silencioso — fix commit 47e11ff).
+//
+// Idempotente: el docId del histórico es determinístico (slug+patente+
+// entrada_ms), así que correr el script dos veces sobre el mismo rango
+// sobreescribe los mismos docs sin duplicar.
+//
+// Marca `origen_backfill: true` para distinguir de los archivados por el
+// cron en vivo.
+//
+// USO:
+//   node scripts/backfill_descargas.js                  # AYER (default)
+//   node scripts/backfill_descargas.js --dias 3         # últimos N días
+//   node scripts/backfill_descargas.js --desde 2026-05-26 --hasta 2026-05-28
+//
+// Requiere serviceAccountKey.json en la raíz del proyecto + `functions/lib`
+// compilado (npm run build adentro de functions/).
+
+const path = require("path");
+const fs = require("fs");
+
+// ─── Args CLI ────────────────────────────────────────────────────
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const out = { dias: 1, desde: null, hasta: null };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === "--dias") out.dias = parseInt(args[++i], 10);
+    else if (a === "--desde") out.desde = args[++i];
+    else if (a === "--hasta") out.hasta = args[++i];
+  }
+  return out;
+}
+
+const { dias, desde, hasta } = parseArgs();
+
+// ─── Init firebase-admin ─────────────────────────────────────────
+// El módulo compilado `historico_descargas.js` importa transitivamente
+// `setup.js` que llama `initializeApp()` SIN argumentos (Application
+// Default Credentials). Para que pegue contra el proyecto correcto desde
+// fuera de Cloud Functions, seteamos GOOGLE_APPLICATION_CREDENTIALS
+// ANTES de cargar nada de admin.
+const keyPath = path.join(__dirname, "..", "serviceAccountKey.json");
+if (!fs.existsSync(keyPath)) {
+  console.error(`[backfill_descargas] no encuentro ${keyPath}`);
+  console.error("Bajalo de Firebase Console > Project Settings > Service Accounts.");
+  process.exit(1);
+}
+process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
+// firebase-admin no está en el root del proyecto — vive en functions/.
+// Resolvemos a mano desde ahí. NO llamamos initializeApp() — lo hace
+// `setup.js` cuando se carga vía require de `historico_descargas.js`.
+require(
+  path.join(__dirname, "..", "functions", "node_modules", "firebase-admin"),
+);
+
+// ─── Importar la lógica compilada ────────────────────────────────
+// La función vive en `functions/lib/historico_descargas.js` (compilada
+// por `tsc`). Si no existe, fallar con mensaje claro.
+const compiladoPath = path.join(
+  __dirname, "..", "functions", "lib", "historico_descargas.js",
+);
+if (!fs.existsSync(compiladoPath)) {
+  console.error(`[backfill_descargas] falta ${compiladoPath}`);
+  console.error("Compilá antes con: cd functions && npm run build");
+  process.exit(1);
+}
+const { procesarRangoDescargas } = require(compiladoPath);
+
+// ─── Calcular rangos a procesar ──────────────────────────────────
+const UN_DIA = 24 * 60 * 60 * 1000;
+
+function hoyAr00ArtUtc() {
+  // 00:00 ART = 03:00 UTC del mismo día calendario ART.
+  const ahoraArt = new Date(Date.now() - 3 * 60 * 60 * 1000);
+  return new Date(Date.UTC(
+    ahoraArt.getUTCFullYear(),
+    ahoraArt.getUTCMonth(),
+    ahoraArt.getUTCDate(),
+    3, 0, 0, 0,
+  ));
+}
+
+let rangos = [];
+
+if (desde && hasta) {
+  const ini = new Date(desde);
+  const fin = new Date(hasta);
+  if (isNaN(ini.getTime()) || isNaN(fin.getTime())) {
+    console.error("[backfill_descargas] --desde/--hasta invalidos (usar YYYY-MM-DD)");
+    process.exit(1);
+  }
+  for (let t = ini.getTime(); t < fin.getTime(); t += UN_DIA) {
+    const ic = new Date(t);
+    const fc = new Date(Math.min(t + UN_DIA, fin.getTime()));
+    rangos.push({ ini: ic, fin: fc, label: ic.toISOString().substring(0, 10) });
+  }
+} else {
+  if (!Number.isInteger(dias) || dias < 1 || dias > 30) {
+    console.error("[backfill_descargas] --dias debe ser entero 1-30");
+    process.exit(1);
+  }
+  const hoy = hoyAr00ArtUtc();
+  for (let i = 1; i <= dias; i++) {
+    const fin = new Date(hoy.getTime() - (i - 1) * UN_DIA);
+    const ini = new Date(fin.getTime() - UN_DIA);
+    rangos.push({ ini, fin, label: ini.toISOString().substring(0, 10) });
+  }
+}
+
+console.log(
+  `[backfill_descargas] procesando ${rangos.length} día(s): ` +
+  rangos.map((r) => r.label).join(", "),
+);
+
+// ─── Procesar ────────────────────────────────────────────────────
+(async () => {
+  let totEventos = 0;
+  let totDescargas = 0;
+  let totWrites = 0;
+  for (const r of rangos) {
+    console.log(`\n[backfill_descargas] === ${r.label} ===`);
+    console.log(`  desde: ${r.ini.toISOString()}`);
+    console.log(`  hasta: ${r.fin.toISOString()}`);
+    try {
+      const res = await procesarRangoDescargas(r.ini, r.fin);
+      console.log(`  zonas activas: ${res.zonas}`);
+      console.log(`  eventos analizados: ${res.eventos}`);
+      console.log(`  descargas detectadas: ${res.descargas}`);
+      console.log(`  docs escritos: ${res.writes}`);
+      totEventos += res.eventos;
+      totDescargas += res.descargas;
+      totWrites += res.writes;
+    } catch (e) {
+      console.error(`  ERROR: ${e.message}`);
+    }
+  }
+  console.log("\n[backfill_descargas] TOTAL:");
+  console.log(`  eventos analizados: ${totEventos}`);
+  console.log(`  descargas detectadas: ${totDescargas}`);
+  console.log(`  docs escritos: ${totWrites}`);
+  process.exit(0);
+})();

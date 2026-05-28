@@ -33,7 +33,7 @@ import { adquirirLockTick } from "./index";
 // versión esto está OK — si Santiago observa casos reales, fusionamos
 // con un look-back al último doc del histórico antes de archivar.
 
-interface ZonaConfig {
+export interface ZonaConfig {
   slug: string;
   nombre: string;
   shape: "circulo" | "poligono";
@@ -55,7 +55,7 @@ interface PosicionUnidad {
 // ─── Geometría ───────────────────────────────────────────────────
 
 /** Distancia entre dos puntos lat/lng en metros (Haversine). */
-function distanciaMts(
+export function distanciaMts(
   lat1: number, lng1: number, lat2: number, lng2: number,
 ): number {
   const R = 6371000;
@@ -69,7 +69,7 @@ function distanciaMts(
 }
 
 /** Punto dentro de polígono (ray casting). */
-function puntoEnPoligono(
+export function puntoEnPoligono(
   lat: number, lng: number, vertices: { lat: number; lng: number }[],
 ): boolean {
   let dentro = false;
@@ -85,7 +85,7 @@ function puntoEnPoligono(
   return dentro;
 }
 
-function unidadEnZona(
+export function unidadEnZona(
   lat: number, lng: number, zona: ZonaConfig,
 ): boolean {
   if (zona.shape === "circulo" && zona.centro && zona.radioMts) {
