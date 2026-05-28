@@ -151,6 +151,34 @@ def resolver_fecha(valor):
     return str(valor)
 
 
+def fecha_objetivo_pasada(fecha_str) -> bool:
+    """True si la fecha del objetivo es ESTRICTAMENTE anterior a hoy local.
+
+    Post-mortem 2026-05-28 (corte de luz 27-may): 2 objetivos vencidos
+    (CELIZ + VOGEL, ambos con `fecha=2026-05-27`) quedaron en loop "buscando"
+    cuando volvió el bot. `mis_turnos()` no devuelve los CONCRETADOS, el
+    flag en memoria `turno_conseguido` se perdió en el reinicio, y la fecha
+    pasada hizo que `slot_es_futuro` filtre todo → loop infinito sin chance
+    de cerrar ciclo.
+
+    Tratamiento: en `sincronizar_targets` descartamos los objetivos con
+    fecha pasada (borra de Firestore + saca de la worklist viva).
+
+    Casos:
+    - None / '' → False (`cualquier fecha` — no cierra).
+    - 'hoy' / 'manana' → False (siempre se resuelven en el día).
+    - 'AAAA-MM-DD' → True si < hoy local.
+    - Cualquier otro string que no parsee → False (no romper por dato raro).
+    """
+    if not fecha_str:
+        return False
+    v = str(fecha_str).strip().lower()
+    if v in ("hoy", "today", "manana", "mañana", "tomorrow"):
+        return False
+    hoy = datetime.now().strftime("%Y-%m-%d")
+    return v < hoy
+
+
 def _leer_config_archivo(ultimo):
     """Lee drop.json tolerando que esté a medio escribir (devuelve la última
     config buena en ese caso). None = no existe."""
@@ -499,6 +527,29 @@ def refrescar_datos_firestore(targets: dict):
 # ---- sincronización de targets con la config (hot reload) -----------------
 def sincronizar_targets(cfg: dict, targets: dict):
     deseados = {c["dni"]: c for c in cfg.get("choferes", []) if c.get("dni")}
+
+    # Guard fecha pasada (post-mortem corte de luz 2026-05-28): si un
+    # objetivo quedó colgado con `fecha < hoy`, cerramos el ciclo solos.
+    # Sin esto, el bot intenta reservar para una fecha pasada — `slot_es_futuro`
+    # filtra todo → loop infinito "buscando" sin posibilidad de cerrar (porque
+    # `mis_turnos()` no trae los CONCRETADOS y el flag `turno_conseguido` es
+    # in-memory y se pierde al reiniciar).
+    for dni in list(deseados):
+        if fecha_objetivo_pasada(deseados[dni].get("fecha")):
+            nombre = deseados[dni].get("nombre") or dni
+            fecha = deseados[dni].get("fecha")
+            log("LOG", nombre,
+                f"objetivo con fecha pasada ({fecha}) → cierro ciclo")
+            try:
+                nube.eliminar_objetivo(dni)
+            except Exception as e:
+                log("LOG", "sistema",
+                    f"no pude borrar objetivo de {nombre} ({dni}): {e}")
+            _despublicar_turno(dni)
+            deseados.pop(dni)
+            # Si estaba en targets vivos, sacarlo también.
+            if dni in targets:
+                del targets[dni]
 
     for dni in list(targets):                       # sacar los que ya no están
         if dni not in deseados:

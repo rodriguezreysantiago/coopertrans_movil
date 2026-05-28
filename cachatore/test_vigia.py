@@ -170,5 +170,47 @@ class TestCicloLatenteBusquedaVisible(unittest.TestCase):
         self.assertEqual(n2, 1)  # el 2do ciclo NO agregó otra línea (throttled)
 
 
+class TestFechaObjetivoPasada(unittest.TestCase):
+    """Guard contra objetivos colgados con fecha pasada (post-mortem corte
+    de luz 2026-05-28, CELIZ + VOGEL stuck en 'buscando' loop infinito).
+    """
+
+    def test_none_no_es_pasada(self):
+        # null = "cualquier fecha" → nunca cerrar ciclo.
+        self.assertFalse(vigia.fecha_objetivo_pasada(None))
+        self.assertFalse(vigia.fecha_objetivo_pasada(""))
+
+    def test_hoy_manana_no_son_pasadas(self):
+        # Las palabras se re-resuelven cada día → nunca cerrar.
+        for v in ("hoy", "HOY", "today", "manana", "mañana", "tomorrow"):
+            self.assertFalse(vigia.fecha_objetivo_pasada(v),
+                             f"esperaba False para {v!r}")
+
+    def test_fecha_futura_no_es_pasada(self):
+        futuro = (datetime.now() + timedelta(days=3)).strftime("%Y-%m-%d")
+        self.assertFalse(vigia.fecha_objetivo_pasada(futuro))
+
+    def test_fecha_hoy_no_es_pasada(self):
+        # Hoy exacto → no cerrar (el chofer puede tener turno más tarde).
+        hoy = datetime.now().strftime("%Y-%m-%d")
+        self.assertFalse(vigia.fecha_objetivo_pasada(hoy))
+
+    def test_fecha_ayer_es_pasada(self):
+        ayer = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        self.assertTrue(vigia.fecha_objetivo_pasada(ayer))
+
+    def test_fecha_vieja_es_pasada(self):
+        self.assertTrue(vigia.fecha_objetivo_pasada("2020-01-01"))
+
+    def test_string_basura_no_rompe(self):
+        # Defensivo: si llega algo que no parsea como fecha (típico ej:
+        # un valor mal seteado en Firestore), no romper — devolver False
+        # y dejar el objetivo vivo (el admin lo limpia a mano).
+        # NOTA: la comparación de strings en Python sí ordena ("blabla"
+        # > "2026-..."), así que el guard de fallback igual da False
+        # porque la "fecha" no es < hoy en ese orden alfabético.
+        self.assertFalse(vigia.fecha_objetivo_pasada("blabla"))
+
+
 if __name__ == "__main__":
     unittest.main()
