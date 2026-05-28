@@ -804,88 +804,65 @@ class _Mapa extends StatelessWidget {
       tieneDrift: tieneDrift,
     );
 
+    // Ícono adentro del círculo:
+    // - Si se está moviendo: flecha de navegación rotada al heading.
+    //   Reemplaza al camión — es el indicador de rumbo más directo,
+    //   no asoma "afuera" del círculo (que se camuflaba a zoom bajo).
+    // - Si tiene drift: warning_amber (siempre, sobre el rumbo).
+    // - Si está parado / motor off: camión.
+    //
+    // Drift tiene prioridad sobre rumbo — si el chofer físico ≠ asignado,
+    // queremos que el admin vea el warning antes que la dirección.
+    final IconData iconoMarker;
+    final double rotacionMarker;
+    if (tieneDrift) {
+      iconoMarker = Icons.warning_amber;
+      rotacionMarker = 0;
+    } else if (enMovimiento) {
+      iconoMarker = Icons.navigation;
+      // El ícono `navigation` apunta al norte por defecto (cabeza arriba).
+      // Sitrack reporta heading en grados con 0=norte, sentido horario,
+      // que coincide con la rotación nativa de Transform.rotate.
+      rotacionMarker = heading * math.pi / 180;
+    } else {
+      iconoMarker = Icons.local_shipping;
+      rotacionMarker = 0;
+    }
+
     return Marker(
       point: LatLng(lat, lng),
-      // Width/height más grandes que el círculo (36) para que la flecha
-      // tenga espacio para "asomar" por encima del borde. El ancla del
-      // Marker sigue siendo el centro del SizedBox, que coincide con el
-      // centro del círculo (la flecha NO desplaza el punto).
-      // 60x60 (antes 48) para que la flecha grande quepa al rotarse en
-      // diagonal sin clipping.
-      width: 60,
-      height: 60,
+      width: 40,
+      height: 40,
       child: GestureDetector(
         onTap: () => onMarkerTap(doc),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Flecha rotada — solo si está en movimiento.
-            // Transform.rotate gira desde el centro del Stack (= centro
-            // del círculo). La flecha está alineada topCenter dentro
-            // del Stack, así al rotar 0° apunta al norte, 90° al este,
-            // 180° al sur, etc. (convenio Sitrack: 0=norte, sentido
-            // horario, en grados).
-            //
-            // Diseño 2026-05-28 (rev): flecha BLANCA con stroke negro
-            // grueso, no del color del marker — antes era verde sobre
-            // verde y se camuflaba a zoom de país. Blanco + stroke
-            // contrasta sobre cualquier color (mapa claro, marker
-            // verde/gris/rojo/naranja). Tamaño 32 (antes 22) + offset
-            // arriba para que asome bien fuera del círculo.
-            if (enMovimiento)
-              Transform.rotate(
-                angle: heading * math.pi / 180,
-                child: const Align(
-                  alignment: Alignment.topCenter,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      // Stroke: ícono ligeramente más grande en negro
-                      // para dar contorno (Flutter no soporta stroke
-                      // nativo en Icon).
-                      Icon(
-                        Icons.arrow_drop_up,
-                        color: Colors.black87,
-                        size: 36,
-                      ),
-                      // Relleno blanco encima.
-                      Icon(
-                        Icons.arrow_drop_up,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            // Círculo central (no rotado, ícono camión siempre vertical).
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                // Borde más grueso/contrastado si hay drift, para que salte
-                // a la vista incluso cuando hay muchos markers cerca.
-                border: Border.all(
-                  color: AppColors.textPrimary,
-                  width: tieneDrift ? 3 : 2,
-                ),
-                boxShadow: const [
-                  BoxShadow(
-                    color: AppColors.surface0,
-                    blurRadius: 4,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(
-                tieneDrift ? Icons.warning_amber : Icons.local_shipping,
-                color: AppColors.textPrimary,
-                size: tieneDrift ? 20 : 18,
-              ),
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            // Borde más grueso/contrastado si hay drift, para que salte
+            // a la vista incluso cuando hay muchos markers cerca.
+            border: Border.all(
+              color: AppColors.textPrimary,
+              width: tieneDrift ? 3 : 2,
             ),
-          ],
+            boxShadow: const [
+              BoxShadow(
+                color: AppColors.surface0,
+                blurRadius: 4,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Transform.rotate(
+            angle: rotacionMarker,
+            child: Icon(
+              iconoMarker,
+              color: AppColors.textPrimary,
+              size: tieneDrift ? 20 : 22,
+            ),
+          ),
         ),
       ),
     );
