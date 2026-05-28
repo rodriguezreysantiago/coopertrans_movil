@@ -204,23 +204,44 @@ foreach ($item in $Items) {
                     'Singleton*', 'LOCK', 'LOG', 'LOG.old',
                     'lockfile', 'DevToolsActivePort', '*.log'
                 )
+                # Log a archivo temp para poder parsear errors si exit
+                # >= 8 (algun archivo lockeado que NO esta en excludes).
+                $logTmp = [System.IO.Path]::GetTempFileName()
                 $null = robocopy $src $dst /MIR /NFL /NDL /NJH /NJS /NP /R:1 /W:1 `
-                    /XD $excludeDirs /XF $excludeFiles
+                    /XD $excludeDirs /XF $excludeFiles /LOG:$logTmp
                 # Exit codes robocopy:
                 #   0-7  = OK (con o sin copias/extras/mismatches)
                 #   8-15 = WARNING (algun archivo no copiado -- si pasa
                 #          a pesar de los excludes, es algo NUEVO que
-                #          se lockeo. Vale la pena revisar.)
+                #          se lockeo. El diagnostico de abajo muestra
+                #          que archivos para agregar al exclude.)
                 #   16+  = error fatal (acceso denegado total, etc.)
                 if ($LASTEXITCODE -ge 16) {
                     Write-Host "  - $($lbl): robocopy ERROR FATAL exit $LASTEXITCODE" -ForegroundColor Red
                     $errores++
+                    Remove-Item $logTmp -ErrorAction SilentlyContinue
                     continue
                 }
                 if ($LASTEXITCODE -ge 8) {
-                    Write-Host "  ! $($lbl) (dir): copia parcial inesperada (exit $LASTEXITCODE). Algun archivo nuevo se lockeo -- agregar a la lista de excludes si se repite." -ForegroundColor Yellow
+                    Write-Host "  ! $($lbl) (dir): copia parcial inesperada (exit $LASTEXITCODE)." -ForegroundColor Yellow
+                    # Parsear log para mostrar archivos problematicos.
+                    # robocopy escribe lineas tipo: "ERROR 32 (...)" seguidas
+                    # del path. Mostramos hasta 10 unicos.
+                    $erroresLog = Get-Content $logTmp -ErrorAction SilentlyContinue |
+                        Where-Object { $_ -match 'ERROR\s+\d' -or $_ -match '^\s+\d+\s+.*\\' } |
+                        Select-Object -First 20
+                    if ($erroresLog) {
+                        Write-Host "    Diagnostico (primeras lineas del log con ERROR):" -ForegroundColor DarkYellow
+                        foreach ($line in $erroresLog) {
+                            Write-Host "    $line" -ForegroundColor DarkYellow
+                        }
+                        Write-Host "    Log completo: $logTmp (no se borra para inspeccion)" -ForegroundColor DarkGray
+                    } else {
+                        Write-Host "    (sin lineas ERROR en el log -- ver $logTmp)" -ForegroundColor DarkGray
+                    }
                 } else {
                     Write-Host "  OK $lbl (dir)" -ForegroundColor Green
+                    Remove-Item $logTmp -ErrorAction SilentlyContinue
                 }
             }
         } else {
