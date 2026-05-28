@@ -202,7 +202,15 @@ foreach ($item in $Items) {
                 )
                 $excludeFiles = @(
                     'Singleton*', 'LOCK', 'LOG', 'LOG.old',
-                    'lockfile', 'DevToolsActivePort', '*.log'
+                    'lockfile', 'DevToolsActivePort', '*.log',
+                    # Cookies + journal: Chromium los mantiene abiertos
+                    # para writes. WhatsApp Web NO los usa para autenticar
+                    # (la sesion vive en IndexedDB/ y Local Storage/).
+                    # Excluirlos NO rompe la restauracion del bot.
+                    'Cookies', 'Cookies-journal',
+                    # Tabs_*: sesiones de tabs del browser (cambia cada
+                    # vez que se abre/cierra una). No necesarias para WA.
+                    'Tabs_*'
                 )
                 # Log a archivo temp para poder parsear errors si exit
                 # >= 8 (algun archivo lockeado que NO esta en excludes).
