@@ -85,7 +85,8 @@ class _AppOfflineBannerState<T> extends State<AppOfflineBanner<T>> {
           duration: const Duration(milliseconds: 240),
           transitionBuilder: (c, anim) => SizeTransition(
             sizeFactor: anim,
-            axisAlignment: -1,
+            // axisAlignment:-1 (deprecado tras 3.41) -> se despliega desde arriba.
+            alignment: Alignment.topLeft,
             child: c,
           ),
           child: _lenta
