@@ -336,7 +336,7 @@
       ]
     },
     {
-      "collectionGroup": "revisiones",
+      "collectionGroup": "REVISIONES",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "estado", "order": "ASCENDING" },
