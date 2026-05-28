@@ -184,17 +184,29 @@ if (-not $SkipWeb) {
     $webRoot  = Join-Path (Split-Path $repoRoot -Parent) 'web_coopertrans'
     $sitioApp = Join-Path $webRoot 'sitio_nuevo\sistema'
     $subirPy  = Join-Path $webRoot '_subir_sitio.py'
-    $ftpCreds = Join-Path $env:USERPROFILE 'Desktop\ftp_datos.txt'
+
+    # Credenciales FTP: priorizamos el Drive (G:/Mi unidad/ClaudeCodeSync)
+    # para que cualquier PC con el Drive sincronizado pueda hacer release
+    # sin pasos manuales de restauración. Fallback al Desktop por compat
+    # con PCs que ya las tienen ahí desde antes del setup multi-PC.
+    $ftpCredsDrive   = 'G:\Mi unidad\ClaudeCodeSync\secrets\ftp\ftp_datos.txt'
+    $ftpCredsDesktop = Join-Path $env:USERPROFILE 'Desktop\ftp_datos.txt'
+    $ftpCreds = $null
+    if (Test-Path $ftpCredsDrive)        { $ftpCreds = $ftpCredsDrive }
+    elseif (Test-Path $ftpCredsDesktop)  { $ftpCreds = $ftpCredsDesktop }
 
     if (-not (Test-Path $subirPy)) {
         Write-Host "  AVISO: no encuentro $subirPy" -ForegroundColor Yellow
         Write-Host "  Salteo el deploy web (esta PC no tiene el proyecto web)." -ForegroundColor DarkGray
         $webStatus = 'salteado (sin proyecto web en esta PC)'
     }
-    elseif (-not (Test-Path $ftpCreds)) {
-        Write-Host "  AVISO: no encuentro credenciales FTP ($ftpCreds)" -ForegroundColor Yellow
+    elseif (-not $ftpCreds) {
+        Write-Host "  AVISO: no encuentro credenciales FTP." -ForegroundColor Yellow
+        Write-Host "    Busque en:" -ForegroundColor DarkGray
+        Write-Host "      $ftpCredsDrive" -ForegroundColor DarkGray
+        Write-Host "      $ftpCredsDesktop" -ForegroundColor DarkGray
         Write-Host "  Salteo el deploy web." -ForegroundColor DarkGray
-        $webStatus = 'salteado (sin credenciales FTP en esta PC)'
+        $webStatus = 'salteado (sin credenciales FTP)'
     }
     else {
         try {
