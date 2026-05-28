@@ -332,20 +332,6 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // ========================================================================
-    // ICM_SEMANAL — agregados ICM por semana ISO (modulo ICM)
-    // ========================================================================
-    //
-    // Solo escribe la scheduled function `recomputeIcmSemanalScheduled`
-    // (lunes 6 AM ART) via Admin SDK. El cliente lee historico desde aca
-    // (rapido — 1 doc por semana) y solo cae al calculo on-the-fly desde
-    // SITRACK_EVENTOS para la semana actual aun no cerrada.
-    // Lectura: admin + supervisor + seg_higiene (los mismos que ven el
-    // modulo ICM).
-    match /ICM_SEMANAL/{doc} {
-      allow read: if isAdminOrSupervisor() || isSegHigiene();
-      allow write: if false;
-    }
 
     // ========================================================================
     // ICM_OFICIAL — ICM oficial de Sitrack (el que audita YPF) por período

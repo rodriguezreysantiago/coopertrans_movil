@@ -25,12 +25,11 @@ import "./setup";
 //   - telemetria.ts        telemetriaSnapshotScheduled
 //   - cleanup_y_recibos.ts asignarNumeroReciboAdelanto + purgarColaWhatsappAntigua
 //   - dashboard_stats.ts   recomputeDashboardStats
-//   - icm.ts               recomputeIcmSemanalScheduled
 //   - mantenimiento.ts     backup + bot_health + vigilador jornadas + silenciados
 //   - sitrack.ts           sitrackPosicionPoller + sitrackEventosPoller
 //   - resumenes_diarios.ts 4 resúmenes diarios 08:00 ART
 //
-// Orden: comun + auth primero porque exportan helpers que icm/sitrack/
+// Orden: comun + auth primero porque exportan helpers que sitrack/
 // mantenimiento/resumenes importan vía "./index" (re-export).
 export * from "./comun";
 export * from "./auth";
@@ -42,7 +41,6 @@ export * from "./volvo_mantenimiento";
 export * from "./telemetria";
 export * from "./cleanup_y_recibos";
 export * from "./dashboard_stats";
-export * from "./icm";
 export * from "./mantenimiento";
 export * from "./sitrack";
 export * from "./zonas_descarga";

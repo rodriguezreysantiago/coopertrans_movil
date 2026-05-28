@@ -128,8 +128,6 @@ export const backupFirestoreScheduled = onSchedule(
       "SITRACK_POSICIONES",
       "SITRACK_EVENTOS",
       "JORNADAS",
-      // ICM
-      "ICM_SEMANAL",
       // Logistica + Viajes + Adelantos
       "EMPRESAS_LOGISTICA",
       "UBICACIONES_LOGISTICA",

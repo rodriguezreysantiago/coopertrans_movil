@@ -1374,7 +1374,6 @@ Patrón `export *` desde el entry point oficial (TS no tiene `part of`):
 - `helpers.ts` — `expiraEnMin`, `primerNombre`, `rrPick`, formatos AR (ya existía + drift fix: jornadas_v2 capitaliza nombres ahora + round-robin determinístico anti-baneo)
 - `cleanup_y_recibos.ts` — asignarNumeroReciboAdelanto + purgarColaWhatsappAntigua
 - `dashboard_stats.ts` — recomputeDashboardStats + helpers
-- `icm.ts` — recomputeIcmSemanalScheduled
 - `mantenimiento.ts` — backup + bot_health + vigilador wrappers
 - `sitrack.ts` — 2 pollers
 - `resumenes_diarios.ts` — 4 resúmenes 08:00 ART

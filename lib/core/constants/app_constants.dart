@@ -20,7 +20,7 @@ class AppRoutes {
   // Vista Ejecutiva — tablero CEO con KPIs grandes + gráficos de tendencia
   // + top 5 choferes. Pensado como "homepage" para directivos / panorama
   // operativo rápido. Reúne data ya capturada en otros módulos
-  // (VIAJES_LOGISTICA + ICM_SEMANAL + STATS/dashboard).
+  // (VIAJES_LOGISTICA + ICM_OFICIAL + STATS/dashboard).
   static const String adminVistaEjecutiva = '/admin_vista_ejecutiva';
   static const String adminPersonalLista = '/admin_personal_lista';
   static const String adminVehiculosLista = '/admin_vehiculos_lista';

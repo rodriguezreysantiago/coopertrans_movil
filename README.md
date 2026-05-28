@@ -127,8 +127,7 @@ Resúmenes diarios a Vecchi:
 - `resumenExcesosJornadaDiario` (08:00 ART) — excesos del vigilador v2 al jefe Seg e Higiene.
 - `resumenConductaManejoDiario` (08:00 ART) — Sitrack peligrosos + Volvo AEBS/ESP únicos + sobrevelocidad cartográfica detallada por chofer a Molina.
 
-ICM y dashboard:
-- `recomputeIcmSemanalScheduled` (lunes 06:00 ART) — precalcula `ICM_SEMANAL/{YYYY-WW}` con ranking + top 5 mejores/peores.
+Dashboard:
 - `recomputeDashboardStats` (cada 5 min) — agregado para tablero admin → `STATS/dashboard`.
 
 Salud + mantenimiento:
