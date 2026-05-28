@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
@@ -238,16 +240,105 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
 
 /// Stream de UN solo día — detalle completo (resumen + gráfico + tramos
 /// + paradas) usando los widgets viejos.
-class _DetalleUnDia extends StatelessWidget {
+///
+/// Caso HOY: el cron `reconstruirJornadasDiario` corre a las 06:30 ART
+/// procesando AYER, así que HOY no existe en `VOLVO_JORNADAS_HISTORICO`
+/// hasta mañana. Para no quedar ciegos en el día, exponemos un botón
+/// "Cargar jornada de hoy" que invoca la callable `procesarJornadaHoyChofer`
+/// — procesa los eventos parciales (hoy 00:00 ART → ahora) y persiste
+/// al mismo doc, por lo que el StreamBuilder se actualiza solo al
+/// terminar. Si el doc ya existe (porque el admin ya lo cargó antes
+/// hoy o estamos viendo ayer), aparece un FAB para "Actualizar".
+class _DetalleUnDia extends StatefulWidget {
   final String choferDni;
   final DateTime fecha;
   const _DetalleUnDia({required this.choferDni, required this.fecha});
 
   @override
+  State<_DetalleUnDia> createState() => _DetalleUnDiaState();
+}
+
+class _DetalleUnDiaState extends State<_DetalleUnDia> {
+  bool _procesando = false;
+
+  bool get _esHoy {
+    final h = DateTime.now();
+    return widget.fecha.year == h.year &&
+        widget.fecha.month == h.month &&
+        widget.fecha.day == h.day;
+  }
+
+  /// Invoca la callable `procesarJornadaHoyChofer` por HTTPS directo
+  /// (no usamos `cloud_functions` plugin porque no tiene impl Windows
+  /// — mismo patrón que `loginConDni` y `actualizarRolEmpleado`).
+  ///
+  /// La callable está en us-central1. Auth con Bearer del idToken del
+  /// usuario logueado (el server chequea rol ADMIN/SUPERVISOR).
+  Future<void> _procesarHoy() async {
+    if (!mounted) return;
+    setState(() => _procesando = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw StateError('Sin sesión activa.');
+      }
+      final idToken = await user.getIdToken();
+      if (idToken == null || idToken.isEmpty) {
+        throw StateError('No se pudo obtener el token de sesión.');
+      }
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 12),
+        receiveTimeout: const Duration(seconds: 120),
+      ));
+      const url =
+          'https://us-central1-coopertrans-movil.cloudfunctions.net/'
+          'procesarJornadaHoyChofer';
+      final response = await dio.post<Map<String, dynamic>>(
+        url,
+        // Protocolo callable: payload va envuelto en `data`.
+        data: {
+          'data': {'choferDni': widget.choferDni},
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $idToken',
+          },
+          validateStatus: (_) => true,
+          responseType: ResponseType.json,
+        ),
+      );
+      if (response.statusCode == null || response.statusCode! >= 400) {
+        final err = response.data?['error'] as Map<String, dynamic>?;
+        final message = (err?['message'] ?? '').toString();
+        throw Exception(
+            message.isNotEmpty ? message : 'HTTP ${response.statusCode}');
+      }
+      final result = response.data?['result'] as Map<String, dynamic>?;
+      final persistida = result?['jornada_persistida'] == true;
+      final eventos = result?['eventos'] ?? 0;
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        content: Text(persistida
+            ? 'Jornada de hoy actualizada ($eventos eventos).'
+            : 'Sin actividad del chofer hoy todavía.'),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        content: Text('No se pudo procesar la jornada: $e'),
+      ));
+    } finally {
+      if (mounted) setState(() => _procesando = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<JornadaDia?>(
       stream: JornadaHistoricoService.streamDia(
-          choferDni: choferDni, fecha: fecha),
+          choferDni: widget.choferDni, fecha: widget.fecha),
       builder: (ctx, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
           return const Center(
@@ -263,19 +354,124 @@ class _DetalleUnDia extends StatelessWidget {
         }
         final j = snap.data;
         if (j == null) {
-          return const _Placeholder(
+          // Placeholder con CTA específico cuando es HOY — sino el
+          // usuario no tendría forma de pedir el procesamiento parcial.
+          return _PlaceholderConAccion(
             icono: Icons.event_busy,
-            titulo: 'Sin jornada procesada',
-            subtitulo:
-                'Este chofer no manejó ese día, o el día todavía no se '
-                'procesó (el cron corre a las 06:30 ART procesando el día '
-                'anterior).',
+            titulo: _esHoy
+                ? 'Jornada de hoy no procesada todavía'
+                : 'Sin jornada procesada',
+            subtitulo: _esHoy
+                ? 'El cron procesa los días completos a las 06:30 ART. '
+                    'Tocá "Cargar jornada de hoy" para reconstruir lo que '
+                    'lleva el día hasta ahora.'
+                : 'Este chofer no manejó ese día.',
+            accion: _esHoy
+                ? _AccionPlaceholder(
+                    label: 'Cargar jornada de hoy',
+                    icono: Icons.refresh,
+                    onTap: _procesarHoy,
+                    cargando: _procesando,
+                  )
+                : null,
           );
         }
-        return _Contenido(jornada: j);
+        // Hay jornada — si es HOY, dejamos un FAB para refrescar.
+        return Stack(
+          children: [
+            _Contenido(jornada: j),
+            if (_esHoy)
+              Positioned(
+                right: AppSpacing.md,
+                bottom: AppSpacing.md,
+                child: FloatingActionButton.extended(
+                  heroTag: 'jornada_hoy_refrescar',
+                  backgroundColor: AppColors.success,
+                  foregroundColor: Colors.white,
+                  onPressed: _procesando ? null : _procesarHoy,
+                  icon: _procesando
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Icon(Icons.refresh, size: 18),
+                  label: Text(_procesando ? 'Actualizando…' : 'Actualizar'),
+                ),
+              ),
+          ],
+        );
       },
     );
   }
+}
+
+/// Placeholder con un botón de acción opcional. Variante del `_Placeholder`
+/// original que solo mostraba texto — necesario para el CTA "Cargar
+/// jornada de hoy" cuando no hay doc todavía.
+class _PlaceholderConAccion extends StatelessWidget {
+  final IconData icono;
+  final String titulo;
+  final String subtitulo;
+  final _AccionPlaceholder? accion;
+
+  const _PlaceholderConAccion({
+    required this.icono,
+    required this.titulo,
+    required this.subtitulo,
+    this.accion,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icono, color: Colors.white38, size: 48),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              titulo,
+              textAlign: TextAlign.center,
+              style: AppType.body.copyWith(
+                  color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              subtitulo,
+              textAlign: TextAlign.center,
+              style: AppType.label.copyWith(color: Colors.white54),
+            ),
+            if (accion != null) ...[
+              const SizedBox(height: AppSpacing.lg),
+              AppButton(
+                label: accion!.cargando ? 'Procesando…' : accion!.label,
+                icon: accion!.icono,
+                isLoading: accion!.cargando,
+                onPressed: accion!.cargando ? null : accion!.onTap,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AccionPlaceholder {
+  final String label;
+  final IconData icono;
+  final VoidCallback onTap;
+  final bool cargando;
+  const _AccionPlaceholder({
+    required this.label,
+    required this.icono,
+    required this.onTap,
+    required this.cargando,
+  });
 }
 
 /// Stream de varios días — lista de cards resumen ordenadas

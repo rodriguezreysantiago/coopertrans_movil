@@ -501,3 +501,119 @@ export const backfillJornadas = onCall(
     };
   },
 );
+
+// ============================================================================
+// Procesar UN solo chofer en un día (parcial OK) — usado por la callable
+// `procesarJornadaHoyChofer` para que el admin pueda ver la jornada del
+// día EN VIVO sin esperar al cron de mañana.
+// ============================================================================
+
+/** Variante de `procesarDia` que filtra a un solo chofer ANTES de cargar
+ *  los eventos a memoria. Reusa la misma reconstrucción + persistencia
+ *  que el cron — el doc resultante es idéntico al que generaría el cron
+ *  cuando procese ayer (pero parcial si el día todavía no terminó).
+ *
+ *  No necesita índice compuesto `driver_dni + report_date`: la query
+ *  filtra solo por `report_date`, el filtro por DNI es en memoria.
+ *  Tradeoff: lee todos los eventos del día (~3-5K) pero solo persiste 1
+ *  doc. Para uso esporádico desde la UI es OK; no se llama en cron. */
+export async function procesarDiaUnChofer(
+  desde: Date, hasta: Date, fechaLabel: string, dni: string,
+): Promise<{ eventos: number; jornadaPersistida: boolean }> {
+  const snap = await db.collection("SITRACK_EVENTOS")
+    .where("report_date", ">=", Timestamp.fromDate(desde))
+    .where("report_date", "<", Timestamp.fromDate(hasta))
+    .get();
+
+  const eventos: EventoIn[] = [];
+  for (const d of snap.docs) {
+    const m = d.data();
+    const eventoDni = (m.driver_dni as string | undefined)?.trim();
+    if (eventoDni !== dni) continue; // filtro temprano
+    const patente = (m.asset_id as string | undefined)?.trim().toUpperCase();
+    const ts = m.report_date as Timestamp | undefined;
+    if (!patente || !ts) continue;
+
+    const speed = typeof m.gps_speed === "number" ?
+      m.gps_speed :
+      (typeof m.speed === "number" ? m.speed : 0);
+    const ignition = m.ignition === 1 || m.ignition === true;
+    const lat = typeof m.latitude === "number" ? m.latitude : undefined;
+    const lng = typeof m.longitude === "number" ? m.longitude : undefined;
+    const odo = typeof m.odometer === "number" ?
+      m.odometer :
+      (typeof m.gps_odometer === "number" ? m.gps_odometer : undefined);
+
+    eventos.push({
+      ts: ts.toDate(),
+      speed,
+      ignition,
+      patente,
+      driverDni: dni,
+      driverName: (m.driver_name as string | undefined)?.trim() || undefined,
+      lat,
+      lng,
+      odometer: odo,
+    });
+  }
+
+  if (eventos.length === 0) {
+    return { eventos: 0, jornadaPersistida: false };
+  }
+
+  const j = reconstruirJornadaDia(dni, fechaLabel, eventos);
+  if (!j) return { eventos: eventos.length, jornadaPersistida: false };
+
+  await persistirJornada(j);
+  return { eventos: eventos.length, jornadaPersistida: true };
+}
+
+/** Callable que reconstruye la jornada de HOY (00:00 ART → ahora) para
+ *  un chofer puntual y la persiste a `VOLVO_JORNADAS_HISTORICO`. El
+ *  StreamBuilder de la pantalla se actualiza solo al persistirse el doc.
+ *
+ *  Pensada para uso interactivo desde la pantalla "Jornada" del hub ICM
+ *  — el admin elige HOY y, si no hay doc todavía (porque el cron diario
+ *  recién corre mañana 06:30), pulsa "Cargar jornada de hoy" y dispara
+ *  esta callable. También sirve para refrescar mid-día.
+ *
+ *  Region us-central1 + ADMIN/SUPERVISOR. */
+export const procesarJornadaHoyChofer = onCall(
+  {
+    timeoutSeconds: 120,
+    memory: "512MiB",
+    region: "us-central1",
+  },
+  async (req) => {
+    const rol = (req.auth?.token?.rol as string | undefined) || "";
+    if (rol !== "ADMIN" && rol !== "SUPERVISOR") {
+      throw new Error(
+        "Solo ADMIN o SUPERVISOR pueden procesar jornadas en vivo.");
+    }
+    const dni = (req.data?.choferDni as string | undefined)?.trim();
+    if (!dni) throw new Error("Falta choferDni.");
+
+    // HOY 00:00 ART = 03:00 UTC del mismo día calendario ART → ahora.
+    const ahoraArt = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const hoyArt = new Date(Date.UTC(
+      ahoraArt.getUTCFullYear(),
+      ahoraArt.getUTCMonth(),
+      ahoraArt.getUTCDate(),
+      3, 0, 0, 0,
+    ));
+    const ahora = new Date();
+    const fechaLabel = hoyArt.toISOString().substring(0, 10);
+
+    logger.info("[procesarJornadaHoyChofer] iniciando", { dni, fechaLabel });
+    const res = await procesarDiaUnChofer(hoyArt, ahora, fechaLabel, dni);
+    logger.info("[procesarJornadaHoyChofer] OK", { dni, ...res });
+
+    return {
+      ok: true,
+      chofer_dni: dni,
+      fecha: fechaLabel,
+      eventos: res.eventos,
+      jornada_persistida: res.jornadaPersistida,
+    };
+  },
+);
