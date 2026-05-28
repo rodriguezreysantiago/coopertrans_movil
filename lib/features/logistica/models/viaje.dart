@@ -175,12 +175,17 @@ class TarifaSnapshot {
   /// dueño del punto físico — ej. "ACÁ LA BALLENERA (LA BALLENERA)
   /// (PROFERTIL)" significa "Profertil paga el flete pero la planta
   /// es de ACA" (Santiago confirmó 2026-05-13 que es un caso real).
-  String get origenDisplay =>
-      _displayUbicacionConEmpresa(origenEtiqueta, empresaOrigenNombre);
+  ///
+  /// Usa la versión limpia (sin paréntesis de localidad) — pedido
+  /// 2026-05-28: en vistas de viaje/tarifa la localidad anexa entre
+  /// paréntesis (ej. "BAHIA BLANCA - PROFERTIL (BAHIA BLANCA)") es
+  /// ruido visual.
+  String get origenDisplay => _displayUbicacionConEmpresa(
+      _stripParentesis(origenEtiqueta), empresaOrigenNombre);
 
   /// Versión "display" de destino, misma lógica que [origenDisplay].
-  String get destinoDisplay =>
-      _displayUbicacionConEmpresa(destinoEtiqueta, empresaDestinoNombre);
+  String get destinoDisplay => _displayUbicacionConEmpresa(
+      _stripParentesis(destinoEtiqueta), empresaDestinoNombre);
 
   static String _displayUbicacionConEmpresa(
     String ubicacion,
@@ -193,6 +198,15 @@ class TarifaSnapshot {
     // (las ubicaciones se cargan con varias variantes).
     return u.toUpperCase().contains(e.toUpperCase()) ? u : '$u ($e)';
   }
+
+  /// Saca cualquier "(...)" de la etiqueta. Útil para vistas compactas
+  /// donde la localidad anexa entre paréntesis no aporta info nueva.
+  /// Mismo helper que `TarifaLogistica._stripParentesis` — duplicado
+  /// porque cada modelo es autocontenido.
+  static String _stripParentesis(String s) =>
+      s.replaceAll(RegExp(r'\s*\([^)]*\)\s*'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
 
   factory TarifaSnapshot.fromTarifa(TarifaLogistica t) {
     return TarifaSnapshot(

@@ -523,7 +523,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
     if (tarA == null || tarB == null) return null;
     if (tarA.ubicacionDestinoId == tarB.ubicacionOrigenId) return null;
     return 'El origen no coincide con el destino del tramo anterior '
-        '(${tarA.ubicacionDestinoEtiqueta} → ${tarB.ubicacionOrigenEtiqueta}). '
+        '(${tarA.ubicacionDestinoLimpia} → ${tarB.ubicacionOrigenLimpia}). '
         'Revisá si está bien.';
   }
 

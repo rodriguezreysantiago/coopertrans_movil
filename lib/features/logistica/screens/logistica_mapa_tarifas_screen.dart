@@ -268,8 +268,8 @@ class _LogisticaMapaTarifasScreenState
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            '${f.tarifa.ubicacionOrigenEtiqueta} → '
-                            '${f.tarifa.ubicacionDestinoEtiqueta}',
+                            '${f.tarifa.ubicacionOrigenLimpia} → '
+                            '${f.tarifa.ubicacionDestinoLimpia}',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -901,7 +901,7 @@ class _TarifaTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              t.ubicacionOrigenEtiqueta,
+              t.ubicacionOrigenLimpia,
               style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
@@ -913,7 +913,7 @@ class _TarifaTile extends StatelessWidget {
                 const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
-                    t.ubicacionDestinoEtiqueta,
+                    t.ubicacionDestinoLimpia,
                     style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -977,7 +977,7 @@ class _DetalleTarifaSheet extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
-                  '${t.ubicacionOrigenEtiqueta} → ${t.ubicacionDestinoEtiqueta}',
+                  '${t.ubicacionOrigenLimpia} → ${t.ubicacionDestinoLimpia}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),

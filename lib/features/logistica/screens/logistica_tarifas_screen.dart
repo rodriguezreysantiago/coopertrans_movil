@@ -384,7 +384,10 @@ class _RutaOrigenDestino extends StatelessWidget {
           child: _Punto(
             etiqueta: 'ORIGEN',
             empresa: tarifa.empresaOrigenNombre,
-            ubicacion: tarifa.ubicacionOrigenEtiqueta,
+            // Versión limpia (sin "(localidad)" final) — pedido
+            // 2026-05-28: la localidad anexa es redundante con el
+            // nombre que ya viene en la etiqueta cruda.
+            ubicacion: tarifa.ubicacionOrigenLimpia,
             color: AppColors.info,
           ),
         ),
@@ -406,7 +409,7 @@ class _RutaOrigenDestino extends StatelessWidget {
           child: _Punto(
             etiqueta: 'DESTINO',
             empresa: tarifa.empresaDestinoNombre,
-            ubicacion: tarifa.ubicacionDestinoEtiqueta,
+            ubicacion: tarifa.ubicacionDestinoLimpia,
             color: AppColors.brandSoft,
           ),
         ),

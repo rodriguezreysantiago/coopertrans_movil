@@ -104,18 +104,33 @@ class TarifaLogistica {
   final String ubicacionDestinoId;
   final String ubicacionDestinoEtiqueta;
 
+  /// Etiqueta de ubicación origen sin los paréntesis al final ni del
+  /// medio. La etiqueta cruda del catálogo viene con la localidad
+  /// anexa entre paréntesis (ej. "BAHIA BLANCA - PROFERTIL (BAHIA
+  /// BLANCA)") — info útil para distinguir ubicaciones homónimas en
+  /// el ABM, pero ruidosa en las vistas de tarifa donde Santiago ya
+  /// sabe qué planta es. Pedido 2026-05-28.
+  String get ubicacionOrigenLimpia =>
+      _stripParentesis(ubicacionOrigenEtiqueta);
+  String get ubicacionDestinoLimpia =>
+      _stripParentesis(ubicacionDestinoEtiqueta);
+
   /// Etiqueta de origen lista para mostrar: `"<ubicación> (<empresa>)"`
   /// EXCEPTO si la ubicación ya contiene el nombre de la empresa (caso
   /// típico: ubicación "PROFERTIL (BAHIA BLANCA)" + empresa
   /// "PROFERTIL" → mostrar solo "PROFERTIL (BAHIA BLANCA)" sin
   /// duplicar). Misma lógica que `TarifaSnapshot.origenDisplay` —
   /// duplicado para mantener cada modelo autocontenido.
+  ///
+  /// Usa la versión limpia (sin paréntesis de localidad), así el
+  /// dedup con la empresa queda consistente y no se ve la localidad
+  /// duplicada cuando esta coincide con el nombre de la empresa.
   String get origenDisplay =>
-      _displayUbicacionConEmpresa(ubicacionOrigenEtiqueta, empresaOrigenNombre);
+      _displayUbicacionConEmpresa(ubicacionOrigenLimpia, empresaOrigenNombre);
 
   /// Versión "display" de destino, misma lógica que [origenDisplay].
   String get destinoDisplay => _displayUbicacionConEmpresa(
-      ubicacionDestinoEtiqueta, empresaDestinoNombre);
+      ubicacionDestinoLimpia, empresaDestinoNombre);
 
   static String _displayUbicacionConEmpresa(
     String ubicacion,
@@ -126,6 +141,16 @@ class TarifaLogistica {
     if (e.isEmpty) return u;
     return u.toUpperCase().contains(e.toUpperCase()) ? u : '$u ($e)';
   }
+
+  /// Saca cualquier "(...)" de la etiqueta. Útil para vistas compactas
+  /// donde la localidad anexa entre paréntesis no aporta info nueva
+  /// (típico: "BAHIA BLANCA - PROFERTIL (BAHIA BLANCA)" → "BAHIA
+  /// BLANCA - PROFERTIL"). Conserva el resto del texto y trimea
+  /// dobles espacios que pudieron quedar.
+  static String _stripParentesis(String s) =>
+      s.replaceAll(RegExp(r'\s*\([^)]*\)\s*'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
 
   final FleteLogistica flete;
   final UnidadTarifa unidadTarifa;
