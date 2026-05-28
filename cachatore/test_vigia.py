@@ -212,5 +212,99 @@ class TestFechaObjetivoPasada(unittest.TestCase):
         self.assertFalse(vigia.fecha_objetivo_pasada("blabla"))
 
 
+class TestMensajeAgrupadoEncargado(unittest.TestCase):
+    """Tests para `nube._armar_mensaje_agrupado_encargado` — la función pura
+    que arma el texto que recibe Errazu cuando el drop de las 10:30 genera
+    7-10 turnos al hilo. Lockea el formato.
+
+    Importa `nube` desde el módulo `cachatore.nube`. Como `nube.py` tiene
+    side effects al importar (lee claves.json), parcheamos lo mínimo."""
+
+    @classmethod
+    def setUpClass(cls):
+        # Importar nube SIN disparar init de Firebase (no hay cred en CI).
+        with mock.patch.object(
+            __import__("firebase_admin"), "initialize_app", return_value=None):
+            cls.nube = __import__("nube")
+
+    def _item(self, nombre, dni, cuando, evento="reservado"):
+        return {
+            "chofer_dni": dni,
+            "chofer_nombre": nombre,
+            "cuando": cuando,
+            "evento": evento,
+        }
+
+    def test_un_solo_aviso_va_formato_individual(self):
+        # 1 item → mensaje individual (mismo que el de antes del cambio).
+        msg = self.nube._armar_mensaje_agrupado_encargado([
+            self._item("PEREZ JUAN", "12345678", "Viernes 22 May 2026 10:00"),
+        ])
+        self.assertEqual(
+            msg, "Turno YPF — PEREZ JUAN (DNI 12345678): Viernes 22 May 2026 10:00.")
+
+    def test_un_solo_aviso_reagendado(self):
+        msg = self.nube._armar_mensaje_agrupado_encargado([
+            self._item("PEREZ JUAN", "12345678", "Sábado 23 May 11:00", "reagendado"),
+        ])
+        self.assertIn("REPROGRAMADO", msg)
+        self.assertIn("PEREZ JUAN", msg)
+
+    def test_un_solo_aviso_cancelado(self):
+        msg = self.nube._armar_mensaje_agrupado_encargado([
+            self._item("PEREZ JUAN", "12345678", "Sábado 23 May 11:00", "cancelado"),
+        ])
+        self.assertIn("CANCELADO", msg)
+
+    def test_dos_o_mas_va_agrupado_con_header(self):
+        msg = self.nube._armar_mensaje_agrupado_encargado([
+            self._item("PEREZ JUAN", "12345678", "Viernes 22 May 10:00"),
+            self._item("LOPEZ MARIA", "23456789", "Viernes 22 May 11:30"),
+            self._item("RUIZ PEDRO", "34567890", "Viernes 22 May 13:00"),
+        ])
+        # Header con count
+        self.assertIn("Cachatore — 3 turnos procesados", msg)
+        # Bloque "Nuevos (3)"
+        self.assertIn("Nuevos (3)", msg)
+        # Los 3 nombres
+        self.assertIn("PEREZ JUAN", msg)
+        self.assertIn("LOPEZ MARIA", msg)
+        self.assertIn("RUIZ PEDRO", msg)
+
+    def test_mix_de_eventos_separa_por_bloque(self):
+        msg = self.nube._armar_mensaje_agrupado_encargado([
+            self._item("A B", "1", "X", "reservado"),
+            self._item("C D", "2", "Y", "reagendado"),
+            self._item("E F", "3", "Z", "cancelado"),
+        ])
+        self.assertIn("Nuevos (1)", msg)
+        self.assertIn("Reprogramados (1)", msg)
+        self.assertIn("Cancelados (1)", msg)
+        # Header total
+        self.assertIn("3 turnos procesados", msg)
+
+    def test_orden_alfabetico_por_nombre(self):
+        # Aunque vengan desordenados, salen ABC dentro de cada bloque.
+        msg = self.nube._armar_mensaje_agrupado_encargado([
+            self._item("ZARATE M", "3", "X"),
+            self._item("ALVAREZ J", "1", "Y"),
+            self._item("MORALES P", "2", "Z"),
+        ])
+        idx_a = msg.index("ALVAREZ")
+        idx_m = msg.index("MORALES")
+        idx_z = msg.index("ZARATE")
+        self.assertLess(idx_a, idx_m)
+        self.assertLess(idx_m, idx_z)
+
+    def test_evento_invalido_se_trata_como_reservado(self):
+        # Si llega un evento desconocido, fallback a "reservado" para no
+        # tirar nada al usuario.
+        msg = self.nube._armar_mensaje_agrupado_encargado([
+            self._item("X Y", "1", "Z", "evento_raro"),
+            self._item("A B", "2", "C", "reservado"),
+        ])
+        self.assertIn("Nuevos (2)", msg)
+
+
 if __name__ == "__main__":
     unittest.main()

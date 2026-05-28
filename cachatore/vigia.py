@@ -1097,6 +1097,25 @@ def main():
                         log("LOG", "sistema", f"error en resumen diario: {e}")
                     ultimo_resumen = hoy
 
+            # 6.b) flush de avisos al encargado AGRUPADOS. Si hay >=1 aviso
+            #      con edad >= 90s en el buffer CACHATORE_AVISOS_ENCARGADO_PENDIENTES,
+            #      manda UN solo mensaje con TODOS los pendientes. Esto resuelve
+            #      el spam del drop de las 10:30 (7-10 turnos seguidos = 7-10
+            #      mensajes a Errazu). Si todos son recientes, espera al
+            #      próximo ciclo (la ventana se cierra cuando deja de haber
+            #      avisos nuevos por 90s). Idempotente ante crash: los
+            #      pendientes viven en Firestore, no en memoria.
+            if _ESCRIBIR_ESTADO:
+                try:
+                    n_flush = nube.flushear_avisos_encargado()
+                    if n_flush > 0:
+                        log("LOG", "sistema",
+                            f"flush avisos al encargado: {n_flush} "
+                            f"turno(s) agrupado(s) en 1 mensaje")
+                except Exception as e:
+                    log("LOG", "sistema",
+                        f"error flush avisos encargado: {e}")
+
             time.sleep(espera)
 
         except KeyboardInterrupt:

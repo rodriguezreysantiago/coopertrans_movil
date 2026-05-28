@@ -833,6 +833,16 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Buffer interno del cachatore para agrupar avisos al encargado de
+    // logística cuando el drop genera 7-10 turnos seguidos. El cachatore
+    // (Admin SDK) escribe acá al conseguir un turno y los flushea agrupados
+    // a COLA_WHATSAPP cada ciclo (ventana 90s). La app no necesita leer
+    // ni escribir esto — es estado efímero del worker. Deny total desde
+    // cliente; admin SDK bypassa.
+    match /CACHATORE_AVISOS_ENCARGADO_PENDIENTES/{doc} {
+      allow read, write: if false;
+    }
+
     // ========================================================================
     // SITRACK_IBUTTONS_HISTORICO — tramos reconstruidos del iButton físico
     // ========================================================================

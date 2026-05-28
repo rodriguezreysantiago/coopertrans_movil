@@ -283,7 +283,16 @@ def encolar_whatsapp(telefono, mensaje):
 def avisar_turno(chofer_dni, chofer_nombre, cuando, evento):
     """Avisa por WhatsApp al chofer + al encargado de logística cuando el bot
     consigue (`evento='reservado'`), reprograma (`'reagendado'`) o CANCELA
-    (`'cancelado'`) un turno."""
+    (`'cancelado'`) un turno.
+
+    Al CHOFER: encola un mensaje individual inmediato (es crítico, no se
+    agrupa — necesita saber al toque que tiene/cambió/perdió su turno).
+
+    Al ENCARGADO: en lugar de encolar directo, escribe a un BUFFER
+    (`CACHATORE_AVISOS_ENCARGADO_PENDIENTES`) que `flushear_avisos_encargado()`
+    consume cada ciclo (~5s) con una ventana de 90s para agrupar varios
+    turnos del mismo drop en UN solo mensaje. Antes el drop de las 10:30
+    le metía 7-10 mensajes seguidos a Errazu (request 2026-05-28)."""
     db = choferes._db()
     cuando = cuando or "(ver en iTurnos)"
     nombre = (chofer_nombre or chofer_dni)
@@ -292,22 +301,150 @@ def avisar_turno(chofer_dni, chofer_nombre, cuando, evento):
     if evento == "reagendado":
         msg_chofer = (f"{hola}te reprogramamos el turno de carga YPF: "
                       f"ahora es *{cuando}*.\n\n_Coopertrans Móvil_")
-        msg_enc = (f"Turno YPF REPROGRAMADO — {nombre} (DNI {chofer_dni}): "
-                   f"{cuando}.")
     elif evento == "cancelado":
         msg_chofer = (f"{hola}te avisamos que tu turno de carga YPF "
                       f"(*{cuando}*) fue CANCELADO.\n\n_Coopertrans Móvil_")
-        msg_enc = (f"Turno YPF CANCELADO — {nombre} (DNI {chofer_dni}): "
-                   f"{cuando}.")
     else:
         msg_chofer = (f"{hola}te conseguimos turno de carga YPF para "
                       f"*{cuando}*.\n\n_Coopertrans Móvil_")
-        msg_enc = (f"Turno YPF — {nombre} (DNI {chofer_dni}): {cuando}.")
     encolar_whatsapp(_telefono_de(db, chofer_dni), msg_chofer)
     # M9 — pausa por canal. La pausa silencia SOLO el aviso al encargado;
     # el chofer siempre recibe el aviso de su turno (es crítico).
     if not canales_pausados.esta_canal_pausado("cachatoreEncargado"):
-        encolar_whatsapp(_telefono_de(db, _encargado_dni()), msg_enc)
+        _bufferear_aviso_encargado(
+            db, str(chofer_dni or ""), nombre, cuando, evento or "reservado")
+
+
+# ---- buffer + flush de avisos al encargado (agrupados) --------------------
+COL_AVISOS_ENC = "CACHATORE_AVISOS_ENCARGADO_PENDIENTES"
+
+
+def _bufferear_aviso_encargado(db, chofer_dni, chofer_nombre, cuando, evento):
+    """Mete un aviso individual al buffer para que `flushear_avisos_encargado`
+    lo agrupe en un solo mensaje con otros del mismo batch."""
+    db.collection(COL_AVISOS_ENC).add({
+        "chofer_dni": chofer_dni,
+        "chofer_nombre": chofer_nombre,
+        "cuando": cuando,
+        "evento": evento,
+        "creado_en": firestore.SERVER_TIMESTAMP,
+    })
+
+
+def _armar_mensaje_agrupado_encargado(items):
+    """Texto del WhatsApp al encargado.
+    - 1 item → formato individual (mismo que enviaba antes).
+    - 2+ items → mensaje agrupado, separado por tipo de evento si hay mix.
+    `items` = lista de dicts con keys: chofer_dni, chofer_nombre, cuando, evento.
+    """
+    n = len(items)
+    if n == 1:
+        it = items[0]
+        ev = it["evento"]
+        n_v = it["chofer_nombre"]
+        dni = it["chofer_dni"]
+        cuando = it["cuando"]
+        if ev == "reagendado":
+            return f"Turno YPF REPROGRAMADO — {n_v} (DNI {dni}): {cuando}."
+        if ev == "cancelado":
+            return f"Turno YPF CANCELADO — {n_v} (DNI {dni}): {cuando}."
+        return f"Turno YPF — {n_v} (DNI {dni}): {cuando}."
+
+    # 2+: agrupar por evento, mostrar contadores
+    por_ev = {"reservado": [], "reagendado": [], "cancelado": []}
+    for it in items:
+        ev = it["evento"] if it["evento"] in por_ev else "reservado"
+        por_ev[ev].append(it)
+
+    partes = [f"*Cachatore — {n} turnos procesados*", ""]
+    bloques = [
+        ("Nuevos", "reservado"),
+        ("Reprogramados", "reagendado"),
+        ("Cancelados", "cancelado"),
+    ]
+    for label, ev in bloques:
+        if not por_ev[ev]:
+            continue
+        partes.append(f"*{label} ({len(por_ev[ev])}):*")
+        # Orden por nombre — más legible que por cuando (que puede ser
+        # string sin formato uniforme).
+        for it in sorted(por_ev[ev], key=lambda x: (x["chofer_nombre"] or "").upper()):
+            partes.append(
+                f"• {it['chofer_nombre']} (DNI {it['chofer_dni']}): {it['cuando']}"
+            )
+        partes.append("")  # línea en blanco entre bloques
+
+    return "\n".join(partes).rstrip()
+
+
+def flushear_avisos_encargado(ventana_seg=90):
+    """Si hay avisos pendientes con edad >= `ventana_seg`, encola UN solo
+    mensaje agrupado al encargado y borra los pendientes flusheados.
+
+    Política:
+      - Si TODOS los pendientes son recientes (<ventana_seg), no hace
+        nada — espera más avisos del batch.
+      - Si hay al menos UNO con edad >= ventana_seg, flushea TODOS los
+        pendientes (incluso los recientes), porque ya pasó el tiempo de
+        "esperar más" del batch del drop.
+      - El doc en COLA_WHATSAPP queda con origen 'cachatore_agrupado'
+        para distinguir de los individuales en la pantalla de cola.
+
+    Idempotente ante crashes: los pendientes viven en Firestore, no en
+    memoria. Si el cachatore muere con un buffer pendiente, al volver el
+    próximo ciclo los flushea.
+
+    Devuelve cant de avisos flusheados (0 si no hizo nada)."""
+    from datetime import datetime, timezone
+    db = choferes._db()
+    pendientes = list(db.collection(COL_AVISOS_ENC).stream())
+    if not pendientes:
+        return 0
+
+    ahora = datetime.now(timezone.utc)
+    hay_estable = False
+    items = []
+    for d in pendientes:
+        x = d.to_dict() or {}
+        creado = x.get("creado_en")
+        if creado is None:
+            # write muy reciente, el server timestamp no se asentó aún
+            continue
+        try:
+            edad = (ahora - creado).total_seconds()
+        except TypeError:
+            edad = (ahora - creado.replace(tzinfo=timezone.utc)).total_seconds()
+        if edad >= ventana_seg:
+            hay_estable = True
+        items.append({
+            "ref": d.reference,
+            "chofer_dni": str(x.get("chofer_dni") or ""),
+            "chofer_nombre": str(x.get("chofer_nombre") or x.get("chofer_dni") or ""),
+            "cuando": str(x.get("cuando") or "(ver iTurnos)"),
+            "evento": str(x.get("evento") or "reservado"),
+        })
+
+    if not hay_estable or not items:
+        return 0  # todos recientes o todos sin timestamp aún → esperar
+
+    mensaje = _armar_mensaje_agrupado_encargado(items)
+    tel = _telefono_de(db, _encargado_dni())
+    # Si no hay teléfono, igual borramos el buffer (no podemos mandar)
+    if tel:
+        db.collection(COL_COLA).add({
+            "telefono": tel,
+            "mensaje": mensaje,
+            "estado": "PENDIENTE",
+            "encolado_en": firestore.SERVER_TIMESTAMP,
+            "enviado_en": None,
+            "origen": "cachatore_agrupado",
+        })
+
+    batch = db.batch()
+    for it in items:
+        batch.delete(it["ref"])
+    batch.commit()
+    return len(items)
 
 
 def resumen_turnos_para_encargado():
