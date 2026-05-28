@@ -209,7 +209,6 @@
 				33CC10EB2044A3C60003C045 /* Resources */,
 				33CC110E2044A8840003C045 /* Bundle Framework */,
 				3399D490228B24CF009A79C7 /* ShellScript */,
-				C0DE516E0000000000000001 /* CodeSign binary interno (workaround Xcode Cloud macOS) */,
 			);
 			buildRules = (
 			);
@@ -329,24 +328,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"$FLUTTER_ROOT\"/packages/flutter_tools/bin/macos_assemble.sh && touch Flutter/ephemeral/tripwire";
-		};
-		C0DE516E0000000000000001 /* CodeSign binary interno (workaround Xcode Cloud macOS) */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-			);
-			outputFileListPaths = (
-			);
-			outputPaths = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "# Build 44: codesign tiro 'code object is not signed at all' sobre el\n# binary que tratabamos de firmar. Imposible normalmente. Este build es\n# DIAGNOSTICO: dump metadata del binary + codesign verbose para entender\n# que rompe Apple Xcode Cloud + macOS 26.5 SDK + UTF-8 en path.\nset +e   # NO abortar — queremos ver TODO el output\nEXE=\"$TARGET_BUILD_DIR/$EXECUTABLE_PATH\"\necho \"==> EXE path: [$EXE]\"\necho \"==> Existe? $([ -f \"$EXE\" ] && echo SI || echo NO)\"\necho \"==> file output:\"\n/usr/bin/file \"$EXE\" 2>&1\necho \"==> ls -la del binary:\"\n/bin/ls -la \"$EXE\" 2>&1\necho \"==> Firma actual (si la hay):\"\n/usr/bin/codesign -dvvv \"$EXE\" 2>&1\necho \"==> Intentando remove-signature primero:\"\n/usr/bin/codesign --remove-signature \"$EXE\" 2>&1\necho \"==> Ahora codesign --force --sign - --verbose=4:\"\n/usr/bin/codesign --force --sign - --verbose=4 \"$EXE\" 2>&1\nRC=$?\necho \"==> codesign exit code: $RC\"\necho \"==> Verificacion post-firma:\"\n/usr/bin/codesign -dvvv \"$EXE\" 2>&1\n# No abortamos NUNCA — queremos que el build siga para ver si --deep\n# del CodeSign implicito recupera algo o tira otro error revelador.\nexit 0\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
