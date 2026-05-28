@@ -474,9 +474,21 @@ class _AccionPlaceholder {
   });
 }
 
-/// Stream de varios días — lista de cards resumen ordenadas
-/// cronológicamente. Tap sobre una card abre el detalle del día puntual
-/// (reusa la misma pantalla con fecha igual a desde y hasta).
+/// Stream de varios días — los **combina en una sola jornada continua**
+/// (gráfico extendido N×24h, tramos en orden cronológico, paradas
+/// combinadas, KPIs sumados). Decisión 2026-05-28: el operador querio
+/// ver el patrón continuo del rango sin ver cards separadas — mejor
+/// para detectar tendencias multi-día (ej. jornadas largas seguidas
+/// que el descanso entre ellas no compensa).
+///
+/// La fusión es client-side y barata (pocos KB por día). Si el rango
+/// es muy grande (ej. 30 días) y la lista de paradas crece, igual
+/// renderea bien — `ListView` interno de `_Contenido` virtualiza.
+///
+/// Si una fecha del rango NO tiene jornada (chofer no manejó), se
+/// skipea silenciosamente — el rango muestra solo los días que tuvieron
+/// actividad. Por eso el header dice "X días con jornada" (no
+/// "X días en el rango").
 class _ListaRango extends StatelessWidget {
   final String choferDni;
   final DateTime desde;
@@ -514,171 +526,105 @@ class _ListaRango extends StatelessWidget {
                 'elegidas (o no manejó esos días).',
           );
         }
-        // Suma agregada para que el operador vea totales del rango.
-        final totalKm = jornadas.fold<int>(0, (s, j) => s + j.kmTotal);
-        final totalManejo =
-            jornadas.fold<int>(0, (s, j) => s + j.manejoMin);
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(4, 4, 4, 12),
-              child: Text(
-                '${jornadas.length} jornada${jornadas.length == 1 ? "" : "s"} · '
-                'total ${_fmtHM(totalManejo)} manejo · '
-                '${totalKm.toString()} km',
-                style: AppType.label.copyWith(color: Colors.white60, fontWeight: FontWeight.w600, letterSpacing: 0.3),
-              ),
-            ),
-            for (final j in jornadas) _CardResumenDia(jornada: j),
-          ],
+        final combinada = _combinarJornadas(jornadas);
+        return _Contenido(
+          jornada: combinada,
+          rangoLabel:
+              '${jornadas.length} día${jornadas.length == 1 ? "" : "s"} combinados',
         );
       },
     );
   }
 }
 
-/// Card compacta con resumen de UN día dentro de una lista de rango.
-/// Tap → abre la misma pantalla con ese día puntual (vista detalle).
-class _CardResumenDia extends StatelessWidget {
-  final JornadaDia jornada;
-  const _CardResumenDia({required this.jornada});
+/// Fusiona N `JornadaDia` en una sola estructura como si fuera un
+/// continuo de N×24h. La jornada resultante mantiene los timestamps
+/// originales (el gráfico se extiende a 48h, 72h, etc.) y suma los
+/// KPIs. Para detectar la "patente principal" del rango se cuenta
+/// frecuencia entre las patentes de cada día.
+JornadaDia _combinarJornadas(List<JornadaDia> jornadas) {
+  assert(jornadas.isNotEmpty, '_combinarJornadas requiere lista no vacía');
+  // Ordenar cronológicamente por inicio.
+  final ordenadas = [...jornadas]..sort((a, b) => a.inicio.compareTo(b.inicio));
 
-  @override
-  Widget build(BuildContext context) {
-    // Convertimos 'YYYY-MM-DD' del doc a un DateTime ART (sin tiempo).
-    final partes = jornada.fecha.split('-');
-    final fecha = partes.length == 3
-        ? DateTime(
-            int.tryParse(partes[0]) ?? 0,
-            int.tryParse(partes[1]) ?? 1,
-            int.tryParse(partes[2]) ?? 1,
-          )
-        : null;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: AppCard(
-        padding: const EdgeInsets.all(14),
-        onTap: fecha == null
-            ? null
-            : () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => JornadaDiaScreen(
-                      choferDniInicial: jornada.choferDni,
-                      fechaInicial: fecha,
-                    ),
-                  ),
-                );
-              },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.calendar_today,
-                    color: AppColors.success, size: 16),
-                const SizedBox(width: AppSpacing.sm),
-                Text(
-                  jornada.fecha,
-                  style: const TextStyle(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  jornada.patentePrincipal,
-                  style: AppType.label.copyWith(color: Colors.white70, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                const Icon(Icons.arrow_forward_ios,
-                    color: Colors.white24, size: 12),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                _MiniKpi(
-                  label: 'INICIO',
-                  valor: _fmtHoraCorta(jornada.inicio),
-                  color: AppColors.brandSoft,
-                  icono: Icons.play_arrow,
-                ),
-                const SizedBox(width: 18),
-                _MiniKpi(
-                  label: 'FIN',
-                  valor: _fmtHoraCorta(jornada.fin),
-                  color: AppColors.brandSoft,
-                  icono: Icons.stop,
-                ),
-                const SizedBox(width: 18),
-                _MiniKpi(
-                  label: 'MANEJO',
-                  valor: _fmtHM(jornada.manejoMin),
-                  color: AppColors.info,
-                  icono: Icons.directions_car,
-                ),
-                const SizedBox(width: 18),
-                _MiniKpi(
-                  label: 'KM',
-                  valor: jornada.kmTotal.toString(),
-                  color: AppColors.success,
-                  icono: Icons.route,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
+  // Concatenar listas — ya vienen ordenadas dentro de cada día.
+  final tramos = <TramoManejo>[];
+  final paradas = <Parada>[];
+  final serie = <PuntoVelocidad>[];
+  final patentes = <String>{};
+  final patenteFreq = <String, int>{};
+
+  var manejoMin = 0;
+  var paradasMin = 0;
+  var kmTotal = 0;
+  var velMax = 0;
+  var totalEv = 0;
+
+  for (final j in ordenadas) {
+    tramos.addAll(j.tramos);
+    paradas.addAll(j.paradas);
+    serie.addAll(j.serieVelocidad);
+    patentes.addAll(j.patentes);
+    patenteFreq[j.patentePrincipal] =
+        (patenteFreq[j.patentePrincipal] ?? 0) + 1;
+    manejoMin += j.manejoMin;
+    paradasMin += j.paradasMin;
+    kmTotal += j.kmTotal;
+    if (j.velocidadMax > velMax) velMax = j.velocidadMax;
+    totalEv += j.totalEventos;
   }
+
+  // Ordenar la serie de velocidad por timestamp — debería estar
+  // ya ordenada por el orden de procesamiento, pero por las dudas.
+  serie.sort((a, b) => a.tsMs.compareTo(b.tsMs));
+
+  // Patente más usada en el rango (la que aparece como principal en
+  // más días). Empate → la primera alfabéticamente para determinismo.
+  final patentePrincipal = patenteFreq.entries
+          .toList()
+          .let((entries) {
+            entries.sort((a, b) {
+              final cmp = b.value.compareTo(a.value);
+              if (cmp != 0) return cmp;
+              return a.key.compareTo(b.key);
+            });
+            return entries;
+          })
+          .firstOrNull
+          ?.key ??
+      ordenadas.first.patentePrincipal;
+
+  return JornadaDia(
+    id: '__combinada_${ordenadas.first.fecha}_${ordenadas.last.fecha}',
+    choferDni: ordenadas.first.choferDni,
+    choferNombre: ordenadas.first.choferNombre,
+    patentePrincipal: patentePrincipal,
+    patentes: patentes.toList()..sort(),
+    fecha:
+        '${ordenadas.first.fecha} → ${ordenadas.last.fecha}',
+    inicio: ordenadas.first.inicio,
+    fin: ordenadas.last.fin,
+    manejoMin: manejoMin,
+    paradasMin: paradasMin,
+    kmTotal: kmTotal,
+    velocidadMax: velMax,
+    totalEventos: totalEv,
+    tramos: tramos,
+    paradas: paradas,
+    serieVelocidad: serie,
+  );
 }
 
-class _MiniKpi extends StatelessWidget {
-  final String label;
-  final String valor;
-  final Color color;
-  final IconData icono;
-  const _MiniKpi({
-    required this.label,
-    required this.valor,
-    required this.color,
-    required this.icono,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icono, color: color, size: 14),
-        const SizedBox(width: AppSpacing.xs),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label,
-                style: const TextStyle(
-                  color: Colors.white38,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8,
-                )),
-            Text(valor,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                )),
-          ],
-        ),
-      ],
-    );
-  }
+/// Mini extension para encadenar transformaciones en una expresión.
+extension _Let<T> on T {
+  R let<R>(R Function(T) f) => f(this);
 }
+
+// `_CardResumenDia` y `_MiniKpi` removidos 2026-05-28: la vista de rango
+// pasó a ser combinada (una sola jornada continua) en lugar de lista
+// de cards por día. Si en el futuro se decide ofrecer toggle "ver por
+// día" vs "combinado", recuperar del git history (commit anterior a
+// este).
 
 class _ChoferOpt {
   final String dni;
@@ -820,14 +766,49 @@ class _Placeholder extends StatelessWidget {
 
 class _Contenido extends StatelessWidget {
   final JornadaDia jornada;
-  const _Contenido({required this.jornada});
+  /// Opcional: cuando esta jornada es una fusión de varios días, este
+  /// label se muestra arriba ("3 días combinados"). Si es null, se
+  /// renderea la vista normal de 1 día.
+  final String? rangoLabel;
+
+  const _Contenido({required this.jornada, this.rangoLabel});
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
       children: [
-        _ResumenCard(j: jornada),
+        if (rangoLabel != null) ...[
+          Container(
+            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: AppColors.brandSoft.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              border: Border.all(
+                  color: AppColors.brandSoft.withValues(alpha: 0.40)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.merge_type,
+                    color: AppColors.brandSoft, size: 16),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    'VISTA COMBINADA — $rangoLabel',
+                    style: AppType.eyebrow.copyWith(
+                      color: AppColors.brandSoft,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        _ResumenCard(j: jornada, multiDia: rangoLabel != null),
         const SizedBox(height: AppSpacing.md),
         _GraficoVelocidad(j: jornada),
         const SizedBox(height: AppSpacing.lg),
@@ -836,7 +817,8 @@ class _Contenido extends StatelessWidget {
           texto: 'TRAMOS DE MANEJO (${jornada.tramos.length})',
         ),
         const SizedBox(height: AppSpacing.sm),
-        for (final t in jornada.tramos) _TramoCard(t: t),
+        for (final t in jornada.tramos)
+          _TramoCard(t: t, multiDia: rangoLabel != null),
         const SizedBox(height: AppSpacing.lg),
         _SeccionLabel(
           icono: Icons.local_parking,
@@ -852,7 +834,8 @@ class _Contenido extends StatelessWidget {
               style: AppType.label.copyWith(color: Colors.white54),
             ),
           ),
-        for (final p in jornada.paradas) _ParadaCard(p: p),
+        for (final p in jornada.paradas)
+          _ParadaCard(p: p, multiDia: rangoLabel != null),
       ],
     );
   }
@@ -860,7 +843,8 @@ class _Contenido extends StatelessWidget {
 
 class _ResumenCard extends StatelessWidget {
   final JornadaDia j;
-  const _ResumenCard({required this.j});
+  final bool multiDia;
+  const _ResumenCard({required this.j, this.multiDia = false});
 
   @override
   Widget build(BuildContext context) {
@@ -884,7 +868,8 @@ class _ResumenCard extends StatelessWidget {
                 ),
               ),
               Text(
-                '${_fmtHoraCorta(j.inicio)} → ${_fmtHoraCorta(j.fin)}',
+                '${_fmtHoraSegun(j.inicio, multiDia: multiDia)} → '
+                '${_fmtHoraSegun(j.fin, multiDia: multiDia)}',
                 style:
                     AppType.label.copyWith(color: Colors.white70),
               ),
@@ -1076,7 +1061,8 @@ class _GraficoVelocidad extends StatelessWidget {
 
 class _TramoCard extends StatelessWidget {
   final TramoManejo t;
-  const _TramoCard({required this.t});
+  final bool multiDia;
+  const _TramoCard({required this.t, this.multiDia = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1098,7 +1084,8 @@ class _TramoCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${_fmtHoraCorta(t.desde)} → ${_fmtHoraCorta(t.hasta)}',
+                  '${_fmtHoraSegun(t.desde, multiDia: multiDia)} → '
+                  '${_fmtHoraSegun(t.hasta, multiDia: multiDia)}',
                   style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -1122,7 +1109,8 @@ class _TramoCard extends StatelessWidget {
 
 class _ParadaCard extends StatelessWidget {
   final Parada p;
-  const _ParadaCard({required this.p});
+  final bool multiDia;
+  const _ParadaCard({required this.p, this.multiDia = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1154,7 +1142,8 @@ class _ParadaCard extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      '${_fmtHoraCorta(p.desde)} → ${_fmtHoraCorta(p.hasta)}',
+                      '${_fmtHoraSegun(p.desde, multiDia: multiDia)} → '
+                      '${_fmtHoraSegun(p.hasta, multiDia: multiDia)}',
                       style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -1221,6 +1210,15 @@ String _fmtFecha(DateTime d) =>
 
 String _fmtHoraCorta(DateTime d) =>
     '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+/// Cuando la jornada cruza varios días (vista combinada), agregar
+/// "DD/MM" delante para distinguir tramos/paradas del día 1 vs día 2.
+String _fmtHoraSegun(DateTime d, {required bool multiDia}) {
+  final hm = _fmtHoraCorta(d);
+  if (!multiDia) return hm;
+  return '${d.day.toString().padLeft(2, '0')}/'
+      '${d.month.toString().padLeft(2, '0')} $hm';
+}
 
 String _fmtHM(int min) {
   if (min < 60) return '${min}m';
