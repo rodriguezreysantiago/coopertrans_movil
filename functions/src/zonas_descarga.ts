@@ -136,11 +136,22 @@ export const zonaDescargaPoller = onSchedule(
         };
       });
 
-      // ─── 2) Cargar posiciones recientes (últimos 15 min) ──────
-      // Sitrack actualiza cada 5 min — si un doc tiene > 15 min de
-      // antigüedad probablemente la unidad está apagada y NO sirve para
-      // detectar presencia en zona ahora.
-      const limiteMs = Date.now() - 15 * 60 * 1000;
+      // ─── 2) Cargar posiciones recientes (últimas 4 h) ──────────
+      // Sitrack actualiza cada ~5 min con motor encendido, pero baja
+      // a ~1 reporte/hora con motor apagado. En una descarga típica
+      // (chofer llega, apaga motor, descarga, espera turno) la última
+      // posición conocida puede quedarse "stale" 30-90 min aunque la
+      // unidad físicamente sigue en el predio.
+      //
+      // Ventana 4 h: si la última posición es de ese rango y cae
+      // dentro de una zona, asumimos que la unidad sigue ahí. Si se
+      // fue y pierde señal antes de salir, queda en la cola hasta
+      // 4 h después — tolerable.
+      //
+      // Antes era 15 min y se perdían unidades con motor off recién
+      // llegadas a una planta (caso real 2026-05-28, AH628EI en
+      // NECOCHEA con DIETRICH).
+      const limiteMs = Date.now() - 4 * 60 * 60 * 1000;
       const posSnap = await db.collection("SITRACK_POSICIONES").get();
       const posiciones: PosicionUnidad[] = [];
       for (const doc of posSnap.docs) {
