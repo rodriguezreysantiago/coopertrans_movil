@@ -686,12 +686,16 @@ class _Mapa extends StatelessWidget {
               subdomains: MapConstants.tileSubdomains,
               userAgentPackageName: MapConstants.userAgent,
             ),
-            // Agrupamos pins muy cerca (radio chico de 40px) para evitar
+            // Agrupamos pins muy cerca (radio chico de 25px) para evitar
             // superposición cuando varios tractores están en el mismo
             // predio (acopio, base operativa). A zoom alto se separan.
+            // Bajamos de 40 → 25 para que a zoom medio (provincia) los
+            // markers individuales asomen con su flecha de rumbo — antes
+            // a Argentina entera quedaba todo en clusters y nunca se
+            // veían rumbos.
             MarkerClusterLayerWidget(
               options: MarkerClusterLayerOptions(
-                maxClusterRadius: 40,
+                maxClusterRadius: 25,
                 size: const Size(38, 38),
                 alignment: Alignment.center,
                 padding: const EdgeInsets.all(50),
@@ -806,8 +810,10 @@ class _Mapa extends StatelessWidget {
       // tenga espacio para "asomar" por encima del borde. El ancla del
       // Marker sigue siendo el centro del SizedBox, que coincide con el
       // centro del círculo (la flecha NO desplaza el punto).
-      width: 48,
-      height: 48,
+      // 60x60 (antes 48) para que la flecha grande quepa al rotarse en
+      // diagonal sin clipping.
+      width: 60,
+      height: 60,
       child: GestureDetector(
         onTap: () => onMarkerTap(doc),
         child: Stack(
@@ -819,20 +825,34 @@ class _Mapa extends StatelessWidget {
             // del Stack, así al rotar 0° apunta al norte, 90° al este,
             // 180° al sur, etc. (convenio Sitrack: 0=norte, sentido
             // horario, en grados).
+            //
+            // Diseño 2026-05-28 (rev): flecha BLANCA con stroke negro
+            // grueso, no del color del marker — antes era verde sobre
+            // verde y se camuflaba a zoom de país. Blanco + stroke
+            // contrasta sobre cualquier color (mapa claro, marker
+            // verde/gris/rojo/naranja). Tamaño 32 (antes 22) + offset
+            // arriba para que asome bien fuera del círculo.
             if (enMovimiento)
               Transform.rotate(
                 angle: heading * math.pi / 180,
-                child: Align(
+                child: const Align(
                   alignment: Alignment.topCenter,
-                  child: Icon(
-                    Icons.arrow_drop_up,
-                    color: color,
-                    size: 22,
-                    shadows: const [
-                      Shadow(
-                        color: AppColors.surface0,
-                        blurRadius: 2,
-                        offset: Offset(0, 1),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Stroke: ícono ligeramente más grande en negro
+                      // para dar contorno (Flutter no soporta stroke
+                      // nativo en Icon).
+                      Icon(
+                        Icons.arrow_drop_up,
+                        color: Colors.black87,
+                        size: 36,
+                      ),
+                      // Relleno blanco encima.
+                      Icon(
+                        Icons.arrow_drop_up,
+                        color: Colors.white,
+                        size: 32,
                       ),
                     ],
                   ),
