@@ -154,6 +154,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "chofer_dni", "order": "ASCENDING" },
+        { "fieldPath": "desde", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ASIGNACIONES_VEHICULO",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "chofer_dni", "order": "ASCENDING" },
         { "fieldPath": "hasta", "order": "ASCENDING" }
       ]
     },
