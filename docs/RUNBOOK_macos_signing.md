@@ -1,9 +1,35 @@
 # RUNBOOK — macOS signing en Xcode Cloud
 
-**Estado:** ⏸ PAUSADO al 2026-05-28 — necesita Mac local para debug interactivo.
-**Próximo paso requerido:** acceso a una Mac (propia, prestada por 1h, o MacInCloud).
+**Estado:** ✅ CAUSA RAÍZ ENCONTRADA + FIX APLICADO 2026-05-28 (validado en Mac local Intel, Xcode 16.4 / SDK 15.5). Pendiente: confirmar en Xcode Cloud disparando un build real.
+
+## TL;DR — qué era y cómo se arregló
+
+**Causa raíz:** el ejecutable principal se llamaba `Coopertrans Móvil` (con tilde). El carácter no-ASCII `ó` en `CFBundleExecutable` hace que `codesign`, al sellar el bundle **sin `--deep`** (que es como lo hace Xcode), trate el binario como un subcomponente sin firmar → `code object is not signed at all`. **NO era el SDK 26.5** (la hipótesis vieja, ver más abajo) — se reproduce idéntico con SDK 15.5.
+
+**Fix (1 línea):** en `macos/Runner/Configs/AppInfo.xcconfig`:
+```
+EXECUTABLE_NAME = CoopertransMovil
+```
+Fuerza el binario interno a ASCII. El `.app` se sigue llamando `Coopertrans Móvil.app` y `CFBundleName` mantiene la tilde — **el usuario no ve ningún cambio**. Solo `Contents/MacOS/CoopertransMovil` pasa a ASCII.
+
+**Cómo se diagnosticó** (matriz de pruebas con `codesign --force --sign -` sin `--deep` sobre el `.app` real):
+
+| Ejecutable | Resultado |
+|---|---|
+| `Coopertrans Móvil` (tilde) | ❌ FALLA |
+| `Coopertrans Movil` (espacio, sin tilde) | ✅ OK |
+| `CoopertransMóvil` (sin espacio, con tilde) | ❌ FALLA |
+| `CoopertransMovil` (ASCII) | ✅ OK |
+
+El binario, las dos arches (x86_64+arm64), los load commands y el deployment target están todos sanos: el mismo binario copiado a `/tmp` con nombre ASCII firma perfecto. El único factor es la tilde en el nombre del ejecutable.
+
+> **Validación local:** `xcodebuild ... CODE_SIGN_IDENTITY=- AD_HOC_CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Automatic build` (réplica exacta de los overrides que impone Xcode Cloud) → `** BUILD SUCCEEDED **` con el fix. Antes: `** BUILD FAILED **` en el CodeSign del `.app`.
 
 ---
+
+## Historia del bloqueo (hipótesis vieja — REFUTADA)
+
+> Lo de abajo quedó como registro de los 8 builds que se quemaron antes de encontrar la causa real. La hipótesis del "bug del SDK 26.5 con binarios universales" era **incorrecta**.
 
 ## Resumen del bloqueo
 

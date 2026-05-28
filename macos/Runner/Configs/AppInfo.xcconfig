@@ -8,6 +8,12 @@
 // ventana principal cuando Flutter no lo override-a.
 PRODUCT_NAME = Coopertrans Móvil
 
+// El binario interno (Contents/MacOS/<EXECUTABLE_NAME>) DEBE ser ASCII: la 'ó'
+// en CFBundleExecutable rompe el codesign del archive Mac App Store con
+// "code object is not signed at all". El nombre visible (.app + CFBundleName)
+// mantiene la tilde. NO volver a unificar con PRODUCT_NAME — ver docs/RUNBOOK_macos_signing.md.
+EXECUTABLE_NAME = CoopertransMovil
+
 // Bundle ID — IDÉNTICO al de iOS para que App Store Connect lo trate
 // como app multi-platform en lugar de dos apps separadas. La review
 // de macOS es independiente pero el listing comparte ratings, reviews
