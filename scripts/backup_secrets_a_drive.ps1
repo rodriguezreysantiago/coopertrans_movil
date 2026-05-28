@@ -3,12 +3,12 @@
 # =============================================================================
 #
 # Corre en la PC dedicada (Colo Logistica) como Scheduled Task. Sincroniza
-# los archivos que cambian con el tiempo (sesión WhatsApp Web, claves
-# rotadas, env vars actualizadas) al kit del Drive, así si la PC se muere
-# mañana, el kit es de hace < 24h y la PC nueva levanta en 15 min sin
+# los archivos que cambian con el tiempo (sesion WhatsApp Web, claves
+# rotadas, env vars actualizadas) al kit del Drive, asi si la PC se muere
+# manana, el kit es de hace < 24h y la PC nueva levanta en 15 min sin
 # pedir QR de WhatsApp ni claves obsoletas.
 #
-# Política multi-PC 2026-05-28 — corolario operativo del refactor de
+# Politica multi-PC 2026-05-28 -- corolario operativo del refactor de
 # secrets en Drive.
 #
 # USO:
@@ -22,6 +22,11 @@
 #   - Drive Desktop instalado en la PC dedicada bajo la misma cuenta
 #     Google que monta G:\Mi unidad\ClaudeCodeSync\.
 #   - El repo del bot/cachatore clonado en C:\coopertrans_movil\.
+#
+# NOTA encoding: este archivo es ASCII puro a proposito. PowerShell 5.1
+# (default en Windows) lee UTF-8 sin BOM como Latin-1, lo que rompe
+# caracteres unicode (acentos, lineas de caja, flechas). No agregar
+# caracteres > 127 sin verificar que ande en 5.1.
 
 [CmdletBinding()]
 param(
@@ -32,14 +37,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# ─── Config ──────────────────────────────────────────────────────
+# --- Config ------------------------------------------------------
 $RepoRoot     = 'C:\coopertrans_movil'
 $DriveRoot    = 'G:\Mi unidad\ClaudeCodeSync'
 
 # Items a sincronizar: [origen, destino, descripcion]
-# Cada entry es un objeto con Src, Dst y Label.
 $Items = @(
-    # Bot WhatsApp — kit completo en Drive (instalador all-in-one)
+    # Bot WhatsApp -- kit completo en Drive (instalador all-in-one)
     @{
         Src   = "$RepoRoot\whatsapp-bot\.env"
         Dst   = "$DriveRoot\bot-pc-dedicada\.env"
@@ -53,24 +57,34 @@ $Items = @(
     @{
         Src   = "$RepoRoot\whatsapp-bot\.wwebjs_auth"
         Dst   = "$DriveRoot\bot-pc-dedicada\.wwebjs_auth"
-        Label = 'bot .wwebjs_auth (sesión WhatsApp)'
+        Label = 'bot .wwebjs_auth (sesion WhatsApp)'
         IsDir = $true
     }
-    # Cachatore — secrets que cambian (la PC vieja no tenía kit del cachatore)
+    # Cachatore -- secrets que cambian
     @{
         Src   = "$RepoRoot\cachatore\claves.json"
         Dst   = "$DriveRoot\secrets\cachatore\claves.json"
         Label = 'cachatore claves.json'
     }
-    # serviceAccountKey general también para los scripts admin
+    @{
+        Src   = "$RepoRoot\cachatore\claves.json"
+        Dst   = "$DriveRoot\cachatore-pc-dedicada\claves.json"
+        Label = 'kit cachatore claves.json'
+    }
+    # serviceAccountKey general (scripts admin)
     @{
         Src   = "$RepoRoot\serviceAccountKey.json"
         Dst   = "$DriveRoot\secrets\firebase\serviceAccountKey.json"
         Label = 'secrets/firebase/serviceAccountKey.json'
     }
+    @{
+        Src   = "$RepoRoot\serviceAccountKey.json"
+        Dst   = "$DriveRoot\cachatore-pc-dedicada\serviceAccountKey.json"
+        Label = 'kit cachatore serviceAccountKey.json'
+    }
 )
 
-# ─── Manejo de Scheduled Task ─────────────────────────────────────
+# --- Manejo de Scheduled Task -------------------------------------
 $TaskName = 'CoopertransMovilBackupSecretsDrive'
 $ScriptPath = "$RepoRoot\scripts\backup_secrets_a_drive.ps1"
 
@@ -87,10 +101,9 @@ if ($InstalarTask) {
     }
     if (-not (Test-Path $ScriptPath)) {
         Write-Host "ERROR: No encuentro $ScriptPath" -ForegroundColor Red
-        Write-Host "        ¿El repo está clonado en $RepoRoot?" -ForegroundColor Yellow
+        Write-Host "       Esta el repo clonado en $RepoRoot ?" -ForegroundColor Yellow
         exit 1
     }
-    # Borrar si ya existía (idempotente)
     $existente = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($existente) {
         Write-Host "  Borrando task existente..." -ForegroundColor DarkGray
@@ -107,7 +120,7 @@ if ($InstalarTask) {
     Register-ScheduledTask -TaskName $TaskName `
         -Action $action -Trigger $trigger `
         -Principal $principal -Settings $settings `
-        -Description 'Backup nocturno de secrets vivos al kit del Drive (PC dedicada → G:\Mi unidad\ClaudeCodeSync\)'
+        -Description 'Backup nocturno de secrets de la PC dedicada al Drive'
     Write-Host "OK Scheduled Task '$TaskName' registrada (diaria 3:00 AM)." -ForegroundColor Green
     exit 0
 }
@@ -127,12 +140,13 @@ if ($DesinstalarTask) {
     exit 0
 }
 
-# ─── Ejecución normal (sync) ──────────────────────────────────────
-Write-Host "[backup_secrets_a_drive] iniciando $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+# --- Ejecucion normal (sync) --------------------------------------
+$fecha = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+Write-Host "[backup_secrets_a_drive] iniciando $fecha"
 
 if (-not (Test-Path $DriveRoot)) {
     Write-Host "ERROR: No encuentro el Drive en $DriveRoot" -ForegroundColor Red
-    Write-Host "       Verificá que Google Drive Desktop esté instalado y" -ForegroundColor Yellow
+    Write-Host "       Verifica que Google Drive Desktop este instalado y" -ForegroundColor Yellow
     Write-Host "       sincronizando la cuenta correcta." -ForegroundColor Yellow
     exit 1
 }
@@ -148,32 +162,26 @@ foreach ($item in $Items) {
     $isDir = [bool]$item.IsDir
 
     if (-not (Test-Path $src)) {
-        Write-Host "  - $lbl: ORIGEN NO EXISTE ($src)" -ForegroundColor Yellow
+        Write-Host "  - $($lbl): ORIGEN NO EXISTE ($src)" -ForegroundColor Yellow
         $skipped++
         continue
     }
 
-    # Si el destino existe y tiene mismo tamaño (para archivos) o
-    # mismo número de items (para dirs), capaz no hace falta copiar.
-    # Para simplicidad, copiamos siempre (los archivos son chicos y
-    # .wwebjs_auth es lo único pesado — usamos robocopy con /MIR).
     try {
         if ($isDir) {
             if ($DryRun) {
-                Write-Host "  [DRY] sync dir: $src → $dst" -ForegroundColor Cyan
+                Write-Host "  [DRY] sync dir: $src -> $dst" -ForegroundColor Cyan
             } else {
-                # Crear destino si no existe
                 if (-not (Test-Path $dst)) {
                     New-Item -ItemType Directory -Path $dst -Force | Out-Null
                 }
-                # robocopy /MIR mantiene el destino IDÉNTICO al origen
-                # (borra del destino lo que no esté en origen, copia lo
+                # robocopy /MIR mantiene el destino IDENTICO al origen
+                # (borra del destino lo que no este en origen, copia lo
                 # nuevo). Es lo correcto para .wwebjs_auth donde la
-                # sesión vieja se reemplaza por la nueva.
-                $result = robocopy $src $dst /MIR /NFL /NDL /NJH /NJS /NP /R:2 /W:5
-                # robocopy exit code: 0-7 = OK (sin errores reales), 8+ = error
+                # sesion vieja se reemplaza por la nueva.
+                $null = robocopy $src $dst /MIR /NFL /NDL /NJH /NJS /NP /R:2 /W:5
                 if ($LASTEXITCODE -ge 8) {
-                    Write-Host "  - $lbl: robocopy exit $LASTEXITCODE" -ForegroundColor Red
+                    Write-Host "  - $($lbl): robocopy exit $LASTEXITCODE" -ForegroundColor Red
                     $errores++
                     continue
                 }
@@ -181,9 +189,8 @@ foreach ($item in $Items) {
             }
         } else {
             if ($DryRun) {
-                Write-Host "  [DRY] copy file: $src → $dst" -ForegroundColor Cyan
+                Write-Host "  [DRY] copy file: $src -> $dst" -ForegroundColor Cyan
             } else {
-                # Crear directorio del destino si no existe
                 $dstDir = Split-Path $dst -Parent
                 if (-not (Test-Path $dstDir)) {
                     New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
@@ -194,22 +201,18 @@ foreach ($item in $Items) {
         }
         $copiados++
     } catch {
-        Write-Host "  - $lbl: ERROR — $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  - $($lbl): ERROR -- $($_.Exception.Message)" -ForegroundColor Red
         $errores++
     }
 }
 
-# ─── Marca de "última corrida exitosa" ────────────────────────────
-# Útil para diagnóstico: si el kit del Drive tiene 30 días de viejo,
-# este timestamp dice cuándo fue el último sync OK.
+# --- Marca de "ultima corrida exitosa" ----------------------------
 if (-not $DryRun -and $errores -eq 0) {
     $marker = "$DriveRoot\bot-pc-dedicada\ULTIMO_BACKUP.txt"
-    $contenido = @"
-Último backup OK: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')
-PC origen: $env:COMPUTERNAME ($env:USERNAME)
-Items copiados: $copiados
-"@
-    Set-Content -Path $marker -Value $contenido -Encoding UTF8
+    $contenido = "Ultimo backup OK: " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz') + "`r`n" +
+                 "PC origen: $env:COMPUTERNAME ($env:USERNAME)`r`n" +
+                 "Items copiados: $copiados"
+    Set-Content -Path $marker -Value $contenido -Encoding ASCII
 }
 
 Write-Host ""
