@@ -10,10 +10,10 @@
 // el output te dice si es por geometría (afuera del polígono), por
 // staleness de posición, por motor apagado, etc.
 const path = require("path");
-const fs = require("fs");
 
-const keyPath = path.join(__dirname, "..", "serviceAccountKey.json");
-process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
+// Resolver credenciales (Drive > env > repo local) y setear
+// GOOGLE_APPLICATION_CREDENTIALS antes de cargar admin.
+require('./_lib/firebase_creds');
 const admin = require(
   path.join(__dirname, "..", "functions", "node_modules", "firebase-admin"),
 );

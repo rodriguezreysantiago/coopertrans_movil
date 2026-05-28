@@ -28,8 +28,31 @@ except Exception:  # pragma: no cover
     FieldFilter = None
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
-_SAK = os.path.join(_DIR, "..", "serviceAccountKey.json")
-_CLAVES = os.path.join(_DIR, "claves.json")
+
+# Política multi-PC 2026-05-28: el código busca los secrets primero en
+# el Drive (G:/Mi unidad/ClaudeCodeSync/secrets/...) — así una PC nueva
+# con Drive sincronizado los encuentra sin restaurar a paths locales.
+# Si la PC no tiene el Drive montado (caso típico: PC dedicada del bot
+# que NO sincroniza Drive), cae al path local.
+_DRIVE_SECRETS = "G:\\Mi unidad\\ClaudeCodeSync\\secrets"
+_SAK_LOCAL = os.path.join(_DIR, "..", "serviceAccountKey.json")
+_SAK_DRIVE = os.path.join(_DRIVE_SECRETS, "firebase", "serviceAccountKey.json")
+_CLAVES_LOCAL = os.path.join(_DIR, "claves.json")
+_CLAVES_DRIVE = os.path.join(_DRIVE_SECRETS, "cachatore", "claves.json")
+
+
+def _primer_path_existente(*candidatos: str) -> str:
+    """Devuelve el primer path de la lista que existe en disco. Si
+    ninguno existe, devuelve el primero (para que el error que se
+    tire después sea claro)."""
+    for p in candidatos:
+        if p and os.path.exists(p):
+            return p
+    return candidatos[0]
+
+
+_SAK = _primer_path_existente(_SAK_DRIVE, _SAK_LOCAL)
+_CLAVES = _primer_path_existente(_CLAVES_DRIVE, _CLAVES_LOCAL)
 
 ROL_CHOFER = "CHOFER"
 COL_EMPLEADOS = "EMPLEADOS"

@@ -28,7 +28,8 @@
 //   node scripts/backfill_descargas.js --desde 2026-05-26 --hasta 2026-05-28
 //   node scripts/backfill_descargas.js --dias 7 --no-limpiar   # puro upsert
 //
-// Requiere serviceAccountKey.json en la raíz del proyecto + `functions/lib`
+// Requiere serviceAccountKey.json (busca en Drive primero, repo local
+// como fallback — ver scripts/_lib/firebase_creds.js) + `functions/lib`
 // compilado (npm run build adentro de functions/).
 
 const path = require("path");
@@ -54,19 +55,14 @@ const { dias, desde, hasta, limpiar } = parseArgs();
 // ─── Init firebase-admin ─────────────────────────────────────────
 // El módulo compilado `historico_descargas.js` importa transitivamente
 // `setup.js` que llama `initializeApp()` SIN argumentos (Application
-// Default Credentials). Para que pegue contra el proyecto correcto desde
-// fuera de Cloud Functions, seteamos GOOGLE_APPLICATION_CREDENTIALS
-// ANTES de cargar nada de admin.
-const keyPath = path.join(__dirname, "..", "serviceAccountKey.json");
-if (!fs.existsSync(keyPath)) {
-  console.error(`[backfill_descargas] no encuentro ${keyPath}`);
-  console.error("Bajalo de Firebase Console > Project Settings > Service Accounts.");
-  process.exit(1);
-}
-process.env.GOOGLE_APPLICATION_CREDENTIALS = keyPath;
+// Default Credentials). El helper `_lib/firebase_creds.js` setea
+// GOOGLE_APPLICATION_CREDENTIALS ANTES de cargar firebase-admin,
+// resolviéndolo del Drive si está disponible (política multi-PC
+// 2026-05-28) o del repo local como fallback.
+require('./_lib/firebase_creds');
 // firebase-admin no está en el root del proyecto — vive en functions/.
-// Resolvemos a mano desde ahí. NO llamamos initializeApp() — lo hace
-// `setup.js` cuando se carga vía require de `historico_descargas.js`.
+// NO llamamos initializeApp() acá — lo hace `setup.js` cuando se
+// carga vía require de `historico_descargas.js`.
 require(
   path.join(__dirname, "..", "functions", "node_modules", "firebase-admin"),
 );
