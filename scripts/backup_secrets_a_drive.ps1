@@ -180,28 +180,45 @@ foreach ($item in $Items) {
                 # nuevo). Es lo correcto para .wwebjs_auth donde la
                 # sesion vieja se reemplaza por la nueva.
                 #
-                # /R:1 /W:1 = 1 retry de 1s en archivos ocupados (no
-                # gastar minutos esperando archivos que estan lockeados
-                # mientras el bot corre).
-                $null = robocopy $src $dst /MIR /NFL /NDL /NJH /NJS /NP /R:1 /W:1
+                # /R:1 /W:1 = 1 retry de 1s en archivos ocupados.
+                #
+                # /XD = excluir directorios SIEMPRE lockeados por
+                # Chromium mientras el bot corre. Todos son CACHES que
+                # se regeneran solos al levantar el bot — NO son
+                # necesarios para preservar la sesion WhatsApp (esos
+                # viven en IndexedDB/, Local Storage/, Cookies, que
+                # NO suelen estar lockeados). Sin excluirlos, robocopy
+                # daba exit 8-11 ensuciando los logs todos los dias.
+                #
+                # /XF = excluir locks de proceso unico (Singleton*) y
+                # el LOCK del perfil. Idem regenerables.
+                $excludeDirs = @(
+                    'Cache', 'Code Cache', 'GPUCache',
+                    'DawnGraphiteCache', 'DawnWebGPUCache',
+                    'Service Worker', 'Shader Cache', 'GrShaderCache',
+                    'ShaderCache', 'optimization_guide_model_store',
+                    'GraphiteDawnCache', 'CrashpadMetrics',
+                    'component_crx_cache', 'extensions_crx_cache'
+                )
+                $excludeFiles = @(
+                    'Singleton*', 'LOCK', 'LOG', 'LOG.old',
+                    'lockfile', 'DevToolsActivePort', '*.log'
+                )
+                $null = robocopy $src $dst /MIR /NFL /NDL /NJH /NJS /NP /R:1 /W:1 `
+                    /XD $excludeDirs /XF $excludeFiles
                 # Exit codes robocopy:
                 #   0-7  = OK (con o sin copias/extras/mismatches)
-                #   8-15 = OK PARCIAL (algunos archivos no se pudieron
-                #          copiar -- tipicamente lockeados por proceso
-                #          activo, en este caso Chromium del bot
-                #          mientras corre. Los archivos lockeados son
-                #          cache de Chrome que se regenera; los archivos
-                #          criticos de sesion WhatsApp (keys/tokens)
-                #          NO suelen estar lockeados y SI pasan).
-                #   16+  = error fatal (acceso denegado total, disco
-                #          lleno, etc.)
+                #   8-15 = WARNING (algun archivo no copiado -- si pasa
+                #          a pesar de los excludes, es algo NUEVO que
+                #          se lockeo. Vale la pena revisar.)
+                #   16+  = error fatal (acceso denegado total, etc.)
                 if ($LASTEXITCODE -ge 16) {
                     Write-Host "  - $($lbl): robocopy ERROR FATAL exit $LASTEXITCODE" -ForegroundColor Red
                     $errores++
                     continue
                 }
                 if ($LASTEXITCODE -ge 8) {
-                    Write-Host "  ! $lbl (dir): copia parcial -- algunos archivos lockeados (exit $LASTEXITCODE). OK para sesion WhatsApp -- caches de Chrome se regeneran." -ForegroundColor Yellow
+                    Write-Host "  ! $($lbl) (dir): copia parcial inesperada (exit $LASTEXITCODE). Algun archivo nuevo se lockeo -- agregar a la lista de excludes si se repite." -ForegroundColor Yellow
                 } else {
                     Write-Host "  OK $lbl (dir)" -ForegroundColor Green
                 }
