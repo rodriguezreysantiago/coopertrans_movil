@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -527,6 +529,21 @@ class _Mapa extends StatelessWidget {
         reportTs == null ? null : ahora.difference(reportTs).inMinutes;
     final tieneDrift = (data['drift_tipo'] ?? '').toString().isNotEmpty;
 
+    // Rumbo + velocidad (Sitrack): si el camión se está moviendo y hay
+    // heading, mostramos una flechita rotada arriba del círculo apuntando
+    // al rumbo. Si está parado o no hay heading, no la mostramos —
+    // visualmente más limpio (rumbo de un camión parado no aporta).
+    // Preferimos gps_speed sobre speed (gps_speed es la velocidad medida
+    // por GPS, más confiable que la del ECU).
+    final headingRaw = data['heading'];
+    final speedRaw = data['gps_speed'] ?? data['speed'];
+    final heading = headingRaw is num ? headingRaw.toDouble() : null;
+    final speed = speedRaw is num ? speedRaw.toDouble() : null;
+    // Umbral 5 km/h: filtra "ruido" de GPS en parado (un camión detenido
+    // puede reportar 1-3 km/h por imprecisión del GPS).
+    final enMovimiento =
+        ignition && speed != null && speed > 5 && heading != null;
+
     final color = _colorMarker(
       ignition: ignition,
       minStale: minDesdeReporte,
@@ -535,33 +552,70 @@ class _Mapa extends StatelessWidget {
 
     return Marker(
       point: LatLng(lat, lng),
-      width: 36,
-      height: 36,
+      // Width/height más grandes que el círculo (36) para que la flecha
+      // tenga espacio para "asomar" por encima del borde. El ancla del
+      // Marker sigue siendo el centro del SizedBox, que coincide con el
+      // centro del círculo (la flecha NO desplaza el punto).
+      width: 48,
+      height: 48,
       child: GestureDetector(
         onTap: () => onMarkerTap(doc),
-        child: Container(
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            // Borde más grueso/contrastado si hay drift, para que salte
-            // a la vista incluso cuando hay muchos markers cerca.
-            border: Border.all(
-              color: AppColors.textPrimary,
-              width: tieneDrift ? 3 : 2,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: AppColors.surface0,
-                blurRadius: 4,
-                offset: Offset(0, 2),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Flecha rotada — solo si está en movimiento.
+            // Transform.rotate gira desde el centro del Stack (= centro
+            // del círculo). La flecha está alineada topCenter dentro
+            // del Stack, así al rotar 0° apunta al norte, 90° al este,
+            // 180° al sur, etc. (convenio Sitrack: 0=norte, sentido
+            // horario, en grados).
+            if (enMovimiento)
+              Transform.rotate(
+                angle: heading * math.pi / 180,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Icon(
+                    Icons.arrow_drop_up,
+                    color: color,
+                    size: 22,
+                    shadows: const [
+                      Shadow(
+                        color: AppColors.surface0,
+                        blurRadius: 2,
+                        offset: Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ],
-          ),
-          child: Icon(
-            tieneDrift ? Icons.warning_amber : Icons.local_shipping,
-            color: AppColors.textPrimary,
-            size: tieneDrift ? 20 : 18,
-          ),
+            // Círculo central (no rotado, ícono camión siempre vertical).
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                // Borde más grueso/contrastado si hay drift, para que salte
+                // a la vista incluso cuando hay muchos markers cerca.
+                border: Border.all(
+                  color: AppColors.textPrimary,
+                  width: tieneDrift ? 3 : 2,
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: AppColors.surface0,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Icon(
+                tieneDrift ? Icons.warning_amber : Icons.local_shipping,
+                color: AppColors.textPrimary,
+                size: tieneDrift ? 20 : 18,
+              ),
+            ),
+          ],
         ),
       ),
     );
