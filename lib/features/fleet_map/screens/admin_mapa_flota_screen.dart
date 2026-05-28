@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -5,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -50,9 +52,16 @@ class AdminMapaFlotaScreen extends StatefulWidget {
 }
 
 class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
-  // Bahía Blanca centro — operación de Vecchi.
-  static const _centroInicial = LatLng(-38.7196, -62.2724);
-  static const _zoomInicial = 8.0;
+  // Bahía Blanca centro — operación de Vecchi (fallback si no hay
+  // posición persistida en SharedPreferences ni docs en el stream).
+  static const _centroFallback = LatLng(-38.7196, -62.2724);
+  static const _zoomFallback = 8.0;
+
+  // Centro + zoom efectivos del mapa. Se inicializan con el fallback y
+  // se actualizan con la última posición persistida (cargada async en
+  // initState) o con auto-fit cuando llegan los primeros markers.
+  LatLng _centroInicial = _centroFallback;
+  double _zoomInicial = _zoomFallback;
 
   /// Filtro por estado del motor. null = todos.
   bool? _filtroIgnicionOn; // null=todos, true=ON, false=OFF
@@ -64,12 +73,116 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
   /// del sistema. Útil para que el admin atienda solo los inconsistentes.
   bool _soloDrift = false;
 
+  /// Texto de búsqueda por patente (mayúsculas, substring match).
+  /// Vacío = sin filtro.
+  String _searchQuery = '';
+  final _searchCtrl = TextEditingController();
+
+  /// Auto-fit al primer render con docs. Después de la primera vez, no
+  /// volvemos a tocar la cámara automáticamente — el admin pan/zoom y
+  /// cualquier auto-fit posterior le mataría su contexto visual.
+  bool _didInitialFit = false;
+
   final _mapController = MapController();
+
+  /// Keys de SharedPreferences para persistir centro/zoom entre sesiones.
+  static const _prefsKeyLat = 'mapa_flota_last_lat';
+  static const _prefsKeyLng = 'mapa_flota_last_lng';
+  static const _prefsKeyZoom = 'mapa_flota_last_zoom';
+
+  /// Debounce del save de prefs cuando el usuario pan/zoom — sin debounce
+  /// escribiríamos a disco con cada frame del drag.
+  Timer? _persistirDebounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _cargarUltimaPosicion();
+  }
 
   @override
   void dispose() {
+    _persistirDebounce?.cancel();
+    _searchCtrl.dispose();
     _mapController.dispose();
     super.dispose();
+  }
+
+  /// Lee la última posición del mapa de SharedPreferences. Si existe,
+  /// la aplica como `_centroInicial`/`_zoomInicial`. Async — el primer
+  /// frame puede mostrarse con el fallback y luego se actualiza con
+  /// setState cuando llega la posición persistida.
+  Future<void> _cargarUltimaPosicion() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final lat = prefs.getDouble(_prefsKeyLat);
+      final lng = prefs.getDouble(_prefsKeyLng);
+      final zoom = prefs.getDouble(_prefsKeyZoom);
+      if (lat != null && lng != null && zoom != null && mounted) {
+        setState(() {
+          _centroInicial = LatLng(lat, lng);
+          _zoomInicial = zoom;
+        });
+      }
+    } catch (_) {
+      // Silencioso — si SharedPreferences falla, usamos el fallback.
+    }
+  }
+
+  /// Persiste centro + zoom actual con debounce de 1s. Llamado desde
+  /// `onMapEvent` cuando el usuario termina un pan o zoom.
+  void _persistirPosicion(LatLng center, double zoom) {
+    _persistirDebounce?.cancel();
+    _persistirDebounce = Timer(const Duration(seconds: 1), () async {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setDouble(_prefsKeyLat, center.latitude);
+        await prefs.setDouble(_prefsKeyLng, center.longitude);
+        await prefs.setDouble(_prefsKeyZoom, zoom);
+      } catch (_) {/* silencioso */}
+    });
+  }
+
+  /// Calcula el bounding box de los markers y aplica fitCamera para que
+  /// se vean TODOS con un margen. Si no hay markers, no hace nada.
+  void _ajustarVistaATodaLaFlota(
+      List<QueryDocumentSnapshot<Map<String, dynamic>>> docs) {
+    if (docs.isEmpty) return;
+    final puntos = docs
+        .map((d) {
+          final lat = (d.data()['lat'] as num?)?.toDouble();
+          final lng = (d.data()['lng'] as num?)?.toDouble();
+          if (lat == null || lng == null) return null;
+          return LatLng(lat, lng);
+        })
+        .whereType<LatLng>()
+        .toList();
+    if (puntos.isEmpty) return;
+    if (puntos.length == 1) {
+      // Con 1 solo punto no podemos calcular bounds — centramos con
+      // zoom moderado.
+      _mapController.move(puntos.first, 13);
+      return;
+    }
+    final bounds = LatLngBounds.fromPoints(puntos);
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: bounds,
+        padding: const EdgeInsets.all(50),
+      ),
+    );
+  }
+
+  /// Limpia los 3 filtros + el search. Usado desde el botón del empty
+  /// state cuando los filtros actuales vacían el mapa.
+  void _limpiarFiltros() {
+    setState(() {
+      _filtroIgnicionOn = null;
+      _ocultarStale = false;
+      _soloDrift = false;
+      _searchQuery = '';
+      _searchCtrl.clear();
+    });
   }
 
   @override
@@ -115,12 +228,28 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
               if (reportTs == null) return false;
               if (ahora.difference(reportTs).inMinutes > 60) return false;
             }
+            // Filtro por patente (substring match, case-insensitive).
+            if (_searchQuery.isNotEmpty &&
+                !d.id.toUpperCase().contains(_searchQuery)) {
+              return false;
+            }
             // Tiene que tener lat/lng válidos.
             final lat = (data['lat'] as num?)?.toDouble();
             final lng = (data['lng'] as num?)?.toDouble();
             if (lat == null || lng == null) return false;
             return true;
           }).toList();
+
+          // Auto-fit al primer render con datos. Si ya hubo fit previo,
+          // respetamos el pan/zoom del usuario.
+          if (!_didInitialFit && visibles.isNotEmpty) {
+            _didInitialFit = true;
+            // Posponer al próximo frame para que el MapController ya esté
+            // attached al FlutterMap.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _ajustarVistaATodaLaFlota(visibles);
+            });
+          }
 
           // Conteos para la toolbar
           int conIgnicionOn = 0;
@@ -156,6 +285,9 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
                 filtroIgnicion: _filtroIgnicionOn,
                 ocultarStale: _ocultarStale,
                 soloDrift: _soloDrift,
+                searchCtrl: _searchCtrl,
+                onSearchChanged: (v) =>
+                    setState(() => _searchQuery = v.toUpperCase()),
                 onFiltroIgnicion: (v) =>
                     setState(() => _filtroIgnicionOn = v),
                 onOcultarStaleToggle: (v) =>
@@ -169,7 +301,15 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
                   zoomInicial: _zoomInicial,
                   docs: visibles,
                   ahora: ahora,
+                  hayFiltrosActivos: _filtroIgnicionOn != null ||
+                      _ocultarStale ||
+                      _soloDrift ||
+                      _searchQuery.isNotEmpty,
+                  totalSinFiltros: allDocs.length,
                   onMarkerTap: (doc) => _abrirDetalle(doc),
+                  onLimpiarFiltros: _limpiarFiltros,
+                  onFitFlota: () => _ajustarVistaATodaLaFlota(visibles),
+                  onPosicionCambiada: _persistirPosicion,
                 ),
               ),
             ],
@@ -183,10 +323,7 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => _DetalleSheet(
-        patente: doc.id,
-        data: doc.data(),
-      ),
+      builder: (_) => _DetalleSheet(patente: doc.id),
     );
   }
 }
@@ -205,6 +342,8 @@ class _Toolbar extends StatelessWidget {
   final bool? filtroIgnicion;
   final bool ocultarStale;
   final bool soloDrift;
+  final TextEditingController searchCtrl;
+  final ValueChanged<String> onSearchChanged;
   final ValueChanged<bool?> onFiltroIgnicion;
   final ValueChanged<bool> onOcultarStaleToggle;
   final ValueChanged<bool> onSoloDriftToggle;
@@ -219,6 +358,8 @@ class _Toolbar extends StatelessWidget {
     required this.filtroIgnicion,
     required this.ocultarStale,
     required this.soloDrift,
+    required this.searchCtrl,
+    required this.onSearchChanged,
     required this.onFiltroIgnicion,
     required this.onOcultarStaleToggle,
     required this.onSoloDriftToggle,
@@ -274,12 +415,49 @@ class _Toolbar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.xs),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              'Mostrando $visibles',
-              style: AppType.eyebrow,
-            ),
+          // Search por patente + contador "Mostrando X" en la misma fila.
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 32,
+                  child: TextField(
+                    controller: searchCtrl,
+                    style: AppType.label,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      prefixIcon: const Icon(Icons.search,
+                          size: 18, color: AppColors.textTertiary),
+                      suffixIcon: searchCtrl.text.isEmpty
+                          ? null
+                          : IconButton(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              icon: const Icon(Icons.clear,
+                                  size: 16, color: AppColors.textTertiary),
+                              onPressed: () {
+                                searchCtrl.clear();
+                                onSearchChanged('');
+                              },
+                            ),
+                      hintText: 'Buscar patente...',
+                      hintStyle:
+                          AppType.label.copyWith(color: AppColors.textTertiary),
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.sm, vertical: 0),
+                    ),
+                    onChanged: onSearchChanged,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                'Mostrando $visibles',
+                style: AppType.eyebrow,
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.xs),
           SizedBox(
@@ -459,7 +637,12 @@ class _Mapa extends StatelessWidget {
   final double zoomInicial;
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
   final DateTime ahora;
+  final bool hayFiltrosActivos;
+  final int totalSinFiltros;
   final ValueChanged<QueryDocumentSnapshot<Map<String, dynamic>>> onMarkerTap;
+  final VoidCallback onLimpiarFiltros;
+  final VoidCallback onFitFlota;
+  final void Function(LatLng center, double zoom) onPosicionCambiada;
 
   const _Mapa({
     required this.controller,
@@ -467,54 +650,121 @@ class _Mapa extends StatelessWidget {
     required this.zoomInicial,
     required this.docs,
     required this.ahora,
+    required this.hayFiltrosActivos,
+    required this.totalSinFiltros,
     required this.onMarkerTap,
+    required this.onLimpiarFiltros,
+    required this.onFitFlota,
+    required this.onPosicionCambiada,
   });
 
   @override
   Widget build(BuildContext context) {
-    return FlutterMap(
-      mapController: controller,
-      options: MapOptions(
-        initialCenter: centroInicial,
-        initialZoom: zoomInicial,
-        minZoom: 4,
-        maxZoom: 18,
-      ),
+    return Stack(
       children: [
-        TileLayer(
-          urlTemplate: MapConstants.tileUrl,
-          subdomains: MapConstants.tileSubdomains,
-          userAgentPackageName: MapConstants.userAgent,
-        ),
-        // Agrupamos pins muy cerca (radio chico de 40px) para evitar
-        // superposición cuando varios tractores están en el mismo
-        // predio (acopio, base operativa). A zoom alto se separan.
-        MarkerClusterLayerWidget(
-          options: MarkerClusterLayerOptions(
-            maxClusterRadius: 40,
-            size: const Size(38, 38),
-            alignment: Alignment.center,
-            padding: const EdgeInsets.all(50),
-            markers: docs.map((d) => _markerDeDoc(d)).toList(),
-            builder: (ctx, markers) => Container(
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.brand,
-              ),
-              child: Center(
-                child: Text(
-                  markers.length.toString(),
-                  style: AppType.heading.copyWith(color: AppColors.textPrimary),
+        FlutterMap(
+          mapController: controller,
+          options: MapOptions(
+            initialCenter: centroInicial,
+            initialZoom: zoomInicial,
+            minZoom: 4,
+            maxZoom: 18,
+            // Persistir posición cuando el usuario termina un pan/zoom.
+            // El debounce vive en el padre — acá solo notificamos.
+            onMapEvent: (event) {
+              if (event is MapEventMoveEnd ||
+                  event is MapEventDoubleTapZoomEnd ||
+                  event is MapEventFlingAnimationEnd ||
+                  event is MapEventScrollWheelZoom) {
+                onPosicionCambiada(event.camera.center, event.camera.zoom);
+              }
+            },
+          ),
+          children: [
+            TileLayer(
+              urlTemplate: MapConstants.tileUrl,
+              subdomains: MapConstants.tileSubdomains,
+              userAgentPackageName: MapConstants.userAgent,
+            ),
+            // Agrupamos pins muy cerca (radio chico de 40px) para evitar
+            // superposición cuando varios tractores están en el mismo
+            // predio (acopio, base operativa). A zoom alto se separan.
+            MarkerClusterLayerWidget(
+              options: MarkerClusterLayerOptions(
+                maxClusterRadius: 40,
+                size: const Size(38, 38),
+                alignment: Alignment.center,
+                padding: const EdgeInsets.all(50),
+                markers: docs.map((d) => _markerDeDoc(d)).toList(),
+                builder: (ctx, markers) => Container(
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.brand,
+                  ),
+                  child: Center(
+                    child: Text(
+                      // Separador de miles para clusters grandes (1.234
+                      // en vez de 1234, consistente con resto de la app).
+                      AppFormatters.formatearMiles(markers.length),
+                      style: AppType.heading
+                          .copyWith(color: AppColors.textPrimary),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-        const RichAttributionWidget(
-          attributions: [
-            TextSourceAttribution('© OpenStreetMap'),
+            const RichAttributionWidget(
+              attributions: [
+                TextSourceAttribution('© OpenStreetMap'),
+              ],
+            ),
           ],
         ),
+
+        // Empty state overlay: filtros activos pero 0 markers visibles.
+        // Solo mostramos si hay docs en total (sin filtros) — si no hay
+        // ningún doc, el problema es de data no de filtros.
+        if (docs.isEmpty && totalSinFiltros > 0 && hayFiltrosActivos)
+          Positioned(
+            top: AppSpacing.md,
+            left: AppSpacing.md,
+            right: AppSpacing.md,
+            child: AppCard(
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: Row(
+                children: [
+                  const Icon(Icons.filter_alt_off,
+                      color: AppColors.warning, size: 20),
+                  const SizedBox(width: AppSpacing.sm),
+                  const Expanded(
+                    child: Text(
+                      'Sin unidades con los filtros actuales.',
+                    ),
+                  ),
+                  AppButton.ghost(
+                    label: 'Limpiar',
+                    size: AppButtonSize.sm,
+                    onPressed: onLimpiarFiltros,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        // FAB "centrar en toda la flota". Solo si hay markers visibles.
+        if (docs.isNotEmpty)
+          Positioned(
+            right: AppSpacing.md,
+            bottom: AppSpacing.md,
+            child: FloatingActionButton.small(
+              heroTag: 'mapa_flota_fit',
+              backgroundColor: AppColors.brand,
+              foregroundColor: AppColors.textPrimary,
+              tooltip: 'Ver toda la flota',
+              onPressed: onFitFlota,
+              child: const Icon(Icons.crop_free),
+            ),
+          ),
       ],
     );
   }
@@ -642,14 +892,45 @@ class _Mapa extends StatelessWidget {
 
 class _DetalleSheet extends StatelessWidget {
   final String patente;
-  final Map<String, dynamic> data;
 
-  const _DetalleSheet({required this.patente, required this.data});
+  const _DetalleSheet({required this.patente});
 
   @override
   Widget build(BuildContext context) {
+    // Stream del doc — antes pasábamos `data` como snapshot estático y
+    // si la unidad cambiaba mientras el sheet estaba abierto el admin
+    // veía info vieja (velocidad cero, ubicación obsoleta). Con stream
+    // los datos se refrescan en vivo.
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection(AppCollections.sitrackPosiciones)
+          .doc(patente)
+          .snapshots(),
+      builder: (ctx, snap) {
+        final data = snap.data?.data();
+        if (data == null) {
+          // Loading inicial — sheet vacío con altura mínima para que la
+          // animación de apertura no flickeree.
+          return Container(
+            height: 200,
+            decoration: const BoxDecoration(
+              color: AppColors.surface2,
+              borderRadius: BorderRadius.vertical(
+                  top: Radius.circular(AppRadius.lg)),
+            ),
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        return _buildContenido(context, data);
+      },
+    );
+  }
+
+  Widget _buildContenido(BuildContext context, Map<String, dynamic> data) {
     final ignition = data['ignition'] == true;
     final speed = (data['speed'] as num?)?.toDouble();
+    final gpsSpeed = (data['gps_speed'] as num?)?.toDouble();
+    final headingRaw = (data['heading'] as num?)?.toDouble();
     final odometer = (data['odometer'] as num?)?.toDouble();
     final hourmeter = (data['hourmeter'] as num?)?.toDouble();
     final reportTs = (data['report_date'] as Timestamp?)?.toDate();
@@ -664,6 +945,13 @@ class _DetalleSheet extends StatelessWidget {
     final driftTipo = (data['drift_tipo'] ?? '').toString();
     final asignacionDni = (data['asignacion_dni'] ?? '').toString();
     final asignacionNombre = (data['asignacion_nombre'] ?? '').toString();
+
+    // En movimiento: misma lógica que el marker (gps_speed > 5 km/h).
+    final speedEfectiva = gpsSpeed ?? speed;
+    final enMovimiento = ignition &&
+        speedEfectiva != null &&
+        speedEfectiva > 5 &&
+        headingRaw != null;
 
     final choferTexto = driverDni.isEmpty
         ? '— (sin identificar)'
@@ -735,11 +1023,21 @@ class _DetalleSheet extends StatelessWidget {
             valor: speed == null ? '—' : '${speed.toStringAsFixed(0)} km/h',
             icono: Icons.speed,
           ),
+          // Rumbo: solo si está en movimiento. Texto formato "NE (45°)"
+          // — cardinal + grados exactos. Helper en `_rumboCardinal`.
+          if (enMovimiento)
+            _Fila(
+              label: 'Rumbo',
+              valor:
+                  '${_rumboCardinal(headingRaw)} (${headingRaw.toStringAsFixed(0)}°)',
+              icono: Icons.navigation,
+              colorIcono: AppColors.success,
+            ),
           _Fila(
             label: 'Odómetro',
             valor: odometer == null
                 ? '—'
-                : '${_formatearMiles(odometer)} km',
+                : '${AppFormatters.formatearMiles(odometer.round())} km',
             icono: Icons.straighten,
           ),
           if (hourmeter != null)
@@ -796,7 +1094,7 @@ class _DetalleSheet extends StatelessWidget {
                     label: 'Ver en Maps',
                     icon: Icons.open_in_new,
                     expand: true,
-                    onPressed: () => _abrirMaps(lat, lng),
+                    onPressed: () => _abrirMaps(context, lat, lng),
                   ),
                 ),
               ],
@@ -807,28 +1105,39 @@ class _DetalleSheet extends StatelessWidget {
     );
   }
 
-  Future<void> _abrirMaps(double lat, double lng) async {
+  /// Abre Google Maps en una ventana externa. Si el launch falla (raro
+  /// pero pasa con browser desconfigurado o Android sin queries en
+  /// manifest), notificamos al admin con SnackBar — antes fallaba
+  /// silencioso y el botón parecía roto.
+  Future<void> _abrirMaps(
+      BuildContext context, double lat, double lng) async {
+    final messenger = ScaffoldMessenger.of(context);
     final uri = Uri.parse('https://www.google.com/maps?q=$lat,$lng');
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) {
+        messenger.showSnackBar(const SnackBar(
+          content:
+              Text('No se pudo abrir Google Maps en este dispositivo.'),
+        ));
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text('Error abriendo Maps: $e'),
+      ));
     }
   }
 
-  /// Formato AR: 12.345.678 (separador de miles con punto).
-  static String _formatearMiles(double n) {
-    final i = n.round();
-    final s = i.toString();
-    final buf = StringBuffer();
-    var c = 0;
-    for (var k = s.length - 1; k >= 0; k--) {
-      buf.write(s[k]);
-      c++;
-      if (c == 3 && k != 0) {
-        buf.write('.');
-        c = 0;
-      }
-    }
-    return buf.toString().split('').reversed.join();
+  /// Convierte heading en grados (0=N, 90=E, 180=S, 270=O) a sentido
+  /// cardinal de 8 direcciones (N, NE, E, SE, S, SO, O, NO).
+  static String _rumboCardinal(double heading) {
+    const cardinales = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+    // Normalizar a [0, 360) por si vienen valores fuera de rango.
+    final h = ((heading % 360) + 360) % 360;
+    // Cada cardinal cubre 45° centrado en su ángulo. +22.5 desplaza
+    // los bordes para que 0..22.5 sea N, 22.5..67.5 sea NE, etc.
+    final idx = ((h + 22.5) / 45).floor() % 8;
+    return cardinales[idx];
   }
 }
 
@@ -912,17 +1221,35 @@ extension _StringIfEmpty on String {
 /// frecuencia (cron cada ~6h o sync manual desde la pantalla de
 /// unidades). Si la unidad no tiene Volvo Connect (campos ausentes),
 /// el widget no renderiza nada — silencioso.
-class _TelemetriaVolvoFila extends StatelessWidget {
+///
+/// **Stateful con Future cacheado** (antes era StatelessWidget con el
+/// `.get()` dentro de FutureBuilder, lo que re-fetcheaba en cada
+/// rebuild del sheet — costos Firestore extra). Ahora la query corre
+/// una sola vez en initState.
+class _TelemetriaVolvoFila extends StatefulWidget {
   final String patente;
   const _TelemetriaVolvoFila({required this.patente});
 
   @override
+  State<_TelemetriaVolvoFila> createState() => _TelemetriaVolvoFilaState();
+}
+
+class _TelemetriaVolvoFilaState extends State<_TelemetriaVolvoFila> {
+  late final Future<DocumentSnapshot<Map<String, dynamic>>> _futuro;
+
+  @override
+  void initState() {
+    super.initState();
+    _futuro = FirebaseFirestore.instance
+        .collection(AppCollections.vehiculos)
+        .doc(widget.patente)
+        .get();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      future: FirebaseFirestore.instance
-          .collection(AppCollections.vehiculos)
-          .doc(patente)
-          .get(),
+      future: _futuro,
       builder: (ctx, snap) {
         if (!snap.hasData || snap.data?.data() == null) {
           return const SizedBox.shrink();
