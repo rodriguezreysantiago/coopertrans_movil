@@ -7,6 +7,31 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-05-28 — Revisión de pendientes (varios cerrados) + setup PC nueva
+
+Revisión del estado real contra el código. **Cerrados / obsoletos:**
+
+- **Logística multi-tramo — features chicas**: TODO resuelto. Reordenar y
+  duplicar tramos los descartó Santiago el 14-may (innecesarios en la práctica);
+  validación de encadenamiento (banner amarillo), buscador en empresas y tarifas,
+  pantalla de viajes borrados (toggle "Mostrar eliminados" + Reactivar) y export
+  de liquidación a Excel (`report_liquidacion.dart` → `.xlsx`) ya implementados.
+- **iOS — listing App Store**: hecho. App **aprobada + LIVE en App Store público**
+  2026-05-28 → distribución multiplataforma completa (Windows + Play + iOS).
+- **Sitrack P4 — tiempo promedio de descarga**: el KPI ya lo muestra la pantalla
+  Descargas (`admin_descargas_screen`, promedio en min). Queda solo ranking por
+  chofer + alerta de outliers (esperar ~1 mes de data).
+- **Bot PC dedicada + acceso remoto**: operativos desde 2026-05-18 (NSSM +
+  Tailscale `100.99.223.44` + RDP). Ver `project_bot_pc_dedicada.md`.
+- **Setup PC de desarrollo nueva**: `docs/SETUP_PC_DESARROLLO.md` (toolchain:
+  Flutter 3.44.0, Node 22 nvm, etc.) + `secrets\README_RESTAURACION.md` del Drive.
+
+**Decisión abierta de ICM**: el "baseline odómetro" del CESVI quedó **moot** — la
+UI usa el ICM **oficial** de Sitrack desde el 22-may y el CESVI está desconectado.
+Lo que queda es decidir si **retirar** el CESVI (ver sección operativa abajo).
+
+---
+
 ## 📅 2026-05-24 — Actualización del estado de propuestas Volvo/WhatsApp
 
 ### ✅ HECHO hoy (commits del 24-may)
@@ -808,50 +833,24 @@ al módulo ICM. Está cubierto end-to-end.
 
 ## 🟡 Pendientes operativos (sin fecha fija)
 
-### Bot WhatsApp en PC dedicada 24/7 — pendiente migración física
-Kit completo armado en `G:\Mi unidad\ClaudeCodeSync\bot-pc-dedicada\`
-(683 MB). Cuando Santiago prenda la PC dedicada (Windows Pro recién
-instalado):
-
-1. Esperar que Drive sincronice la carpeta.
-2. Click derecho `instalar_todo.ps1` → Run with PowerShell (admin).
-3. ~10-15 min: instala Node+Git via winget, clona repo, copia los 3
-   archivos secret, npm install, registra servicio NSSM, configura
-   Windows 24/7, instala auto-update Scheduled Task, smoke test.
-4. Cuando confirme heartbeat OK desde `bot_estado_remoto.js`, apagar
-   bot en PC oficina (`Stop-Service CoopertransMovilBot` +
-   `Set-Service ... -StartupType Manual`).
-
-Ver memoria `project_bot_pc_dedicada.md` para detalle.
-
-### Acceso remoto PC dedicada → casa
-Recomendado: Tailscale + RDP nativo. Setup en `docs/SETUP_PC_DEDICADA_BOT.md`
-(actualizar con sección Tailscale cuando se concrete). Windows Pro ya
-instalado en la PC dedicada — RDP funciona out-of-the-box.
-
-### Multi-tramo Logística — features chicas
-- Reordenar tramos (drag handle).
-- Duplicar tramo (botón "+ copiar").
-- Validar encadenamiento (origen tramo N+1 = destino tramo N).
-- Buscador en empresas y tarifas (igual al de ubicaciones).
-- Pantalla "viajes borrados" para revisar/restaurar soft-deleted.
-- Exportar liquidación a Excel.
+> Limpieza 2026-05-28: se quitaron los ya cerrados (multi-tramo features, bot PC
+> dedicada, acceso remoto, iOS listing) — detalle en la entrada del 28-may arriba.
+> Queda lo realmente abierto:
 
 ### Volvo Driver/Tachograph Files API
 Módulos activos pero feeds vacíos. Pedir a Volvo Argentina alta de 48
 choferes + activación transmisión por unidad.
 
-### iOS — Listing público App Store (cuando se quiera publicar)
-- Capturas de pantalla (mínimo iPhone 6.7" y 6.5").
-- Descripción larga + corta + keywords.
-- Material similar a `docs/PLAY_STORE_LISTING.md` (reutilizable).
-- DSA Trader Status para distribución en EU (marcar "No comerciante"
-  para uso interno sin facturación a usuarios).
+### ICM — decidir si retirar el CESVI propio
+La UI usa el ICM OFICIAL de Sitrack desde 2026-05-22; el CESVI propio
+(`icm_calculator` + cron `recomputeIcmSemanalScheduled` + colección
+`ICM_SEMANAL`) quedó VIVO pero DESCONECTADO de toda pantalla. Decidir si
+retirarlo (menos código muerto) o mantenerlo como oráculo de los tests de
+paridad. El viejo "refinar el baseline odómetro 1 evento=100 km" quedó MOOT
+(no se usa). Cosmético menor aparte: iconos custom para ICM verde/amarillo/rojo
+(hoy `Icons.leaderboard` + color de fondo).
 
-### Refinamientos ICM (no urgentes)
-- Cuando haya histórico de odómetros por patente (snapshot diario
-  desde TELEMETRIA_HISTORICO), reemplazar el baseline `1 evento = 100
-  km` del calculator por cálculo real. El factor del ICM (default 5)
-  podría calibrarse para que matchee con el Tablero ICM YPF.
-- Iconos custom para ICM verde/amarillo/rojo (hoy usa `Icons.leaderboard`
-  + colores de fondo).
+### Sitrack P4 — ranking + outliers de descarga
+El tiempo promedio de descarga ya lo muestra la pantalla Descargas. Falta el
+ranking por chofer + alerta de outliers (el que tardó >> que el promedio).
+Esperar ~1 mes de data para que el promedio sea representativo.
