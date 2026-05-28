@@ -7,17 +7,26 @@
 // bug de mismatch de campos `m.latitude` vs `m.lat` skipeaba todas las
 // unidades silencioso — fix commit 47e11ff).
 //
-// Idempotente: el docId del histórico es determinístico (slug+patente+
-// entrada_ms), así que correr el script dos veces sobre el mismo rango
-// sobreescribe los mismos docs sin duplicar.
+// Idempotente al docId determinístico (slug+patente+entrada_ms): correr el
+// script dos veces sobre el mismo rango Y MISMA GEOMETRÍA sobreescribe los
+// mismos docs sin duplicar.
+//
+// CUIDADO con cambios de geometría (radio o vértices): al cambiar la
+// forma de la zona, la ENTRADA al predio se detecta en otro evento, así
+// que el `entrada_ms` (y por ende el docId) cambia. Resultado: la misma
+// descarga aparece DUPLICADA — el doc viejo con el entrada_ms anterior
+// + el doc nuevo. Por eso el script por DEFECTO LIMPIA los docs
+// existentes del rango+zona antes de re-armar (--no-limpiar para
+// volver al comportamiento puro upsert).
 //
 // Marca `origen_backfill: true` para distinguir de los archivados por el
 // cron en vivo.
 //
 // USO:
-//   node scripts/backfill_descargas.js                  # AYER (default)
+//   node scripts/backfill_descargas.js                  # AYER (default, limpia)
 //   node scripts/backfill_descargas.js --dias 3         # últimos N días
 //   node scripts/backfill_descargas.js --desde 2026-05-26 --hasta 2026-05-28
+//   node scripts/backfill_descargas.js --dias 7 --no-limpiar   # puro upsert
 //
 // Requiere serviceAccountKey.json en la raíz del proyecto + `functions/lib`
 // compilado (npm run build adentro de functions/).
@@ -28,17 +37,19 @@ const fs = require("fs");
 // ─── Args CLI ────────────────────────────────────────────────────
 function parseArgs() {
   const args = process.argv.slice(2);
-  const out = { dias: 1, desde: null, hasta: null };
+  const out = { dias: 1, desde: null, hasta: null, limpiar: true };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--dias") out.dias = parseInt(args[++i], 10);
     else if (a === "--desde") out.desde = args[++i];
     else if (a === "--hasta") out.hasta = args[++i];
+    else if (a === "--limpiar") out.limpiar = true;
+    else if (a === "--no-limpiar") out.limpiar = false;
   }
   return out;
 }
 
-const { dias, desde, hasta } = parseArgs();
+const { dias, desde, hasta, limpiar } = parseArgs();
 
 // ─── Init firebase-admin ─────────────────────────────────────────
 // El módulo compilado `historico_descargas.js` importa transitivamente
@@ -115,20 +126,54 @@ if (desde && hasta) {
 }
 
 console.log(
-  `[backfill_descargas] procesando ${rangos.length} día(s): ` +
+  `[backfill_descargas] procesando ${rangos.length} día(s) ` +
+  `(${limpiar ? "CON LIMPIEZA previa" : "sin limpieza, upsert puro"}): ` +
   rangos.map((r) => r.label).join(", "),
 );
+
+// ─── Limpieza opcional ───────────────────────────────────────────
+// Borra los docs existentes del rango cuyos `entrada_ts` caen en el
+// rango. Necesario cuando cambiamos la geometría de una zona — el
+// docId determinístico cambia y los docs viejos quedan duplicados
+// con los nuevos. Indispensable después de cambios de radio/polígono.
+const admin = require(
+  path.join(__dirname, "..", "functions", "node_modules", "firebase-admin"),
+);
+const db = admin.firestore();
+
+async function limpiarHistoricoRango(desde, hasta) {
+  const snap = await db.collection("ZONA_DESCARGA_HISTORICO")
+    .where("entrada_ts", ">=", admin.firestore.Timestamp.fromDate(desde))
+    .where("entrada_ts", "<", admin.firestore.Timestamp.fromDate(hasta))
+    .get();
+  let borrados = 0;
+  // Firestore batch limita a 500 ops; trabajamos en chunks de 400.
+  for (let i = 0; i < snap.docs.length; i += 400) {
+    const chunk = snap.docs.slice(i, i + 400);
+    const batch = db.batch();
+    for (const d of chunk) batch.delete(d.ref);
+    await batch.commit();
+    borrados += chunk.length;
+  }
+  return borrados;
+}
 
 // ─── Procesar ────────────────────────────────────────────────────
 (async () => {
   let totEventos = 0;
   let totDescargas = 0;
   let totWrites = 0;
+  let totBorrados = 0;
   for (const r of rangos) {
     console.log(`\n[backfill_descargas] === ${r.label} ===`);
     console.log(`  desde: ${r.ini.toISOString()}`);
     console.log(`  hasta: ${r.fin.toISOString()}`);
     try {
+      if (limpiar) {
+        const borrados = await limpiarHistoricoRango(r.ini, r.fin);
+        console.log(`  docs viejos borrados: ${borrados}`);
+        totBorrados += borrados;
+      }
       const res = await procesarRangoDescargas(r.ini, r.fin);
       console.log(`  zonas activas: ${res.zonas}`);
       console.log(`  eventos analizados: ${res.eventos}`);
@@ -142,6 +187,7 @@ console.log(
     }
   }
   console.log("\n[backfill_descargas] TOTAL:");
+  if (limpiar) console.log(`  docs viejos borrados: ${totBorrados}`);
   console.log(`  eventos analizados: ${totEventos}`);
   console.log(`  descargas detectadas: ${totDescargas}`);
   console.log(`  docs escritos: ${totWrites}`);

@@ -270,6 +270,29 @@ export async function procesarRangoDescargas(
   };
 }
 
+/** Borra los docs de `ZONA_DESCARGA_HISTORICO` con `entrada_ts` en el
+ *  rango [desde, hasta). Necesario antes de un backfill cuando cambia
+ *  la geometría de una zona — el docId (slug+patente+entrada_ms)
+ *  cambia y los docs viejos quedan duplicados con los nuevos. */
+export async function limpiarHistoricoDescargasRango(
+  desde: Date,
+  hasta: Date,
+): Promise<number> {
+  const snap = await db.collection("ZONA_DESCARGA_HISTORICO")
+    .where("entrada_ts", ">=", Timestamp.fromDate(desde))
+    .where("entrada_ts", "<", Timestamp.fromDate(hasta))
+    .get();
+  let borrados = 0;
+  for (let i = 0; i < snap.docs.length; i += 400) {
+    const chunk = snap.docs.slice(i, i + 400);
+    const batch = db.batch();
+    for (const d of chunk) batch.delete(d.ref);
+    await batch.commit();
+    borrados += chunk.length;
+  }
+  return borrados;
+}
+
 // ============================================================================
 // Callable de backfill — uso manual
 // ============================================================================
@@ -336,11 +359,19 @@ export const backfillHistoricoDescargas = onCall(
       }
     }
 
+    // Por DEFAULT limpia los docs viejos del rango antes de reconstruir.
+    // Necesario cuando cambia la geometría de una zona (radio/polígono)
+    // — el docId determinístico cambia y queda duplicado con el doc
+    // viejo. `limpiar: false` deja el comportamiento puro upsert.
+    const limpiar = req.data?.limpiar !== false;
+
     let totalEventos = 0;
     let totalDescargas = 0;
     let totalWrites = 0;
+    let totalBorrados = 0;
     const detalle: {
       fecha: string;
+      borrados: number;
       eventos: number;
       descargas: number;
       writes: number;
@@ -348,15 +379,21 @@ export const backfillHistoricoDescargas = onCall(
 
     for (const r of rangos) {
       logger.info(`[backfillHistoricoDescargas] procesando ${r.label}`, {
-        desde: r.ini.toISOString(), hasta: r.fin.toISOString(),
+        desde: r.ini.toISOString(),
+        hasta: r.fin.toISOString(),
+        limpiar,
       });
       try {
+        const borrados = limpiar ?
+          await limpiarHistoricoDescargasRango(r.ini, r.fin) : 0;
         const res = await procesarRangoDescargas(r.ini, r.fin);
+        totalBorrados += borrados;
         totalEventos += res.eventos;
         totalDescargas += res.descargas;
         totalWrites += res.writes;
         detalle.push({
           fecha: r.label,
+          borrados,
           eventos: res.eventos,
           descargas: res.descargas,
           writes: res.writes,
@@ -367,7 +404,7 @@ export const backfillHistoricoDescargas = onCall(
         });
         detalle.push({
           fecha: r.label,
-          eventos: -1, descargas: -1, writes: -1,
+          borrados: -1, eventos: -1, descargas: -1, writes: -1,
         });
       }
     }
@@ -375,6 +412,8 @@ export const backfillHistoricoDescargas = onCall(
     return {
       ok: true,
       rangos_procesados: rangos.length,
+      limpiar,
+      total_borrados: totalBorrados,
       total_eventos: totalEventos,
       total_descargas: totalDescargas,
       total_writes: totalWrites,
