@@ -1,6 +1,6 @@
 # RUNBOOK — macOS signing en Xcode Cloud
 
-**Estado:** ✅ CAUSA RAÍZ ENCONTRADA + FIX APLICADO 2026-05-28 (validado en Mac local Intel, Xcode 16.4 / SDK 15.5). Pendiente: confirmar en Xcode Cloud disparando un build real.
+**Estado:** ✅ RESUELTO + CONFIRMADO EN XCODE CLOUD 2026-05-28. **Build 46** (primero con el fix): `** ARCHIVE SUCCEEDED **` + `** EXPORT SUCCEEDED **` en app-store y development export, **CERO** errores de codesign. En el log se ve la firma de `Coopertrans Móvil.app/Contents/MacOS/CoopertransMovil` (binario ASCII). Causa raíz validada en Mac local (Xcode 16.4 / SDK 15.5) y confirmada en la nube. Queda confirmar que el build suba/aparezca en App Store Connect (upload = post-action; el codesign que bloqueaba ya está resuelto).
 
 ## TL;DR — qué era y cómo se arregló
 
