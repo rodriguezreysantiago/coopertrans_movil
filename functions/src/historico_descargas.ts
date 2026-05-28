@@ -313,7 +313,7 @@ export const backfillHistoricoDescargas = onCall(
     const desdeIso = req.data?.desde_iso as string | undefined;
     const hastaIso = req.data?.hasta_iso as string | undefined;
 
-    let rangos: { ini: Date; fin: Date; label: string }[] = [];
+    const rangos: { ini: Date; fin: Date; label: string }[] = [];
 
     if (desdeIso && hastaIso) {
       const ini = new Date(desdeIso);
