@@ -8,7 +8,9 @@ import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../../asignaciones/models/asignacion_enganche.dart';
 import '../../asignaciones/models/asignacion_vehiculo.dart';
+import '../../asignaciones/services/asignacion_enganche_service.dart';
 import '../../asignaciones/services/asignacion_vehiculo_service.dart';
 
 /// Auditoría de asignaciones — 2 vistas en TabBar.
@@ -108,6 +110,7 @@ class _TabPorUnidadState extends State<_TabPorUnidad>
     with AutomaticKeepAliveClientMixin {
   late DateTime _fecha;
   String _patente = '';
+  bool _esEnganche = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -150,7 +153,10 @@ class _TabPorUnidadState extends State<_TabPorUnidad>
         const SizedBox(height: AppSpacing.sm),
         _DropdownPatente(
           value: _patente,
-          onChanged: (v) => setState(() => _patente = v),
+          onChanged: (v, esEng) => setState(() {
+            _patente = v;
+            _esEnganche = esEng;
+          }),
         ),
         const SizedBox(height: AppSpacing.lg),
         if (_patente.isEmpty)
@@ -158,10 +164,12 @@ class _TabPorUnidadState extends State<_TabPorUnidad>
             icono: Icons.local_shipping_outlined,
             titulo: 'Elegí una unidad',
             subtitulo:
-                'Seleccioná un tractor y la fecha para ver quién lo manejaba.',
+                'Tractor o enganche + la fecha. Para enganches mostramos el '
+                'tractor que lo llevaba y su chofer (para multas al acoplado).',
           )
         else
-          _ResultadoAsignacion(patente: _patente, fecha: _fecha),
+          _ResultadoAsignacion(
+              patente: _patente, fecha: _fecha, esEnganche: _esEnganche),
       ],
     );
   }
@@ -298,11 +306,13 @@ class _SelectorFecha extends StatelessWidget {
   }
 }
 
-/// Dropdown de patentes (solo TIPO=TRACTOR). Sin filtro de ESTADO porque
-/// la auditoría puede interesarse en unidades dadas de baja.
+/// Dropdown de patentes — tractores Y enganches (las multas aplican a
+/// ambos). Sin filtro de ESTADO porque la auditoría puede interesarse en
+/// unidades dadas de baja. Devuelve `(patente, esEnganche)` para que el
+/// resultado sepa si hay que hacer la cascada enganche→tractor→chofer.
 class _DropdownPatente extends StatelessWidget {
   final String value;
-  final ValueChanged<String> onChanged;
+  final void Function(String patente, bool esEnganche) onChanged;
   const _DropdownPatente({required this.value, required this.onChanged});
 
   @override
@@ -310,41 +320,80 @@ class _DropdownPatente extends StatelessWidget {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection(AppCollections.vehiculos)
-          .where('TIPO', isEqualTo: 'TRACTOR')
           .snapshots(),
       builder: (ctx, snap) {
-        final patentes = (snap.data?.docs ??
+        // Tractores primero, después enganches; cada grupo alfabético.
+        final items = (snap.data?.docs ??
                 <QueryDocumentSnapshot<Map<String, dynamic>>>[])
-            .map((d) => d.id)
-            .toList()
-          ..sort();
+            .map((d) {
+          final tipo = (d.data()['TIPO'] ?? '').toString().toUpperCase();
+          return (
+            patente: d.id,
+            tipo: tipo,
+            esEnganche: tipo.isNotEmpty && tipo != 'TRACTOR',
+          );
+        }).toList()
+          ..sort((a, b) {
+            if (a.esEnganche != b.esEnganche) return a.esEnganche ? 1 : -1;
+            return a.patente.compareTo(b.patente);
+          });
         return DropdownButtonFormField<String>(
           isDense: true,
           isExpanded: true,
           decoration: const InputDecoration(
-            labelText: 'Unidad (tractor)',
+            labelText: 'Unidad (tractor o enganche)',
             border: OutlineInputBorder(),
             isDense: true,
             prefixIcon:
-                Icon(Icons.local_shipping_outlined, color: Colors.white54),
+                Icon(Icons.directions_car_outlined, color: Colors.white54),
           ),
           style: const TextStyle(color: Colors.white, fontSize: 14),
           dropdownColor: AppColors.surface2,
+          menuMaxHeight: 400,
           initialValue: value.isEmpty ? null : value,
           hint: const Text('Elegí una unidad…',
               style: TextStyle(color: Colors.white54, fontSize: 14)),
-          items: patentes
-              .map((p) => DropdownMenuItem<String>(
-                    value: p,
-                    child: Text(p,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            letterSpacing: 0.5,
-                            fontWeight: FontWeight.w600)),
+          items: items
+              .map((it) => DropdownMenuItem<String>(
+                    value: it.patente,
+                    child: Row(
+                      children: [
+                        Icon(
+                          it.esEnganche
+                              ? Icons.rv_hookup
+                              : Icons.local_shipping_outlined,
+                          size: 16,
+                          color: Colors.white38,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(it.patente,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                letterSpacing: 0.5,
+                                fontWeight: FontWeight.w600)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            it.esEnganche ? it.tipo.toLowerCase() : 'tractor',
+                            style: AppType.label.copyWith(
+                                color: Colors.white38, fontSize: 11),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ))
               .toList(),
-          onChanged: (v) => onChanged(v ?? ''),
+          onChanged: (v) {
+            if (v == null || v.isEmpty) {
+              onChanged('', false);
+              return;
+            }
+            final it = items.firstWhere((e) => e.patente == v,
+                orElse: () => (patente: v, tipo: '', esEnganche: false));
+            onChanged(v, it.esEnganche);
+          },
         );
       },
     );
@@ -493,11 +542,21 @@ class _Placeholder extends StatelessWidget {
 class _ResultadoAsignacion extends StatelessWidget {
   final String patente;
   final DateTime fecha;
-  const _ResultadoAsignacion({required this.patente, required this.fecha});
+  final bool esEnganche;
+  const _ResultadoAsignacion({
+    required this.patente,
+    required this.fecha,
+    required this.esEnganche,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Traemos TODAS las asignaciones de la patente (suelen ser pocas
+    // Enganche → cascada enganche→tractor→chofer (los acoplados no tienen
+    // chofer directo; quién lo llevaba sale del tractor que lo remolcaba).
+    if (esEnganche) {
+      return _ResultadoEnganche(patente: patente, fecha: fecha);
+    }
+    // Tractor: chofer directo. Traemos TODAS las asignaciones de la patente (suelen ser pocas
     // por unidad). Filtrar `desde <= fecha && hasta >= fecha` en
     // Firestore requeriría index compuesto y dos rangos (no se puede
     // en una sola query). Lo hacemos en memoria — la cardinalidad
@@ -631,6 +690,150 @@ class _AsignacionCardPorUnidad extends StatelessWidget {
                 colorValor: Colors.white54,
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// RESULTADO TAB 1 (ENGANCHE): cascada enganche → tractor → chofer en la fecha
+// ============================================================================
+
+/// Para una multa al ACOPLADO: resuelve qué tractor lo llevaba en la fecha
+/// (`ASIGNACIONES_ENGANCHE`) y qué chofer manejaba ese tractor
+/// (`ASIGNACIONES_VEHICULO`). Así se sabe a quién atribuir la infracción.
+class _ResultadoEnganche extends StatelessWidget {
+  final String patente;
+  final DateTime fecha;
+  const _ResultadoEnganche({required this.patente, required this.fecha});
+
+  Future<(AsignacionEnganche?, AsignacionVehiculo?)> _resolver() async {
+    final asignEng = await AsignacionEngancheService()
+        .obtenerTractorEnFecha(engancheId: patente, fecha: fecha);
+    if (asignEng == null) return (null, null);
+    final chofer = await AsignacionVehiculoService()
+        .obtenerChoferEnFecha(vehiculoId: asignEng.tractorId, fecha: fecha);
+    return (asignEng, chofer);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<(AsignacionEnganche?, AsignacionVehiculo?)>(
+      future: _resolver(),
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const AppSkeletonList(count: 1, conAvatar: true);
+        }
+        if (snap.hasError) {
+          return AppErrorState(title: 'Error', subtitle: snap.error.toString());
+        }
+        final (asignEng, chofer) = snap.data ?? (null, null);
+        if (asignEng == null) {
+          return const _Placeholder(
+            icono: Icons.link_off,
+            titulo: 'Enganche sin tractor',
+            subtitulo:
+                'No hay registro de qué tractor llevaba este enganche en la '
+                'fecha. Puede que estuviera desenganchado o que falte cargar '
+                'la asignación tractor↔enganche.',
+          );
+        }
+        return _AtribucionEngancheCard(
+          enganche: patente,
+          asignEnganche: asignEng,
+          chofer: chofer,
+        );
+      },
+    );
+  }
+}
+
+/// Card de la cascada: el destaque es el chofer (a quién se le pone la multa),
+/// con el tractor como eslabón intermedio.
+class _AtribucionEngancheCard extends StatelessWidget {
+  final String enganche;
+  final AsignacionEnganche asignEnganche;
+  final AsignacionVehiculo? chofer;
+  const _AtribucionEngancheCard({
+    required this.enganche,
+    required this.asignEnganche,
+    required this.chofer,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tractor = asignEnganche.tractorId;
+    final c = chofer;
+    final nombre = (c?.choferNombre ?? '').trim().isNotEmpty
+        ? c!.choferNombre!.trim()
+        : (c != null ? 'DNI ${c.choferDni}' : null);
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: nombre != null ? AppColors.brand : AppColors.warning,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    nombre != null ? Icons.person : Icons.person_off,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: nombre != null
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(nombre,
+                                style: AppType.heading.copyWith(
+                                    color: Colors.white, fontSize: 17)),
+                            Text('DNI ${c!.choferDni}',
+                                style: AppType.label
+                                    .copyWith(color: Colors.white54)),
+                          ],
+                        )
+                      : Text(
+                          'El tractor $tractor no tenía chofer asignado en esa '
+                          'fecha (falta cargar la asignación).',
+                          style: AppType.body.copyWith(color: Colors.white70)),
+                ),
+              ],
+            ),
+            const Divider(color: Colors.white12, height: 24),
+            _Fila(label: 'Enganche', valor: enganche),
+            const SizedBox(height: AppSpacing.xs),
+            _Fila(
+              label: 'Llevado por (tractor)',
+              valor: (asignEnganche.tractorModelo ?? '').trim().isNotEmpty
+                  ? '$tractor · ${asignEnganche.tractorModelo!.trim()}'
+                  : tractor,
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            _Fila(
+              label: 'Enganchado desde',
+              valor: AppFormatters.formatearFecha(asignEnganche.desde),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            _Fila(
+              label: 'Hasta',
+              valor: asignEnganche.hasta == null
+                  ? 'Sigue enganchado'
+                  : AppFormatters.formatearFecha(asignEnganche.hasta!),
+              colorValor: asignEnganche.hasta == null
+                  ? AppColors.success
+                  : Colors.white,
+            ),
           ],
         ),
       ),
