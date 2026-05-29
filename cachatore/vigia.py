@@ -1082,7 +1082,7 @@ def main():
                 # turno / total; el "sin turno" se deduce. `rea` = a reagendar.
                 log("LOG", "sistema",
                     f"{modo.upper()} · {con_turno}/{len(targets)} turno"
-                    f" · {rea} reag · ~{int(espera)}s")
+                    f" · {rea} reag")
                 ultimo_latido_log = time.time()
 
             # 6) resumen diario de turnos al encargado de logística (~8 AM ART).
