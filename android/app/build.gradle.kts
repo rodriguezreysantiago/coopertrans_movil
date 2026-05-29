@@ -27,6 +27,14 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
+    // Kotlin DEBE compilar al mismo JVM target que Java (17). Sin esto, Kotlin
+    // toma el JDK del entorno (JDK 21 en la PC nueva 2026-05) y Gradle aborta:
+    // "Inconsistent JVM-target compatibility ... (17) and ... (21)". Fijarlo
+    // mantiene el build reproducible en cualquier PC/CI sin importar el JDK local.
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+
 
     signingConfigs {
         create("release") {
