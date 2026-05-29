@@ -25,10 +25,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
         return windows;
       case TargetPlatform.linux:
@@ -52,6 +49,19 @@ class DefaultFirebaseOptions {
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyAI1z5ZtDvuK5KpI2g483rnHVKb9zUg29M',
+    appId: '1:808925655961:ios:35db79f4532b71caa4d908',
+    messagingSenderId: '808925655961',
+    projectId: 'coopertrans-movil',
+    storageBucket: 'coopertrans-movil.firebasestorage.app',
+    iosBundleId: 'com.coopertrans.movil',
+  );
+
+  // macOS comparte bundle ID (com.coopertrans.movil) con iOS → en Firebase
+  // es la MISMA app Apple (no se pueden registrar dos apps con el mismo
+  // bundle ID en un proyecto), así que usa idénticas FirebaseOptions que iOS.
+  // Sin este caso, Firebase.initializeApp tiraba UnsupportedError en macOS.
+  static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyAI1z5ZtDvuK5KpI2g483rnHVKb9zUg29M',
     appId: '1:808925655961:ios:35db79f4532b71caa4d908',
     messagingSenderId: '808925655961',

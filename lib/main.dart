@@ -87,16 +87,30 @@ void main() async {
   // PlatformDispatcher.onError directo a Crashlytics. En Web/Windows
   // dejamos los defaults de Flutter (que loguean a consola) — los
   // try/catch puntuales del código siguen usando AppLogger.recordError.
-  await AppLogger.init();
-  await PrefsService.init();
-  await NotificationService.init();
+  // Cada init de arranque va protegida individualmente: un fallo de una
+  // init no-crítica (p.ej. NotificationService en una plataforma sin
+  // soporte completo) NO debe impedir que la app llegue a runApp(). El
+  // caso real que motivó esto: faltaba el settings de macOS en
+  // NotificationService y tumbaba el arranque entero -> pantalla negra.
+  Future<void> initSeguro(String nombre, Future<void> Function() fn) async {
+    try {
+      await fn();
+    } catch (e, st) {
+      AppLogger.recordError(e, st, reason: '$nombre.init falló');
+    }
+  }
+
+  await initSeguro('AppLogger', AppLogger.init);
+  await initSeguro('PrefsService', PrefsService.init);
+  await initSeguro('NotificationService', NotificationService.init);
 
   // Inicializar símbolos de fecha en español-AR para que widgets como
   // TableCalendar muestren los nombres de días/meses en español.
   // MaterialApp.locale solo configura las localizations de Flutter
   // (botones, tooltips); el `intl` package usa una tabla aparte que
   // hay que cargar explícitamente con esta llamada.
-  await initializeDateFormatting('es_AR', null);
+  await initSeguro(
+      'initializeDateFormatting', () => initializeDateFormatting('es_AR', null));
 
   // ================= SENTRY =================
   // El DSN de Sentry NO es un secret crítico (solo permite enviar

@@ -69,6 +69,11 @@ class NotificationService {
     const InitializationSettings initializationSettings = InitializationSettings(
       android: initializationSettingsAndroid,
       iOS: initializationSettingsIOS,
+      // macOS usa DarwinInitializationSettings igual que iOS. Sin este
+      // parámetro, initialize() tira en macOS (mismo patrón que Windows
+      // arriba) y, como init() corría sin try/catch en main(), tumbaba el
+      // arranque entero -> pantalla negra. Reutiliza la config de iOS.
+      macOS: initializationSettingsIOS,
       linux: initializationSettingsLinux,
       windows: initializationSettingsWindows,
     );
