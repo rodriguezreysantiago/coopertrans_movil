@@ -61,5 +61,12 @@
 	     un title bar blanco. -->
 	<key>NSRequiresAquaSystemAppearance</key>
 	<false/>
+
+	<!-- Export compliance: la app solo usa cifrado estándar del OS (HTTPS) →
+	     EXENTA. Sin esta key, App Store Connect deja el build esperando el
+	     "Cumplimiento de exportación" y no llega a TestFlight (deja el paso de
+	     Xcode Cloud colgado). Mismo valor que iOS. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>
