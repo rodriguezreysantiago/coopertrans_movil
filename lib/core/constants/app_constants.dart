@@ -272,6 +272,25 @@ class AppCollections {
   /// elegir uno nuevo.
   static const String cubiertasProveedores = 'CUBIERTAS_PROVEEDORES';
 
+  // ─── Rediseño gomería 2026-05-29 (modelo por posición+km+marca) ──────────
+  // Sistema NUEVO, coexiste con el viejo hasta migrar. No serializa cubiertas.
+
+  /// Montaje de una cubierta (modelo+vida) en una posición durante un
+  /// período. Reemplaza CUBIERTAS_INSTALADAS sin serializar la cubierta.
+  /// Activo: `hasta == null`. Ver modelo `Montaje`.
+  static const String gomeriaMontajes = 'GOMERIA_MONTAJES';
+
+  /// Log de movimientos de stock del depósito (compra/montaje/retiro/
+  /// recapado/descarte/ajuste). Stock actual = suma de `delta` por SKU
+  /// (modelo+vida). Ver modelo `StockMovimiento`.
+  static const String gomeriaStockMovimientos = 'GOMERIA_STOCK_MOVIMIENTOS';
+
+  /// Lock de unicidad de posición (1 montaje activo por posición). DocId
+  /// `{unidad}__{posicion}`. Rule `allow update: if false` da la unicidad
+  /// sin runTransaction (prohibido en Windows). Existe sii la posición
+  /// está ocupada por un montaje activo.
+  static const String gomeriaPosicionesActivas = 'GOMERIA_POSICIONES_ACTIVAS';
+
   /// Colección de configs / cursores internos del backend (Volvo poller
   /// cursor, contadores como `cubiertas_counter`, etc.). Acceso
   /// restringido — la mayoría de docs solo los toca el server vía Admin
