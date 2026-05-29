@@ -212,10 +212,13 @@ if (-not $SkipWeb) {
         try {
             # 1) Build web con base-href /sistema/ (PowerShell pasa la ruta
             #    literal; NO usar git-bash que la mangle a C:/Program Files/Git/).
+            #    --no-wasm-dry-run: la app compila a JS, no a WebAssembly. El dry-run
+            #    de wasm solo tira warnings por incompatibilidades en deps de terceros
+            #    (ej. package `image`) que no nos afectan. Lo apagamos para no ensuciar el log.
             Write-Host "  Compilando flutter web..." -ForegroundColor DarkGray
             Push-Location $repoRoot
             try {
-                Invoke-Native { & flutter build web --release --base-href /sistema/ }
+                Invoke-Native { & flutter build web --release --base-href /sistema/ --no-wasm-dry-run }
                 if ($LASTEXITCODE -ne 0) { throw "flutter build web fallo (exit $LASTEXITCODE)" }
             }
             finally { Pop-Location }
