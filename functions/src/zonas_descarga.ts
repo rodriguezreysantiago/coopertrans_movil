@@ -235,13 +235,32 @@ export const zonaDescargaPoller = onSchedule(
       }
 
       // ─── 5) Salidas: docs en cola que NO están adentro ────────
+      // Una unidad se cierra (sale de la cola) en 2 casos:
+      //  (a) REPORTA posición fresca (<4h) pero fuera de esta zona → la
+      //      vemos en otro lado → SALIÓ de verdad → cerrar YA.
+      //  (b) NO reporta hace > 4h (stale) → asumimos que ya no está →
+      //      cerrar.
+      // Solo se ESPERA si NO reporta fresco PERO su última posición
+      // (dentro) es < 4h: ahí asumimos que sigue en el predio con el GPS
+      // dormido (motor apagado) y esperamos al próximo ciclo.
+      //
+      // BUG anterior (caso AG218ZD 2026-05-29): solo se contemplaba (b),
+      // así que una unidad que SALÍA reportando (motor encendido, en la
+      // ruta) quedaba trabada en la cola hasta 4 h porque su última pos
+      // DENTRO seguía siendo < 4h. La pista era `ultima_pos_ts` (la
+      // última vez adentro), que no se refresca cuando la unidad está
+      // afuera → nunca superaba el límite mientras la descarga era
+      // reciente.
+      const patentesFrescas = new Set(posiciones.map((p) => p.patente));
       for (const [docId, data] of colaActual.entries()) {
         if (visitadosCola.has(docId)) continue;
-        // Pudo no aparecer porque la unidad está stale (>15 min). Solo
-        // archivamos si la última posición es > 15 min — sino esperamos
-        // próximo ciclo. La unidad se "saca" de la cola igualmente.
         const ultPosTs = data.ultima_pos_ts as Timestamp | undefined;
-        if (ultPosTs && ultPosTs.toMillis() > limiteMs) continue;
+        const reportaFresco = patentesFrescas.has(data.patente as string);
+        // Sigue en el predio sin señal → esperar (no reporta y la última
+        // pos adentro es reciente). Si reporta fresco, SALIÓ → cerrar.
+        if (!reportaFresco && ultPosTs && ultPosTs.toMillis() > limiteMs) {
+          continue;
+        }
 
         stats.salidas++;
         const entradaTs = data.entrada_ts as Timestamp;
