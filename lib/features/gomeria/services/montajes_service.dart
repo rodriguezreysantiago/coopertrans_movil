@@ -76,6 +76,12 @@ class MontajesService {
     return calcularStock(movs);
   }
 
+  /// Stock actual EN VIVO (para la UI de depósito).
+  Stream<List<StockItem>> streamStock() {
+    return _movs.snapshots().map((s) => calcularStock(
+        s.docs.map((d) => StockMovimiento.fromMap(d.id, d.data())).toList()));
+  }
+
   /// Cantidad disponible en depósito de un SKU específico.
   Future<int> stockDisponible({
     required String modeloId,
