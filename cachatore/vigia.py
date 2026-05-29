@@ -1081,7 +1081,7 @@ def main():
                 # ventana de logs (Santiago 2026-05-29). "3/3 turno" = con
                 # turno / total; el "sin turno" se deduce. `rea` = a reagendar.
                 log("LOG", "sistema",
-                    f"latido {modo.upper()} · {con_turno}/{len(targets)} turno"
+                    f"{modo.upper()} · {con_turno}/{len(targets)} turno"
                     f" · {rea} reag · ~{int(espera)}s")
                 ultimo_latido_log = time.time()
 
