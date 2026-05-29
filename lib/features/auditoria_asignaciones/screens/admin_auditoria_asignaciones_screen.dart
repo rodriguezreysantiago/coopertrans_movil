@@ -899,9 +899,92 @@ class _HistorialPorChofer extends StatelessWidget {
             const SizedBox(height: AppSpacing.md),
             ...asignaciones
                 .map((a) => _AsignacionCardPorChofer(asignacion: a)),
+            _EnganchesDelChofer(asignacionesTractor: asignaciones),
           ],
         );
       },
+    );
+  }
+}
+
+/// Sección "Enganches que llevó" del historial por chofer (cruce
+/// chofer→tractor→enganche). Si el chofer nunca llevó enganches, no muestra
+/// nada para no ensuciar la vista.
+class _EnganchesDelChofer extends StatelessWidget {
+  final List<AsignacionVehiculo> asignacionesTractor;
+  const _EnganchesDelChofer({required this.asignacionesTractor});
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<List<EngancheLlevado>>(
+      future: AsignacionEngancheService()
+          .enganchesLlevadosPorChofer(asignacionesTractor),
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.only(top: AppSpacing.md),
+            child: AppSkeletonList(count: 2, conAvatar: false),
+          );
+        }
+        final enganches = snap.data ?? const <EngancheLlevado>[];
+        if (enganches.isEmpty) return const SizedBox.shrink();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: AppSpacing.lg),
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm, left: 4),
+              child: Text('ENGANCHES QUE LLEVÓ',
+                  style: AppType.eyebrow.copyWith(color: Colors.white54)),
+            ),
+            ...enganches.map((e) => _EngancheLlevadoCard(item: e)),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _EngancheLlevadoCard extends StatelessWidget {
+  final EngancheLlevado item;
+  const _EngancheLlevadoCard({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final activo = item.hasta == null;
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Row(
+          children: [
+            const Icon(Icons.rv_hookup, color: Colors.white54, size: 22),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.enganche,
+                      style: AppType.body.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.5)),
+                  Text('vía tractor ${item.tractor}',
+                      style: AppType.label.copyWith(color: Colors.white54)),
+                  const SizedBox(height: 2),
+                  Text(
+                    activo
+                        ? 'Desde ${AppFormatters.formatearFecha(item.desde)} · sigue'
+                        : '${AppFormatters.formatearFecha(item.desde)} → '
+                            '${AppFormatters.formatearFecha(item.hasta!)}',
+                    style: AppType.label.copyWith(
+                        color: activo ? AppColors.success : Colors.white70),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

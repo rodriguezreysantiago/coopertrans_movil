@@ -6,6 +6,22 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/services/audit_log_service.dart';
 import '../../fleet_map/services/sitrack_snapshot_service.dart';
 import '../models/asignacion_enganche.dart';
+import '../models/asignacion_vehiculo.dart';
+
+/// Un enganche que un chofer LLEVÓ (derivado chofer→tractor→enganche), con el
+/// período EFECTIVO en que estuvieron juntos. Para la auditoría por chofer.
+class EngancheLlevado {
+  final String enganche;
+  final String tractor;
+  final DateTime desde;
+  final DateTime? hasta;
+  const EngancheLlevado({
+    required this.enganche,
+    required this.tractor,
+    required this.desde,
+    required this.hasta,
+  });
+}
 
 /// Único punto de entrada para cambiar la asignación tractor↔enganche.
 ///
@@ -315,6 +331,49 @@ class AsignacionEngancheService {
       return null;
     }
     return candidata;
+  }
+
+  /// Enganches que un chofer LLEVÓ, derivados de sus asignaciones de tractor:
+  /// para cada período chofer↔tractor, qué enganches estuvieron en ese tractor
+  /// (solapando). Devuelve el período EFECTIVO (intersección chofer ∩ enganche),
+  /// más reciente primero. 1 query por tractor (cardinalidad por chofer chica).
+  /// Para la auditoría "por chofer".
+  Future<List<EngancheLlevado>> enganchesLlevadosPorChofer(
+    List<AsignacionVehiculo> asignacionesTractor,
+  ) async {
+    final out = <EngancheLlevado>[];
+    for (final at in asignacionesTractor) {
+      final tractor = at.vehiculoId.trim();
+      if (tractor.isEmpty) continue;
+      final snap = await _db
+          .collection(AppCollections.asignacionesEnganche)
+          .where('tractor_id', isEqualTo: tractor)
+          .get();
+      for (final d in snap.docs) {
+        final ae = AsignacionEnganche.fromDoc(d);
+        // Intersección [at.desde, at.hasta] ∩ [ae.desde, ae.hasta]
+        // (hasta == null = período abierto/activo).
+        final inicio = ae.desde.isAfter(at.desde) ? ae.desde : at.desde;
+        DateTime? fin;
+        if (at.hasta == null) {
+          fin = ae.hasta;
+        } else if (ae.hasta == null) {
+          fin = at.hasta;
+        } else {
+          fin = at.hasta!.isBefore(ae.hasta!) ? at.hasta : ae.hasta;
+        }
+        if (fin == null || inicio.isBefore(fin)) {
+          out.add(EngancheLlevado(
+            enganche: ae.engancheId,
+            tractor: tractor,
+            desde: inicio,
+            hasta: fin,
+          ));
+        }
+      }
+    }
+    out.sort((a, b) => b.desde.compareTo(a.desde));
+    return out;
   }
 
   /// Devuelve TODAS las asignaciones del [engancheId] que se solapan
