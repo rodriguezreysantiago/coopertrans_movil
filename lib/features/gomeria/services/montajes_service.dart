@@ -429,4 +429,116 @@ class MontajesService {
         .snapshots()
         .map((s) => s.docs.map((d) => Montaje.fromMap(d.id, d.data())).toList());
   }
+
+  // ===========================================================================
+  // KM EN VIVO (alimenta el semáforo de la UI)
+  // ===========================================================================
+
+  /// km recorrido de la cubierta de cada posición activa de una unidad.
+  /// Devuelve `{codigoPosicion: km}` (null por posición si no se pudo calcular).
+  /// Tractor: `KM_ACTUAL − km_al_montar`. Enganche: cálculo robusto cruzando
+  /// las duplas tractor↔enganche con el odómetro histórico del tractor (los
+  /// enganches no tienen odómetro propio). Se pasa a `construirEstadoUnidad`.
+  Future<Map<String, double?>> kmRecorridoPorPosicion({
+    required String unidadId,
+    required TipoUnidadCubierta unidadTipo,
+    required List<Montaje> montajesActivos,
+  }) async {
+    final out = <String, double?>{};
+    if (montajesActivos.isEmpty) return out;
+
+    if (unidadTipo == TipoUnidadCubierta.tractor) {
+      final kmActual = await _kmActualTractor(unidadId);
+      for (final m in montajesActivos) {
+        final base = m.kmUnidadAlMontar;
+        out[m.posicion] =
+            (kmActual != null && base != null) ? (kmActual - base) : null;
+      }
+      return out;
+    }
+
+    // Enganche: km robusto por montaje (desde su montaje hasta ahora).
+    final ahora = DateTime.now();
+    for (final m in montajesActivos) {
+      out[m.posicion] = await _kmEnganche(unidadId, m.desde, ahora);
+    }
+    return out;
+  }
+
+  Future<double?> _kmActualTractor(String unidadId) async {
+    final snap =
+        await _db.collection(AppCollections.vehiculos).doc(unidadId).get();
+    final km = (snap.data()?['KM_ACTUAL'] as num?)?.toDouble();
+    return (km != null && km > 0) ? km : null;
+  }
+
+  /// km que rodó un enganche en [desde, hasta] cruzando `ASIGNACIONES_ENGANCHE`
+  /// con `TELEMETRIA_HISTORICO` del tractor. Mismo algoritmo robusto validado
+  /// 2026-05-29 (`gomeria_service`); duplicado a propósito para no tocar el
+  /// servicio viejo — se unifica cuando se borre el viejo. Devuelve `null` si
+  /// no se pudo calcular NADA (distinto de 0 km reales).
+  Future<double?> _kmEnganche(
+      String engancheId, DateTime desde, DateTime hasta) async {
+    final snap = await _db
+        .collection(AppCollections.asignacionesEnganche)
+        .where('enganche_id', isEqualTo: engancheId)
+        .where('desde', isLessThanOrEqualTo: Timestamp.fromDate(hasta))
+        .get();
+    double total = 0;
+    var contadas = 0;
+    var sinDatos = 0;
+    for (final d in snap.docs) {
+      final data = d.data();
+      final aDesde = (data['desde'] as Timestamp?)?.toDate();
+      final aHasta = (data['hasta'] as Timestamp?)?.toDate();
+      final tractorId = data['tractor_id']?.toString();
+      if (aDesde == null || tractorId == null || tractorId.isEmpty) continue;
+      if (aHasta != null && !aHasta.isAfter(desde)) continue; // terminó antes
+      final inicio = aDesde.isBefore(desde) ? desde : aDesde;
+      final fin = (aHasta == null || aHasta.isAfter(hasta)) ? hasta : aHasta;
+      final odoIni = await _odometroTractorEnFecha(tractorId, inicio);
+      final odoFin = await _odometroTractorEnFecha(tractorId, fin);
+      if (odoIni == null || odoFin == null) {
+        sinDatos++;
+        continue;
+      }
+      final diff = odoFin - odoIni;
+      if (diff > 0) {
+        total += diff;
+        contadas++;
+      }
+    }
+    if (contadas == 0 && sinDatos > 0) return null;
+    return total;
+  }
+
+  Future<double?> _odometroTractorEnFecha(String tractorId, DateTime fecha,
+      {int ventanaDias = 7}) async {
+    for (var off = 0; off <= ventanaDias; off++) {
+      final cands = off == 0
+          ? <DateTime>[fecha]
+          : <DateTime>[
+              fecha.subtract(Duration(days: off)),
+              fecha.add(Duration(days: off)),
+            ];
+      for (final f in cands) {
+        final snap = await _db
+            .collection(AppCollections.telemetriaHistorico)
+            .doc(_telemetriaDocId(tractorId, f))
+            .get();
+        if (!snap.exists) continue;
+        final km = (snap.data()?['km'] as num?)?.toDouble();
+        if (km != null && km > 0) return km;
+      }
+    }
+    return null;
+  }
+
+  static String _telemetriaDocId(String patente, DateTime fecha) {
+    final f = fecha.toLocal();
+    final y = f.year.toString().padLeft(4, '0');
+    final m = f.month.toString().padLeft(2, '0');
+    final d = f.day.toString().padLeft(2, '0');
+    return '${patente}_$y-$m-$d';
+  }
 }

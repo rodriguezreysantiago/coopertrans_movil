@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:coopertrans_movil/features/gomeria/constants/posiciones.dart';
@@ -253,6 +254,120 @@ void main() {
           supervisorDni: '1');
       expect(await service.stockDisponible(modeloId: 'm1', vida: 2), 2);
       expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 2);
+    });
+  });
+
+  group('km en vivo por posición', () {
+    Montaje montajeManual({
+      required String unidadId,
+      required String unidadTipo,
+      required String posicion,
+      double? kmAlMontar,
+      DateTime? desde,
+    }) =>
+        Montaje.fromMap('mng_$posicion', {
+          'unidad_id': unidadId,
+          'unidad_tipo': unidadTipo,
+          'posicion': posicion,
+          'modelo_id': 'm1',
+          'modelo_etiqueta': 'x',
+          'tipo_uso': 'TRACCION',
+          'vida': 1,
+          'km_vida_estimada': 80000,
+          'desde': Timestamp.fromDate(desde ?? DateTime(2026, 1, 1)),
+          'hasta': null,
+          'km_unidad_al_montar': kmAlMontar,
+          'montado_por_dni': '1',
+        });
+
+    String telId(String t, DateTime f) =>
+        '${t}_${f.year}-${f.month.toString().padLeft(2, '0')}-${f.day.toString().padLeft(2, '0')}';
+
+    test('tractor: KM_ACTUAL − km_al_montar', () async {
+      await fake
+          .collection('VEHICULOS')
+          .doc('AB123CD')
+          .set({'KM_ACTUAL': 180000});
+      final km = await service.kmRecorridoPorPosicion(
+        unidadId: 'AB123CD',
+        unidadTipo: TipoUnidadCubierta.tractor,
+        montajesActivos: [
+          montajeManual(
+              unidadId: 'AB123CD',
+              unidadTipo: 'TRACTOR',
+              posicion: 'TRAC1_IZQ_EXT',
+              kmAlMontar: 100000),
+        ],
+      );
+      expect(km['TRAC1_IZQ_EXT'], 80000.0);
+    });
+
+    test('tractor sin KM_ACTUAL => null', () async {
+      final km = await service.kmRecorridoPorPosicion(
+        unidadId: 'SIN_KM',
+        unidadTipo: TipoUnidadCubierta.tractor,
+        montajesActivos: [
+          montajeManual(
+              unidadId: 'SIN_KM',
+              unidadTipo: 'TRACTOR',
+              posicion: 'TRAC1_IZQ_EXT',
+              kmAlMontar: 100000),
+        ],
+      );
+      expect(km['TRAC1_IZQ_EXT'], null);
+    });
+
+    test('enganche: cruza la dupla con telemetría del tractor', () async {
+      final ahora = DateTime.now();
+      final hace10 = ahora.subtract(const Duration(days: 10));
+      await fake.collection('ASIGNACIONES_ENGANCHE').add({
+        'enganche_id': 'ENGU',
+        'tractor_id': 'TR1',
+        'desde': Timestamp.fromDate(hace10),
+        'hasta': null,
+      });
+      await fake
+          .collection('TELEMETRIA_HISTORICO')
+          .doc(telId('TR1', hace10))
+          .set({'km': 100000});
+      await fake
+          .collection('TELEMETRIA_HISTORICO')
+          .doc(telId('TR1', ahora))
+          .set({'km': 105000});
+      final km = await service.kmRecorridoPorPosicion(
+        unidadId: 'ENGU',
+        unidadTipo: TipoUnidadCubierta.enganche,
+        montajesActivos: [
+          montajeManual(
+              unidadId: 'ENGU',
+              unidadTipo: 'ENGANCHE',
+              posicion: 'ENG1_IZQ_EXT',
+              desde: hace10),
+        ],
+      );
+      expect(km['ENG1_IZQ_EXT'], 5000.0); // 105000 − 100000
+    });
+
+    test('enganche sin telemetría del tractor => null', () async {
+      final hace10 = DateTime.now().subtract(const Duration(days: 10));
+      await fake.collection('ASIGNACIONES_ENGANCHE').add({
+        'enganche_id': 'ENGU',
+        'tractor_id': 'TR1',
+        'desde': Timestamp.fromDate(hace10),
+        'hasta': null,
+      });
+      final km = await service.kmRecorridoPorPosicion(
+        unidadId: 'ENGU',
+        unidadTipo: TipoUnidadCubierta.enganche,
+        montajesActivos: [
+          montajeManual(
+              unidadId: 'ENGU',
+              unidadTipo: 'ENGANCHE',
+              posicion: 'ENG1_IZQ_EXT',
+              desde: hace10),
+        ],
+      );
+      expect(km['ENG1_IZQ_EXT'], null);
     });
   });
 }
