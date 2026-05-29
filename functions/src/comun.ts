@@ -376,7 +376,11 @@ export function esErrorTransient(e: unknown): boolean {
   const name = err.name || "";
   const msg = err.message || "";
   if (name === "AbortError" || name === "TimeoutError") return true;
-  if (/abort|timeout|deadline|ECONNRESET|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|fetch failed|network|socket hang up|ECONNREFUSED/i.test(msg)) {
+  const transientPatterns = [
+    "abort", "timeout", "deadline", "ECONNRESET", "ENOTFOUND", "ETIMEDOUT",
+    "EAI_AGAIN", "fetch failed", "network", "socket hang up", "ECONNREFUSED",
+  ];
+  if (new RegExp(transientPatterns.join("|"), "i").test(msg)) {
     return true;
   }
   // node-fetch / undici a veces anidan la causa real adentro.
