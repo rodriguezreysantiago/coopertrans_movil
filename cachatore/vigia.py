@@ -1077,10 +1077,12 @@ def main():
                 rea = sum(1 for t in targets.values()
                           if t.reagendar and t.tiene_turno and not t.reagendar_hecho)
                 con_turno = len(targets) - pend
+                # Compacto a propósito: tiene que entrar en UNA línea de la
+                # ventana de logs (Santiago 2026-05-29). "3/3 turno" = con
+                # turno / total; el "sin turno" se deduce. `rea` = a reagendar.
                 log("LOG", "sistema",
-                    f"latido — {modo.upper()} · {len(targets)} chofer(es) "
-                    f"({con_turno} con turno / {pend} sin / {rea} a reagendar) · "
-                    f"barriendo cada ~{int(espera)}s")
+                    f"latido {modo.upper()} · {con_turno}/{len(targets)} turno"
+                    f" · {rea} reag · ~{int(espera)}s")
                 ultimo_latido_log = time.time()
 
             # 6) resumen diario de turnos al encargado de logística (~8 AM ART).
