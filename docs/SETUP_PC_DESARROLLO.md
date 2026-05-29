@@ -119,3 +119,37 @@ npx eslint .                   # 0 errors
   `build_installer.ps1` encuentra Inno aunque winget lo instale en
   `AppData\Local\Programs\Inno Setup 6\` (scope user, sin admin).
 - **macOS**: frente pausado (ver `docs/RUNBOOK_macos_signing.md`). No bloquea Win/Android/iOS.
+
+---
+
+## Primer release completo desde PC nueva — baches resueltos (2026-05-29)
+
+El primer `release_completo.ps1` desde la PC `santi` destapó baches que el setup
+base no cubre. Todos resueltos y commiteados; desde **1.0.83+86** el release corre
+**end-to-end** (Windows + AAB + iOS + Sentry symbols + web) en una sola pasada. Si
+reaparecen en una migración futura:
+
+- **Scripts `.ps1` de release: "Falta la llave de cierre"** → se editaron en la Mac
+  y quedaron UTF-8 **sin BOM**; PS 5.1 los lee como Windows-1252 y rompe el parser
+  con los ~400 no-ASCII (separadores `─`, acentos). Las llaves estaban balanceadas.
+  Fix: reescribir con UTF-8 **con BOM**.
+- **`nuget.exe not found`** en `flutter build windows` → **cosmético** (Flutter lo
+  baja/cachea solo y el build completa). Igual conviene bajarlo de
+  `dist.nuget.org/win-x86-commandline/latest/nuget.exe` a una carpeta del PATH
+  (`C:\Users\<USER>\tools`).
+- **AAB: "Inconsistent JVM-target compatibility (17) and (21)"** → la PC nueva trae
+  **JDK 21** (Java en 17, Kotlin tomaba 21). Fix YA en `android/app/build.gradle.kts`
+  (`kotlinOptions.jvmTarget = 17`). Si reaparece, alguien lo sacó.
+- **`release_android` no encuentra `key.properties`** → secret; el backup del Drive
+  trae la ruta del keystore de la PC vieja, el README de restauración ahora ajusta
+  `storeFile` al user actual (README_RESTAURACION §2).
+- **Web `/sistema` "salteada (sin proyecto web)"** → faltaba clonar el sitio
+  (README_RESTAURACION §1: `cooper-trans.com.ar` → `web_coopertrans\sitio_nuevo` +
+  copiar `_subir_sitio.py`).
+- **Sentry symbols 403** → token de upload faltante (README_RESTAURACION: token
+  `project:releases` → `git config sentry.authtoken`).
+
+Warnings que quedan y son **inofensivos** (NO accionar): `DWARF unobfuscated`
+(el `--strip` ROMPE el build — probado), `KGP / Built-in Kotlin` (deprecación
+futura, depende de plugins de terceros). El wasm dry-run de la web se silenció con
+`--no-wasm-dry-run`.
