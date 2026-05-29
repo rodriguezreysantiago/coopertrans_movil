@@ -17,6 +17,7 @@ const { Timestamp } = require('firebase-admin/firestore');
 
 const {
   evaluarTickJornada,
+  analizarEventosDetencion,
   construirMensajeResumenJornadas,
   BLOQUE_ALERTA_TEMPRANA_SEGUNDOS, // 3h30
   BLOQUE_EXCEDIDO_SEGUNDOS, // 4h
@@ -74,6 +75,9 @@ function tickManejando(j, deltaSeg, opts = {}) {
     lat: opts.lat ?? null,
     lng: opts.lng ?? null,
     tieneDescansoPrevio: opts.tieneDescansoPrevio ?? false,
+    paroEnMs: opts.paroEnMs ?? null,
+    arrancoMs: opts.arrancoMs ?? null,
+    pausaPreviaSeg: opts.pausaPreviaSeg ?? null,
   });
 }
 
@@ -85,6 +89,9 @@ function tickParado(j, deltaSeg, opts = {}) {
     lat: opts.lat ?? null,
     lng: opts.lng ?? null,
     tieneDescansoPrevio: false,
+    paroEnMs: opts.paroEnMs ?? null,
+    arrancoMs: opts.arrancoMs ?? null,
+    pausaPreviaSeg: opts.pausaPreviaSeg ?? null,
   });
 }
 
@@ -406,5 +413,136 @@ describe('construirMensajeResumenJornadas', () => {
       new Map(), 'Hola', '19/05/2026'
     );
     assert.match(m, /2 jornadas con/);
+  });
+});
+
+// ── analizarEventosDetencion (PURA) — fix AB493CP 2026-05-29 ─────────
+
+describe('analizarEventosDetencion', () => {
+  // evento a las 17:<min> ART (= 20:<min> UTC).
+  const ev = (min, speed, eventId = null) => ({
+    ms: Date.UTC(2026, 4, 28, 20, min, 0), speed, gpsSpeed: speed, eventId,
+  });
+
+  test('sin eventos → fuente sin_eventos (caller usa fallback)', () => {
+    const r = analizarEventosDetencion([], Date.UTC(2026, 4, 28, 20, 30, 0));
+    assert.strictEqual(r.fuente, 'sin_eventos');
+    assert.strictEqual(r.parado, false);
+    assert.strictEqual(r.paroEnMs, null);
+  });
+
+  test('último evento en movimiento → manejando, sin pausa previa', () => {
+    const r = analizarEventosDetencion(
+      [ev(0, 40), ev(5, 50), ev(10, 45)], Date.UTC(2026, 4, 28, 20, 12, 0)
+    );
+    assert.strictEqual(r.parado, false);
+    assert.strictEqual(r.fuente, 'eventos');
+    assert.strictEqual(r.pausaPreviaSeg, null);
+  });
+
+  test('parado → paroEnMs = primer no-movimiento tras el último movimiento', () => {
+    const eventos = [ev(0, 40), ev(5, 45), ev(10, 0), ev(15, 0)];
+    const ahora = Date.UTC(2026, 4, 28, 20, 20, 0); // 17:20
+    const r = analizarEventosDetencion(eventos, ahora);
+    assert.strictEqual(r.parado, true);
+    assert.strictEqual(r.paroEnMs, eventos[2].ms); // 17:10
+    assert.strictEqual((ahora - r.paroEnMs) / 60000, 10); // 10 min en curso
+  });
+
+  test('arrancó tras pausa → pausaPreviaSeg = arranque − paró', () => {
+    const eventos = [ev(0, 40), ev(5, 0), ev(10, 0), ev(22, 60)];
+    const r = analizarEventosDetencion(eventos, Date.UTC(2026, 4, 28, 20, 25, 0));
+    assert.strictEqual(r.parado, false);
+    assert.strictEqual(r.arrancoMs, eventos[3].ms); // 17:22
+    assert.strictEqual(r.pausaPreviaSeg, 17 * 60); // 17:22 − 17:05 = 17 min
+  });
+
+  test('"Fin de detenido" (eventId 7) cuenta como movimiento aunque speed bajo', () => {
+    const eventos = [
+      ev(0, 40), ev(5, 0), ev(10, 0),
+      { ms: Date.UTC(2026, 4, 28, 20, 20, 0), speed: 5, gpsSpeed: 5, eventId: 7 },
+    ];
+    const r = analizarEventosDetencion(eventos, Date.UTC(2026, 4, 28, 20, 25, 0));
+    assert.strictEqual(r.parado, false); // el "Fin de detenido" marca arranque
+  });
+
+  test('REPRODUCE caso AB493CP: pausa de 17 min se detecta', () => {
+    // Datos reales del 28/5: último mov 17:14, Contacto OFF 17:25 (speed 0),
+    // detenido 17:27 y 17:39, arranca 17:42 (Fin de detenido).
+    const eventos = [
+      ev(14, 40), ev(25, 0), ev(27, 0), ev(39, 0), ev(42, 70, 7),
+    ];
+    const r = analizarEventosDetencion(eventos, Date.UTC(2026, 4, 28, 20, 45, 0));
+    assert.strictEqual(r.parado, false); // ya arrancó
+    assert.ok(r.pausaPreviaSeg >= PAUSA_BLOQUE_SEGUNDOS); // ≥ 15 min → cierra
+    assert.strictEqual(Math.round(r.pausaPreviaSeg / 60), 17); // 17 min
+  });
+});
+
+// ── evaluarTickJornada con detección por eventos (fix AB493CP) ───────
+
+describe('evaluarTickJornada — pausa por eventos (fix AB493CP)', () => {
+  test('pausa en curso medida por paroEnMs (NO acumulada por deltaSeg)', () => {
+    const ahora = MEDIODIA_MS;
+    const j = nuevaJornadaTest({ bloque_actual_manejo_seg: 3000 });
+    tickParado(j, 600, { ahoraMs: ahora, paroEnMs: ahora - 10 * 60 * 1000 });
+    assert.strictEqual(j.bloque_actual_pausa_seg, 600); // 10 min reales
+  });
+
+  test('cierra bloque con pausa en curso ≥15min (motor apagado, sin acumular)', () => {
+    const ahora = MEDIODIA_MS;
+    const j = nuevaJornadaTest({ bloque_actual_manejo_seg: 10000 });
+    tickParado(j, 600, { ahoraMs: ahora, paroEnMs: ahora - 15 * 60 * 1000 });
+    assert.strictEqual(j.bloques_completos, 1);
+    assert.strictEqual(j.bloque_actual_manejo_seg, 0);
+    assert.strictEqual(j.estado, 'descanso_post_bloque');
+  });
+
+  test('NO cierra bloque si la pausa en curso < 15 min', () => {
+    const ahora = MEDIODIA_MS;
+    const j = nuevaJornadaTest({ bloque_actual_manejo_seg: 10000 });
+    tickParado(j, 600, { ahoraMs: ahora, paroEnMs: ahora - 14 * 60 * 1000 });
+    assert.strictEqual(j.bloques_completos, 0);
+  });
+
+  test('cierra bloque RETROACTIVO cuando arrancó tras pausa ≥15min entre ticks', () => {
+    const ahora = MEDIODIA_MS;
+    const j = nuevaJornadaTest({
+      bloque_actual_manejo_seg: 12000,
+      ultima_actualizacion_ts: Timestamp.fromMillis(ahora - 5 * 60 * 1000),
+    });
+    tickManejando(j, 300, {
+      ahoraMs: ahora, arrancoMs: ahora - 2 * 60 * 1000, pausaPreviaSeg: 17 * 60,
+    });
+    assert.strictEqual(j.bloques_completos, 1); // cerró por la pausa previa
+    assert.strictEqual(j.bloque_actual_manejo_seg, 300); // nuevo bloque arranca
+  });
+
+  test('idempotencia: NO recuenta pausa previa si arrancó ANTES del último tick', () => {
+    const ahora = MEDIODIA_MS;
+    const j = nuevaJornadaTest({
+      bloque_actual_manejo_seg: 1000,
+      ultima_actualizacion_ts: Timestamp.fromMillis(ahora - 5 * 60 * 1000),
+    });
+    tickManejando(j, 300, {
+      ahoraMs: ahora, arrancoMs: ahora - 8 * 60 * 1000, pausaPreviaSeg: 17 * 60,
+    });
+    assert.strictEqual(j.bloques_completos, 0); // arranque viejo, ya contado
+  });
+
+  test('idempotencia: parado ≥15min varios ticks no incrementa bloques 2 veces', () => {
+    const ahora = MEDIODIA_MS;
+    const paroEnMs = ahora - 20 * 60 * 1000;
+    const j = nuevaJornadaTest({ bloque_actual_manejo_seg: 10000 });
+    tickParado(j, 600, { ahoraMs: ahora, paroEnMs });
+    assert.strictEqual(j.bloques_completos, 1);
+    tickParado(j, 600, { ahoraMs: ahora + 5 * 60 * 1000, paroEnMs });
+    assert.strictEqual(j.bloques_completos, 1); // manejo ya en 0 → no recuenta
+  });
+
+  test('fallback: sin paroEnMs (sin eventos) acumula por deltaSeg como antes', () => {
+    const j = nuevaJornadaTest({ bloque_actual_manejo_seg: 10000 });
+    tickParado(j, 900); // sin opts → paroEnMs null → fallback
+    assert.strictEqual(j.bloques_completos, 1); // 900s = 15min acumulados
   });
 });

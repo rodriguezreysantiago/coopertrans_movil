@@ -113,6 +113,11 @@ export const VEDA_NOCTURNA_DESDE_HORA = 0; // 00:00 ART
 export const VEDA_NOCTURNA_HASTA_HORA = 6; // 06:00 ART (no se usa para alertar,
 // el descanso de 8h ya garantiza no arrancar antes)
 export const DELTA_MAX_SEGUNDOS = 600;
+// Ventana de SITRACK_EVENTOS que el tick analiza por chofer para medir las
+// pausas reales (fix bug AB493CP 2026-05-29). 2h cubre cualquier pausa
+// intra-bloque que pueda "caer entre ticks"; las detenciones más largas ya
+// se detectan en curso (pausa = ahora − paró) tick a tick.
+export const VENTANA_EVENTOS_SEGUNDOS = 2 * 3600;
 export const COLECCION = "JORNADAS";
 
 // Banner de testing eliminado 2026-05-18 — el bot ya opera 24/7 con
@@ -294,6 +299,103 @@ export function decidirManejando(
       ? f.volvoLng ?? f.sitrackLng
       : f.sitrackLng ?? f.volvoLng,
     fuente: "ninguna",
+  };
+}
+
+// ─── Detección de pausas por EVENTOS Sitrack (fix bug AB493CP 2026-05-29) ────
+//
+// PROBLEMA que resuelve: el vigilador infería "maneja/para" del speed
+// INSTANTÁNEO de un snapshot (VOLVO_ESTADO / SITRACK_POSICIONES). Eso falla:
+//   1. Motor apagado: Volvo deja de transmitir y su último speed>0 queda
+//      "fresco" ~10 min -> el tick ve "manejando" y resetea la pausa
+//      (`bloque_actual_pausa_seg = 0`). Caso real: AB493CP paró 17 min, el
+//      sistema contó ~7 y le mandó "descansá 20 min" indebidamente.
+//   2. Gaps de reporte: la pausa se acumulaba `+= deltaSeg` tick a tick; si
+//      no hay reportes en el medio, se perdía tiempo.
+//   3. Pausas que empiezan y terminan ENTRE dos ticks de 5 min.
+//
+// SOLUCIÓN: mirar la SECUENCIA de eventos del chofer (últimas 2h) y deducir
+// el estado real de detención por VELOCIDAD (no por contacto — el 95% de las
+// pausas pasan en ralentí con motor encendido, validado con datos 2026-05-29):
+//   - parado + `paroEnMs`: cuándo empezó la detención actual (primer evento
+//     sin movimiento tras el último con movimiento) -> pausa = ahora − paró.
+//   - manejando + `pausaPreviaSeg`/`arrancoMs`: si acaba de arrancar, la
+//     duración REAL de la pausa que terminó (arranque − paró), aunque haya
+//     caído entre ticks -> cierra el bloque retroactivo si fue ≥ 15 min.
+// Robusto ante Volvo congelado, gaps y ralentí. Idempotente vía el gate
+// `arrancoMs > ultima_actualizacion` (no recuenta la misma pausa).
+
+/** Evento Sitrack mínimo para reconstruir detención (speed + arranque). */
+export interface EventoDetencionLite {
+  ms: number;
+  speed: number | null;
+  gpsSpeed: number | null;
+  eventId: number | null;
+}
+
+export interface DeteccionDetencion {
+  /** true = el chofer está detenido ahora (último evento sin movimiento). */
+  parado: boolean;
+  /** si parado: epoch ms en que empezó la detención actual. */
+  paroEnMs: number | null;
+  /** si manejando tras una pausa: epoch ms del arranque (1er movimiento). */
+  arrancoMs: number | null;
+  /** si manejando tras una pausa: duración de la pausa terminada (seg). */
+  pausaPreviaSeg: number | null;
+  /** "eventos" si hubo datos; "sin_eventos" => el caller usa el fallback. */
+  fuente: "eventos" | "sin_eventos";
+}
+
+/** Un evento es MOVIMIENTO si supera el umbral o es "Fin de detenido". */
+function esEventoMovimiento(ev: EventoDetencionLite): boolean {
+  return (
+    (ev.speed != null && ev.speed > UMBRAL_MOVIMIENTO_KMH) ||
+    (ev.gpsSpeed != null && ev.gpsSpeed > UMBRAL_MOVIMIENTO_KMH) ||
+    ev.eventId === 7 // "Fin de detenido" siempre marca arranque
+  );
+}
+
+/**
+ * PURA — reconstruye el estado de detención de un chofer a partir de sus
+ * eventos Sitrack recientes. Ver bloque de comentario de arriba. Sin I/O.
+ */
+export function analizarEventosDetencion(
+  eventos: EventoDetencionLite[],
+  ahoraMs: number
+): DeteccionDetencion {
+  const evs = eventos
+    .filter((e) => e.ms <= ahoraMs)
+    .sort((a, b) => a.ms - b.ms);
+  if (evs.length === 0) {
+    return {
+      parado: false, paroEnMs: null, arrancoMs: null,
+      pausaPreviaSeg: null, fuente: "sin_eventos",
+    };
+  }
+  const ult = evs[evs.length - 1];
+  if (esEventoMovimiento(ult)) {
+    // Manejando ahora. Inicio de la racha de movimiento final = arranque.
+    let i = evs.length - 1;
+    while (i > 0 && esEventoMovimiento(evs[i - 1])) i--;
+    const arrancoMs = evs[i].ms;
+    // Detención inmediatamente anterior al arranque (si la hubo en la ventana).
+    let pausaPreviaSeg: number | null = null;
+    if (i > 0) {
+      let j = i - 1;
+      while (j > 0 && !esEventoMovimiento(evs[j - 1])) j--;
+      pausaPreviaSeg = (arrancoMs - evs[j].ms) / 1000;
+    }
+    return {
+      parado: false, paroEnMs: null, arrancoMs, pausaPreviaSeg,
+      fuente: "eventos",
+    };
+  }
+  // Parado ahora. Inicio de la racha de detención final = cuándo paró.
+  let i = evs.length - 1;
+  while (i > 0 && !esEventoMovimiento(evs[i - 1])) i--;
+  return {
+    parado: true, paroEnMs: evs[i].ms, arrancoMs: null,
+    pausaPreviaSeg: null, fuente: "eventos",
   };
 }
 
@@ -769,6 +871,16 @@ export interface EvaluarTickInput {
    * `false` por default = fail-safe (avisar veda ante duda).
    */
   tieneDescansoPrevio: boolean;
+  /**
+   * Detección de pausa por EVENTOS Sitrack (fix AB493CP 2026-05-29). Cuando
+   * el caller pudo analizar eventos, mide la pausa de forma robusta:
+   *   - parado: `paroEnMs` = inicio de la detención -> pausa = ahora − paró.
+   *   - recién arrancó: `pausaPreviaSeg`/`arrancoMs` -> cierra bloque si ≥15min.
+   * `null` (sin eventos del chofer) => fallback a la acumulación por deltaSeg.
+   */
+  paroEnMs: number | null;
+  arrancoMs: number | null;
+  pausaPreviaSeg: number | null;
 }
 
 export interface EvaluarTickResult {
@@ -776,6 +888,26 @@ export interface EvaluarTickResult {
   avisos: AvisoJornada[];
   /** true si la jornada se cerró por descanso de 8h. */
   cerrada: boolean;
+}
+
+/**
+ * Cierra el bloque de manejo actual por haber completado una pausa ≥15 min.
+ * Suma el manejo al acumulado, incrementa el contador y resetea los flags
+ * por-bloque (3h30 + infracción de 4h). Idempotente: si no hubo manejo en el
+ * bloque (ya cerrado / jornada recién arrancada parada) no hace nada — esto
+ * evita recontar bloques mientras el chofer sigue detenido tick tras tick.
+ */
+function cerrarBloquePorPausa(j: JornadaDoc): void {
+  if (j.bloque_actual_manejo_seg <= 0) return;
+  j.bloques_completos += 1;
+  j.total_manejo_seg += j.bloque_actual_manejo_seg;
+  j.bloque_actual_manejo_seg = 0;
+  j.alerta_3_30_enviada = false; // reset alerta del bloque
+  // Reset de la infracción de 4h POR BLOQUE (auditoría 2026-05-22): sin esto el
+  // flag se seteaba 1 vez por JORNADA y un chofer que cruzaba 4h en un 2º
+  // bloque de la misma jornada NO recibía el aviso.
+  j.bloque_excedido = false;
+  j.estado = "descanso_post_bloque";
 }
 
 /**
@@ -795,13 +927,28 @@ export function evaluarTickJornada(
   j: JornadaDoc,
   input: EvaluarTickInput
 ): EvaluarTickResult {
-  const { manejando, deltaSeg, ahoraMs, lat, lng, tieneDescansoPrevio } = input;
+  const {
+    manejando, deltaSeg, ahoraMs, lat, lng, tieneDescansoPrevio,
+    paroEnMs, arrancoMs, pausaPreviaSeg,
+  } = input;
   const ahora = Timestamp.fromMillis(ahoraMs);
   const avisos: AvisoJornada[] = [];
   let cerrada = false;
 
   if (manejando) {
     // === Está manejando ===
+    // Fix AB493CP: si recién arrancó tras una pausa ≥15 min que terminó
+    // DESPUÉS del último tick, cerrar el bloque retroactivamente (la pausa
+    // pudo empezar y terminar entre dos ticks de 5 min). El gate
+    // `arrancoMs > ultima_actualizacion` impide recontar la misma pausa.
+    if (
+      pausaPreviaSeg != null &&
+      pausaPreviaSeg >= PAUSA_BLOQUE_SEGUNDOS &&
+      arrancoMs != null &&
+      arrancoMs > j.ultima_actualizacion_ts.toMillis()
+    ) {
+      cerrarBloquePorPausa(j);
+    }
     j.bloque_actual_manejo_seg += deltaSeg;
     j.bloque_actual_pausa_seg = 0;
     j.estado = "manejando";
@@ -870,24 +1017,20 @@ export function evaluarTickJornada(
     if (lng != null) j.ultima_lng = lng;
   } else {
     // === Está parado o speed bajo ===
-    j.bloque_actual_pausa_seg += deltaSeg;
+    // Fix AB493CP: medir la pausa por el INICIO REAL de la detención (de los
+    // eventos Sitrack) en vez de acumular `+= deltaSeg` — que se reseteaba a 0
+    // con el Volvo congelado y perdía tiempo en los gaps de reporte. Fallback
+    // a la acumulación si el caller no tuvo eventos del chofer.
+    if (paroEnMs != null) {
+      j.bloque_actual_pausa_seg = Math.max(0, (ahoraMs - paroEnMs) / 1000);
+    } else {
+      j.bloque_actual_pausa_seg += deltaSeg;
+    }
     j.estado = "pausa_intra_bloque";
 
-    // Si pausa >= 15 min continuos: cierra el bloque actual.
+    // Si pausa >= 15 min: cierra el bloque actual (idempotente).
     if (j.bloque_actual_pausa_seg >= PAUSA_BLOQUE_SEGUNDOS) {
-      if (j.bloque_actual_manejo_seg > 0) {
-        j.bloques_completos += 1;
-        j.total_manejo_seg += j.bloque_actual_manejo_seg;
-        j.bloque_actual_manejo_seg = 0;
-        j.alerta_3_30_enviada = false; // reset alerta del bloque
-        // Reset de la infracción de 4h POR BLOQUE: sin esto, el flag se
-        // seteaba 1 vez y nunca volvía → el aviso "excediste 4h continuas"
-        // salía 1 vez por JORNADA en lugar de 1 vez por bloque, y un chofer
-        // que cruzaba las 4h en un 2º bloque de la misma jornada NO recibía
-        // el aviso (horas legales de conducción). Fix auditoría 2026-05-22.
-        j.bloque_excedido = false;
-        j.estado = "descanso_post_bloque";
-      }
+      cerrarBloquePorPausa(j);
     }
 
     // Tracking descanso 8h con misma posición (radio 1000 m).
@@ -975,6 +1118,48 @@ export async function tickVigiladorJornada(): Promise<void> {
     );
   }
 
+  // SITRACK_EVENTOS de las últimas 2h, agrupados por DNI (fix AB493CP
+  // 2026-05-29). Una query (~800 docs). El tick mide las pausas reales por
+  // esta secuencia de eventos — no por el speed del snapshot, que el Volvo
+  // congelado (motor apagado) falsea con un último speed>0 "fresco". Si la
+  // query falla, el Map queda vacío y `evaluarTickJornada` cae al fallback
+  // por deltaSeg (comportamiento previo).
+  const eventosPorDni = new Map<string, EventoDetencionLite[]>();
+  try {
+    const desdeEv = Timestamp.fromMillis(
+      Date.now() - VENTANA_EVENTOS_SEGUNDOS * 1000
+    );
+    const evSnap = await db().collection("SITRACK_EVENTOS")
+      .where("report_date", ">=", desdeEv)
+      .orderBy("report_date", "desc")
+      .limit(20000) // backstop anti-runaway; el pico real en 2h es ~2k docs
+      .get();
+    for (const d of evSnap.docs) {
+      const x = d.data();
+      const evDni = (x.driver_dni ?? "").toString().trim();
+      if (!evDni) continue;
+      const ms = (x.report_date as FsTimestamp | undefined)?.toMillis();
+      if (ms == null) continue;
+      let arr = eventosPorDni.get(evDni);
+      if (!arr) {
+        arr = [];
+        eventosPorDni.set(evDni, arr);
+      }
+      arr.push({
+        ms,
+        speed: typeof x.speed === "number" ? x.speed : null,
+        gpsSpeed: typeof x.gps_speed === "number" ? x.gps_speed : null,
+        eventId: typeof x.event_id === "number" ? x.event_id : null,
+      });
+    }
+  } catch (e) {
+    logger.warn(
+      "[jornadas_v2.tick] no se pudo cargar SITRACK_EVENTOS, " +
+        "pausas por fallback deltaSeg",
+      { error: (e as Error).message }
+    );
+  }
+
   // Race condition fix (auditoria 2026-05-16): si por drift de
   // CHOFER_DISTINTO un mismo DNI aparece en 2 patentes (chofer logueado
   // con su iButton + otro tractor reportando su nombre legacy), antes
@@ -1010,9 +1195,12 @@ export async function tickVigiladorJornada(): Promise<void> {
   let silenciadosCount = 0;
   let nuevasJornadas = 0;
   let cerradas = 0;
-  // Observabilidad fix #36: cuántas decisiones salieron de cada fuente.
+  // Observabilidad fix #36: cuántas decisiones de POSICIÓN salieron de cada
+  // fuente. `fuenteEventos` = cuántos choferes evaluaron el ESTADO de pausa
+  // por eventos Sitrack (fix AB493CP) vs el fallback por snapshot.
   let fuenteVolvo = 0;
   let fuenteSitrack = 0;
+  let fuenteEventos = 0;
 
   for (const [dni, entry] of choferesProcesados.entries()) {
     const docPos = entry.docPos;
@@ -1044,7 +1232,17 @@ export async function tickVigiladorJornada(): Promise<void> {
       },
       Date.now()
     );
-    const manejando = decision.manejando;
+    // Estado de detención por EVENTOS Sitrack (fix AB493CP): fuente de verdad
+    // de las pausas. Si hay eventos del chofer, `manejando` se deriva de ahí
+    // (no del snapshot, que el Volvo congelado falsea). Si no hay eventos,
+    // fallback a la decisión por speed del snapshot.
+    const det = analizarEventosDetencion(
+      eventosPorDni.get(dni) ?? [],
+      Date.now()
+    );
+    const manejando =
+      det.fuente === "eventos" ? !det.parado : decision.manejando;
+    if (det.fuente === "eventos") fuenteEventos++;
     const lat = decision.lat;
     const lng = decision.lng;
     if (decision.fuente === "volvo") fuenteVolvo++;
@@ -1097,6 +1295,9 @@ export async function tickVigiladorJornada(): Promise<void> {
         lat,
         lng,
         tieneDescansoPrevio,
+        paroEnMs: det.paroEnMs,
+        arrancoMs: det.arrancoMs,
+        pausaPreviaSeg: det.pausaPreviaSeg,
       });
       if (cerrada) cerradas++;
       j.ultima_patente = patente;
@@ -1153,7 +1354,7 @@ export async function tickVigiladorJornada(): Promise<void> {
   logger.info("[jornadas_v2.tick] OK", {
     evaluados, avisosEnviados, silenciadosCount, nuevasJornadas, cerradas,
     silenciados: silenciados.size,
-    fuenteVolvo, fuenteSitrack,
+    fuenteVolvo, fuenteSitrack, fuenteEventos,
   });
 }
 
