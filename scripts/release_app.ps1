@@ -1,4 +1,4 @@
-# Empaqueta el build Windows release de la app Flutter y lo publica como
+﻿# Empaqueta el build Windows release de la app Flutter y lo publica como
 # GitHub Release. Pensado para correr UNA SOLA VEZ por release, en la PC
 # donde acabás de buildear.
 #

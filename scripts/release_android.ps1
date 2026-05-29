@@ -1,4 +1,4 @@
-# Buildea el release de Android y lo distribuye:
+﻿# Buildea el release de Android y lo distribuye:
 #   - Por defecto: APK -> Firebase App Distribution (testers internos).
 #   - Con -PlayStore:  AAB -> queda listo en disco para subir a Play Console
 #     (no se publica automaticamente; Google exige subida manual o via API).

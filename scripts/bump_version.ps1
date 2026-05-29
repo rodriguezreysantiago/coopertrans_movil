@@ -1,4 +1,4 @@
-# Bumpea la versión en los 3 lugares donde vive:
+﻿# Bumpea la versión en los 3 lugares donde vive:
 #   - pubspec.yaml (version: X.Y.Z+N)
 #   - lib/core/constants/app_constants.dart (appVersion = 'v X.Y.Z')
 #   - windows/runner/main.cpp (título de la ventana)

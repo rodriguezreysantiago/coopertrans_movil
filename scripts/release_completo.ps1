@@ -1,4 +1,4 @@
-# Release completo en 1 comando: bump + build Windows + instalador +
+﻿# Release completo en 1 comando: bump + build Windows + instalador +
 # push + GitHub Release + AAB Android.
 #
 # Pensado para que NO te quedes colgado en ningún paso. Cada paso
