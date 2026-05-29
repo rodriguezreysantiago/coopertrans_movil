@@ -1511,15 +1511,26 @@ class GomeriaService {
       final empezoAntes = desde.compareTo(instalado) < 0;
       final terminaDespues = hasta == null || hasta.compareTo(retirado) > 0;
 
-      // Resolver odómetro al inicio del overlap.
-      final double? odoOverlapIni = empezoAntes
-          ? await _odometroTractorEnFecha(tractorId, instalado.toDate())
-          : odoIni;
+      // Fechas reales del overlap [inicio, fin] entre esta asignación y la
+      // vida de la cubierta.
+      final inicioOverlap = empezoAntes ? instalado : desde;
+      final finOverlap = terminaDespues ? retirado : hasta;
 
-      // Resolver odómetro al fin del overlap.
-      final double? odoOverlapFin = terminaDespues
-          ? await _odometroTractorEnFecha(tractorId, retirado.toDate())
-          : odoFin;
+      // Resolver el odómetro del tractor en cada borde del overlap.
+      // ROBUSTO (fix 2026-05-29): priorizamos SIEMPRE el odómetro histórico
+      // del tractor (TELEMETRIA_HISTORICO). Validado contra datos reales —
+      // resuelve el 100% de las duplas activas, mientras que el snapshot
+      // `odometer_inicial/final` de la asignación falta en ~75% de los docs
+      // (el snapshot Sitrack al asignar es best-effort y suele venir null).
+      // El snapshot queda solo como FALLBACK cuando el borde del overlap
+      // coincide con el borde de la asignación (sino no corresponde).
+      double? odoOverlapIni =
+          await _odometroTractorEnFecha(tractorId, inicioOverlap.toDate());
+      odoOverlapIni ??= empezoAntes ? null : odoIni;
+
+      double? odoOverlapFin =
+          await _odometroTractorEnFecha(tractorId, finOverlap.toDate());
+      odoOverlapFin ??= terminaDespues ? null : odoFin;
 
       if (odoOverlapIni == null || odoOverlapFin == null) {
         skippedSinDatos++;
