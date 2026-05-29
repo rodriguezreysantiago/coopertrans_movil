@@ -186,10 +186,61 @@ export const zonaDescargaPoller = onSchedule(
       const colaActual = new Map<string, FirebaseFirestore.DocumentData>();
       for (const d of colaSnap.docs) colaActual.set(d.id, d.data());
 
+      // ─── 3b) Eventos recientes para la detección de entrada por EVENTOS ─
+      // (fix cobertura en vivo 2026-05-29). El snapshot del paso 4 pierde
+      // descargas cuando la unidad no reporta justo estando adentro (motor
+      // apagado → snapshot stale fuera; o entra/maniobra entre ciclos). Los
+      // EVENTOS (SITRACK_EVENTOS, densos) capturan esa entrada — misma señal
+      // que usa el backfill, traída al vivo. Una query (~150 docs/15 min).
+      // Formato como el backfill: patente en `asset_id`, coords en
+      // `latitude`/`longitude` (NO `lat`/`lng`, que son de SITRACK_POSICIONES).
+      const VENTANA_EVENTOS_MS = 15 * 60 * 1000;
+      const eventosRecientesPorPatente = new Map<string, PosicionUnidad[]>();
+      try {
+        const desdeEv = Timestamp.fromMillis(Date.now() - VENTANA_EVENTOS_MS);
+        const evSnap = await db.collection("SITRACK_EVENTOS")
+          .where("report_date", ">=", desdeEv)
+          .get();
+        for (const d of evSnap.docs) {
+          const m = d.data();
+          const patente = (m.asset_id as string | undefined)
+            ?.trim().toUpperCase();
+          const lat = typeof m.latitude === "number" ? m.latitude : null;
+          const lng = typeof m.longitude === "number" ? m.longitude : null;
+          const ts = m.report_date as Timestamp | undefined;
+          if (!patente || lat === null || lng === null || !ts) continue;
+          if (lat === 0 && lng === 0) continue;
+          let arr = eventosRecientesPorPatente.get(patente);
+          if (!arr) {
+            arr = [];
+            eventosRecientesPorPatente.set(patente, arr);
+          }
+          arr.push({
+            patente, lat, lng, ts,
+            driverDni: (m.driver_dni as string | undefined)?.trim() ||
+              undefined,
+            driverNombre: (m.driver_name as string | undefined)?.trim() ||
+              undefined,
+          });
+        }
+        for (const arr of eventosRecientesPorPatente.values()) {
+          arr.sort((a, b) => a.ts.toMillis() - b.ts.toMillis());
+        }
+      } catch (e) {
+        logger.warn(
+          "[zonaDescargaPoller] no se pudo cargar SITRACK_EVENTOS, " +
+            "detección solo por snapshot",
+          { error: (e as Error).message },
+        );
+      }
+
       const ahora = Timestamp.now();
       const batch = db.batch();
       let writes = 0;
-      const stats = { entradas: 0, salidas: 0, archivados: 0, dentro: 0 };
+      const stats = {
+        entradas: 0, salidas: 0, archivados: 0, dentro: 0,
+        entradasPorEvento: 0, // entradas que el snapshot habría perdido
+      };
 
       // ─── 4) Detectar adentro/afuera por (unidad × zona) ───────
       // Set de docIds visitados — los que NO se visitan están "afuera".
@@ -234,6 +285,55 @@ export const zonaDescargaPoller = onSchedule(
         }
       }
 
+      // ─── 4b) Entrada por EVENTOS recientes (ADITIVO — fix cobertura) ──
+      // Para las unidades que el snapshot NO marcó adentro (paso 4) pero que
+      // SÍ tienen un evento dentro de la zona en la ventana reciente, las
+      // metemos en cola igual. Solo SUMA detecciones; `visitadosCola` evita
+      // re-procesar las que ya entraron por snapshot. La salida (paso 5) y el
+      // archivado no cambian — una vez en cola, la ventana de 4h la sostiene
+      // aunque el motor se apague.
+      for (const [patente, evs] of eventosRecientesPorPatente) {
+        for (const zona of zonas) {
+          const docId = `${patente}_${zona.slug}`;
+          if (visitadosCola.has(docId)) continue; // ya entró por snapshot
+          const evsDentro = evs.filter((e) => unidadEnZona(e.lat, e.lng, zona));
+          if (evsDentro.length === 0) continue;
+          visitadosCola.add(docId);
+          stats.dentro++;
+          const primero = evsDentro[0]; // proxy de entrada (más viejo en ventana)
+          const ultimo = evsDentro[evsDentro.length - 1];
+          if (colaActual.get(docId)) {
+            // Ya estaba en cola → solo refrescar última posición.
+            batch.set(db.collection("ZONA_DESCARGA_COLA").doc(docId), {
+              ultima_pos_ts: ultimo.ts,
+              ultimo_lat: ultimo.lat,
+              ultimo_lng: ultimo.lng,
+              ...(ultimo.driverDni ? { chofer_dni: ultimo.driverDni } : {}),
+              ...(ultimo.driverNombre ?
+                { chofer_nombre: ultimo.driverNombre } : {}),
+            }, { merge: true });
+            writes++;
+          } else {
+            // Entrada nueva que el snapshot se había perdido.
+            stats.entradas++;
+            stats.entradasPorEvento++;
+            batch.set(db.collection("ZONA_DESCARGA_COLA").doc(docId), {
+              patente,
+              slug_zona: zona.slug,
+              nombre_zona: zona.nombre,
+              entrada_ts: primero.ts,
+              ultima_pos_ts: ultimo.ts,
+              ultimo_lat: ultimo.lat,
+              ultimo_lng: ultimo.lng,
+              chofer_dni: ultimo.driverDni ?? null,
+              chofer_nombre: ultimo.driverNombre ?? null,
+              origen_entrada: "evento",
+            });
+            writes++;
+          }
+        }
+      }
+
       // ─── 5) Salidas: docs en cola que NO están adentro ────────
       // Una unidad se cierra (sale de la cola) en 2 casos:
       //  (a) REPORTA posición fresca (<4h) pero fuera de esta zona → la
@@ -251,7 +351,13 @@ export const zonaDescargaPoller = onSchedule(
       // última vez adentro), que no se refresca cuando la unidad está
       // afuera → nunca superaba el límite mientras la descarga era
       // reciente.
-      const patentesFrescas = new Set(posiciones.map((p) => p.patente));
+      // Reporta fresco = aparece en el snapshot O en los eventos recientes.
+      // Incluir los eventos permite CERRAR por eventos una unidad que entró
+      // por eventos y ya salió (sin esperar el stale de 4h del snapshot).
+      const patentesFrescas = new Set<string>([
+        ...posiciones.map((p) => p.patente),
+        ...eventosRecientesPorPatente.keys(),
+      ]);
       for (const [docId, data] of colaActual.entries()) {
         if (visitadosCola.has(docId)) continue;
         const ultPosTs = data.ultima_pos_ts as Timestamp | undefined;
