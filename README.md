@@ -8,7 +8,7 @@ Sistema de gestión de flota para la empresa de transporte **Vecchi / Sucesión 
 
 ## Stack
 
-- **App Flutter** 3.x multiplataforma (Windows desktop para admin, Android para choferes; Web compila pero algunos features se desactivan).
+- **App Flutter** 3.44 multiplataforma: Windows desktop (admin), Android (choferes, LIVE en Google Play), iOS (LIVE en App Store) y macOS (enviado a review de App Store, 2026-05-29). Web compila pero algunos features se desactivan.
 - **Firebase**: Firestore (datos), Storage (archivos), Auth con custom token, Cloud Functions Gen2 (Node.js 22), Crashlytics.
 - **Bot WhatsApp**: proyecto Node.js separado en `whatsapp-bot/` que escucha la cola en Firestore y envía mensajes con anti-baneo + watchdog + retry + agrupación por chofer.
 - **Volvo Connect API**: telemetría de tractores Volvo (odómetro, combustible, mantenimiento) vía Cloud Function proxy.
