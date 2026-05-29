@@ -119,6 +119,143 @@ class MontajesService {
     await _movs.add(mov.toMap());
   }
 
+  /// Ajuste por INVENTARIO FÍSICO (control anti-robo). El gomero contó
+  /// `cantidadFisica` cubiertas de un SKU; comparamos con el stock teórico y,
+  /// si difieren, emitimos un movimiento `ajuste` con el delta. Devuelve la
+  /// diferencia (física − teórica): negativa = faltante, positiva = sobrante.
+  Future<int> ajustarInventario({
+    required String modeloId,
+    required String modeloEtiqueta,
+    required int vida,
+    required int cantidadFisica,
+    required String supervisorDni,
+    String? supervisorNombre,
+  }) async {
+    if (cantidadFisica < 0) {
+      throw MontajeException('La cantidad contada no puede ser negativa.');
+    }
+    final teorico = await stockDisponible(modeloId: modeloId, vida: vida);
+    final delta = cantidadFisica - teorico;
+    if (delta != 0) {
+      await _emitirMovimiento(
+        tipo: TipoMovimientoStock.ajuste,
+        modeloId: modeloId,
+        modeloEtiqueta: modeloEtiqueta,
+        vida: vida,
+        delta: delta,
+        supervisorDni: supervisorDni,
+        supervisorNombre: supervisorNombre,
+        motivo: 'Inventario físico: contado $cantidadFisica, teórico $teorico',
+      );
+    }
+    return delta;
+  }
+
+  /// Da de baja `cantidad` cubiertas del depósito (sin pasar por una posición).
+  Future<void> descartarDeDeposito({
+    required String modeloId,
+    required String modeloEtiqueta,
+    required int vida,
+    int cantidad = 1,
+    required String supervisorDni,
+    String? supervisorNombre,
+    String? motivo,
+  }) async {
+    await _salidaDeposito(
+      tipo: TipoMovimientoStock.descarte,
+      modeloId: modeloId,
+      modeloEtiqueta: modeloEtiqueta,
+      vida: vida,
+      cantidad: cantidad,
+      supervisorDni: supervisorDni,
+      supervisorNombre: supervisorNombre,
+      motivo: motivo,
+    );
+  }
+
+  /// Manda `cantidad` cubiertas del depósito al proveedor a recapar (salen
+  /// del stock). Vuelven con [recibirDeRecapado].
+  Future<void> mandarARecapar({
+    required String modeloId,
+    required String modeloEtiqueta,
+    required int vida,
+    int cantidad = 1,
+    required String supervisorDni,
+    String? supervisorNombre,
+    String? motivo,
+  }) async {
+    await _salidaDeposito(
+      tipo: TipoMovimientoStock.aRecapado,
+      modeloId: modeloId,
+      modeloEtiqueta: modeloEtiqueta,
+      vida: vida,
+      cantidad: cantidad,
+      supervisorDni: supervisorDni,
+      supervisorNombre: supervisorNombre,
+      motivo: motivo,
+    );
+  }
+
+  /// Recibe cubiertas del proveedor de recapado: `recibidas` vuelven al
+  /// depósito con vida +1 (las descartadas por el proveedor no vuelven, no
+  /// generan movimiento). `vidaPrevia` es la vida con la que se enviaron.
+  Future<void> recibirDeRecapado({
+    required String modeloId,
+    required String modeloEtiqueta,
+    required int vidaPrevia,
+    required int recibidas,
+    required String supervisorDni,
+    String? supervisorNombre,
+    String? motivo,
+  }) async {
+    if (recibidas < 0) {
+      throw MontajeException('La cantidad recibida no puede ser negativa.');
+    }
+    if (recibidas == 0) return;
+    await _emitirMovimiento(
+      tipo: TipoMovimientoStock.deRecapado,
+      modeloId: modeloId,
+      modeloEtiqueta: modeloEtiqueta,
+      vida: vidaPrevia + 1,
+      delta: recibidas,
+      supervisorDni: supervisorDni,
+      supervisorNombre: supervisorNombre,
+      motivo: motivo,
+    );
+  }
+
+  /// Helper común de salidas del depósito (recapado / descarte): valida que
+  /// haya stock suficiente y emite el movimiento negativo.
+  Future<void> _salidaDeposito({
+    required TipoMovimientoStock tipo,
+    required String modeloId,
+    required String modeloEtiqueta,
+    required int vida,
+    required int cantidad,
+    required String supervisorDni,
+    String? supervisorNombre,
+    String? motivo,
+  }) async {
+    if (cantidad <= 0) {
+      throw MontajeException('La cantidad debe ser mayor a 0.');
+    }
+    final disp = await stockDisponible(modeloId: modeloId, vida: vida);
+    if (disp < cantidad) {
+      throw MontajeException(
+          'No hay stock suficiente de "$modeloEtiqueta": hay $disp, pedís $cantidad.');
+    }
+    await _emitirMovimiento(
+      tipo: tipo,
+      modeloId: modeloId,
+      modeloEtiqueta: modeloEtiqueta,
+      vida: vida,
+      delta: -cantidad,
+      supervisorDni: supervisorDni,
+      supervisorNombre: supervisorNombre,
+      motivo: motivo,
+    );
+  }
+
   // ===========================================================================
   // MONTAJES
   // ===========================================================================

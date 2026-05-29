@@ -184,4 +184,75 @@ void main() {
       );
     });
   });
+
+  group('operaciones de stock de depósito', () {
+    test('ajustarInventario: faltante baja el stock y devuelve delta negativo',
+        () async {
+      await comprar5(); // teórico 5
+      final delta = await service.ajustarInventario(
+          modeloId: 'm1',
+          modeloEtiqueta: 'x',
+          vida: 1,
+          cantidadFisica: 3,
+          supervisorDni: '1');
+      expect(delta, -2);
+      expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 3);
+    });
+
+    test('ajustarInventario: sin diferencia no cambia nada', () async {
+      await comprar5();
+      final delta = await service.ajustarInventario(
+          modeloId: 'm1',
+          modeloEtiqueta: 'x',
+          vida: 1,
+          cantidadFisica: 5,
+          supervisorDni: '1');
+      expect(delta, 0);
+      expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 5);
+    });
+
+    test('descartarDeDeposito baja el stock', () async {
+      await comprar5();
+      await service.descartarDeDeposito(
+          modeloId: 'm1',
+          modeloEtiqueta: 'x',
+          vida: 1,
+          cantidad: 2,
+          supervisorDni: '1');
+      expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 3);
+    });
+
+    test('descartarDeDeposito sin stock suficiente lanza', () async {
+      await comprar5();
+      expect(
+        () => service.descartarDeDeposito(
+            modeloId: 'm1',
+            modeloEtiqueta: 'x',
+            vida: 1,
+            cantidad: 99,
+            supervisorDni: '1'),
+        throwsA(isA<MontajeException>()),
+      );
+    });
+
+    test('ciclo recapado: manda vida 1, recibe como vida 2', () async {
+      await comprar5(); // vida 1: 5
+      await service.mandarARecapar(
+          modeloId: 'm1',
+          modeloEtiqueta: 'x',
+          vida: 1,
+          cantidad: 3,
+          supervisorDni: '1');
+      expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 2); // 5−3
+      // vuelven 2 (1 la descartó el proveedor) como vida 2.
+      await service.recibirDeRecapado(
+          modeloId: 'm1',
+          modeloEtiqueta: 'x',
+          vidaPrevia: 1,
+          recibidas: 2,
+          supervisorDni: '1');
+      expect(await service.stockDisponible(modeloId: 'm1', vida: 2), 2);
+      expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 2);
+    });
+  });
 }
