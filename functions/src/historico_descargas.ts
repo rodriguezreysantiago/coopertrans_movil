@@ -24,6 +24,7 @@
 // días había que rearmarlos desde SITRACK_EVENTOS — esta CF.
 
 import { onCall } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
@@ -419,5 +420,58 @@ export const backfillHistoricoDescargas = onCall(
       total_writes: totalWrites,
       detalle,
     };
+  },
+);
+
+// ============================================================================
+// Backfill AUTOMÁTICO diario — red de seguridad del histórico
+// ============================================================================
+//
+// El cron en vivo `zonaDescargaPoller` (snapshot SITRACK_POSICIONES cada
+// 5 min) se PIERDE descargas: el camión apaga el motor (deja de reportar →
+// snapshot stale) o la estadía es corta / con maniobras entre ciclos. Caso
+// real 2026-05-29: backfill detectó 17 descargas del día vs 7 del cron.
+//
+// Este cron re-procesa el DÍA ANTERIOR completo desde SITRACK_EVENTOS (más
+// denso y fiable que el snapshot) con LIMPIEZA previa — idéntico a
+// `scripts/backfill_descargas.js --dias 1`. El cron en vivo sigue para la
+// COLA en tiempo real; este completa el HISTÓRICO. 04:30 ART da margen para
+// que el día anterior haya cerrado y todos sus eventos estén persistidos.
+export const backfillDescargasDiario = onSchedule(
+  {
+    schedule: "30 4 * * *",
+    timeZone: "America/Argentina/Buenos_Aires",
+    timeoutSeconds: 540,
+    memory: "1GiB",
+  },
+  async () => {
+    // Día anterior completo en ART: [ayer 00:00 ART, hoy 00:00 ART).
+    // 00:00 ART = 03:00 UTC del mismo día calendario ART.
+    const ahoraArt = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const fin = new Date(Date.UTC(
+      ahoraArt.getUTCFullYear(),
+      ahoraArt.getUTCMonth(),
+      ahoraArt.getUTCDate(),
+      3, 0, 0, 0,
+    ));
+    const ini = new Date(fin.getTime() - 24 * 60 * 60 * 1000);
+    logger.info("[backfillDescargasDiario] iniciando", {
+      desde: ini.toISOString(), hasta: fin.toISOString(),
+    });
+    try {
+      const borrados = await limpiarHistoricoDescargasRango(ini, fin);
+      const res = await procesarRangoDescargas(ini, fin);
+      logger.info("[backfillDescargasDiario] OK", {
+        borrados,
+        zonas: res.zonas,
+        eventos: res.eventos,
+        descargas: res.descargas,
+        writes: res.writes,
+      });
+    } catch (e) {
+      logger.error("[backfillDescargasDiario] error", {
+        error: (e as Error).message,
+      });
+    }
   },
 );
