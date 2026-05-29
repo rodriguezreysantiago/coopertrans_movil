@@ -1137,6 +1137,48 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // GOMERIA_* — rediseño 2026-05-29 (modelo por posición + km + marca)
+    // ========================================================================
+    // Sistema NUEVO, coexiste con CUBIERTAS_* hasta migrar. No serializa
+    // cubiertas: los montajes referencian modelo+vida y el stock se lleva por
+    // CANTIDADES (log de movimientos). Ver `MontajesService`.
+
+    // Montaje de cubierta en una posición. Activo = `hasta == null`.
+    match /GOMERIA_MONTAJES/{doc} {
+      allow read: if puedeOperarGomeria();
+      // Crear: montaje nuevo ACTIVO; el que lo crea es el usuario autenticado.
+      allow create: if puedeOperarGomeria()
+        && request.resource.data.hasta == null
+        && request.resource.data.montado_por_dni == request.auth.uid;
+      // Update: SOLO cerrar el montaje (retiro). No se puede reabrir ni tocar
+      // la identidad (unidad/posición/modelo/vida quedan inmutables).
+      allow update: if puedeOperarGomeria()
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['hasta', 'km_unidad_al_retirar', 'km_recorridos',
+                      'motivo_retiro', 'destino', 'retirado_por_dni',
+                      'retirado_por_nombre']);
+      allow delete: if false;
+    }
+
+    // Log de movimientos de stock del depósito. INMUTABLE (auditoría +
+    // base del cálculo de stock por cantidades).
+    match /GOMERIA_STOCK_MOVIMIENTOS/{doc} {
+      allow read: if puedeOperarGomeria();
+      allow create: if puedeOperarGomeria()
+        && request.resource.data.responsable_dni == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // Lock de unicidad de posición. `update: if false` garantiza que una
+    // posición no tenga 2 montajes activos sin necesitar runTransaction
+    // (prohibido en Windows): un `set` sobre un lock existente rebota.
+    match /GOMERIA_POSICIONES_ACTIVAS/{doc} {
+      allow read: if puedeOperarGomeria();
+      allow create, delete: if puedeOperarGomeria();
+      allow update: if false;
+    }
+
+    // ========================================================================
     // CUBIERTAS_PROVEEDORES — catálogo de proveedores de recapado
     // ========================================================================
     // Mismo patrón que CUBIERTAS_MARCAS pero ABM disponible para
