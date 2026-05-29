@@ -319,7 +319,7 @@ async function _despacharFalloEnvio(docRef, error) {
   // data es null (el doc no existe), marcarError lo trata como llamada
   // legacy y solo actualiza el doc original (no escribe histórico).
   await fs.marcarError(docRef, data, `${error.message} (${motivo})`);
-  log.warn(`✗ ${docRef.id}: ERROR definitivo (${motivo}).`);
+  log.warn(`${docRef.id}: ERROR definitivo (${motivo}).`);
 }
 
 // ─── Cache LRU de WIDs verificados (Fix H1 24/7) ─────────────────────
@@ -447,7 +447,7 @@ async function procesarSiguiente() {
         (Date.now() - data.expira_en.toMillis()) / 1000
       );
       log.info(
-        `${docId}: aviso EXPIRADO (origen=${data.origen}, ` +
+        `aviso EXPIRADO para ${_quien(data.telefono)} (origen=${data.origen}, ` +
           `vencido hace ${segundosVencido}s); borrando de la cola.`
       );
       try {
@@ -680,7 +680,7 @@ async function procesarSiguiente() {
       log.warn(`${docId}: agrupador falló (envío individual): ${e.message}`);
     }
 
-    log.info(`→ Enviando a ${_quien(data.telefono)} (en ${Math.round(delay / 1000)}s)...`);
+    log.info(`Enviando a ${_quien(data.telefono)} (en ${Math.round(delay / 1000)}s)...`);
     await sleep(delay);
 
     // Splitting anti-baneo: WhatsApp puede flaggear mensajes > ~4096
@@ -722,7 +722,7 @@ async function procesarSiguiente() {
         chunksEnviados++;
       } catch (chunkE) {
         chunkError = chunkE;
-        log.error(`✗ Chunk ${i + 1}/${partes.length} de ${docId} falló: ` +
+        log.error(`Chunk ${i + 1}/${partes.length} de ${docId} falló: ` +
           `${chunkE.message}`);
         break;
       }
@@ -747,7 +747,7 @@ async function procesarSiguiente() {
         total: partes.length,
         error: chunkError ? chunkError.message : 'desconocido',
       };
-      log.warn(`⚠ Mensaje ${docId} parcial: ${chunksEnviados}/${partes.length}`);
+      log.warn(`Mensaje ${docId} parcial: ${chunksEnviados}/${partes.length}`);
       health.registrarError('envio_parcial',
         `${docId}: ${chunksEnviados}/${partes.length}`);
     }
@@ -772,9 +772,9 @@ async function procesarSiguiente() {
     // Pasar el `origen` del doc para que el contador por categoría se
     // incremente correctamente (M1, 2026-05-24).
     health.registrarEnvio(data.origen);
-    log.info(`✓ Enviado a ${_quien(data.telefono)}`);
+    log.info(`Enviado a ${_quien(data.telefono)}`);
   } catch (e) {
-    log.error(`✗ Falló ${docId}: ${e.message}`);
+    log.error(`Falló ${docId}: ${e.message}`);
     health.registrarError('envio', `${docId}: ${e.message}`);
     try {
       await _despacharFalloEnvio(docRef, e);
@@ -909,7 +909,7 @@ async function pollearCola(db) {
         'sweeper PROCESANDO'
       );
       if (recuperados > 0) {
-        log.warn(`Sweeper: recupere ${recuperados} doc(s) stale en PROCESANDO → PENDIENTE.`);
+        log.warn(`Sweeper: recupere ${recuperados} doc(s) stale en PROCESANDO -> PENDIENTE.`);
       }
     } catch (e) {
       log.warn(`Sweeper de PROCESANDO fallo: ${e.message}`);
