@@ -7,7 +7,6 @@ import '../../../shared/utils/responsive_grid.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../constants/posiciones.dart';
 import '../models/cubierta_instalada.dart';
-import 'gomeria_v2_hub_screen.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
@@ -39,20 +38,6 @@ class GomeriaHubScreen extends StatelessWidget {
             // alertas). El gap inferior está adentro del propio banner
             // para que cuando no hay alertas no quede espacio en blanco.
             const _AlertasFinDeVida(),
-            // Acceso BETA al rediseño (modelo por posición+km+marca,
-            // 2026-05-29). Temporal hasta migrar — convive con el viejo.
-            Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.md),
-              child: FilledButton.tonalIcon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const GomeriaV2HubScreen()),
-                ),
-                icon: const Icon(Icons.new_releases_outlined),
-                label: const Text('Probar gomería nueva (beta)'),
-              ),
-            ),
             // Hub principal — 4 accesos. Misma lógica que el hub de
             // Logística: columnas según el ancho disponible + ratio
             // calculado con LayoutBuilder, y GridView scrollable (nunca

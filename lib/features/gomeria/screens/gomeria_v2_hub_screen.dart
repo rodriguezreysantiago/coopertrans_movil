@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../constants/posiciones.dart';
+import 'gomeria_hub_screen.dart';
 import 'gomeria_v2_stock_screen.dart';
 import 'gomeria_v2_unidad_screen.dart';
 
@@ -69,6 +70,15 @@ class GomeriaV2HubScreen extends StatelessWidget {
               for (final d in enganches)
                 _tileUnidad(context, d.id, d.data(),
                     TipoUnidadCubierta.enganche),
+              const SizedBox(height: 16),
+              TextButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const GomeriaHubScreen()),
+                ),
+                icon: const Icon(Icons.history),
+                label: const Text('Ver sistema anterior (datos viejos)'),
+              ),
             ],
           );
         },

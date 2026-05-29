@@ -18,7 +18,7 @@ import '../../auditoria_asignaciones/screens/admin_auditoria_asignaciones_screen
 import '../../fleet_map/screens/admin_mapa_flota_screen.dart';
 import '../../icm/screens/icm_hub_screen.dart';
 import '../../cachatore/screens/cachatore_hub_screen.dart';
-import '../../gomeria/screens/gomeria_hub_screen.dart';
+import '../../gomeria/screens/gomeria_v2_hub_screen.dart';
 import '../../logistica/screens/logistica_hub_screen.dart';
 import '../../vehicles/screens/admin_mantenimiento_screen.dart';
 import '../../vehicles/screens/admin_vehiculos_lista_screen.dart';
@@ -128,7 +128,7 @@ class _AdminShellState extends State<AdminShell> {
       icon: Icons.tire_repair_outlined,
       iconActive: Icons.tire_repair,
       requiredCapability: Capability.verGomeria,
-      build: () => const GomeriaHubScreen(),
+      build: () => const GomeriaV2HubScreen(),
     ),
     _ShellSection(
       label: 'Mantenimiento',
