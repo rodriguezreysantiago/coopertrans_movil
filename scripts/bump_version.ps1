@@ -111,7 +111,11 @@ $mainContent = Get-Content $mainCpp -Raw
 # Reemplaza el string del titulo. Tolerante con o sin acento, con
 # diferentes formatos de version.
 $mainContent = $mainContent -replace 'L"Coopertrans M[^"]*"', "L`"Coopertrans Móvil — $appVer (build $nBuild)`""
-Set-Content -Path $mainCpp -Value $mainContent -Encoding UTF8
+# main.cpp: UTF-8 CON BOM (MSVC lo necesita para los no-ASCII del título "Móvil —")
+# + LF. Antes Set-Content -Encoding UTF8 escribía CRLF y git avisaba "CRLF will be
+# replaced by LF" en cada release (el .gitattributes fuerza LF). Preservamos el BOM.
+$mainContent = $mainContent -replace "`r`n", "`n"
+[System.IO.File]::WriteAllText($mainCpp, $mainContent, [System.Text.UTF8Encoding]::new($true))
 
 Write-Host "OK. Cambios aplicados." -ForegroundColor Green
 Write-Host ""
