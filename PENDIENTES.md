@@ -7,6 +7,28 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-05-29 — macOS enviado a review de Apple 🎉
+
+Frente macOS destrabado end-to-end y **app enviada a review** del Mac App Store.
+Detalle técnico en `ESTADO_PROYECTO.md` (entrada 2026-05-29) y `docs/RUNBOOK_macos_signing.md`.
+
+**✅ Hecho hoy** (commits `c7c1c62`, `be9999c`, `7db6cee`, `1897091`):
+- Pantalla negra de arranque resuelta (faltaba `macOS` en flutter_local_notifications +
+  Firebase macOS sin configurar + inits de `main()` sin try/catch).
+- Deployment target Podfile macOS → 11.0 (−86% warnings de build); Podfile versionado.
+- Página de soporte `public/soporte.html` deployada (Support URL daba 404 → ahora 200).
+- Listing macOS completo: capturas 2560×1600 (DNI propio borrado; la de Descargas
+  DESCARTADA por exponer PII de otros choferes), promo, descripción, keywords.
+- functions: 0 warnings (fix max-len en `comun.ts`). Entorno Mac alineado: Flutter 3.44.0 + SPM off + Node 26.
+
+**⏳ Pendiente:**
+1. **Esperar aprobación de Apple** (1-3 días) → publicar (modo **manual** elegido). Si rechazan, leer motivo y ajustar.
+2. **Confirmar que el login demo `00000001` sigue activo** — es la causa #1 de rechazo de Apple (probar el login antes de que revisen).
+3. **Android — análisis de warnings**: NO se pudo en la Mac (sin Android SDK). Pendiente desde la PC Windows: `flutter build appbundle` capturando el log de Gradle/Kotlin y clasificar (como se hizo con macOS).
+4. **Limpieza menor**: borrar `~/Desktop/appstore_macos/_originales_sin_procesar/` (respaldo de capturas crudas) cuando se confirme que las finales entraron OK en el listing.
+
+---
+
 ## 📅 2026-05-28 — Revisión de pendientes (varios cerrados) + setup PC nueva
 
 Revisión del estado real contra el código. **Cerrados / obsoletos:**

@@ -204,10 +204,12 @@ flota,vencimientos,choferes,gomeria,volvo,sitrack,vecchi,coopertrans,transporte,
 ### 4.5 Support URL
 
 ```
-https://coopertrans-movil.web.app/eliminar-cuenta
+https://coopertrans-movil.web.app/soporte
 ```
 
-(Cualquier URL válida del dominio sirve. Apple solo verifica que cargue.)
+(Página de soporte real creada 2026-05-29 — `public/soporte.html`, con contacto + FAQ;
+responde HTTP 200. Antes se usaba `/eliminar-cuenta` como placeholder. Apple verifica
+que la URL cargue, así que tiene que existir el rewrite en `firebase.json`.)
 
 ### 4.6 Marketing URL (opcional)
 
