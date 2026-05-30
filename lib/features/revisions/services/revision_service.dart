@@ -159,14 +159,16 @@ RevisionAprobadaPlan planificarAprobacion(Map<String, dynamic> datos) {
     );
   }
 
-  // Caso fallback: cualquier otro campo se trata como vencimiento puro
-  // (legacy / migraciones viejas). Solo updateamos el campo con
-  // `fecha_vencimiento`, sin tocar archivo ni timestamp.
-  return RevisionAprobadaPlan(
-    colDestino: colDestino,
-    idDoc: idDoc,
-    campoAct: campoAct,
-    camposDestino: {campoAct: datos['fecha_vencimiento']},
+  // SEGURIDAD (2026-05-30): cualquier OTRO `campo` se RECHAZA. Antes el fallback
+  // escribía {campo: fecha_vencimiento} con `campo` arbitrario controlado por
+  // quien creó la solicitud → un chofer podía pedir campo:'ROL' (o 'ACTIVO',
+  // 'EMPRESA_CUIT'...) y, al aprobar el admin, auto-promoverse a ADMIN. Solo se
+  // aceptan VENCIMIENTO_* y las 2 solicitudes (ya manejadas arriba). Defensa en
+  // profundidad: la rule de REVISIONES valida la misma whitelist en el create.
+  throw StateError(
+    'Campo de solicitud no permitido ("$campoAct"). Solo se aceptan '
+    'renovaciones de vencimiento (VENCIMIENTO_*) o solicitudes de '
+    'cambio de unidad/enganche.',
   );
 }
 

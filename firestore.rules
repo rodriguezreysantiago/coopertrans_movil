@@ -180,7 +180,19 @@ service cloud.firestore {
         && request.resource.data.dni == request.auth.uid
         && request.resource.data.keys().hasAll(['dni', 'campo',
                                                   'coleccion_destino',
-                                                  'url_archivo', 'estado']);
+                                                  'url_archivo', 'estado'])
+        // SEGURIDAD (2026-05-30): restringir `campo` y `coleccion_destino` a la
+        // whitelist REAL. Sin esto, un chofer con cliente Firestore crudo podia
+        // crear una "revision" con campo:'ROL' (o 'ACTIVO', 'EMPRESA_CUIT'...) y,
+        // al aprobarla el admin (que no ve esos campos en la bandeja), el flujo
+        // de aprobacion escribia EMPLEADOS/{suDNI}.{campo} = {valor} → escalada a
+        // ADMIN. Los unicos campos legitimos son VENCIMIENTO_* (papeles) y las 2
+        // solicitudes de cambio. La logica de aprobacion (planificarAprobacion)
+        // valida la misma whitelist como defensa en profundidad.
+        && request.resource.data.coleccion_destino in ['EMPLEADOS', 'VEHICULOS']
+        && (request.resource.data.campo.matches('VENCIMIENTO_.*')
+            || request.resource.data.campo == 'SOLICITUD_VEHICULO'
+            || request.resource.data.campo == 'SOLICITUD_ENGANCHE');
       // Admin/supervisor aprueban o rechazan.
       allow update, delete: if isAdminOrSupervisor();
     }

@@ -246,30 +246,46 @@ void main() {
     });
   });
 
-  group('planificarAprobacion — campo legacy / desconocido', () {
-    test('campo arbitrario no estructurado: actualiza con fecha_vencimiento', () {
-      // Migración vieja podría tener un campo `LICENCIA` o `RTO` sin el
-      // prefijo `VENCIMIENTO_`. Se acepta como fallback.
-      final plan = planificarAprobacion({
-        'coleccion_destino': 'EMPLEADOS',
-        'dni': '35244439',
-        'campo': 'CAMPO_LEGACY',
-        'fecha_vencimiento': '2027-06-15',
-      });
-      expect(plan.camposDestino, {'CAMPO_LEGACY': '2027-06-15'});
-      expect(plan.vehiculosUpdates, isEmpty);
-      expect(plan.asignacionRequest, isNull);
+  group('planificarAprobacion — campo NO permitido (seguridad 2026-05-30)', () {
+    // Antes el fallback aceptaba CUALQUIER `campo` y escribía
+    // {campo: fecha_vencimiento}. Eso permitía escalada de privilegios: un
+    // chofer creaba una "revisión" con campo:'ROL' y al aprobarla el admin se
+    // volvía ADMIN. Ahora se RECHAZA todo lo que no sea VENCIMIENTO_* o las 2
+    // solicitudes. (La rule de REVISIONES valida la misma whitelist en el create.)
+    test('campo ROL → StateError (no permite escalar a admin)', () {
+      expect(
+        () => planificarAprobacion({
+          'coleccion_destino': 'EMPLEADOS',
+          'dni': '35244439',
+          'campo': 'ROL',
+          'fecha_vencimiento': 'ADMIN',
+        }),
+        throwsA(isA<StateError>()),
+      );
     });
 
-    test('campo legacy sin fecha_vencimiento: graba null en el campo', () {
-      // Defensivo: si el dato faltó, no rompemos — se graba null y el
-      // admin lo ve en pantalla para corregirlo.
-      final plan = planificarAprobacion({
-        'coleccion_destino': 'EMPLEADOS',
-        'dni': '35244439',
-        'campo': 'CAMPO_X',
-      });
-      expect(plan.camposDestino, {'CAMPO_X': null});
+    test('campo ACTIVO → StateError (no permite revivir una baja)', () {
+      expect(
+        () => planificarAprobacion({
+          'coleccion_destino': 'EMPLEADOS',
+          'dni': '35244439',
+          'campo': 'ACTIVO',
+          'fecha_vencimiento': true,
+        }),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('campo legacy sin prefijo VENCIMIENTO_ → StateError (ya no se acepta)', () {
+      expect(
+        () => planificarAprobacion({
+          'coleccion_destino': 'EMPLEADOS',
+          'dni': '35244439',
+          'campo': 'CAMPO_LEGACY',
+          'fecha_vencimiento': '2027-06-15',
+        }),
+        throwsA(isA<StateError>()),
+      );
     });
   });
 
