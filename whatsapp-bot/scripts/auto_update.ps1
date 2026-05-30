@@ -37,8 +37,12 @@ function Write-Log {
     param([string]$Level, [string]$Msg)
     # Formato unificado con el cachatore: fecha PRIMERO entre corchetes
     # (dd/mm, sin anio), despues el nivel. Asi toda linea arranca con la fecha.
-    $ts = (Get-Date).ToString('dd/MM HH:mm:ss')
-    "[$ts] [$Level] $Msg" | Out-File -FilePath $LogFile -Append -Encoding utf8
+    # .NET puro (sin Get-Date / Out-File): un hipo del modulo Microsoft.PowerShell.Utility
+    # NO debe tumbar el auto-update. Caso real 2026-05-29: Get-Date no cargaba el modulo y
+    # el script entraba en loop de error en el catch. [DateTime]::Now + AppendAllText no
+    # dependen de ningun modulo de PowerShell.
+    $ts = [DateTime]::Now.ToString('dd/MM HH:mm:ss')
+    [System.IO.File]::AppendAllText($LogFile, "[$ts] [$Level] $Msg`r`n", [System.Text.UTF8Encoding]::new($false))
 }
 
 function Rotate-LogIfBig {
@@ -53,7 +57,7 @@ function Rotate-LogIfBig {
 
 # --- Lockfile (anti-overlap) ----------------------------------------
 if (Test-Path $LockFile) {
-    $lockAge = (Get-Date) - (Get-Item $LockFile).LastWriteTime
+    $lockAge = [DateTime]::Now - (Get-Item $LockFile).LastWriteTime
     if ($lockAge.TotalMinutes -lt 30) {
         # Otro auto-update esta corriendo (o quedo colgado < 30 min). Salir silencioso.
         exit 0

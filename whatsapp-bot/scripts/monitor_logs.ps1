@@ -29,6 +29,23 @@ $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 
+# Desactivar QuickEdit Mode de la consola. Con QuickEdit (default de Windows), al
+# hacer click o seleccionar texto en la ventana el proceso se CONGELA (deja de
+# mostrar lineas nuevas) hasta apretar Esc/Enter — parece que el visor se colgo.
+# Lo apagamos para que nunca se congele al pasar el mouse / scrollear / clickear.
+# (Para copiar texto: click-derecho -> Marcar.) Best-effort: si falla (no hay
+# consola real, p.ej. corriendo bajo un servicio), seguimos sin tocar nada.
+try {
+    $qeSig = '[DllImport("kernel32.dll")] public static extern IntPtr GetStdHandle(int h); [DllImport("kernel32.dll")] public static extern bool GetConsoleMode(IntPtr h, out uint m); [DllImport("kernel32.dll")] public static extern bool SetConsoleMode(IntPtr h, uint m);'
+    $qe = Add-Type -Name ConsoleQuickEdit -Namespace W32 -PassThru -MemberDefinition $qeSig
+    $hIn = $qe::GetStdHandle(-10)   # STD_INPUT_HANDLE
+    $m = 0
+    if ($qe::GetConsoleMode($hIn, [ref]$m)) {
+        # quitar ENABLE_QUICK_EDIT (0x40); poner ENABLE_EXTENDED_FLAGS (0x80)
+        $qe::SetConsoleMode($hIn, (($m -band (-bnot 0x40)) -bor 0x80)) | Out-Null
+    }
+} catch { }
+
 $botDir = Split-Path $PSScriptRoot -Parent
 $logsDir = Join-Path $botDir 'logs'
 $outLog = Join-Path $logsDir 'bot.out.log'

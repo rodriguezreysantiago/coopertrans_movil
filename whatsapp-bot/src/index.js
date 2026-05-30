@@ -729,7 +729,7 @@ async function procesarSiguiente() {
     }
     if (partes.length > 1) {
       log.info(
-        `  ${docId}: ${chunksEnviados}/${partes.length} chunks enviados ` +
+        `  ${chunksEnviados}/${partes.length} chunks enviados ` +
         `(${mensajeFinal.length} chars total)`
       );
     }
@@ -766,7 +766,7 @@ async function procesarSiguiente() {
         });
       }
       await batch.commit();
-      log.info(`  ${docsAgrupados.length} doc(s) marcados como agrupados en ${docId}`);
+      log.info(`  ${docsAgrupados.length} doc(s) marcados como agrupados`);
     }
 
     // Pasar el `origen` del doc para que el contador por categoría se
