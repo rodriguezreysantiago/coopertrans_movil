@@ -162,7 +162,7 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Descargas',
       icon: Icons.local_shipping_outlined,
       iconActive: Icons.local_shipping,
-      requiredCapability: Capability.verAlertasVolvo,
+      requiredCapability: Capability.verDescargas,
       // Cola en vivo + recién descargaron + KPIs basado en presencia REAL
       // en geocercas configurables (ZONAS_DESCARGA). Reemplazó al detector
       // PTO Volvo (falsos positivos + solo flota Volvo) el 2026-05-24.

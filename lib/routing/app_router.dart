@@ -336,7 +336,7 @@ class AppRouter {
       case AppRoutes.adminDescargas:
         return _buildRoute(
           _protegerAdmin(const AdminDescargasScreen(),
-              Capability.verAlertasVolvo),
+              Capability.verDescargas),
           settings,
         );
 
@@ -344,7 +344,7 @@ class AppRouter {
       case AppRoutes.adminZonasDescarga:
         return _buildRoute(
           _protegerAdmin(const AdminZonasDescargaScreen(),
-              Capability.verAlertasVolvo),
+              Capability.verDescargas),
           settings,
         );
 

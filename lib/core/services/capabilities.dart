@@ -39,6 +39,11 @@ enum Capability {
   /// IDLING, OVERSPEED, DISTANCE_ALERT, PTO, TELL_TALE, etc.). Tanto admin
   /// como supervisor pueden verlas y marcarlas como atendidas.
   verAlertasVolvo,
+  /// Módulo Descargas — cola en vivo + histórico de entradas/salidas a las
+  /// geocercas YPF (ZONAS_DESCARGA) + CRUD de zonas. Separado de
+  /// `verAlertasVolvo` el 2026-05-30 para sacárselo a SEG_HIGIENE sin que pierda
+  /// Auditoría/Mapa (que comparten ese permiso). ADMIN + SUPERVISOR.
+  verDescargas,
   /// Módulo Gomería — gestión de stock de cubiertas, instalación/retiro
   /// por posición de tractor o enganche, recapados. Operado típicamente
   /// desde una tablet pegada en la pared del taller. Tanto ADMIN como
@@ -122,7 +127,8 @@ class Capabilities {
       // las recibe consolidadas vía WhatsApp diario.
       Capability.verPanelAdmin,
       Capability.verIcm,
-      Capability.verAlertasVolvo, // mantiene Mapa Flota + Descargas PTO
+      Capability.verAlertasVolvo, // mantiene Mapa Flota + Auditoría (Descargas
+      // se separó a `verDescargas` el 2026-05-30 — SEG_HIGIENE ya no la ve).
     },
     AppRoles.supervisor: {
       Capability.verPanelAdmin,
@@ -135,6 +141,7 @@ class Capabilities {
       // verEstadoBot (WhatsApp Bot) NO va a SUPERVISOR — exclusivo de ADMIN
       // (2026-05-30, pedido Santiago "por ahora"). Vive en `_adminExtra`.
       Capability.verAlertasVolvo,
+      Capability.verDescargas,
       Capability.verGomeria,
       Capability.verLogistica,
       Capability.verIcm,

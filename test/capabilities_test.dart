@@ -70,6 +70,7 @@ void main() {
         Capability.verReportes,
         Capability.verMantenimiento,
         Capability.verAlertasVolvo,
+        Capability.verDescargas,
       ];
       for (final cap in expectedTrue) {
         expect(
@@ -114,6 +115,30 @@ void main() {
 
     test('SUPERVISOR NO ve auditoría (solo ADMIN)', () {
       expect(Capabilities.can(AppRoles.supervisor, Capability.verAuditoria),
+          isFalse);
+    });
+  });
+
+  group('Capabilities.can — SEG_HIGIENE (conducta)', () {
+    test('SEG_HIGIENE ve ICM + tableros de conducta (Auditoría/Mapa)', () {
+      expect(Capabilities.can(AppRoles.segHigiene, Capability.verPanelAdmin),
+          isTrue);
+      expect(Capabilities.can(AppRoles.segHigiene, Capability.verIcm), isTrue);
+      expect(Capabilities.can(AppRoles.segHigiene, Capability.verAlertasVolvo),
+          isTrue);
+    });
+
+    test('SEG_HIGIENE NO ve Descargas (separado el 2026-05-30)', () {
+      expect(Capabilities.can(AppRoles.segHigiene, Capability.verDescargas),
+          isFalse);
+    });
+
+    test('SEG_HIGIENE NO ve módulos de gestión (personal/gomería/bot)', () {
+      expect(Capabilities.can(AppRoles.segHigiene, Capability.verListaPersonal),
+          isFalse);
+      expect(Capabilities.can(AppRoles.segHigiene, Capability.verGomeria),
+          isFalse);
+      expect(Capabilities.can(AppRoles.segHigiene, Capability.verEstadoBot),
           isFalse);
     });
   });
