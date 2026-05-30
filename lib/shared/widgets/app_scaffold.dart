@@ -103,13 +103,17 @@ class AppScaffold extends StatelessWidget {
                   ),
                 ],
               )
-            : null,
+            // Sin título → mostramos SOLO el logo (evita el "Coopertrans Móvil"
+            // duplicado en pantallas como el menú de inicio, donde el título era
+            // el propio appName y chocaba con el logo).
+            : const CoopertransLogo(size: CoopertransLogoSize.s),
         leading: leading,
         actions: actions,
         // El logo + separador + título es ancho variable; lo dejamos
         // alineado a la izquierda (después del back button si existe)
         // en lugar de centrado para que no quede flotando en el medio.
-        centerTitle: title != null ? false : centerTitle,
+        // Logo (solo o con título) siempre alineado a la izquierda.
+        centerTitle: false,
         titleSpacing: 12,
         backgroundColor: Colors.transparent,
         elevation: 0,

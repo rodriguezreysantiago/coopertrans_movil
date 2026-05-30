@@ -68,7 +68,8 @@ class MainPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      title: AppTexts.appName,
+      // Sin título: el menú de inicio muestra solo el logo (el título era
+      // appName y se duplicaba con el logo, se veía "Coopertrans Móvil" 2 veces).
       actions: [
         IconButton(
           icon: const Icon(Icons.logout_outlined),
