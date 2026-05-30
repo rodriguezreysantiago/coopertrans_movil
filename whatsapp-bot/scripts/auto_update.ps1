@@ -73,6 +73,19 @@ try {
 
     Set-Location $RepoRoot
 
+    # --- Muestreo de memoria (TEMPORAL, diagnostico de leak - 2026-05-30) -------
+    # Cada corrida (~5 min) registra la RAM de node + chrome del bot en
+    # logs\memoria.log, para ver si crece con los dias (leak de Chromium /
+    # whatsapp-web.js) y decidir si hace falta un restart periodico. try/catch ->
+    # nunca afecta el auto-update. BORRAR este bloque cuando tengamos la conclusion.
+    try {
+        $nodeBytes   = (Get-Process node -ErrorAction SilentlyContinue | Measure-Object WorkingSet64 -Sum).Sum
+        $chromeBytes = (Get-Process chrome, chromium -ErrorAction SilentlyContinue | Measure-Object WorkingSet64 -Sum).Sum
+        $tsMem  = [DateTime]::Now.ToString('dd/MM HH:mm')
+        $linMem = "[$tsMem] node=$([math]::Round([double]$nodeBytes/1MB))MB chrome=$([math]::Round([double]$chromeBytes/1MB))MB"
+        [System.IO.File]::AppendAllText((Join-Path $LogDir 'memoria.log'), "$linMem`r`n", [System.Text.UTF8Encoding]::new($false))
+    } catch { }
+
     # --- 1. git fetch (silencioso si falla por red) -----------------
     # `2>&1` con $EAP=Stop en PS 5.1 convierte stderr en ErrorRecord
     # y aborta. Usamos $EAP local 'Continue' para capturar stderr en
