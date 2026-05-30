@@ -13,6 +13,7 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../auth/services/auth_service.dart';
+import '../../gomeria/screens/gomeria_v2_hub_screen.dart';
 import '../../vehicles/providers/vehiculo_provider.dart';
 import '../../vehicles/services/vehiculo_repository.dart';
 
@@ -47,17 +48,22 @@ class MainPanel extends StatelessWidget {
 
   bool get _isAdmin => rol.trim().toUpperCase() == 'ADMIN';
 
-  /// Puede entrar al Panel de administración. Lo tienen ADMIN, SUPERVISOR,
-  /// GOMERIA y SEG_HIGIENE — antes el tile de acceso se mostraba SOLO a ADMIN
-  /// (bug latente: un SUPERVISOR no podía entrar al panel). Fix 2026-05-30.
+  /// Puede entrar al Panel de administración (shell). ADMIN, SUPERVISOR y
+  /// SEG_HIGIENE. GOMERIA ya NO (2026-05-30): va directo a su módulo. Antes el
+  /// tile de acceso se mostraba SOLO a ADMIN (bug: un SUPERVISOR no entraba).
   bool get _puedeVerPanelAdmin =>
       Capabilities.can(rol, Capability.verPanelAdmin);
 
+  /// GOMERIA — rol especializado del taller. En el menú de inicio ve un tile
+  /// "Gomería" que abre directo el hub, en vez de "Panel de administración".
+  bool get _esGomeria => AppRoles.normalizar(rol) == AppRoles.gomeria;
+
   /// Tiles personales "Mi unidad" + "Mis vencimientos": las ven los choferes
-  /// (CHOFER/PLANTA, que usan el shell de chofer) y el ADMIN. Los roles admin
+  /// (CHOFER/PLANTA, que usan el shell de chofer) y el ADMIN. Los roles
   /// especializados (SUPERVISOR/GOMERIA/SEG_HIGIENE) NO conducen → no las
   /// necesitan (pedido Santiago 2026-05-30).
-  bool get _mostrarTilesPersonales => !_puedeVerPanelAdmin || _isAdmin;
+  bool get _mostrarTilesPersonales =>
+      _isAdmin || (!_puedeVerPanelAdmin && !_esGomeria);
 
   @override
   Widget build(BuildContext context) {
@@ -128,7 +134,20 @@ class MainPanel extends StatelessWidget {
                       arguments: dni,
                     ),
                   ),
-                if (_puedeVerPanelAdmin) ...[
+                if (_esGomeria) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  _TileWide(
+                    titulo: 'Gomería',
+                    subtitulo: 'Stock, montar y retirar cubiertas',
+                    icono: Icons.tire_repair_outlined,
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const GomeriaV2HubScreen(),
+                      ),
+                    ),
+                  ),
+                ] else if (_puedeVerPanelAdmin) ...[
                   const SizedBox(height: AppSpacing.md),
                   _TileWide(
                     titulo: 'Panel de administración',

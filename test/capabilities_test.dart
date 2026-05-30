@@ -143,6 +143,22 @@ void main() {
     });
   });
 
+  group('Capabilities.can — GOMERIA (solo su módulo)', () {
+    test('GOMERIA solo tiene verGomeria (sin panel admin, 2026-05-30)', () {
+      expect(Capabilities.can(AppRoles.gomeria, Capability.verGomeria), isTrue);
+      // Ya NO tiene verPanelAdmin: va directo a su módulo desde el inicio.
+      expect(Capabilities.can(AppRoles.gomeria, Capability.verPanelAdmin),
+          isFalse);
+      expect(Capabilities.can(AppRoles.gomeria, Capability.verListaPersonal),
+          isFalse);
+      expect(Capabilities.can(AppRoles.gomeria, Capability.verDescargas),
+          isFalse);
+      // Único permiso = verGomeria.
+      expect(Capabilities.ofRol(AppRoles.gomeria),
+          equals({Capability.verGomeria}));
+    });
+  });
+
   group('Capabilities.can — ADMIN (herencia + exclusivas)', () {
     test('ADMIN tiene todas las capabilities de SUPERVISOR (herencia)', () {
       // Iteramos el set de SUPERVISOR y verificamos que cada cap esté en ADMIN.

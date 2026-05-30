@@ -115,9 +115,11 @@ class Capabilities {
       // Igual que chofer: no entra al panel admin.
     },
     AppRoles.gomeria: {
-      // Rol especializado: solo opera el módulo Gomería. Entra al panel
-      // admin para acceder al hub de gomería; ningún otro tile aparece.
-      Capability.verPanelAdmin,
+      // Rol especializado del taller: SOLO opera el módulo Gomería. Único
+      // permiso de acceso = verGomeria (2026-05-30, pedido Santiago). Sin
+      // verPanelAdmin → NO entra al shell admin; el menú de inicio le muestra
+      // un tile "Gomería" que abre directo el hub. Las rutas de gomería se
+      // gatean por verGomeria, así que el acceso al módulo está cubierto.
       Capability.verGomeria,
     },
     AppRoles.segHigiene: {
