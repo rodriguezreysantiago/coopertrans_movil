@@ -297,9 +297,16 @@ class IturnosClient:
         return ok
 
     # ---- AGENDA ------------------------------------------------------------
-    def abrir_agenda(self) -> str:
-        """Devuelve el HTML de la pantalla de tomar turno de la agenda YPF."""
-        return self.s.get(AGENDA_URL).text
+    def abrir_agenda(self, fecha: str = None) -> str:
+        """HTML de la pantalla de tomar turno de la agenda YPF.
+
+        iTurnos pagina la agenda POR SEMANA. Sin `fecha` trae la semana actual
+        (default del sitio); con `fecha` ('AAAA-MM-DD') navega a la semana que la
+        contiene vía `?d=`. Confirmado en vivo (2026-05-30): sin `?d=` el scanner
+        solo veía la semana actual y se perdía los turnos que caían en la
+        siguiente ('el cachatore no toma turnos porque aparecen la semana que viene')."""
+        url = AGENDA_URL if not fecha else f"{AGENDA_URL}?d={fecha}"
+        return self.s.get(url).text
 
     # ---- RESERVA -----------------------------------------------------------
     def abrir_reserva(self, url: str) -> str:

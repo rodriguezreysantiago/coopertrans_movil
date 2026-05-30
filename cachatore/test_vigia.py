@@ -306,5 +306,56 @@ class TestMensajeAgrupadoEncargado(unittest.TestCase):
         self.assertIn("Nuevos (2)", msg)
 
 
+class TestSemanasAEscanear(unittest.TestCase):
+    """semanas_a_escanear: qué semanas de la agenda mira el scanner.
+
+    Lockea el fix 2026-05-30: el scanner solo leía la semana actual (abrir_agenda
+    sin ?d=) y NO tomaba los turnos que aparecían en la semana siguiente. Ahora
+    barre la semana actual + la(s) semana(s) de las fechas pedidas."""
+
+    # Sábado 30-may-2026 (la semana ISO es lun 25-may → dom 31-may; la siguiente
+    # arranca el lun 01-jun). Fijo para que el test no dependa de la fecha real.
+    HOY = datetime(2026, 5, 30).date()
+
+    def _p(self, fecha):
+        return _target_pendiente("1", "X", fecha, "manana")
+
+    def test_sin_pendientes_solo_semana_actual(self):
+        self.assertEqual(vigia.semanas_a_escanear([], hoy=self.HOY), [None])
+
+    def test_fecha_cualquiera_suma_proximas_dos_semanas(self):
+        anclas = vigia.semanas_a_escanear([self._p(None)], hoy=self.HOY)
+        self.assertEqual(anclas[0], None)            # semana actual
+        self.assertIn("2026-06-01", anclas)          # lunes de la semana +7
+        self.assertIn("2026-06-08", anclas)          # lunes de la semana +14
+        self.assertEqual(len(anclas), 3)
+
+    def test_fecha_puntual_semana_siguiente(self):
+        # 03-jun-2026 (miércoles) → su lunes es 01-jun.
+        anclas = vigia.semanas_a_escanear([self._p("2026-06-03")], hoy=self.HOY)
+        self.assertEqual(anclas, [None, "2026-06-01"])
+
+    def test_fecha_de_esta_semana_no_agrega_ancla(self):
+        # 30-may cae en la semana actual → solo [None] (sin ?d=).
+        anclas = vigia.semanas_a_escanear([self._p("2026-05-30")], hoy=self.HOY)
+        self.assertEqual(anclas, [None])
+
+    def test_fecha_pasada_se_ignora(self):
+        anclas = vigia.semanas_a_escanear([self._p("2026-05-01")], hoy=self.HOY)
+        self.assertEqual(anclas, [None])
+
+    def test_dedup_misma_semana(self):
+        # Dos fechas de la misma semana (01-jun) → una sola ancla.
+        ps = [self._p("2026-06-02"), self._p("2026-06-04")]
+        anclas = vigia.semanas_a_escanear(ps, hoy=self.HOY)
+        self.assertEqual(anclas, [None, "2026-06-01"])
+
+    def test_cap_max_semanas(self):
+        ps = [self._p("2026-06-03"), self._p("2026-06-10"), self._p("2026-06-17"),
+              self._p("2026-06-24"), self._p("2026-07-01")]
+        anclas = vigia.semanas_a_escanear(ps, hoy=self.HOY, max_semanas=3)
+        self.assertEqual(len(anclas), 3)
+
+
 if __name__ == "__main__":
     unittest.main()

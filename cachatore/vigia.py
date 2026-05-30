@@ -151,6 +151,48 @@ def resolver_fecha(valor):
     return str(valor)
 
 
+def semanas_a_escanear(pendientes, max_semanas=4, hoy=None):
+    """Fechas-ancla (un día por semana) que el scanner debe consultar en la
+    agenda de reserva.
+
+    iTurnos pagina la agenda POR SEMANA: `abrir_agenda(None)` trae la semana
+    actual y `abrir_agenda('AAAA-MM-DD')` la semana que contiene esa fecha (?d=).
+    Sin esto el scanner solo miraba la semana actual y NO tomaba los turnos que
+    caían en la siguiente (bug 2026-05-30 "los turnos aparecen la semana que viene").
+
+    Siempre incluye la semana actual (None). Por cada pendiente con fecha PUNTUAL
+    a futuro suma la semana de esa fecha; si hay alguno con fecha 'cualquiera'
+    (None) suma las próximas 2 semanas para darle opciones hacia adelante. Dedup
+    por semana (lunes) y cap en `max_semanas` GETs por ciclo (gentil con
+    Cloudflare). Devuelve p.ej. [None, '2026-06-01', ...] (None = semana actual)."""
+    hoy = hoy or datetime.now().date()
+
+    def lunes(d):
+        return d - timedelta(days=d.weekday())
+
+    lunes_hoy = lunes(hoy)
+    semanas = {lunes_hoy}
+    hay_cualquiera = False
+    for t in pendientes:
+        f = resolver_fecha(getattr(t, "fecha", None))
+        if f is None:
+            hay_cualquiera = True
+            continue
+        try:
+            d = datetime.strptime(f, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            continue
+        if d >= hoy:
+            semanas.add(lunes(d))
+    if hay_cualquiera:
+        semanas.add(lunes(hoy + timedelta(days=7)))
+        semanas.add(lunes(hoy + timedelta(days=14)))
+    anclas = []
+    for l in sorted(semanas)[:max_semanas]:
+        anclas.append(None if l == lunes_hoy else l.strftime("%Y-%m-%d"))
+    return anclas
+
+
 def fecha_objetivo_pasada(fecha_str) -> bool:
     """True si la fecha del objetivo es ESTRICTAMENTE anterior a hoy local.
 
@@ -716,26 +758,35 @@ def ciclo_latente(targets: dict, dry: bool):
     # hay pendientes (ensure_scanner devuelve None) o el scanner no puede leer,
     # NO cortamos acá: el bloque de reagendar de abajo corre igual (usa OTRA
     # página propia de cada chofer y el auto-cancel es un chequeo en memoria).
+    # choferes que TODAVÍA necesitan turno (a quién/qué le estamos buscando).
+    # Se calcula ANTES del scanner: define qué semanas de la agenda hay que mirar.
+    pendientes = [t for t in targets.values()
+                  if not t.tiene_turno and t.credenciales_ok and t.patente]
+
     libres = []
     scanner_ok = False
     cli = ensure_scanner(targets)
     if cli is not None:
-        try:
-            html = cli.abrir_agenda()
-        except Exception as e:
-            log("LOG", "scanner", f"error leyendo agenda: {e}")
-            _scanner["logueado"] = False
-            html = None
-        if html is not None and 'id="login-form"' in html:
-            _scanner["logueado"] = False
-            html = None
-        if html is not None:
-            libres = iturnos.parsear_disponibilidad(html)["slots"]
+        # iTurnos pagina la agenda por semana: barremos la semana actual + las
+        # semanas de las fechas que pidieron los pendientes. Sin esto el scanner
+        # quedaba ciego a los turnos de la semana siguiente (bug 2026-05-30).
+        vistos = set()
+        for ancla in semanas_a_escanear(pendientes):
+            try:
+                html = cli.abrir_agenda(ancla)
+            except Exception as e:
+                log("LOG", "scanner",
+                    f"error leyendo agenda ({ancla or 'semana actual'}): {e}")
+                _scanner["logueado"] = False
+                break
+            if 'id="login-form"' in html:
+                _scanner["logueado"] = False
+                break
             scanner_ok = True
-
-    # choferes que TODAVÍA necesitan turno (a quién/qué le estamos buscando).
-    pendientes = [t for t in targets.values()
-                  if not t.tiene_turno and t.credenciales_ok and t.patente]
+            for s in iturnos.parsear_disponibilidad(html)["slots"]:
+                if s["iso"] not in vistos:
+                    vistos.add(s["iso"])
+                    libres.append(s)
 
     # asignar slots LIBRES a los choferes que necesitan turno (uno por slot),
     # respetando la FECHA y la FRANJA de cada chofer.
