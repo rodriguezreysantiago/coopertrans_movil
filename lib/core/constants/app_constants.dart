@@ -401,7 +401,8 @@ class AppCollections {
 
   // ─── Empresas empleadoras (2026-05-08) ───
   /// Empresas que figuran como empleador del personal (Vecchi Ariel y
-  /// Vecchi Graciela S.R.L. + Sucesión de Vecchi Carlos Luis). Doc id:
+  /// Vecchi Graciela S.R.L. + Sucesión de Vecchi Carlos Luis + El Mundo
+  /// del Repuesto). Doc id:
   /// CUIT (formato `XX-XXXXXXXX-X`). Cada doc guarda los documentos
   /// laborales que son COMUNES a todos los empleados de esa empresa
   /// (Póliza ART + Formulario 931). El empleado los ve read-only desde
@@ -573,14 +574,15 @@ class AppDocsEmpresa {
       'ARCHIVO_LIBRE_DE_DEUDA_SINDICAL';
 }
 
-/// Catálogo hardcoded de las 2 empresas empleadoras de Vecchi (2026-05-08).
+/// Catálogo hardcoded de las 3 empresas empleadoras de Vecchi (2026-05-08;
+/// +El Mundo del Repuesto el 2026-05-30).
 ///
 /// El campo `EMPRESA` en EMPLEADOS guarda el string "completo"
 /// (`'NOMBRE: (CUIT)'`) para mantener la UX del dropdown como estaba.
 /// Para resolver de empleado a doc de empresa usamos el CUIT extraído
 /// con [cuitDeStringEmpresa] como docId en EMPRESAS_EMPLEADORAS.
 ///
-/// Si Vecchi suma una tercera empresa empleadora, agregar acá +
+/// Si Vecchi suma otra empresa empleadora, agregar acá +
 /// seedear el doc desde la pantalla admin.
 class AppEmpresasEmpleadoras {
   AppEmpresasEmpleadoras._();
@@ -590,6 +592,9 @@ class AppEmpresasEmpleadoras {
 
   /// Sucesión de Vecchi Carlos Luis.
   static const String cuitVecchiCarlos = '20-08569424-4';
+
+  /// El Mundo del Repuesto (alta 2026-05-30).
+  static const String cuitMundoRepuesto = '30-70862998-3';
 
   /// Catálogo (orden estable: el dropdown del form de personal usa
   /// estos mismos labels). Si cambiás un label acá, no afecta la
@@ -604,6 +609,11 @@ class AppEmpresasEmpleadoras {
       cuit: cuitVecchiCarlos,
       label: 'SUCESION DE VECCHI CARLOS LUIS: ($cuitVecchiCarlos)',
       nombre: 'Sucesión de Vecchi Carlos Luis',
+    ),
+    EmpresaEmpleadoraInfo(
+      cuit: cuitMundoRepuesto,
+      label: 'EL MUNDO DEL REPUESTO: ($cuitMundoRepuesto)',
+      nombre: 'El Mundo del Repuesto',
     ),
   ];
 
