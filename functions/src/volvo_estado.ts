@@ -325,25 +325,6 @@ export const estadoVolvoPoller = onSchedule(
         conTellTales,
       });
 
-      // MUESTRA para verificar la estructura real (se quita tras confirmar paths).
-      try {
-        const s0 = asObj(cache[0]);
-        const snap0 = asObj(s0?.snapshotData);
-        logger.info("[estadoVolvo] muestra estructura", {
-          topKeys: s0 ? Object.keys(s0) : [],
-          snapKeys: snap0 ? Object.keys(snap0) : [],
-          uptimeKeys: asObj(s0?.uptimeData)
-            ? Object.keys(asObj(s0?.uptimeData)!)
-            : [],
-          gnssKeys: asObj(snap0?.gnssPosition)
-            ? Object.keys(asObj(snap0?.gnssPosition)!)
-            : [],
-          parsedSample: parseEstadoVolvo(cache[0]),
-        });
-      } catch {
-      // best-effort
-      }
-
       // VIN → patente
       const vehiculosSnap = await db.collection("VEHICULOS").limit(5000).get();
       const vinToPatente = new Map<string, string>();

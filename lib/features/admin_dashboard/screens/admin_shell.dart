@@ -688,23 +688,40 @@ class _IconoMas extends StatelessWidget {
   /// Combina los streams en uno solo que emite `true` mientras alguno
   /// tenga docs > 0. Implementación simple: por cada stream, mantiene
   /// su último count en un mapa y emite el OR del conjunto.
-  Stream<bool> _hayPendientes() async* {
+  Stream<bool> _hayPendientes() {
     if (streams.isEmpty) {
-      yield false;
-      return;
+      return Stream.value(false);
     }
     final counts = List<int>.filled(streams.length, 0);
-    final controller = StreamController<bool>();
-    for (var i = 0; i < streams.length; i++) {
-      streams[i].listen(
-        (snap) {
-          counts[i] = snap.docs.length;
-          controller.add(counts.any((c) => c > 0));
-        },
-        onError: (_) {},
-      );
-    }
-    yield* controller.stream;
+    final subs = <StreamSubscription<QuerySnapshot>>[];
+    late final StreamController<bool> controller;
+    // FIX leak (auditoría 2026-05-30): antes era `async*` con un
+    // StreamController + `.listen()` cuyas suscripciones NUNCA se cancelaban.
+    // Como `stream:` se arma en build(), cada rebuild del NavigationBar dejaba
+    // colgadas las suscripciones viejas (memory leak + lecturas Firestore que
+    // no se liberan). Ahora onCancel cancela las suscripciones internas cuando
+    // el StreamBuilder se desuscribe (rebuild o dispose).
+    controller = StreamController<bool>(
+      onListen: () {
+        for (var i = 0; i < streams.length; i++) {
+          subs.add(streams[i].listen(
+            (snap) {
+              counts[i] = snap.docs.length;
+              if (!controller.isClosed) {
+                controller.add(counts.any((c) => c > 0));
+              }
+            },
+            onError: (_) {},
+          ));
+        }
+      },
+      onCancel: () async {
+        for (final s in subs) {
+          await s.cancel();
+        }
+      },
+    );
+    return controller.stream;
   }
 
   @override
