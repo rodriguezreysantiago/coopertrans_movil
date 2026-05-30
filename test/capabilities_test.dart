@@ -69,7 +69,6 @@ void main() {
         Capability.verRevisiones,
         Capability.verReportes,
         Capability.verMantenimiento,
-        Capability.verEstadoBot,
         Capability.verAlertasVolvo,
       ];
       for (final cap in expectedTrue) {
@@ -79,6 +78,12 @@ void main() {
           reason: 'SUPERVISOR debe poder $cap',
         );
       }
+    });
+
+    test('SUPERVISOR NO ve el WhatsApp Bot (verEstadoBot exclusivo ADMIN, 2026-05-30)',
+        () {
+      expect(Capabilities.can(AppRoles.supervisor, Capability.verEstadoBot),
+          isFalse);
     });
 
     test('SUPERVISOR puede gestionar personal y flota (excepto borrar)', () {
@@ -133,6 +138,7 @@ void main() {
         Capability.asignarRolAdmin,
         Capability.cambiarRolEmpleado,
         Capability.verAuditoria,
+        Capability.verEstadoBot, // WhatsApp Bot: exclusivo ADMIN desde 2026-05-30
       ];
       for (final cap in exclusivasAdmin) {
         expect(
@@ -144,16 +150,17 @@ void main() {
     });
 
     test('REGRESSION: si se rompe la herencia, ADMIN debería seguir teniendo TODAS', () {
-      // Sanity check: ADMIN tiene exactamente |SUPERVISOR| + 5 exclusivas.
-      // (5 desde 2026-05-24, era 6 — se quitó verSyncDashboard junto con
-      // AutoSyncService.) Si alguien agrega una capability nueva en
-      // SUPERVISOR sin actualizar adminExtra y _resolverHerencia funciona
-      // mal, este test lo detecta.
+      // Sanity check: ADMIN tiene exactamente |SUPERVISOR| + 6 exclusivas.
+      // Las 6: eliminarEmpleado, eliminarVehiculo, asignarRolAdmin,
+      // cambiarRolEmpleado, verAuditoria, verEstadoBot. (verEstadoBot pasó a
+      // exclusivo ADMIN el 2026-05-30 al sacarlo de SUPERVISOR — el WhatsApp
+      // Bot ya no lo ve el supervisor.) Si alguien agrega una capability nueva
+      // en SUPERVISOR sin actualizar adminExtra, este test lo detecta.
       final supSize = Capabilities.ofRol(AppRoles.supervisor).length;
       final adminSize = Capabilities.ofRol(AppRoles.admin).length;
-      expect(adminSize, equals(supSize + 5),
+      expect(adminSize, equals(supSize + 6),
           reason:
-              'ADMIN debería tener |SUPERVISOR| + 5 exclusivas. Si esto rompe, revisar adminExtra en _resolverHerencia.');
+              'ADMIN debería tener |SUPERVISOR| + 6 exclusivas. Si esto rompe, revisar adminExtra en _resolverHerencia.');
     });
   });
 

@@ -132,7 +132,8 @@ class Capabilities {
       Capability.verRevisiones,
       Capability.verReportes,
       Capability.verMantenimiento,
-      Capability.verEstadoBot,
+      // verEstadoBot (WhatsApp Bot) NO va a SUPERVISOR — exclusivo de ADMIN
+      // (2026-05-30, pedido Santiago "por ahora"). Vive en `_adminExtra`.
       Capability.verAlertasVolvo,
       Capability.verGomeria,
       Capability.verLogistica,
@@ -168,6 +169,9 @@ class Capabilities {
       Capability.asignarRolAdmin,
       Capability.cambiarRolEmpleado,
       Capability.verAuditoria,
+      // WhatsApp Bot: solo ADMIN (sacado de SUPERVISOR el 2026-05-30). Acá en
+      // _adminExtra para que ADMIN lo conserve pese a quitarlo de SUPERVISOR.
+      Capability.verEstadoBot,
     };
     return {
       AppRoles.chofer: _porRol[AppRoles.chofer] ?? {},

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/capabilities.dart';
 import '../../../core/services/prefs_service.dart';
 import '../../../core/theme/app_breakpoints.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -46,6 +47,18 @@ class MainPanel extends StatelessWidget {
 
   bool get _isAdmin => rol.trim().toUpperCase() == 'ADMIN';
 
+  /// Puede entrar al Panel de administración. Lo tienen ADMIN, SUPERVISOR,
+  /// GOMERIA y SEG_HIGIENE — antes el tile de acceso se mostraba SOLO a ADMIN
+  /// (bug latente: un SUPERVISOR no podía entrar al panel). Fix 2026-05-30.
+  bool get _puedeVerPanelAdmin =>
+      Capabilities.can(rol, Capability.verPanelAdmin);
+
+  /// Tiles personales "Mi unidad" + "Mis vencimientos": las ven los choferes
+  /// (CHOFER/PLANTA, que usan el shell de chofer) y el ADMIN. Los roles admin
+  /// especializados (SUPERVISOR/GOMERIA/SEG_HIGIENE) NO conducen → no las
+  /// necesitan (pedido Santiago 2026-05-30).
+  bool get _mostrarTilesPersonales => !_puedeVerPanelAdmin || _isAdmin;
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
@@ -72,36 +85,50 @@ class MainPanel extends StatelessWidget {
                 const SizedBox(height: AppSpacing.lg),
                 _GreetingCard(dni: dni, nombre: nombre),
                 const SizedBox(height: AppSpacing.lg),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _TileSquare(
-                        titulo: 'Mi perfil',
-                        icono: Icons.person_outline,
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.perfil,
-                          arguments: dni,
+                if (_mostrarTilesPersonales) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _TileSquare(
+                          titulo: 'Mi perfil',
+                          icono: Icons.person_outline,
+                          onTap: () => Navigator.pushNamed(
+                            context,
+                            AppRoutes.perfil,
+                            arguments: dni,
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: _TileSquare(
-                        titulo: 'Mi unidad',
-                        icono: Icons.local_shipping_outlined,
-                        onTap: () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.equipo,
-                          arguments: dni,
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: _TileSquare(
+                          titulo: 'Mi unidad',
+                          icono: Icons.local_shipping_outlined,
+                          onTap: () => Navigator.pushNamed(
+                            context,
+                            AppRoutes.equipo,
+                            arguments: dni,
+                          ),
                         ),
                       ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  _TileVencimientos(dni: dni),
+                ] else
+                  // Roles admin que no conducen (supervisor / gomería / seg.
+                  // higiene): sin "Mi unidad" ni "Mis vencimientos", solo perfil.
+                  _TileWide(
+                    titulo: 'Mi perfil',
+                    subtitulo: 'Tus datos personales',
+                    icono: Icons.person_outline,
+                    onTap: () => Navigator.pushNamed(
+                      context,
+                      AppRoutes.perfil,
+                      arguments: dni,
                     ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-                _TileVencimientos(dni: dni),
-                if (_isAdmin) ...[
+                  ),
+                if (_puedeVerPanelAdmin) ...[
                   const SizedBox(height: AppSpacing.md),
                   _TileWide(
                     titulo: 'Panel de administración',
