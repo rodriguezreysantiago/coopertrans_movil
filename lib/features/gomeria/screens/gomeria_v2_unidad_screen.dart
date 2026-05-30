@@ -12,6 +12,7 @@ import '../models/montaje.dart';
 import '../models/nivel_desgaste.dart';
 import '../models/stock_movimiento.dart';
 import '../services/montajes_service.dart';
+import '../widgets/esquema_unidad_v2_view.dart';
 
 /// Pantalla de detalle de una unidad — modelo NUEVO de gomería (rediseño
 /// 2026-05-29). Muestra cada posición con su semáforo de desgaste (por km vs
@@ -108,6 +109,25 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
           ),
         ),
         const SizedBox(height: 8),
+        // Esquema visual: el dibujo de la unidad con cada posición tappeable
+        // (semáforo + % de vida). Pensado para el gomero — tocar la rueda en el
+        // dibujo dispara el mismo montar/retirar que el tile de la lista.
+        EsquemaUnidadV2View(
+          tipo: widget.unidadTipo,
+          estados: estados,
+          onTapPosicion: (e) =>
+              e.montaje == null ? _montar(e) : _retirar(e, e.montaje!),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(4, 12, 4, 0),
+          child: Text(
+            'Tocá una rueda en el dibujo (o un ítem de la lista) para montar o '
+            'retirar. El color es el desgaste: verde OK · amarillo cerca del '
+            'límite · rojo pasado · gris sin datos.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ),
+        const Divider(height: 24),
         for (final eje in ejes) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
