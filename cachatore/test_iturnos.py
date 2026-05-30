@@ -7,7 +7,7 @@ Correr con el venv del cachatore (trae curl_cffi/bs4 que iturnos importa):
     cd cachatore; venv\\Scripts\\python.exe test_iturnos.py
 """
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest import mock
 
 import iturnos
@@ -315,6 +315,57 @@ class TestReagendarCualquieraExcluyeFranjaActual(unittest.TestCase):
         cli.s.get.return_value.text = cal
         r = cli.reagendar("U", "cualquiera", None, franja_actual="madrugada")
         self.assertEqual(r["motivo"], "sin_slot_en_franja")  # espera, no autocancela
+
+
+class TestReagendarNavegaPorSemana(unittest.TestCase):
+    """El reagendar navega a la semana de la fecha pedida con ?d=, pero SOLO si la
+    fecha es ESTRICTAMENTE futura. Para HOY (o sin fecha) usa la semana actual sin
+    ?d=, porque ?d=hoy/pasado devuelve la vista rota de iTurnos (caso LACEAR,
+    verificado en vivo 2026-05-30). Lockea el caso 'reagendar a hoy más temprano'."""
+
+    def _cli(self):
+        cli = iturnos.IturnosClient()
+        cli.s = mock.MagicMock()
+        return cli
+
+    def test_fecha_futura_otra_semana_usa_d(self):
+        fecha = (datetime.now() + timedelta(days=8)).strftime("%Y-%m-%d")
+        cal = ('<a class="btn btn-outline-success" '
+               f'href="https://x/reagendar/editar/{fecha}T07:00">07:00</a>')
+        cli = self._cli()
+        cli.s.get.return_value = mock.MagicMock(text=cal)
+        cli.reagendar("U", "manana", fecha)
+        primera = cli.s.get.call_args_list[0].args[0]
+        self.assertIn(f"?d={fecha}", primera)
+
+    def test_fecha_hoy_no_usa_d(self):
+        # 'reagendar a hoy más temprano': fecha = hoy → semana actual, SIN ?d=
+        # (con ?d=hoy iTurnos devuelve la vista rota de 94 KB sin slots).
+        hoy = datetime.now().strftime("%Y-%m-%d")
+        cli = self._cli()
+        cli.s.get.return_value = mock.MagicMock(text="sin slots libres")
+        cli.reagendar("U", "manana", hoy)
+        primera = cli.s.get.call_args_list[0].args[0]
+        self.assertNotIn("?d=", primera)
+
+    def test_sin_fecha_no_usa_d(self):
+        cli = self._cli()
+        cli.s.get.return_value = mock.MagicMock(text="sin slots libres")
+        cli.reagendar("U", "manana", None)
+        primera = cli.s.get.call_args_list[0].args[0]
+        self.assertNotIn("?d=", primera)
+
+    def test_fallback_a_semana_actual_si_d_no_trae_slots(self):
+        # ?d= devuelve vacío (semana sin turnos o vista rota) → reintenta sin ?d=.
+        fecha = (datetime.now() + timedelta(days=8)).strftime("%Y-%m-%d")
+        cli = self._cli()
+        cli.s.get.side_effect = [mock.MagicMock(text="sin slots"),   # con ?d=
+                                 mock.MagicMock(text="sin slots")]   # fallback sin ?d=
+        cli.reagendar("U", "manana", fecha)
+        urls = [c.args[0] for c in cli.s.get.call_args_list]
+        self.assertIn(f"?d={fecha}", urls[0])     # primero intenta navegar con ?d=
+        self.assertEqual(len(urls), 2)            # hizo el fallback
+        self.assertNotIn("?d=", urls[1])          # el fallback va sin ?d=
 
 
 if __name__ == "__main__":

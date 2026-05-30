@@ -442,12 +442,30 @@ class IturnosClient:
         botones de reservar slots, en formato esperado.
         """
         url = f"{BASE}/reagendar/calendario/{uuid}"
-        # El calendario trae la semana entera → filtrar por franja + fecha (si se
+        # El calendario trae UNA semana → filtrar por franja + fecha (si se
         # pidió) + que sea a futuro, y elegir el ÚLTIMO de la franja (día más
         # cercano, hora más tarde — ver ordenar_slots_preferidos). Sin el filtro
         # de fecha el bot reagendaba al día equivocado (ver parsear_slots_reagendar).
         ahora = datetime.now()
-        crudos = parsear_slots_reagendar(self.s.get(url).text)
+        # iTurnos pagina el calendario POR SEMANA. Para una fecha FUTURA de otra
+        # semana hay que navegar con ?d= (igual que la reserva). OJO (verificado en
+        # vivo 2026-05-30, "caso LACEAR"): ?d= con HOY o una fecha pasada devuelve
+        # una vista rota de ~94 KB SIN slots; por eso SOLO navegamos con ?d= si la
+        # fecha es ESTRICTAMENTE futura. Para hoy / sin fecha usamos la semana
+        # actual, que ya trae los turnos de hoy (caso "reagendar a hoy más temprano").
+        url_get = url
+        if fecha:
+            try:
+                if datetime.strptime(fecha, "%Y-%m-%d").date() > ahora.date():
+                    url_get = f"{url}?d={fecha}"
+            except (ValueError, TypeError):
+                pass
+        crudos = parsear_slots_reagendar(self.s.get(url_get).text)
+        # Defensivo: si navegamos con ?d= y no vino NINGÚN slot (semana sin turnos
+        # o alguna vista inesperada de iTurnos), reintentamos la semana actual para
+        # no quedar peor que antes del fix.
+        if url_get != url and not crudos:
+            crudos = parsear_slots_reagendar(self.s.get(url).text)
         slots = [s for s in crudos
                  if hora_en_franja(s["hora"], franja)
                  and (not fecha or s.get("fecha") == fecha)
