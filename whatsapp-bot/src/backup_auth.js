@@ -141,7 +141,7 @@ async function _ejecutarBackup() {
   const nombreArchivo = _construirNombre(pcId);
   const objectPath = `wwebjs_auth/${nombreArchivo}`;
 
-  log.info(`Backup .wwebjs_auth/ → gs://${bucketName}/${objectPath} ...`);
+  log.info(`Backup .wwebjs_auth/ -> gs://${bucketName}/${objectPath} ...`);
 
   const inicio = Date.now();
   const buffer = await _comprimirCarpeta(archiver, carpetaAuth);
@@ -162,7 +162,7 @@ async function _ejecutarBackup() {
 
   const duracionSeg = Math.round((Date.now() - inicio) / 100) / 10;
   log.info(
-    `✓ Backup .wwebjs_auth/ subido (${(buffer.length / 1024 / 1024).toFixed(1)} MB, ${duracionSeg}s).`
+    `Backup .wwebjs_auth/ subido (${(buffer.length / 1024 / 1024).toFixed(1)} MB, ${duracionSeg}s).`
   );
 
   // Limpieza de backups viejos (best-effort). Si falla, no rompe el
@@ -481,7 +481,7 @@ async function restaurarUltimoBackup({ pcId } = {}) {
     }
 
     log.info(
-      `✓ Restore OK: .wwebjs_auth/ con ${entries.length} entries top-level. ` +
+      `Restore OK: .wwebjs_auth/ con ${entries.length} entries top-level. ` +
       `whatsapp-web.js deberia reconectar sin QR.`
     );
     return true;

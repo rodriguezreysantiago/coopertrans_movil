@@ -22,7 +22,7 @@ function inicializar() {
   if (!fs.existsSync(absPath)) {
     throw new Error(
       `Firebase credentials no encontradas en: ${absPath}\n` +
-        '→ Ajustar FIREBASE_CREDENTIALS_PATH en .env'
+        'Ajustar FIREBASE_CREDENTIALS_PATH en .env'
     );
   }
 

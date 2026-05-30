@@ -326,7 +326,7 @@ async function _enviarAcuseSiCorresponde(db, wa, msg, chofer) {
 
   try {
     await wa.responder(msg, texto);
-    log.info(`→ Acuse automático enviado a ${chofer.dni}`);
+    log.info(`Acuse automático enviado a ${chofer.dni}`);
   } catch (e) {
     log.warn(`No se pudo enviar acuse a ${chofer.dni}: ${e.message}`);
   }
@@ -430,7 +430,7 @@ function crearHandler(fs, wa) {
       // ─── Asociar con un aviso ───
       const asoc = await _asociarConAviso(db, chofer, msg, quotedId);
       log.info(
-        `← Mensaje de ${chofer.dni} asociación=${asoc.razon}` +
+        `Mensaje de ${chofer.dni} asociación=${asoc.razon}` +
           (asoc.aviso ? ` (cola ${asoc.aviso.id})` : '')
       );
 
@@ -467,7 +467,7 @@ function crearHandler(fs, wa) {
           fechaIso,
           mensajeOriginal: msg.body,
         });
-        log.info(`✓ Revisión creada para ${chofer.dni}`);
+        log.info(`Revisión creada para ${chofer.dni}`);
         try {
           await wa.responder(
             msg,
@@ -486,7 +486,7 @@ function crearHandler(fs, wa) {
           candidatos: asoc.candidatos,
         });
         log.info(
-          `⚠️  Mensaje de ${chofer.dni} fue a bandeja ambigua (razón: ${asoc.razon})`
+          `Mensaje de ${chofer.dni} fue a bandeja ambigua (razón: ${asoc.razon})`
         );
         try {
           await wa.responder(

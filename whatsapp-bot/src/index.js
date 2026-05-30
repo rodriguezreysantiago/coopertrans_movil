@@ -305,9 +305,9 @@ async function _despacharFalloEnvio(docRef, error) {
     await fs.marcarReintento(docRef, error.message, cuando);
     const ajustado = cuando.getTime() !== cuandoRaw.getTime();
     log.info(
-      `↻ Reintento ${intentos}/${maxRetries} de ${docRef.id} ` +
+      `Reintento ${intentos}/${maxRetries} para ${_quien(data && data.telefono)} ` +
         `(${ajustado ? 'desplazado a horario hábil' : `en ${backoffSeg}s`}) ` +
-        `→ ${aLocalDateTime(cuando)}`
+        `-> ${aLocalDateTime(cuando)}`
     );
     return;
   }

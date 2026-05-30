@@ -592,10 +592,10 @@ async function _runOnce(fs) {
 
         stats.encolados++;
         if (items.length === 1) {
-          log.info(`+ Encolado: ${dni} ${items[0].tipoDoc} → ${colaRef.id}`);
+          log.info(`+ Encolado: ${dni} ${items[0].tipoDoc} -> ${colaRef.id}`);
         } else {
           log.info(
-            `+ Encolado AGRUPADO: ${dni} (${items.length} papeles) → ${colaRef.id}`
+            `+ Encolado AGRUPADO: ${dni} (${items.length} papeles) -> ${colaRef.id}`
           );
         }
       } catch (e) {
