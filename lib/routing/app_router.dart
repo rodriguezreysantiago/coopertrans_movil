@@ -354,7 +354,7 @@ class AppRouter {
       case AppRoutes.adminAuditoriaAsignaciones:
         return _buildRoute(
           _protegerAdmin(const AdminAuditoriaAsignacionesScreen(),
-              Capability.verAlertasVolvo),
+              Capability.verAuditoria),
           settings,
         );
 

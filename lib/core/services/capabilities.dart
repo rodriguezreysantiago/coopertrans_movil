@@ -129,8 +129,9 @@ class Capabilities {
       // las recibe consolidadas vía WhatsApp diario.
       Capability.verPanelAdmin,
       Capability.verIcm,
-      Capability.verAlertasVolvo, // mantiene Mapa Flota + Auditoría (Descargas
-      // se separó a `verDescargas` el 2026-05-30 — SEG_HIGIENE ya no la ve).
+      Capability.verAlertasVolvo, // Mapa Flota + tableros Volvo (Descargas se
+      // separó a `verDescargas` el 2026-05-30 — SEG_HIGIENE ya no la ve).
+      Capability.verAuditoria, // Auditoría de asignaciones (atribución/conducta).
     },
     AppRoles.supervisor: {
       Capability.verPanelAdmin,
@@ -157,6 +158,10 @@ class Capabilities {
       Capability.editarVehiculo,
       Capability.aprobarRevision,
       Capability.rechazarRevision,
+      // Auditoría de asignaciones (quién manejaba qué unidad/fecha) — el
+      // supervisor la usa para multas tardías y reconciliación. Antes el
+      // acceso venía "de prestado" por verAlertasVolvo; ahora es explícito.
+      Capability.verAuditoria,
     },
     AppRoles.admin: {
       // ADMIN tiene TODAS las capabilities. Lo construimos desde el set
@@ -177,7 +182,6 @@ class Capabilities {
       Capability.eliminarVehiculo,
       Capability.asignarRolAdmin,
       Capability.cambiarRolEmpleado,
-      Capability.verAuditoria,
       // WhatsApp Bot: solo ADMIN (sacado de SUPERVISOR el 2026-05-30). Acá en
       // _adminExtra para que ADMIN lo conserve pese a quitarlo de SUPERVISOR.
       Capability.verEstadoBot,

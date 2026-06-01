@@ -306,10 +306,173 @@ class _SelectorFecha extends StatelessWidget {
   }
 }
 
-/// Dropdown de patentes — tractores Y enganches (las multas aplican a
-/// ambos). Sin filtro de ESTADO porque la auditoría puede interesarse en
-/// unidades dadas de baja. Devuelve `(patente, esEnganche)` para que el
-/// resultado sepa si hay que hacer la cascada enganche→tractor→chofer.
+// ============================================================================
+// SELECTORES CON BUSCADOR (patente / chofer)
+// ============================================================================
+// Reemplazaron a los DropdownButtonFormField planos el 2026-06-01: con ~50
+// unidades y ~48 choferes el dropdown nativo era un scroll largo sin filtro.
+// Ahora cada uno abre un modal sheet con buscador (mismo patrón que el
+// selector de tarifas de Logística). El campo visible imita un dropdown.
+
+/// Campo tappable que imita un dropdown pero abre un selector con buscador.
+class _CampoSelector extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final String? textoSel; // null/vacío → muestra el hint
+  final String hint;
+  final VoidCallback onTap;
+  const _CampoSelector({
+    required this.label,
+    required this.icon,
+    required this.textoSel,
+    required this.hint,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tiene = (textoSel ?? '').isNotEmpty;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          border: const OutlineInputBorder(),
+          isDense: true,
+          prefixIcon: Icon(icon, color: Colors.white54),
+          suffixIcon: const Icon(Icons.search, color: Colors.white54),
+        ),
+        child: Text(
+          tiene ? textoSel! : hint,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: tiene ? Colors.white : Colors.white54,
+            fontSize: 14,
+            fontWeight: tiene ? FontWeight.w600 : FontWeight.normal,
+            letterSpacing: tiene ? 0.5 : 0,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Estructura común de los sheets de selección (handle + título + buscador
+/// autofocus + lista). El filtrado lo hace cada sheet sobre su lista.
+class _PickerSheetScaffold extends StatelessWidget {
+  final String titulo;
+  final String hintBuscar;
+  final TextEditingController ctrl;
+  final String filtro;
+  final ValueChanged<String> onFiltro;
+  final Widget lista;
+  const _PickerSheetScaffold({
+    required this.titulo,
+    required this.hintBuscar,
+    required this.ctrl,
+    required this.filtro,
+    required this.onFiltro,
+    required this.lista,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: media.size.height * 0.85),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(
+                  top: AppSpacing.sm, bottom: AppSpacing.xs),
+              decoration: BoxDecoration(
+                color: AppColors.borderStrong,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.xs),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(titulo,
+                    style: AppType.eyebrow.copyWith(
+                        color: AppColors.textPrimary,
+                        fontSize: 13,
+                        letterSpacing: 1.4)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
+              child: TextField(
+                controller: ctrl,
+                autofocus: true,
+                decoration: InputDecoration(
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  hintText: hintBuscar,
+                  border: const OutlineInputBorder(),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md, vertical: AppSpacing.md),
+                  suffixIcon: filtro.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close, size: 18),
+                          tooltip: 'Limpiar búsqueda',
+                          onPressed: () {
+                            ctrl.clear();
+                            onFiltro('');
+                          },
+                        ),
+                ),
+                onChanged: onFiltro,
+              ),
+            ),
+            Expanded(child: lista),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Estado vacío del picker (lista sin coincidencias con el filtro).
+Widget _sinCoincidencias(String filtro) {
+  return Center(
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Text(
+        filtro.trim().isEmpty
+            ? 'No hay opciones cargadas.'
+            : 'Sin coincidencias con "$filtro".',
+        textAlign: TextAlign.center,
+        style:
+            AppType.body.copyWith(color: AppColors.textSecondary, fontSize: 13),
+      ),
+    ),
+  );
+}
+
+class _PatenteOpcion {
+  final String patente;
+  final String tipo;
+  final bool esEnganche;
+  const _PatenteOpcion(
+      {required this.patente, required this.tipo, required this.esEnganche});
+}
+
+/// Selector de patente con BUSCADOR — tractores Y enganches (las multas
+/// aplican a ambos). Sin filtro de ESTADO porque la auditoría puede
+/// interesarse en unidades dadas de baja. Devuelve `(patente, esEnganche)`
+/// para que el resultado sepa si hacer la cascada enganche→tractor→chofer.
 class _DropdownPatente extends StatelessWidget {
   final String value;
   final void Function(String patente, bool esEnganche) onChanged;
@@ -327,7 +490,7 @@ class _DropdownPatente extends StatelessWidget {
                 <QueryDocumentSnapshot<Map<String, dynamic>>>[])
             .map((d) {
           final tipo = (d.data()['TIPO'] ?? '').toString().toUpperCase();
-          return (
+          return _PatenteOpcion(
             patente: d.id,
             tipo: tipo,
             esEnganche: tipo.isNotEmpty && tipo != 'TRACTOR',
@@ -337,62 +500,29 @@ class _DropdownPatente extends StatelessWidget {
             if (a.esEnganche != b.esEnganche) return a.esEnganche ? 1 : -1;
             return a.patente.compareTo(b.patente);
           });
-        return DropdownButtonFormField<String>(
-          isDense: true,
-          isExpanded: true,
-          decoration: const InputDecoration(
-            labelText: 'Unidad (tractor o enganche)',
-            border: OutlineInputBorder(),
-            isDense: true,
-            prefixIcon:
-                Icon(Icons.directions_car_outlined, color: Colors.white54),
-          ),
-          style: const TextStyle(color: Colors.white, fontSize: 14),
-          dropdownColor: AppColors.surface2,
-          menuMaxHeight: 400,
-          initialValue: value.isEmpty ? null : value,
-          hint: const Text('Elegí una unidad…',
-              style: TextStyle(color: Colors.white54, fontSize: 14)),
-          items: items
-              .map((it) => DropdownMenuItem<String>(
-                    value: it.patente,
-                    child: Row(
-                      children: [
-                        Icon(
-                          it.esEnganche
-                              ? Icons.rv_hookup
-                              : Icons.local_shipping_outlined,
-                          size: 16,
-                          color: Colors.white38,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(it.patente,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 14,
-                                letterSpacing: 0.5,
-                                fontWeight: FontWeight.w600)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            it.esEnganche ? it.tipo.toLowerCase() : 'tractor',
-                            style: AppType.label.copyWith(
-                                color: Colors.white38, fontSize: 11),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ))
-              .toList(),
-          onChanged: (v) {
-            if (v == null || v.isEmpty) {
-              onChanged('', false);
-              return;
-            }
-            final it = items.firstWhere((e) => e.patente == v,
-                orElse: () => (patente: v, tipo: '', esEnganche: false));
-            onChanged(v, it.esEnganche);
+
+        return _CampoSelector(
+          label: 'Unidad (tractor o enganche)',
+          icon: Icons.directions_car_outlined,
+          textoSel: value.isEmpty ? null : value,
+          hint: 'Elegí una unidad…',
+          onTap: () async {
+            final elegida = await showModalBottomSheet<String>(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: AppColors.background,
+              shape: const RoundedRectangleBorder(
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+              ),
+              builder: (_) =>
+                  _PatentePickerSheet(items: items, seleccionada: value),
+            );
+            if (elegida == null) return; // cerró sin elegir
+            final it = items.firstWhere((e) => e.patente == elegida,
+                orElse: () => _PatenteOpcion(
+                    patente: elegida, tipo: '', esEnganche: false));
+            onChanged(elegida, it.esEnganche);
           },
         );
       },
@@ -400,9 +530,100 @@ class _DropdownPatente extends StatelessWidget {
   }
 }
 
-/// Dropdown de choferes (rol CHOFER o legacy USUARIO, ACTIVO=true).
-/// Sin filtrar por ACTIVO=false porque la auditoría puede interesar
-/// choferes que se fueron — su historial sigue siendo válido.
+/// Sheet con buscador para elegir una unidad (tractor o enganche).
+class _PatentePickerSheet extends StatefulWidget {
+  final List<_PatenteOpcion> items;
+  final String seleccionada;
+  const _PatentePickerSheet(
+      {required this.items, required this.seleccionada});
+
+  @override
+  State<_PatentePickerSheet> createState() => _PatentePickerSheetState();
+}
+
+class _PatentePickerSheetState extends State<_PatentePickerSheet> {
+  final _ctrl = TextEditingController();
+  String _filtro = '';
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final f = _filtro.trim().toUpperCase();
+    final filtrados = f.isEmpty
+        ? widget.items
+        : widget.items
+            .where((it) =>
+                it.patente.toUpperCase().contains(f) ||
+                it.tipo.toUpperCase().contains(f))
+            .toList();
+    return _PickerSheetScaffold(
+      titulo: 'ELEGIR UNIDAD',
+      hintBuscar: 'Buscar por patente o tipo…',
+      ctrl: _ctrl,
+      filtro: _filtro,
+      onFiltro: (v) => setState(() => _filtro = v),
+      lista: filtrados.isEmpty
+          ? _sinCoincidencias(_filtro)
+          : ListView.separated(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.sm, 0, AppSpacing.sm, AppSpacing.lg),
+              itemCount: filtrados.length,
+              separatorBuilder: (_, __) =>
+                  const Divider(height: 1, color: AppColors.borderSubtle),
+              itemBuilder: (_, i) {
+                final it = filtrados[i];
+                final esActual = it.patente == widget.seleccionada;
+                return InkWell(
+                  onTap: () => Navigator.of(context).pop(it.patente),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm, vertical: AppSpacing.md),
+                    child: Row(
+                      children: [
+                        Icon(
+                          it.esEnganche
+                              ? Icons.rv_hookup
+                              : Icons.local_shipping_outlined,
+                          size: 18,
+                          color: Colors.white38,
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Text(it.patente,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5)),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            it.esEnganche ? it.tipo.toLowerCase() : 'tractor',
+                            style: AppType.label
+                                .copyWith(color: Colors.white38, fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (esActual)
+                          const Icon(Icons.check_circle,
+                              color: AppColors.success, size: 20),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+}
+
+/// Selector de choferes con BUSCADOR (rol CHOFER o legacy USUARIO). Sin
+/// filtrar por ACTIVO=false porque la auditoría puede interesar choferes
+/// que se fueron — su historial sigue siendo válido.
 class _DropdownChofer extends StatelessWidget {
   final String value;
   final ValueChanged<String> onChanged;
@@ -421,9 +642,9 @@ class _DropdownChofer extends StatelessWidget {
       builder: (ctx, snap) {
         final docs = snap.data?.docs ??
             <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-        // Lista (dni, nombre) ordenada por nombre ASC para el dropdown.
-        // No filtramos por ACTIVO: choferes inactivos tienen historial
-        // y la auditoría puede necesitarlo.
+        // Lista (dni, nombre) ordenada por nombre ASC. No filtramos por
+        // ACTIVO: choferes inactivos tienen historial y la auditoría puede
+        // necesitarlo.
         final choferes = docs.map((d) {
           final data = d.data();
           final nombre = (data['NOMBRE'] ?? '').toString().trim();
@@ -436,58 +657,133 @@ class _DropdownChofer extends StatelessWidget {
         }).toList()
           ..sort((a, b) => a.nombre.compareTo(b.nombre));
 
-        return DropdownButtonFormField<String>(
-          isDense: true,
-          isExpanded: true,
-          decoration: const InputDecoration(
-            labelText: 'Chofer',
-            border: OutlineInputBorder(),
-            isDense: true,
-            prefixIcon: Icon(Icons.person_outline, color: Colors.white54),
-          ),
-          style: const TextStyle(color: Colors.white, fontSize: 14),
-          dropdownColor: AppColors.surface2,
-          initialValue: value.isEmpty ? null : value,
-          hint: const Text('Elegí un chofer…',
-              style: TextStyle(color: Colors.white54, fontSize: 14)),
-          // menuMaxHeight para que en mobile con muchos choferes el menú
-          // no ocupe toda la pantalla — queda scrolleable.
-          menuMaxHeight: 400,
-          items: choferes
-              .map((c) => DropdownMenuItem<String>(
-                    value: c.dni,
+        final sel = value.isEmpty
+            ? null
+            : choferes.firstWhere((c) => c.dni == value,
+                orElse: () =>
+                    _ChoferOpcion(dni: value, nombre: 'DNI $value', activo: true));
+
+        return _CampoSelector(
+          label: 'Chofer',
+          icon: Icons.person_outline,
+          textoSel: sel?.nombre,
+          hint: 'Elegí un chofer…',
+          onTap: () async {
+            final elegido = await showModalBottomSheet<String>(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: AppColors.background,
+              shape: const RoundedRectangleBorder(
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+              ),
+              builder: (_) =>
+                  _ChoferPickerSheet(choferes: choferes, seleccionado: value),
+            );
+            if (elegido == null) return; // cerró sin elegir
+            onChanged(elegido);
+          },
+        );
+      },
+    );
+  }
+}
+
+/// Sheet con buscador para elegir un chofer (filtra por nombre o DNI).
+class _ChoferPickerSheet extends StatefulWidget {
+  final List<_ChoferOpcion> choferes;
+  final String seleccionado;
+  const _ChoferPickerSheet(
+      {required this.choferes, required this.seleccionado});
+
+  @override
+  State<_ChoferPickerSheet> createState() => _ChoferPickerSheetState();
+}
+
+class _ChoferPickerSheetState extends State<_ChoferPickerSheet> {
+  final _ctrl = TextEditingController();
+  String _filtro = '';
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final f = _filtro.trim().toUpperCase();
+    final filtrados = f.isEmpty
+        ? widget.choferes
+        : widget.choferes
+            .where((c) =>
+                c.nombre.toUpperCase().contains(f) || c.dni.contains(f))
+            .toList();
+    return _PickerSheetScaffold(
+      titulo: 'ELEGIR CHOFER',
+      hintBuscar: 'Buscar por nombre o DNI…',
+      ctrl: _ctrl,
+      filtro: _filtro,
+      onFiltro: (v) => setState(() => _filtro = v),
+      lista: filtrados.isEmpty
+          ? _sinCoincidencias(_filtro)
+          : ListView.separated(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.sm, 0, AppSpacing.sm, AppSpacing.lg),
+              itemCount: filtrados.length,
+              separatorBuilder: (_, __) =>
+                  const Divider(height: 1, color: AppColors.borderSubtle),
+              itemBuilder: (_, i) {
+                final c = filtrados[i];
+                final esActual = c.dni == widget.seleccionado;
+                return InkWell(
+                  onTap: () => Navigator.of(context).pop(c.dni),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.sm, vertical: AppSpacing.md),
                     child: Row(
                       children: [
                         Expanded(
-                          child: Text(
-                            c.nombre,
-                            style: TextStyle(
-                              color: c.activo
-                                  ? Colors.white
-                                  : Colors.white54,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                c.nombre,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color:
+                                      c.activo ? Colors.white : Colors.white54,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              Text('DNI ${c.dni}',
+                                  style: AppType.label.copyWith(
+                                      color: Colors.white38, fontSize: 11)),
+                            ],
                           ),
                         ),
-                        if (!c.activo) ...[
-                          const SizedBox(width: 6),
-                          Text(
-                            '(inactivo)',
-                            style: AppType.label.copyWith(
-                              color: AppColors.warning,
-                              fontSize: 11,
-                            ),
+                        if (!c.activo)
+                          Padding(
+                            padding:
+                                const EdgeInsets.only(left: AppSpacing.sm),
+                            child: Text('(inactivo)',
+                                style: AppType.label.copyWith(
+                                    color: AppColors.warning, fontSize: 11)),
                           ),
-                        ],
+                        if (esActual)
+                          const Padding(
+                            padding: EdgeInsets.only(left: AppSpacing.sm),
+                            child: Icon(Icons.check_circle,
+                                color: AppColors.success, size: 20),
+                          ),
                       ],
                     ),
-                  ))
-              .toList(),
-          onChanged: (v) => onChanged(v ?? ''),
-        );
-      },
+                  ),
+                );
+              },
+            ),
     );
   }
 }

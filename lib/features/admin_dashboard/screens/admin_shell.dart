@@ -175,7 +175,9 @@ class _AdminShellState extends State<AdminShell> {
       label: 'Auditoría',
       icon: Icons.fact_check_outlined,
       iconActive: Icons.fact_check,
-      requiredCapability: Capability.verAlertasVolvo,
+      // Gateado por verAuditoria (no por verAlertasVolvo): el acceso a la
+      // auditoría de asignaciones es propio, no "de prestado" de Volvo.
+      requiredCapability: Capability.verAuditoria,
       build: () => const AdminAuditoriaAsignacionesScreen(),
     ),
     // "Mapa" muestra la posición ACTUAL de toda la flota según Sitrack

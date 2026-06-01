@@ -71,6 +71,7 @@ void main() {
         Capability.verMantenimiento,
         Capability.verAlertasVolvo,
         Capability.verDescargas,
+        Capability.verAuditoria,
       ];
       for (final cap in expectedTrue) {
         expect(
@@ -113,9 +114,9 @@ void main() {
           isFalse);
     });
 
-    test('SUPERVISOR NO ve auditoría (solo ADMIN)', () {
+    test('SUPERVISOR SÍ ve auditoría (verAuditoria explícita, 2026-06-01)', () {
       expect(Capabilities.can(AppRoles.supervisor, Capability.verAuditoria),
-          isFalse);
+          isTrue);
     });
   });
 
@@ -125,6 +126,8 @@ void main() {
           isTrue);
       expect(Capabilities.can(AppRoles.segHigiene, Capability.verIcm), isTrue);
       expect(Capabilities.can(AppRoles.segHigiene, Capability.verAlertasVolvo),
+          isTrue);
+      expect(Capabilities.can(AppRoles.segHigiene, Capability.verAuditoria),
           isTrue);
     });
 
@@ -178,7 +181,6 @@ void main() {
         Capability.eliminarVehiculo,
         Capability.asignarRolAdmin,
         Capability.cambiarRolEmpleado,
-        Capability.verAuditoria,
         Capability.verEstadoBot, // WhatsApp Bot: exclusivo ADMIN desde 2026-05-30
       ];
       for (final cap in exclusivasAdmin) {
@@ -191,27 +193,28 @@ void main() {
     });
 
     test('REGRESSION: si se rompe la herencia, ADMIN debería seguir teniendo TODAS', () {
-      // Sanity check: ADMIN tiene exactamente |SUPERVISOR| + 6 exclusivas.
-      // Las 6: eliminarEmpleado, eliminarVehiculo, asignarRolAdmin,
-      // cambiarRolEmpleado, verAuditoria, verEstadoBot. (verEstadoBot pasó a
-      // exclusivo ADMIN el 2026-05-30 al sacarlo de SUPERVISOR — el WhatsApp
-      // Bot ya no lo ve el supervisor.) Si alguien agrega una capability nueva
-      // en SUPERVISOR sin actualizar adminExtra, este test lo detecta.
+      // Sanity check: ADMIN tiene exactamente |SUPERVISOR| + 5 exclusivas.
+      // Las 5: eliminarEmpleado, eliminarVehiculo, asignarRolAdmin,
+      // cambiarRolEmpleado, verEstadoBot. (verAuditoria pasó a SUPERVISOR el
+      // 2026-06-01 — la auditoría de asignaciones ya no es exclusiva de ADMIN;
+      // antes el supervisor igual la veía "de prestado" por verAlertasVolvo.)
+      // Si alguien agrega una capability nueva en SUPERVISOR sin actualizar
+      // adminExtra, este test lo detecta.
       final supSize = Capabilities.ofRol(AppRoles.supervisor).length;
       final adminSize = Capabilities.ofRol(AppRoles.admin).length;
-      expect(adminSize, equals(supSize + 6),
+      expect(adminSize, equals(supSize + 5),
           reason:
-              'ADMIN debería tener |SUPERVISOR| + 6 exclusivas. Si esto rompe, revisar adminExtra en _resolverHerencia.');
+              'ADMIN debería tener |SUPERVISOR| + 5 exclusivas. Si esto rompe, revisar adminExtra en _resolverHerencia.');
     });
   });
 
   group('Capabilities.canAny / canAll', () {
-    test('canAny: SUPERVISOR tiene alguna entre [verAuditoria, verRevisiones]', () {
+    test('canAny: SUPERVISOR tiene alguna entre [verEstadoBot, verRevisiones]', () {
       expect(
         Capabilities.canAny(AppRoles.supervisor,
-            [Capability.verAuditoria, Capability.verRevisiones]),
+            [Capability.verEstadoBot, Capability.verRevisiones]),
         isTrue,
-        reason: 'tiene verRevisiones aunque no verAuditoria',
+        reason: 'tiene verRevisiones aunque no verEstadoBot (exclusiva ADMIN)',
       );
     });
 
@@ -228,7 +231,7 @@ void main() {
         Capabilities.canAll(AppRoles.admin, [
           Capability.eliminarEmpleado,
           Capability.asignarRolAdmin,
-          Capability.verAuditoria,
+          Capability.verEstadoBot,
         ]),
         isTrue,
       );
