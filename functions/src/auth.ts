@@ -453,6 +453,52 @@ export const resetearContrasenaEmpleadoAdmin = onCall(
 );
 
 // ============================================================================
+// revocarSesionEmpleado
+// ============================================================================
+//
+// Revoca los refresh tokens de un empleado para CORTARLE la sesión activa al
+// instante (sin esperar a que su ID token expire, ~1h). La usa el flujo de
+// "dar de baja" (despido): tras setear ACTIVO=false, el AuthGuard del cliente
+// del afectado detecta el token revocado en su próximo getIdToken(true) y lo
+// desloguea. Solo ADMIN — dar de baja es acción solo-admin (2026-06-01).
+export const revocarSesionEmpleado = onCall(
+  { timeoutSeconds: 30, memory: "256MiB" },
+  async (request) => {
+    const rolCaller = request.auth?.token?.rol;
+    if (!request.auth || rolCaller !== "ADMIN") {
+      logger.warn("[revocarSesionEmpleado] sin auth admin", {
+        uid: request.auth?.uid ?? "no-uid",
+        rol: rolCaller ?? "no-rol",
+      });
+      throw new HttpsError(
+        "permission-denied",
+        "Solo ADMIN puede revocar sesiones.",
+      );
+    }
+    const dni = (request.data?.dni ?? "").toString().trim();
+    if (!dni) {
+      throw new HttpsError("invalid-argument", "Falta `dni`.");
+    }
+    try {
+      await auth.revokeRefreshTokens(dni);
+      logger.info("[revocarSesionEmpleado] OK", {
+        adminHash: hashId(request.auth.uid),
+        dniHash: hashId(dni),
+      });
+      return { ok: true, revocado: true };
+    } catch (e) {
+      // El empleado puede no tener Auth account (nunca logueó): no hay
+      // sesión que cortar. No es error fatal.
+      logger.info("[revocarSesionEmpleado] sin Auth account / no se pudo", {
+        dniHash: hashId(dni),
+        error: (e as Error).message,
+      });
+      return { ok: true, revocado: false };
+    }
+  },
+);
+
+// ============================================================================
 // actualizarRolEmpleado
 // ============================================================================
 //

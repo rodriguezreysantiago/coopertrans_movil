@@ -125,6 +125,9 @@ class EmpleadoActions {
   static const String _endpointRenombrarDni =
       'https://southamerica-east1-coopertrans-movil.cloudfunctions.net/renombrarEmpleadoDni';
 
+  static const String _endpointRevocarSesion =
+      'https://southamerica-east1-coopertrans-movil.cloudfunctions.net/revocarSesionEmpleado';
+
   static Dio? _dioCallable;
   static Dio get _httpCallable => _dioCallable ??= Dio(
         BaseOptions(
@@ -1107,6 +1110,12 @@ class EmpleadoActions {
       }
       await empRef.update(updates);
 
+      // Cortar la sesión activa del empleado (despido): el AuthGuard de su
+      // cliente detecta el token revocado en su próximo refresh y lo
+      // desloguea. Best-effort — si falla, la baja igual quedó (y ya no
+      // puede re-loguear porque loginConDni chequea ACTIVO).
+      await _revocarSesion(dniLimpio);
+
       unawaited(AuditLog.registrar(
         accion: AuditAccion.darDeBajaEmpleado,
         entidad: 'EMPLEADOS',
@@ -1128,6 +1137,32 @@ class EmpleadoActions {
         tecnico: e,
         stack: s,
       );
+    }
+  }
+
+  /// Revoca la sesión activa de [dni] vía callable (corta al instante la
+  /// sesión de un empleado dado de baja; el AuthGuard del afectado lo
+  /// desloguea). Best-effort: cualquier fallo se ignora — la baja ya quedó.
+  static Future<void> _revocarSesion(String dni) async {
+    try {
+      final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (idToken == null || idToken.isEmpty) return;
+      await _httpCallable.post<Map<String, dynamic>>(
+        _endpointRevocarSesion,
+        data: {
+          'data': {'dni': dni.trim()},
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $idToken',
+          },
+          validateStatus: (_) => true,
+          responseType: ResponseType.json,
+        ),
+      );
+    } catch (_) {
+      // No bloquea la baja.
     }
   }
 
