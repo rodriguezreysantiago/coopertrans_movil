@@ -44,6 +44,25 @@ class _GomeriaStockScreenState extends State<GomeriaStockScreen> {
   final _busquedaCtrl = TextEditingController();
   String _busqueda = '';
 
+  // Stream cacheado (auditoría 2026-05-30): antes se creaba inline en build(),
+  // así que CADA tecla del buscador (setState _busqueda) re-suscribía el stream
+  // (hasta 2000 cubiertas). La búsqueda filtra client-side (_matchBusqueda);
+  // solo estado/tipoUso cambian la query real → recreamos el stream ahí.
+  late Stream<List<Cubierta>> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _recargarStream();
+  }
+
+  void _recargarStream() {
+    _stream = _service.streamCubiertasFiltradas(
+      estado: _estado,
+      tipoUso: _tipoUso,
+    );
+  }
+
   @override
   void dispose() {
     _busquedaCtrl.dispose();
@@ -63,18 +82,21 @@ class _GomeriaStockScreenState extends State<GomeriaStockScreen> {
           ),
           _FiltrosEstado(
             seleccionado: _estado,
-            onChanged: (v) => setState(() => _estado = v),
+            onChanged: (v) => setState(() {
+              _estado = v;
+              _recargarStream();
+            }),
           ),
           _FiltrosTipoUso(
             seleccionado: _tipoUso,
-            onChanged: (v) => setState(() => _tipoUso = v),
+            onChanged: (v) => setState(() {
+              _tipoUso = v;
+              _recargarStream();
+            }),
           ),
           Expanded(
             child: StreamBuilder<List<Cubierta>>(
-              stream: _service.streamCubiertasFiltradas(
-                estado: _estado,
-                tipoUso: _tipoUso,
-              ),
+              stream: _stream,
               builder: (ctx, snap) {
                 // Error explícito: sin este check el StreamBuilder
                 // mostraba CircularProgress eterno si Firestore fallaba

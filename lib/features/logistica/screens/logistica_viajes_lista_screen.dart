@@ -36,11 +36,18 @@ class _LogisticaViajesListaScreenState
   // Lo dispara el TextField de la barra superior — siempre lowercase.
   String _busqueda = '';
   late final TextEditingController _busquedaCtrl;
+  // Stream cacheado (auditoría 2026-05-30): antes se creaba inline en build(),
+  // así que CADA tecla del buscador (setState _busqueda) re-suscribía el
+  // .snapshots() de VIAJES_LOGISTICA (hasta 200 docs). La búsqueda/estado/
+  // liquidado filtran client-side; solo `_verBorrados` cambia la query real,
+  // así que recreamos el stream únicamente ahí.
+  late Stream<List<Viaje>> _streamViajes;
 
   @override
   void initState() {
     super.initState();
     _busquedaCtrl = TextEditingController();
+    _streamViajes = ViajesService.streamViajes(incluirInactivos: _verBorrados);
   }
 
   @override
@@ -107,13 +114,15 @@ class _LogisticaViajesListaScreenState
               verBorrados: _verBorrados,
               onEstadoChanged: (v) => setState(() => _filtroEstado = v),
               onLiquidadoChanged: (v) => setState(() => _filtroLiquidado = v),
-              onVerBorradosChanged: (v) => setState(() => _verBorrados = v),
+              onVerBorradosChanged: (v) => setState(() {
+                _verBorrados = v;
+                _streamViajes =
+                    ViajesService.streamViajes(incluirInactivos: v);
+              }),
             ),
             Expanded(
               child: StreamBuilder<List<Viaje>>(
-                stream: ViajesService.streamViajes(
-                  incluirInactivos: _verBorrados,
-                ),
+                stream: _streamViajes,
                 builder: (ctx, snap) {
                   if (snap.connectionState == ConnectionState.waiting) {
                     return const AppSkeletonList(count: 6);

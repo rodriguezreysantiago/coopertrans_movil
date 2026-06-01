@@ -310,7 +310,7 @@ class _SelectorZona extends StatelessWidget {
 
 // ─── KPIs ─────────────────────────────────────────────────────────
 
-class _KpisZona extends StatelessWidget {
+class _KpisZona extends StatefulWidget {
   final String slug;
   final DateTime desde;
   final DateTime hasta;
@@ -321,16 +321,48 @@ class _KpisZona extends StatelessWidget {
   });
 
   @override
+  State<_KpisZona> createState() => _KpisZonaState();
+}
+
+class _KpisZonaState extends State<_KpisZona> {
+  late Future<QuerySnapshot<Map<String, dynamic>>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _cargar();
+  }
+
+  @override
+  void didUpdateWidget(covariant _KpisZona old) {
+    super.didUpdateWidget(old);
+    if (old.slug != widget.slug ||
+        old.desde != widget.desde ||
+        old.hasta != widget.hasta) {
+      _future = _cargar();
+    }
+  }
+
+  // `.get()` one-shot + límite defensivo. Antes era `.snapshots()` (listener
+  // permanente) SIN límite sobre el histórico del rango — y el date-picker
+  // llega a 365 días (auditoría 2026-05-30). Los KPIs son un resumen, no
+  // necesitan ser live; se recalculan al cambiar zona/rango (didUpdateWidget).
+  Future<QuerySnapshot<Map<String, dynamic>>> _cargar() {
+    return FirebaseFirestore.instance
+        .collection(AppCollections.zonaDescargaHistorico)
+        .where('slug_zona', isEqualTo: widget.slug)
+        .where('entrada_ts',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(widget.desde))
+        .where('entrada_ts',
+            isLessThanOrEqualTo: Timestamp.fromDate(widget.hasta))
+        .limit(5000)
+        .get();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection(AppCollections.zonaDescargaHistorico)
-          .where('slug_zona', isEqualTo: slug)
-          .where('entrada_ts',
-              isGreaterThanOrEqualTo: Timestamp.fromDate(desde))
-          .where('entrada_ts',
-              isLessThanOrEqualTo: Timestamp.fromDate(hasta))
-          .snapshots(),
+    return FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      future: _future,
       builder: (ctx, snap) {
         final docs = snap.data?.docs ?? const [];
         final count = docs.length;
