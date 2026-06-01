@@ -1,45 +1,49 @@
 // Agente conversacional del bot — Fase 1 (consultas read-only).
 //
+// MULTI-PROVEEDOR: funciona con Google Gemini (free tier, sin tarjeta) o con
+// Anthropic Claude. Se elige con AGENTE_PROVIDER; si no se setea, autodetecta
+// por la API key disponible (Gemini primero, por ser gratis).
+//
 // Cuando un chofer CONOCIDO le escribe texto libre al bot (no un comando
 // /jornada, no una foto de comprobante), en vez del acuse genérico ("soy
-// automático, hablá con la oficina") intentamos responder con un modelo de
-// lenguaje (Claude, de Anthropic) que entiende la pregunta y la responde
-// con DATOS REALES del sistema.
+// automático, hablá con la oficina") intentamos responder con un modelo que
+// entiende la pregunta y la responde con DATOS REALES del sistema.
 //
 // Pilares de diseño (importan porque le habla a empleados de verdad):
 //   1. NO inventa: el modelo no responde "de memoria". Para contestar algo
 //      tiene que llamar a una "herramienta" (tool) que ejecuta una query a
-//      Firestore. Si no hay tool para lo que preguntan, está instruido a
-//      decir que no sabe y derivar a la oficina.
+//      Firestore. Si no hay tool, está instruido a decir que no sabe y
+//      derivar a la oficina.
 //   2. Privacidad por diseño: cada tool filtra por el DNI del que pregunta
 //      (que sale de la identidad del remitente, NO de lo que escriba). Un
 //      chofer jamás puede pedir datos de otro.
-//   3. No puede tumbar el bot: si no hay API key, el agente está apagado, o
-//      la API falla/tarda, `responder()` devuelve null y el handler cae al
-//      acuse genérico de siempre. El bot sigue igual que hoy.
+//   3. No puede tumbar el bot: sin API key, agente apagado, o si la API
+//      falla/tarda, `responder()` devuelve null y el handler cae al acuse
+//      genérico de siempre. El bot sigue igual que hoy.
 //   4. Controlable: kill-switch propio (env AGENTE_ENABLED o Firestore
 //      META/config_bot.agente_activo), límite por persona, y log de cada
 //      pregunta/respuesta en AGENTE_CONVERSACIONES para auditar.
 //
 // Implementación con `fetch` nativo (Node >=18) — sin SDK, cero
-// dependencias nuevas, así el deploy no necesita `npm install` en la PC
-// dedicada.
+// dependencias nuevas, así el deploy no necesita `npm install`.
 
 const admin = require('firebase-admin');
 const log = require('./logger');
 
+// ── Anthropic (Claude) ──
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
 const ANTHROPIC_VERSION = '2023-06-01';
+const MODELO_ANTHROPIC = process.env.AGENTE_MODELO || 'claude-3-5-haiku-latest';
 
-// Modelo overrideable por env (los ids de Anthropic cambian; si el default
-// queda viejo, se ajusta AGENTE_MODELO sin tocar código). Haiku alcanza
-// para consultas con tools y cuesta centavos.
-const MODELO = process.env.AGENTE_MODELO || 'claude-3-5-haiku-latest';
+// ── Google Gemini ──
+const GEMINI_API_BASE =
+  'https://generativelanguage.googleapis.com/v1beta/models';
+// Free tier: solo modelos Flash. Overrideable si el id queda viejo.
+const MODELO_GEMINI = process.env.AGENTE_MODELO_GEMINI || 'gemini-2.5-flash';
+
 const MAX_TOKENS = 1024;
 const TIMEOUT_MS = parseInt(process.env.AGENTE_TIMEOUT_MS || '30000', 10);
-// Cuántas veces como mucho dejamos que el modelo pida tools antes de cortar
-// (anti-loop). Cada vuelta es: el modelo pide una/varias tools → las
-// ejecutamos → le devolvemos los resultados.
+// Anti-loop: cuántas veces como mucho dejamos que el modelo pida tools.
 const MAX_TOOL_ITERS = 4;
 
 // Límite por chofer: N preguntas por hora (anti-spam + anti-costo). En
@@ -51,6 +55,28 @@ const _rlPorDni = new Map(); // dni -> number[] (timestamps ms)
 let _flagCache = null;
 let _flagCacheTs = 0;
 const _FLAG_TTL_MS = 30000;
+
+// ───────────────────────── proveedor ─────────────────────────
+
+/**
+ * Proveedor a usar: 'gemini' | 'anthropic' | null. Prioridad:
+ *   1. env AGENTE_PROVIDER explícita.
+ *   2. autodetección por API key (Gemini primero, por ser el free tier).
+ *   3. null = ninguna key configurada → agente apagado.
+ */
+function _provider() {
+  const p = String(process.env.AGENTE_PROVIDER || '').toLowerCase().trim();
+  if (p === 'anthropic' || p === 'gemini') return p;
+  if (process.env.GEMINI_API_KEY) return 'gemini';
+  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
+  return null;
+}
+
+function _keyDe(provider) {
+  if (provider === 'gemini') return process.env.GEMINI_API_KEY || null;
+  if (provider === 'anthropic') return process.env.ANTHROPIC_API_KEY || null;
+  return null;
+}
 
 // ───────────────────────── helpers ─────────────────────────
 
@@ -70,7 +96,7 @@ function _rateLimited(dni) {
 
 /**
  * ¿Está encendido el agente? Prioridad:
- *   1. env AGENTE_ENABLED si está seteada explícitamente (true/false).
+ *   1. env AGENTE_ENABLED si está seteada (true/false).
  *   2. Firestore META/config_bot.agente_activo (cache 30s).
  *   3. Default: APAGADO (para que nunca arranque solo al deployar).
  */
@@ -94,14 +120,9 @@ async function _agenteActivo(db) {
   return _flagCache;
 }
 
-/**
- * Normaliza una fecha de Firestore (Timestamp o string) a 'YYYY-MM-DD'
- * para pasársela al modelo de forma inequívoca. Devuelve null si no se
- * puede interpretar.
- */
+/** Normaliza una fecha de Firestore (Timestamp o string) a 'YYYY-MM-DD'. */
 function _fechaIso(v) {
   if (v == null || v === '') return null;
-  // Firestore Timestamp.
   if (typeof v.toDate === 'function') {
     try {
       return v.toDate().toISOString().slice(0, 10);
@@ -110,14 +131,12 @@ function _fechaIso(v) {
     }
   }
   const s = String(v).trim();
-  // DD-MM-AAAA o DD/MM/AAAA → YYYY-MM-DD.
   const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
   if (m) {
     const dd = m[1].padStart(2, '0');
     const mm = m[2].padStart(2, '0');
     return `${m[3]}-${mm}-${dd}`;
   }
-  // YYYY-MM-DD (con o sin hora) → primeros 10.
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
   return null;
 }
@@ -126,7 +145,6 @@ function _fechaIso(v) {
 function _hoyIso() {
   const tz = process.env.BOT_TIMEZONE || 'America/Argentina/Buenos_Aires';
   try {
-    // en-CA da formato YYYY-MM-DD.
     return new Intl.DateTimeFormat('en-CA', {
       timeZone: tz,
       year: 'numeric',
@@ -140,9 +158,11 @@ function _hoyIso() {
 
 // ───────────────────────── tools ─────────────────────────
 //
-// Cada tool NO recibe el DNI como parámetro del modelo: el DNI sale del
-// contexto (el chofer identificado por su teléfono). Así el modelo no puede
-// pedir datos de otra persona aunque lo intente.
+// Definición NEUTRA (independiente del proveedor): name, description y
+// params (JSON schema properties). Cada proveedor la convierte a su formato.
+// Las tools NO reciben el DNI como parámetro del modelo: sale del contexto
+// (el chofer identificado por su teléfono) → el modelo no puede pedir datos
+// de otra persona aunque lo intente.
 
 const TOOLS_CHOFER = [
   {
@@ -153,7 +173,7 @@ const TOOLS_CHOFER = [
       'defensivo) y de su unidad asignada (RTO, seguro, extintores). Usala ' +
       'cuando pregunten cuándo se les vence algún papel o si tienen algo ' +
       'por vencer.',
-    input_schema: { type: 'object', properties: {} },
+    params: {},
   },
   {
     name: 'mi_unidad',
@@ -161,9 +181,35 @@ const TOOLS_CHOFER = [
       'Devuelve qué tractor y qué enganche (acoplado/batea/etc.) tiene ' +
       'asignado el chofer que pregunta, con su patente, marca y tipo. ' +
       'Usala cuando pregunten qué unidad/camión/acoplado tienen asignado.',
-    input_schema: { type: 'object', properties: {} },
+    params: {},
   },
 ];
+
+/** Tools en formato Anthropic. */
+function _toolsAnthropic() {
+  return TOOLS_CHOFER.map((t) => ({
+    name: t.name,
+    description: t.description,
+    input_schema: { type: 'object', properties: t.params || {} },
+  }));
+}
+
+/** Tools en formato Gemini (functionDeclarations). */
+function _toolsGemini() {
+  return [
+    {
+      functionDeclarations: TOOLS_CHOFER.map((t) => {
+        const decl = { name: t.name, description: t.description };
+        // Gemini rechaza properties vacío en algunas versiones: si la tool
+        // no toma argumentos, omitimos `parameters`.
+        if (t.params && Object.keys(t.params).length > 0) {
+          decl.parameters = { type: 'object', properties: t.params };
+        }
+        return decl;
+      }),
+    },
+  ];
+}
 
 const LABELS_VENC_EMPLEADO = {
   LICENCIA_DE_CONDUCIR: 'Licencia de conducir',
@@ -207,9 +253,10 @@ async function _toolMisVencimientos(db, chofer) {
     papeles_del_chofer: papelesChofer,
     unidad_asignada: patenteTractor || null,
     papeles_de_la_unidad: papelesUnidad,
-    nota: papelesChofer.length === 0 && papelesUnidad.length === 0
-      ? 'No hay fechas de vencimiento cargadas para este chofer ni su unidad.'
-      : undefined,
+    nota:
+      papelesChofer.length === 0 && papelesUnidad.length === 0
+        ? 'No hay fechas de vencimiento cargadas para este chofer ni su unidad.'
+        : undefined,
   };
 }
 
@@ -282,25 +329,21 @@ function _systemPrompt(chofer) {
   ].join('\n');
 }
 
-// ───────────────────────── llamada a la API ─────────────────────────
+// ───────────────────────── HTTP ─────────────────────────
 
-async function _callAnthropic(body) {
+async function _fetchJson(url, headers, body) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(ANTHROPIC_API_URL, {
+    const res = await fetch(url, {
       method: 'POST',
-      headers: {
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': ANTHROPIC_VERSION,
-        'content-type': 'application/json',
-      },
+      headers,
       body: JSON.stringify(body),
       signal: controller.signal,
     });
     if (!res.ok) {
       const txt = await res.text().catch(() => '');
-      throw new Error(`Anthropic HTTP ${res.status}: ${txt.slice(0, 300)}`);
+      throw new Error(`HTTP ${res.status}: ${txt.slice(0, 300)}`);
     }
     return await res.json();
   } finally {
@@ -308,7 +351,9 @@ async function _callAnthropic(body) {
   }
 }
 
-/** Extrae el texto plano de la respuesta del modelo. */
+// ───────────────────────── loop Anthropic ─────────────────────────
+
+/** Extrae el texto plano de una respuesta de Anthropic. */
 function _textoDeRespuesta(apiResp) {
   if (!apiResp || !Array.isArray(apiResp.content)) return '';
   return apiResp.content
@@ -318,9 +363,112 @@ function _textoDeRespuesta(apiResp) {
     .trim();
 }
 
+async function _conversarAnthropic(db, system, userText, chofer) {
+  const headers = {
+    'x-api-key': process.env.ANTHROPIC_API_KEY,
+    'anthropic-version': ANTHROPIC_VERSION,
+    'content-type': 'application/json',
+  };
+  const messages = [{ role: 'user', content: userText }];
+  const toolsUsadas = [];
+
+  for (let iter = 0; iter < MAX_TOOL_ITERS; iter++) {
+    const resp = await _fetchJson(ANTHROPIC_API_URL, headers, {
+      model: MODELO_ANTHROPIC,
+      max_tokens: MAX_TOKENS,
+      system,
+      tools: _toolsAnthropic(),
+      messages,
+    });
+
+    if (resp.stop_reason === 'tool_use') {
+      messages.push({ role: 'assistant', content: resp.content });
+      const toolResults = [];
+      for (const bloque of resp.content) {
+        if (bloque.type !== 'tool_use') continue;
+        toolsUsadas.push(bloque.name);
+        let resultado;
+        try {
+          resultado = await _ejecutarTool(db, bloque.name, chofer);
+        } catch (e) {
+          resultado = { error: e.message };
+        }
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: bloque.id,
+          content: JSON.stringify(resultado),
+        });
+      }
+      messages.push({ role: 'user', content: toolResults });
+      continue;
+    }
+
+    return { texto: _textoDeRespuesta(resp), toolsUsadas };
+  }
+  return { texto: null, toolsUsadas, error: 'max_tool_iters' };
+}
+
+// ───────────────────────── loop Gemini ─────────────────────────
+
+async function _conversarGemini(db, system, userText, chofer) {
+  const key = process.env.GEMINI_API_KEY;
+  const url = `${GEMINI_API_BASE}/${MODELO_GEMINI}:generateContent`;
+  const headers = { 'x-goog-api-key': key, 'content-type': 'application/json' };
+  const base = {
+    systemInstruction: { parts: [{ text: system }] },
+    tools: _toolsGemini(),
+    generationConfig: { maxOutputTokens: MAX_TOKENS },
+  };
+  const contents = [{ role: 'user', parts: [{ text: userText }] }];
+  const toolsUsadas = [];
+
+  for (let iter = 0; iter < MAX_TOOL_ITERS; iter++) {
+    const resp = await _fetchJson(url, headers, { ...base, contents });
+    const parts =
+      (resp && resp.candidates && resp.candidates[0] &&
+        resp.candidates[0].content && resp.candidates[0].content.parts) || [];
+
+    const llamadas = parts.filter((p) => p.functionCall);
+    if (llamadas.length > 0) {
+      // Turno del modelo (con los functionCall) + nuestras respuestas.
+      contents.push({ role: 'model', parts });
+      const respParts = [];
+      for (const p of llamadas) {
+        const fc = p.functionCall;
+        toolsUsadas.push(fc.name);
+        let resultado;
+        try {
+          resultado = await _ejecutarTool(db, fc.name, chofer);
+        } catch (e) {
+          resultado = { error: e.message };
+        }
+        respParts.push({
+          functionResponse: { name: fc.name, response: { result: resultado } },
+        });
+      }
+      contents.push({ role: 'user', parts: respParts });
+      continue;
+    }
+
+    const texto = parts
+      .filter((p) => typeof p.text === 'string')
+      .map((p) => p.text)
+      .join('\n')
+      .trim();
+    if (!texto) {
+      // Sin texto y sin tool_call: respuesta inesperada (¿safety block?).
+      log.warn(
+        `[agente/gemini] respuesta sin texto: ${JSON.stringify(resp).slice(0, 300)}`
+      );
+    }
+    return { texto, toolsUsadas };
+  }
+  return { texto: null, toolsUsadas, error: 'max_tool_iters' };
+}
+
 // ───────────────────────── logging ─────────────────────────
 
-async function _loggear(db, { chofer, telefono, pregunta, respuesta, toolsUsadas, error }) {
+async function _loggear(db, { provider, chofer, telefono, pregunta, respuesta, toolsUsadas, error }) {
   try {
     await db.collection('AGENTE_CONVERSACIONES').add({
       dni: chofer.dni,
@@ -329,10 +477,10 @@ async function _loggear(db, { chofer, telefono, pregunta, respuesta, toolsUsadas
       pregunta: String(pregunta || '').slice(0, 2000),
       respuesta: String(respuesta || '').slice(0, 4000),
       tools_usadas: toolsUsadas || [],
-      modelo: MODELO,
+      proveedor: provider || null,
+      modelo: provider === 'anthropic' ? MODELO_ANTHROPIC : MODELO_GEMINI,
       error: error || null,
       creado_en: admin.firestore.FieldValue.serverTimestamp(),
-      // TTL: el cron de cleanup lo puede usar para purgar a los 60 días.
       expira_en: admin.firestore.Timestamp.fromMillis(
         Date.now() + 60 * 24 * 60 * 60 * 1000
       ),
@@ -347,84 +495,52 @@ async function _loggear(db, { chofer, telefono, pregunta, respuesta, toolsUsadas
 /**
  * Intenta responder una pregunta de texto libre de un chofer con el agente.
  *
- * @param {{ texto: string, chofer: {dni:string, data:object}, telefono?: string }} args
- * @param {object} fs - módulo firestore.js
  * @returns {Promise<string|null>} el texto a enviar, o null si el agente no
- *   actúa (apagado / sin key / rate-limit duro / falla) → el caller cae al
- *   acuse genérico.
+ *   actúa (apagado / sin key / falla) → el caller cae al acuse genérico.
  */
 async function responder({ texto, chofer, telefono }, fs) {
   if (!texto || !chofer || !chofer.dni) return null;
-  if (!process.env.ANTHROPIC_API_KEY) return null; // sin key → fallback
-  const db = fs.inicializar();
 
+  const provider = _provider();
+  if (!provider) return null; // ninguna API key configurada → apagado
+  if (!_keyDe(provider)) return null;
+
+  const db = fs.inicializar();
   if (!(await _agenteActivo(db))) return null; // kill-switch
 
   if (_rateLimited(chofer.dni)) {
-    // Respuesta amable (no null) para que el chofer sepa por qué no le
-    // contestamos más — y no caiga al acuse genérico que confundiría.
     return 'Recibí varias consultas seguidas. Esperá un ratito y volvé a ' +
       'escribirme, o comunicate con la oficina si es urgente.';
   }
 
   const system = _systemPrompt(chofer);
-  const messages = [{ role: 'user', content: String(texto).slice(0, 2000) }];
-  const toolsUsadas = [];
+  const userText = String(texto).slice(0, 2000);
 
   try {
-    for (let iter = 0; iter < MAX_TOOL_ITERS; iter++) {
-      const resp = await _callAnthropic({
-        model: MODELO,
-        max_tokens: MAX_TOKENS,
-        system,
-        tools: TOOLS_CHOFER,
-        messages,
+    const r =
+      provider === 'gemini'
+        ? await _conversarGemini(db, system, userText, chofer)
+        : await _conversarAnthropic(db, system, userText, chofer);
+
+    if (!r.texto) {
+      log.warn(`[agente] sin respuesta para ${chofer.dni} (${r.error || 'vacío'})`);
+      await _loggear(db, {
+        provider, chofer, telefono, pregunta: texto, respuesta: null,
+        toolsUsadas: r.toolsUsadas, error: r.error || 'sin_texto',
       });
-
-      if (resp.stop_reason === 'tool_use') {
-        // El modelo pidió una o más tools. Las ejecutamos y le devolvemos
-        // los resultados para que redacte la respuesta final.
-        messages.push({ role: 'assistant', content: resp.content });
-        const toolResults = [];
-        for (const bloque of resp.content) {
-          if (bloque.type !== 'tool_use') continue;
-          toolsUsadas.push(bloque.name);
-          let resultado;
-          try {
-            resultado = await _ejecutarTool(db, bloque.name, chofer);
-          } catch (e) {
-            resultado = { error: e.message };
-          }
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: bloque.id,
-            content: JSON.stringify(resultado),
-          });
-        }
-        messages.push({ role: 'user', content: toolResults });
-        continue; // otra vuelta para que redacte con los resultados
-      }
-
-      // stop_reason normal (end_turn) → tenemos la respuesta final.
-      const out = _textoDeRespuesta(resp);
-      const final = out ||
-        'Disculpá, no pude armar la respuesta. Comunicate con la oficina.';
-      await _loggear(db, { chofer, telefono, pregunta: texto, respuesta: final, toolsUsadas });
-      return final;
+      return null; // fallback al acuse genérico
     }
 
-    // Se agotaron las iteraciones de tools sin respuesta final.
-    log.warn(`[agente] max iteraciones para dni ${chofer.dni}`);
     await _loggear(db, {
-      chofer, telefono, pregunta: texto, respuesta: null,
-      toolsUsadas, error: 'max_tool_iters',
+      provider, chofer, telefono, pregunta: texto, respuesta: r.texto,
+      toolsUsadas: r.toolsUsadas,
     });
-    return null;
+    return r.texto;
   } catch (e) {
-    log.error(`[agente] error respondiendo a ${chofer.dni}: ${e.message}`);
+    log.error(`[agente] error (${provider}) respondiendo a ${chofer.dni}: ${e.message}`);
     await _loggear(db, {
-      chofer, telefono, pregunta: texto, respuesta: null,
-      toolsUsadas, error: e.message,
+      provider, chofer, telefono, pregunta: texto, respuesta: null,
+      toolsUsadas: [], error: e.message,
     });
     return null; // fallback al acuse genérico
   }
@@ -433,12 +549,16 @@ async function responder({ texto, chofer, telefono }, fs) {
 module.exports = {
   responder,
   // Exportados para tests:
+  _provider,
+  _keyDe,
   _fechaIso,
   _hoyIso,
   _rateLimited,
   _systemPrompt,
   _ejecutarTool,
   _textoDeRespuesta,
+  _toolsAnthropic,
+  _toolsGemini,
   TOOLS_CHOFER,
   _resetRateLimit: () => _rlPorDni.clear(),
 };

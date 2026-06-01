@@ -81,14 +81,73 @@ describe('agente._textoDeRespuesta', () => {
   });
 });
 
-describe('agente.TOOLS_CHOFER — forma válida para la API', () => {
-  test('cada tool tiene name, description e input_schema', () => {
+describe('agente — tools neutras y conversores por proveedor', () => {
+  test('TOOLS_CHOFER en formato neutro (name, description, params)', () => {
     assert.ok(agente.TOOLS_CHOFER.length >= 2);
     for (const t of agente.TOOLS_CHOFER) {
       assert.strictEqual(typeof t.name, 'string');
       assert.ok(t.description.length > 10);
+      assert.strictEqual(typeof t.params, 'object');
+    }
+  });
+  test('_toolsAnthropic → input_schema object por tool', () => {
+    const tools = agente._toolsAnthropic();
+    assert.strictEqual(tools.length, agente.TOOLS_CHOFER.length);
+    for (const t of tools) {
+      assert.strictEqual(typeof t.name, 'string');
       assert.strictEqual(t.input_schema.type, 'object');
     }
+  });
+  test('_toolsGemini → un bloque con functionDeclarations', () => {
+    const tools = agente._toolsGemini();
+    assert.strictEqual(tools.length, 1);
+    const decls = tools[0].functionDeclarations;
+    assert.strictEqual(decls.length, agente.TOOLS_CHOFER.length);
+    for (const d of decls) {
+      assert.strictEqual(typeof d.name, 'string');
+      assert.ok(d.description.length > 10);
+      // tools sin args: no debe llevar `parameters` con properties vacío
+      assert.strictEqual(d.parameters, undefined);
+    }
+  });
+});
+
+describe('agente._provider — selección de proveedor', () => {
+  // Corre `fn` con SOLO las env vars dadas (restaura las previas al salir).
+  function conEnv(vars, fn) {
+    const keys = ['AGENTE_PROVIDER', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY'];
+    const prev = {};
+    for (const k of keys) prev[k] = process.env[k];
+    for (const k of keys) delete process.env[k];
+    for (const [k, v] of Object.entries(vars)) process.env[k] = v;
+    try {
+      fn();
+    } finally {
+      for (const k of keys) {
+        if (prev[k] === undefined) delete process.env[k];
+        else process.env[k] = prev[k];
+      }
+    }
+  }
+
+  test('respeta AGENTE_PROVIDER explícito', () => {
+    conEnv({ AGENTE_PROVIDER: 'anthropic' }, () =>
+      assert.strictEqual(agente._provider(), 'anthropic')
+    );
+    conEnv({ AGENTE_PROVIDER: 'gemini' }, () =>
+      assert.strictEqual(agente._provider(), 'gemini')
+    );
+  });
+  test('sin nada configurado → null (apagado)', () => {
+    conEnv({}, () => assert.strictEqual(agente._provider(), null));
+  });
+  test('autodetecta por key; Gemini tiene prioridad', () => {
+    conEnv({ ANTHROPIC_API_KEY: 'x' }, () =>
+      assert.strictEqual(agente._provider(), 'anthropic')
+    );
+    conEnv({ ANTHROPIC_API_KEY: 'x', GEMINI_API_KEY: 'y' }, () =>
+      assert.strictEqual(agente._provider(), 'gemini')
+    );
   });
 });
 
