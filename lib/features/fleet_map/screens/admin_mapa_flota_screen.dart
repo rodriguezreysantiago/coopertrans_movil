@@ -693,8 +693,9 @@ class _Mapa extends StatelessWidget {
             ),
             RichAttributionWidget(
               attributions: [
-                TextSourceAttribution(
-                    usarSatelite ? '© Mapbox · © Maxar' : '© OpenStreetMap'),
+                TextSourceAttribution(usarSatelite
+                    ? MapConstants.attributionSatelite
+                    : MapConstants.attribution),
               ],
             ),
           ],

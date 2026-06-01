@@ -29,14 +29,18 @@ class MapConstants {
   static const String tileUrl =
       'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png';
 
-  /// URL de tiles satelitales. Mapbox Satellite (consume el token).
-  /// Útil para identificar puntos rurales por aspecto físico (silos,
-  /// galpones, accesos a campos) cuando el mapa callejero no tiene
-  /// suficiente detalle. Cuando se accede a esta URL en runtime hay
-  /// que reemplazar `{token}` por `mapboxToken` (no hay subdomains
-  /// — Mapbox usa un solo host).
+  /// URL de tiles satelitales HÍBRIDOS. Mapbox Satellite Streets
+  /// (`satellite-streets-v12`): la imagen satelital CON las calles,
+  /// rutas y sus nombres dibujados encima. Así se identifica un punto
+  /// por su aspecto físico (silos, galpones, accesos a campos) Y se sabe
+  /// sobre qué ruta está parado el camión (RN22, etc.) — el satélite
+  /// "pelado" (`satellite-v9`) se veía incompleto para eso (Santiago
+  /// 2026-06-01). Mismo token y mismo costo: el style híbrido sólo suma
+  /// la capa vectorial de calles sobre la misma imagen. Cuando se accede
+  /// a esta URL en runtime hay que reemplazar `{token}` por `mapboxToken`
+  /// (no hay subdomains — Mapbox usa un solo host).
   static const String tileSatelliteUrlTemplate =
-      'https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/'
+      'https://api.mapbox.com/styles/v1/mapbox/satellite-streets-v12/tiles/'
       '256/{z}/{x}/{y}?access_token={token}';
 
   /// URL de tiles satelitales LISTA para usar — token ya inyectado.
@@ -48,7 +52,7 @@ class MapConstants {
 
   /// Atribución para vista satelital — exigida por Mapbox.
   static const String attributionSatelite =
-      '© Mapbox · © Maxar';
+      '© Mapbox · © OpenStreetMap · © Maxar';
 
   /// Subdomains para `TileLayer.subdomains`.
   static const List<String> tileSubdomains = ['a', 'b', 'c', 'd'];
