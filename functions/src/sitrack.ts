@@ -676,14 +676,27 @@ export const sitrackEventosPoller = onSchedule(
           continue;
         }
 
+        // TTL 90 días (auditoría 2026-05-30): el evento CRUDO se borra 90 días
+        // después de su fecha (o de ahora, si no trae fecha). La policy TTL vive
+        // en firestore.indexes.json (fieldOverride SITRACK_EVENTOS.expira_en).
+        // Los históricos DESTILADOS (JORNADAS, ZONA_DESCARGA_HISTORICO,
+        // SITRACK_IBUTTONS_HISTORICO, VOLVO_JORNADAS_HISTORICO) son PERMANENTES;
+        // estos eventos crudos solo sirven para reconstruir/auditar al detalle
+        // hasta 90 días atrás. Antes la colección crecía sin tope (~3-5K docs/día).
+        const reportTs = parseTs(e.reportDate);
+        const baseExpira = reportTs ? reportTs.toDate() : new Date();
+        const expiraEn = Timestamp.fromMillis(
+          baseExpira.getTime() + 90 * 24 * 60 * 60 * 1000);
+
         const doc: Record<string, unknown> = {
         // Identificación
           report_id: reportId,
           sequential_id: (e.sequentialId ?? "").toString(),
           // Tiempo
-          report_date: parseTs(e.reportDate),
+          report_date: reportTs,
           input_date: parseTs(e.inputDate),
           recibido_en: FieldValue.serverTimestamp(),
+          expira_en: expiraEn,
           // Activo
           asset_id: (e.assetId ?? "").toString(),
           asset_name: (e.assetName ?? "").toString(),
