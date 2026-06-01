@@ -32,6 +32,7 @@ const fechaExtractor = require('./fecha_extractor');
 const commands = require('./commands');
 const control = require('./control');
 const cron = require('./cron');
+const agente = require('./agente');
 const { normalizarTelefonoAWid } = require('./humano');
 
 // Mapeo de teléfono normalizado (solo dígitos) → DNI del chofer.
@@ -399,6 +400,34 @@ function crearHandler(fs, wa) {
       if (!chofer) {
         log.debug(`Mensaje de número no registrado ${fromNumber}, ignoro.`);
         return;
+      }
+
+      // ─── Agente conversacional (Fase 1: consultas read-only) ───
+      // Texto libre de un chofer conocido, SIN foto y SIN citar un aviso
+      // del bot: si el agente está encendido, le responde con datos reales
+      // (vencimientos, unidad...). Si está apagado, no hay API key o falla,
+      // `responder` devuelve null y seguimos al flujo de siempre (acuse /
+      // Fase 3). El quote y la media se reservan para el flujo de
+      // respuestas-a-avisos de más abajo.
+      const esTextoLibre =
+        !msg.hasMedia &&
+        !msg.hasQuotedMsg &&
+        typeof msg.body === 'string' &&
+        msg.body.trim().length > 0;
+      if (esTextoLibre) {
+        try {
+          const respuestaAgente = await agente.responder(
+            { texto: msg.body, chofer, telefono: fromNumber },
+            fs
+          );
+          if (respuestaAgente) {
+            await wa.responder(msg, respuestaAgente);
+            log.info(`Agente respondió a ${chofer.dni}`);
+            return;
+          }
+        } catch (e) {
+          log.warn(`Agente no respondió (${e.message}), sigo al flujo normal`);
+        }
       }
 
       // ─── Acuse automático ───
