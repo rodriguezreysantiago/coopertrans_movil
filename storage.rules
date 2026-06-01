@@ -147,7 +147,13 @@ service firebase.storage {
     // misma razón social.
     match /EMPRESAS_EMPLEADORAS/{cuit}/{archivo=**} {
       allow read: if isAdminOrSupervisor() || isSegHigiene();
-      allow write: if isAdmin();
+      // write: admin + SUPERVISOR. El supervisor gestiona los vencimientos de
+      // empresa (Póliza ART, F.931, SCVO, libre deuda) desde Vencimientos >
+      // Empresa. La rule de Firestore (EMPRESAS_EMPLEADORAS create/update) ya
+      // permitía isAdminOrSupervisor; faltaba alinear Storage — por eso al
+      // supervisor le daba "imposible subir este archivo". Reportado por
+      // Giagante el 2026-06-01 (mismo gap que EMPLEADOS_DOCS/VEHICULOS_DOCS).
+      allow write: if isAdminOrSupervisor();
     }
 
     // ========================================================================
