@@ -55,15 +55,13 @@ class _AdminShellState extends State<AdminShell> {
   /// Definición declarativa de las secciones del shell.
   /// Cada una incluye su pantalla, label, icon y un builder opcional
   /// para badges dinámicos.
-  // Orden definido por Vecchi 2026-05-07: Personal → Flota →
-  // Revisiones → Vencimientos → Logística → Gomería → Service →
-  // Alertas → Reportes → Sync → Estado Bot. El bloque Volvo
-  // (Eco-Driving / Descargas / Mapa) queda intercalado después de
-  // Alertas porque las 4 pantallas comparten capability y fuente de
-  // datos — visualmente conviene agruparlas. El panel central
-  // (admin_panel_screen.dart) usa el mismo orden para las 11 entradas
-  // operativas (sin Inicio ni el bloque Volvo, que ya tiene su propio
-  // tile principal en "Alertas").
+  // Orden del menú (Santiago 2026-06-01): Personal → Flota →
+  // Vencimientos → Mapa → Logística → Mantenimiento → ICM → Descargas
+  // → Auditoría → Reportes → Gomería → Cachatore → WhatsApp Bot.
+  // (Inicio va siempre primero — es el panel/dashboard.) El panel
+  // central admin_panel_screen.dart ya NO lista módulos (refactor
+  // 2026-05-24, quedó solo dashboard); el orden del menú vive
+  // únicamente acá, en el shell.
   late final List<_ShellSection> _sections = [
     _ShellSection(
       label: 'Inicio',
@@ -116,19 +114,23 @@ class _AdminShellState extends State<AdminShell> {
           .limit(100)
           .snapshots(),
     ),
+    // "Mapa" muestra la posición ACTUAL de toda la flota según Sitrack
+    // (tractores Volvo + no-Volvo). Reusa la capability de Volvo porque
+    // el acceso es del mismo nivel admin/supervisor. Orden: Santiago
+    // pidió Mapa entre Vencimientos y Logística (2026-06-01).
+    _ShellSection(
+      label: 'Mapa',
+      icon: Icons.map_outlined,
+      iconActive: Icons.map,
+      requiredCapability: Capability.verAlertasVolvo,
+      build: () => const AdminMapaFlotaScreen(),
+    ),
     _ShellSection(
       label: 'Logística',
       icon: Icons.route_outlined,
       iconActive: Icons.route,
       requiredCapability: Capability.verLogistica,
       build: () => const LogisticaHubScreen(),
-    ),
-    _ShellSection(
-      label: 'Gomería',
-      icon: Icons.tire_repair_outlined,
-      iconActive: Icons.tire_repair,
-      requiredCapability: Capability.verGomeria,
-      build: () => const GomeriaV2HubScreen(),
     ),
     _ShellSection(
       label: 'Mantenimiento',
@@ -180,25 +182,6 @@ class _AdminShellState extends State<AdminShell> {
       requiredCapability: Capability.verAuditoria,
       build: () => const AdminAuditoriaAsignacionesScreen(),
     ),
-    // "Mapa" muestra la posición ACTUAL de toda la flota según Sitrack
-    // (tractores Volvo + no-Volvo). Reusa la capability de Volvo porque
-    // el acceso es del mismo nivel admin/supervisor.
-    //
-    // El "Mapa Volvo" anterior (eventos Volvo geo-localizados, heatmap
-    // OVERSPEED, ruta del chofer) ya NO es tab del shell. Vive como
-    // acción "Ver en mapa" dentro del tablero de Alertas — están
-    // conceptualmente ligados (el mapa muestra los mismos eventos del
-    // tablero) y antes confundía tener dos accesos paralelos. Reusamos
-    // el label "Mapa" (en vez de "Flota") porque es más reconocible:
-    // cuando el admin piensa "dónde están mis camiones AHORA" busca
-    // "Mapa", no "Flota".
-    _ShellSection(
-      label: 'Mapa',
-      icon: Icons.map_outlined,
-      iconActive: Icons.map,
-      requiredCapability: Capability.verAlertasVolvo,
-      build: () => const AdminMapaFlotaScreen(),
-    ),
     // ─── Cierre: reportes + bots ─────────────────────
     _ShellSection(
       label: 'Reportes',
@@ -207,9 +190,16 @@ class _AdminShellState extends State<AdminShell> {
       build: () => const AdminReportsScreen(),
       requiredCapability: Capability.verReportes,
     ),
+    // Gomería entre Reportes y Cachatore (Santiago 2026-06-01).
+    _ShellSection(
+      label: 'Gomería',
+      icon: Icons.tire_repair_outlined,
+      iconActive: Icons.tire_repair,
+      requiredCapability: Capability.verGomeria,
+      build: () => const GomeriaV2HubScreen(),
+    ),
     // Bots al final (Cachatore + Estado Bot juntos, 2026-05-24): son los
-    // dos "agentes automáticos" del sistema (turnos YPF + WhatsApp). El
-    // panel admin (admin_panel_screen.dart) usa el mismo orden.
+    // dos "agentes automáticos" del sistema (turnos YPF + WhatsApp).
     _ShellSection(
       label: 'Cachatore',
       icon: Icons.schedule,
