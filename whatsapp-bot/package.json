@@ -9,7 +9,7 @@
   },
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test test/"
+    "test": "node --test"
   },
   "dependencies": {
     "archiver": "^7.0.1",
