@@ -332,7 +332,7 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
 /// Panel con la lista de todas las unidades visibles, ordenadas por patente.
 /// Tap en una → centra el mapa en ella. Reemplazó a la toolbar de filtros el
 /// 2026-06-01 (pedido Santiago: sacar filtros, poner lista lateral).
-class _PanelUnidades extends StatelessWidget {
+class _PanelUnidades extends StatefulWidget {
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
   final DateTime ahora;
   final String? seleccionada;
@@ -347,7 +347,35 @@ class _PanelUnidades extends StatelessWidget {
   });
 
   @override
+  State<_PanelUnidades> createState() => _PanelUnidadesState();
+}
+
+class _PanelUnidadesState extends State<_PanelUnidades> {
+  final _ctrl = TextEditingController();
+  String _filtro = '';
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Filtro client-side por patente o chofer (la lista ya está en memoria).
+    final f = _filtro.trim().toUpperCase();
+    final filtrados = f.isEmpty
+        ? widget.docs
+        : widget.docs.where((d) {
+            if (d.id.toUpperCase().contains(f)) return true;
+            final data = d.data();
+            final apellido =
+                (data['driver_apellido'] ?? '').toString().toUpperCase();
+            final nombre =
+                (data['driver_nombre'] ?? '').toString().toUpperCase();
+            return apellido.contains(f) || nombre.contains(f);
+          }).toList();
+
     return Container(
       color: AppColors.surface0,
       child: Column(
@@ -355,40 +383,81 @@ class _PanelUnidades extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.sm),
+                AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.xs),
             child: Row(
               children: [
                 const Icon(Icons.local_shipping_outlined,
                     size: 18, color: AppColors.textSecondary),
                 const SizedBox(width: AppSpacing.sm),
-                Text('UNIDADES (${docs.length})',
+                Text('UNIDADES (${filtrados.length})',
                     style: AppType.eyebrow
                         .copyWith(color: AppColors.textSecondary)),
               ],
             ),
           ),
+          // Buscador por patente o chofer.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md, 0, AppSpacing.md, AppSpacing.sm),
+            child: SizedBox(
+              height: 36,
+              child: TextField(
+                controller: _ctrl,
+                textCapitalization: TextCapitalization.characters,
+                style: AppType.label.copyWith(color: AppColors.textPrimary),
+                decoration: InputDecoration(
+                  isDense: true,
+                  prefixIcon: const Icon(Icons.search,
+                      size: 18, color: AppColors.textTertiary),
+                  suffixIcon: _filtro.isEmpty
+                      ? null
+                      : IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: const Icon(Icons.clear,
+                              size: 16, color: AppColors.textTertiary),
+                          onPressed: () {
+                            _ctrl.clear();
+                            setState(() => _filtro = '');
+                          },
+                        ),
+                  hintText: 'Buscar patente o chofer…',
+                  hintStyle:
+                      AppType.label.copyWith(color: AppColors.textTertiary),
+                  border: const OutlineInputBorder(),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm, vertical: 0),
+                ),
+                onChanged: (v) => setState(() => _filtro = v),
+              ),
+            ),
+          ),
           const Divider(height: 1, color: AppColors.borderSubtle),
           Expanded(
-            child: docs.isEmpty
-                ? const Center(
+            child: filtrados.isEmpty
+                ? Center(
                     child: Padding(
-                      padding: EdgeInsets.all(AppSpacing.lg),
-                      child: Text('Sin unidades con posición.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: AppColors.textTertiary)),
+                      padding: const EdgeInsets.all(AppSpacing.lg),
+                      child: Text(
+                        widget.docs.isEmpty
+                            ? 'Sin unidades con posición.'
+                            : 'Sin coincidencias con "$_filtro".',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppColors.textTertiary),
+                      ),
                     ),
                   )
                 : ListView.builder(
                     padding:
                         const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                    itemCount: docs.length,
+                    itemCount: filtrados.length,
                     itemBuilder: (ctx, i) {
-                      final d = docs[i];
+                      final d = filtrados[i];
                       return _ItemUnidad(
                         doc: d,
-                        ahora: ahora,
-                        seleccionada: d.id == seleccionada,
-                        onTap: () => onSeleccionar(d),
+                        ahora: widget.ahora,
+                        seleccionada: d.id == widget.seleccionada,
+                        onTap: () => widget.onSeleccionar(d),
                       );
                     },
                   ),
@@ -731,38 +800,73 @@ class _Mapa extends StatelessWidget {
 
     return Marker(
       point: LatLng(lat, lng),
-      width: 40,
-      height: 40,
+      width: 96,
+      height: 54,
+      // El conjunto es círculo + etiqueta debajo. Con esta alineación el
+      // CENTRO del círculo (a ~18px del top, sobre un alto total de 54)
+      // queda anclado a la posición GPS real y la patente cuelga debajo
+      // (pedido Santiago 2026-06-01). -0.33 ≈ 18/54 mapeado a [-1,1].
+      alignment: const Alignment(0, -0.33),
       child: GestureDetector(
         onTap: () => onMarkerTap(doc),
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-            // Borde brand grueso si está seleccionada desde el panel;
-            // si no, más grueso/contrastado cuando hay drift.
-            border: Border.all(
-              color: esSeleccionada ? AppColors.brand : AppColors.textPrimary,
-              width: esSeleccionada ? 4 : (tieneDrift ? 3 : 2),
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: AppColors.surface0,
-                blurRadius: 4,
-                offset: Offset(0, 2),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                // Borde brand grueso si está seleccionada desde el panel;
+                // si no, más grueso/contrastado cuando hay drift.
+                border: Border.all(
+                  color: esSeleccionada
+                      ? AppColors.brand
+                      : AppColors.textPrimary,
+                  width: esSeleccionada ? 4 : (tieneDrift ? 3 : 2),
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: AppColors.surface0,
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
               ),
-            ],
-          ),
-          child: Transform.rotate(
-            angle: rotacionMarker,
-            child: Icon(
-              iconoMarker,
-              color: AppColors.textPrimary,
-              size: tieneDrift ? 20 : 22,
+              child: Transform.rotate(
+                angle: rotacionMarker,
+                child: Icon(
+                  iconoMarker,
+                  color: AppColors.textPrimary,
+                  size: tieneDrift ? 20 : 22,
+                ),
+              ),
             ),
-          ),
+            const SizedBox(height: 2),
+            // Etiqueta con la patente debajo del marker — para identificar
+            // cada unidad sin tener que tocarla.
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.78),
+                borderRadius: BorderRadius.circular(4),
+                border: esSeleccionada
+                    ? Border.all(color: AppColors.brand, width: 1.5)
+                    : null,
+              ),
+              child: Text(
+                doc.id,
+                maxLines: 1,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.3,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
