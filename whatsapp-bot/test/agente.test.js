@@ -61,11 +61,12 @@ describe('agente._systemPrompt — por rol', () => {
     assert.ok(/NUNCA inventes/i.test(p));
     assert.ok(/CHOFER/i.test(p));
   });
-  test('ADMIN: menciona administrador y acceso a cualquiera', () => {
+  test('gestión (ADMIN): menciona Cachatore, acceso a cualquiera, anti-invención', () => {
     const p = agente._systemPrompt({ rol: 'ADMIN', nombre: 'Santiago', data: {} });
-    assert.ok(/ADMINISTRADOR/i.test(p));
+    assert.ok(/cachatore/i.test(p), 'menciona Cachatore');
     assert.ok(/cualquier/i.test(p));
     assert.ok(/NUNCA inventes/i.test(p));
+    assert.ok(/rol ADMIN/i.test(p));
   });
 });
 
@@ -106,6 +107,19 @@ describe('agente — tools por rol y conversores', () => {
       (d) => d.name === 'buscar_vencimientos'
     );
     assert.ok(gbv.parameters.properties.query); // admin SÍ lleva parameters
+  });
+  test('ADMIN/SUPERVISOR: incluyen las tools de Cachatore', () => {
+    for (const rol of ['ADMIN', 'SUPERVISOR']) {
+      const t = agente._toolsAnthropic(rol).map((x) => x.name);
+      assert.ok(t.includes('buscar_vencimientos'), `${rol} buscar_vencimientos`);
+      assert.ok(t.includes('cachatore_estado'), `${rol} cachatore_estado`);
+      assert.ok(t.includes('poner_a_buscar_turno'), `${rol} poner_a_buscar_turno`);
+    }
+  });
+  test('roles sin tools propias todavía → vacío', () => {
+    assert.strictEqual(agente._toolsAnthropic('PLANTA').length, 0);
+    assert.strictEqual(agente._toolsAnthropic('GOMERIA').length, 0);
+    assert.strictEqual(agente._toolsAnthropic('SEG_HIGIENE').length, 0);
   });
 });
 
@@ -232,5 +246,106 @@ describe('agente._ejecutarTool — contra Firestore mockeado', () => {
   test('tool desconocida → error', async () => {
     const r = await agente._ejecutarTool(dbMock(), 'no_existe', { rol: 'CHOFER', data: {} });
     assert.ok(r.error);
+  });
+});
+
+describe('agente._ejecutarTool — Cachatore', () => {
+  function dbMockCacha({ objetivos = [], estadoBot = null, empleados = [] } = {}) {
+    const escrituras = {};
+    return {
+      _escrituras: escrituras,
+      collection(name) {
+        return {
+          doc(id) {
+            return {
+              async get() {
+                if (name === 'CACHATORE_ESTADO' && id === 'bot') {
+                  return { exists: !!estadoBot, data: () => estadoBot };
+                }
+                return { exists: false, data: () => undefined };
+              },
+              async set(data) {
+                escrituras[`${name}/${id}`] = data;
+              },
+            };
+          },
+          async get() {
+            if (name === 'CACHATORE_OBJETIVOS') {
+              return { docs: objetivos.map((o) => ({ id: o.dni, data: () => o })) };
+            }
+            if (name === 'EMPLEADOS') {
+              return { docs: empleados.map((e) => ({ id: e.id, data: () => e.data })) };
+            }
+            return { docs: [] };
+          },
+        };
+      },
+    };
+  }
+
+  test('cachatore_estado cuenta por estado (ignora inactivos)', async () => {
+    const db = dbMockCacha({
+      objetivos: [
+        { dni: '1', nombre: 'A', activo: true, estado: 'reservado' },
+        { dni: '2', nombre: 'B', activo: true, estado: 'buscando' },
+        { dni: '3', nombre: 'C', activo: true, estado: 'buscando', reagendar: true },
+        { dni: '4', nombre: 'D', activo: false, estado: 'reservado' },
+        { dni: '5', nombre: 'E', activo: true, estado: 'sin_patente' },
+      ],
+      estadoBot: { modo: 'activo' },
+    });
+    const r = await agente._ejecutarTool(db, 'cachatore_estado', { rol: 'ADMIN' }, {});
+    assert.strictEqual(r.total_objetivos, 4);
+    assert.strictEqual(r.con_turno, 1);
+    assert.strictEqual(r.buscando, 2);
+    assert.strictEqual(r.para_reagendar, 1);
+    assert.strictEqual(r.con_problemas, 1);
+  });
+
+  test('poner_a_buscar_turno escribe el objetivo con el contrato exacto', async () => {
+    const db = dbMockCacha({
+      empleados: [{ id: '30111222', data: { NOMBRE: 'PEZOA CARLOS', ROL: 'CHOFER', ACTIVO: true } }],
+    });
+    const r = await agente._ejecutarTool(
+      db, 'poner_a_buscar_turno', { rol: 'ADMIN', dni: '25999888' },
+      { chofer: 'pezoa', franja: 'manana', fecha: 'manana' }
+    );
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.dni, '30111222');
+    assert.strictEqual(r.franja, 'manana');
+    const esc = db._escrituras['CACHATORE_OBJETIVOS/30111222'];
+    assert.ok(esc, 'escribió el objetivo');
+    assert.strictEqual(esc.franja, 'manana');
+    assert.strictEqual(esc.fecha, 'manana');
+    assert.strictEqual(esc.activo, true);
+    assert.strictEqual(esc.reagendar, false);
+    assert.strictEqual(esc.creado_por_dni, '25999888');
+  });
+
+  test('poner_a_buscar_turno ambiguo (2 coincidencias) NO escribe', async () => {
+    const db = dbMockCacha({
+      empleados: [
+        { id: '1', data: { NOMBRE: 'PEZOA CARLOS', ROL: 'CHOFER', ACTIVO: true } },
+        { id: '2', data: { NOMBRE: 'PEZOA JUAN', ROL: 'CHOFER', ACTIVO: true } },
+      ],
+    });
+    const r = await agente._ejecutarTool(db, 'poner_a_buscar_turno', { rol: 'ADMIN' }, { chofer: 'pezoa' });
+    assert.strictEqual(r.ok, false);
+    assert.ok(r.ambiguo);
+    assert.strictEqual(Object.keys(db._escrituras).length, 0);
+  });
+
+  test('poner_a_buscar_turno: franja inválida → cualquiera', async () => {
+    const db = dbMockCacha({
+      empleados: [{ id: '1', data: { NOMBRE: 'GOMEZ', ROL: 'CHOFER', ACTIVO: true } }],
+    });
+    const r = await agente._ejecutarTool(db, 'poner_a_buscar_turno', { rol: 'ADMIN' }, { chofer: 'gomez', franja: 'xyz' });
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.franja, 'cualquiera');
+  });
+
+  test('poner_a_buscar_turno sin chofer → error', async () => {
+    const r = await agente._ejecutarTool(dbMockCacha(), 'poner_a_buscar_turno', { rol: 'ADMIN' }, {});
+    assert.strictEqual(r.ok, false);
   });
 });

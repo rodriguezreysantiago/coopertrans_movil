@@ -179,15 +179,14 @@ const TOOLS_CHOFER = [
   },
 ];
 
-const TOOLS_ADMIN = [
+const TOOLS_GESTION_VENC = [
   {
     name: 'buscar_vencimientos',
     description:
       'Busca los vencimientos de un CHOFER (por nombre o apellido) o de una ' +
-      'UNIDAD (por patente, ej. AB123CD). Usala cuando el administrador ' +
-      'pregunte por los papeles o vencimientos de alguien o de algún ' +
-      'vehículo. Devuelve las fechas; vos calculás los días y avisás lo ' +
-      'vencido o por vencer.',
+      'UNIDAD (por patente, ej. AB123CD). Usala cuando pregunten por los ' +
+      'papeles o vencimientos de alguien o de algún vehículo. Devuelve las ' +
+      'fechas; vos calculás los días y avisás lo vencido o por vencer.',
     params: {
       query: {
         type: 'string',
@@ -198,8 +197,59 @@ const TOOLS_ADMIN = [
   },
 ];
 
+// Cachatore (turnos YPF). Solo roles con verCachatore (ADMIN / SUPERVISOR).
+const TOOLS_CACHATORE = [
+  {
+    name: 'cachatore_estado',
+    description:
+      'Devuelve el estado de Cachatore (sniper de turnos YPF): cuántos ' +
+      'choferes tienen turno reservado, cuántos están buscando, cuántos ' +
+      'están marcados para reagendar y cuáles tienen problemas (sin mail, ' +
+      'sin unidad, etc.). Usala cuando pregunten por el estado de los turnos ' +
+      'o de Cachatore.',
+    params: {},
+  },
+  {
+    name: 'poner_a_buscar_turno',
+    description:
+      'Pone a un CHOFER a buscar turno de carga en YPF (Cachatore). Es una ' +
+      'ACCIÓN que modifica datos. Franjas horarias: madrugada (00-05:30), ' +
+      'manana (06-11:30), tarde (12-17:30), noche (18-23:30), o cualquiera. ' +
+      'Si te dicen "franja 1/2/3/4" interpretá 1=madrugada, 2=manana, ' +
+      '3=tarde, 4=noche. Después de ejecutar, confirmá SIEMPRE y de forma ' +
+      'EXPLÍCITA qué chofer, qué fecha y qué franja (con su horario) ' +
+      'quedaron, para que el admin pueda verificar.',
+    params: {
+      chofer: {
+        type: 'string',
+        description: 'Nombre o apellido del chofer a poner a buscar turno.',
+      },
+      franja: {
+        type: 'string',
+        description:
+          'madrugada | manana | tarde | noche | cualquiera. Si no la ' +
+          'indican, usá cualquiera.',
+      },
+      fecha: {
+        type: 'string',
+        description:
+          "Día objetivo: 'hoy', 'manana' o fecha AAAA-MM-DD. Vacío = " +
+          'cualquier fecha.',
+      },
+    },
+  },
+];
+
+// Roles con verCachatore (ven/operan Cachatore) — espejo de capabilities.dart.
+const ROLES_GESTION = new Set(['ADMIN', 'SUPERVISOR']);
+
 function _toolsDelRol(rol) {
-  return rol === 'ADMIN' ? TOOLS_ADMIN : TOOLS_CHOFER;
+  if (rol === 'CHOFER') return TOOLS_CHOFER;
+  if (ROLES_GESTION.has(rol)) {
+    return [...TOOLS_GESTION_VENC, ...TOOLS_CACHATORE];
+  }
+  // PLANTA / GOMERIA / SEG_HIGIENE: todavía no tienen consultas propias.
+  return [];
 }
 
 function _toolsAnthropic(rol) {
@@ -332,6 +382,125 @@ async function _toolBuscarVencimientos(db, args) {
   }
 }
 
+const FRANJAS_VALIDAS = ['madrugada', 'manana', 'tarde', 'noche', 'cualquiera'];
+const ESTADOS_PROBLEMA = ['sin_credenciales', 'sin_patente', 'login_fallo', 'revisar'];
+
+function _normalizarFranja(f) {
+  let s = String(f || 'cualquiera').trim().toLowerCase();
+  s = s.replace(/ñ/g, 'n').replace(/[áà]/g, 'a').replace(/[éè]/g, 'e');
+  return FRANJAS_VALIDAS.includes(s) ? s : 'cualquiera';
+}
+
+async function _toolCachatoreEstado(db) {
+  let total = 0, conTurno = 0, buscando = 0, paraReagendar = 0, conProblemas = 0;
+  const reagendarDetalle = [];
+  const problemasDetalle = [];
+  try {
+    const snap = await db.collection('CACHATORE_OBJETIVOS').get();
+    for (const d of snap.docs) {
+      const o = d.data();
+      if (o.activo === false) continue;
+      total++;
+      const est = String(o.estado || 'buscando');
+      if (est === 'reservado' || est === 'reagendado') conTurno++;
+      else if (ESTADOS_PROBLEMA.includes(est)) {
+        conProblemas++;
+        problemasDetalle.push({ nombre: o.nombre || d.id, estado: est });
+      } else buscando++;
+      if (o.reagendar === true) {
+        paraReagendar++;
+        reagendarDetalle.push({ nombre: o.nombre || d.id, estado: est });
+      }
+    }
+  } catch (e) {
+    return { error: `No pude leer Cachatore: ${e.message}` };
+  }
+  let bot = {};
+  try {
+    const b = await db.collection('CACHATORE_ESTADO').doc('bot').get();
+    if (b.exists) bot = b.data();
+  } catch (_) {
+    /* el estado del bot no es crítico para el resumen */
+  }
+  return {
+    total_objetivos: total,
+    con_turno: conTurno,
+    buscando,
+    para_reagendar: paraReagendar,
+    para_reagendar_detalle: reagendarDetalle,
+    con_problemas: conProblemas,
+    problemas_detalle: problemasDetalle,
+    bot_modo: bot.modo || bot.estado || null,
+  };
+}
+
+async function _toolPonerABuscar(db, persona, args) {
+  const nombreQuery = String((args && args.chofer) || '').trim();
+  if (!nombreQuery) return { ok: false, error: 'Indicá el nombre del chofer.' };
+  const franja = _normalizarFranja(args && args.franja);
+  let fecha = args && args.fecha ? String(args.fecha).trim() : null;
+  if (!fecha) fecha = null;
+
+  // Resolver el chofer ACTIVO por nombre (en Cachatore la identidad es el DNI).
+  let matches;
+  try {
+    const snap = await db.collection('EMPLEADOS').get();
+    const qUp = nombreQuery.toUpperCase();
+    matches = snap.docs.filter((d) => {
+      const data = d.data();
+      const rol = String(data.ROL || 'CHOFER').toUpperCase();
+      return (
+        (rol === 'CHOFER' || rol === '' || rol === 'USUARIO') &&
+        data.ACTIVO !== false &&
+        String(data.NOMBRE || '').toUpperCase().includes(qUp)
+      );
+    });
+  } catch (e) {
+    return { ok: false, error: `No pude buscar el chofer: ${e.message}` };
+  }
+  if (matches.length === 0) {
+    return { ok: false, error: `No encontré un chofer activo con "${nombreQuery}".` };
+  }
+  if (matches.length > 1) {
+    return {
+      ok: false,
+      ambiguo: true,
+      opciones: matches.slice(0, 6).map((d) => d.data().NOMBRE),
+      error: `Hay ${matches.length} choferes que coinciden con "${nombreQuery}"; pedí que aclare con nombre y apellido.`,
+    };
+  }
+  const doc = matches[0];
+  const data = doc.data();
+  const dni = doc.id;
+  // Contrato exacto de CACHATORE_OBJETIVOS/{dni} (igual que la UI Flutter).
+  try {
+    await db.collection('CACHATORE_OBJETIVOS').doc(dni).set(
+      {
+        dni,
+        nombre: data.NOMBRE || dni,
+        fecha,
+        franja,
+        reagendar: false,
+        activo: true,
+        creado_en: admin.firestore.FieldValue.serverTimestamp(),
+        creado_por_dni: persona.dni || 'bot_agente',
+        actualizado_en: admin.firestore.FieldValue.serverTimestamp(),
+        actualizado_por_dni: persona.dni || 'bot_agente',
+      },
+      { merge: true }
+    );
+  } catch (e) {
+    return { ok: false, error: `No pude guardar la búsqueda: ${e.message}` };
+  }
+  return {
+    ok: true,
+    chofer: data.NOMBRE || dni,
+    dni,
+    fecha: fecha || 'cualquier fecha',
+    franja,
+  };
+}
+
 async function _ejecutarTool(db, nombre, persona, args) {
   switch (nombre) {
     case 'mis_vencimientos':
@@ -340,6 +509,10 @@ async function _ejecutarTool(db, nombre, persona, args) {
       return await _toolMiUnidad(db, persona);
     case 'buscar_vencimientos':
       return await _toolBuscarVencimientos(db, args);
+    case 'cachatore_estado':
+      return await _toolCachatoreEstado(db);
+    case 'poner_a_buscar_turno':
+      return await _toolPonerABuscar(db, persona, args);
     default:
       return { error: `Herramienta desconocida: ${nombre}` };
   }
@@ -361,20 +534,30 @@ function _systemPrompt(persona) {
     '  presentate como el asistente del sistema.',
   ];
 
-  if (persona.rol === 'ADMIN') {
-    const nombre = persona.nombre || 'el administrador';
+  if (ROLES_GESTION.has(persona.rol)) {
+    const nombre =
+      persona.nombre ||
+      (persona.rol === 'ADMIN' ? 'el administrador' : 'el supervisor');
     return [
-      'Sos el asistente por WhatsApp de Coopertrans Móvil, la app de la',
-      'empresa de transporte Vecchi. Le respondés al ADMINISTRADOR de la',
-      `empresa (${nombre}).`,
+      'Sos el asistente por WhatsApp de Coopertrans Móvil (empresa de',
+      `transporte Vecchi). Le respondés a ${nombre} (rol ${persona.rol}).`,
       `Hoy es ${_hoyIso()} (zona horaria de Argentina).`,
       '',
+      'PODÉS, con las herramientas:',
+      '- Consultar los vencimientos de cualquier chofer o unidad.',
+      '- Consultar el estado de Cachatore / turnos YPF.',
+      '- Poner a un chofer a buscar turno en YPF. Es una ACCIÓN que cambia',
+      '  datos: ejecutala solo cuando tengas claro a QUÉ chofer; si el nombre',
+      '  coincide con varios, NO ejecutes y pedí que aclaren con nombre y',
+      '  apellido. Después de ejecutar, confirmá de forma explícita el chofer,',
+      '  la fecha y la franja (con su horario) para que puedan verificar.',
+      '',
       'REGLAS:',
-      '- El administrador puede consultar datos de CUALQUIER chofer o unidad;',
-      '  no hay restricción de privacidad.',
-      '- Si te pide algo que todavía no podés resolver con las herramientas',
-      '  (viajes, sueldos, estado de la flota en vivo, etc.), decí que esa',
-      '  consulta todavía no está disponible.',
+      '- Pueden consultar datos de CUALQUIER chofer o unidad (sin restricción',
+      '  de privacidad).',
+      '- Si piden algo que todavía no está en las herramientas (viajes,',
+      '  sueldos, flota en vivo, reagendar o cancelar turnos), decí que esa',
+      '  función todavía no está disponible. No lo inventes.',
       ...comun,
     ].join('\n');
   }
@@ -575,6 +758,10 @@ async function responder({ texto, persona, telefono }, fs) {
   const db = fs.inicializar();
   if (!(await _agenteActivo(db))) return null; // kill-switch
 
+  // Roles sin herramientas propias todavía (PLANTA/GOMERIA/SEG_HIGIENE): el
+  // agente no actúa, cae al flujo de siempre.
+  if (_toolsDelRol(persona.rol).length === 0) return null;
+
   const rlKey = persona.dni || telefono || 'anon';
   if (_rateLimited(rlKey)) {
     return 'Recibí varias consultas seguidas. Esperá un ratito y volvé a ' +
@@ -627,6 +814,7 @@ module.exports = {
   _toolsAnthropic,
   _toolsGemini,
   TOOLS_CHOFER,
-  TOOLS_ADMIN,
+  TOOLS_GESTION_VENC,
+  TOOLS_CACHATORE,
   _resetRateLimit: () => _rlPorClave.clear(),
 };

@@ -56,6 +56,9 @@ let _cacheTimestamp = 0;
 // son choferes y por eso no entran en `_cacheEmpleados`. Se llena en el mismo
 // refresh (la query ya trae todos los empleados; solo guardamos su data).
 let _rosterTodos = null;
+// Roster completo CON dni ({dni, data}) — para resolver el ROL real de
+// cualquier empleado por teléfono (no solo de los choferes).
+let _rosterConId = null;
 
 /**
  * Fuerza el descarte del cache de empleados. La próxima llamada va a
@@ -84,6 +87,7 @@ async function _refrescarCacheEmpleados(db) {
     });
   // Roster completo (todos los roles) para logs legibles.
   _rosterTodos = snap.docs.map((doc) => doc.data());
+  _rosterConId = snap.docs.map((doc) => ({ dni: doc.id, data: doc.data() }));
   _cacheTimestamp = Date.now();
   log.info(`[empleados-cache] refresh: ${_cacheEmpleados.length} choferes (de ${todos} empleados, TTL ${_CACHE_TTL_MS}ms)`);
 }
@@ -397,38 +401,25 @@ function crearHandler(fs, wa) {
       // ─── Identificar al chofer (necesario para ACUSE y para Fase 3) ───
       const fromNumber = msg.from.replace('@c.us', '');
       const chofer = await _resolverChofer(db, fromNumber);
-      const esAdmin = !chofer && commands._esAdmin(fromNumber);
-      if (!chofer && !esAdmin) {
+      const persona = await _resolverPersonaAgente(db, fromNumber, chofer);
+      if (!persona) {
         log.debug(`Mensaje de número no registrado ${fromNumber}, ignoro.`);
         return;
       }
 
-      // ─── Agente conversacional (Fase 1: consultas read-only) ───
+      // ─── Agente conversacional ───
       // Texto libre (sin foto y sin citar un aviso): si el agente está
-      // encendido responde con datos reales. CHOFER ve SOLO lo suyo; ADMIN
-      // puede consultar de cualquiera (las tools cambian según el rol). Si
-      // está apagado, sin API key o falla, `responder` devuelve null y
-      // seguimos al flujo de siempre (al chofer: acuse / Fase 3; al admin:
-      // nada). El quote y la media se reservan para respuestas-a-avisos.
+      // encendido responde según el ROL (CHOFER ve solo lo suyo;
+      // ADMIN/SUPERVISOR consultan de cualquiera + Cachatore). Si está
+      // apagado, sin API key, sin tools para ese rol, o falla, `responder`
+      // devuelve null y seguimos al flujo de siempre (al chofer: acuse /
+      // Fase 3; a otros roles: nada). Quote y media van a respuestas-a-avisos.
       const esTextoLibre =
         !msg.hasMedia &&
         !msg.hasQuotedMsg &&
         typeof msg.body === 'string' &&
         msg.body.trim().length > 0;
       if (esTextoLibre) {
-        const persona = chofer
-          ? {
-              rol: 'CHOFER',
-              dni: chofer.dni,
-              nombre: chofer.data.NOMBRE,
-              data: chofer.data,
-            }
-          : {
-              rol: 'ADMIN',
-              dni: null,
-              nombre: nombrePorTelefonoTodos(fromNumber),
-              data: {},
-            };
         try {
           const respuestaAgente = await agente.responder(
             { texto: msg.body, persona, telefono: fromNumber },
@@ -446,8 +437,9 @@ function crearHandler(fs, wa) {
         }
       }
 
-      // Si es ADMIN (no chofer), termina acá: no recibe el acuse de chofer.
-      if (esAdmin) return;
+      // Solo los CHOFERES siguen al acuse / Fase 3. Otros roles (admin,
+      // supervisor, etc.) terminan acá: no reciben el acuse de chofer.
+      if (!chofer) return;
 
       // ─── Acuse automático ───
       // Aunque la Fase 3 esté apagada, si un chofer registrado responde
@@ -592,6 +584,69 @@ function nombrePorTelefono(telefono) {
  */
 function nombrePorTelefonoTodos(telefono) {
   return _buscarNombreEn(telefono, _rosterTodos);
+}
+
+// ─── Resolución de rol para el agente ───
+
+const _ROLES_VALIDOS = new Set([
+  'CHOFER', 'PLANTA', 'GOMERIA', 'SEG_HIGIENE', 'SUPERVISOR', 'ADMIN',
+]);
+
+/** Espejo (JS) de AppRoles.normalizar: USUARIO→CHOFER, valida la lista. */
+function _normalizarRol(rol) {
+  const r = String(rol || '').toUpperCase().trim();
+  if (r === 'USUARIO') return 'CHOFER';
+  return _ROLES_VALIDOS.has(r) ? r : 'CHOFER';
+}
+
+/** Busca el {dni, data} de un empleado por teléfono (E.164) en `lista`. */
+function _buscarEmpleadoEn(telefono, lista) {
+  if (!lista || !telefono) return null;
+  const digits = String(telefono).replace(/\D+/g, '');
+  if (!digits) return null;
+  const wid = normalizarTelefonoAWid(telefono);
+  const canonical = wid ? String(wid).replace(/@c\.us$/, '') : null;
+  for (const item of lista) {
+    const tel = String(item.data.TELEFONO || '').replace(/\D+/g, '');
+    if (!tel) continue;
+    if (digits === tel) return item;
+    if (canonical) {
+      const telWid = normalizarTelefonoAWid(tel);
+      if (telWid && canonical === String(telWid).replace(/@c\.us$/, '')) {
+        return item;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Resuelve la "persona" (con su ROL real) que escribe, para el agente:
+ *   - CHOFER si `_resolverChofer` ya lo identificó.
+ *   - Otro rol (SUPERVISOR / GOMERIA / ...) buscándolo en el roster completo.
+ *   - ADMIN si su teléfono está en ADMIN_PHONES (gana sobre lo anterior).
+ * Devuelve null si el número no pertenece a ningún empleado ni admin.
+ */
+async function _resolverPersonaAgente(db, fromNumber, chofer) {
+  if (chofer) {
+    return {
+      rol: 'CHOFER',
+      dni: chofer.dni,
+      nombre: chofer.data.NOMBRE,
+      data: chofer.data,
+    };
+  }
+  await asegurarCacheEmpleados(db);
+  const emp = _buscarEmpleadoEn(fromNumber, _rosterConId || []);
+  let rol = emp ? _normalizarRol(emp.data.ROL) : null;
+  if (commands._esAdmin(fromNumber)) rol = 'ADMIN';
+  if (!rol) return null;
+  return {
+    rol,
+    dni: emp ? emp.dni : null,
+    nombre: emp ? emp.data.NOMBRE : nombrePorTelefonoTodos(fromNumber),
+    data: emp ? emp.data : {},
+  };
 }
 
 module.exports = {
