@@ -161,11 +161,15 @@ service firebase.storage {
 
     match /EMPLEADOS_DOCS/{archivo=**} {
       allow read: if isAdminOrSupervisor() || isSegHigiene();
-      allow write: if isAdmin();
+      // write: admin + SUPERVISOR. El supervisor GESTIONA vencimientos y sube los
+      // comprobantes desde el menú Vencimientos. Antes era solo isAdmin() → el
+      // supervisor no podía actualizar archivos ni fechas (la subida del archivo
+      // fallaba y abortaba todo el flujo). Bug reportado/auditado 2026-06-01.
+      allow write: if isAdminOrSupervisor();
     }
     match /VEHICULOS_DOCS/{archivo=**} {
       allow read: if isAdminOrSupervisor() || isSegHigiene();
-      allow write: if isAdmin();
+      allow write: if isAdminOrSupervisor();
     }
 
     // ========================================================================
