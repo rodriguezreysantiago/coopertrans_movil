@@ -105,16 +105,49 @@ describe('evaluarTickJornada — manejando, acumulación', () => {
     assert.strictEqual(j.estado, 'manejando');
   });
 
-  test('resetea pausa y tracking de descanso al manejar', () => {
+  test('resetea pausa y tracking de descanso al manejar (descanso corto)', () => {
     const j = nuevaJornadaTest({
       bloque_actual_pausa_seg: 300,
       descanso_segundos: 1000,
-      descanso_inicio_ts: T0,
+      // Paró hace 1h (pausa, NO descanso de jornada de 8h): al volver a
+      // manejar debe resetear el tracking y seguir la MISMA jornada.
+      descanso_inicio_ts: Timestamp.fromMillis(MEDIODIA_MS - 3600 * 1000),
     });
-    tickManejando(j, 600);
+    const { cerrada } = tickManejando(j, 600);
+    assert.ok(!cerrada, 'no debe cerrar la jornada por una pausa corta');
     assert.strictEqual(j.bloque_actual_pausa_seg, 0);
     assert.strictEqual(j.descanso_segundos, 0);
     assert.strictEqual(j.descanso_inicio_ts, null);
+  });
+
+  // Regresión Balbiano 2026-06-01: paró 23:23, el equipo se APAGÓ (dejó de
+  // transmitir → gap de horas sin reporte) y arrancó 07:26. El tracking
+  // incremental del descanso (+= deltaSeg tick a tick) no acumuló nada
+  // porque el tick no veía al camión, y la ventana de eventos (2h) no
+  // alcanzaba a ver cuándo paró → el sistema seguía contando la jornada del
+  // día anterior y le mandó "11h de conducción". El fix mide el descanso por
+  // la DURACIÓN real desde que paró (descanso_inicio_ts) y, al arrancar tras
+  // ≥8h, cierra la jornada (descanso de jornada cumplido).
+  test('arranca tras ≥8h parado (camión apagado) → cierra jornada por descanso', () => {
+    const j = nuevaJornadaTest({
+      estado: 'descanso',
+      // Paró hace 8h 3min (≥ DESCANSO_MIN_SEGUNDOS = 8h) en una posición.
+      descanso_inicio_ts: Timestamp.fromMillis(
+        MEDIODIA_MS - (DESCANSO_MIN_SEGUNDOS + 180) * 1000,
+      ),
+      descanso_inicio_lat: -38.0,
+      descanso_inicio_lng: -68.0,
+      // El tracking incremental "perdió" el descanso por el gap de reporte.
+      descanso_segundos: 0,
+    });
+    const { cerrada } = tickManejando(j, 600);
+    assert.ok(cerrada, 'debe cerrar la jornada al arrancar tras el descanso');
+    assert.strictEqual(j.estado, 'descanso_jornada');
+    assert.ok(
+      j.descanso_segundos >= DESCANSO_MIN_SEGUNDOS,
+      'descanso registrado >= 8h aunque el tracking incremental fuera 0',
+    );
+    assert.ok(j.jornada_fin_ts != null, 'jornada cerrada con fin_ts');
   });
 });
 

@@ -937,6 +937,26 @@ export function evaluarTickJornada(
 
   if (manejando) {
     // === Está manejando ===
+    // Robustez ante camión APAGADO de noche (caso Balbiano 2026-06-01): si
+    // venía parado en la misma posición desde hace ≥ 8h, el descanso de
+    // jornada está CUMPLIDO aunque el tracking incremental no lo haya podido
+    // acumular. El equipo apagado deja de transmitir (gap de horas sin
+    // reporte) y la ventana de eventos (2h) no llega a ver cuándo paró → el
+    // sistema "perdía" el descanso y seguía contando la jornada del día
+    // anterior. Acá lo medimos por la DURACIÓN real desde descanso_inicio_ts
+    // y cerramos la jornada antes de contar este arranque como manejo viejo
+    // (el próximo tick abre la jornada nueva, el chofer ya arrancó).
+    if (j.descanso_inicio_ts != null) {
+      const descansoRealSeg =
+        (ahoraMs - j.descanso_inicio_ts.toMillis()) / 1000;
+      if (descansoRealSeg >= DESCANSO_MIN_SEGUNDOS) {
+        j.descanso_segundos = descansoRealSeg;
+        j.estado = "descanso_jornada";
+        j.jornada_fin_ts = ahora;
+        j.ultima_actualizacion_ts = ahora;
+        return { avisos, cerrada: true };
+      }
+    }
     // Fix AB493CP: si recién arrancó tras una pausa ≥15 min que terminó
     // DESPUÉS del último tick, cerrar el bloque retroactivamente (la pausa
     // pudo empezar y terminar entre dos ticks de 5 min). El gate
@@ -1053,7 +1073,12 @@ export function evaluarTickJornada(
           j.descanso_inicio_lng = lng;
           j.descanso_segundos = 0;
         } else {
-          j.descanso_segundos += deltaSeg;
+          // Duración REAL del descanso (no acumulación tick a tick): robusto
+          // ante gaps de reporte. Si el equipo dejó de transmitir un rato y
+          // vuelve en la misma posición, el descanso refleja el tiempo real
+          // transcurrido desde que paró, no solo los ticks que vimos.
+          j.descanso_segundos =
+            (ahoraMs - j.descanso_inicio_ts!.toMillis()) / 1000;
         }
       }
     }
