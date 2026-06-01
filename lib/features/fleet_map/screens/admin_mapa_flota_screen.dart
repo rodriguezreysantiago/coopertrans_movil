@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/excluidos_service.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/constants/map_constants.dart';
 import '../../../shared/utils/formatters.dart';
@@ -63,20 +64,16 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
   LatLng _centroInicial = _centroFallback;
   double _zoomInicial = _zoomFallback;
 
-  /// Filtro por estado del motor. null = todos.
-  bool? _filtroIgnicionOn; // null=todos, true=ON, false=OFF
-  /// Si true, oculta tractores con > 1h sin reportar.
-  bool _ocultarStale = false;
-  /// Si true, muestra SOLO los tractores con drift detectado.
-  /// El cron del poller marca `drift_tipo` en cada doc cuando el chofer
-  /// que reporta Sitrack (iButton) no coincide con la asignación activa
-  /// del sistema. Útil para que el admin atienda solo los inconsistentes.
-  bool _soloDrift = false;
+  /// Vista satelital (Mapbox) vs callejera (Carto). Default callejera.
+  bool _satelital = false;
 
-  /// Texto de búsqueda por patente (mayúsculas, substring match).
-  /// Vacío = sin filtro.
-  String _searchQuery = '';
-  final _searchCtrl = TextEditingController();
+  /// Set de excluidos (tanques + sus choferes + testers). Carga async en
+  /// initState. Mientras es null no se excluye a nadie (fail-safe).
+  ExcluidosSet? _excluidos;
+
+  /// Patente seleccionada desde el panel lateral (resalta su marker +
+  /// centra el mapa). null = ninguna.
+  String? _seleccionada;
 
   /// Auto-fit al primer render con docs. Después de la primera vez, no
   /// volvemos a tocar la cámara automáticamente — el admin pan/zoom y
@@ -98,12 +95,16 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
   void initState() {
     super.initState();
     _cargarUltimaPosicion();
+    // Excluir tanques + sus choferes (combustibles, otra área de Vecchi),
+    // igual que el resto de la app. Fail-safe: si falla, no excluye a nadie.
+    ExcluidosService.cargar().then((s) {
+      if (mounted) setState(() => _excluidos = s);
+    });
   }
 
   @override
   void dispose() {
     _persistirDebounce?.cancel();
-    _searchCtrl.dispose();
     _mapController.dispose();
     super.dispose();
   }
@@ -173,16 +174,45 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
     );
   }
 
-  /// Limpia los 3 filtros + el search. Usado desde el botón del empty
-  /// state cuando los filtros actuales vacían el mapa.
-  void _limpiarFiltros() {
-    setState(() {
-      _filtroIgnicionOn = null;
-      _ocultarStale = false;
-      _soloDrift = false;
-      _searchQuery = '';
-      _searchCtrl.clear();
-    });
+  /// Centra el mapa en la unidad elegida desde el panel lateral y la marca
+  /// como seleccionada (para resaltar su marker).
+  void _seleccionarUnidad(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    final lat = (data['lat'] as num?)?.toDouble();
+    final lng = (data['lng'] as num?)?.toDouble();
+    setState(() => _seleccionada = doc.id);
+    if (lat != null && lng != null) {
+      _mapController.move(LatLng(lat, lng), 14);
+    }
+  }
+
+  /// Abre el panel de unidades como bottom sheet (mobile, donde no entra el
+  /// panel lateral fijo).
+  void _abrirPanelMobile(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+    DateTime ahora,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface1,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
+      builder: (_) => SizedBox(
+        height: MediaQuery.of(context).size.height * 0.7,
+        child: _PanelUnidades(
+          docs: docs,
+          ahora: ahora,
+          seleccionada: _seleccionada,
+          onSeleccionar: (doc) {
+            Navigator.of(context).pop();
+            _seleccionarUnidad(doc);
+          },
+        ),
+      ),
+    );
   }
 
   @override
@@ -198,123 +228,90 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
           .collection(AppCollections.sitrackPosiciones)
           .snapshots(),
       builder: (ctx, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppColors.brand),
-            );
-          }
-          if (snap.hasError) {
-            return AppErrorState(
-              title: 'No pudimos cargar el mapa',
-              subtitle: snap.error.toString(),
-            );
-          }
-
-          final allDocs = snap.data?.docs ?? const [];
-          final ahora = DateTime.now();
-
-          // Filtros aplicados client-side (la colección es chica, ~55
-          // docs; no justifica indices ni queries compuestas).
-          final visibles = allDocs.where((d) {
-            final data = d.data();
-            final ignition = data['ignition'] == true;
-            final driftTipo = (data['drift_tipo'] ?? '').toString();
-            if (_soloDrift && driftTipo.isEmpty) return false;
-            if (_filtroIgnicionOn != null && ignition != _filtroIgnicionOn) {
-              return false;
-            }
-            if (_ocultarStale) {
-              final reportTs = (data['report_date'] as Timestamp?)?.toDate();
-              if (reportTs == null) return false;
-              if (ahora.difference(reportTs).inMinutes > 60) return false;
-            }
-            // Filtro por patente (substring match, case-insensitive).
-            if (_searchQuery.isNotEmpty &&
-                !d.id.toUpperCase().contains(_searchQuery)) {
-              return false;
-            }
-            // Tiene que tener lat/lng válidos.
-            final lat = (data['lat'] as num?)?.toDouble();
-            final lng = (data['lng'] as num?)?.toDouble();
-            if (lat == null || lng == null) return false;
-            return true;
-          }).toList();
-
-          // Auto-fit al primer render con datos. Si ya hubo fit previo,
-          // respetamos el pan/zoom del usuario.
-          if (!_didInitialFit && visibles.isNotEmpty) {
-            _didInitialFit = true;
-            // Posponer al próximo frame para que el MapController ya esté
-            // attached al FlutterMap.
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _ajustarVistaATodaLaFlota(visibles);
-            });
-          }
-
-          // Conteos para la toolbar
-          int conIgnicionOn = 0;
-          int conIgnicionOff = 0;
-          int stale = 0;
-          int drifts = 0;
-          for (final d in allDocs) {
-            final data = d.data();
-            if (data['ignition'] == true) {
-              conIgnicionOn++;
-            } else {
-              conIgnicionOff++;
-            }
-            final reportTs = (data['report_date'] as Timestamp?)?.toDate();
-            if (reportTs == null ||
-                ahora.difference(reportTs).inMinutes > 60) {
-              stale++;
-            }
-            if ((data['drift_tipo'] ?? '').toString().isNotEmpty) {
-              drifts++;
-            }
-          }
-
-          return Column(
-            children: [
-              _Toolbar(
-                total: allDocs.length,
-                conIgnicionOn: conIgnicionOn,
-                conIgnicionOff: conIgnicionOff,
-                stale: stale,
-                drifts: drifts,
-                visibles: visibles.length,
-                filtroIgnicion: _filtroIgnicionOn,
-                ocultarStale: _ocultarStale,
-                soloDrift: _soloDrift,
-                searchCtrl: _searchCtrl,
-                onSearchChanged: (v) =>
-                    setState(() => _searchQuery = v.toUpperCase()),
-                onFiltroIgnicion: (v) =>
-                    setState(() => _filtroIgnicionOn = v),
-                onOcultarStaleToggle: (v) =>
-                    setState(() => _ocultarStale = v),
-                onSoloDriftToggle: (v) => setState(() => _soloDrift = v),
-              ),
-              Expanded(
-                child: _Mapa(
-                  controller: _mapController,
-                  centroInicial: _centroInicial,
-                  zoomInicial: _zoomInicial,
-                  docs: visibles,
-                  ahora: ahora,
-                  hayFiltrosActivos: _filtroIgnicionOn != null ||
-                      _ocultarStale ||
-                      _soloDrift ||
-                      _searchQuery.isNotEmpty,
-                  totalSinFiltros: allDocs.length,
-                  onMarkerTap: (doc) => _abrirDetalle(doc),
-                  onLimpiarFiltros: _limpiarFiltros,
-                  onFitFlota: () => _ajustarVistaATodaLaFlota(visibles),
-                  onPosicionCambiada: _persistirPosicion,
-                ),
-              ),
-            ],
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.brand),
           );
-        },
+        }
+        if (snap.hasError) {
+          return AppErrorState(
+            title: 'No pudimos cargar el mapa',
+            subtitle: snap.error.toString(),
+          );
+        }
+
+        final allDocs = snap.data?.docs ?? const [];
+        final ahora = DateTime.now();
+
+        // Unidades visibles: con posición válida y NO excluidas. Los tanques
+        // y sus choferes quedan afuera (combustibles, otra área de Vecchi),
+        // igual que en todo el resto de la app. Ordenadas por patente
+        // ascendente (de menor a mayor) para el panel lateral.
+        final visibles = allDocs.where((d) {
+          final data = d.data();
+          final lat = (data['lat'] as num?)?.toDouble();
+          final lng = (data['lng'] as num?)?.toDouble();
+          if (lat == null || lng == null) return false;
+          final driverDni = (data['driver_dni'] ?? '').toString();
+          if (ExcluidosService.esExcluido(_excluidos,
+              dni: driverDni, patente: d.id)) {
+            return false;
+          }
+          return true;
+        }).toList()
+          ..sort((a, b) => a.id.compareTo(b.id));
+
+        // Auto-fit al primer render con datos. Si ya hubo fit previo,
+        // respetamos el pan/zoom del usuario.
+        if (!_didInitialFit && visibles.isNotEmpty) {
+          _didInitialFit = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _ajustarVistaATodaLaFlota(visibles);
+          });
+        }
+
+        // Layout: panel lateral con la lista de unidades + mapa. En pantallas
+        // angostas (mobile) el panel no entra fijo → se abre desde un botón
+        // sobre el mapa.
+        return LayoutBuilder(
+          builder: (lbCtx, constraints) {
+            final panelFijo = constraints.maxWidth >= 720;
+            final mapa = _Mapa(
+              controller: _mapController,
+              centroInicial: _centroInicial,
+              zoomInicial: _zoomInicial,
+              docs: visibles,
+              ahora: ahora,
+              satelital: _satelital,
+              seleccionada: _seleccionada,
+              onToggleSatelital: () =>
+                  setState(() => _satelital = !_satelital),
+              onMarkerTap: (doc) => _abrirDetalle(doc),
+              onFitFlota: () => _ajustarVistaATodaLaFlota(visibles),
+              onPosicionCambiada: _persistirPosicion,
+              onAbrirPanel:
+                  panelFijo ? null : () => _abrirPanelMobile(visibles, ahora),
+            );
+            if (!panelFijo) return mapa;
+            return Row(
+              children: [
+                SizedBox(
+                  width: 280,
+                  child: _PanelUnidades(
+                    docs: visibles,
+                    ahora: ahora,
+                    seleccionada: _seleccionada,
+                    onSeleccionar: _seleccionarUnidad,
+                  ),
+                ),
+                const VerticalDivider(
+                    width: 1, color: AppColors.borderSubtle),
+                Expanded(child: mapa),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -329,177 +326,72 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
 }
 
 // =============================================================================
-// TOOLBAR — chips de filtros + contadores
+// PANEL LATERAL — lista de unidades (de menor a mayor patente)
 // =============================================================================
 
-class _Toolbar extends StatelessWidget {
-  final int total;
-  final int conIgnicionOn;
-  final int conIgnicionOff;
-  final int stale;
-  final int drifts;
-  final int visibles;
-  final bool? filtroIgnicion;
-  final bool ocultarStale;
-  final bool soloDrift;
-  final TextEditingController searchCtrl;
-  final ValueChanged<String> onSearchChanged;
-  final ValueChanged<bool?> onFiltroIgnicion;
-  final ValueChanged<bool> onOcultarStaleToggle;
-  final ValueChanged<bool> onSoloDriftToggle;
+/// Panel con la lista de todas las unidades visibles, ordenadas por patente.
+/// Tap en una → centra el mapa en ella. Reemplazó a la toolbar de filtros el
+/// 2026-06-01 (pedido Santiago: sacar filtros, poner lista lateral).
+class _PanelUnidades extends StatelessWidget {
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  final DateTime ahora;
+  final String? seleccionada;
+  final ValueChanged<QueryDocumentSnapshot<Map<String, dynamic>>>
+      onSeleccionar;
 
-  const _Toolbar({
-    required this.total,
-    required this.conIgnicionOn,
-    required this.conIgnicionOff,
-    required this.stale,
-    required this.drifts,
-    required this.visibles,
-    required this.filtroIgnicion,
-    required this.ocultarStale,
-    required this.soloDrift,
-    required this.searchCtrl,
-    required this.onSearchChanged,
-    required this.onFiltroIgnicion,
-    required this.onOcultarStaleToggle,
-    required this.onSoloDriftToggle,
+  const _PanelUnidades({
+    required this.docs,
+    required this.ahora,
+    required this.seleccionada,
+    required this.onSeleccionar,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
-      decoration: const BoxDecoration(
-        color: AppColors.surface0,
-        border: Border(
-          bottom: BorderSide(color: AppColors.borderSubtle),
-        ),
-      ),
+      color: AppColors.surface0,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 5 contadores + texto "Mostrando X" en una sola Row sumaba
-          // ~400 dp en mobile (iPhone SE = 375 dp). Se rompía el toolbar.
-          // Ahora: contadores con scroll horizontal + texto fijo abajo.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.sm),
             child: Row(
               children: [
-                _ContadorMini(
-                    label: 'TOTAL',
-                    valor: '$total',
-                    color: AppColors.info),
-                const SizedBox(width: AppSpacing.md),
-                _ContadorMini(
-                    label: 'EN MARCHA',
-                    valor: '$conIgnicionOn',
-                    color: AppColors.success),
-                const SizedBox(width: AppSpacing.md),
-                _ContadorMini(
-                    label: 'APAGADOS',
-                    valor: '$conIgnicionOff',
-                    color: AppColors.textTertiary),
-                const SizedBox(width: AppSpacing.md),
-                _ContadorMini(
-                    label: '> 1H',
-                    valor: '$stale',
-                    color: AppColors.error),
-                const SizedBox(width: AppSpacing.md),
-                _ContadorMini(
-                    label: 'DRIFT',
-                    valor: '$drifts',
-                    color: drifts > 0
-                        ? AppColors.warning
-                        : AppColors.textDisabled),
+                const Icon(Icons.local_shipping_outlined,
+                    size: 18, color: AppColors.textSecondary),
+                const SizedBox(width: AppSpacing.sm),
+                Text('UNIDADES (${docs.length})',
+                    style: AppType.eyebrow
+                        .copyWith(color: AppColors.textSecondary)),
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.xs),
-          // Search por patente + contador "Mostrando X" en la misma fila.
-          Row(
-            children: [
-              Expanded(
-                child: SizedBox(
-                  height: 32,
-                  child: TextField(
-                    controller: searchCtrl,
-                    style: AppType.label,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: InputDecoration(
-                      isDense: true,
-                      prefixIcon: const Icon(Icons.search,
-                          size: 18, color: AppColors.textTertiary),
-                      suffixIcon: searchCtrl.text.isEmpty
-                          ? null
-                          : IconButton(
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              icon: const Icon(Icons.clear,
-                                  size: 16, color: AppColors.textTertiary),
-                              onPressed: () {
-                                searchCtrl.clear();
-                                onSearchChanged('');
-                              },
-                            ),
-                      hintText: 'Buscar patente...',
-                      hintStyle:
-                          AppType.label.copyWith(color: AppColors.textTertiary),
-                      border: const OutlineInputBorder(),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm, vertical: 0),
+          const Divider(height: 1, color: AppColors.borderSubtle),
+          Expanded(
+            child: docs.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(AppSpacing.lg),
+                      child: Text('Sin unidades con posición.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.textTertiary)),
                     ),
-                    onChanged: onSearchChanged,
+                  )
+                : ListView.builder(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+                    itemCount: docs.length,
+                    itemBuilder: (ctx, i) {
+                      final d = docs[i];
+                      return _ItemUnidad(
+                        doc: d,
+                        ahora: ahora,
+                        seleccionada: d.id == seleccionada,
+                        onTap: () => onSeleccionar(d),
+                      );
+                    },
                   ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                'Mostrando $visibles',
-                style: AppType.eyebrow,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          SizedBox(
-            height: 30,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _ChipFiltro(
-                  label: 'TODOS',
-                  selected: filtroIgnicion == null,
-                  onTap: () => onFiltroIgnicion(null),
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                _ChipFiltro(
-                  label: 'EN MARCHA',
-                  selected: filtroIgnicion == true,
-                  onTap: () => onFiltroIgnicion(true),
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                _ChipFiltro(
-                  label: 'APAGADOS',
-                  selected: filtroIgnicion == false,
-                  onTap: () => onFiltroIgnicion(false),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                _ToggleChip(
-                  label: 'OCULTAR > 1H',
-                  icono: Icons.timer_off_outlined,
-                  activo: ocultarStale,
-                  colorActivo: AppColors.error,
-                  onChange: onOcultarStaleToggle,
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                _ToggleChip(
-                  label: 'SOLO DRIFT',
-                  icono: Icons.warning_amber_outlined,
-                  activo: soloDrift,
-                  colorActivo: AppColors.warning,
-                  onChange: onSoloDriftToggle,
-                ),
-              ],
-            ),
           ),
         ],
       ),
@@ -507,120 +399,124 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
-class _ContadorMini extends StatelessWidget {
-  final String label;
-  final String valor;
-  final Color color;
-
-  const _ContadorMini({
-    required this.label,
-    required this.valor,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: AppType.eyebrow.copyWith(color: color.withAlpha(180)),
-        ),
-        Text(
-          valor,
-          style: AppType.heading.copyWith(color: color, fontWeight: FontWeight.bold),
-        ),
-      ],
-    );
-  }
-}
-
-class _ChipFiltro extends StatelessWidget {
-  final String label;
-  final bool selected;
+/// Un item del panel: dot de estado (motor/frescura/drift) + patente +
+/// chofer si está identificado.
+class _ItemUnidad extends StatelessWidget {
+  final QueryDocumentSnapshot<Map<String, dynamic>> doc;
+  final DateTime ahora;
+  final bool seleccionada;
   final VoidCallback onTap;
 
-  const _ChipFiltro({
-    required this.label,
-    required this.selected,
+  const _ItemUnidad({
+    required this.doc,
+    required this.ahora,
+    required this.seleccionada,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.brand : AppColors.textDisabled;
+    final data = doc.data();
+    final ignition = data['ignition'] == true;
+    final reportTs = (data['report_date'] as Timestamp?)?.toDate();
+    final minStale =
+        reportTs == null ? null : ahora.difference(reportTs).inMinutes;
+    final tieneDrift = (data['drift_tipo'] ?? '').toString().isNotEmpty;
+    final color = _Mapa._colorMarker(
+      ignition: ignition,
+      minStale: minStale,
+      tieneDrift: tieneDrift,
+    );
+
+    final apellido = (data['driver_apellido'] ?? '').toString();
+    final nombre = (data['driver_nombre'] ?? '').toString();
+    final chofer = [apellido, nombre]
+        .where((s) => s.isNotEmpty)
+        .join(' ')
+        .trim()
+        .replaceAll(RegExp(r'\s+'), ' ');
+
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.brand.withAlpha(25)
-              : AppColors.borderSubtle,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: color.withAlpha(80)),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 0.4,
-          ),
+        color: seleccionada ? AppColors.brand.withAlpha(30) : null,
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        child: Row(
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration:
+                  BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    doc.id,
+                    style: AppType.body.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (chofer.isNotEmpty)
+                    Text(
+                      chofer,
+                      style: AppType.label
+                          .copyWith(color: AppColors.textTertiary),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
+              ),
+            ),
+            if (tieneDrift)
+              const Icon(Icons.warning_amber,
+                  size: 16, color: AppColors.warning),
+          ],
         ),
       ),
     );
   }
 }
 
-class _ToggleChip extends StatelessWidget {
-  final String label;
+/// Botón flotante tipo "pill" sobre el mapa (toggle satélite / abrir panel).
+class _BotonMapa extends StatelessWidget {
   final IconData icono;
-  final bool activo;
-  final Color colorActivo;
-  final ValueChanged<bool> onChange;
-
-  const _ToggleChip({
-    required this.label,
-    required this.icono,
-    required this.activo,
-    required this.colorActivo,
-    required this.onChange,
-  });
+  final String label;
+  final VoidCallback onTap;
+  const _BotonMapa(
+      {required this.icono, required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final color = activo ? colorActivo : AppColors.textTertiary;
-    return InkWell(
-      onTap: () => onChange(!activo),
+    return Material(
+      color: AppColors.surface1,
       borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-        decoration: BoxDecoration(
-          color: activo ? colorActivo.withAlpha(35) : AppColors.borderSubtle,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: color.withAlpha(120)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icono, size: 14, color: color),
-            const SizedBox(width: AppSpacing.xs),
-            Text(
-              label,
-              style: TextStyle(
-                color: color,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 0.4,
-              ),
-            ),
-          ],
+      elevation: 3,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icono, size: 16, color: AppColors.textPrimary),
+              const SizedBox(width: AppSpacing.xs),
+              Text(label,
+                  style: AppType.label.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600)),
+            ],
+          ),
         ),
       ),
     );
@@ -637,12 +533,16 @@ class _Mapa extends StatelessWidget {
   final double zoomInicial;
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
   final DateTime ahora;
-  final bool hayFiltrosActivos;
-  final int totalSinFiltros;
+  final bool satelital;
+  final String? seleccionada;
+  final VoidCallback onToggleSatelital;
   final ValueChanged<QueryDocumentSnapshot<Map<String, dynamic>>> onMarkerTap;
-  final VoidCallback onLimpiarFiltros;
   final VoidCallback onFitFlota;
   final void Function(LatLng center, double zoom) onPosicionCambiada;
+
+  /// Si no es null, muestra un botón arriba-izquierda para abrir el panel de
+  /// unidades (mobile). En desktop el panel es fijo y esto es null.
+  final VoidCallback? onAbrirPanel;
 
   const _Mapa({
     required this.controller,
@@ -650,16 +550,20 @@ class _Mapa extends StatelessWidget {
     required this.zoomInicial,
     required this.docs,
     required this.ahora,
-    required this.hayFiltrosActivos,
-    required this.totalSinFiltros,
+    required this.satelital,
+    required this.seleccionada,
+    required this.onToggleSatelital,
     required this.onMarkerTap,
-    required this.onLimpiarFiltros,
     required this.onFitFlota,
     required this.onPosicionCambiada,
+    required this.onAbrirPanel,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Satélite Mapbox si hay token configurado; si no, cae a callejero
+    // (Carto Voyager).
+    final usarSatelite = satelital && MapConstants.tieneMapbox;
     return Stack(
       children: [
         FlutterMap(
@@ -681,18 +585,21 @@ class _Mapa extends StatelessWidget {
             },
           ),
           children: [
-            TileLayer(
-              urlTemplate: MapConstants.tileUrl,
-              subdomains: MapConstants.tileSubdomains,
-              userAgentPackageName: MapConstants.userAgent,
-            ),
+            // Vista satelital (Mapbox, sin subdomains) o callejera (Carto
+            // Voyager, con subdomains a/b/c/d).
+            if (usarSatelite)
+              TileLayer(
+                urlTemplate: MapConstants.tileSatelliteUrl,
+                userAgentPackageName: MapConstants.userAgent,
+              )
+            else
+              TileLayer(
+                urlTemplate: MapConstants.tileUrl,
+                subdomains: MapConstants.tileSubdomains,
+                userAgentPackageName: MapConstants.userAgent,
+              ),
             // Agrupamos pins muy cerca (radio chico de 25px) para evitar
-            // superposición cuando varios tractores están en el mismo
-            // predio (acopio, base operativa). A zoom alto se separan.
-            // Bajamos de 40 → 25 para que a zoom medio (provincia) los
-            // markers individuales asomen con su flecha de rumbo — antes
-            // a Argentina entera quedaba todo en clusters y nunca se
-            // veían rumbos.
+            // superposición en el mismo predio. A zoom alto se separan.
             MarkerClusterLayerWidget(
               options: MarkerClusterLayerOptions(
                 maxClusterRadius: 25,
@@ -707,8 +614,6 @@ class _Mapa extends StatelessWidget {
                   ),
                   child: Center(
                     child: Text(
-                      // Separador de miles para clusters grandes (1.234
-                      // en vez de 1234, consistente con resto de la app).
                       AppFormatters.formatearMiles(markers.length),
                       style: AppType.heading
                           .copyWith(color: AppColors.textPrimary),
@@ -717,43 +622,37 @@ class _Mapa extends StatelessWidget {
                 ),
               ),
             ),
-            const RichAttributionWidget(
+            RichAttributionWidget(
               attributions: [
-                TextSourceAttribution('© OpenStreetMap'),
+                TextSourceAttribution(
+                    usarSatelite ? '© Mapbox · © Maxar' : '© OpenStreetMap'),
               ],
             ),
           ],
         ),
 
-        // Empty state overlay: filtros activos pero 0 markers visibles.
-        // Solo mostramos si hay docs en total (sin filtros) — si no hay
-        // ningún doc, el problema es de data no de filtros.
-        if (docs.isEmpty && totalSinFiltros > 0 && hayFiltrosActivos)
+        // Botón "abrir panel de unidades" (solo mobile, arriba-izquierda).
+        if (onAbrirPanel != null)
           Positioned(
             top: AppSpacing.md,
             left: AppSpacing.md,
-            right: AppSpacing.md,
-            child: AppCard(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Row(
-                children: [
-                  const Icon(Icons.filter_alt_off,
-                      color: AppColors.warning, size: 20),
-                  const SizedBox(width: AppSpacing.sm),
-                  const Expanded(
-                    child: Text(
-                      'Sin unidades con los filtros actuales.',
-                    ),
-                  ),
-                  AppButton.ghost(
-                    label: 'Limpiar',
-                    size: AppButtonSize.sm,
-                    onPressed: onLimpiarFiltros,
-                  ),
-                ],
-              ),
+            child: _BotonMapa(
+              icono: Icons.list,
+              label: 'Unidades',
+              onTap: onAbrirPanel!,
             ),
           ),
+
+        // Toggle satélite / mapa (arriba-derecha).
+        Positioned(
+          top: AppSpacing.md,
+          right: AppSpacing.md,
+          child: _BotonMapa(
+            icono: satelital ? Icons.map_outlined : Icons.satellite_alt,
+            label: satelital ? 'Mapa' : 'Satélite',
+            onTap: onToggleSatelital,
+          ),
+        ),
 
         // FAB "centrar en toda la flota". Solo si hay markers visibles.
         if (docs.isNotEmpty)
@@ -775,6 +674,7 @@ class _Mapa extends StatelessWidget {
 
   Marker _markerDeDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data();
+    final esSeleccionada = doc.id == seleccionada;
     final lat = (data['lat'] as num).toDouble();
     final lng = (data['lng'] as num).toDouble();
     final ignition = data['ignition'] == true;
@@ -841,11 +741,11 @@ class _Mapa extends StatelessWidget {
           decoration: BoxDecoration(
             color: color,
             shape: BoxShape.circle,
-            // Borde más grueso/contrastado si hay drift, para que salte
-            // a la vista incluso cuando hay muchos markers cerca.
+            // Borde brand grueso si está seleccionada desde el panel;
+            // si no, más grueso/contrastado cuando hay drift.
             border: Border.all(
-              color: AppColors.textPrimary,
-              width: tieneDrift ? 3 : 2,
+              color: esSeleccionada ? AppColors.brand : AppColors.textPrimary,
+              width: esSeleccionada ? 4 : (tieneDrift ? 3 : 2),
             ),
             boxShadow: const [
               BoxShadow(
