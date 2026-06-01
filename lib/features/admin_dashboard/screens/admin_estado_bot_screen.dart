@@ -123,3 +123,55 @@ class _AdminEstadoBotScreenState extends State<AdminEstadoBotScreen> {
   }
 }
 
+/// Pantalla dedicada de "Reglas de notificación" del bot.
+///
+/// Se separó del dashboard de Estado del Bot (Santiago 2026-06-01: la card
+/// inline con todas las reglas hacía la pantalla muy larga). Tiene su
+/// propio stream de `BOT_HEALTH/main` para reflejar en vivo las reglas y
+/// los canales pausados. El catálogo y las filas (`_CardReglasNotificacion`
+/// y sus sub-widgets) viven en el part de widgets — al ser del mismo
+/// library se reutilizan tal cual, sin moverlos.
+class AdminReglasNotificacionScreen extends StatelessWidget {
+  const AdminReglasNotificacionScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppScaffold(
+      title: 'Reglas de notificación',
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('BOT_HEALTH')
+            .doc('main')
+            .snapshots(),
+        builder: (ctx, snap) {
+          if (snap.hasError) {
+            return _Mensaje(
+              icono: Icons.error_outline,
+              color: AppColors.error,
+              texto: 'Error leyendo BOT_HEALTH: ${snap.error}',
+            );
+          }
+          if (!snap.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(color: AppColors.success),
+            );
+          }
+          final data =
+              (snap.data!.data() as Map<String, dynamic>?) ?? const {};
+          final reglas = (data['reglasNotificacion'] as Map?) ?? const {};
+          return ListView(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
+            ),
+            children: [
+              _CardReglasNotificacion(reglas: reglas),
+              const SizedBox(height: AppSpacing.xl),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+

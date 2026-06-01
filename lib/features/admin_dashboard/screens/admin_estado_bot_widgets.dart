@@ -39,15 +39,13 @@ class _DashboardBot extends StatelessWidget {
         const SizedBox(height: AppSpacing.md),
         _CardConfig(config: (data['config'] as Map?) ?? const {}),
         const SizedBox(height: AppSpacing.md),
-        _CardReglasNotificacion(
-          reglas: (data['reglasNotificacion'] as Map?) ?? const {},
+        // Reglas de notificación: movido a pantalla aparte (Santiago
+        // 2026-06-01) — la card inline (16 reglas) hacía el dashboard muy
+        // largo. Acá queda un acceso; el detalle + las pausas viven en
+        // AdminReglasNotificacionScreen.
+        _TileAbrirReglas(
+          cantidad: ((data['reglasNotificacion'] as Map?) ?? const {}).length,
         ),
-        const SizedBox(height: AppSpacing.md),
-        _CardErroresRecientes(
-          errores: (data['erroresRecientes'] as List?) ?? const [],
-        ),
-        const SizedBox(height: AppSpacing.md),
-        _CardBotInfo(bot: (data['bot'] as Map?) ?? const {}),
         const SizedBox(height: AppSpacing.xl),
       ],
     );
@@ -866,131 +864,65 @@ class _CardConfig extends StatelessWidget {
   }
 }
 
-class _CardBotInfo extends StatelessWidget {
-  final Map bot;
-  const _CardBotInfo({required this.bot});
+/// Acceso a la pantalla de "Reglas de notificación". Se sacó del dashboard
+/// (Santiago 2026-06-01: la card inline con todas las reglas lo hacía muy
+/// largo). Muestra el total y abre el detalle (quién recibe qué + pausas).
+///
+/// Las antiguas cards "Proceso" (versión/PID/Node/uptime) y "Errores
+/// recientes" (buffer de log técnico, solo lectura) se quitaron el mismo
+/// día: no eran accionables para el operador y alargaban el dashboard. La
+/// data sigue en BOT_HEALTH/main para diagnóstico.
+class _TileAbrirReglas extends StatelessWidget {
+  final int cantidad;
+  const _TileAbrirReglas({required this.cantidad});
 
   @override
   Widget build(BuildContext context) {
-    final v = (bot['version'] ?? '?').toString();
-    final pid = bot['pid'];
-    final node = (bot['nodeVersion'] ?? '?').toString();
-    final uptime = (bot['uptimeSegundos'] ?? 0) as int;
-
-    return _BloqueDatos(
-      titulo: 'Proceso',
-      icono: Icons.memory,
-      filas: [
-        _Fila('Versión', v),
-        _Fila('PID', pid?.toString() ?? '?'),
-        _Fila('Node', node),
-        _Fila('Uptime', _formatUptime(uptime)),
-      ],
-    );
-  }
-}
-
-class _CardErroresRecientes extends StatelessWidget {
-  final List errores;
-  const _CardErroresRecientes({required this.errores});
-
-  @override
-  Widget build(BuildContext context) {
-    if (errores.isEmpty) {
-      return const _BloqueDatos(
-        titulo: 'Errores recientes',
-        icono: Icons.bug_report_outlined,
-        filas: [
-          _Fila('Sin errores en buffer', '✓',
-              color: AppColors.success),
-        ],
-      );
-    }
     return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.lg - 2),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.bug_report_outlined,
-                  color: AppColors.error, size: 18),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                'Errores recientes (${errores.length})',
-                style: AppType.label.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-            ],
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const AdminReglasNotificacionScreen(),
           ),
-          const SizedBox(height: AppSpacing.md - 2),
-          ...errores.map((e) => _FilaError(error: e as Map)),
-        ],
-      ),
-    );
-  }
-}
-
-class _FilaError extends StatelessWidget {
-  final Map error;
-  const _FilaError({required this.error});
-
-  @override
-  Widget build(BuildContext context) {
-    final cuando = _toDate(error['en']);
-    final ctx = (error['contexto'] ?? '').toString();
-    final msg = (error['mensaje'] ?? '').toString();
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Row(
             children: [
-              if (ctx.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withAlpha(30),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    ctx.toUpperCase(),
-                    style: const TextStyle(
-                      color: AppColors.error,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.5,
+              const Icon(Icons.rule_folder_outlined,
+                  color: AppColors.info, size: 20),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Reglas de notificación',
+                      style: AppType.label.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
                     ),
-                  ),
-                ),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                cuando == null ? '—' : _hace(cuando),
-                style: const TextStyle(
-                  color: AppColors.textTertiary,
-                  fontSize: 10,
+                    const SizedBox(height: 2),
+                    Text(
+                      cantidad > 0
+                          ? '$cantidad reglas · quién recibe qué y pausas'
+                          : 'Quién recibe qué y pausas',
+                      style: AppType.label.copyWith(
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              const Icon(Icons.chevron_right,
+                  color: AppColors.textTertiary, size: 20),
             ],
           ),
-          const SizedBox(height: 2),
-          Text(
-            msg,
-            // Stack-traces y mensajes crudos pueden ser de 200+ chars.
-            // 4 líneas + ellipsis para no inundar la card.
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
-            style: AppType.label.copyWith(
-              color: AppColors.textPrimary,
-              fontFamily: 'monospace',
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -1018,19 +950,6 @@ String _hace(DateTime cuando, {bool futuro = false}) {
   if (hs < 24) return futuro ? 'en $hs h' : 'hace $hs h';
   final dias = diff.inDays.abs();
   return futuro ? 'en $dias días' : 'hace $dias días';
-}
-
-String _formatUptime(int segs) {
-  if (segs < 60) return '${segs}s';
-  if (segs < 3600) return '${(segs / 60).floor()}m';
-  if (segs < 86400) {
-    final h = (segs / 3600).floor();
-    final m = ((segs % 3600) / 60).floor();
-    return '${h}h ${m}m';
-  }
-  final d = (segs / 86400).floor();
-  final h = ((segs % 86400) / 3600).floor();
-  return '${d}d ${h}h';
 }
 
 // =============================================================================
@@ -2029,11 +1948,14 @@ class _CardSparklineEnviadosState extends State<_CardSparklineEnviados> {
             },
           ),
           touchCallback: (event, response) {
-            if (!event.isInterestedForInteractions) return;
+            // Solo navegar en un TAP real. En desktop/web el mouse dispara
+            // FlPointerHoverEvent al pasar por encima del gráfico, y antes
+            // navegábamos con cualquier evento (isInterestedForInteractions
+            // también es true en hover) → te llevaba al histórico sin tocar
+            // nada (reporte Santiago 2026-06-01). FlTapUpEvent es el
+            // tap/click completado, equivalente a onTap.
+            if (event is! FlTapUpEvent) return;
             if (response?.spot == null) return;
-            // Tap a una barra → abrir el histórico (el usuario refina
-            // el rango ahí). Por ahora navegamos sin pre-seleccionar
-            // un día específico para no acoplar la API de la screen.
             Navigator.of(context).push(
               MaterialPageRoute<void>(
                 builder: (_) => const AdminWhatsappHistoricoScreen(),
