@@ -302,7 +302,9 @@ export const backfillHistoricoDescargas = onCall(
   {
     timeoutSeconds: 540,
     memory: "1GiB",
-    region: "us-central1",
+    // Hereda la región global (southamerica-east1, mismo DC que Firestore).
+    // Auditoría 2026-05-30: estaba en us-central1 (cross-region, +150ms/op);
+    // ningún cliente la llama por URL fija, así que mover es seguro.
   },
   async (req) => {
     const rol = (req.auth?.token?.rol as string | undefined) || "";
