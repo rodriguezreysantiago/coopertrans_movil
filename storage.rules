@@ -83,13 +83,14 @@ service firebase.storage {
       // solo SU foto (archivo arranca con su UID).
       allow read: if isAdminOrSupervisor()
         || (isSignedIn() && archivo.matches(request.auth.uid + '\\..*'));
-      allow write: if isAdmin()
+      // write: admin/supervisor (gestión de Personal) o el chofer su propia foto.
+      allow write: if isAdminOrSupervisor()
         || (isSignedIn() && archivo.matches(request.auth.uid + '\\..*'));
     }
     match /perfiles/{archivo} {
       allow read: if isAdminOrSupervisor()
         || (isSignedIn() && archivo.matches(request.auth.uid + '\\..*'));
-      allow write: if isAdmin()
+      allow write: if isAdminOrSupervisor()
         || (isSignedIn() && archivo.matches(request.auth.uid + '\\..*'));
     }
 
@@ -109,7 +110,8 @@ service firebase.storage {
             firestore.exists(/databases/(default)/documents/EMPLEADOS/$(request.auth.uid)) &&
             (firestore.get(/databases/(default)/documents/EMPLEADOS/$(request.auth.uid)).data.VEHICULO == patente
              || firestore.get(/databases/(default)/documents/EMPLEADOS/$(request.auth.uid)).data.ENGANCHE == patente));
-      allow write: if isAdmin();
+      // write: admin/supervisor (gestión de Flota sube/cambia la foto).
+      allow write: if isAdminOrSupervisor();
     }
     // Comprobantes (RTO, Seguro, extintores) — el código sube a VEHICULOS
     // en mayúsculas para distinguirlo de la carpeta de fotos (minúsculas).
@@ -122,18 +124,21 @@ service firebase.storage {
             firestore.exists(/databases/(default)/documents/EMPLEADOS/$(request.auth.uid)) &&
             (firestore.get(/databases/(default)/documents/EMPLEADOS/$(request.auth.uid)).data.VEHICULO == patente
              || firestore.get(/databases/(default)/documents/EMPLEADOS/$(request.auth.uid)).data.ENGANCHE == patente));
-      allow write: if isAdmin();
+      // write: admin/supervisor (gestión de Flota sube comprobantes).
+      allow write: if isAdminOrSupervisor();
     }
 
     // ========================================================================
-    // EMPLEADOS — papeles del chofer reemplazados por admin
+    // EMPLEADOS — papeles del chofer reemplazados por admin/supervisor
     // ========================================================================
 
     match /EMPLEADOS/{dni}/{archivo=**} {
-      // Solo admin reemplaza papeles (sin pasar por el flujo de
-      // revisión). El chofer NO escribe acá (lo hace en REVISIONES).
-      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == dni);
-      allow write: if isAdmin();
+      // Admin/supervisor reemplazan papeles desde la ficha de Personal (sin
+      // pasar por el flujo de revisión). El chofer NO escribe acá (lo hace
+      // en REVISIONES) pero SÍ lee los suyos.
+      allow read: if isAdminOrSupervisor()
+        || (isSignedIn() && request.auth.uid == dni);
+      allow write: if isAdminOrSupervisor();
     }
 
     // ========================================================================
