@@ -204,6 +204,24 @@ const TOOLS_CHOFER = [
       'tienen asignada.',
     params: {},
   },
+  {
+    name: 'mi_jornada',
+    description:
+      'Estado de la jornada de manejo de HOY del chofer que pregunta: ' +
+      'cuánto manejó en total, en qué bloque va y si está en pausa o ' +
+      'descanso. La jornada son 3 bloques de hasta 4h de manejo y el límite ' +
+      'diario es 12h. Usala si preguntan "cuánto llevo manejando", "cómo ' +
+      'viene mi jornada", etc.',
+    params: {},
+  },
+  {
+    name: 'mi_turno_ypf',
+    description:
+      'El turno de carga en YPF del chofer que pregunta: si tiene uno ' +
+      'reservado (con fecha/franja), si lo está buscando, o si no tiene ' +
+      'nada cargado. Usala si preguntan por su turno de carga en YPF.',
+    params: {},
+  },
 ];
 
 const TOOLS_GESTION_VENC = [
@@ -220,6 +238,41 @@ const TOOLS_GESTION_VENC = [
         description:
           'Nombre o apellido del chofer, o la patente de la unidad a buscar.',
       },
+    },
+  },
+  {
+    name: 'vencimientos_proximos',
+    description:
+      'Lista qué papeles vencen pronto, de los CHOFERES (licencia, ' +
+      'preocupacional, manejo defensivo) y de las UNIDADES (RTO, seguro, ' +
+      'extintores). Por defecto los próximos 15 días e incluye lo ya ' +
+      'vencido. Usala para "qué vence esta semana", "a quién se le vence ' +
+      'algo", etc.',
+    params: {
+      dias: {
+        type: 'integer',
+        description: 'Ventana en días hacia adelante (default 15). Ej: 7, 30.',
+      },
+    },
+  },
+  {
+    name: 'info_chofer',
+    description:
+      'Datos generales de un chofer (por nombre o apellido): rol, si está ' +
+      'activo, teléfono, unidad y enganche asignados, y vencimiento de la ' +
+      'licencia. Usala cuando pregunten los datos de un chofer.',
+    params: {
+      query: { type: 'string', description: 'Nombre o apellido del chofer.' },
+    },
+  },
+  {
+    name: 'jornada_de',
+    description:
+      'Estado de la jornada de manejo de HOY de un chofer indicado por ' +
+      'nombre o apellido (cuánto manejó, en qué bloque va, pausa/descanso). ' +
+      'Usala para "cómo viene la jornada de Fulano", "cuánto manejó X".',
+    params: {
+      query: { type: 'string', description: 'Nombre o apellido del chofer.' },
     },
   },
 ];
@@ -264,6 +317,16 @@ const TOOLS_CACHATORE = [
           'cualquier fecha.',
       },
     },
+  },
+  {
+    name: 'turnos_ypf_detalle',
+    description:
+      'Lista DETALLADA de Cachatore con NOMBRES: quiénes tienen turno ' +
+      'reservado, quiénes están buscando, quiénes están marcados para ' +
+      'reagendar y quiénes tienen problemas (sin mail, sin unidad, etc.). ' +
+      'Usala cuando pregunten "quiénes tienen turno", "quiénes están ' +
+      'buscando", o el detalle más allá del conteo.',
+    params: {},
   },
 ];
 
@@ -535,6 +598,217 @@ async function _toolPonerABuscar(db, persona, args) {
   };
 }
 
+function _fmtHHMM(seg) {
+  const s = Math.max(0, Math.round(seg || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/** Días entre hoy y `iso` (YYYY-MM-DD). Negativo = ya venció. null si inválida. */
+function _diasHasta(iso) {
+  if (!iso) return null;
+  const a = new Date(`${iso}T00:00:00Z`).getTime();
+  const b = new Date(`${_hoyIso()}T00:00:00Z`).getTime();
+  if (isNaN(a) || isNaN(b)) return null;
+  return Math.round((a - b) / 86400000);
+}
+
+/** Resuelve un chofer/empleado por nombre. {ok,dni,data} | {ok:false,...}. */
+async function _resolverChoferPorNombre(db, query, soloChofer) {
+  const q = String(query || '').trim();
+  if (!q) return { ok: false, error: 'Indicá el nombre.' };
+  let snap;
+  try {
+    snap = await db.collection('EMPLEADOS').get();
+  } catch (e) {
+    return { ok: false, error: `No pude buscar: ${e.message}` };
+  }
+  const qUp = q.toUpperCase();
+  const matches = snap.docs.filter((d) => {
+    const data = d.data();
+    if (soloChofer) {
+      const rol = String(data.ROL || 'CHOFER').toUpperCase();
+      if (!(rol === 'CHOFER' || rol === '' || rol === 'USUARIO')) return false;
+    }
+    return String(data.NOMBRE || '').toUpperCase().includes(qUp);
+  });
+  if (matches.length === 0) {
+    return { ok: false, error: `No encontré a "${q}".` };
+  }
+  if (matches.length > 1) {
+    return {
+      ok: false,
+      ambiguo: true,
+      opciones: matches.slice(0, 6).map((d) => d.data().NOMBRE),
+      error: `Varios coinciden con "${q}"; pedí que aclaren nombre y apellido.`,
+    };
+  }
+  return { ok: true, dni: matches[0].id, data: matches[0].data() };
+}
+
+async function _estadoJornada(db, dni, nombre) {
+  let snap;
+  try {
+    snap = await db.collection('JORNADAS')
+      .where('chofer_dni', '==', dni)
+      .where('jornada_fin_ts', '==', null)
+      .limit(1).get();
+  } catch (e) {
+    return { error: `No pude leer la jornada: ${e.message}` };
+  }
+  if (snap.empty) {
+    return {
+      chofer: nombre || dni,
+      jornada_activa: false,
+      nota: 'No hay una jornada de manejo en curso ahora.',
+    };
+  }
+  const j = snap.docs[0].data();
+  return {
+    chofer: nombre || dni,
+    jornada_activa: true,
+    estado: j.estado || null,
+    manejo_total: _fmtHHMM(j.total_manejo_seg),
+    bloques_completos: j.bloques_completos || 0,
+    bloque_actual_manejo: _fmtHHMM(j.bloque_actual_manejo_seg),
+    pausa_actual_min: Math.round((j.bloque_actual_pausa_seg || 0) / 60),
+    unidad: j.ultima_patente || null,
+  };
+}
+
+async function _toolMiJornada(db, persona) {
+  return await _estadoJornada(
+    db, persona.dni, persona.data && persona.data.NOMBRE
+  );
+}
+
+async function _toolMiTurnoYpf(db, persona) {
+  try {
+    const snap = await db.collection('CACHATORE_OBJETIVOS').doc(persona.dni).get();
+    if (!snap.exists || snap.data().activo === false) {
+      return {
+        tiene_turno: false,
+        buscando: false,
+        nota: 'No hay un turno de YPF cargado para este chofer.',
+      };
+    }
+    const o = snap.data();
+    const est = String(o.estado || 'buscando');
+    return {
+      estado: est,
+      tiene_turno: est === 'reservado' || est === 'reagendado',
+      turno: o.estado_turno || o.estado_hora || null,
+      franja: o.franja || null,
+      fecha_objetivo: o.fecha || null,
+      buscando: est === 'buscando',
+    };
+  } catch (e) {
+    return { error: `No pude leer el turno: ${e.message}` };
+  }
+}
+
+async function _toolVencimientosProximos(db, args) {
+  let dias = parseInt((args && args.dias) || 15, 10);
+  if (isNaN(dias) || dias <= 0) dias = 15;
+  const items = [];
+  try {
+    const snap = await db.collection('EMPLEADOS').get();
+    for (const d of snap.docs) {
+      const data = d.data();
+      if (data.ACTIVO === false) continue;
+      const rol = String(data.ROL || 'CHOFER').toUpperCase();
+      if (!(rol === 'CHOFER' || rol === '' || rol === 'USUARIO')) continue;
+      for (const [campo, etiqueta] of Object.entries(LABELS_VENC_EMPLEADO)) {
+        const dh = _diasHasta(_fechaIso(data[campo]));
+        if (dh != null && dh <= dias) {
+          items.push({
+            quien: data.NOMBRE || d.id, papel: etiqueta,
+            vence: _fechaIso(data[campo]), dias: dh,
+          });
+        }
+      }
+    }
+  } catch (_) { /* sigue con vehículos */ }
+  try {
+    const snap = await db.collection('VEHICULOS').get();
+    for (const d of snap.docs) {
+      const data = d.data();
+      if (data.ACTIVO === false) continue;
+      for (const [campo, etiqueta] of Object.entries(LABELS_VENC_VEHICULO)) {
+        const dh = _diasHasta(_fechaIso(data[campo]));
+        if (dh != null && dh <= dias) {
+          items.push({
+            quien: `Unidad ${d.id}`, papel: etiqueta,
+            vence: _fechaIso(data[campo]), dias: dh,
+          });
+        }
+      }
+    }
+  } catch (_) { /* nada */ }
+  items.sort((a, b) => a.dias - b.dias);
+  return {
+    ventana_dias: dias,
+    cantidad: items.length,
+    vencen: items.slice(0, 40),
+    nota:
+      items.length === 0
+        ? `No vence nada de personal ni unidades en los próximos ${dias} días.`
+        : 'Días negativos = ya vencido. No incluye papeles de empresa todavía.',
+  };
+}
+
+async function _toolInfoChofer(db, args) {
+  const r = await _resolverChoferPorNombre(db, args && args.query, false);
+  if (!r.ok) return r;
+  const data = r.data;
+  return {
+    nombre: data.NOMBRE || r.dni,
+    dni: r.dni,
+    rol: data.ROL || null,
+    activo: data.ACTIVO !== false,
+    telefono: data.TELEFONO || null,
+    unidad: data.VEHICULO || null,
+    enganche: data.ENGANCHE || null,
+    licencia_vence: _fechaIso(data.LICENCIA_DE_CONDUCIR),
+  };
+}
+
+async function _toolJornadaDe(db, args) {
+  const r = await _resolverChoferPorNombre(db, args && args.query, true);
+  if (!r.ok) return r;
+  return await _estadoJornada(db, r.dni, r.data.NOMBRE);
+}
+
+async function _toolTurnosYpfDetalle(db) {
+  const buscando = [], reservado = [], reagendar = [], problemas = [];
+  try {
+    const snap = await db.collection('CACHATORE_OBJETIVOS').get();
+    for (const d of snap.docs) {
+      const o = d.data();
+      if (o.activo === false) continue;
+      const est = String(o.estado || 'buscando');
+      const nombre = o.nombre || d.id;
+      if (est === 'reservado' || est === 'reagendado') {
+        reservado.push({ nombre, turno: o.estado_turno || o.estado_hora || null });
+      } else if (ESTADOS_PROBLEMA.includes(est)) {
+        problemas.push({ nombre, estado: est });
+      } else {
+        buscando.push({ nombre, franja: o.franja || null });
+      }
+      if (o.reagendar === true) reagendar.push(nombre);
+    }
+  } catch (e) {
+    return { error: `No pude leer Cachatore: ${e.message}` };
+  }
+  return {
+    con_turno: reservado,
+    buscando,
+    para_reagendar: reagendar,
+    con_problemas: problemas,
+  };
+}
+
 async function _ejecutarTool(db, nombre, persona, args) {
   switch (nombre) {
     case 'mis_vencimientos':
@@ -547,6 +821,18 @@ async function _ejecutarTool(db, nombre, persona, args) {
       return await _toolCachatoreEstado(db);
     case 'poner_a_buscar_turno':
       return await _toolPonerABuscar(db, persona, args);
+    case 'mi_jornada':
+      return await _toolMiJornada(db, persona);
+    case 'mi_turno_ypf':
+      return await _toolMiTurnoYpf(db, persona);
+    case 'vencimientos_proximos':
+      return await _toolVencimientosProximos(db, args);
+    case 'info_chofer':
+      return await _toolInfoChofer(db, args);
+    case 'jornada_de':
+      return await _toolJornadaDe(db, args);
+    case 'turnos_ypf_detalle':
+      return await _toolTurnosYpfDetalle(db);
     default:
       return { error: `Herramienta desconocida: ${nombre}` };
   }
@@ -880,6 +1166,8 @@ module.exports = {
   TOOLS_CHOFER,
   TOOLS_GESTION_VENC,
   TOOLS_CACHATORE,
+  _fmtHHMM,
+  _diasHasta,
   _recuperarHistorial,
   _guardarHistorial,
   _resetRateLimit: () => _rlPorClave.clear(),

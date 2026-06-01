@@ -375,3 +375,115 @@ describe('agente — memoria conversacional', () => {
     assert.strictEqual(h[0].texto, 't4'); // descartó los 4 más viejos
   });
 });
+
+describe('agente — herramientas nuevas (jornada, turno, vencimientos, info)', () => {
+  function dbMockFull({ empleados = [], vehiculos = {}, jornadas = [], cacheObj = {}, cacheList = [] } = {}) {
+    function colJornadas() {
+      const f = {};
+      const q = {};
+      q.where = (campo, _op, val) => { f[campo] = val; return q; };
+      q.limit = () => q;
+      q.get = async () => {
+        let res = jornadas;
+        if ('chofer_dni' in f) res = res.filter((j) => j.chofer_dni === f.chofer_dni);
+        if ('jornada_fin_ts' in f) res = res.filter((j) => (j.jornada_fin_ts ?? null) === f.jornada_fin_ts);
+        return { empty: res.length === 0, docs: res.map((j) => ({ id: j.chofer_dni, data: () => j })) };
+      };
+      return q;
+    }
+    return {
+      collection(name) {
+        if (name === 'JORNADAS') return colJornadas();
+        return {
+          doc(id) {
+            return {
+              async get() {
+                if (name === 'VEHICULOS') { const d = vehiculos[id]; return { exists: !!d, data: () => d }; }
+                if (name === 'CACHATORE_OBJETIVOS') { const d = cacheObj[id]; return { exists: !!d, data: () => d }; }
+                return { exists: false, data: () => undefined };
+              },
+            };
+          },
+          async get() {
+            if (name === 'EMPLEADOS') return { docs: empleados.map((e) => ({ id: e.id, data: () => e.data })) };
+            if (name === 'VEHICULOS') return { docs: Object.entries(vehiculos).map(([id, data]) => ({ id, data: () => data })) };
+            if (name === 'CACHATORE_OBJETIVOS') return { docs: cacheList.map((o) => ({ id: o.dni, data: () => o })) };
+            return { docs: [] };
+          },
+        };
+      },
+    };
+  }
+
+  test('mi_jornada: jornada activa → manejo y bloques', async () => {
+    const db = dbMockFull({ jornadas: [
+      { chofer_dni: '30111222', jornada_fin_ts: null, estado: 'manejando', total_manejo_seg: 5400, bloques_completos: 1, bloque_actual_manejo_seg: 1800, bloque_actual_pausa_seg: 0, ultima_patente: 'AA111AA' },
+    ] });
+    const r = await agente._ejecutarTool(db, 'mi_jornada', { rol: 'CHOFER', dni: '30111222', data: { NOMBRE: 'PEREZ' } });
+    assert.strictEqual(r.jornada_activa, true);
+    assert.strictEqual(r.manejo_total, '1h 30m');
+    assert.strictEqual(r.bloques_completos, 1);
+    assert.strictEqual(r.unidad, 'AA111AA');
+  });
+
+  test('mi_jornada: sin jornada activa', async () => {
+    const r = await agente._ejecutarTool(dbMockFull({ jornadas: [] }), 'mi_jornada', { rol: 'CHOFER', dni: 'x', data: {} });
+    assert.strictEqual(r.jornada_activa, false);
+  });
+
+  test('jornada_de: resuelve por nombre', async () => {
+    const db = dbMockFull({
+      empleados: [{ id: '30111222', data: { NOMBRE: 'PEREZ JUAN', ROL: 'CHOFER', ACTIVO: true } }],
+      jornadas: [{ chofer_dni: '30111222', jornada_fin_ts: null, estado: 'manejando', total_manejo_seg: 3600 }],
+    });
+    const r = await agente._ejecutarTool(db, 'jornada_de', { rol: 'ADMIN' }, { query: 'perez' });
+    assert.strictEqual(r.jornada_activa, true);
+    assert.strictEqual(r.manejo_total, '1h 0m');
+  });
+
+  test('mi_turno_ypf: reservado', async () => {
+    const db = dbMockFull({ cacheObj: { '30111222': { activo: true, estado: 'reservado', estado_turno: '05-06 06:00', franja: 'manana' } } });
+    const r = await agente._ejecutarTool(db, 'mi_turno_ypf', { rol: 'CHOFER', dni: '30111222', data: {} });
+    assert.strictEqual(r.tiene_turno, true);
+    assert.strictEqual(r.turno, '05-06 06:00');
+  });
+
+  test('vencimientos_proximos: filtra por ventana de días', async () => {
+    const hoy = new Date();
+    const en = (d) => { const x = new Date(hoy); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10); };
+    const db = dbMockFull({
+      empleados: [{ id: '1', data: { NOMBRE: 'A', ROL: 'CHOFER', ACTIVO: true, LICENCIA_DE_CONDUCIR: en(5) } }],
+      vehiculos: { AA111AA: { VENCIMIENTO_RTO: en(40) } },
+    });
+    const r = await agente._ejecutarTool(db, 'vencimientos_proximos', { rol: 'ADMIN' }, { dias: 15 });
+    assert.strictEqual(r.cantidad, 1); // la licencia (5d) entra; RTO (40d) no
+    assert.strictEqual(r.vencen[0].papel, 'Licencia de conducir');
+  });
+
+  test('info_chofer: datos por nombre', async () => {
+    const db = dbMockFull({ empleados: [{ id: '30111222', data: { NOMBRE: 'PEREZ JUAN', ROL: 'CHOFER', ACTIVO: true, TELEFONO: '549', VEHICULO: 'AA111AA' } }] });
+    const r = await agente._ejecutarTool(db, 'info_chofer', { rol: 'ADMIN' }, { query: 'perez' });
+    assert.strictEqual(r.dni, '30111222');
+    assert.strictEqual(r.unidad, 'AA111AA');
+  });
+
+  test('turnos_ypf_detalle: agrupa con nombres', async () => {
+    const db = dbMockFull({ cacheList: [
+      { dni: '1', nombre: 'A', activo: true, estado: 'reservado', estado_turno: 'X' },
+      { dni: '2', nombre: 'B', activo: true, estado: 'buscando' },
+      { dni: '3', nombre: 'C', activo: true, estado: 'sin_patente' },
+    ] });
+    const r = await agente._ejecutarTool(db, 'turnos_ypf_detalle', { rol: 'ADMIN' }, {});
+    assert.strictEqual(r.con_turno.length, 1);
+    assert.strictEqual(r.con_turno[0].nombre, 'A');
+    assert.strictEqual(r.buscando.length, 1);
+    assert.strictEqual(r.con_problemas.length, 1);
+  });
+
+  test('helpers _fmtHHMM y _diasHasta', () => {
+    assert.strictEqual(agente._fmtHHMM(5400), '1h 30m');
+    assert.strictEqual(agente._fmtHHMM(120), '2m');
+    assert.strictEqual(agente._diasHasta(null), null);
+    assert.strictEqual(agente._diasHasta('no-fecha'), null);
+  });
+});
