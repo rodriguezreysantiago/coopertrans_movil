@@ -59,7 +59,11 @@ admin.initializeApp({
 const db = admin.firestore();
 const auth = admin.auth();
 
-const ROLES_VALIDOS = ['CHOFER', 'PLANTA', 'SUPERVISOR', 'ADMIN'];
+// OJO: esta lista DEBE incluir los 6 roles. Si falta alguno, planearMigracion
+// lo degrada a CHOFER (abajo) — bug histórico: faltaban GOMERIA y SEG_HIGIENE,
+// así que re-correr el script degradaba a esos roles. Mantener sincronizada con
+// ROLES_VALIDOS de functions/src/auth.ts y AppRoles de la app. (fix 2026-06-01)
+const ROLES_VALIDOS = ['CHOFER', 'PLANTA', 'GOMERIA', 'SEG_HIGIENE', 'SUPERVISOR', 'ADMIN'];
 const AREAS_VALIDAS = [
   'MANEJO',
   'ADMINISTRACION',
@@ -90,10 +94,13 @@ function planearMigracion(data) {
   // Inferencia del área si no está cargada.
   let areaNuevaInferida = areaActual;
   if (!AREAS_VALIDAS.includes(areaActual)) {
-    if (rolNuevo === 'ADMIN' || rolNuevo === 'SUPERVISOR') {
+    if (rolNuevo === 'ADMIN' || rolNuevo === 'SUPERVISOR' ||
+        rolNuevo === 'SEG_HIGIENE') {
       areaNuevaInferida = 'ADMINISTRACION';
     } else if (rolNuevo === 'PLANTA') {
       areaNuevaInferida = 'PLANTA';
+    } else if (rolNuevo === 'GOMERIA') {
+      areaNuevaInferida = 'GOMERIA';
     } else {
       areaNuevaInferida = 'MANEJO';
     }

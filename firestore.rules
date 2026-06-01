@@ -113,8 +113,10 @@ service cloud.firestore {
       // `read: if false`. Por ahora, la validacion de password fuerza
       // minimo 6 chars al alta + comentario aqui para no olvidar.
       allow read: if isAdminOrSupervisor() || isSegHigiene() || isSelf(dni);
-      // Crear y borrar: solo admin/supervisor (alta y baja).
-      allow create, delete: if isAdminOrSupervisor();
+      // Crear: admin/supervisor. Borrar (delete real): solo ADMIN — la baja
+      // operativa es soft (ACTIVO=false vía update), no delete.
+      allow create: if isAdminOrSupervisor();
+      allow delete: if isAdmin();
       // Update: admin/supervisor sin restricción.
       // El chofer (dueño del legajo) puede actualizar SOLO los campos
       // self-service de "Mi Perfil":
@@ -132,7 +134,14 @@ service cloud.firestore {
       // el nuevo hash (ver functions/src/index.ts).
       // Cualquier otro campo (DNI, rol, vencimientos, vehículo asignado,
       // etc.) está reservado a admin/supervisor.
-      allow update: if isAdminOrSupervisor()
+      // ADMIN: cualquier campo. SUPERVISOR: todo MENOS el campo ACTIVO —
+      // dar de baja / reactivar personal quedó como acción solo-ADMIN
+      // (decisión Santiago 2026-06-01). El chofer (dueño): solo sus 3 campos
+      // self-service.
+      allow update: if isAdmin()
+        || (isSupervisor()
+            && !request.resource.data.diff(resource.data)
+                 .affectedKeys().hasAny(['ACTIVO']))
         || (isSelf(dni)
             && request.resource.data.diff(resource.data)
                  .affectedKeys().hasOnly(['ARCHIVO_PERFIL',
@@ -154,9 +163,15 @@ service cloud.firestore {
         || isSegHigiene()
         || isGomeria()
         || isMyAssignedVehiculo(patente);
-      // Alta, edición, sincronización Volvo (KM/combustible/autonomía):
-      // admin o supervisor. El bot bypasea con Admin SDK.
-      allow write: if isAdminOrSupervisor();
+      // Alta + edición + sync Volvo: admin/supervisor. Pero dar de baja /
+      // reactivar (campo ACTIVO) quedó solo-ADMIN (decisión Santiago
+      // 2026-06-01). El bot bypasea con Admin SDK.
+      allow create: if isAdminOrSupervisor();
+      allow update: if isAdmin()
+        || (isAdminOrSupervisor()
+            && !request.resource.data.diff(resource.data)
+                 .affectedKeys().hasAny(['ACTIVO']));
+      allow delete: if isAdmin();
     }
 
     // ========================================================================
@@ -327,7 +342,9 @@ service cloud.firestore {
       // 2026-05-24: abrimos read a puedeVerVolvoTableros (admin/
       // supervisor/SEG_HIGIENE) — los 3 abren la pantalla de
       // mantenimiento detalle y necesitan ver km/consumo de la unidad.
-      allow read: if puedeVerVolvoTableros();
+      // + GOMERIA: el semáforo de desgaste de enganches (Gomería V2) cruza
+      // TELEMETRIA_HISTORICO del tractor para calcular km recorridos.
+      allow read: if puedeVerVolvoTableros() || isGomeria();
       allow write: if false;
     }
 
@@ -958,8 +975,9 @@ service cloud.firestore {
     // historial.
 
     match /ASIGNACIONES_VEHICULO/{doc} {
-      // Lectura: admin/supervisor. El chofer no necesita ver el log.
-      allow read: if isAdminOrSupervisor();
+      // Lectura: admin/supervisor + SEG_HIGIENE (usa la pantalla Auditoría de
+      // asignaciones para atribuir conducta a choferes). El chofer no la ve.
+      allow read: if puedeVerVolvoTableros();
 
       // Crear una nueva asignación: requiere admin/supervisor + estructura
       // mínima. `hasta` debe ser null (las nuevas SIEMPRE arrancan
@@ -1001,9 +1019,10 @@ service cloud.firestore {
     // `hasta = null` al crear + solo se permite "cerrar" (setear `hasta`).
 
     match /ASIGNACIONES_ENGANCHE/{doc} {
-      // Lectura: admin/supervisor (incluye supervisor de gomería).
-      // El chofer no necesita ver el log.
-      allow read: if isAdminOrSupervisor();
+      // Lectura: admin/supervisor + SEG_HIGIENE (auditoría de asignaciones) +
+      // GOMERIA (el semáforo de desgaste de enganches en Gomería V2 cruza
+      // estas asignaciones con la telemetría del tractor). El chofer no la ve.
+      allow read: if puedeVerVolvoTableros() || isGomeria();
 
       // Crear una nueva asignación: requiere admin/supervisor + estructura
       // mínima + `hasta == null` (nuevas siempre arrancan activas).
