@@ -1056,10 +1056,40 @@ export function evaluarTickJornada(
     // Tracking descanso 8h con misma posición (radio 1000 m).
     if (lat != null && lng != null) {
       if (j.descanso_inicio_ts == null) {
-        j.descanso_inicio_ts = ahora;
-        j.descanso_inicio_lat = lat;
-        j.descanso_inicio_lng = lng;
-        j.descanso_segundos = 0;
+        // Anclaje anti-gap (caso Balbiano 2026-06-01): si el equipo dejó de
+        // reportar un buen rato (camión apagado de noche → su doc desaparece
+        // de SITRACK_POSICIONES y el tick no lo procesa) y REAPARECE en la
+        // misma posición, el descanso NO empezó "ahora": empezó cuando lo
+        // vimos por última vez. Anclamos descanso_inicio_ts al pasado y
+        // arrancamos descanso_segundos con el gap ya transcurrido, así no se
+        // pierde el tiempo de inactividad. La condición de misma posición
+        // (vs. la última conocida) evita falsos positivos: un chofer que
+        // siguió manejando sin reportar reaparece en OTRO lado → no ancla, y
+        // un cron caído no cierra jornadas de quienes estaban en ruta.
+        const gapSeg =
+          (ahoraMs - j.ultima_actualizacion_ts.toMillis()) / 1000;
+        let anclar = false;
+        if (
+          gapSeg >= DELTA_MAX_SEGUNDOS &&
+          j.ultima_lat != null &&
+          j.ultima_lng != null
+        ) {
+          const distGap = distanciaMetros(
+            j.ultima_lat, j.ultima_lng, lat, lng
+          );
+          anclar = distGap <= DESCANSO_RADIO_METROS;
+        }
+        if (anclar) {
+          j.descanso_inicio_ts = j.ultima_actualizacion_ts;
+          j.descanso_inicio_lat = j.ultima_lat;
+          j.descanso_inicio_lng = j.ultima_lng;
+          j.descanso_segundos = gapSeg;
+        } else {
+          j.descanso_inicio_ts = ahora;
+          j.descanso_inicio_lat = lat;
+          j.descanso_inicio_lng = lng;
+          j.descanso_segundos = 0;
+        }
       } else if (
         j.descanso_inicio_lat != null &&
         j.descanso_inicio_lng != null

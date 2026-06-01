@@ -151,6 +151,61 @@ describe('evaluarTickJornada — manejando, acumulación', () => {
   });
 });
 
+describe('evaluarTickJornada — descanso por gap de reporte (camión apagado)', () => {
+  test('reaparece PARADO tras gap largo en misma posición → ancla descanso al gap y cierra', () => {
+    // El equipo se apagó ~8h (no reportó), el tick nunca lo procesó →
+    // descanso_inicio_ts quedó null. Reaparece PARADO en la misma posición:
+    // anclamos el descanso al último tick visto y lo damos por cumplido.
+    const ultVisto = Timestamp.fromMillis(
+      MEDIODIA_MS - (DESCANSO_MIN_SEGUNDOS + 300) * 1000,
+    );
+    const j = nuevaJornadaTest({
+      estado: 'pausa_intra_bloque',
+      descanso_inicio_ts: null,
+      descanso_segundos: 0,
+      ultima_actualizacion_ts: ultVisto,
+      ultima_lat: -38.0,
+      ultima_lng: -68.0,
+    });
+    const { cerrada } = tickParado(j, 60, { lat: -38.0001, lng: -68.0001 });
+    assert.ok(cerrada, 'debe cerrar la jornada (descanso de 8h por gap)');
+    assert.strictEqual(j.estado, 'descanso_jornada');
+    assert.ok(j.descanso_segundos >= DESCANSO_MIN_SEGUNDOS);
+  });
+
+  test('reaparece PARADO tras gap largo en OTRA posición → NO ancla (siguió en ruta)', () => {
+    const ultVisto = Timestamp.fromMillis(
+      MEDIODIA_MS - (DESCANSO_MIN_SEGUNDOS + 300) * 1000,
+    );
+    const j = nuevaJornadaTest({
+      descanso_inicio_ts: null,
+      descanso_segundos: 0,
+      ultima_actualizacion_ts: ultVisto,
+      ultima_lat: -38.0,
+      ultima_lng: -68.0,
+    });
+    // Reaparece a ~200 km: no es un descanso en el lugar → no debe anclar.
+    const { cerrada } = tickParado(j, 60, { lat: -39.5, lng: -69.5 });
+    assert.ok(!cerrada, 'no debe cerrar: reapareció en otra posición');
+    assert.strictEqual(j.descanso_segundos, 0);
+  });
+
+  test('gap corto (5 min, dentro de operación normal) NO ancla', () => {
+    const ultVisto = Timestamp.fromMillis(MEDIODIA_MS - 300 * 1000);
+    const j = nuevaJornadaTest({
+      descanso_inicio_ts: null,
+      descanso_segundos: 0,
+      ultima_actualizacion_ts: ultVisto,
+      ultima_lat: -38.0,
+      ultima_lng: -68.0,
+    });
+    const { cerrada } = tickParado(j, 60, { lat: -38.0, lng: -68.0 });
+    assert.ok(!cerrada);
+    // Sin gap significativo, el descanso arranca en ~0 (no anclado al pasado).
+    assert.ok(j.descanso_segundos < 60);
+  });
+});
+
 describe('evaluarTickJornada — aviso 3h30 (manejo continuo)', () => {
   test('cruza 3h30 → aviso "3h30" + flag', () => {
     const j = nuevaJornadaTest({
