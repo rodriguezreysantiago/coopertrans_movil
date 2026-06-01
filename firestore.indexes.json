@@ -182,6 +182,22 @@
       ]
     },
     {
+      "collectionGroup": "ASIGNACIONES_ENGANCHE",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "enganche_id", "order": "ASCENDING" },
+        { "fieldPath": "desde", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ASIGNACIONES_VEHICULO",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "vehiculo_id", "order": "ASCENDING" },
+        { "fieldPath": "desde", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "EMPRESAS_LOGISTICA",
       "queryScope": "COLLECTION",
       "fields": [
