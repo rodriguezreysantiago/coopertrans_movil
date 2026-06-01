@@ -210,7 +210,17 @@ class EmpleadoActions {
       final mensaje = nuevoRol != null
           ? 'Rol actualizado a ${nuevoRol.toLowerCase()}'
           : 'Área actualizada';
-      AppFeedback.successOn(messenger, mensaje);
+      // propagacionOk == false (solo) si quedó una sesión viva que no se
+      // pudo revocar → el cambio no aplica hasta que el afectado re-loguee.
+      if (result?['propagacionOk'] == false) {
+        AppFeedback.warningOn(
+          messenger,
+          '$mensaje, pero no se pudo cerrar su sesión actual. Pedile que '
+          'cierre sesión y vuelva a entrar para que el cambio aplique.',
+        );
+      } else {
+        AppFeedback.successOn(messenger, mensaje);
+      }
     } catch (e, s) {
       AppFeedback.errorTecnicoOn(
         messenger,

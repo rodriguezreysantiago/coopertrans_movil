@@ -97,19 +97,22 @@ class _AdminPersonalListaScreenState
                 setState(() => _mostrarExcluidos = !_mostrarExcluidos),
           ),
       ],
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const AdminPersonalFormScreen(),
-          ),
-        ),
-        // El tooltip ayuda en desktop (hover) y a screen readers — el
-        // label "Nuevo" del FAB es ambiguo sin contexto fuera del título.
-        tooltip: 'Agregar nuevo chofer',
-        icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('Nuevo'),
-      ),
+      // Solo quien puede crear empleados ve el FAB "Nuevo" (ADMIN/SUPERVISOR).
+      floatingActionButton:
+          Capabilities.can(PrefsService.rol, Capability.crearEmpleado)
+              ? FloatingActionButton.extended(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AdminPersonalFormScreen(),
+                    ),
+                  ),
+                  // El tooltip ayuda en desktop (hover) y a screen readers.
+                  tooltip: 'Agregar nuevo chofer',
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: const Text('Nuevo'),
+                )
+              : null,
       body: Column(
         children: [
           // Chip "Mostrar inactivos" arriba del listado, más visible

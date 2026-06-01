@@ -664,6 +664,10 @@ export const actualizarRolEmpleado = onCall(
     // Si el UID no existe en Firebase Auth (caso de empleados que nunca
     // hicieron login), lanzamos pero no rompemos: el claim se setea
     // cuando hagan loginConDni la próxima vez.
+    // `propagacionOk`: true si el cambio se propaga ya (sesión revocada o
+    // sin sesión activa). false SOLO si hay una sesión viva que no pudimos
+    // cortar → el cliente avisa que el afectado debe re-loguear.
+    let propagacionOk = false;
     try {
       await auth.setCustomUserClaims(dni, {
         rol: rolFinal,
@@ -684,6 +688,7 @@ export const actualizarRolEmpleado = onCall(
       // privilegios obsoletos.
       try {
         await auth.revokeRefreshTokens(dni);
+        propagacionOk = true;
         logger.info("[actualizarRolEmpleado] tokens revocados, usuario debera re-loguear", {
           dniHash: hashId(dni),
         });
@@ -699,6 +704,9 @@ export const actualizarRolEmpleado = onCall(
         areaNueva: areaFinal,
       });
     } catch (e) {
+      // Sin Auth account (nunca logueó): no hay sesión que cortar, el rol
+      // aplica en el próximo login → estado consistente.
+      propagacionOk = true;
       logger.info(
         "[actualizarRolEmpleado] usuario sin Auth account, " +
           "claim se aplicará al próximo login",
@@ -711,6 +719,7 @@ export const actualizarRolEmpleado = onCall(
       dni,
       rol: rolFinal,
       area: areaFinal,
+      propagacionOk,
     };
   }
 );

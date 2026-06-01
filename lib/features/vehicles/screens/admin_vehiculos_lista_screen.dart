@@ -124,17 +124,21 @@ class _AdminVehiculosListaScreenState
               Tab(text: AppTiposVehiculo.pluralEtiquetas[t] ?? t),
           ],
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => const AdminVehiculoAltaScreen(),
-            ),
-          ),
-          tooltip: 'Agregar nueva unidad',
-          icon: const Icon(Icons.add),
-          label: const Text('Nuevo'),
-        ),
+        // Solo quien puede crear vehículos ve el FAB "Nuevo" (ADMIN/SUPERVISOR).
+        floatingActionButton:
+            Capabilities.can(PrefsService.rol, Capability.crearVehiculo)
+                ? FloatingActionButton.extended(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AdminVehiculoAltaScreen(),
+                      ),
+                    ),
+                    tooltip: 'Agregar nueva unidad',
+                    icon: const Icon(Icons.add),
+                    label: const Text('Nuevo'),
+                  )
+                : null,
         body: TabBarView(
           children: [
             for (final t in tipos)

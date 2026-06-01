@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/services/capabilities.dart';
+import '../../core/services/prefs_service.dart';
 import '../constants/app_colors.dart';
 
 import '../../features/employees/screens/admin_personal_lista_screen.dart'
@@ -77,16 +79,34 @@ class _PaletteDialogState extends State<_PaletteDialog> {
   Future<void> _cargar() async {
     try {
       final db = FirebaseFirestore.instance;
-      // Las revisiones suelen ser pocas (≤50 a la vez); las dos
-      // colecciones grandes son EMPLEADOS y VEHICULOS. Si crece mucho
-      // esto, conviene paginar — por ahora un fetch simple alcanza.
-      final results = await Future.wait([
-        db.collection(AppCollections.empleados).get(),
-        db.collection(AppCollections.vehiculos).get(),
-        db.collection(AppCollections.revisiones).get(),
-      ]);
+      // Filtramos por capability del rol logueado: solo consultamos las
+      // colecciones de las secciones que el rol tiene en el menú. Evita
+      // lecturas de más, `permission-denied`, y que por Ctrl+K un rol abra
+      // fichas de una sección que no le corresponde (ej. SEG_HIGIENE no ve
+      // Flota ni Revisiones → no debe poder abrir esas fichas por el palette).
+      final rol = PrefsService.rol;
+      final verPersonal =
+          Capabilities.can(rol, Capability.verListaPersonal);
+      final verFlota = Capabilities.can(rol, Capability.verListaFlota);
+      final verRevisiones =
+          Capabilities.can(rol, Capability.verRevisiones);
+
+      // Lanzamos en paralelo solo lo permitido (las requests arrancan al
+      // asignarse; los await de abajo no agregan latencia).
+      final empF =
+          verPersonal ? db.collection(AppCollections.empleados).get() : null;
+      final vehF =
+          verFlota ? db.collection(AppCollections.vehiculos).get() : null;
+      final revF =
+          verRevisiones ? db.collection(AppCollections.revisiones).get() : null;
+
+      const sinDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+      final empDocs = empF == null ? sinDocs : (await empF).docs;
+      final vehDocs = vehF == null ? sinDocs : (await vehF).docs;
+      final revDocs = revF == null ? sinDocs : (await revF).docs;
+
       final items = <_PaletteItem>[];
-      for (final doc in results[0].docs) {
+      for (final doc in empDocs) {
         final data = doc.data();
         // Soft-delete: empleados dados de baja no aparecen en Ctrl+K.
         if (!AppActivo.esActivo(data)) continue;
@@ -100,7 +120,7 @@ class _PaletteDialogState extends State<_PaletteDialog> {
           data: data,
         ));
       }
-      for (final doc in results[1].docs) {
+      for (final doc in vehDocs) {
         final data = doc.data();
         // Soft-delete: vehiculos dados de baja no aparecen en Ctrl+K.
         if (!AppActivo.esActivo(data)) continue;
@@ -117,7 +137,7 @@ class _PaletteDialogState extends State<_PaletteDialog> {
           data: data,
         ));
       }
-      for (final doc in results[2].docs) {
+      for (final doc in revDocs) {
         final data = doc.data();
         final esCambioEquipo = data['tipo_solicitud'] == 'CAMBIO_EQUIPO';
         final solicitante =
