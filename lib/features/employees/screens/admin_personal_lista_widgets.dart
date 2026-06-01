@@ -447,6 +447,11 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
   Widget build(BuildContext context) {
     final activo = AppActivo.esActivo(data);
     final nombre = (data['NOMBRE'] ?? dni).toString();
+    // Dar de baja / reactivar toca el campo ACTIVO → acción solo-ADMIN
+    // (decisión Santiago 2026-06-01). El supervisor sigue viendo el resto
+    // del sheet (incluido "Resetear contraseña", que sí puede).
+    final puedeBaja =
+        Capabilities.can(PrefsService.rol, Capability.eliminarEmpleado);
     if (activo) {
       return Column(
         children: [
@@ -468,24 +473,25 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
               ),
             ),
           ),
-          Center(
-            child: TextButton.icon(
-              onPressed: () => EmpleadoActions.confirmarYDarDeBaja(
-                context,
-                dni: dni,
-                nombreVisible: nombre,
-              ),
-              icon: const Icon(Icons.person_off_outlined,
-                  color: AppColors.error),
-              label: const Text(
-                'Dar de baja',
-                style: TextStyle(
-                  color: AppColors.error,
-                  fontWeight: FontWeight.bold,
+          if (puedeBaja)
+            Center(
+              child: TextButton.icon(
+                onPressed: () => EmpleadoActions.confirmarYDarDeBaja(
+                  context,
+                  dni: dni,
+                  nombreVisible: nombre,
+                ),
+                icon: const Icon(Icons.person_off_outlined,
+                    color: AppColors.error),
+                label: const Text(
+                  'Dar de baja',
+                  style: TextStyle(
+                    color: AppColors.error,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       );
     }
@@ -529,25 +535,27 @@ class _BotonBajaReactivarEmpleado extends StatelessWidget {
               style: AppType.label.copyWith(color: AppColors.textSecondary),
             ),
           ],
-          const SizedBox(height: AppSpacing.md),
-          Center(
-            child: TextButton.icon(
-              onPressed: () => EmpleadoActions.confirmarYReactivar(
-                context,
-                dni: dni,
-                nombreVisible: nombre,
-              ),
-              icon: const Icon(Icons.unarchive_outlined,
-                  color: AppColors.success),
-              label: const Text(
-                'Reactivar',
-                style: TextStyle(
-                  color: AppColors.success,
-                  fontWeight: FontWeight.bold,
+          if (puedeBaja) ...[
+            const SizedBox(height: AppSpacing.md),
+            Center(
+              child: TextButton.icon(
+                onPressed: () => EmpleadoActions.confirmarYReactivar(
+                  context,
+                  dni: dni,
+                  nombreVisible: nombre,
+                ),
+                icon: const Icon(Icons.unarchive_outlined,
+                    color: AppColors.success),
+                label: const Text(
+                  'Reactivar',
+                  style: TextStyle(
+                    color: AppColors.success,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );

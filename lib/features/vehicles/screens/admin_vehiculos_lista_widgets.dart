@@ -650,7 +650,11 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final activo = AppActivo.esActivo(data);
+    // Dar de baja / reactivar (campo ACTIVO) quedó solo-ADMIN (2026-06-01).
+    final puedeBaja =
+        Capabilities.can(PrefsService.rol, Capability.eliminarVehiculo);
     if (activo) {
+      if (!puedeBaja) return const SizedBox.shrink();
       return Center(
         child: TextButton.icon(
           onPressed: () => VehiculoActions.confirmarYDarDeBaja(
@@ -708,24 +712,26 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
               style: AppType.label.copyWith(color: AppColors.textSecondary),
             ),
           ],
-          const SizedBox(height: AppSpacing.md),
-          Center(
-            child: TextButton.icon(
-              onPressed: () => VehiculoActions.confirmarYReactivar(
-                context,
-                patente: patente,
-              ),
-              icon: const Icon(Icons.unarchive_outlined,
-                  color: AppColors.success),
-              label: const Text(
-                'Reactivar',
-                style: TextStyle(
-                  color: AppColors.success,
-                  fontWeight: FontWeight.bold,
+          if (puedeBaja) ...[
+            const SizedBox(height: AppSpacing.md),
+            Center(
+              child: TextButton.icon(
+                onPressed: () => VehiculoActions.confirmarYReactivar(
+                  context,
+                  patente: patente,
+                ),
+                icon: const Icon(Icons.unarchive_outlined,
+                    color: AppColors.success),
+                label: const Text(
+                  'Reactivar',
+                  style: TextStyle(
+                    color: AppColors.success,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
