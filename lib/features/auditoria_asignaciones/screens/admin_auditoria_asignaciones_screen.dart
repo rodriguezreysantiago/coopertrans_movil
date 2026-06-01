@@ -108,33 +108,34 @@ class _TabPorUnidad extends StatefulWidget {
 
 class _TabPorUnidadState extends State<_TabPorUnidad>
     with AutomaticKeepAliveClientMixin {
-  late DateTime _fecha;
   String _patente = '';
   bool _esEnganche = false;
+
+  /// Rango de fechas para acotar el historial. `null` = todo el historial
+  /// (desde el inicio), que es el default — el pedido principal del operador.
+  DateTimeRange? _rango;
 
   @override
   bool get wantKeepAlive => true;
 
-  @override
-  void initState() {
-    super.initState();
-    _fecha = DateTime.now();
-  }
-
-  Future<void> _elegirFecha() async {
+  Future<void> _elegirRango() async {
     final ahora = DateTime.now();
-    final f = await showDatePicker(
+    final r = await showDateRangePicker(
       context: context,
-      initialDate: _fecha,
       firstDate: DateTime(2024, 1, 1),
       lastDate: ahora,
+      initialDateRange: _rango,
       locale: const Locale('es', 'AR'),
-      helpText: 'Fecha a consultar',
-      confirmText: 'Aplicar',
-      cancelText: 'Cancelar',
+      helpText: 'Elegí el rango de fechas',
+      saveText: 'Aplicar',
     );
-    if (f == null) return;
-    setState(() => _fecha = DateTime(f.year, f.month, f.day, 23, 59, 59));
+    if (r == null) return;
+    // Normalizamos: desde 00:00 del primer día hasta 23:59:59 del último,
+    // para que el rango incluya completos ambos extremos.
+    setState(() => _rango = DateTimeRange(
+          start: DateTime(r.start.year, r.start.month, r.start.day),
+          end: DateTime(r.end.year, r.end.month, r.end.day, 23, 59, 59),
+        ));
   }
 
   @override
@@ -144,13 +145,11 @@ class _TabPorUnidadState extends State<_TabPorUnidad>
       padding: const EdgeInsets.all(AppSpacing.md),
       children: [
         const _BannerInfo(
-          texto: 'Mostramos qué chofer tenía asignada la unidad elegida en '
-              'la fecha que selecciones, según el historial de asignaciones '
-              'del sistema. Sirve para multas tardías y reconciliación.',
+          texto: 'Elegí una unidad y te mostramos TODOS los choferes que la '
+              'manejaron desde que hay registro (si es enganche, los tractores '
+              'que lo llevaron). Filtrá por rango de fechas para acotar.',
         ),
         const SizedBox(height: AppSpacing.md),
-        _SelectorFecha(fecha: _fecha, onTap: _elegirFecha),
-        const SizedBox(height: AppSpacing.sm),
         _DropdownPatente(
           value: _patente,
           onChanged: (v, esEng) => setState(() {
@@ -158,18 +157,30 @@ class _TabPorUnidadState extends State<_TabPorUnidad>
             _esEnganche = esEng;
           }),
         ),
+        if (_patente.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.sm),
+          _SelectorRango(
+            rango: _rango,
+            onElegir: _elegirRango,
+            onLimpiar:
+                _rango == null ? null : () => setState(() => _rango = null),
+          ),
+        ],
         const SizedBox(height: AppSpacing.lg),
         if (_patente.isEmpty)
           const _Placeholder(
             icono: Icons.local_shipping_outlined,
             titulo: 'Elegí una unidad',
             subtitulo:
-                'Tractor o enganche + la fecha. Para enganches mostramos el '
-                'tractor que lo llevaba y su chofer (para multas al acoplado).',
+                'Tractor o enganche. Te mostramos su historial completo de '
+                'choferes (o tractores, si es enganche) desde el inicio.',
           )
         else
-          _ResultadoAsignacion(
-              patente: _patente, fecha: _fecha, esEnganche: _esEnganche),
+          _HistorialPorUnidad(
+            patente: _patente,
+            esEnganche: _esEnganche,
+            rango: _rango,
+          ),
       ],
     );
   }
@@ -258,10 +269,15 @@ class _BannerInfo extends StatelessWidget {
   }
 }
 
-class _SelectorFecha extends StatelessWidget {
-  final DateTime fecha;
-  final VoidCallback onTap;
-  const _SelectorFecha({required this.fecha, required this.onTap});
+/// Selector de rango de fechas OPCIONAL. Por defecto "Todo el historial";
+/// al tocar abre un date range picker. Con rango activo muestra una X para
+/// limpiarlo (volver a todo).
+class _SelectorRango extends StatelessWidget {
+  final DateTimeRange? rango;
+  final VoidCallback onElegir;
+  final VoidCallback? onLimpiar; // null = no hay rango que limpiar
+  const _SelectorRango(
+      {required this.rango, required this.onElegir, this.onLimpiar});
 
   String _fmt(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}-'
@@ -269,11 +285,15 @@ class _SelectorFecha extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hayRango = rango != null;
+    final texto = hayRango
+        ? '${_fmt(rango!.start)}  →  ${_fmt(rango!.end)}'
+        : 'Todo el historial';
     return InkWell(
-      onTap: onTap,
+      onTap: onElegir,
       borderRadius: BorderRadius.circular(AppRadius.sm),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: AppColors.brand.withValues(alpha: 0.10),
           borderRadius: BorderRadius.circular(AppRadius.sm),
@@ -281,16 +301,16 @@ class _SelectorFecha extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.calendar_today, color: AppColors.brand, size: 20),
+            const Icon(Icons.date_range, color: AppColors.brand, size: 20),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('FECHA',
+                  Text('PERÍODO',
                       style: AppType.eyebrow.copyWith(color: AppColors.brand)),
                   const SizedBox(height: 2),
-                  Text(_fmt(fecha),
+                  Text(texto,
                       style: AppType.body.copyWith(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
@@ -298,7 +318,15 @@ class _SelectorFecha extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.edit, color: Colors.white54, size: 16),
+            if (onLimpiar != null)
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white54, size: 18),
+                tooltip: 'Ver todo el historial',
+                onPressed: onLimpiar,
+                visualDensity: VisualDensity.compact,
+              )
+            else
+              const Icon(Icons.edit, color: Colors.white54, size: 16),
           ],
         ),
       ),
@@ -832,77 +860,155 @@ class _Placeholder extends StatelessWidget {
 }
 
 // ============================================================================
-// RESULTADO TAB 1: chofer asignado a la patente en la fecha
+// RESULTADO TAB 1: historial completo de la unidad (choferes / tractores)
 // ============================================================================
 
-class _ResultadoAsignacion extends StatelessWidget {
+/// Historial completo de una unidad. Para un TRACTOR: todos los choferes que
+/// la manejaron (de ASIGNACIONES_VEHICULO). Para un ENGANCHE: todos los
+/// tractores que lo llevaron (de ASIGNACIONES_ENGANCHE). Filtrable por
+/// [rango] (null = todo el historial). Reemplazó al modo "fecha puntual" el
+/// 2026-06-01: el operador necesitaba ver todo de una y acotar por rango, no
+/// ir fecha por fecha.
+class _HistorialPorUnidad extends StatelessWidget {
   final String patente;
-  final DateTime fecha;
   final bool esEnganche;
-  const _ResultadoAsignacion({
+  final DateTimeRange? rango;
+  const _HistorialPorUnidad({
     required this.patente,
-    required this.fecha,
     required this.esEnganche,
+    required this.rango,
   });
+
+  /// Una asignación entra si su período [desde, hasta] se solapa con el
+  /// rango (hasta==null = activa, sin fin).
+  bool _enRango(DateTime desde, DateTime? hasta) {
+    final r = rango;
+    if (r == null) return true;
+    if (desde.isAfter(r.end)) return false;
+    if (hasta != null && hasta.isBefore(r.start)) return false;
+    return true;
+  }
+
+  Widget _vacio() {
+    final conFiltro = rango != null;
+    return _Placeholder(
+      icono: Icons.history_toggle_off_outlined,
+      titulo: conFiltro ? 'Sin registros en ese rango' : 'Sin historial',
+      subtitulo: conFiltro
+          ? 'No hay asignaciones de esta unidad en el rango elegido. Probá '
+              'ampliar las fechas o tocá la X para ver todo el historial.'
+          : 'Esta unidad no tiene asignaciones registradas en el sistema. Si '
+              'nunca se le asignó nadie oficialmente, no aparece nada acá.',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Enganche → cascada enganche→tractor→chofer (los acoplados no tienen
-    // chofer directo; quién lo llevaba sale del tractor que lo remolcaba).
-    if (esEnganche) {
-      return _ResultadoEnganche(patente: patente, fecha: fecha);
-    }
-    // Tractor: chofer directo. Traemos TODAS las asignaciones de la patente (suelen ser pocas
-    // por unidad). Filtrar `desde <= fecha && hasta >= fecha` en
-    // Firestore requeriría index compuesto y dos rangos (no se puede
-    // en una sola query). Lo hacemos en memoria — la cardinalidad
-    // por patente es chica.
-    final stream = FirebaseFirestore.instance
-        .collection(AppCollections.asignacionesVehiculo)
-        .where('vehiculo_id', isEqualTo: patente)
-        .snapshots();
+    return esEnganche ? _buildEnganche() : _buildTractor();
+  }
 
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: stream,
+  Widget _buildTractor() {
+    return StreamBuilder<List<AsignacionVehiculo>>(
+      stream: AsignacionVehiculoService().streamHistorialPorVehiculo(patente),
       builder: (ctx, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const AppSkeletonList(count: 1, conAvatar: true);
+          return const AppSkeletonList(count: 4, conAvatar: true);
         }
         if (snap.hasError) {
           return AppErrorState(
               title: 'Error', subtitle: snap.error.toString());
         }
-        final asignaciones = (snap.data?.docs ?? [])
-            .map(AsignacionVehiculo.fromDoc)
-            .where((a) => _activaEn(a, fecha))
+        final filtradas = (snap.data ?? const <AsignacionVehiculo>[])
+            .where((a) => _enRango(a.desde, a.hasta))
             .toList();
-
-        if (asignaciones.isEmpty) {
-          return const _Placeholder(
-            icono: Icons.person_off_outlined,
-            titulo: 'Sin chofer asignado',
-            subtitulo:
-                'No hay registros de asignación a esta unidad para la fecha '
-                'seleccionada. Puede que la unidad estuviera libre o '
-                'que falte cargar el alta.',
-          );
-        }
-
-        // Caso normal: 1 asignación matching. Caso raro (overlap): mostramos
-        // todas para que el admin las vea.
+        if (filtradas.isEmpty) return _vacio();
+        final choferesUnicos =
+            filtradas.map((a) => a.choferDni).toSet().length;
         return Column(
-          children: asignaciones
-              .map((a) => _AsignacionCardPorUnidad(asignacion: a))
-              .toList(),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _ResumenUnidad(
+              asignaciones: filtradas.length,
+              etiquetaSecundaria: 'Choferes distintos',
+              valorSecundario: '$choferesUnicos',
+            ),
+            const SizedBox(height: AppSpacing.md),
+            ...filtradas.map((a) => _AsignacionCardPorUnidad(asignacion: a)),
+          ],
         );
       },
     );
   }
 
-  bool _activaEn(AsignacionVehiculo a, DateTime fecha) {
-    if (a.desde.isAfter(fecha)) return false;
-    if (a.hasta == null) return true;
-    return !a.hasta!.isBefore(fecha);
+  Widget _buildEnganche() {
+    return StreamBuilder<List<AsignacionEnganche>>(
+      stream: AsignacionEngancheService().streamHistorialPorEnganche(patente),
+      builder: (ctx, snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const AppSkeletonList(count: 4, conAvatar: true);
+        }
+        if (snap.hasError) {
+          return AppErrorState(
+              title: 'Error', subtitle: snap.error.toString());
+        }
+        final filtradas = (snap.data ?? const <AsignacionEnganche>[])
+            .where((a) => _enRango(a.desde, a.hasta))
+            .toList();
+        if (filtradas.isEmpty) return _vacio();
+        final tractoresUnicos =
+            filtradas.map((a) => a.tractorId).toSet().length;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _ResumenUnidad(
+              asignaciones: filtradas.length,
+              etiquetaSecundaria: 'Tractores distintos',
+              valorSecundario: '$tractoresUnicos',
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            const _BannerInfo(
+              texto: 'Es un enganche: mostramos los tractores que lo llevaron. '
+                  'Para ver el chofer de cada período, elegí ese tractor en '
+                  'esta misma pestaña.',
+            ),
+            const SizedBox(height: AppSpacing.md),
+            ...filtradas.map((a) => _EngancheHistorialCard(asignacion: a)),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Resumen de 2 KPIs arriba del historial de una unidad.
+class _ResumenUnidad extends StatelessWidget {
+  final int asignaciones;
+  final String etiquetaSecundaria;
+  final String valorSecundario;
+  const _ResumenUnidad({
+    required this.asignaciones,
+    required this.etiquetaSecundaria,
+    required this.valorSecundario,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Row(
+          children: [
+            Expanded(
+                child:
+                    _Kpi(label: 'Asignaciones', valor: '$asignaciones')),
+            Container(width: 1, height: 36, color: Colors.white12),
+            Expanded(
+                child: _Kpi(
+                    label: etiquetaSecundaria, valor: valorSecundario)),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -994,143 +1100,78 @@ class _AsignacionCardPorUnidad extends StatelessWidget {
 }
 
 // ============================================================================
-// RESULTADO TAB 1 (ENGANCHE): cascada enganche → tractor → chofer en la fecha
+// CARD DE UN PERÍODO DE ENGANCHE (qué tractor lo llevó)
 // ============================================================================
 
-/// Para una multa al ACOPLADO: resuelve qué tractor lo llevaba en la fecha
-/// (`ASIGNACIONES_ENGANCHE`) y qué chofer manejaba ese tractor
-/// (`ASIGNACIONES_VEHICULO`). Así se sabe a quién atribuir la infracción.
-class _ResultadoEnganche extends StatelessWidget {
-  final String patente;
-  final DateTime fecha;
-  const _ResultadoEnganche({required this.patente, required this.fecha});
-
-  Future<(AsignacionEnganche?, AsignacionVehiculo?)> _resolver() async {
-    final asignEng = await AsignacionEngancheService()
-        .obtenerTractorEnFecha(engancheId: patente, fecha: fecha);
-    if (asignEng == null) return (null, null);
-    final chofer = await AsignacionVehiculoService()
-        .obtenerChoferEnFecha(vehiculoId: asignEng.tractorId, fecha: fecha);
-    return (asignEng, chofer);
-  }
+/// Card de un período del historial de un enganche: qué tractor lo llevó y
+/// desde/hasta cuándo. El destaque es el tractor — de ahí se deriva el chofer
+/// (eligiendo ese tractor en la misma pestaña).
+class _EngancheHistorialCard extends StatelessWidget {
+  final AsignacionEnganche asignacion;
+  const _EngancheHistorialCard({required this.asignacion});
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<(AsignacionEnganche?, AsignacionVehiculo?)>(
-      future: _resolver(),
-      builder: (ctx, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const AppSkeletonList(count: 1, conAvatar: true);
-        }
-        if (snap.hasError) {
-          return AppErrorState(title: 'Error', subtitle: snap.error.toString());
-        }
-        final (asignEng, chofer) = snap.data ?? (null, null);
-        if (asignEng == null) {
-          return const _Placeholder(
-            icono: Icons.link_off,
-            titulo: 'Enganche sin tractor',
-            subtitulo:
-                'No hay registro de qué tractor llevaba este enganche en la '
-                'fecha. Puede que estuviera desenganchado o que falte cargar '
-                'la asignación tractor↔enganche.',
-          );
-        }
-        return _AtribucionEngancheCard(
-          enganche: patente,
-          asignEnganche: asignEng,
-          chofer: chofer,
-        );
-      },
-    );
-  }
-}
-
-/// Card de la cascada: el destaque es el chofer (a quién se le pone la multa),
-/// con el tractor como eslabón intermedio.
-class _AtribucionEngancheCard extends StatelessWidget {
-  final String enganche;
-  final AsignacionEnganche asignEnganche;
-  final AsignacionVehiculo? chofer;
-  const _AtribucionEngancheCard({
-    required this.enganche,
-    required this.asignEnganche,
-    required this.chofer,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tractor = asignEnganche.tractorId;
-    final c = chofer;
-    final nombre = (c?.choferNombre ?? '').trim().isNotEmpty
-        ? c!.choferNombre!.trim()
-        : (c != null ? 'DNI ${c.choferDni}' : null);
-    return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: nombre != null ? AppColors.brand : AppColors.warning,
-                    shape: BoxShape.circle,
+    final esActual = asignacion.hasta == null;
+    final tractor = asignacion.tractorId;
+    final modelo = (asignacion.tractorModelo ?? '').trim();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: AppCard(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: esActual
+                          ? AppColors.success
+                          : AppColors.brand.withValues(alpha: 0.60),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.local_shipping,
+                        color: Colors.white, size: 22),
                   ),
-                  child: Icon(
-                    nombre != null ? Icons.person : Icons.person_off,
-                    color: Colors.white,
-                    size: 24,
+                  const SizedBox(width: AppSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(tractor,
+                            style: AppType.heading.copyWith(
+                                color: Colors.white,
+                                fontSize: 18,
+                                letterSpacing: 1,
+                                fontWeight: FontWeight.w700)),
+                        if (modelo.isNotEmpty)
+                          Text(modelo,
+                              style: AppType.label
+                                  .copyWith(color: Colors.white54)),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: nombre != null
-                      ? Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(nombre,
-                                style: AppType.heading.copyWith(
-                                    color: Colors.white, fontSize: 17)),
-                            Text('DNI ${c!.choferDni}',
-                                style: AppType.label
-                                    .copyWith(color: Colors.white54)),
-                          ],
-                        )
-                      : Text(
-                          'El tractor $tractor no tenía chofer asignado en esa '
-                          'fecha (falta cargar la asignación).',
-                          style: AppType.body.copyWith(color: Colors.white70)),
-                ),
-              ],
-            ),
-            const Divider(color: Colors.white12, height: 24),
-            _Fila(label: 'Enganche', valor: enganche),
-            const SizedBox(height: AppSpacing.xs),
-            _Fila(
-              label: 'Llevado por (tractor)',
-              valor: (asignEnganche.tractorModelo ?? '').trim().isNotEmpty
-                  ? '$tractor · ${asignEnganche.tractorModelo!.trim()}'
-                  : tractor,
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            _Fila(
-              label: 'Enganchado desde',
-              valor: AppFormatters.formatearFecha(asignEnganche.desde),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            _Fila(
-              label: 'Hasta',
-              valor: asignEnganche.hasta == null
-                  ? 'Sigue enganchado'
-                  : AppFormatters.formatearFecha(asignEnganche.hasta!),
-              colorValor: asignEnganche.hasta == null
-                  ? AppColors.success
-                  : Colors.white,
-            ),
-          ],
+                  if (esActual) const _BadgeActual(),
+                ],
+              ),
+              const Divider(color: Colors.white12, height: 24),
+              _Fila(
+                label: 'Enganchado desde',
+                valor: AppFormatters.formatearFecha(asignacion.desde),
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              _Fila(
+                label: 'Hasta',
+                valor: esActual
+                    ? 'Sigue enganchado'
+                    : AppFormatters.formatearFecha(asignacion.hasta!),
+                colorValor: esActual ? AppColors.success : Colors.white,
+              ),
+            ],
+          ),
         ),
       ),
     );
