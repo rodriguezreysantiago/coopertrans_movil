@@ -297,6 +297,8 @@ describe('agente._ejecutarTool — Cachatore', () => {
     const r = await agente._ejecutarTool(db, 'cachatore_estado', { rol: 'ADMIN' }, {});
     assert.strictEqual(r.total_objetivos, 4);
     assert.strictEqual(r.con_turno, 1);
+    assert.strictEqual(r.con_turno_detalle.length, 1);
+    assert.strictEqual(r.con_turno_detalle[0].nombre, 'A');
     assert.strictEqual(r.buscando, 2);
     assert.strictEqual(r.para_reagendar, 1);
     assert.strictEqual(r.con_problemas, 1);
@@ -347,5 +349,29 @@ describe('agente._ejecutarTool — Cachatore', () => {
   test('poner_a_buscar_turno sin chofer → error', async () => {
     const r = await agente._ejecutarTool(dbMockCacha(), 'poner_a_buscar_turno', { rol: 'ADMIN' }, {});
     assert.strictEqual(r.ok, false);
+  });
+});
+
+describe('agente — memoria conversacional', () => {
+  test('guarda y recupera turnos; aísla por clave', () => {
+    agente._resetHistorial();
+    agente._guardarHistorial('k1', [
+      { rol: 'user', texto: 'cuantos con turno' },
+      { rol: 'assistant', texto: 'son 2' },
+    ]);
+    const h = agente._recuperarHistorial('k1');
+    assert.strictEqual(h.length, 2);
+    assert.strictEqual(h[0].texto, 'cuantos con turno');
+    assert.strictEqual(h[1].rol, 'assistant');
+    assert.strictEqual(agente._recuperarHistorial('k2').length, 0);
+  });
+
+  test('recorta a los últimos 8 turnos', () => {
+    agente._resetHistorial();
+    const muchos = Array.from({ length: 12 }, (_, i) => ({ rol: 'user', texto: `t${i}` }));
+    agente._guardarHistorial('k', muchos);
+    const h = agente._recuperarHistorial('k');
+    assert.strictEqual(h.length, 8);
+    assert.strictEqual(h[0].texto, 't4'); // descartó los 4 más viejos
   });
 });

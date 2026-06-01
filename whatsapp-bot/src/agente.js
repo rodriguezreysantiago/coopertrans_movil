@@ -34,6 +34,14 @@ const MAX_TOOL_ITERS = 4;
 const RL_MAX_POR_HORA = parseInt(process.env.AGENTE_MAX_POR_HORA || '20', 10);
 const _rlPorClave = new Map();
 
+// Memoria conversacional: últimos turnos (texto) por persona, para entender
+// preguntas de seguimiento ("¿y la de Balbiano?", "¿quiénes son?"). En
+// memoria — se pierde al reiniciar el bot (aceptable). TTL de inactividad +
+// tope de turnos para no inflar tokens/costo.
+const HIST_TTL_MS = parseInt(process.env.AGENTE_HIST_TTL_MS || '900000', 10);
+const HIST_MAX_TURNOS = 8;
+const _histPorClave = new Map();
+
 let _flagCache = null;
 let _flagCacheTs = 0;
 const _FLAG_TTL_MS = 30000;
@@ -67,6 +75,25 @@ function _rateLimited(clave) {
   previos.push(ahora);
   _rlPorClave.set(clave, previos);
   return false;
+}
+
+/** Turnos de conversación recientes de `clave` (o [] si no hay o expiró). */
+function _recuperarHistorial(clave) {
+  const h = _histPorClave.get(clave);
+  if (!h) return [];
+  if (Date.now() - h.ts > HIST_TTL_MS) {
+    _histPorClave.delete(clave);
+    return [];
+  }
+  return h.turnos;
+}
+
+/** Guarda los turnos (recortados a los últimos HIST_MAX_TURNOS) + timestamp. */
+function _guardarHistorial(clave, turnos) {
+  _histPorClave.set(clave, {
+    turnos: turnos.slice(-HIST_MAX_TURNOS),
+    ts: Date.now(),
+  });
 }
 
 async function _agenteActivo(db) {
@@ -393,6 +420,7 @@ function _normalizarFranja(f) {
 
 async function _toolCachatoreEstado(db) {
   let total = 0, conTurno = 0, buscando = 0, paraReagendar = 0, conProblemas = 0;
+  const conTurnoDetalle = [];
   const reagendarDetalle = [];
   const problemasDetalle = [];
   try {
@@ -402,8 +430,13 @@ async function _toolCachatoreEstado(db) {
       if (o.activo === false) continue;
       total++;
       const est = String(o.estado || 'buscando');
-      if (est === 'reservado' || est === 'reagendado') conTurno++;
-      else if (ESTADOS_PROBLEMA.includes(est)) {
+      if (est === 'reservado' || est === 'reagendado') {
+        conTurno++;
+        conTurnoDetalle.push({
+          nombre: o.nombre || d.id,
+          turno: o.estado_turno || o.estado_hora || null,
+        });
+      } else if (ESTADOS_PROBLEMA.includes(est)) {
         conProblemas++;
         problemasDetalle.push({ nombre: o.nombre || d.id, estado: est });
       } else buscando++;
@@ -425,6 +458,7 @@ async function _toolCachatoreEstado(db) {
   return {
     total_objetivos: total,
     con_turno: conTurno,
+    con_turno_detalle: conTurnoDetalle,
     buscando,
     para_reagendar: paraReagendar,
     para_reagendar_detalle: reagendarDetalle,
@@ -612,13 +646,19 @@ function _textoDeRespuesta(apiResp) {
     .trim();
 }
 
-async function _conversarAnthropic(db, system, userText, persona) {
+async function _conversarAnthropic(db, system, historial, userText, persona) {
   const headers = {
     'x-api-key': process.env.ANTHROPIC_API_KEY,
     'anthropic-version': ANTHROPIC_VERSION,
     'content-type': 'application/json',
   };
-  const messages = [{ role: 'user', content: userText }];
+  const messages = [
+    ...historial.map((t) => ({
+      role: t.rol === 'assistant' ? 'assistant' : 'user',
+      content: t.texto,
+    })),
+    { role: 'user', content: userText },
+  ];
   const toolsUsadas = [];
 
   for (let iter = 0; iter < MAX_TOOL_ITERS; iter++) {
@@ -659,7 +699,7 @@ async function _conversarAnthropic(db, system, userText, persona) {
 
 // ───────────────────────── loop Gemini ─────────────────────────
 
-async function _conversarGemini(db, system, userText, persona) {
+async function _conversarGemini(db, system, historial, userText, persona) {
   const url = `${GEMINI_API_BASE}/${MODELO_GEMINI}:generateContent`;
   const headers = {
     'x-goog-api-key': process.env.GEMINI_API_KEY,
@@ -670,7 +710,13 @@ async function _conversarGemini(db, system, userText, persona) {
     tools: _toolsGemini(persona.rol),
     generationConfig: { maxOutputTokens: MAX_TOKENS },
   };
-  const contents = [{ role: 'user', parts: [{ text: userText }] }];
+  const contents = [
+    ...historial.map((t) => ({
+      role: t.rol === 'assistant' ? 'model' : 'user',
+      parts: [{ text: t.texto }],
+    })),
+    { role: 'user', parts: [{ text: userText }] },
+  ];
   const toolsUsadas = [];
 
   for (let iter = 0; iter < MAX_TOOL_ITERS; iter++) {
@@ -770,12 +816,13 @@ async function responder({ texto, persona, telefono }, fs) {
 
   const system = _systemPrompt(persona);
   const userText = String(texto).slice(0, 2000);
+  const historial = _recuperarHistorial(rlKey);
 
   try {
     const r =
       provider === 'gemini'
-        ? await _conversarGemini(db, system, userText, persona)
-        : await _conversarAnthropic(db, system, userText, persona);
+        ? await _conversarGemini(db, system, historial, userText, persona)
+        : await _conversarAnthropic(db, system, historial, userText, persona);
 
     if (!r.texto) {
       log.warn(`[agente] sin respuesta (${r.error || 'vacío'}) rol=${persona.rol}`);
@@ -785,6 +832,12 @@ async function responder({ texto, persona, telefono }, fs) {
       });
       return null;
     }
+    // Guardar el intercambio para dar contexto a las próximas preguntas.
+    _guardarHistorial(rlKey, [
+      ...historial,
+      { rol: 'user', texto: userText },
+      { rol: 'assistant', texto: r.texto },
+    ]);
     await _loggear(db, {
       provider, persona, telefono, pregunta: texto, respuesta: r.texto,
       toolsUsadas: r.toolsUsadas,
@@ -816,5 +869,8 @@ module.exports = {
   TOOLS_CHOFER,
   TOOLS_GESTION_VENC,
   TOOLS_CACHATORE,
+  _recuperarHistorial,
+  _guardarHistorial,
   _resetRateLimit: () => _rlPorClave.clear(),
+  _resetHistorial: () => _histPorClave.clear(),
 };
