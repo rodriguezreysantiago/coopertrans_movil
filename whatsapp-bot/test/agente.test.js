@@ -487,3 +487,136 @@ describe('agente — herramientas nuevas (jornada, turno, vencimientos, info)', 
     assert.strictEqual(agente._diasHasta('no-fecha'), null);
   });
 });
+
+describe('agente — herramientas de flota / operación', () => {
+  // Mock genérico: data = { COLECCION: [ {id, ...campos} ] }. Soporta
+  // collection().where().get(), collection().doc(id).get(), collection().get().
+  function dbMockGen(data) {
+    function makeQuery(name) {
+      const filtros = [];
+      const q = {
+        where(campo, op, val) { filtros.push([campo, op, val]); return q; },
+        limit() { return q; },
+        orderBy() { return q; },
+        async get() {
+          let docs = data[name] || [];
+          for (const [campo, op, val] of filtros) {
+            docs = docs.filter((d) => {
+              if (op === '==') return (d[campo] ?? null) === val;
+              if (op === '>=') {
+                const v = d[campo];
+                const ms = v && v.toMillis ? v.toMillis() : (typeof v === 'number' ? v : null);
+                const valMs = val && val.toMillis ? val.toMillis() : val;
+                return ms != null && ms >= valMs;
+              }
+              return true;
+            });
+          }
+          return { size: docs.length, empty: docs.length === 0, docs: docs.map((d) => ({ id: d.id, data: () => d })) };
+        },
+      };
+      return q;
+    }
+    return {
+      collection(name) {
+        const q = makeQuery(name);
+        return {
+          where: q.where,
+          limit: q.limit,
+          orderBy: q.orderBy,
+          get: q.get,
+          doc(id) {
+            return {
+              async get() {
+                const found = (data[name] || []).find((d) => d.id === id);
+                return { exists: !!found, data: () => found };
+              },
+            };
+          },
+        };
+      },
+    };
+  }
+
+  test('mis_adelantos: suma pendiente/pagado e ignora eliminados y otros', async () => {
+    const db = dbMockGen({ ADELANTOS_CHOFER: [
+      { id: 'a1', chofer_dni: '30', monto: 1500, pagado: false },
+      { id: 'a2', chofer_dni: '30', monto: 2000, pagado: true },
+      { id: 'a3', chofer_dni: '30', monto: 500, pagado: false, eliminado: true },
+      { id: 'a4', chofer_dni: '99', monto: 9999, pagado: false },
+    ] });
+    const r = await agente._ejecutarTool(db, 'mis_adelantos', { rol: 'CHOFER', dni: '30', data: { NOMBRE: 'X' } });
+    assert.strictEqual(r.total_pendiente, 1500);
+    assert.strictEqual(r.total_pagado, 2000);
+    assert.strictEqual(r.cantidad, 2);
+  });
+
+  test('donde_esta_mi_unidad: VOLVO_ESTADO en ruta', async () => {
+    const db = dbMockGen({ VOLVO_ESTADO: [{ id: 'AA111AA', speed_kmh: 80, motor_encendido: true, posicion_ts: new Date().toISOString() }] });
+    const r = await agente._ejecutarTool(db, 'donde_esta_mi_unidad', { rol: 'CHOFER', dni: '1', data: { VEHICULO: 'AA111AA' } });
+    assert.strictEqual(r.en_ruta, true);
+    assert.strictEqual(r.velocidad_kmh, 80);
+  });
+
+  test('donde_esta_mi_unidad: sin unidad asignada', async () => {
+    const r = await agente._ejecutarTool(dbMockGen({}), 'donde_esta_mi_unidad', { rol: 'CHOFER', dni: '1', data: {} });
+    assert.strictEqual(r.encontrado, false);
+  });
+
+  test('estado_flota: categoriza por velocidad y frescura', async () => {
+    const ahora = new Date().toISOString();
+    const viejo = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+    const db = dbMockGen({ VOLVO_ESTADO: [
+      { id: '1', speed_kmh: 80, posicion_ts: ahora },
+      { id: '2', speed_kmh: 0, posicion_ts: ahora },
+      { id: '3', speed_kmh: 50, posicion_ts: viejo },
+    ] });
+    const r = await agente._ejecutarTool(db, 'estado_flota', { rol: 'ADMIN' });
+    assert.strictEqual(r.total_unidades, 3);
+    assert.strictEqual(r.en_ruta, 1);
+    assert.strictEqual(r.paradas, 1);
+    assert.strictEqual(r.sin_datos_recientes, 1);
+  });
+
+  test('quien_esta_descargando: lista la cola', async () => {
+    const db = dbMockGen({ ZONA_DESCARGA_COLA: [
+      { id: 'AA_z', patente: 'AA111AA', nombre_zona: 'Añelo', chofer_nombre: 'PEREZ', entrada_ts: { toMillis: () => Date.now() - 1800000 } },
+    ] });
+    const r = await agente._ejecutarTool(db, 'quien_esta_descargando', { rol: 'ADMIN' });
+    assert.strictEqual(r.cantidad, 1);
+    assert.strictEqual(r.unidades[0].zona, 'Añelo');
+  });
+
+  test('alertas_unidad: filtra 24h y cuenta críticas', async () => {
+    const reciente = { toMillis: () => Date.now() - 3600000 };
+    const viejo = { toMillis: () => Date.now() - 48 * 3600000 };
+    const db = dbMockGen({ VOLVO_ALERTAS: [
+      { id: '1', patente: 'AA111AA', tipo: 'OVERSPEED', severidad: 'HIGH', creado_en: reciente },
+      { id: '2', patente: 'AA111AA', tipo: 'IDLING', severidad: 'LOW', creado_en: reciente },
+      { id: '3', patente: 'AA111AA', tipo: 'OVERSPEED', severidad: 'HIGH', creado_en: viejo },
+    ] });
+    const r = await agente._ejecutarTool(db, 'alertas_unidad', { rol: 'ADMIN' }, { query: 'AA111AA' });
+    assert.strictEqual(r.alertas_24h, 2);
+    assert.strictEqual(r.criticas, 1);
+  });
+
+  test('service_unidad: horas y distancia', async () => {
+    const db = dbMockGen({ VOLVO_ESTADO: [{ id: 'AA111AA', horas_motor: 12500, service_distance_km: 2000 }] });
+    const r = await agente._ejecutarTool(db, 'service_unidad', { rol: 'ADMIN' }, { query: 'AA111AA' });
+    assert.strictEqual(r.horas_motor, 12500);
+    assert.strictEqual(r.km_al_proximo_service, 2000);
+  });
+
+  test('viajes_resumen: cuenta por estado e ignora borrados', async () => {
+    const reciente = { toMillis: () => Date.now() - 2 * 86400000 };
+    const db = dbMockGen({ VIAJES_LOGISTICA: [
+      { id: '1', estado: 'CONCLUIDO', creado_en: reciente },
+      { id: '2', estado: 'EN_CURSO', creado_en: reciente },
+      { id: '3', estado: 'PLANEADO', creado_en: reciente, activo: false },
+    ] });
+    const r = await agente._ejecutarTool(db, 'viajes_resumen', { rol: 'ADMIN' }, { dias: 7 });
+    assert.strictEqual(r.total, 2);
+    assert.strictEqual(r.concluidos, 1);
+    assert.strictEqual(r.en_curso, 1);
+  });
+});

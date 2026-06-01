@@ -222,6 +222,29 @@ const TOOLS_CHOFER = [
       'nada cargado. Usala si preguntan por su turno de carga en YPF.',
     params: {},
   },
+  {
+    name: 'mis_adelantos',
+    description:
+      'Adelantos de dinero del chofer que pregunta: cuánto tiene pendiente ' +
+      'de descontar, cuánto ya le descontaron y los últimos movimientos. ' +
+      'Usala si preguntan por adelantos o plata que les adelantaron.',
+    params: {},
+  },
+  {
+    name: 'donde_esta_mi_unidad',
+    description:
+      'Última posición y estado del camión del chofer que pregunta: si está ' +
+      'en ruta o parado, velocidad, hace cuánto reportó y la zona/localidad ' +
+      'si se conoce. Usala si preguntan dónde está su camión.',
+    params: {},
+  },
+  {
+    name: 'mis_viajes',
+    description:
+      'Viajes recientes del chofer que pregunta (estado planeado/en curso/' +
+      'concluido, fecha y carga). Usala si preguntan por sus viajes.',
+    params: {},
+  },
 ];
 
 const TOOLS_GESTION_VENC = [
@@ -330,13 +353,71 @@ const TOOLS_CACHATORE = [
   },
 ];
 
+// Flota / operación en vivo. Solo ADMIN/SUPERVISOR.
+const TOOLS_GESTION_FLOTA = [
+  {
+    name: 'donde_esta',
+    description:
+      'Última posición de una unidad (por patente) o del camión de un chofer ' +
+      '(por nombre): en ruta o parado, velocidad, hace cuánto reportó y la ' +
+      'zona/localidad. Usala para "dónde está X", "dónde anda la unidad Y".',
+    params: {
+      query: { type: 'string', description: 'Patente de la unidad o nombre del chofer.' },
+    },
+  },
+  {
+    name: 'estado_flota',
+    description:
+      'Resumen de toda la flota: cuántas unidades en ruta, cuántas paradas y ' +
+      'cuántas sin datos recientes. Usala para "cómo está la flota", ' +
+      '"cuántos camiones andando".',
+    params: {},
+  },
+  {
+    name: 'viajes_resumen',
+    description:
+      'Resumen de viajes de los últimos N días (default 7): cuántos ' +
+      'planeados, en curso y concluidos. Usala para "cuántos viajes esta semana".',
+    params: { dias: { type: 'integer', description: 'Ventana en días (default 7).' } },
+  },
+  {
+    name: 'quien_esta_descargando',
+    description:
+      'Unidades que están AHORA dentro de una zona de carga/descarga YPF ' +
+      '(quién, en qué zona, hace cuánto entró). Usala para "quién está ' +
+      'descargando", "quién está en planta".',
+    params: {},
+  },
+  {
+    name: 'alertas_unidad',
+    description:
+      'Alertas Volvo de las últimas 24h de una unidad (por patente) o del ' +
+      'camión de un chofer: sobrevelocidad, frenado/aceleración brusca, ' +
+      'ralentí, AEBS, etc., con su severidad — sirve para ver cómo viene ' +
+      'manejando. Usala para "qué alertas tuvo X", "cómo maneja Y".',
+    params: {
+      query: { type: 'string', description: 'Patente o nombre del chofer.' },
+    },
+  },
+  {
+    name: 'service_unidad',
+    description:
+      'Estado de service de una unidad (por patente): horas de motor ' +
+      'actuales y, si está disponible, km al próximo service. Usala para ' +
+      '"cuándo le toca service a X".',
+    params: {
+      query: { type: 'string', description: 'Patente de la unidad.' },
+    },
+  },
+];
+
 // Roles con verCachatore (ven/operan Cachatore) — espejo de capabilities.dart.
 const ROLES_GESTION = new Set(['ADMIN', 'SUPERVISOR']);
 
 function _toolsDelRol(rol) {
   if (rol === 'CHOFER') return TOOLS_CHOFER;
   if (ROLES_GESTION.has(rol)) {
-    return [...TOOLS_GESTION_VENC, ...TOOLS_CACHATORE];
+    return [...TOOLS_GESTION_VENC, ...TOOLS_GESTION_FLOTA, ...TOOLS_CACHATORE];
   }
   // PLANTA / GOMERIA / SEG_HIGIENE: todavía no tienen consultas propias.
   return [];
@@ -809,6 +890,245 @@ async function _toolTurnosYpfDetalle(db) {
   };
 }
 
+// ── Posición de una unidad (VOLVO_ESTADO primero, SITRACK fallback) ──
+async function _posicionUnidad(db, patente) {
+  const p = String(patente || '').trim().toUpperCase();
+  if (!p) return null;
+  try {
+    const v = await db.collection('VOLVO_ESTADO').doc(p).get();
+    if (v.exists) {
+      const d = v.data();
+      const ts = d.posicion_ts ? new Date(d.posicion_ts).getTime() : null;
+      return {
+        patente: p,
+        velocidad_kmh: d.speed_kmh ?? null,
+        motor: d.motor_encendido === true ? 'encendido'
+          : (d.motor_encendido === false ? 'apagado' : null),
+        en_ruta: (d.speed_kmh ?? 0) > 8,
+        reporto_hace_min: ts ? Math.round((Date.now() - ts) / 60000) : null,
+        combustible_pct: d.combustible_pct ?? null,
+      };
+    }
+  } catch (_) { /* fallback a SITRACK */ }
+  try {
+    const s = await db.collection('SITRACK_POSICIONES').doc(p).get();
+    if (s.exists) {
+      const d = s.data();
+      const ms = d.report_date && d.report_date.toMillis ? d.report_date.toMillis() : null;
+      const vel = d.speed ?? d.gps_speed ?? null;
+      return {
+        patente: p,
+        velocidad_kmh: vel,
+        motor: d.ignition === true ? 'encendido'
+          : (d.ignition === false ? 'apagado' : null),
+        en_ruta: (vel ?? 0) > 8,
+        ubicacion: d.location || d.zone_name || null,
+        reporto_hace_min: ms ? Math.round((Date.now() - ms) / 60000) : null,
+      };
+    }
+  } catch (_) { /* nada */ }
+  return null;
+}
+
+async function _adelantosDe(db, dni, nombre) {
+  let lista;
+  try {
+    const snap = await db.collection('ADELANTOS_CHOFER').where('chofer_dni', '==', dni).get();
+    lista = snap.docs.map((d) => d.data()).filter((a) => a.eliminado !== true);
+  } catch (e) {
+    return { error: `No pude leer los adelantos: ${e.message}` };
+  }
+  let pendiente = 0, pagado = 0;
+  for (const a of lista) {
+    const m = Number(a.monto) || 0;
+    if (a.pagado === true) pagado += m; else pendiente += m;
+  }
+  lista.sort((a, b) => {
+    const fa = a.fecha && a.fecha.toMillis ? a.fecha.toMillis() : 0;
+    const fb = b.fecha && b.fecha.toMillis ? b.fecha.toMillis() : 0;
+    return fb - fa;
+  });
+  return {
+    chofer: nombre || dni,
+    total_pendiente: pendiente,
+    total_pagado: pagado,
+    cantidad: lista.length,
+    ultimos: lista.slice(0, 5).map((a) => ({
+      monto: Number(a.monto) || 0,
+      fecha: _fechaIso(a.fecha),
+      pagado: a.pagado === true,
+      observacion: a.observacion || null,
+    })),
+  };
+}
+
+async function _viajesDe(db, dni) {
+  let docs;
+  try {
+    const snap = await db.collection('VIAJES_LOGISTICA').where('chofer_dni', '==', dni).get();
+    docs = snap.docs.map((d) => d.data()).filter((v) => v.activo !== false);
+  } catch (e) {
+    return { error: `No pude leer los viajes: ${e.message}` };
+  }
+  docs.sort((a, b) => {
+    const fa = a.creado_en && a.creado_en.toMillis ? a.creado_en.toMillis() : 0;
+    const fb = b.creado_en && b.creado_en.toMillis ? b.creado_en.toMillis() : 0;
+    return fb - fa;
+  });
+  return {
+    cantidad: docs.length,
+    viajes: docs.slice(0, 8).map((v) => ({
+      estado: v.estado || null,
+      fecha: _fechaIso(v.fecha_carga) || _fechaIso(v.creado_en),
+      carga: v.carga_transportada || null,
+      unidad: v.vehiculo_id || null,
+    })),
+  };
+}
+
+async function _toolMisAdelantos(db, persona) {
+  return await _adelantosDe(db, persona.dni, persona.data && persona.data.NOMBRE);
+}
+async function _toolMisViajes(db, persona) {
+  return await _viajesDe(db, persona.dni);
+}
+async function _toolDondeEstaMiUnidad(db, persona) {
+  const patente = (persona.data && persona.data.VEHICULO || '').trim();
+  if (!patente) return { encontrado: false, nota: 'No tenés una unidad asignada.' };
+  const pos = await _posicionUnidad(db, patente);
+  return pos || { encontrado: false, nota: `No tengo posición reciente de tu unidad (${patente}).` };
+}
+
+async function _toolDondeEsta(db, args) {
+  const q = String((args && args.query) || '').trim();
+  if (!q) return { error: 'Indicá una patente o un chofer.' };
+  const qP = q.replace(/\s+/g, '').toUpperCase();
+  if (RE_PATENTE.test(qP)) {
+    const pos = await _posicionUnidad(db, qP);
+    return pos || { encontrado: false, nota: `No tengo posición de ${qP}.` };
+  }
+  const r = await _resolverChoferPorNombre(db, q, false);
+  if (!r.ok) return r;
+  const patente = (r.data.VEHICULO || '').trim();
+  if (!patente) return { encontrado: false, nota: `${r.data.NOMBRE} no tiene unidad asignada.` };
+  const pos = await _posicionUnidad(db, patente);
+  return pos
+    ? { chofer: r.data.NOMBRE, ...pos }
+    : { encontrado: false, nota: `No tengo posición de la unidad ${patente}.` };
+}
+
+async function _toolEstadoFlota(db) {
+  let enRuta = 0, paradas = 0, sinDatos = 0, total = 0;
+  try {
+    const snap = await db.collection('VOLVO_ESTADO').limit(5000).get();
+    for (const d of snap.docs) {
+      const v = d.data();
+      total++;
+      const ts = v.posicion_ts ? new Date(v.posicion_ts).getTime() : null;
+      if (!ts || (Date.now() - ts) > 60 * 60 * 1000) sinDatos++;
+      else if ((v.speed_kmh ?? 0) > 8) enRuta++;
+      else paradas++;
+    }
+  } catch (e) {
+    return { error: `No pude leer la flota: ${e.message}` };
+  }
+  return { total_unidades: total, en_ruta: enRuta, paradas, sin_datos_recientes: sinDatos };
+}
+
+async function _toolViajesResumen(db, args) {
+  let dias = parseInt((args && args.dias) || 7, 10);
+  if (isNaN(dias) || dias <= 0) dias = 7;
+  const desde = admin.firestore.Timestamp.fromMillis(Date.now() - dias * 86400000);
+  let docs;
+  try {
+    docs = (await db.collection('VIAJES_LOGISTICA').where('creado_en', '>=', desde).get()).docs;
+  } catch (e) {
+    return { error: `No pude leer los viajes: ${e.message}` };
+  }
+  let planeados = 0, enCurso = 0, concluidos = 0, total = 0;
+  for (const d of docs) {
+    const v = d.data();
+    if (v.activo === false) continue;
+    total++;
+    const e = String(v.estado || '').toUpperCase();
+    if (e === 'PLANEADO') planeados++;
+    else if (e === 'EN_CURSO') enCurso++;
+    else if (e === 'CONCLUIDO') concluidos++;
+  }
+  return { ventana_dias: dias, total, planeados, en_curso: enCurso, concluidos };
+}
+
+async function _toolQuienDescargando(db) {
+  let docs;
+  try {
+    docs = (await db.collection('ZONA_DESCARGA_COLA').get()).docs;
+  } catch (e) {
+    return { error: `No pude leer las zonas de descarga: ${e.message}` };
+  }
+  const unidades = docs.map((d) => {
+    const o = d.data();
+    const ms = o.entrada_ts && o.entrada_ts.toMillis ? o.entrada_ts.toMillis() : null;
+    return {
+      patente: o.patente || null,
+      zona: o.nombre_zona || o.slug_zona || null,
+      chofer: o.chofer_nombre || null,
+      dentro_hace_min: ms ? Math.round((Date.now() - ms) / 60000) : null,
+    };
+  });
+  return { cantidad: unidades.length, unidades };
+}
+
+async function _toolAlertasUnidad(db, args) {
+  const q = String((args && args.query) || '').trim();
+  if (!q) return { error: 'Indicá una patente o un chofer.' };
+  let patente = q.replace(/\s+/g, '').toUpperCase();
+  if (!RE_PATENTE.test(patente)) {
+    const r = await _resolverChoferPorNombre(db, q, false);
+    if (!r.ok) return r;
+    patente = (r.data.VEHICULO || '').trim().toUpperCase();
+    if (!patente) return { encontrado: false, nota: `${r.data.NOMBRE} no tiene unidad asignada.` };
+  }
+  let docs;
+  try {
+    docs = (await db.collection('VOLVO_ALERTAS').where('patente', '==', patente).limit(150).get()).docs;
+  } catch (e) {
+    return { error: `No pude leer las alertas: ${e.message}` };
+  }
+  const hace24 = Date.now() - 24 * 60 * 60 * 1000;
+  const recientes = docs.map((d) => d.data()).filter((a) => {
+    const ms = a.creado_en && a.creado_en.toMillis ? a.creado_en.toMillis() : 0;
+    return ms >= hace24;
+  });
+  const porTipo = {};
+  let criticas = 0;
+  for (const a of recientes) {
+    porTipo[a.tipo || 'OTRO'] = (porTipo[a.tipo || 'OTRO'] || 0) + 1;
+    if (String(a.severidad).toUpperCase() === 'HIGH') criticas++;
+  }
+  return { patente, alertas_24h: recientes.length, criticas, por_tipo: porTipo };
+}
+
+async function _toolServiceUnidad(db, args) {
+  const q = String((args && args.query) || '').replace(/\s+/g, '').toUpperCase();
+  if (!q) return { error: 'Indicá la patente de la unidad.' };
+  try {
+    const v = await db.collection('VOLVO_ESTADO').doc(q).get();
+    if (!v.exists) return { encontrado: false, nota: `No tengo datos Volvo de ${q}.` };
+    const d = v.data();
+    return {
+      patente: q,
+      horas_motor: d.horas_motor ?? null,
+      km_al_proximo_service: d.service_distance_km ?? null,
+      odometro_km: d.odometro_km ?? null,
+      nota: (d.horas_motor == null && d.service_distance_km == null)
+        ? 'La unidad no está reportando horas de motor ni distancia de service.'
+        : undefined,
+    };
+  } catch (e) {
+    return { error: `No pude leer el service: ${e.message}` };
+  }
+}
+
 async function _ejecutarTool(db, nombre, persona, args) {
   switch (nombre) {
     case 'mis_vencimientos':
@@ -833,6 +1153,24 @@ async function _ejecutarTool(db, nombre, persona, args) {
       return await _toolJornadaDe(db, args);
     case 'turnos_ypf_detalle':
       return await _toolTurnosYpfDetalle(db);
+    case 'mis_adelantos':
+      return await _toolMisAdelantos(db, persona);
+    case 'mis_viajes':
+      return await _toolMisViajes(db, persona);
+    case 'donde_esta_mi_unidad':
+      return await _toolDondeEstaMiUnidad(db, persona);
+    case 'donde_esta':
+      return await _toolDondeEsta(db, args);
+    case 'estado_flota':
+      return await _toolEstadoFlota(db);
+    case 'viajes_resumen':
+      return await _toolViajesResumen(db, args);
+    case 'quien_esta_descargando':
+      return await _toolQuienDescargando(db);
+    case 'alertas_unidad':
+      return await _toolAlertasUnidad(db, args);
+    case 'service_unidad':
+      return await _toolServiceUnidad(db, args);
     default:
       return { error: `Herramienta desconocida: ${nombre}` };
   }
