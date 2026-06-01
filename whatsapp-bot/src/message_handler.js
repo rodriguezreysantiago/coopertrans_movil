@@ -397,38 +397,57 @@ function crearHandler(fs, wa) {
       // ─── Identificar al chofer (necesario para ACUSE y para Fase 3) ───
       const fromNumber = msg.from.replace('@c.us', '');
       const chofer = await _resolverChofer(db, fromNumber);
-      if (!chofer) {
+      const esAdmin = !chofer && commands._esAdmin(fromNumber);
+      if (!chofer && !esAdmin) {
         log.debug(`Mensaje de número no registrado ${fromNumber}, ignoro.`);
         return;
       }
 
       // ─── Agente conversacional (Fase 1: consultas read-only) ───
-      // Texto libre de un chofer conocido, SIN foto y SIN citar un aviso
-      // del bot: si el agente está encendido, le responde con datos reales
-      // (vencimientos, unidad...). Si está apagado, no hay API key o falla,
-      // `responder` devuelve null y seguimos al flujo de siempre (acuse /
-      // Fase 3). El quote y la media se reservan para el flujo de
-      // respuestas-a-avisos de más abajo.
+      // Texto libre (sin foto y sin citar un aviso): si el agente está
+      // encendido responde con datos reales. CHOFER ve SOLO lo suyo; ADMIN
+      // puede consultar de cualquiera (las tools cambian según el rol). Si
+      // está apagado, sin API key o falla, `responder` devuelve null y
+      // seguimos al flujo de siempre (al chofer: acuse / Fase 3; al admin:
+      // nada). El quote y la media se reservan para respuestas-a-avisos.
       const esTextoLibre =
         !msg.hasMedia &&
         !msg.hasQuotedMsg &&
         typeof msg.body === 'string' &&
         msg.body.trim().length > 0;
       if (esTextoLibre) {
+        const persona = chofer
+          ? {
+              rol: 'CHOFER',
+              dni: chofer.dni,
+              nombre: chofer.data.NOMBRE,
+              data: chofer.data,
+            }
+          : {
+              rol: 'ADMIN',
+              dni: null,
+              nombre: nombrePorTelefonoTodos(fromNumber),
+              data: {},
+            };
         try {
           const respuestaAgente = await agente.responder(
-            { texto: msg.body, chofer, telefono: fromNumber },
+            { texto: msg.body, persona, telefono: fromNumber },
             fs
           );
           if (respuestaAgente) {
             await wa.responder(msg, respuestaAgente);
-            log.info(`Agente respondió a ${chofer.dni}`);
+            log.info(
+              `Agente respondió a ${persona.rol} ${persona.dni || fromNumber}`
+            );
             return;
           }
         } catch (e) {
           log.warn(`Agente no respondió (${e.message}), sigo al flujo normal`);
         }
       }
+
+      // Si es ADMIN (no chofer), termina acá: no recibe el acuse de chofer.
+      if (esAdmin) return;
 
       // ─── Acuse automático ───
       // Aunque la Fase 3 esté apagada, si un chofer registrado responde

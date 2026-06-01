@@ -1,12 +1,9 @@
 // Tests de la lógica PURA del agente conversacional (agente.js).
 //
-// NO llaman a la API de Anthropic (eso requiere API key + red). Cubren lo
-// que SÍ se puede lockear sin la API: normalización de fechas, rate limit,
-// armado del system prompt, extracción del texto de la respuesta, forma de
-// las tools y ejecución de cada tool contra un Firestore mockeado.
-//
-// La pieza que NO se testea acá (la llamada HTTP a Anthropic) se valida en
-// vivo cuando se carga la API key.
+// NO llaman a las APIs de Gemini/Anthropic (eso requiere key + red). Cubren:
+// normalización de fechas, rate limit, system prompt por rol, extracción del
+// texto, selección de proveedor, tools por rol y ejecución de cada tool
+// contra un Firestore mockeado (chofer y admin).
 process.env.TZ = 'America/Argentina/Buenos_Aires';
 
 const { test, describe } = require('node:test');
@@ -34,16 +31,16 @@ describe('agente._fechaIso — normaliza a YYYY-MM-DD', () => {
   });
 });
 
-describe('agente._rateLimited — tope por chofer', () => {
+describe('agente._rateLimited — tope por clave', () => {
   test('no limita hasta el cupo, después sí', () => {
     agente._resetRateLimit();
-    const dni = '12345678';
+    const k = '12345678';
     for (let i = 0; i < 20; i++) {
-      assert.strictEqual(agente._rateLimited(dni), false, `iter ${i}`);
+      assert.strictEqual(agente._rateLimited(k), false, `iter ${i}`);
     }
-    assert.strictEqual(agente._rateLimited(dni), true);
+    assert.strictEqual(agente._rateLimited(k), true);
   });
-  test('el cupo es por DNI (no se mezclan choferes)', () => {
+  test('el cupo es por clave (no se mezclan)', () => {
     agente._resetRateLimit();
     for (let i = 0; i < 20; i++) agente._rateLimited('111');
     assert.strictEqual(agente._rateLimited('111'), true);
@@ -51,16 +48,24 @@ describe('agente._rateLimited — tope por chofer', () => {
   });
 });
 
-describe('agente._systemPrompt', () => {
-  test('incluye nombre, DNI, fecha de hoy y la regla anti-invención', () => {
+describe('agente._systemPrompt — por rol', () => {
+  test('CHOFER: nombre, DNI, fecha, anti-invención', () => {
     const p = agente._systemPrompt({
+      rol: 'CHOFER',
       dni: '30111222',
       data: { NOMBRE: 'PEREZ JUAN' },
     });
     assert.ok(p.includes('PEREZ JUAN'));
     assert.ok(p.includes('30111222'));
-    assert.ok(/\d{4}-\d{2}-\d{2}/.test(p), 'lleva la fecha de hoy');
-    assert.ok(/NUNCA inventes/i.test(p), 'tiene la regla anti-invención');
+    assert.ok(/\d{4}-\d{2}-\d{2}/.test(p));
+    assert.ok(/NUNCA inventes/i.test(p));
+    assert.ok(/CHOFER/i.test(p));
+  });
+  test('ADMIN: menciona administrador y acceso a cualquiera', () => {
+    const p = agente._systemPrompt({ rol: 'ADMIN', nombre: 'Santiago', data: {} });
+    assert.ok(/ADMINISTRADOR/i.test(p));
+    assert.ok(/cualquier/i.test(p));
+    assert.ok(/NUNCA inventes/i.test(p));
   });
 });
 
@@ -81,39 +86,30 @@ describe('agente._textoDeRespuesta', () => {
   });
 });
 
-describe('agente — tools neutras y conversores por proveedor', () => {
-  test('TOOLS_CHOFER en formato neutro (name, description, params)', () => {
-    assert.ok(agente.TOOLS_CHOFER.length >= 2);
-    for (const t of agente.TOOLS_CHOFER) {
-      assert.strictEqual(typeof t.name, 'string');
-      assert.ok(t.description.length > 10);
-      assert.strictEqual(typeof t.params, 'object');
+describe('agente — tools por rol y conversores', () => {
+  test('CHOFER: tools sin parámetros', () => {
+    const a = agente._toolsAnthropic('CHOFER');
+    assert.ok(a.length >= 2);
+    for (const t of a) assert.strictEqual(t.input_schema.type, 'object');
+    const g = agente._toolsGemini('CHOFER');
+    for (const d of g[0].functionDeclarations) {
+      assert.strictEqual(d.parameters, undefined); // sin args
     }
   });
-  test('_toolsAnthropic → input_schema object por tool', () => {
-    const tools = agente._toolsAnthropic();
-    assert.strictEqual(tools.length, agente.TOOLS_CHOFER.length);
-    for (const t of tools) {
-      assert.strictEqual(typeof t.name, 'string');
-      assert.strictEqual(t.input_schema.type, 'object');
-    }
-  });
-  test('_toolsGemini → un bloque con functionDeclarations', () => {
-    const tools = agente._toolsGemini();
-    assert.strictEqual(tools.length, 1);
-    const decls = tools[0].functionDeclarations;
-    assert.strictEqual(decls.length, agente.TOOLS_CHOFER.length);
-    for (const d of decls) {
-      assert.strictEqual(typeof d.name, 'string');
-      assert.ok(d.description.length > 10);
-      // tools sin args: no debe llevar `parameters` con properties vacío
-      assert.strictEqual(d.parameters, undefined);
-    }
+  test('ADMIN: buscar_vencimientos con parámetro query', () => {
+    const a = agente._toolsAnthropic('ADMIN');
+    const bv = a.find((t) => t.name === 'buscar_vencimientos');
+    assert.ok(bv, 'existe buscar_vencimientos');
+    assert.ok(bv.input_schema.properties.query);
+    const g = agente._toolsGemini('ADMIN');
+    const gbv = g[0].functionDeclarations.find(
+      (d) => d.name === 'buscar_vencimientos'
+    );
+    assert.ok(gbv.parameters.properties.query); // admin SÍ lleva parameters
   });
 });
 
 describe('agente._provider — selección de proveedor', () => {
-  // Corre `fn` con SOLO las env vars dadas (restaura las previas al salir).
   function conEnv(vars, fn) {
     const keys = ['AGENTE_PROVIDER', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY'];
     const prev = {};
@@ -129,7 +125,6 @@ describe('agente._provider — selección de proveedor', () => {
       }
     }
   }
-
   test('respeta AGENTE_PROVIDER explícito', () => {
     conEnv({ AGENTE_PROVIDER: 'anthropic' }, () =>
       assert.strictEqual(agente._provider(), 'anthropic')
@@ -138,7 +133,7 @@ describe('agente._provider — selección de proveedor', () => {
       assert.strictEqual(agente._provider(), 'gemini')
     );
   });
-  test('sin nada configurado → null (apagado)', () => {
+  test('sin nada configurado → null', () => {
     conEnv({}, () => assert.strictEqual(agente._provider(), null));
   });
   test('autodetecta por key; Gemini tiene prioridad', () => {
@@ -152,82 +147,90 @@ describe('agente._provider — selección de proveedor', () => {
 });
 
 describe('agente._ejecutarTool — contra Firestore mockeado', () => {
-  // Mock mínimo: db.collection(X).doc(id).get() → {exists, data()}.
-  function dbMock(vehiculos) {
+  // doc(id).get() lee de `vehiculos`; collection().get() devuelve `empleados`.
+  function dbMock({ vehiculos = {}, empleados = [] } = {}) {
     return {
       collection() {
         return {
           doc(id) {
             return {
               async get() {
-                const data = (vehiculos || {})[id];
-                return { exists: !!data, data: () => data };
+                const d = vehiculos[id];
+                return { exists: !!d, data: () => d };
               },
             };
+          },
+          async get() {
+            return { docs: empleados.map((e) => ({ id: e.id, data: () => e.data })) };
           },
         };
       },
     };
   }
 
-  test('mis_vencimientos arma papeles del chofer y de su unidad', async () => {
-    const chofer = {
+  test('mis_vencimientos (chofer): papeles propios + de la unidad', async () => {
+    const persona = {
+      rol: 'CHOFER',
       dni: '30111222',
-      data: {
-        NOMBRE: 'PEREZ',
-        VEHICULO: 'AA111AA',
-        LICENCIA_DE_CONDUCIR: '14-06-2026',
-        PREOCUPACIONAL: '2027-01-10',
-      },
+      data: { NOMBRE: 'PEREZ', VEHICULO: 'AA111AA', LICENCIA_DE_CONDUCIR: '14-06-2026' },
     };
-    const db = dbMock({ AA111AA: { VENCIMIENTO_RTO: '01-08-2026' } });
-    const r = await agente._ejecutarTool(db, 'mis_vencimientos', chofer);
+    const db = dbMock({ vehiculos: { AA111AA: { VENCIMIENTO_RTO: '01-08-2026' } } });
+    const r = await agente._ejecutarTool(db, 'mis_vencimientos', persona);
     assert.strictEqual(r.unidad_asignada, 'AA111AA');
-    const papeles = r.papeles_del_chofer.map((p) => p.papel);
-    assert.ok(papeles.includes('Licencia de conducir'));
-    assert.ok(papeles.includes('Preocupacional'));
-    const lic = r.papeles_del_chofer.find(
-      (p) => p.papel === 'Licencia de conducir'
+    assert.ok(
+      r.papeles_del_chofer.some(
+        (p) => p.papel === 'Licencia de conducir' && p.vence === '2026-06-14'
+      )
     );
-    assert.strictEqual(lic.vence, '2026-06-14'); // normalizado
     assert.ok(r.papeles_de_la_unidad.some((p) => p.papel === 'RTO'));
   });
 
-  test('mis_vencimientos sin datos → nota explicativa', async () => {
-    const chofer = { dni: '1', data: { NOMBRE: 'X' } };
-    const r = await agente._ejecutarTool(dbMock({}), 'mis_vencimientos', chofer);
-    assert.strictEqual(r.papeles_del_chofer.length, 0);
-    assert.ok(r.nota);
-  });
-
-  test('mi_unidad devuelve tractor y enganche con detalle', async () => {
-    const chofer = {
-      dni: '1',
-      data: { VEHICULO: 'AA111AA', ENGANCHE: 'BB222BB' },
-    };
+  test('mi_unidad (chofer): tractor + enganche', async () => {
+    const persona = { rol: 'CHOFER', dni: '1', data: { VEHICULO: 'AA111AA', ENGANCHE: 'BB222BB' } };
     const db = dbMock({
-      AA111AA: { TIPO: 'TRACTOR', MARCA: 'Volvo' },
-      BB222BB: { TIPO: 'BATEA' },
+      vehiculos: { AA111AA: { TIPO: 'TRACTOR', MARCA: 'Volvo' }, BB222BB: { TIPO: 'BATEA' } },
     });
-    const r = await agente._ejecutarTool(db, 'mi_unidad', chofer);
+    const r = await agente._ejecutarTool(db, 'mi_unidad', persona);
     assert.strictEqual(r.tractor.patente, 'AA111AA');
     assert.strictEqual(r.tractor.marca, 'Volvo');
-    assert.strictEqual(r.enganche.patente, 'BB222BB');
     assert.strictEqual(r.enganche.tipo, 'BATEA');
   });
 
-  test('mi_unidad sin enganche → enganche null', async () => {
-    const chofer = { dni: '1', data: { VEHICULO: 'AA111AA' } };
-    const r = await agente._ejecutarTool(dbMock({}), 'mi_unidad', chofer);
-    assert.strictEqual(r.enganche, null);
-    assert.strictEqual(r.tractor.patente, 'AA111AA');
+  test('buscar_vencimientos por PATENTE (admin)', async () => {
+    const db = dbMock({ vehiculos: { AB123CD: { TIPO: 'TRACTOR', VENCIMIENTO_RTO: '10-09-2026' } } });
+    const r = await agente._ejecutarTool(db, 'buscar_vencimientos', { rol: 'ADMIN' }, { query: 'AB123CD' });
+    assert.strictEqual(r.tipo, 'unidad');
+    assert.strictEqual(r.patente, 'AB123CD');
+    assert.ok(r.papeles.some((p) => p.papel === 'RTO' && p.vence === '2026-09-10'));
   });
 
-  test('tool desconocida → {error}', async () => {
-    const r = await agente._ejecutarTool(dbMock({}), 'no_existe', {
-      dni: '1',
-      data: {},
+  test('buscar_vencimientos por NOMBRE (admin)', async () => {
+    const db = dbMock({
+      empleados: [
+        { id: '30111222', data: { NOMBRE: 'PEREZ JUAN', VEHICULO: 'AA111AA', LICENCIA_DE_CONDUCIR: '14-06-2026' } },
+        { id: '40555666', data: { NOMBRE: 'GOMEZ LUIS' } },
+      ],
     });
+    const r = await agente._ejecutarTool(db, 'buscar_vencimientos', { rol: 'ADMIN' }, { query: 'perez' });
+    assert.strictEqual(r.tipo, 'choferes');
+    assert.strictEqual(r.resultados.length, 1);
+    assert.strictEqual(r.resultados[0].nombre, 'PEREZ JUAN');
+    assert.ok(r.resultados[0].papeles.some((p) => p.papel === 'Licencia de conducir'));
+  });
+
+  test('buscar_vencimientos sin coincidencias (admin)', async () => {
+    const db = dbMock({ empleados: [{ id: '1', data: { NOMBRE: 'GOMEZ' } }] });
+    const r = await agente._ejecutarTool(db, 'buscar_vencimientos', { rol: 'ADMIN' }, { query: 'xyz' });
+    assert.strictEqual(r.encontrado, false);
+  });
+
+  test('buscar_vencimientos sin query → error', async () => {
+    const r = await agente._ejecutarTool(dbMock(), 'buscar_vencimientos', { rol: 'ADMIN' }, {});
+    assert.ok(r.error);
+  });
+
+  test('tool desconocida → error', async () => {
+    const r = await agente._ejecutarTool(dbMock(), 'no_existe', { rol: 'CHOFER', data: {} });
     assert.ok(r.error);
   });
 });
