@@ -358,6 +358,54 @@
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "fecha_vencimiento", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "GOMERIA_MONTAJES",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unidad_id", "order": "ASCENDING" },
+        { "fieldPath": "hasta", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "CUBIERTAS",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "tipo_uso", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "CUBIERTAS_CONTROLES",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "cubierta_id", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ASIGNACIONES_ENGANCHE",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "enganche_id", "order": "ASCENDING" },
+        { "fieldPath": "hasta", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ASIGNACIONES_ENGANCHE",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tractor_id", "order": "ASCENDING" },
+        { "fieldPath": "hasta", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "ASIGNACIONES_VEHICULO",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "vehiculo_id", "order": "ASCENDING" },
+        { "fieldPath": "hasta", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
