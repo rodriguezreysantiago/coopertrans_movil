@@ -98,10 +98,17 @@ service firebase.storage {
     // ========================================================================
 
     match /vehiculos/{patente}/{archivo=**} {
-      // Foto de la unidad — operativa, no PII. Chofer la ve en "Mi
-      // equipo" para verificar que efectivamente es su unidad. Acceso
-      // amplio aceptable.
-      allow read: if isSignedIn();
+      // Foto de la unidad. Antes `read: if isSignedIn()` dejaba que CUALQUIER
+      // logueado viera la foto de CUALQUIER unidad (enumeraba la flota,
+      // auditoría 2026-05-30). Ahora mismo criterio que la carpeta hermana
+      // VEHICULOS/ (comprobantes): admin/supervisor todas; el chofer solo la
+      // de SU unidad/enganche. La app igual la consume por la URL `ARCHIVO_FOTO`
+      // del doc VEHICULOS; esto cierra el acceso DIRECTO por path predecible.
+      allow read: if isAdminOrSupervisor()
+        || (isSignedIn() &&
+            firestore.exists(/databases/(default)/documents/EMPLEADOS/$(request.auth.uid)) &&
+            (firestore.get(/databases/(default)/documents/EMPLEADOS/$(request.auth.uid)).data.VEHICULO == patente
+             || firestore.get(/databases/(default)/documents/EMPLEADOS/$(request.auth.uid)).data.ENGANCHE == patente));
       allow write: if isAdmin();
     }
     // Comprobantes (RTO, Seguro, extintores) — el código sube a VEHICULOS
