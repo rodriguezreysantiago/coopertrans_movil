@@ -8,8 +8,6 @@
  *   - `volvoAlertasPoller` (cron 5 min): Vehicle Alerts API → VOLVO_ALERTAS.
  *   - `onAlertaVolvoCreated` (trigger): notifica al chofer alertas HIGH.
  *   - `volvoScoresPoller` (cron diario): Group Scores API → VOLVO_SCORES_DIARIOS.
- *   - `onAlertaVolvoMantenimientoCreated` (trigger): registra alertas de
- *     mantenimiento para el resumen diario.
  *
  * Alertas + scores comparten toda la infra de auth de Volvo (secrets +
  * VOLVO_BASE + Accept headers), por eso van en un solo módulo en lugar
@@ -1531,47 +1529,6 @@ function buildScoreFleetDoc(
   };
 }
 
-// ============================================================================
-// onAlertaVolvoMantenimientoCreated — alerta de mantenimiento al jefe
-// ============================================================================
-// Trigger Firestore distinto y complementario a `onAlertaVolvoCreated`
-// (que notifica al CHOFER cuando hay HIGH severity de manejo). Este
-// notifica al JEFE DE MANTENIMIENTO cuando aparece una alerta que
-// indica problema mecánico/operativo del vehículo (independiente de
-// severity).
-//
-// Tipos cubiertos:
-//   - FUEL    → cambio anormal de combustible (posible robo, fuga,
-//               medidor mal calibrado).
-//   - CATALYST → problema con sistema SCR / filtro AdBlue.
-//   - GENERIC con sub-tipo:
-//       * TELL_TALE        → testigo del tablero encendido (check
-//                            engine, presión aceite, etc).
-//       * ADBLUELEVEL_LOW  → AdBlue por debajo del umbral.
-//       * WITHOUT_ADBLUE   → sin AdBlue (riesgo de derate).
-//
-// Filtramos a tipos que indican "el camión te está avisando algo" antes
-// que el chofer llame del medio de la ruta. La idea: pasar de modo
-// reactivo (apagar incendios) a modo predictivo (turno de taller listo).
-//
-// Destinatario: hardcoded al DNI 35244439 (Santiago, jefe de
-// mantenimiento Vecchi 2026). Si Vecchi suma a otra persona en el
-// futuro, refactorizar a una colección META o env var.
-//
-// Bot: encolado en COLA_WHATSAPP — respeta el horario hábil del bot
-// (8-19 lunes a viernes, sin feriados). Una alerta del sábado 23:00
-// se entrega el lunes 8:00 AM. Para mantenimiento NO crítico esto está
-// bien (el chofer ya llamó si era urgente). El sistema es predictivo.
-//
-// Idempotencia: trigger `onCreate` se dispara una sola vez por docId.
-// El docId composite del poller (`{vin}_{createdMs}_{tipo}`) garantiza
-// que mismo evento Volvo no genera dos triggers.
-//
-// Sin dedupe por tipo+patente en este v1: con ~7 eventos de
-// mantenimiento en 13 días reales (TELL_TALE + FUEL + CATALYST), el
-// volumen es muy bajo para preocuparse por spam. Si se materializa
-// (ej: testigo intermitente que dispara 50 veces por hora), agregar
-// dedupe simple por (alert_tipo, alert_patente) en últimas N horas.
 
 // MANTENIMIENTO_DESTINATARIO_DNI + SEG_HIGIENE_DESTINATARIO_DNI movidos
 // a comun.ts (split 2026-05-19).
@@ -1638,86 +1595,13 @@ const VOLVO_HIGH_THROTTLE_VENTANA_SEG = 60 * 60; // 1h rolling
 
 // _expiraEnMinutos movido a helpers.ts (refactor 2026-05-18) como expiraEnMin.
 
-const TIPOS_MANTENIMIENTO_DIRECTOS = new Set(["FUEL", "CATALYST"]);
-
-const SUBTIPOS_GENERIC_MANTENIMIENTO = new Set([
-  "TELL_TALE",
-  "ADBLUELEVEL_LOW",
-  "WITHOUT_ADBLUE",
-]);
-
-function _esAlertaMantenimiento(
-  tipo: string,
-  data: Record<string, unknown>
-): boolean {
-  if (TIPOS_MANTENIMIENTO_DIRECTOS.has(tipo)) return true;
-  if (tipo !== "GENERIC") return false;
-  const detalleGeneric = data.detalle_generic as
-    | Record<string, unknown>
-    | undefined;
-  // BUG (auditoría 2026-05-22, verificado con data real): Volvo pone el
-  // subtipo de los GENERIC en `triggerType`, NO en `type` (que viene vacío
-  // en el 100% de los eventos). Leer solo `type` hacía que esta función
-  // NUNCA reconociera un mantenimiento GENERIC (TELL_TALE, etc.). Leemos
-  // `triggerType ?? type` (mismo criterio que el resto del código).
-  const subType = (
-    detalleGeneric?.triggerType ?? detalleGeneric?.type ?? ""
-  ).toString().toUpperCase();
-  return SUBTIPOS_GENERIC_MANTENIMIENTO.has(subType);
-}
-
-export const onAlertaVolvoMantenimientoCreated = onDocumentCreated(
-  {
-    document: "VOLVO_ALERTAS/{alertId}",
-    timeoutSeconds: 30,
-    memory: "256MiB",
-  },
-  async (event) => {
-    const snap = event.data;
-    if (!snap) {
-      logger.warn("[onAlertaVolvoMantenimientoCreated] event.data vacío, skip");
-      return;
-    }
-
-    const data = snap.data() ?? {};
-    const tipo = (data.tipo ?? "").toString().toUpperCase();
-
-    if (!_esAlertaMantenimiento(tipo, data)) {
-      return; // No es del tipo que notificamos.
-    }
-
-    const patente = (data.patente ?? "").toString().trim().toUpperCase();
-
-    // Etiqueta legible para el log.
-    let etiqueta = ETIQUETAS_TIPO_ALERTA[tipo] ?? tipo;
-    if (tipo === "GENERIC") {
-      const detalleGeneric = data.detalle_generic as
-        | Record<string, unknown>
-        | undefined;
-      const subType = (detalleGeneric?.type ?? "").toString().toUpperCase();
-      etiqueta = ETIQUETAS_TIPO_ALERTA[subType] ?? subType ?? "Evento genérico";
-    }
-
-    // No encolamos en COLA_WHATSAPP aquí. La Cloud Function
-    // `resumenMantenimientoVehiculosDiario` (volvo_mantenimiento.ts) arma
-    // a las 08:00 ART UN "Parte de mantenimiento" consolidado: testigos del
-    // tablero (VOLVO_ESTADO) + eventos de neumáticos/tacógrafo de las
-    // últimas 24h (VOLVO_ALERTAS). Enviar uno por evento generaba N
-    // mensajes separados al admin.
-    // (Hasta 2026-05-22 ese resumen lo armaba el cron del bot —
-    // cron_mantenimiento_diario — pero le llegaba duplicado a Emmanuel.)
-    logger.info(
-      "[onAlertaVolvoMantenimientoCreated] evento registrado en " +
-      "VOLVO_ALERTAS — cron diario lo incluirá en resumen",
-      {
-        alertId: event.params.alertId,
-        patente,
-        tipo,
-        etiqueta,
-      }
-    );
-  }
-);
+// ── onAlertaVolvoMantenimientoCreated ELIMINADO (auditoría 2026-05-30) ──
+// Era un trigger onDocumentCreated sobre VOLVO_ALERTAS que había quedado NO-OP:
+// solo logueaba. El "Parte de mantenimiento" lo arma el cron diario
+// resumenMantenimientoVehiculosDiario (volvo_mantenimiento.ts), no este trigger.
+// Pagaba una invocación + cold-start por CADA alerta Volvo sin hacer nada útil.
+// Se quitaron también sus helpers exclusivos (_esAlertaMantenimiento,
+// TIPOS_MANTENIMIENTO_DIRECTOS, SUBTIPOS_GENERIC_MANTENIMIENTO).
 
 // ============================================================================
 // Bypass de seguridad: notificar a Molina cuando un chofer desactiva un
