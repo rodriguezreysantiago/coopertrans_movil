@@ -40,21 +40,74 @@ class AuthGuard extends StatefulWidget {
   State<AuthGuard> createState() => _AuthGuardState();
 }
 
-class _AuthGuardState extends State<AuthGuard> {
+class _AuthGuardState extends State<AuthGuard> with WidgetsBindingObserver {
   bool _gracePeriodOver = false;
   Timer? _graceTimer;
+  Timer? _revisionTimer;
+
+  /// Códigos de FirebaseAuth que significan "esta sesión ya no vale":
+  /// el admin revocó los tokens (cambio de rol / baja) o deshabilitó la
+  /// cuenta. SOLO ante estos cerramos sesión. Cualquier otro error
+  /// (red, timeout, función fría) NO toca la sesión — así evitamos sacar
+  /// a un usuario legítimo por un problema transitorio.
+  static const _codigosSesionRevocada = {
+    'user-token-expired',
+    'user-disabled',
+    'user-not-found',
+    'user-token-revoked',
+    'invalid-user-token',
+  };
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _graceTimer = Timer(const Duration(milliseconds: 1500), () {
       if (mounted) setState(() => _gracePeriodOver = true);
     });
+    // Primer chequeo de sesión revocada tras un margen (que Firebase
+    // termine de cargar la sesión persistida), y después cada 30 min
+    // mientras la app esté abierta. Esto desbloquea el caso "le cambiaron
+    // el rol / lo dieron de baja": revokeRefreshTokens server-side hace
+    // que este getIdToken(true) falle → cerramos sesión → re-login con el
+    // rol nuevo (antes el usuario quedaba en limbo: veía el menú viejo
+    // pero el server le rechazaba todo).
+    Future.delayed(const Duration(seconds: 3), _verificarSesionRevocada);
+    _revisionTimer = Timer.periodic(
+      const Duration(minutes: 30),
+      (_) => _verificarSesionRevocada(),
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Al volver a primer plano, revalidamos: si mientras estuvo en
+    // background le revocaron la sesión, lo detectamos acá.
+    if (state == AppLifecycleState.resumed) {
+      _verificarSesionRevocada();
+    }
+  }
+
+  Future<void> _verificarSesionRevocada() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    try {
+      await user.getIdToken(true).timeout(const Duration(seconds: 12));
+    } on FirebaseAuthException catch (e) {
+      if (_codigosSesionRevocada.contains(e.code)) {
+        await FirebaseAuth.instance.signOut();
+        // El StreamBuilder de build() reacciona al null y redirige a login.
+      }
+    } catch (_) {
+      // Red / timeout / error transitorio → NO tocar la sesión.
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _graceTimer?.cancel();
+    _revisionTimer?.cancel();
     super.dispose();
   }
 
