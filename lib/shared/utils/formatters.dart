@@ -394,8 +394,16 @@ class _MilesDecimalInputFormatter extends TextInputFormatter {
     // reusar la logica de abajo. Asi anda igual tipear "1234.50" (numpad/EEUU)
     // que "1234,50" (AR).
     if (!newValue.text.contains(',')) {
+      // Solo tratamos un '.' como decimal si el usuario ACABA de agregarlo
+      // (hay MÁS puntos que antes). Si la cantidad de puntos no aumentó, son
+      // los separadores de miles que insertamos nosotros: al borrar un dígito
+      // de "1.234.567" queda "1.234.56", donde el último '.' NO es decimal.
+      // Sin este chequeo ese borrado se convertía en "1.234,56" y trababa la
+      // edición (no se podían escribir más números). Bug reportado 2026-06-01.
+      final puntosAntes = '.'.allMatches(oldValue.text).length;
+      final puntosAhora = '.'.allMatches(newValue.text).length;
       final idx = newValue.text.lastIndexOf('.');
-      if (idx >= 0) {
+      if (puntosAhora > puntosAntes && idx >= 0) {
         final cola = newValue.text.substring(idx + 1);
         final colaDigitos = cola.replaceAll(RegExp(r'\D'), '');
         if (cola == colaDigitos && colaDigitos.length <= _maxDecimales) {

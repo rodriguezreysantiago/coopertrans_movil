@@ -309,5 +309,31 @@ void main() {
       expect(fmt('123456.789'), '123.456.789');
       expect(fmt('1.234.567'), '1.234.567');
     });
+
+    test('REGRESIÓN: borrar un dígito reagrupa miles (no lo toma como coma)', () {
+      // Bug 2026-06-01: con "1.234.567" en pantalla, borrar el último dígito
+      // dejaba "1.234.56" y el formatter lo convertía en "1.234,56" (decimal),
+      // trabando la edición. Ahora, si NO se agregó un punto nuevo (los puntos
+      // ya estaban, son de miles), reagrupa en lugar de poner coma.
+      String fmtEdit(String oldT, String newT) {
+        final r = AppFormatters.inputMilesDecimal.formatEditUpdate(
+          TextEditingValue(
+            text: oldT,
+            selection: TextSelection.collapsed(offset: oldT.length),
+          ),
+          TextEditingValue(
+            text: newT,
+            selection: TextSelection.collapsed(offset: newT.length),
+          ),
+        );
+        return r.text;
+      }
+
+      expect(fmtEdit('1.234.567', '1.234.56'), '123.456');
+      expect(fmtEdit('123.456', '123.45'), '12.345');
+      // Tipear un punto decimal NUEVO sobre una parte entera con miles SÍ va
+      // a coma (ese caso se mantiene).
+      expect(fmtEdit('1.234', '1.234.5'), '1.234,5');
+    });
   });
 }

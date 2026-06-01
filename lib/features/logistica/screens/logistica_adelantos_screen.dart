@@ -575,7 +575,10 @@ class _EmpleadoElegido {
 /// con buscador en vivo. Opción extra "TODOS" arriba para limpiar el
 /// filtro sin tocar la lista.
 class _DialogSeleccionarEmpleado extends StatefulWidget {
-  const _DialogSeleccionarEmpleado();
+  /// `true` (default): muestra la opción "TODOS" — para filtrar la lista.
+  /// `false`: en el alta de un adelanto hay que elegir un empleado puntual.
+  final bool incluirTodos;
+  const _DialogSeleccionarEmpleado({this.incluirTodos = true});
 
   @override
   State<_DialogSeleccionarEmpleado> createState() =>
@@ -603,7 +606,9 @@ class _DialogSeleccionarEmpleadoState
                   const Icon(Icons.person_search, size: 20),
                   const SizedBox(width: AppSpacing.sm),
                   Text(
-                    'Filtrar por empleado',
+                    widget.incluirTodos
+                        ? 'Filtrar por empleado'
+                        : 'Seleccionar empleado',
                     style: AppType.heading.copyWith(fontWeight: FontWeight.bold),
                   ),
                 ],
@@ -662,19 +667,21 @@ class _DialogSeleccionarEmpleadoState
                         }).toList();
                   return ListView(
                     children: [
-                      // Opción "TODOS" — limpia el filtro
-                      ListTile(
-                        leading: const Icon(Icons.people_outline,
-                            color: Colors.white60),
-                        title: const Text('TODOS los empleados'),
-                        subtitle: const Text('Sin filtro de empleado',
-                            style: AppType.eyebrow),
-                        onTap: () => Navigator.pop(
-                          context,
-                          const _EmpleadoElegido(dni: '', nombre: ''),
+                      // Opción "TODOS" — limpia el filtro (solo en modo filtro).
+                      if (widget.incluirTodos) ...[
+                        ListTile(
+                          leading: const Icon(Icons.people_outline,
+                              color: Colors.white60),
+                          title: const Text('TODOS los empleados'),
+                          subtitle: const Text('Sin filtro de empleado',
+                              style: AppType.eyebrow),
+                          onTap: () => Navigator.pop(
+                            context,
+                            const _EmpleadoElegido(dni: '', nombre: ''),
+                          ),
                         ),
-                      ),
-                      const Divider(height: 1),
+                        const Divider(height: 1),
+                      ],
                       for (final d in filtrados)
                         ListTile(
                           dense: true,
@@ -1488,61 +1495,40 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
               // (ver liquidacion_service.dart), entonces los adelantos
               // de empleados no-CHOFER no se asocian a viajes — son
               // adelantos de sueldo puros.
-              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection(AppCollections.empleados)
-                    .snapshots(),
-                builder: (ctx, snap) {
-                  final docs = List<
-                          QueryDocumentSnapshot<Map<String, dynamic>>>.from(
-                    snap.data?.docs ?? const [],
-                  )
-                    // Excluir testers (Apple Reviewer / Android) y los
-                    // 3 choferes asignados a tanques de combustibles
-                    // líquidos. NO tiene sentido cargarles adelantos.
-                    // Usamos el cache sincrónico — la pantalla padre
-                    // (`_LogisticaAdelantosScreenState`) ya pre-cargó
-                    // el set en initState, así que está disponible al
-                    // abrir el dialog.
-                    ..removeWhere((d) => ExcluidosService.esExcluido(
-                          ExcluidosService.cacheActual,
-                          dni: d.id,
-                        ))
-                    ..sort((a, b) {
-                      final na =
-                          (a.data()['NOMBRE'] ?? '').toString().toUpperCase();
-                      final nb =
-                          (b.data()['NOMBRE'] ?? '').toString().toUpperCase();
-                      return na.compareTo(nb);
-                    });
-                  return DropdownButtonFormField<String>(
-                    initialValue: _choferDni,
-                    decoration: const InputDecoration(
-                      labelText: 'Empleado *',
-                      border: OutlineInputBorder(),
-                    ),
-                    isExpanded: true,
-                    items: docs.map((d) {
-                      final dni = (d.data()['DNI'] ?? d.id).toString();
-                      final nom = (d.data()['NOMBRE'] ?? dni).toString();
-                      return DropdownMenuItem(
-                        value: dni,
-                        child: Text(nom, overflow: TextOverflow.ellipsis),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val == null) return;
-                      final doc = docs.firstWhere(
-                        (d) => (d.data()['DNI'] ?? d.id).toString() == val,
-                      );
-                      setState(() {
-                        _choferDni = val;
-                        _choferNombre =
-                            (doc.data()['NOMBRE'] ?? val).toString();
-                      });
-                    },
+              // Selector de empleado CON buscador (reusa el dialog de
+              // búsqueda; en el alta va sin la opción "TODOS"). Antes era un
+              // DropdownButtonFormField sin buscador, incómodo con ~60
+              // empleados (Santiago 2026-06-01).
+              InkWell(
+                onTap: () async {
+                  final elegido = await showDialog<_EmpleadoElegido>(
+                    context: context,
+                    builder: (_) =>
+                        const _DialogSeleccionarEmpleado(incluirTodos: false),
                   );
+                  if (elegido != null && elegido.dni.isNotEmpty) {
+                    setState(() {
+                      _choferDni = elegido.dni;
+                      _choferNombre = elegido.nombre;
+                    });
+                  }
                 },
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: 'Empleado *',
+                    border: OutlineInputBorder(),
+                    suffixIcon: Icon(Icons.search),
+                  ),
+                  child: Text(
+                    (_choferDni == null || _choferDni!.isEmpty)
+                        ? 'Tocá para buscar el empleado…'
+                        : (_choferNombre ?? _choferDni!),
+                    style: (_choferDni == null || _choferDni!.isEmpty)
+                        ? const TextStyle(color: AppColors.textHint)
+                        : null,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
               const SizedBox(height: AppSpacing.md),
               // ─── Fecha ───
