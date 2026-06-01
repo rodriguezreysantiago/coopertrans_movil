@@ -547,8 +547,8 @@ async function procesarSiguiente() {
         cuando
       );
       log.info(
-        `⏳ Rate limit (${health.enviadosUltimaHora()}/${maxPorHora} en última h). ` +
-        `${docId} reagendado para ${aLocalDateTime(cuando)}.`
+        `Rate limit (${health.enviadosUltimaHora()}/${maxPorHora} en última h). ` +
+        `Aviso a ${_quien(data.telefono)} reagendado para ${aLocalDateTime(cuando)}.`
       );
       return;
     }

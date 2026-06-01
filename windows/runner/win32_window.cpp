@@ -150,7 +150,10 @@ bool Win32Window::Create(const std::wstring& title,
 }
 
 bool Win32Window::Show() {
-  return ShowWindow(window_handle_, SW_SHOWNORMAL);
+  // Abrir MAXIMIZADA en Windows (pedido Santiago 2026-06-01). Antes
+  // SW_SHOWNORMAL (tamaño por defecto del Create). La app es de escritorio
+  // operativa con paneles anchos — conviene aprovechar toda la pantalla.
+  return ShowWindow(window_handle_, SW_SHOWMAXIMIZED);
 }
 
 // static
