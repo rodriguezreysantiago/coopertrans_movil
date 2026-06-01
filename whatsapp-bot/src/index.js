@@ -60,6 +60,7 @@ const control = require('./control');
 const backupAuth = require('./backup_auth');
 const messageHandler = require('./message_handler');
 const agrupador = require('./agrupador');
+const configBot = require('./config_bot');
 
 // Identificador de esta PC. Configurable via env var BOT_PC_ID
 // (recomendado: "casa", "oficina", "server-prod"). Si no se setea,
@@ -537,7 +538,9 @@ async function procesarSiguiente() {
     // tomamos el lock — dejamos el doc PENDIENTE y reagendamos para
     // cuando se libere un slot. El polling lo va a respetar gracias al
     // proximoIntentoEn que setea marcarReintento.
-    const maxPorHora = parseInt(process.env.MAX_MESSAGES_PER_HOUR || '30', 10);
+    // Tope ajustable desde Firestore (META/config_bot.max_msgs_hora) con
+    // fallback al .env/30 — para subirlo/bajarlo sin entrar por RDP a la dedicada.
+    const maxPorHora = await configBot.maxMensajesPorHora();
     const msHastaSlot = health.msHastaSlotLibre(maxPorHora);
     if (msHastaSlot > 0) {
       const cuando = new Date(Date.now() + msHastaSlot + 5000); // +5s margen
