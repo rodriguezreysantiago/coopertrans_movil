@@ -261,15 +261,18 @@ async function _statsRecomputeDashboard(): Promise<DashboardCounters & { docs_le
 }
 
 /**
- * Scheduled cada 5 min. Recalcula KPIs y los persiste en
- * `STATS/dashboard`. Stale máximo 5 min — aceptable para dashboard admin.
+ * Scheduled cada 30 min. Recalcula KPIs y los persiste en `STATS/dashboard`.
+ * Stale máximo 30 min — aceptable para un dashboard admin.
  *
- * Costo: 3 reads × ~177 docs cada 5 min = ~150k reads/mes. Despreciable
- * vs. el costo de tener N admins simultáneos haciendo lo mismo client-side.
+ * Auditoría 2026-05-30: bajado de 5 a 30 min. Recalculaba leyendo EMPLEADOS +
+ * VEHICULOS + REVISIONES cada 5 min aunque nada hubiera cambiado (~72k reads/día
+ * al pedo). El panel tolera 30 min de atraso sin problema.
+ *
+ * Costo: 3 reads × ~177 docs cada 30 min ≈ ~25k reads/mes (antes ~150k).
  */
 export const recomputeDashboardStats = onSchedule(
   {
-    schedule: "every 5 minutes",
+    schedule: "every 30 minutes",
     timeZone: "America/Argentina/Buenos_Aires",
     timeoutSeconds: 60,
     memory: "256MiB",
