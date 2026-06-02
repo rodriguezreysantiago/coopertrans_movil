@@ -167,15 +167,10 @@ class _TabPorUnidadState extends State<_TabPorUnidad>
           ),
         ],
         const SizedBox(height: AppSpacing.lg),
-        if (_patente.isEmpty)
-          const _Placeholder(
-            icono: Icons.local_shipping_outlined,
-            titulo: 'Elegí una unidad',
-            subtitulo:
-                'Tractor o enganche. Te mostramos su historial completo de '
-                'choferes (o tractores, si es enganche) desde el inicio.',
-          )
-        else
+        // Sin unidad elegida no mostramos un recuadro grande: el cartel de
+        // ayuda + el campo ya dicen qué hacer (evita la triple repetición de
+        // "elegí una unidad" — decisión Santiago 2026-06-02).
+        if (_patente.isNotEmpty)
           _HistorialPorUnidad(
             patente: _patente,
             esEnganche: _esEnganche,
@@ -221,15 +216,9 @@ class _TabPorChoferState extends State<_TabPorChofer>
           onChanged: (v) => setState(() => _choferDni = v),
         ),
         const SizedBox(height: AppSpacing.lg),
-        if (_choferDni.isEmpty)
-          const _Placeholder(
-            icono: Icons.person_search_outlined,
-            titulo: 'Elegí un chofer',
-            subtitulo:
-                'Seleccioná un chofer para ver todas las unidades que '
-                'condujo y los rangos de fechas.',
-          )
-        else
+        // Sin chofer elegido, igual que en "Por unidad": cartel + campo
+        // alcanzan, sin recuadro grande redundante.
+        if (_choferDni.isNotEmpty)
           _HistorialPorChofer(choferDni: _choferDni),
       ],
     );
