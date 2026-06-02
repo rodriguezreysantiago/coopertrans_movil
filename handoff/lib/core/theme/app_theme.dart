@@ -23,17 +23,18 @@
 // caiga a Inter / SF Pro / Segoe UI según target.
 
 import 'package:flutter/material.dart';
-import '../../shared/constants/app_colors.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'app_colors.dart';
 import 'app_radius.dart';
 import 'app_typography.dart';
 
 class AppTheme {
   AppTheme._();
 
-  static ThemeData dark() => _build(brightness: Brightness.dark);
-  static ThemeData light() => _build(brightness: Brightness.light);
+  static ThemeData dark() => _build(brightness: Brightness.dark, palette: AppColors.dark);
+  static ThemeData light() => _build(brightness: Brightness.light, palette: AppColors.light);
 
-  static ThemeData _build({required Brightness brightness}) {
+  static ThemeData _build({required Brightness brightness, required _Palette palette}) {
     final isDark = brightness == Brightness.dark;
     final ext = isDark ? AppColorsExt.forDark() : AppColorsExt.forLight();
 
@@ -59,14 +60,14 @@ class AppTheme {
       splashFactory: InkRipple.splashFactory,
       visualDensity: VisualDensity.adaptivePlatformDensity,
 
-      // Texto default — Geist (embebida en assets/fonts/). Material widgets que
-      // no usen AppType directamente toman esta familia.
-      fontFamily: 'Geist',
-      textTheme: ThemeData(brightness: brightness).textTheme.apply(
-        bodyColor: ext.text,
-        displayColor: ext.text,
-        fontFamily: 'Geist',
-        fontFamilyFallback: const ['Roboto', 'SF Pro Text', 'Segoe UI', 'sans-serif'],
+      // Texto default — Geist con fallbacks por plataforma.
+      // Material widgets que no usen AppType directamente toman esto.
+      textTheme: GoogleFonts.geistTextTheme(
+        ThemeData(brightness: brightness).textTheme.apply(
+          bodyColor: ext.text,
+          displayColor: ext.text,
+          fontFamilyFallback: const ['Inter', 'SF Pro Text', 'Segoe UI', 'Roboto', 'sans-serif'],
+        ),
       ),
 
       // Botones — un AppButton manual reemplaza esto pero los Material
@@ -124,7 +125,7 @@ class AppTheme {
       ),
 
       // Cards — neutralizamos defaults; usamos AppCard.
-      cardTheme: CardThemeData(
+      cardTheme: CardTheme(
         color: ext.surface2,
         elevation: 0,
         margin: EdgeInsets.zero,
@@ -145,7 +146,7 @@ class AppTheme {
       ),
 
       // Dialog
-      dialogTheme: DialogThemeData(
+      dialogTheme: DialogTheme(
         backgroundColor: ext.surface2,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.xxl)),
@@ -164,7 +165,7 @@ class AppTheme {
       // Selection
       textSelectionTheme: TextSelectionThemeData(
         cursorColor: ext.brand,
-        selectionColor: ext.brand.withValues(alpha: 0.3),
+        selectionColor: ext.brand.withOpacity(0.3),
         selectionHandleColor: ext.brand,
       ),
 
@@ -173,7 +174,6 @@ class AppTheme {
   }
 }
 
-// El typedef `_Palette = AppColorsExt` se eliminó: `_build` ya no recibe un
-// `palette` (usaba AppColorsExt.forDark()/forLight() internamente igual). El
-// original no compilaba — pasaba `AppColors.dark` (tipo _Palette privado de
-// app_colors.dart) a un parámetro tipado AppColorsExt.
+/// Internal alias — AppColors._Palette es private. Lo exponemos como tipo
+/// público dentro del paquete via this hack para que app_theme.dart compile.
+typedef _Palette = AppColorsExt;

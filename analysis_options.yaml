@@ -24,6 +24,9 @@ analyzer:
     - "whatsapp-bot/**"
     - "build/**"
     - "**/.dart_tool/**"
+    # handoff/: material de referencia del refactor Núcleo (Dart de diseño que
+    # no compila tal cual; sus versiones se copian a lib/ y se adaptan ahí).
+    - "handoff/**"
 
 linter:
   # Lints adicionales habilitados (2026-04-28) sobre la base de

@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Coopertrans · Handoff técnico — Refactor Núcleo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #050505;
+    --surface1: #0a0a0b;
+    --surface2: #0f0f10;
+    --surface3: #16161a;
+    --border: rgba(255,255,255,0.07);
+    --border-strong: rgba(255,255,255,0.14);
+    --text: #fafafa;
+    --t2: rgba(250,250,250,0.62);
+    --t3: rgba(250,250,250,0.4);
+    --brand: #7c83ff;
+    --brand-glow: rgba(124,131,255,0.20);
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --crit: #fb7185;
+  }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: "Geist", system-ui, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  * { box-sizing: border-box; }
+  a { color: var(--brand); text-decoration: none; }
+
+  /* HERO */
+  .top-glow {
+    position: absolute; top: -240px; left: 50%; transform: translateX(-50%);
+    width: 1400px; height: 800px; pointer-events: none;
+    background: radial-gradient(ellipse, var(--brand-glow), transparent 60%);
+    filter: blur(40px);
+  }
+
+  .page { max-width: 1200px; margin: 0 auto; padding: 0 32px 120px; position: relative; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(5,5,5,0.7); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 32px; display: flex; align-items: center; justify-content: space-between;
+  }
+  .topbar-inner { max-width: 1136px; width: 100%; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-mark {
+    width: 26px; height: 26px; border-radius: 7px; background: var(--brand);
+    color: var(--bg); display: grid; place-items: center; font-size: 15px; font-weight: 700;
+    box-shadow: 0 0 24px var(--brand-glow);
+  }
+  .pill {
+    font-family: "Geist Mono", monospace; font-size: 10.5px;
+    letter-spacing: 0.06em; text-transform: uppercase; font-weight: 500;
+    padding: 2px 7px; border: 1px solid var(--border); border-radius: 4px;
+    color: var(--t2);
+  }
+  .pill.brand { color: var(--brand); border-color: rgba(124,131,255,0.3); }
+  .pill.ok { color: var(--ok); border-color: rgba(74,222,128,0.3); }
+
+  .hero { padding: 80px 0 56px; position: relative; }
+  .eyebrow {
+    font-family: "Geist Mono", monospace; font-size: 11px;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--brand); font-weight: 600;
+  }
+  h1 { font-size: 84px; font-weight: 600; letter-spacing: -0.045em; line-height: 0.95; margin: 22px 0 0; }
+  h1 em { font-style: italic; color: var(--brand); font-weight: 600; }
+  .lede { font-size: 17px; line-height: 1.55; color: var(--t2); margin-top: 26px; max-width: 680px; }
+  .meta {
+    margin-top: 30px; display: flex; gap: 24px; flex-wrap: wrap;
+    font-family: "Geist Mono", monospace; font-size: 11px;
+    color: var(--t3); letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .meta b { color: var(--text); font-weight: 500; }
+
+  /* SECTIONS */
+  section { padding-top: 80px; scroll-margin-top: 80px; }
+  .sec-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 32px; padding-bottom: 22px; border-bottom: 1px solid var(--border); margin-bottom: 28px; }
+  .sec-head h2 { font-size: 40px; font-weight: 600; letter-spacing: -0.03em; margin: 8px 0 0; line-height: 1; }
+  .sec-head .sub { color: var(--t2); font-size: 14px; margin-top: 8px; max-width: 540px; }
+  .sec-num { font-family: "Geist Mono", monospace; font-size: 11px; color: var(--t3); letter-spacing: 0.1em; text-transform: uppercase; }
+
+  /* GRID */
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+
+  .card { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 22px; }
+  .card.glow { position: relative; overflow: hidden; }
+  .card.glow::before { content: ""; position: absolute; top: -50px; right: -50px; width: 220px; height: 220px; background: radial-gradient(circle, var(--brand-glow), transparent 65%); pointer-events: none; }
+  .card.glow > * { position: relative; }
+  .card .ey { font-family: "Geist Mono", monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--t3); font-weight: 500; }
+  .card h3 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin: 8px 0 8px; }
+  .card p { font-size: 13.5px; line-height: 1.55; color: var(--t2); margin: 0; }
+
+  /* FILE TREE */
+  .tree {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 24px;
+    font-family: "Geist Mono", monospace; font-size: 12.5px; line-height: 1.85;
+    color: var(--t2); white-space: pre; overflow: auto;
+  }
+  .tree .dir { color: var(--brand); font-weight: 600; }
+  .tree .new { color: var(--ok); }
+  .tree .replace { color: var(--warn); }
+  .tree .legend { display: flex; gap: 18px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 11px; }
+
+  /* PHASES */
+  .phase {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 22px; position: relative;
+  }
+  .phase + .phase { margin-top: 12px; }
+  .phase-head { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; margin-bottom: 8px; }
+  .phase .n { font-family: "Geist Mono", monospace; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--brand); font-weight: 600; }
+  .phase h4 { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; margin: 0; }
+  .phase .dur { font-family: "Geist Mono", monospace; font-size: 11px; color: var(--t3); }
+  .phase p { font-size: 13.5px; color: var(--t2); line-height: 1.55; margin: 8px 0 14px; }
+  .phase ul { font-size: 13px; color: var(--t2); margin: 0; padding-left: 20px; line-height: 1.7; }
+  .phase ul li { padding: 0; }
+  .phase ul li::marker { color: var(--t3); }
+
+  /* PLATFORMS */
+  .plat-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .plat { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .plat .ic { width: 36px; height: 36px; border-radius: 9px; background: var(--surface3); display: grid; place-items: center; margin-bottom: 12px; font-size: 17px; }
+  .plat h5 { font-size: 16px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+  .plat .plat-sub { font-family: "Geist Mono", monospace; font-size: 9.5px; color: var(--t3); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 3px; }
+  .plat ul { font-size: 11.5px; color: var(--t2); margin: 12px 0 0; padding-left: 16px; line-height: 1.6; }
+
+  /* TOKEN DIFF */
+  .diff { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .diff-row { display: grid; grid-template-columns: 1fr 1.4fr 1.4fr; gap: 0; }
+  .diff-row + .diff-row { border-top: 1px solid var(--border); }
+  .diff-row.head { background: var(--surface1); }
+  .diff-row > div { padding: 13px 18px; }
+  .diff-row.head > div { font-family: "Geist Mono", monospace; font-size: 10px; color: var(--t3); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 500; }
+  .token { font-family: "Geist Mono", monospace; font-size: 12.5px; color: var(--text); }
+  .val { font-size: 13px; color: var(--t2); display: flex; align-items: center; gap: 10px; }
+  .val .sw { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border); }
+  .old { color: var(--t3); text-decoration: line-through; text-decoration-color: var(--t3); }
+
+  /* DOWNLOADS */
+  .dl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .dl {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 22px;
+    display: flex; gap: 18px; align-items: center;
+  }
+  .dl .ic { width: 44px; height: 44px; border-radius: 10px; background: rgba(124,131,255,0.16); display: grid; place-items: center; flex-shrink: 0; }
+  .dl h4 { font-size: 17px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.015em; }
+  .dl p { font-size: 12.5px; color: var(--t2); margin: 0; line-height: 1.5; }
+  .dl .arrow { margin-left: auto; opacity: 0.6; }
+
+  /* CTA */
+  .cta-row { display: flex; gap: 12px; align-items: center; margin-top: 32px; }
+  .btn-primary {
+    background: var(--brand); color: var(--bg);
+    padding: 14px 22px; border-radius: 8px;
+    font-weight: 600; font-size: 15px; letter-spacing: -0.01em;
+    display: inline-flex; align-items: center; gap: 10px;
+    box-shadow: 0 0 32px var(--brand-glow);
+  }
+  .btn-secondary {
+    background: var(--surface3); color: var(--text);
+    border: 1px solid var(--border-strong);
+    padding: 13px 21px; border-radius: 8px;
+    font-weight: 600; font-size: 15px; letter-spacing: -0.01em;
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+  .btn-ghost {
+    background: transparent; color: var(--text);
+    border: 1px solid var(--border);
+    padding: 13px 21px; border-radius: 8px;
+    font-weight: 500; font-size: 15px;
+    display: inline-flex; align-items: center; gap: 10px;
+  }
+
+  /* RULES */
+  .rules { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .rule {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-left: 3px solid var(--brand);
+    border-radius: 12px; padding: 18px 20px;
+  }
+  .rule h5 { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+  .rule p { font-size: 13px; color: var(--t2); margin: 0; line-height: 1.55; }
+  .rule .n { font-family: "Geist Mono", monospace; font-size: 10px; color: var(--brand); letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
+
+  /* FOOTER */
+  footer {
+    margin-top: 100px; padding-top: 32px;
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: "Geist Mono", monospace; font-size: 11px;
+    color: var(--t3); letter-spacing: 0.04em;
+  }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-inner">
+    <div style="display:flex;align-items:center;gap:20px;">
+      <div class="logo">
+        <div class="logo-mark">C</div>
+        <div style="font-size:14px;font-weight:600;">Coopertrans · Handoff</div>
+        <span class="pill">v3.0 · jun '26</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;">
+      <a href="#sistema" class="pill">Sistema</a>
+      <a href="#plan" class="pill">Plan</a>
+      <a href="#multi" class="pill">Multiplataforma</a>
+      <a href="#archivos" class="pill brand">Descargas</a>
+    </div>
+  </div>
+</div>
+
+<div class="page">
+  <div class="top-glow"></div>
+
+  <!-- HERO -->
+  <header class="hero">
+    <div class="eyebrow">Refactor Núcleo · paquete para Claude Code</div>
+    <h1>Handoff técnico — del prototipo al <em>Flutter</em>.</h1>
+    <p class="lede">
+      Paquete de migración del refactor visual <strong>Núcleo</strong> al codebase actual de Coopertrans Móvil.
+      Sustitución quirúrgica de tokens + ampliación de widgets canónicos, manteniendo los nombres existentes.
+      Estimado: <strong>12 días-persona</strong> distribuidos en 5 fases.
+      Target: iOS · Android · macOS · Windows · Chrome.
+    </p>
+    <div class="meta">
+      <span>Sistema <b>Núcleo v3.0</b></span>
+      <span>Codebase <b>coopertrans_movil</b></span>
+      <span>Targets <b>iOS · Android · macOS · Windows · Web</b></span>
+      <span>Estimado <b>12 días</b></span>
+      <span><span style="color:var(--ok);">●</span> listo para handoff</span>
+    </div>
+
+    <div class="cta-row">
+      <a class="btn-primary" href="PROMPT_FOR_CLAUDE_CODE.md">
+        Abrir prompt para Claude Code
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </a>
+      <a class="btn-ghost" href="MIGRATION_PLAN.md">Ver plan de 12 días</a>
+      <a class="btn-ghost" href="../nucleo/Styleguide.html">Styleguide</a>
+      <a class="btn-ghost" href="../nucleo/Prototipo.html">Prototipo navegable</a>
+    </div>
+  </header>
+
+  <!-- SISTEMA · qué es Núcleo -->
+  <section id="sistema">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">01 · sistema</div>
+        <h2>Qué cambia, en una pantalla.</h2>
+      </div>
+    </div>
+
+    <div class="grid-3">
+      <div class="card glow">
+        <div class="ey">una sola tinta</div>
+        <h3>Indigo eléctrico.</h3>
+        <p>El cobalto (#0EA5E9) se reemplaza por indigo (#7C83FF dark / #5B62E0 light). Verde/ámbar/coral existen solo como semánticos — ok / warn / crit. Nada decorativo.</p>
+      </div>
+      <div class="card">
+        <div class="ey">tipografía</div>
+        <h3>Geist + Geist Mono.</h3>
+        <p>Reemplazan a Roboto. Sans para todo lo humano, mono para todo lo técnico (timestamps, IDs, métricas, atajos). Carga vía <code style="font-family: Geist Mono; color: var(--brand);">google_fonts</code>.</p>
+      </div>
+      <div class="card">
+        <div class="ey">datos primero</div>
+        <h3>Hero numbers.</h3>
+        <p>Números grandes (56-96px) con tabular-nums y tracking ajustado. Tipografía sostiene al dato, no compite. Sparklines mini en KPI strips.</p>
+      </div>
+      <div class="card">
+        <div class="ey">forma</div>
+        <h3>Hairlines + bento.</h3>
+        <p>Bordes a 6-14% de opacidad. Cards de tamaños mixtos en grilla de 12 columnas. Radius fijo: botones 8, cards 12, modales 16, pills 999. Sin sombras decorativas.</p>
+      </div>
+      <div class="card">
+        <div class="ey">firma</div>
+        <h3>Ambient glow.</h3>
+        <p>Un radial gradient sutil del color brand al fondo de pantallas hero, blur 40px, opacidad 18-22%. Profundidad sin chrome. Disponible como <code style="font-family: Geist Mono; color: var(--brand);">AppAmbient</code>.</p>
+      </div>
+      <div class="card">
+        <div class="ey">componentes únicos</div>
+        <h3>Un solo botón.</h3>
+        <p>Lo que más te molestaba: "los mismos elementos en distintos tamaños". <code style="font-family: Geist Mono; color: var(--brand);">AppButton</code> tiene 4 kinds × 4 sizes. <code style="font-family: Geist Mono; color: var(--brand);">AppCard</code> tiene 3 variantes. No hay "otro botón" en ningún feature.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- TOKEN DIFF -->
+  <section id="tokens">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">02 · tokens</div>
+        <h2>Cambios de tokens.</h2>
+        <div class="sub">Reemplazo directo en los archivos `app_colors.dart`, `app_typography.dart` y `app_spacing.dart`. Los call-sites quedan iguales — los nombres no cambian, solo los valores.</div>
+      </div>
+    </div>
+    <div class="diff">
+      <div class="diff-row head">
+        <div>token</div>
+        <div>antes · 2026-05-24</div>
+        <div>ahora · núcleo</div>
+      </div>
+      <div class="diff-row">
+        <div class="token">AppColors.brand</div>
+        <div class="val"><span class="sw" style="background:#0EA5E9;"></span><span class="old">#0EA5E9 cobalto</span></div>
+        <div class="val"><span class="sw" style="background:#7C83FF; box-shadow: 0 0 12px var(--brand-glow);"></span>#7C83FF indigo</div>
+      </div>
+      <div class="diff-row">
+        <div class="token">AppColors.surface0</div>
+        <div class="val"><span class="sw" style="background:#09141F;"></span><span class="old">#09141F azulado</span></div>
+        <div class="val"><span class="sw" style="background:#050505;"></span>#050505 near-black</div>
+      </div>
+      <div class="diff-row">
+        <div class="token">AppColors.success</div>
+        <div class="val"><span class="sw" style="background:#1F8A5B;"></span><span class="old">#1F8A5B</span></div>
+        <div class="val"><span class="sw" style="background:#4ADE80;"></span>#4ADE80</div>
+      </div>
+      <div class="diff-row">
+        <div class="token">AppColors.warning</div>
+        <div class="val"><span class="sw" style="background:#C46A14;"></span><span class="old">#C46A14</span></div>
+        <div class="val"><span class="sw" style="background:#FBBF24;"></span>#FBBF24</div>
+      </div>
+      <div class="diff-row">
+        <div class="token">AppColors.error</div>
+        <div class="val"><span class="sw" style="background:#B3261E;"></span><span class="old">#B3261E</span></div>
+        <div class="val"><span class="sw" style="background:#FB7185;"></span>#FB7185</div>
+      </div>
+      <div class="diff-row">
+        <div class="token">AppType.* font</div>
+        <div class="val"><span class="old">Roboto · w400-700</span></div>
+        <div class="val">Geist · w400-600</div>
+      </div>
+      <div class="diff-row">
+        <div class="token">AppRadius default</div>
+        <div class="val"><span class="old">16 (todo)</span></div>
+        <div class="val">12 cards · 8 botones · 16 modales · 999 pills</div>
+      </div>
+      <div class="diff-row">
+        <div class="token">light theme</div>
+        <div class="val"><span class="old">no existía</span></div>
+        <div class="val">disponible vía AppTheme.light()</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REGLAS DE ORO -->
+  <section id="reglas">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">03 · reglas</div>
+        <h2>Reglas de oro.</h2>
+        <div class="sub">No negociables. Si el código las viola, no es Núcleo.</div>
+      </div>
+    </div>
+    <div class="rules">
+      <div class="rule"><div class="n">01</div><h5>Una tinta por pantalla</h5><p>El indigo del brand. Verde/ámbar/coral son semánticos — ok/warn/crit. Nunca decorativos.</p></div>
+      <div class="rule"><div class="n">02</div><h5>Una línea uppercase por bloque</h5><p>El AppEyebrow. Nada más. Tile labels, botones y badges van en sentence case.</p></div>
+      <div class="rule"><div class="n">03</div><h5>Mono solo para lo técnico</h5><p>Timestamps, IDs, métricas, status, atajos. Lo humano (títulos, copy) va en Geist Sans.</p></div>
+      <div class="rule"><div class="n">04</div><h5>Hairlines, no bordes pesados</h5><p>border 1px a 6-12% de opacidad. Colores fuertes son para semántica, no separación.</p></div>
+      <div class="rule"><div class="n">05</div><h5>Solo brand-glow</h5><p>Sin drop-shadows decorativos. Las cards bento se separan por surface2 sobre bg + border.</p></div>
+      <div class="rule"><div class="n">06</div><h5>Radius fijo por componente</h5><p>Botones e inputs 8. Cards 12. Modales 16. Pills 999. No se mezcla.</p></div>
+      <div class="rule"><div class="n">07</div><h5>Números KPI tabular-nums</h5><p>Siempre. Para que no "bailen" al cambiar de valor.</p></div>
+      <div class="rule"><div class="n">08</div><h5>Empty / Loading / Error</h5><p>Cada pantalla con data los implementa. Sin excepción. Patrones en sección 08 del styleguide.</p></div>
+    </div>
+  </section>
+
+  <!-- FILE TREE -->
+  <section id="archivos">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">04 · archivos</div>
+        <h2>Qué hay en este paquete.</h2>
+        <div class="sub">Estructura espejada de `lib/` del codebase Flutter. Copiar 1:1 reemplazando o agregando según indica el color.</div>
+      </div>
+    </div>
+    <div class="tree"><span class="dir">handoff/</span>
+├── <span class="new">FILE_MAP.md               ⟵ tabla autoritativa de qué va dónde · LEER PRIMERO</span>
+├── <span class="new">PROMPT_FOR_CLAUDE_CODE.md ⟵ pegar al iniciar la sesión con Claude Code</span>
+├── <span class="new">MIGRATION_PLAN.md         ⟵ checklist de 5 fases · 12 días</span>
+│
+├── <span class="dir">lib/shared/constants/</span>     <span style="color:var(--t3);">(mismo path que ya existe — reemplazar contenido)</span>
+│   └── <span class="replace">app_colors.dart        ⟵ reemplazar contenido</span>
+├── <span class="dir">lib/core/theme/</span>
+│   ├── <span class="replace">app_typography.dart    ⟵ reemplazar contenido</span>
+│   ├── <span class="replace">app_spacing.dart       ⟵ reemplazar contenido</span>
+│   ├── <span class="new">app_radius.dart        ⟵ nuevo</span>
+│   ├── <span class="new">app_shadows.dart       ⟵ nuevo</span>
+│   ├── <span class="replace">app_theme.dart         ⟵ reemplazar contenido</span>
+│   └── <span class="new">platform_chrome.dart   ⟵ nuevo</span>
+├── <span class="dir">lib/shared/widgets/</span>
+│   ├── <span class="replace">app_button.dart        ⟵ reemplazar contenido</span>
+│   ├── <span class="replace">app_card.dart          ⟵ reemplazar contenido</span>
+│   ├── <span class="new">app_badge.dart         ⟵ nuevo (NO renombrar app_status_badge)</span>
+│   ├── <span class="new">app_input.dart         ⟵ nuevo</span>
+│   ├── <span class="new">app_eyebrow.dart       ⟵ nuevo  (incluye AppDot, AppHairline)</span>
+│   ├── <span class="new">app_stat.dart          ⟵ nuevo  (incluye AppKpiStrip, AppSparkline)</span>
+│   └── <span class="new">app_ambient.dart       ⟵ nuevo</span>
+│
+└── <span class="dir">nucleo/</span> <span style="color:var(--t3);">(materiales de referencia, NO se copian al Flutter)</span>
+    ├── <span style="color:var(--t2);">Styleguide.html              — sistema completo en una página</span>
+    ├── <span style="color:var(--t2);">Prototipo.html               — chofer + admin navegable lado a lado</span>
+    ├── <span style="color:var(--t2);">system.jsx                   — los primitivos en React, referencia 1:1 a Dart</span>
+    ├── <span style="color:var(--t2);">screens-mobile.jsx           — 8 pantallas chofer</span>
+    ├── <span style="color:var(--t2);">screens-desktop-core.jsx     — 5 pantallas admin core</span>
+    └── <span style="color:var(--t2);">screens-desktop-modules.jsx  — módulos admin</span>
+      <div class="legend">
+        <span><span style="color:var(--ok);">● nuevo</span></span>
+        <span><span style="color:var(--warn);">● reemplaza existente</span></span>
+        <span><span style="color:var(--brand);">● directorio</span></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- PLAN -->
+  <section id="plan">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">05 · plan</div>
+        <h2>5 fases, 12 días.</h2>
+        <div class="sub">Pensado para una persona FT o dos PT. Las fases 3 y 4 paralelizan por feature folder.</div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><div class="n">Fase 1</div><h4>Theme engine</h4><div class="dur">1 día</div></div>
+      <p>Reemplazar los 7 archivos de `lib/core/theme/`. Agregar `google_fonts` y `window_manager`. Wire-up en `main.dart` con `AppTheme.dark()` + `AppTheme.light()` y `PlatformChrome.apply()`.</p>
+      <ul>
+        <li>La app compila y arranca en los 5 targets</li>
+        <li>El bg es near-black (#050505), no azulado</li>
+        <li>Las fuentes resuelven a Geist</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <div class="phase-head"><div class="n">Fase 2</div><h4>Widgets base</h4><div class="dur">1 día</div></div>
+      <p>Copiar los 7 archivos de `lib/shared/widgets/`. Renombrar `app_status_badge → app_badge`. Actualizar el barrel `app_widgets.dart`. Ajustar imports rotos.</p>
+      <ul>
+        <li><code style="color:var(--brand);">flutter analyze</code> limpio</li>
+        <li>Smoke test del login con widgets nuevos</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <div class="phase-head"><div class="n">Fase 3</div><h4>Pantallas críticas</h4><div class="dur">3 días</div></div>
+      <p>Login chofer · Home chofer · Admin dashboard · Fleet map · Vencimientos chofer · Personal lista. Cada una con su JSX de referencia en `nucleo/screens-*.jsx`.</p>
+      <ul>
+        <li>6 pantallas migradas pixel-aware al sistema Núcleo</li>
+        <li>Login + dashboard funcionan end-to-end con datos reales</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <div class="phase-head"><div class="n">Fase 4</div><h4>Módulos restantes</h4><div class="dur">5 días</div></div>
+      <p>Logística, Cachatore, WhatsApp Bot, Eco-driving, ICM, Gomería, Vehículos, Reportes, módulos administrativos. Paralelizable.</p>
+      <ul>
+        <li>Cero referencias a `Color(0xFF0EA5E9)` y `Colors.{accent}` neon</li>
+        <li>Cero `fontSize:` literales fuera de AppType</li>
+      </ul>
+    </div>
+    <div class="phase">
+      <div class="phase-head"><div class="n">Fase 5</div><h4>Polish + multiplataforma</h4><div class="dur">2 días</div></div>
+      <p>iOS status bar · Android edge-to-edge · macOS title bar custom · Windows title bar custom · Web theme-color y manifest. Smoke test en los 5 targets.</p>
+      <ul>
+        <li>Screenshots en docs/screenshots/v3.0/ de los 5 targets</li>
+        <li>Lighthouse audit web > 90 performance</li>
+        <li>Demo al directorio agendado</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- MULTIPLATFORM -->
+  <section id="multi">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">06 · multiplataforma</div>
+        <h2>Los 5 targets — checklist por plataforma.</h2>
+        <div class="sub">Cada uno tiene tics propios. Esto los cubre. Detalle en `PROMPT_FOR_CLAUDE_CODE.md`.</div>
+      </div>
+    </div>
+    <div class="plat-grid">
+      <div class="plat">
+        <div class="ic">📱</div>
+        <h5>iOS</h5>
+        <div class="plat-sub">15 +</div>
+        <ul>
+          <li>Status bar transparent, ícons light</li>
+          <li>SafeArea en body, no en bg</li>
+          <li>Swipe-back gesture funcional</li>
+          <li>Touch ≥ 44pt</li>
+          <li>Notch + Dynamic Island</li>
+        </ul>
+      </div>
+      <div class="plat">
+        <div class="ic">🤖</div>
+        <h5>Android</h5>
+        <div class="plat-sub">API 26 +</div>
+        <ul>
+          <li>System nav bar matchea bg</li>
+          <li>Edge-to-edge en API 35+</li>
+          <li>Touch ≥ 48dp</li>
+          <li>Material 3 enabled</li>
+        </ul>
+      </div>
+      <div class="plat">
+        <div class="ic">🖥️</div>
+        <h5>macOS</h5>
+        <div class="plat-sub">Sonoma +</div>
+        <ul>
+          <li>Title bar hidden + drag region</li>
+          <li>Traffic lights re-posicionados</li>
+          <li>Window bg #050505 sin flash</li>
+          <li>Min 1200x720</li>
+          <li>Cmd+W, Cmd+Q, Cmd+K</li>
+        </ul>
+      </div>
+      <div class="plat">
+        <div class="ic">🪟</div>
+        <h5>Windows</h5>
+        <div class="plat-sub">10 +</div>
+        <ul>
+          <li>Title bar custom</li>
+          <li>Window controls custom-render</li>
+          <li>Min 1200x720</li>
+          <li>Tab navegación + atajos</li>
+        </ul>
+      </div>
+      <div class="plat">
+        <div class="ic">🌐</div>
+        <h5>Chrome</h5>
+        <div class="plat-sub">Web · PWA</div>
+        <ul>
+          <li>meta theme-color #050505</li>
+          <li>PWA manifest match bg</li>
+          <li>Service worker offline</li>
+          <li>Lighthouse > 90</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOWNLOADS -->
+  <section>
+    <div class="sec-head">
+      <div>
+        <div class="sec-num">07 · entregables</div>
+        <h2>Materiales del handoff.</h2>
+        <div class="sub">Todo lo que Claude Code necesita para arrancar.</div>
+      </div>
+    </div>
+    <div class="dl-grid">
+      <a class="dl" href="PROMPT_FOR_CLAUDE_CODE.md">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.5" stroke-linecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M6 6l2 2M16 16l2 2M6 18l2-2M16 8l2-2"/></svg></div>
+        <div>
+          <h4>PROMPT_FOR_CLAUDE_CODE.md</h4>
+          <p>Brief completo para pegar al iniciar la sesión. Contexto, materiales, plan, reglas, multiplataforma, quality bar.</p>
+        </div>
+        <div class="arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="1.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      </a>
+      <a class="dl" href="MIGRATION_PLAN.md">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15" rx="1.5"/><path d="M3.5 10h17"/><path d="M8 3v4M16 3v4"/></svg></div>
+        <div>
+          <h4>MIGRATION_PLAN.md</h4>
+          <p>Checklist de 5 fases × 12 días. Cada item con archivo target, JSX de referencia, criterio de aceptación.</p>
+        </div>
+        <div class="arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="1.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      </a>
+      <a class="dl" href="../nucleo/Styleguide.html">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.5" stroke-linecap="round"><circle cx="13" cy="13" r="8"/><circle cx="13" cy="13" r="3"/><path d="M13 5V2M13 24v-3M5 13H2M24 13h-3"/></svg></div>
+        <div>
+          <h4>Styleguide.html</h4>
+          <p>Sistema completo en una sola página — tokens, type, componentes, patrones, estados.</p>
+        </div>
+        <div class="arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="1.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      </a>
+      <a class="dl" href="../nucleo/Prototipo.html">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+        <div>
+          <h4>Prototipo.html</h4>
+          <p>Chofer móvil + admin escritorio navegable lado a lado, 16 pantallas con interacciones reales.</p>
+        </div>
+        <div class="arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--t2)" stroke-width="1.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+      </a>
+    </div>
+  </section>
+
+  <footer>
+    <span>Coopertrans · Núcleo v3.0 · refactor visual · jun 2026</span>
+    <span><span style="color:var(--ok);">●</span> listo para handoff</span>
+  </footer>
+</div>
+
+</body>
+</html>

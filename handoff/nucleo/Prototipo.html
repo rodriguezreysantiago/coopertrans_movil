@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Coopertrans Móvil · Prototipo Núcleo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  html, body { margin: 0; padding: 0; background: #0a0a0b; color: #fafafa; font-family: "Geist", system-ui, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; overflow: hidden; }
+  * { box-sizing: border-box; }
+  #root { width: 100vw; height: 100vh; overflow: hidden; }
+
+  /* The stage scales to fit the viewport (similar approach to a deck) */
+  .stage {
+    width: 1840px;
+    height: 1000px;
+    transform-origin: top left;
+    position: relative;
+  }
+  .stage-wrap {
+    width: 100vw;
+    height: 100vh;
+    display: grid;
+    place-items: center;
+    background:
+      radial-gradient(ellipse 1200px 600px at 50% -10%, rgba(124,131,255,0.18), transparent 70%),
+      #050505;
+  }
+
+  /* Window chrome — desktop frame */
+  .win {
+    width: 1320px;
+    height: 800px;
+    background: #0a0a0b;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.10);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04) inset;
+    overflow: hidden;
+    position: relative;
+  }
+  .win-chrome {
+    height: 36px;
+    background: rgba(255,255,255,0.02);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .win-dot { width: 11px; height: 11px; border-radius: 50%; }
+  .win-title {
+    flex: 1; text-align: center;
+    font-family: "Geist Mono", monospace; font-size: 10.5px;
+    color: rgba(250,250,250,0.5); letter-spacing: 0.04em;
+  }
+  .win-body { height: calc(800px - 36px); overflow: hidden; position: relative; }
+
+  /* Phone frame */
+  .phone {
+    width: 410px;
+    height: 870px;
+    background: #050505;
+    border-radius: 48px;
+    border: 1px solid rgba(255,255,255,0.10);
+    padding: 10px;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.6),
+      inset 0 0 0 1px rgba(255,255,255,0.04);
+    position: relative;
+  }
+  .phone-screen {
+    width: 390px;
+    height: 850px;
+    background: #050505;
+    border-radius: 38px;
+    overflow: hidden;
+    position: relative;
+  }
+  .phone-notch {
+    position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+    width: 110px; height: 28px; background: #050505; border-radius: 18px;
+    z-index: 100; pointer-events: none;
+  }
+
+  /* Stage header */
+  .stage-header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding: 24px 32px 14px;
+  }
+  .stage-title {
+    font-family: "Geist", sans-serif;
+    font-size: 24px; font-weight: 600; letter-spacing: -0.02em;
+    line-height: 1; display: flex; align-items: baseline; gap: 12px;
+  }
+  .stage-eyebrow {
+    font-family: "Geist Mono", monospace;
+    font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: #7c83ff; font-weight: 500;
+  }
+  .stage-meta {
+    font-family: "Geist Mono", monospace;
+    font-size: 10.5px; letter-spacing: 0.06em;
+    color: rgba(250,250,250,0.4);
+    display: flex; gap: 18px;
+  }
+  .stage-meta b { color: rgba(250,250,250,0.85); font-weight: 500; }
+
+  /* Surfaces row */
+  .surfaces {
+    padding: 8px 32px 32px;
+    display: grid;
+    grid-template-columns: 410px 1320px;
+    gap: 36px;
+    justify-content: center;
+    align-items: start;
+  }
+
+  /* Surface label / controls */
+  .surface-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 4px 12px;
+  }
+  .surface-label {
+    font-family: "Geist Mono", monospace;
+    font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: rgba(250,250,250,0.5); font-weight: 500;
+  }
+  .surface-label b { color: #fafafa; font-weight: 600; }
+  .surface-controls {
+    display: flex; gap: 6px; align-items: center;
+  }
+  .btn-ghost {
+    padding: 5px 11px; background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    font-family: "Geist Mono", monospace; font-size: 10.5px;
+    color: rgba(250,250,250,0.75); letter-spacing: 0.04em;
+    cursor: pointer; user-select: none;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .btn-ghost:hover { background: rgba(255,255,255,0.08); color: #fafafa; }
+
+  .scrn-breadcrumb {
+    font-family: "Geist Mono", monospace;
+    font-size: 10px; color: rgba(250,250,250,0.4); letter-spacing: 0.04em;
+    padding: 8px 0 0; display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+  }
+  .scrn-breadcrumb span.cur { color: #fafafa; font-weight: 500; }
+  .scrn-breadcrumb a { color: rgba(250,250,250,0.5); cursor: pointer; text-decoration: none; }
+  .scrn-breadcrumb a:hover { color: #7c83ff; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="system.jsx"></script>
+<script type="text/babel" src="screens-mobile.jsx"></script>
+<script type="text/babel" src="screens-desktop-core.jsx"></script>
+<script type="text/babel" src="screens-desktop-modules.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+  const { useState, useEffect } = React;
+
+  // ---------------------------------------------------------------------------
+  // SCREEN LABELS (used in breadcrumb)
+  // ---------------------------------------------------------------------------
+  const MobileLabels = {
+    splash: 'Splash',
+    login: 'Login',
+    home: 'Home',
+    perfil: 'Mi perfil',
+    venc_list: 'Vencimientos · lista',
+    venc_detail: 'Vencimiento · detalle',
+    unidad: 'Mi unidad',
+    notifs: 'Notificaciones',
+  };
+
+  const DesktopLabels = {
+    login: 'Login',
+    dashboard: 'Dashboard',
+    personal: 'Personal · lista',
+    personal_detail: 'Personal · ficha',
+    vencimientos: 'Vencimientos',
+    flota: 'Flota · mapa',
+    logistica: 'Logística',
+    servicios: 'Servicios',
+    gomeria: 'Gomería',
+    eco: 'Eco-driving',
+    icm: 'ICM',
+  };
+
+  const MOBILE_FLOW = ['splash','login','home','perfil','venc_list','venc_detail','unidad','notifs'];
+  const DESKTOP_FLOW = ['login','dashboard','personal','personal_detail','vencimientos','flota','logistica','servicios','gomeria','eco','icm'];
+
+  // ---------------------------------------------------------------------------
+  // STAGE SCALER — fits the 1840x1000 stage into viewport
+  // ---------------------------------------------------------------------------
+  function StageScaler({ children }) {
+    const [scale, setScale] = useState(1);
+    useEffect(() => {
+      const fit = () => {
+        const sx = window.innerWidth / 1840;
+        const sy = window.innerHeight / 1000;
+        setScale(Math.min(sx, sy));
+      };
+      fit();
+      window.addEventListener('resize', fit);
+      return () => window.removeEventListener('resize', fit);
+    }, []);
+    return (
+      <div className="stage-wrap">
+        <div className="stage" style={{ transform: `scale(${scale})` }}>
+          {children}
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // MOBILE SURFACE
+  // ---------------------------------------------------------------------------
+  function MobileSurface({ screen, onScreen, history, onBack, onHome, onReset }) {
+    const Component = window.MobileScreens[screen] || window.MobileScreens.splash;
+    return (
+      <div>
+        <div className="surface-head">
+          <div className="surface-label">CHOFER · <b>móvil oscuro</b></div>
+          <div className="surface-controls">
+            <div className="btn-ghost" onClick={onBack} title="anterior">← back</div>
+            <div className="btn-ghost" onClick={onHome} title="home">⌂ home</div>
+            <div className="btn-ghost" onClick={onReset} title="reset al splash">↻ reset</div>
+          </div>
+        </div>
+        <div className="phone">
+          <div className="phone-notch" />
+          <div className="phone-screen">
+            <Component go={onScreen} />
+          </div>
+        </div>
+        <div className="scrn-breadcrumb">
+          {history.map((h, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <span>›</span>}
+              {i === history.length - 1
+                ? <span className="cur">{MobileLabels[h] || h}</span>
+                : <a onClick={() => onScreen(h, { trim: i + 1 })}>{MobileLabels[h] || h}</a>}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // DESKTOP SURFACE
+  // ---------------------------------------------------------------------------
+  function DesktopSurface({ screen, onScreen, history, onBack, onHome, onReset }) {
+    const Component =
+      window.DesktopCoreScreens[screen] ||
+      window.DesktopModuleScreens[screen] ||
+      window.DesktopCoreScreens.dashboard;
+    return (
+      <div>
+        <div className="surface-head">
+          <div className="surface-label">ADMIN · <b>escritorio oscuro</b></div>
+          <div className="surface-controls">
+            <div className="btn-ghost" onClick={onBack} title="anterior">← back</div>
+            <div className="btn-ghost" onClick={onHome} title="dashboard">⌂ dashboard</div>
+            <div className="btn-ghost" onClick={onReset} title="reset al login">↻ reset</div>
+          </div>
+        </div>
+        <div className="win">
+          <div className="win-chrome">
+            <span className="win-dot" style={{ background: '#ff5f57' }} />
+            <span className="win-dot" style={{ background: '#febc2e' }} />
+            <span className="win-dot" style={{ background: '#28c840' }} />
+            <span className="win-title">coopertrans.coop · ops · {(DesktopLabels[screen] || screen).toLowerCase()}</span>
+            <span style={{ width: 39 }} />
+          </div>
+          <div className="win-body">
+            <Component go={onScreen} />
+          </div>
+        </div>
+        <div className="scrn-breadcrumb">
+          {history.map((h, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <span>›</span>}
+              {i === history.length - 1
+                ? <span className="cur">{DesktopLabels[h] || h}</span>
+                : <a onClick={() => onScreen(h, { trim: i + 1 })}>{DesktopLabels[h] || h}</a>}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // APP
+  // ---------------------------------------------------------------------------
+  function App() {
+    // mobile state — start past splash for quicker demo, but keep splash reachable
+    const [mHist, setMHist] = useState(['splash', 'login', 'home']);
+    const [dHist, setDHist] = useState(['login', 'dashboard']);
+
+    const goMobile = (s, opts = {}) => {
+      setMHist(h => {
+        if (opts.trim != null) return h.slice(0, opts.trim);
+        // avoid duplicates at top of stack
+        if (h[h.length - 1] === s) return h;
+        return [...h, s];
+      });
+    };
+    const goDesktop = (s, opts = {}) => {
+      setDHist(h => {
+        if (opts.trim != null) return h.slice(0, opts.trim);
+        if (h[h.length - 1] === s) return h;
+        return [...h, s];
+      });
+    };
+
+    const mScreen = mHist[mHist.length - 1];
+    const dScreen = dHist[dHist.length - 1];
+
+    return (
+      <StageScaler>
+        {/* HEADER */}
+        <div className="stage-header">
+          <div>
+            <div className="stage-eyebrow">Coopertrans · Núcleo · prototipo navegable</div>
+            <div className="stage-title">
+              Refactor end-to-end — <span style={{ color: 'rgba(250,250,250,0.5)' }}>2 flujos, 16 pantallas</span>
+            </div>
+          </div>
+          <div className="stage-meta">
+            <span>v <b>3.0 · jun 2026</b></span>
+            <span>tema <b>oscuro</b></span>
+            <span>fuente <b>Geist + Geist Mono</b></span>
+            <span>acento <b>#7C83FF</b></span>
+            <span><span style={{ color: '#4ade80' }}>●</span> sistema operativo</span>
+          </div>
+        </div>
+
+        {/* SURFACES */}
+        <div className="surfaces">
+          <MobileSurface
+            screen={mScreen}
+            history={mHist}
+            onScreen={goMobile}
+            onBack={() => mHist.length > 1 && setMHist(h => h.slice(0, -1))}
+            onHome={() => goMobile('home')}
+            onReset={() => setMHist(['splash'])}
+          />
+          <DesktopSurface
+            screen={dScreen}
+            history={dHist}
+            onScreen={goDesktop}
+            onBack={() => dHist.length > 1 && setDHist(h => h.slice(0, -1))}
+            onHome={() => goDesktop('dashboard')}
+            onReset={() => setDHist(['login'])}
+          />
+        </div>
+      </StageScaler>
+    );
+  }
+
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(<App />);
+</script>
+</body>
+</html>

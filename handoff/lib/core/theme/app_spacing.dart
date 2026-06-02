@@ -6,11 +6,6 @@
 // espaciados; lo único nuevo es exponer constantes para los `gap` típicos
 // que usábamos a ojo (gap entre cards de un bento = 14, no 16).
 
-// AppRadius se extrajo a app_radius.dart (refactor Núcleo). Lo re-exportamos
-// para que los call-sites que lo importaban desde app_spacing.dart sigan
-// compilando sin tocar cada archivo.
-export 'app_radius.dart';
-
 class AppSpacing {
   AppSpacing._();
 

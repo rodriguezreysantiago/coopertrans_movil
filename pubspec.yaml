@@ -12,6 +12,11 @@ dependencies:
 
   cupertino_icons: ^1.0.9
 
+  # ================= UI / TIPOGRAFÍA =================
+  # Refactor Núcleo (jun 2026): Geist + Geist Mono vía google_fonts.
+  # window_manager (title bar custom desktop) se agrega en Fase 5, cuando se usa.
+  google_fonts: ^6.2.1
+
   # ================= ESTADO GLOBAL =================
   provider: ^6.1.2   # ✅ AGREGADO
 
@@ -189,3 +194,19 @@ flutter:
     - assets/gomeria/
     - assets/brand/
     - assets/fonts/
+
+  fonts:
+    - family: Geist
+      fonts:
+        - asset: assets/fonts/Geist-Regular.ttf
+        - asset: assets/fonts/Geist-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Geist-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Geist-Bold.ttf
+          weight: 700
+    - family: GeistMono
+      fonts:
+        - asset: assets/fonts/GeistMono-Regular.ttf
+        - asset: assets/fonts/GeistMono-Medium.ttf
+          weight: 500

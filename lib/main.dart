@@ -441,7 +441,7 @@ class _LogisticaAppState extends State<LogisticaApp> {
 
       locale: const Locale('es', 'AR'),
 
-      theme: AppTheme.darkTheme,
+      theme: AppTheme.dark(),
 
       // Arrancamos en /splash (logo ~1.5s) y de ahí saltamos a /home.
       // El AuthGuard de /home (vía AppRouter.generateRoute) usa un

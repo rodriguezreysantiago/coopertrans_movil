@@ -28,7 +28,7 @@ class AppColors {
   // ACCESORES POR TEMA — usar estos en widgets que respetan el theme.
   // ============================================================================
 
-  static const Palette dark = Palette(
+  static const _Palette dark = _Palette(
     bg:               Color(0xFF050505),
     surface1:         Color(0xFF0A0A0B),
     surface2:         Color(0xFF0F0F10),
@@ -60,7 +60,7 @@ class AppColors {
     infoSoft:         Color(0x2960A5FA),
   );
 
-  static const Palette light = Palette(
+  static const _Palette light = _Palette(
     bg:               Color(0xFFFAFAFA),
     surface1:         Color(0xFFF4F4F5),
     surface2:         Color(0xFFFFFFFF),
@@ -97,46 +97,42 @@ class AppColors {
   // Migración: refactorizar a `Theme.of(context).colors.brand` (ver app_theme.dart).
   // ============================================================================
 
-  // Valores LITERALES (deben coincidir con la paleta `dark` de arriba). Son
-  // `const` reales — NO `dark.brand`, porque acceder a un field de instancia
-  // no es expresión constante en Dart y rompía los cientos de call-sites
-  // `const` (const BoxDecoration(color: AppColors.surface2), etc.).
-  static const Color brand = Color(0xFF7C83FF);
-  static const Color brandSoft = Color(0xFFA5ACFF);
-  static const Color brandDark = Color(0xFF5B62E0);
+  static Color get brand          => dark.brand;
+  static Color get brandSoft      => dark.brandSoft;
+  static Color get brandDark      => dark.brandDark;
 
-  static const Color success = Color(0xFF4ADE80);
-  static const Color warning = Color(0xFFFBBF24);
-  static const Color error = Color(0xFFFB7185);
-  static const Color info = Color(0xFF60A5FA);
+  static Color get success        => dark.success;
+  static Color get warning        => dark.warning;
+  static Color get error          => dark.error;
+  static Color get info           => dark.info;
 
-  static const Color surface0 = Color(0xFF050505);
-  static const Color surface1 = Color(0xFF0A0A0B);
-  static const Color surface2 = Color(0xFF0F0F10);
-  static const Color surface3 = Color(0xFF16161A);
+  static Color get surface0       => dark.bg;
+  static Color get surface1       => dark.surface1;
+  static Color get surface2       => dark.surface2;
+  static Color get surface3       => dark.surface3;
 
-  static const Color textPrimary = Color(0xFFFAFAFA);
-  static const Color textSecondary = Color(0x9EFAFAFA);
-  static const Color textTertiary = Color(0x66FAFAFA);
-  static const Color textDisabled = Color(0x47FAFAFA);
-  static const Color textHint = Color(0x47FAFAFA);
-  static const Color borderSubtle = Color(0x12FFFFFF);
-  static const Color borderStrong = Color(0x24FFFFFF);
+  static Color get textPrimary    => dark.text;
+  static Color get textSecondary  => dark.textSecondary;
+  static Color get textTertiary   => dark.textMuted;
+  static Color get textDisabled   => dark.textPlaceholder;
+  static Color get textHint       => dark.textPlaceholder;
+  static Color get borderSubtle   => dark.border;
+  static Color get borderStrong   => dark.borderStrong;
 
   // Aliases retro
-  static const Color background = Color(0xFF050505);
-  static const Color surface = Color(0xFF0F0F10);
+  static Color get background     => dark.bg;
+  static Color get surface        => dark.surface2;
 }
 
 /// Una paleta completa (un tema). Inmutable.
-class Palette {
+class _Palette {
   final Color bg, surface1, surface2, surface3, surfaceHover;
   final Color border, borderStrong, borderFocus;
   final Color text, textSecondary, textMuted, textPlaceholder;
   final Color brand, brandSoft, brandDark, brandFg, brandGlow;
   final Color success, successSoft, warning, warningSoft, error, errorSoft, info, infoSoft;
 
-  const Palette({
+  const _Palette({
     required this.bg,
     required this.surface1,
     required this.surface2,
@@ -203,7 +199,7 @@ class AppColorsExt extends ThemeExtension<AppColorsExt> {
     required this.infoSoft,
   });
 
-  static AppColorsExt fromPalette(Palette p) => AppColorsExt._(
+  static AppColorsExt fromPalette(_Palette p) => AppColorsExt._(
     bg: p.bg, surface1: p.surface1, surface2: p.surface2, surface3: p.surface3, surfaceHover: p.surfaceHover,
     border: p.border, borderStrong: p.borderStrong, borderFocus: p.borderFocus,
     text: p.text, textSecondary: p.textSecondary, textMuted: p.textMuted, textPlaceholder: p.textPlaceholder,
