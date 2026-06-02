@@ -14,6 +14,7 @@ import 'core/services/prefs_service.dart';
 import 'core/services/notification_service.dart';
 import 'routing/app_router.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/platform_chrome.dart';
 import 'core/constants/app_constants.dart';
 
 // 🔹 DEPENDENCIAS
@@ -40,6 +41,10 @@ const Duration _sentryDedupWindow = Duration(seconds: 10);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Refactor Núcleo: status bar transparente + íconos claros y system nav bar
+  // near-black (iOS/Android). No-op en web/desktop. Idempotente.
+  await PlatformChrome.apply(Brightness.dark);
 
   // ================= FIREBASE =================
   // Inicializar Firebase ANTES que AppLogger porque Crashlytics depende
