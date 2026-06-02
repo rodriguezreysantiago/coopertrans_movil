@@ -650,79 +650,115 @@ class _BannerProximoAVencerState extends State<_BannerProximoAVencer> {
         final candidatos = _recolectarCandidatos(widget.empleadoData, equipos);
         if (candidatos.isEmpty) return const SizedBox.shrink();
 
-        candidatos.sort((a, b) {
-          final aD = a.dias ?? 99999;
-          final bD = b.dias ?? 99999;
-          return aD.compareTo(bD);
-        });
-        final top = candidatos.first;
-        final estado = top.estado;
-
-        // Si todo está OK (días > 30) o sin fecha, no mostramos banner.
-        if (estado == VencimientoEstado.ok ||
-            estado == VencimientoEstado.sinFecha) {
-          return const SizedBox.shrink();
+        // Conteo por estado para el hero "Estado general" (prototipo Núcleo,
+        // VencList). Usamos if/else (no switch) para no depender de la
+        // exhaustividad del enum si más adelante se agrega un estado.
+        var vencidos = 0, proximos = 0, alDia = 0, sinFecha = 0;
+        for (final c in candidatos) {
+          final e = c.estado;
+          if (e == VencimientoEstado.vencido ||
+              e == VencimientoEstado.invalida) {
+            vencidos++;
+          } else if (e == VencimientoEstado.critico ||
+              e == VencimientoEstado.proximo) {
+            proximos++;
+          } else if (e == VencimientoEstado.ok) {
+            alDia++;
+          } else if (e == VencimientoEstado.sinFecha) {
+            sinFecha++;
+          }
         }
 
-        final color = estado.color;
-        final extras = candidatos
-                .where((c) =>
-                    c.estado != VencimientoEstado.ok &&
-                    c.estado != VencimientoEstado.sinFecha)
-                .length -
-            1;
+        // El más urgente (para el aviso debajo del hero).
+        candidatos
+            .sort((a, b) => (a.dias ?? 99999).compareTo(b.dias ?? 99999));
+        final top = candidatos.first;
         final dias = top.dias;
-        final mensaje = switch (estado) {
+        final hayUrgente = top.estado == VencimientoEstado.vencido ||
+            top.estado == VencimientoEstado.invalida ||
+            top.estado == VencimientoEstado.critico ||
+            top.estado == VencimientoEstado.proximo;
+        final mensaje = switch (top.estado) {
           VencimientoEstado.vencido =>
-            '${top.titulo} VENCIDO${dias != null ? " hace ${(-dias)} día(s)" : ""}',
+            '${top.titulo} venció${dias != null ? " hace ${-dias} día(s)" : ""}',
           VencimientoEstado.invalida =>
-            '${top.titulo} tiene una fecha inválida — revisalo con la oficina.',
-          VencimientoEstado.critico => '${top.titulo} vence en $dias día(s)',
-          VencimientoEstado.proximo => '${top.titulo} vence en $dias día(s)',
+            '${top.titulo}: fecha inválida, revisalo con la oficina',
+          VencimientoEstado.critico ||
+          VencimientoEstado.proximo =>
+            '${top.titulo} vence en $dias día(s)',
           _ => top.titulo,
         };
 
-        return Container(
-          margin: const EdgeInsets.fromLTRB(0, 0, 0, AppSpacing.md),
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.18),
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            border: Border.all(color: color.withValues(alpha: 0.5)),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                estado == VencimientoEstado.vencido
-                    ? Icons.error_outline
-                    : Icons.warning_amber_outlined,
-                color: color,
-                size: 24,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        return Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.md),
+          child: AppCard(
+            highlighted: vencidos > 0,
+            borderColor: vencidos > 0
+                ? AppColors.error.withAlpha(120)
+                : (proximos > 0 ? AppColors.warning.withAlpha(90) : null),
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('ESTADO GENERAL', style: AppType.eyebrow),
+                const SizedBox(height: AppSpacing.md),
+                Row(
                   children: [
-                    Text(
-                      mensaje,
-                      style: AppType.heading.copyWith(
-                        color: color,
-                        fontSize: 13,
+                    Expanded(
+                      child: _EstadoStat(
+                        valor: vencidos,
+                        label: vencidos == 1 ? 'vencido' : 'vencidos',
+                        color: AppColors.error,
                       ),
                     ),
-                    if (extras > 0) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        'Y $extras papel(es) más por vencer pronto.',
-                        style: AppType.eyebrow
-                            .copyWith(color: AppColors.textSecondary),
+                    Expanded(
+                      child: _EstadoStat(
+                        valor: proximos,
+                        label: proximos == 1 ? 'próximo' : 'próximos',
+                        color: AppColors.warning,
                       ),
-                    ],
+                    ),
+                    Expanded(
+                      child: _EstadoStat(
+                        valor: alDia,
+                        label: 'al día',
+                        color: AppColors.success,
+                      ),
+                    ),
                   ],
                 ),
-              ),
-            ],
+                if (sinFecha > 0) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Text('$sinFecha sin fecha cargada todavía',
+                      style: AppType.monoSm),
+                ],
+                if (hayUrgente) ...[
+                  const Divider(height: AppSpacing.xl),
+                  Row(
+                    children: [
+                      Icon(
+                        top.estado == VencimientoEstado.vencido ||
+                                top.estado == VencimientoEstado.invalida
+                            ? Icons.error_outline
+                            : Icons.warning_amber_outlined,
+                        color: top.estado.color,
+                        size: 20,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          mensaje,
+                          style: AppType.body.copyWith(
+                            color: top.estado.color,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
           ),
         );
       },
@@ -775,6 +811,37 @@ class _CandidatoVencimiento {
     required this.dias,
     required this.estado,
   });
+}
+
+/// Contador grande del hero "Estado general" (número en color de estado +
+/// label uppercase). Patrón del prototipo Núcleo (VencList).
+class _EstadoStat extends StatelessWidget {
+  final int valor;
+  final String label;
+  final Color color;
+  const _EstadoStat({
+    required this.valor,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '$valor',
+          style: AppType.h2.copyWith(
+            color: color,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(label.toUpperCase(), style: AppType.eyebrow),
+      ],
+    );
+  }
 }
 
 // ============================================================================
