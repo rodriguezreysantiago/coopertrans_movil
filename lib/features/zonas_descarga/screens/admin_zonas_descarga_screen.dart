@@ -137,18 +137,17 @@ class _EstadoVacio extends StatelessWidget {
             const Icon(Icons.add_location_alt_outlined,
                 color: Colors.white24, size: 64),
             const SizedBox(height: AppSpacing.lg),
-            Text(
+            const Text(
               'Sin zonas cargadas',
-              style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+              style: AppType.heading,
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
               'Cargá la primera zona (YPF Añelo) para que el módulo '
               '"Descargas" empiece a detectar entradas y salidas.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.45),
-                fontSize: 13,
+              style: AppType.body.copyWith(
+                color: AppColors.textTertiary,
                 height: 1.4,
               ),
             ),
@@ -198,10 +197,7 @@ class _ZonaCard extends StatelessWidget {
                     zona.nombre,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 15),
+                    style: AppType.body.copyWith(fontWeight: FontWeight.w600),
                   ),
                 ),
                 Text(
