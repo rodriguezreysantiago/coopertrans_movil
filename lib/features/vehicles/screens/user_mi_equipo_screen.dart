@@ -118,7 +118,7 @@ class _UserMiEquipoScreenState extends State<UserMiEquipoScreen> {
               final solicitudes = soliSnap.data?.docs ?? [];
 
               return ListView(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(AppSpacing.lg),
                 children: [
                   _SeccionUnidad(
                     titulo: 'TRACTOR / CHASIS',
@@ -165,15 +165,14 @@ class _EquipoOfflineFallback extends StatelessWidget {
         : PrefsService.nombre.trim();
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppColors.warning.withAlpha(40),
-            borderRadius: BorderRadius.circular(AppRadius.md),
-            border: Border.all(color: AppColors.warning.withAlpha(120)),
-          ),
+        AppCard(
+          tier: 2,
+          highlighted: true,
+          borderColor: AppColors.warning.withAlpha(120),
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          margin: EdgeInsets.zero,
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -186,7 +185,7 @@ class _EquipoOfflineFallback extends StatelessWidget {
                   children: [
                     Text(
                       motivo == null ? 'Conexión lenta' : 'Datos incompletos',
-                      style: AppType.body.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold),
+                      style: AppType.heading.copyWith(color: AppColors.warning),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
@@ -194,11 +193,7 @@ class _EquipoOfflineFallback extends StatelessWidget {
                           'No pudimos cargar los datos de tu unidad. '
                               'Probá cambiar de red (WiFi / datos móviles) '
                               'o reintentar en unos minutos.',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 13,
-                        height: 1.3,
-                      ),
+                      style: AppType.body,
                     ),
                   ],
                 ),
@@ -206,23 +201,19 @@ class _EquipoOfflineFallback extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 30),
+        const SizedBox(height: AppSpacing.xl),
         if (nombre.isNotEmpty)
           Text(
             'Hola, $nombre',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
+            style: AppType.title,
             textAlign: TextAlign.center,
           ),
-        const SizedBox(height: 30),
+        const SizedBox(height: AppSpacing.xl),
         if (motivo == null)
-          Center(
+          const Center(
             child: Column(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 22,
                   height: 22,
                   child: CircularProgressIndicator(
@@ -230,10 +221,10 @@ class _EquipoOfflineFallback extends StatelessWidget {
                     color: AppColors.info,
                   ),
                 ),
-                const SizedBox(height: 10),
+                SizedBox(height: AppSpacing.sm),
                 Text(
                   'Cargando datos de tu unidad…',
-                  style: AppType.label.copyWith(color: Colors.white54),
+                  style: AppType.label,
                 ),
               ],
             ),

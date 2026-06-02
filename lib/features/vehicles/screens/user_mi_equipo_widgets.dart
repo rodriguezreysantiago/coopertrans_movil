@@ -49,16 +49,15 @@ class _SeccionUnidad extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header de la sección
+        // Header de la sección — eyebrow neutra (mono uppercase del
+        // sistema). Antes era verde+bold+tracking 2; el verde es
+        // semántico (estado OK), no identidad de sección.
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                titulo,
-                style: AppType.eyebrow.copyWith(fontWeight: FontWeight.bold, color: AppColors.success, letterSpacing: 2),
-              ),
+              Expanded(child: AppEyebrow(titulo)),
               if (!estaVacia && !tienePendiente)
                 // Santiago 2026-05-21: el chofer YA NO elige la unidad (antes
                 // abría una lista de unidades libres y la gente la usaba para
@@ -110,9 +109,9 @@ class _CardEnRevision extends StatelessWidget {
     // de crashear.
     final raw = solicitud.data();
     if (raw is! Map<String, dynamic>) {
-      return const AppCard(
+      return AppCard(
         child: Text('Solicitud con formato inválido. Avisá a la oficina.',
-            style: TextStyle(color: Colors.white70)),
+            style: AppType.body.copyWith(color: AppColors.textSecondary)),
       );
     }
     final data = raw;
@@ -139,15 +138,9 @@ class _CardEnRevision extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  titulo,
-                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
+                Text(titulo, style: AppType.heading),
                 const SizedBox(height: AppSpacing.xs),
-                Text(
-                  subtitulo,
-                  style: AppType.eyebrow.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold, letterSpacing: 1),
-                ),
+                AppEyebrow(subtitulo, color: AppColors.warning),
               ],
             ),
           ),
@@ -165,11 +158,11 @@ class _CardSinAsignacion extends StatelessWidget {
     return AppCard(
       child: Row(
         children: [
-          const Icon(Icons.info_outline, color: Colors.white24),
+          const Icon(Icons.info_outline, color: AppColors.textTertiary),
           const SizedBox(width: AppSpacing.md),
           Text(
             'Sin unidad asignada',
-            style: AppType.body.copyWith(color: Colors.white38),
+            style: AppType.body.copyWith(color: AppColors.textTertiary),
           ),
         ],
       ),
@@ -198,7 +191,7 @@ class _CardUnidad extends StatelessWidget {
               padding: const EdgeInsets.all(AppSpacing.md),
               child: Text(
                 'Error cargando $patente: ${snap.error}',
-                style: const TextStyle(color: AppColors.error),
+                style: AppType.body.copyWith(color: AppColors.error),
               ),
             ),
           );
@@ -218,62 +211,67 @@ class _CardUnidad extends StatelessWidget {
           margin: EdgeInsets.zero,
           child: Column(
             children: [
-              // Header con patente grande + telemetría JUSTO ABAJO.
-              // Antes la telemetría iba debajo de marca/modelo y se
-              // perdía. Pedido Santiago 2026-05-14: el chofer va a
-              // querer ver primero combustible/autonomía/odómetro,
-              // que es la info viva del día. Marca/modelo es contexto
-              // de menor prioridad — lo movemos abajo.
+              // Hero de la unidad — layout Núcleo (proto "Unidad"):
+              // eyebrow "Asignada" + patente grande (display) + marca/
+              // modelo como subtítulo mono discreto. La telemetría va
+              // JUSTO ABAJO (pedido Santiago 2026-05-14): el chofer
+              // quiere ver primero combustible/autonomía/odómetro, la
+              // info viva del día. Marca/modelo es contexto secundario.
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.lg,
+                  AppSpacing.md,
+                ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Icon(icono, color: Colors.white70, size: 32),
+                    Icon(icono, color: AppColors.textTertiary, size: 32),
                     const SizedBox(width: AppSpacing.lg),
                     Expanded(
-                      child: Text(
-                        patente.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 24,
-                          letterSpacing: 2,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const AppEyebrow('Asignada'),
+                          const SizedBox(height: AppSpacing.xs),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              patente.toUpperCase(),
+                              maxLines: 1,
+                              style: AppType.h3.copyWith(
+                                color: AppColors.brandSoft,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            '${(v['MARCA'] ?? 'S/D')} · ${(v['MODELO'] ?? 'S/D')}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppType.monoSm,
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
-              const Divider(color: Colors.white10, height: 1),
+              const AppHairline(color: AppColors.borderSubtle),
               // Telemetría arriba — info más útil del día a día. Si la
               // unidad no reporta (no-Volvo / sin sync), no se renderiza.
               _BloqueTelemetria(data: v),
-              // Marca + modelo como subtítulo discreto (contexto, no
-              // info principal).
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${(v['MARCA'] ?? 'S/D')} · ${(v['MODELO'] ?? 'S/D')}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppType.label.copyWith(color: Colors.white54),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
               // Resumen de vencimientos (sustituye la lista completa).
               // Antes se duplicaba contra MIS VENCIMIENTOS — pedido
               // Santiago 2026-05-14: en MI EQUIPO solo el resumen
               // (cuántos OK / cuántos próximos / cuántos vencidos),
               // y un link a MIS VENCIMIENTOS para ver el detalle.
-              const Divider(color: Colors.white10, height: 1),
+              const AppHairline(color: AppColors.borderSubtle),
               _ResumenVencimientosEquipo(data: v),
               const SizedBox(height: AppSpacing.sm),
             ],
@@ -359,34 +357,25 @@ class _ResumenVencimientosEquipo extends StatelessWidget {
       if (sinFecha > 0)
         _ChipResumen(
           texto: '$sinFecha sin fecha',
-          color: Colors.white38,
+          color: AppColors.textTertiary,
         ),
     ];
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        AppSpacing.xs,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Text(
-                'PAPELES DEL EQUIPO',
-                style: TextStyle(
-                  color: AppColors.success,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                '($total)',
-                style: const TextStyle(
-                  color: Colors.white38,
-                  fontSize: 10,
-                ),
-              ),
+              const AppEyebrow('Vencimientos de la unidad'),
+              const SizedBox(width: AppSpacing.xs),
+              Text('($total)', style: AppType.monoSm),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
@@ -394,7 +383,7 @@ class _ResumenVencimientosEquipo extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           Text(
             'Mirá el detalle en "Mis Vencimientos".',
-            style: AppType.eyebrow.copyWith(color: Colors.white54, fontStyle: FontStyle.italic),
+            style: AppType.monoSm.copyWith(fontStyle: FontStyle.italic),
           ),
         ],
       ),
@@ -413,12 +402,12 @@ class _ChipResumen extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
         border: Border.all(color: color.withValues(alpha: 0.5)),
       ),
       child: Text(
         texto,
-        style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.bold),
+        style: AppType.monoSm.copyWith(color: color, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -500,7 +489,7 @@ class _BloqueTelemetria extends StatelessWidget {
                 Expanded(
                   child: _DatoTelemetria(
                     icono: Icons.speed,
-                    color: Colors.white70,
+                    color: AppColors.textSecondary,
                     valor: '${AppFormatters.formatearMiles(km.toInt())} km',
                     etiqueta: 'ODÓMETRO',
                   ),
@@ -524,11 +513,10 @@ class _BloqueTelemetria extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             Text(
               hintStaleness,
-              style: TextStyle(
+              style: AppType.monoSm.copyWith(
                 color: hintStaleness.startsWith('⚠')
                     ? AppColors.warning
-                    : Colors.white38,
-                fontSize: 10,
+                    : AppColors.textTertiary,
                 fontStyle: FontStyle.italic,
               ),
             ),
@@ -563,7 +551,7 @@ class _DatoTelemetria extends StatelessWidget {
           child: Text(
             valor,
             maxLines: 1,
-            style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+            style: AppType.heading.copyWith(letterSpacing: 0),
           ),
         ),
         const SizedBox(height: 2),
@@ -571,12 +559,7 @@ class _DatoTelemetria extends StatelessWidget {
           etiqueta,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white38,
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
+          style: AppType.eyebrow,
         ),
       ],
     );
@@ -605,7 +588,7 @@ class _DatoCombustible extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           '${pct.toStringAsFixed(0)}%',
-          style: AppType.body.copyWith(color: _color, fontWeight: FontWeight.bold),
+          style: AppType.heading.copyWith(color: _color, letterSpacing: 0),
         ),
         const SizedBox(height: AppSpacing.xs),
         // Barra horizontal mini que refuerza visualmente el nivel.
@@ -616,7 +599,7 @@ class _DatoCombustible extends StatelessWidget {
             borderRadius: BorderRadius.circular(2),
             child: LinearProgressIndicator(
               value: pct / 100,
-              backgroundColor: Colors.white12,
+              backgroundColor: AppColors.surface3,
               valueColor: AlwaysStoppedAnimation<Color>(_color),
             ),
           ),
