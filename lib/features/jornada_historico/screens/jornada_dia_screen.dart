@@ -155,13 +155,13 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text('Elegir chofer',
-                        style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
+                        style: AppType.heading.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 10),
                     TextField(
                       controller: ctrl,
                       autofocus: true,
                       textCapitalization: TextCapitalization.characters,
-                      style: const TextStyle(color: Colors.white),
+                      style: const TextStyle(color: AppColors.textPrimary),
                       decoration: const InputDecoration(
                         prefixIcon: Icon(Icons.search),
                         labelText: 'Buscar por nombre o DNI',
@@ -177,7 +177,7 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
                           final c = filtrados[i];
                           return ListTile(
                             title: Text(c.nombre,
-                                style: const TextStyle(color: Colors.white)),
+                                style: const TextStyle(color: AppColors.textPrimary)),
                             subtitle: Text('DNI ${c.dni}',
                                 style: AppType.label.copyWith(color: AppColors.textSecondary)),
                             onTap: () => Navigator.pop(ctx, c),
@@ -437,7 +437,7 @@ class _PlaceholderConAccion extends StatelessWidget {
               titulo,
               textAlign: TextAlign.center,
               style: AppType.body.copyWith(
-                  color: Colors.white, fontWeight: FontWeight.bold),
+                  color: AppColors.textPrimary, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
@@ -714,7 +714,7 @@ class _PillButton extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: AppColors.textPrimary,
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
@@ -749,7 +749,7 @@ class _Placeholder extends StatelessWidget {
             Text(
               titulo,
               textAlign: TextAlign.center,
-              style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+              style: AppType.body.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
@@ -864,7 +864,7 @@ class _ResumenCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   patentes,
-                  style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: AppType.heading.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
                 ),
               ),
               Text(
@@ -936,7 +936,7 @@ class _Kpi extends StatelessWidget {
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1)),
             Text(valor,
-                style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold)),
+                style: AppType.body.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
           ],
         ),
       ],
@@ -983,7 +983,7 @@ class _GraficoVelocidad extends StatelessWidget {
               SizedBox(width: AppSpacing.sm),
               Text('Velocidad (km/h)',
                   style: TextStyle(
-                      color: Colors.white,
+                      color: AppColors.textPrimary,
                       fontWeight: FontWeight.bold,
                       fontSize: 13)),
             ],
@@ -1087,7 +1087,7 @@ class _TramoCard extends StatelessWidget {
                   '${_fmtHoraSegun(t.desde, multiDia: multiDia)} → '
                   '${_fmtHoraSegun(t.hasta, multiDia: multiDia)}',
                   style: const TextStyle(
-                      color: Colors.white,
+                      color: AppColors.textPrimary,
                       fontWeight: FontWeight.bold,
                       fontSize: 13),
                 ),
@@ -1145,7 +1145,7 @@ class _ParadaCard extends StatelessWidget {
                       '${_fmtHoraSegun(p.desde, multiDia: multiDia)} → '
                       '${_fmtHoraSegun(p.hasta, multiDia: multiDia)}',
                       style: const TextStyle(
-                          color: Colors.white,
+                          color: AppColors.textPrimary,
                           fontWeight: FontWeight.bold,
                           fontSize: 13),
                     ),
