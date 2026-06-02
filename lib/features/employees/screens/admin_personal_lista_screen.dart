@@ -272,14 +272,14 @@ class _HeroYChips extends StatelessWidget {
             spacing: 6,
             runSpacing: 6,
             children: [
-              _Chip(
+              AppFilterChip(
                 label: 'Todos',
                 count: activos,
                 activo: rolFiltro == null,
                 onTap: () => onRol(null),
               ),
               for (final r in roles)
-                _Chip(
+                AppFilterChip(
                   label: _rolLabel(r),
                   count: porRol[r] ?? 0,
                   activo: rolFiltro == r,
@@ -288,58 +288,6 @@ class _HeroYChips extends StatelessWidget {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  final String label;
-  final int count;
-  final bool activo;
-  final VoidCallback onTap;
-  const _Chip({
-    required this.label,
-    required this.count,
-    required this.activo,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: activo ? AppColors.textPrimary : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-          border: activo
-              ? null
-              : Border.all(color: AppColors.borderStrong),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: AppType.label.copyWith(
-                color: activo ? AppColors.surface0 : AppColors.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              '$count',
-              style: AppType.monoSm.copyWith(
-                color: activo
-                    ? AppColors.surface0.withValues(alpha: 0.6)
-                    : AppColors.textTertiary,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
