@@ -8,6 +8,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/services/capabilities.dart';
 import '../../../core/services/excluidos_service.dart';
 import '../../../core/services/prefs_service.dart';
+import '../../../core/theme/app_breakpoints.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/digit_only_formatter.dart';
 import '../../../shared/utils/formatters.dart';
@@ -26,11 +27,16 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 // navegable el screen principal. Comparten privacidad via `part of`.
 part 'admin_personal_lista_widgets.dart';
 
-/// Pantalla de Gestión de Personal.
+/// Pantalla de Gestión de Personal — REFACTOR NÚCLEO (jun 2026).
 ///
-/// Migrada al sistema de diseño unificado:
-/// AppScaffold + AppListPage + AppCard + AppDetailSheet +
-/// VencimientoBadge + AppFileThumbnail.
+/// Reescrita al layout del prototipo (`screens-desktop-core.jsx :: Personal`):
+/// hero con el conteo real de activos + chips de filtro por rol + **tabla**
+/// densa en desktop. En mobile se mantienen las cards ricas (`_EmpleadoCard`),
+/// que ya son Núcleo por tokens y no conviene degradar a una tabla angosta.
+///
+/// La fila de tabla abre el MISMO detalle que la card (`_DetalleChofer.abrir`),
+/// así que no se pierde ninguna acción. Búsqueda (AppListPage), filtros de
+/// inactivos/excluidos, FAB "Nuevo" y navegación quedan intactos.
 class AdminPersonalListaScreen extends StatefulWidget {
   const AdminPersonalListaScreen({super.key});
 
@@ -51,6 +57,9 @@ class _AdminPersonalListaScreenState
   /// AppBar permite verlos para auditoría/mantenimiento de esos perfiles.
   bool _mostrarExcluidos = false;
 
+  /// Filtro por rol activo (null = todos). Lo setean los chips del hero.
+  String? _rolFiltro;
+
   /// Set de DNIs excluidos (cacheado por `ExcluidosService`). Null hasta
   /// que termine la carga inicial — si quedó null cuando el filter corre,
   /// `esExcluido` devuelve `false` (fail-safe).
@@ -70,16 +79,28 @@ class _AdminPersonalListaScreenState
     });
   }
 
+  /// ¿El empleado pasa los filtros de visibilidad (activo/excluido/rol)?
+  /// Compartido entre el conteo del hero y el filtro de la lista para que
+  /// los números coincidan con lo que se ve.
+  bool _visible(Map<String, dynamic> data, String dni) {
+    if (!_mostrarInactivos && !AppActivo.esActivo(data)) return false;
+    if (!_mostrarExcluidos &&
+        ExcluidosService.esExcluido(_excluidos, dni: dni)) {
+      return false;
+    }
+    if (_rolFiltro != null &&
+        AppRoles.normalizar(data['ROL']?.toString()) != _rolFiltro) {
+      return false;
+    }
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final esDesktop = AppBreakpoints.isDesktopOrLarger(context);
     return AppScaffold(
       title: 'Gestión de Personal',
       actions: [
-        // Toggle de "mostrar excluidos" (tanqueros + testers). Útil
-        // cuando el admin necesita editar perfiles de testers (Apple
-        // Reviewer, Android) o de los choferes de combustibles
-        // líquidos. Por default OFF para que los empleados reales no
-        // se mezclen visualmente con esas cuentas operativas.
         if ((_excluidos?.dnis.isNotEmpty ?? false))
           IconButton(
             tooltip: _mostrarExcluidos
@@ -97,7 +118,6 @@ class _AdminPersonalListaScreenState
                 setState(() => _mostrarExcluidos = !_mostrarExcluidos),
           ),
       ],
-      // Solo quien puede crear empleados ve el FAB "Nuevo" (ADMIN/SUPERVISOR).
       floatingActionButton:
           Capabilities.can(PrefsService.rol, Capability.crearEmpleado)
               ? FloatingActionButton.extended(
@@ -107,7 +127,6 @@ class _AdminPersonalListaScreenState
                       builder: (_) => const AdminPersonalFormScreen(),
                     ),
                   ),
-                  // El tooltip ayuda en desktop (hover) y a screen readers.
                   tooltip: 'Agregar nuevo chofer',
                   icon: const Icon(Icons.person_add_alt_1),
                   label: const Text('Nuevo'),
@@ -115,22 +134,28 @@ class _AdminPersonalListaScreenState
               : null,
       body: Column(
         children: [
-          // Chip "Mostrar inactivos" arriba del listado, más visible
-          // que el IconButton del AppBar anterior (Santiago 2026-05-19:
-          // "no tengo forma de ver los que fueron dados de baja").
-          // Antes vivía como icono pequeño en el AppBar, ahora es un
-          // FilterChip explícito con etiqueta y color.
+          // Hero (conteo real) + chips de filtro por rol.
+          StreamBuilder<QuerySnapshot>(
+            stream: _empleadosStream,
+            builder: (ctx, snap) => _HeroYChips(
+              docs: snap.data?.docs ?? const [],
+              excluidos: _excluidos,
+              mostrarExcluidos: _mostrarExcluidos,
+              rolFiltro: _rolFiltro,
+              onRol: (r) => setState(() => _rolFiltro = r),
+            ),
+          ),
+          // Toggle "mostrar inactivos".
           Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
             child: Row(
               children: [
                 FilterChip(
                   label: const Text('Mostrar inactivos'),
                   selected: _mostrarInactivos,
-                  onSelected: (v) =>
-                      setState(() => _mostrarInactivos = v),
-                  selectedColor:
-                      AppColors.warning.withValues(alpha: 0.6),
+                  onSelected: (v) => setState(() => _mostrarInactivos = v),
+                  selectedColor: AppColors.warning.withValues(alpha: 0.6),
                   avatar: Icon(
                     _mostrarInactivos
                         ? Icons.visibility
@@ -144,6 +169,13 @@ class _AdminPersonalListaScreenState
               ],
             ),
           ),
+          // Encabezado de tabla (solo desktop).
+          if (esDesktop)
+            const Padding(
+              padding: EdgeInsets.fromLTRB(
+                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xs),
+              child: _FilaHeader(),
+            ),
           Expanded(
             child: AppListPage(
               stream: _empleadosStream,
@@ -153,26 +185,16 @@ class _AdminPersonalListaScreenState
               emptyIcon: Icons.badge_outlined,
               filter: (doc, q) {
                 final data = doc.data() as Map<String, dynamic>;
-                // Filtro de soft-delete: por default ocultamos
-                // inactivos. El chip "Mostrar inactivos" permite verlos
-                // cuando hace falta gestionar reactivaciones.
-                if (!_mostrarInactivos && !AppActivo.esActivo(data)) {
-                  return false;
-                }
-                // Filtro de excluidos (tanqueros + testers). Por
-                // default ocultamos para que los empleados reales no
-                // se mezclen.
-                if (!_mostrarExcluidos &&
-                    ExcluidosService.esExcluido(_excluidos, dni: doc.id)) {
-                  return false;
-                }
+                if (!_visible(data, doc.id)) return false;
                 final hay = '${data['NOMBRE'] ?? ''} '
                         '${data['VEHICULO'] ?? ''} ${data['ENGANCHE'] ?? ''} '
                         '${doc.id}'
                     .toUpperCase();
                 return hay.contains(q);
               },
-              itemBuilder: (ctx, doc) => _EmpleadoCard(doc: doc),
+              itemBuilder: (ctx, doc) => esDesktop
+                  ? _FilaPersona(doc: doc)
+                  : _EmpleadoCard(doc: doc),
             ),
           ),
         ],
@@ -181,3 +203,301 @@ class _AdminPersonalListaScreenState
   }
 }
 
+// =============================================================================
+// HERO + CHIPS DE FILTRO POR ROL
+// =============================================================================
+
+class _HeroYChips extends StatelessWidget {
+  final List<QueryDocumentSnapshot> docs;
+  final ExcluidosSet? excluidos;
+  final bool mostrarExcluidos;
+  final String? rolFiltro;
+  final ValueChanged<String?> onRol;
+
+  const _HeroYChips({
+    required this.docs,
+    required this.excluidos,
+    required this.mostrarExcluidos,
+    required this.rolFiltro,
+    required this.onRol,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Conteo de activos (no excluidos) total + por rol. El hero refleja la
+    // realidad de la base, no datos hardcodeados.
+    var activos = 0;
+    final porRol = <String, int>{};
+    for (final d in docs) {
+      final data = d.data() as Map<String, dynamic>;
+      if (!AppActivo.esActivo(data)) continue;
+      if (!mostrarExcluidos &&
+          ExcluidosService.esExcluido(excluidos, dni: d.id)) {
+        continue;
+      }
+      activos++;
+      final rol = AppRoles.normalizar(data['ROL']?.toString());
+      porRol[rol] = (porRol[rol] ?? 0) + 1;
+    }
+    final roles = porRol.keys.toList()
+      ..sort((a, b) => porRol[b]!.compareTo(porRol[a]!));
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('EQUIPO', style: AppType.eyebrow),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                docs.isEmpty ? '—' : '$activos',
+                style: AppType.h2.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Text('activos', style: AppType.monoSm),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _Chip(
+                label: 'Todos',
+                count: activos,
+                activo: rolFiltro == null,
+                onTap: () => onRol(null),
+              ),
+              for (final r in roles)
+                _Chip(
+                  label: _rolLabel(r),
+                  count: porRol[r] ?? 0,
+                  activo: rolFiltro == r,
+                  onTap: () => onRol(r),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool activo;
+  final VoidCallback onTap;
+  const _Chip({
+    required this.label,
+    required this.count,
+    required this.activo,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: activo ? AppColors.textPrimary : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: activo
+              ? null
+              : Border.all(color: AppColors.borderStrong),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: AppType.label.copyWith(
+                color: activo ? AppColors.surface0 : AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '$count',
+              style: AppType.monoSm.copyWith(
+                color: activo
+                    ? AppColors.surface0.withValues(alpha: 0.6)
+                    : AppColors.textTertiary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// TABLA (desktop): encabezado + fila
+// =============================================================================
+
+// Flex de las columnas — el header y las filas comparten estos pesos para
+// que queden alineados.
+const int _flexPersona = 3;
+const int _flexRol = 2;
+const int _flexLegajo = 2;
+const int _flexUnidad = 2;
+const int _flexEstado = 2;
+
+class _FilaHeader extends StatelessWidget {
+  const _FilaHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget h(String t, int flex) => Expanded(
+          flex: flex,
+          child: Text(t.toUpperCase(), style: AppType.eyebrow),
+        );
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      child: Row(
+        children: [
+          h('Persona', _flexPersona),
+          h('Rol', _flexRol),
+          h('Legajo', _flexLegajo),
+          h('Unidad', _flexUnidad),
+          h('Estado', _flexEstado),
+          const SizedBox(width: 24),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilaPersona extends StatelessWidget {
+  final QueryDocumentSnapshot doc;
+  const _FilaPersona({required this.doc});
+
+  @override
+  Widget build(BuildContext context) {
+    final data = doc.data() as Map<String, dynamic>;
+    final dni = doc.id;
+    final nombre = (data['NOMBRE'] ?? 'Sin nombre').toString();
+    final apodo = (data['APODO'] ?? '').toString().trim();
+    final rol = AppRoles.normalizar(data['ROL']?.toString());
+    final area = (data['AREA'] ?? AppAreas.manejo).toString();
+    final mostrarFlota = area == AppAreas.manejo;
+    final tractor = (data['VEHICULO'] ?? '-').toString();
+    final urlPerfil = data['ARCHIVO_PERFIL']?.toString();
+    final activo = AppActivo.esActivo(data);
+
+    return AppCard(
+      tier: 1,
+      onTap: () => _DetalleChofer.abrir(context, dni),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.md),
+      child: Row(
+        children: [
+          // Persona — avatar + nombre (+ apodo).
+          Expanded(
+            flex: _flexPersona,
+            child: Row(
+              children: [
+                FotoPerfilAvatar(url: urlPerfil, nombre: nombre, radius: 16),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    apodo.isNotEmpty ? '$nombre  ($apodo)' : nombre,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.body.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Rol.
+          Expanded(
+            flex: _flexRol,
+            child: Text(
+              _rolLabel(rol),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.bodySm,
+            ),
+          ),
+          // Legajo (DNI).
+          Expanded(
+            flex: _flexLegajo,
+            child: Text(dni, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: AppType.mono.copyWith(color: AppColors.textSecondary)),
+          ),
+          // Unidad.
+          Expanded(
+            flex: _flexUnidad,
+            child: Text(
+              mostrarFlota ? tractor : '—',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.mono.copyWith(
+                color: mostrarFlota
+                    ? AppColors.textPrimary
+                    : AppColors.textTertiary,
+              ),
+            ),
+          ),
+          // Estado.
+          Expanded(
+            flex: _flexEstado,
+            child: Row(
+              children: [
+                AppDot(activo ? AppColors.success : AppColors.textTertiary,
+                    size: 6),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    activo ? 'Activo' : 'Inactivo',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.monoSm.copyWith(
+                      color: activo
+                          ? AppColors.textSecondary
+                          : AppColors.textTertiary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right,
+              size: 18, color: AppColors.textHint),
+        ],
+      ),
+    );
+  }
+}
+
+/// Etiqueta legible para un rol normalizado.
+String _rolLabel(String rol) {
+  switch (rol) {
+    case AppRoles.chofer:
+      return 'Chofer';
+    case AppRoles.admin:
+      return 'Admin';
+    case AppRoles.supervisor:
+      return 'Supervisor';
+    case AppRoles.planta:
+      return 'Planta';
+  }
+  if (rol.isEmpty) return '—';
+  return rol[0].toUpperCase() + rol.substring(1).toLowerCase();
+}
