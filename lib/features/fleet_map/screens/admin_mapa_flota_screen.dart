@@ -376,25 +376,76 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
             return apellido.contains(f) || nombre.contains(f);
           }).toList();
 
+    // Conteo por estado sobre TODAS las unidades visibles (no las filtradas
+    // por búsqueda) para el hero del panel — patrón del prototipo (Flota).
+    var enMarcha = 0, detenidas = 0, sinSenal = 0;
+    for (final d in widget.docs) {
+      final data = d.data();
+      final ignition = data['ignition'] == true;
+      final reportTs = (data['report_date'] as Timestamp?)?.toDate();
+      final minStale = reportTs == null
+          ? null
+          : widget.ahora.difference(reportTs).inMinutes;
+      if (minStale != null && minStale > 60) {
+        sinSenal++;
+      } else if (ignition) {
+        enMarcha++;
+      } else {
+        detenidas++;
+      }
+    }
+
     return Container(
       color: AppColors.surface0,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Hero: total de unidades con posición + breakdown por estado.
           Padding(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.xs),
-            child: Row(
+                AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.local_shipping_outlined,
-                    size: 18, color: AppColors.textSecondary),
-                const SizedBox(width: AppSpacing.sm),
-                Text('UNIDADES (${filtrados.length})',
-                    style: AppType.eyebrow
-                        .copyWith(color: AppColors.textSecondary)),
+                const Text('EN VIVO · SITRACK', style: AppType.eyebrow),
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      '${widget.docs.length}',
+                      style: AppType.h3.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Text('unidades', style: AppType.monoSm),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    _EstadoCajita(
+                        valor: enMarcha,
+                        label: 'En marcha',
+                        color: AppColors.success),
+                    const SizedBox(width: 4),
+                    _EstadoCajita(
+                        valor: detenidas,
+                        label: 'Detenidas',
+                        color: AppColors.textSecondary),
+                    const SizedBox(width: 4),
+                    _EstadoCajita(
+                        valor: sinSenal,
+                        label: 'Sin señal',
+                        color: AppColors.error),
+                  ],
+                ),
               ],
             ),
           ),
+          const Divider(height: 1, color: AppColors.borderSubtle),
           // Buscador por patente o chofer.
           Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -548,6 +599,51 @@ class _ItemUnidad extends StatelessWidget {
             if (tieneDrift)
               const Icon(Icons.warning_amber,
                   size: 16, color: AppColors.warning),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Cajita del breakdown por estado en el hero del panel de flota (prototipo
+/// Núcleo · Flota): número en color de estado + label corto, en una celda.
+class _EstadoCajita extends StatelessWidget {
+  final int valor;
+  final String label;
+  final Color color;
+  const _EstadoCajita({
+    required this.valor,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: AppColors.surface2,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppColors.borderSubtle),
+        ),
+        child: Column(
+          children: [
+            Text(
+              '$valor',
+              style: AppType.mono.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              label.toUpperCase(),
+              style: AppType.monoSm.copyWith(fontSize: 8.5),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
