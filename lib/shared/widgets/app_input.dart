@@ -29,6 +29,9 @@ class AppInput extends StatefulWidget {
   final String? errorText;
   final bool enabled;
   final void Function(String)? onChanged;
+  final bool autofocus;
+  final void Function(String)? onSubmitted;
+  final TextInputAction? textInputAction;
 
   const AppInput({
     super.key,
@@ -45,6 +48,9 @@ class AppInput extends StatefulWidget {
     this.errorText,
     this.enabled = true,
     this.onChanged,
+    this.autofocus = false,
+    this.onSubmitted,
+    this.textInputAction,
   });
 
   @override
@@ -118,7 +124,10 @@ class _AppInputState extends State<AppInput> {
                   obscureText: _obscured && widget.obscure,
                   enabled: widget.enabled,
                   focusNode: _node,
+                  autofocus: widget.autofocus,
                   onChanged: widget.onChanged,
+                  onSubmitted: widget.onSubmitted,
+                  textInputAction: widget.textInputAction,
                   style: (widget.mono ? AppType.mono : AppType.body).copyWith(
                     fontSize: 15, color: c.text, height: 1.2,
                     letterSpacing: widget.obscure && _obscured ? 4 : null,
