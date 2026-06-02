@@ -1300,6 +1300,44 @@ function _textoDeRespuesta(apiResp) {
     .trim();
 }
 
+// Transcribe un mensaje de voz con Gemini (llamada aparte, sin tools). Así la
+// transcripción queda en el log y el hilo (revisable para ir mejorando el
+// bot), y el resto del flujo es idéntico al de un mensaje escrito.
+// Devuelve el texto dicho, o null si no se pudo entender.
+async function _transcribirAudio(audio) {
+  if (!audio || !audio.data) return null;
+  const url = `${GEMINI_API_BASE}/${MODELO_GEMINI}:generateContent`;
+  const headers = {
+    'x-goog-api-key': process.env.GEMINI_API_KEY,
+    'content-type': 'application/json',
+  };
+  const body = {
+    contents: [{
+      role: 'user',
+      parts: [
+        { inlineData: { mimeType: audio.mimetype || 'audio/ogg', data: audio.data } },
+        {
+          text:
+            'Transcribí en español, palabra por palabra, lo que dice este ' +
+            'audio. Devolvé SOLO la transcripción, sin comillas ni ' +
+            'comentarios. Si no se entiende nada, devolvé una cadena vacía.',
+        },
+      ],
+    }],
+    generationConfig: { maxOutputTokens: 512 },
+  };
+  const resp = await _fetchJson(url, headers, body);
+  const parts =
+    (resp && resp.candidates && resp.candidates[0] &&
+      resp.candidates[0].content && resp.candidates[0].content.parts) || [];
+  const texto = parts
+    .filter((p) => typeof p.text === 'string')
+    .map((p) => p.text)
+    .join(' ')
+    .trim();
+  return texto || null;
+}
+
 async function _conversarAnthropic(db, system, historial, userText, persona) {
   const headers = {
     'x-api-key': process.env.ANTHROPIC_API_KEY,
@@ -1353,7 +1391,7 @@ async function _conversarAnthropic(db, system, historial, userText, persona) {
 
 // ───────────────────────── loop Gemini ─────────────────────────
 
-async function _conversarGemini(db, system, historial, userText, persona, audio) {
+async function _conversarGemini(db, system, historial, userText, persona) {
   const url = `${GEMINI_API_BASE}/${MODELO_GEMINI}:generateContent`;
   const headers = {
     'x-goog-api-key': process.env.GEMINI_API_KEY,
@@ -1364,25 +1402,12 @@ async function _conversarGemini(db, system, historial, userText, persona, audio)
     tools: _toolsGemini(persona.rol),
     generationConfig: { maxOutputTokens: MAX_TOKENS },
   };
-  // Turno nuevo del usuario: si vino un mensaje de voz, lo adjuntamos como
-  // parte de audio (Gemini lo transcribe/entiende nativamente).
-  const partsUser = [];
-  if (audio && audio.data) {
-    partsUser.push({
-      inlineData: { mimeType: audio.mimetype || 'audio/ogg', data: audio.data },
-    });
-  }
-  partsUser.push({
-    text:
-      userText ||
-      (audio ? 'Mensaje de voz del usuario: interpretá lo que dice y respondé.' : ''),
-  });
   const contents = [
     ...historial.map((t) => ({
       role: t.rol === 'assistant' ? 'model' : 'user',
       parts: [{ text: t.texto }],
     })),
-    { role: 'user', parts: partsUser },
+    { role: 'user', parts: [{ text: userText }] },
   ];
   const toolsUsadas = [];
 
@@ -1486,19 +1511,36 @@ async function responder({ texto, persona, telefono, audio }, fs) {
   }
 
   const system = _systemPrompt(persona);
-  const userText = String(texto || '').slice(0, 2000);
+
+  // Si vino un mensaje de voz, lo transcribimos con Gemini y usamos la
+  // transcripción como texto: queda en el log y el hilo (revisable para ir
+  // mejorando el bot), y el resto del flujo es idéntico al de un escrito.
+  let userText = String(texto || '').slice(0, 2000);
+  if (audio) {
+    let transcripcion = null;
+    try {
+      transcripcion = await _transcribirAudio(audio);
+    } catch (e) {
+      log.warn(`[agente] no pude transcribir el audio: ${e.message}`);
+    }
+    if (!transcripcion) {
+      return 'No pude entender el audio. ¿Me lo repetís o me lo escribís?';
+    }
+    userText = transcripcion.slice(0, 2000);
+  }
+  const preguntaLog = (audio ? '🎤 ' : '') + userText;
   const historial = _recuperarHistorial(rlKey);
 
   try {
     const r =
       provider === 'gemini'
-        ? await _conversarGemini(db, system, historial, userText, persona, audio)
+        ? await _conversarGemini(db, system, historial, userText, persona)
         : await _conversarAnthropic(db, system, historial, userText, persona);
 
     if (!r.texto) {
       log.warn(`[agente] sin respuesta (${r.error || 'vacío'}) rol=${persona.rol}`);
       await _loggear(db, {
-        provider, persona, telefono, pregunta: texto, respuesta: null,
+        provider, persona, telefono, pregunta: preguntaLog, respuesta: null,
         toolsUsadas: r.toolsUsadas, error: r.error || 'sin_texto',
       });
       // Activo pero sin poder responder: devolvemos un fallback (no null) para
@@ -1509,18 +1551,18 @@ async function responder({ texto, persona, telefono, audio }, fs) {
     // Guardar el intercambio para dar contexto a las próximas preguntas.
     _guardarHistorial(rlKey, [
       ...historial,
-      { rol: 'user', texto: userText || '[mensaje de voz]' },
+      { rol: 'user', texto: userText },
       { rol: 'assistant', texto: r.texto },
     ]);
     await _loggear(db, {
-      provider, persona, telefono, pregunta: texto, respuesta: r.texto,
+      provider, persona, telefono, pregunta: preguntaLog, respuesta: r.texto,
       toolsUsadas: r.toolsUsadas,
     });
     return r.texto;
   } catch (e) {
     log.error(`[agente] error (${provider}) rol=${persona.rol}: ${e.message}`);
     await _loggear(db, {
-      provider, persona, telefono, pregunta: texto, respuesta: null,
+      provider, persona, telefono, pregunta: preguntaLog, respuesta: null,
       toolsUsadas: [], error: e.message,
     });
     return 'Disculpá, no pude procesar eso ahora. Probá de nuevo en un rato.';
