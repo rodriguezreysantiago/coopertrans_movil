@@ -102,73 +102,37 @@ class _BannerEstado extends StatelessWidget {
       _Salud.advertencia => 'BOT EN TRANSICIÓN',
       _Salud.caido => 'BOT NO RESPONDE',
     };
-    final icono = switch (salud) {
-      _Salud.ok => Icons.check_circle_outline,
-      _Salud.advertencia => Icons.warning_amber_rounded,
-      _Salud.caido => Icons.error_outline,
-    };
-
+    // Compacta, mismo layout que la card de estado de Cachatore (dot +
+    // título + detalle con el latido inline) para que ambas se vean iguales
+    // de tamaño (pedido Santiago 2026-06-02).
     return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.xl),
       borderColor: color.withAlpha(160),
-      highlighted: salud != _Salud.ok,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Icon(icono, color: color, size: 32),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      tituloPrincipal,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppType.heading.copyWith(
-                        color: color,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Cliente WhatsApp: ${_etiquetarEstado(estadoCliente)}',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppType.label.copyWith(
-                        color: AppColors.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
           Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md,
-              vertical: AppSpacing.sm,
-            ),
-            decoration: BoxDecoration(
-              color: AppColors.borderSubtle,
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-            ),
-            child: Row(
+            width: 14,
+            height: 14,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Icon(Icons.access_time,
-                    color: AppColors.textTertiary, size: 14),
-                const SizedBox(width: AppSpacing.sm),
                 Text(
-                  ultimoHb == null
-                      ? 'Sin heartbeat registrado'
-                      : 'Último heartbeat: ${_hace(ultimoHb!)}',
-                  style: AppType.label.copyWith(color: AppColors.textSecondary),
+                  tituloPrincipal,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.body
+                      .copyWith(color: color, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${_etiquetarEstado(estadoCliente)} · '
+                  '${ultimoHb == null ? 'sin heartbeat' : 'latió ${_hace(ultimoHb!)}'}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.label,
                 ),
               ],
             ),
