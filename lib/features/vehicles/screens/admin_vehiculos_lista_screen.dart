@@ -52,6 +52,10 @@ class _AdminVehiculosListaScreenState
   /// Set de patentes excluidas (cacheado). Null mientras carga.
   ExcluidosSet? _excluidos;
 
+  /// Tipo de unidad seleccionado por los chips de filtro. Default: el
+  /// primero de `_tipos` (TRACTOR). Reemplaza al `DefaultTabController`.
+  String _tipoSeleccionado = _tipos.first;
+
   @override
   void initState() {
     super.initState();
@@ -72,84 +76,150 @@ class _AdminVehiculosListaScreenState
         ...AppTiposVehiculo.enganches.where((t) => t != 'ACOPLADO'),
       ];
 
+  /// ¿La unidad pasa los filtros de visibilidad (activo/excluido)? Es el
+  /// MISMO predicado que aplica `_ListaPorTipo`, así el contador del chip
+  /// coincide con lo que se ve en la lista.
+  bool _visible(Map<String, dynamic> data, String patente) {
+    if (!_mostrarInactivos && !AppActivo.esActivo(data)) return false;
+    if (!_mostrarExcluidos &&
+        ExcluidosService.esExcluido(_excluidos, patente: patente)) {
+      return false;
+    }
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tipos = _tipos;
-    return DefaultTabController(
-      length: tipos.length,
-      child: AppScaffold(
-        title: 'Gestión de Flota',
-        actions: [
-          // Toggle "mostrar excluidos" (tanques combustibles + tractores
-          // de tanqueros). Por default OFF para que la flota operativa
-          // no se mezcle con las unidades que no controlamos.
-          if ((_excluidos?.patentes.isNotEmpty ?? false))
-            IconButton(
-              tooltip: _mostrarExcluidos
-                  ? 'Ocultar tanques de combustibles'
-                  : 'Mostrar tanques de combustibles',
-              icon: Icon(
-                _mostrarExcluidos
-                    ? Icons.shield_moon_outlined
-                    : Icons.shield_outlined,
-                color: _mostrarExcluidos
-                    ? AppColors.warning
-                    : AppColors.textSecondary,
-              ),
-              onPressed: () =>
-                  setState(() => _mostrarExcluidos = !_mostrarExcluidos),
-            ),
+    return AppScaffold(
+      title: 'Gestión de Flota',
+      actions: [
+        // Toggle "mostrar excluidos" (tanques combustibles + tractores
+        // de tanqueros). Por default OFF para que la flota operativa
+        // no se mezcle con las unidades que no controlamos.
+        if ((_excluidos?.patentes.isNotEmpty ?? false))
           IconButton(
-            tooltip: _mostrarInactivos
-                ? 'Ocultar unidades inactivas'
-                : 'Mostrar unidades inactivas',
+            tooltip: _mostrarExcluidos
+                ? 'Ocultar tanques de combustibles'
+                : 'Mostrar tanques de combustibles',
             icon: Icon(
-              _mostrarInactivos
-                  ? Icons.visibility_off_outlined
-                  : Icons.archive_outlined,
-              color: _mostrarInactivos
+              _mostrarExcluidos
+                  ? Icons.shield_moon_outlined
+                  : Icons.shield_outlined,
+              color: _mostrarExcluidos
                   ? AppColors.warning
                   : AppColors.textSecondary,
             ),
             onPressed: () =>
-                setState(() => _mostrarInactivos = !_mostrarInactivos),
+                setState(() => _mostrarExcluidos = !_mostrarExcluidos),
+          ),
+        IconButton(
+          tooltip: _mostrarInactivos
+              ? 'Ocultar unidades inactivas'
+              : 'Mostrar unidades inactivas',
+          icon: Icon(
+            _mostrarInactivos
+                ? Icons.visibility_off_outlined
+                : Icons.archive_outlined,
+            color: _mostrarInactivos
+                ? AppColors.warning
+                : AppColors.textSecondary,
+          ),
+          onPressed: () =>
+              setState(() => _mostrarInactivos = !_mostrarInactivos),
+        ),
+      ],
+      // Solo quien puede crear vehículos ve el FAB "Nuevo" (ADMIN/SUPERVISOR).
+      floatingActionButton:
+          Capabilities.can(PrefsService.rol, Capability.crearVehiculo)
+              ? FloatingActionButton.extended(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AdminVehiculoAltaScreen(),
+                    ),
+                  ),
+                  tooltip: 'Agregar nueva unidad',
+                  icon: const Icon(Icons.add),
+                  label: const Text('Nuevo'),
+                )
+              : null,
+      body: Column(
+        children: [
+          // Chips de filtro por tipo (mismo look Núcleo que Personal). El
+          // contador refleja las unidades VISIBLES de cada tipo, así que
+          // respeta los toggles de inactivos/excluidos del AppBar. Scroll
+          // horizontal: con 5 tipos no entran cómodos en mobile.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final t in tipos) ...[
+                    _ChipTipo(
+                      tipo: t,
+                      activo: _tipoSeleccionado == t,
+                      visible: _visible,
+                      onTap: () => setState(() => _tipoSeleccionado = t),
+                    ),
+                    if (t != tipos.last) const SizedBox(width: 6),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: _ListaPorTipo(
+              tipo: _tipoSeleccionado,
+              mostrarInactivos: _mostrarInactivos,
+              mostrarExcluidos: _mostrarExcluidos,
+              excluidos: _excluidos,
+            ),
           ),
         ],
-        // isScrollable: con 5 tabs no entran cómodos en una sola fila;
-        // esto los hace deslizables horizontalmente.
-        bottom: TabBar(
-          isScrollable: true,
-          tabs: [
-            for (final t in tipos)
-              Tab(text: AppTiposVehiculo.pluralEtiquetas[t] ?? t),
-          ],
-        ),
-        // Solo quien puede crear vehículos ve el FAB "Nuevo" (ADMIN/SUPERVISOR).
-        floatingActionButton:
-            Capabilities.can(PrefsService.rol, Capability.crearVehiculo)
-                ? FloatingActionButton.extended(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const AdminVehiculoAltaScreen(),
-                      ),
-                    ),
-                    tooltip: 'Agregar nueva unidad',
-                    icon: const Icon(Icons.add),
-                    label: const Text('Nuevo'),
-                  )
-                : null,
-        body: TabBarView(
-          children: [
-            for (final t in tipos)
-              _ListaPorTipo(
-                tipo: t,
-                mostrarInactivos: _mostrarInactivos,
-                mostrarExcluidos: _mostrarExcluidos,
-                excluidos: _excluidos,
-              ),
-          ],
-        ),
+      ),
+    );
+  }
+}
+
+/// Chip de filtro por tipo de unidad. Envuelve `AppFilterChip` en un
+/// `StreamBuilder` sobre el stream cacheado por tipo (`getVehiculosPorTipo`),
+/// el MISMO que consume `_ListaPorTipo`, así no genera lecturas extra de
+/// Firestore. El contador es la cantidad real de unidades visibles del tipo.
+class _ChipTipo extends StatelessWidget {
+  final String tipo;
+  final bool activo;
+  final bool Function(Map<String, dynamic> data, String patente) visible;
+  final VoidCallback onTap;
+
+  const _ChipTipo({
+    required this.tipo,
+    required this.activo,
+    required this.visible,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final label = AppTiposVehiculo.pluralEtiquetas[tipo] ?? tipo;
+    return Consumer<VehiculoProvider>(
+      builder: (ctx, provider, _) => StreamBuilder<QuerySnapshot>(
+        stream: provider.getVehiculosPorTipo(tipo),
+        builder: (ctx, snap) {
+          var count = 0;
+          for (final d in snap.data?.docs ?? const []) {
+            final data = d.data() as Map<String, dynamic>;
+            if (visible(data, d.id)) count++;
+          }
+          return AppFilterChip(
+            label: label,
+            count: count,
+            activo: activo,
+            onTap: onTap,
+          );
+        },
       ),
     );
   }
