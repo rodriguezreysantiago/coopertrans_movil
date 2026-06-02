@@ -16,6 +16,7 @@ export 'app_badge.dart';
 export 'app_button.dart';
 export 'app_card.dart';
 export 'app_eyebrow.dart';
+export 'app_filter_chip.dart';
 export 'app_input.dart';
 export 'app_stat.dart';
 export 'app_confirm_dialog.dart';
