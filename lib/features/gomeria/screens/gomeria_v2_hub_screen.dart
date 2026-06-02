@@ -46,56 +46,91 @@ class GomeriaV2HubScreen extends StatelessWidget {
             (_esEnganche(tipo) ? enganches : tractores).add(d);
           }
 
-          return ListView(
-            padding: const EdgeInsets.all(12),
-            children: [
-              Card(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                child: ListTile(
-                  leading: const Icon(Icons.inventory_2),
-                  title: const Text('Stock del depósito'),
-                  subtitle: const Text('Comprar, recapar, inventario'),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const GomeriaV2StockScreen()),
+          return LayoutBuilder(
+            builder: (_, c) {
+              final ancho = c.maxWidth;
+              // Grilla cuando hay ancho (tablet apaisada / desktop); en teléfono
+              // queda 1 columna como antes. Evita el scroll eterno de 127 tiles.
+              final columnas =
+                  ancho >= 1200 ? 4 : ancho >= 900 ? 3 : ancho >= 600 ? 2 : 1;
+
+              Widget grilla(
+                List<QueryDocumentSnapshot<Map<String, dynamic>>> unidades,
+                TipoUnidadCubierta tipo,
+              ) {
+                if (columnas == 1) {
+                  return Column(
+                    children: [
+                      for (final d in unidades)
+                        _tileUnidad(context, d.id, d.data(), tipo),
+                    ],
+                  );
+                }
+                const spacing = 8.0;
+                final anchoTile =
+                    (ancho - 24 - spacing * (columnas - 1)) / columnas;
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: [
+                    for (final d in unidades)
+                      SizedBox(
+                        width: anchoTile,
+                        child: _tileUnidad(context, d.id, d.data(), tipo),
+                      ),
+                  ],
+                );
+              }
+
+              return ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  Card(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    child: ListTile(
+                      leading: const Icon(Icons.inventory_2),
+                      title: const Text('Stock del depósito'),
+                      subtitle: const Text('Comprar, recapar, inventario'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const GomeriaV2StockScreen()),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              // Catálogo de modelos (marca + medida + km de vida). Solo ADMIN:
-              // el gomero opera con los modelos ya cargados. La ruta también
-              // está protegida con RoleGuard(admin) en el router.
-              if (PrefsService.rol == AppRoles.admin)
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.category_outlined),
-                    title: const Text('Marcas y modelos'),
-                    subtitle: const Text(
-                        'Agregar o dar de baja modelos de cubierta'),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.pushNamed(
-                        context, AppRoutes.adminGomeriaMarcasModelos),
+                  // Catálogo de modelos (marca + medida + km de vida). Solo
+                  // ADMIN: el gomero opera con los modelos ya cargados. La ruta
+                  // también está protegida con RoleGuard(admin) en el router.
+                  if (PrefsService.rol == AppRoles.admin)
+                    Card(
+                      child: ListTile(
+                        leading: const Icon(Icons.category_outlined),
+                        title: const Text('Marcas y modelos'),
+                        subtitle: const Text(
+                            'Agregar o dar de baja modelos de cubierta'),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: () => Navigator.pushNamed(
+                            context, AppRoutes.adminGomeriaMarcasModelos),
+                      ),
+                    ),
+                  _encabezado(context, 'Tractores (${tractores.length})'),
+                  grilla(tractores, TipoUnidadCubierta.tractor),
+                  _encabezado(context, 'Enganches (${enganches.length})'),
+                  grilla(enganches, TipoUnidadCubierta.enganche),
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const GomeriaHubScreen()),
+                    ),
+                    icon: const Icon(Icons.history),
+                    label: const Text('Ver sistema anterior (datos viejos)'),
                   ),
-                ),
-              _encabezado(context, 'Tractores (${tractores.length})'),
-              for (final d in tractores)
-                _tileUnidad(context, d.id, d.data(),
-                    TipoUnidadCubierta.tractor),
-              _encabezado(context, 'Enganches (${enganches.length})'),
-              for (final d in enganches)
-                _tileUnidad(context, d.id, d.data(),
-                    TipoUnidadCubierta.enganche),
-              const SizedBox(height: 16),
-              TextButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const GomeriaHubScreen()),
-                ),
-                icon: const Icon(Icons.history),
-                label: const Text('Ver sistema anterior (datos viejos)'),
-              ),
-            ],
+                ],
+              );
+            },
           );
         },
       ),

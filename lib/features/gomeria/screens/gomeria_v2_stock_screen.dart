@@ -48,20 +48,48 @@ class _GomeriaV2StockScreenState extends State<GomeriaV2StockScreen> {
               subtitle: 'Tocá "Comprar" para cargar cubiertas al stock.',
             );
           }
-          return ListView(
-            padding: const EdgeInsets.all(12),
-            children: [
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.inventory_2),
-                  title: const Text('Total en depósito'),
-                  trailing: Text('$total',
-                      style: Theme.of(context).textTheme.titleLarge),
-                ),
-              ),
-              const SizedBox(height: 8),
-              for (final s in stock) _tileSku(s),
-            ],
+          return LayoutBuilder(
+            builder: (_, c) {
+              final ancho = c.maxWidth;
+              // Mismo criterio que el hub: grilla en tablet apaisada/desktop,
+              // una columna en teléfono.
+              final columnas =
+                  ancho >= 1200 ? 4 : ancho >= 900 ? 3 : ancho >= 600 ? 2 : 1;
+
+              Widget skus() {
+                if (columnas == 1) {
+                  return Column(
+                      children: [for (final s in stock) _tileSku(s)]);
+                }
+                const spacing = 8.0;
+                final anchoTile =
+                    (ancho - 24 - spacing * (columnas - 1)) / columnas;
+                return Wrap(
+                  spacing: spacing,
+                  runSpacing: spacing,
+                  children: [
+                    for (final s in stock)
+                      SizedBox(width: anchoTile, child: _tileSku(s)),
+                  ],
+                );
+              }
+
+              return ListView(
+                padding: const EdgeInsets.all(12),
+                children: [
+                  Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.inventory_2),
+                      title: const Text('Total en depósito'),
+                      trailing: Text('$total',
+                          style: Theme.of(context).textTheme.titleLarge),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  skus(),
+                ],
+              );
+            },
           );
         },
       ),
