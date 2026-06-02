@@ -115,7 +115,14 @@ class _AppListPageState extends State<AppListPage> {
               }
 
               List<QueryDocumentSnapshot> items = snap.data!.docs;
-              if (_query.isNotEmpty && widget.filter != null) {
+              // Aplicamos el filtro SIEMPRE, no solo cuando hay texto: muchos
+              // call-sites usan `filter` también para filtros de visibilidad
+              // (activos/excluidos/rol) que deben regir aunque el buscador esté
+              // vacío. Con query vacío, la parte de búsqueda (`contains('')`) da
+              // true y no descarta nada — solo aplican los filtros de estado.
+              // (Antes el `_query.isNotEmpty &&` los anulaba sin búsqueda → los
+              // chips de rol de Personal y los toggles no hacían nada.)
+              if (widget.filter != null) {
                 items = items
                     .where((it) => widget.filter!(it, _query))
                     .toList();
