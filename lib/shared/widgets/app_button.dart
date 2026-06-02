@@ -1,238 +1,247 @@
+// lib/shared/widgets/app_button.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — AppButton con glow + hover + iconAfter.
+//
+// SHIM RETROCOMPATIBLE: acepta TAMBIÉN la API 2026-05-24 (`variant:`,
+// `isLoading:`, `expand:`, `AppButtonVariant`, `AppButtonSize.compact`) para no
+// romper los ~259 call-sites existentes. El código nuevo usa `kind:`/`loading:`/
+// `full:`. Cuando se migren todas las pantallas, se pueden quitar los alias.
+
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_typography.dart';
 import '../constants/app_colors.dart';
+import '../../core/theme/app_radius.dart';
+import '../../core/theme/app_shadows.dart';
+import '../../core/theme/app_typography.dart';
 
-/// Variantes semánticas del botón unificado.
-enum AppButtonVariant {
-  /// CTA primario — cobalto sólido. Una por pantalla, idealmente.
-  primary,
+enum AppButtonKind { primary, secondary, ghost, danger }
 
-  /// CTA secundario — fondo transparente, borde brand. Acciones
-  /// importantes pero no la principal.
-  secondary,
+/// Compat con el nombre 2026-05-24. Los valores coinciden 1:1.
+typedef AppButtonVariant = AppButtonKind;
 
-  /// "Ghost" — sin borde, texto brand. Acciones de bajo peso visual
-  /// (links inline, "Reintentar" dentro de un error state).
-  ghost,
+/// `compact` es legacy (mapea a sm). `xl` es nuevo.
+enum AppButtonSize { compact, sm, md, lg, xl }
 
-  /// Destructivo — rojo sólido. Borrar, anular, dar de baja.
-  danger,
-}
-
-/// Tamaños — afectan padding y minimumSize.
-///
-/// - [compact] (32 min height) — para desktop/web donde el hover
-///   reemplaza al touch target. NO usar en mobile.
-/// - [sm] (36) — secundario denso, mobile OK.
-/// - [md] (48) — **default**, touch-friendly en mobile.
-/// - [lg] (56) — CTA hero (login, confirm dialogs).
-enum AppButtonSize { compact, sm, md, lg }
-
-/// Botón unificado — REFACTOR 2026-05-24.
-///
-/// Reemplaza:
-/// - `ElevatedButton.styleFrom(...)` ad-hoc con backgroundColor manual.
-/// - `Material + InkWell + Container` "tile button" del login.
-/// - `TextButton` para "ghost" actions.
-///
-/// **Ejemplo:**
-/// ```dart
-/// AppButton(
-///   label: 'Ingresar',
-///   icon: Icons.arrow_forward,
-///   onPressed: _login,
-///   isLoading: _isLoading,
-/// )
-///
-/// AppButton.danger(
-///   label: 'Eliminar legajo',
-///   onPressed: _confirmarBaja,
-/// )
-/// ```
-class AppButton extends StatelessWidget {
+class AppButton extends StatefulWidget {
   final String label;
   final IconData? icon;
+  final IconData? iconAfter;
   final VoidCallback? onPressed;
-  final AppButtonVariant variant;
   final AppButtonSize size;
-  final bool isLoading;
+  final bool glow;
+
+  // API nueva
+  final AppButtonKind? kind;
+  final bool full;
+  final bool loading;
+
+  // API vieja (compat — resueltos en build)
+  final AppButtonKind? variant;
   final bool expand;
+  final bool isLoading;
 
   const AppButton({
     super.key,
     required this.label,
-    this.icon,
     required this.onPressed,
-    this.variant = AppButtonVariant.primary,
+    this.kind,
+    this.variant,
     this.size = AppButtonSize.md,
-    this.isLoading = false,
+    this.icon,
+    this.iconAfter,
+    this.full = false,
     this.expand = false,
+    this.glow = true,
+    this.loading = false,
+    this.isLoading = false,
   });
+
+  const AppButton.primary({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.size = AppButtonSize.md,
+    this.icon,
+    this.iconAfter,
+    this.full = false,
+    this.expand = false,
+    this.glow = true,
+    this.loading = false,
+    this.isLoading = false,
+  })  : kind = AppButtonKind.primary,
+        variant = null;
 
   const AppButton.secondary({
     super.key,
     required this.label,
-    this.icon,
     required this.onPressed,
     this.size = AppButtonSize.md,
-    this.isLoading = false,
+    this.icon,
+    this.iconAfter,
+    this.full = false,
     this.expand = false,
-  }) : variant = AppButtonVariant.secondary;
+    this.loading = false,
+    this.isLoading = false,
+  })  : kind = AppButtonKind.secondary,
+        variant = null,
+        glow = false;
 
   const AppButton.ghost({
     super.key,
     required this.label,
-    this.icon,
     required this.onPressed,
     this.size = AppButtonSize.md,
-    this.isLoading = false,
+    this.icon,
+    this.iconAfter,
+    this.full = false,
     this.expand = false,
-  }) : variant = AppButtonVariant.ghost;
+    this.loading = false,
+    this.isLoading = false,
+  })  : kind = AppButtonKind.ghost,
+        variant = null,
+        glow = false;
 
   const AppButton.danger({
     super.key,
     required this.label,
-    this.icon,
     required this.onPressed,
     this.size = AppButtonSize.md,
-    this.isLoading = false,
+    this.icon,
+    this.iconAfter,
+    this.full = false,
     this.expand = false,
-  }) : variant = AppButtonVariant.danger;
+    this.glow = true,
+    this.loading = false,
+    this.isLoading = false,
+  })  : kind = AppButtonKind.danger,
+        variant = null;
 
-  // ------- helpers --------------------------------------------------------
+  @override
+  State<AppButton> createState() => _AppButtonState();
+}
 
-  ({Color bg, Color fg, Color? border}) _colors() {
-    switch (variant) {
-      case AppButtonVariant.primary:
-        return (bg: AppColors.brand, fg: Colors.white, border: null);
-      case AppButtonVariant.secondary:
-        return (
-          bg: Colors.transparent,
-          fg: AppColors.brand,
-          border: AppColors.brand,
-        );
-      case AppButtonVariant.ghost:
-        return (bg: Colors.transparent, fg: AppColors.brand, border: null);
-      case AppButtonVariant.danger:
-        return (bg: AppColors.error, fg: Colors.white, border: null);
-    }
-  }
+class _AppButtonState extends State<AppButton> {
+  bool _hover = false;
 
-  ({double vPad, double hPad, double minH, double iconSize, TextStyle style})
-      _sizing() {
-    switch (size) {
+  ({double px, double py, double fs, double gap, double ic, double minH}) get _dims {
+    switch (widget.size) {
       case AppButtonSize.compact:
-        return (
-          vPad: 6,
-          hPad: AppSpacing.md,
-          minH: 32,
-          iconSize: 14,
-          style: AppType.label.copyWith(
-            color: Colors.white,
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-          ),
-        );
+        return (px: 10, py: 6, fs: 12, gap: 6, ic: 13, minH: 32);
       case AppButtonSize.sm:
-        return (
-          vPad: AppSpacing.sm,
-          hPad: AppSpacing.md,
-          minH: 36,
-          iconSize: 16,
-          style: AppType.label.copyWith(
-            color: Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        );
-      case AppButtonSize.lg:
-        return (
-          vPad: AppSpacing.lg,
-          hPad: AppSpacing.xl,
-          minH: 56,
-          iconSize: 20,
-          style: AppType.heading.copyWith(color: Colors.white),
-        );
+        return (px: 12, py: 8, fs: 13, gap: 8, ic: 14, minH: 38);
       case AppButtonSize.md:
-        return (
-          vPad: AppSpacing.md,
-          hPad: AppSpacing.lg,
-          minH: 48,
-          iconSize: 18,
-          style: AppType.body.copyWith(
-            color: Colors.white,
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
-        );
+        return (px: 14, py: 10, fs: 14, gap: 8, ic: 15, minH: 44);
+      case AppButtonSize.lg:
+        return (px: 18, py: 14, fs: 15, gap: 10, ic: 17, minH: 52);
+      case AppButtonSize.xl:
+        return (px: 22, py: 16, fs: 16, gap: 12, ic: 18, minH: 56);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final c = _colors();
-    final s = _sizing();
-    final disabled = onPressed == null || isLoading;
+    final cols = context.colors;
+    final d = _dims;
 
-    final fg = disabled ? c.fg.withAlpha(120) : c.fg;
-    final bg = disabled && variant == AppButtonVariant.primary
-        ? c.bg.withAlpha(120)
-        : (disabled && variant == AppButtonVariant.danger
-            ? c.bg.withAlpha(120)
-            : c.bg);
+    // Resolución compat: nueva API gana; si no, la vieja.
+    final kind = widget.kind ?? widget.variant ?? AppButtonKind.primary;
+    final isFull = widget.full || widget.expand;
+    final isLoading = widget.loading || widget.isLoading;
+    final enabled = widget.onPressed != null && !isLoading;
 
-    final content = isLoading
-        ? SizedBox(
-            height: s.iconSize,
-            width: s.iconSize,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: variant == AppButtonVariant.primary ||
-                      variant == AppButtonVariant.danger
-                  ? Colors.white
-                  : AppColors.brand,
-            ),
+    late Color bg, fg;
+    late final Color borderC;
+    List<BoxShadow>? shadow;
+    switch (kind) {
+      case AppButtonKind.primary:
+        bg = cols.brand;
+        fg = cols.brandFg;
+        borderC = Colors.transparent;
+        if (widget.glow && enabled) shadow = AppShadows.glow(cols.brand);
+        break;
+      case AppButtonKind.secondary:
+        bg = cols.surface3;
+        fg = cols.text;
+        borderC = cols.borderStrong;
+        break;
+      case AppButtonKind.ghost:
+        bg = Colors.transparent;
+        fg = cols.text;
+        borderC = cols.border;
+        break;
+      case AppButtonKind.danger:
+        bg = cols.error;
+        fg = Colors.white;
+        borderC = Colors.transparent;
+        if (widget.glow && enabled) shadow = AppShadows.glow(cols.error);
+        break;
+    }
+
+    if (_hover && enabled) {
+      bg = Color.alphaBlend(Colors.white.withValues(alpha: 0.04), bg);
+    }
+    if (!enabled) {
+      bg = bg.withValues(alpha: 0.5);
+      fg = fg.withValues(alpha: 0.5);
+    }
+
+    final content = Row(
+      mainAxisSize: isFull ? MainAxisSize.max : MainAxisSize.min,
+      mainAxisAlignment: isFull
+          ? (widget.iconAfter != null
+              ? MainAxisAlignment.spaceBetween
+              : MainAxisAlignment.center)
+          : MainAxisAlignment.center,
+      children: [
+        if (widget.icon != null) ...[
+          Icon(widget.icon, size: d.ic, color: fg),
+          SizedBox(width: d.gap),
+        ],
+        if (isLoading)
+          SizedBox(
+            width: d.ic,
+            height: d.ic,
+            child: CircularProgressIndicator(strokeWidth: 1.8, color: fg),
           )
-        : Row(
-            mainAxisSize: expand ? MainAxisSize.max : MainAxisSize.min,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: s.iconSize, color: fg),
-                const SizedBox(width: AppSpacing.sm),
-              ],
-              Flexible(
-                child: Text(
-                  label,
-                  overflow: TextOverflow.ellipsis,
-                  style: s.style.copyWith(color: fg),
-                ),
+        else
+          Flexible(
+            child: Text(
+              widget.label,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.body.copyWith(
+                fontSize: d.fs,
+                fontWeight: FontWeight.w600,
+                color: fg,
+                height: 1,
               ),
-            ],
-          );
+            ),
+          ),
+        if (widget.iconAfter != null) ...[
+          SizedBox(width: d.gap),
+          Icon(widget.iconAfter, size: d.ic, color: fg),
+        ],
+      ],
+    );
 
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      child: InkWell(
-        onTap: disabled ? null : onPressed,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        child: Container(
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: enabled ? widget.onPressed : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
           constraints: BoxConstraints(
-            minHeight: s.minH,
-            minWidth: expand ? double.infinity : 0,
+            minHeight: d.minH,
+            minWidth: isFull ? double.infinity : 0,
           ),
-          padding: EdgeInsets.symmetric(
-            vertical: s.vPad,
-            horizontal: s.hPad,
-          ),
+          padding: EdgeInsets.symmetric(horizontal: d.px, vertical: d.py),
           decoration: BoxDecoration(
+            color: bg,
             borderRadius: BorderRadius.circular(AppRadius.md),
-            border: c.border != null
-                ? Border.all(color: c.border!, width: 1.5)
-                : null,
+            border: Border.all(color: borderC, width: 1),
+            boxShadow: shadow,
           ),
           child: Center(child: content),
         ),
