@@ -162,8 +162,8 @@ class _AdminShellState extends State<AdminShell> {
     ),
     _ShellSection(
       label: 'Descargas',
-      icon: Icons.local_shipping_outlined,
-      iconActive: Icons.local_shipping,
+      icon: Icons.outbox_outlined,
+      iconActive: Icons.outbox,
       requiredCapability: Capability.verDescargas,
       // Cola en vivo + recién descargaron + KPIs basado en presencia REAL
       // en geocercas configurables (ZONAS_DESCARGA). Reemplazó al detector
@@ -202,7 +202,7 @@ class _AdminShellState extends State<AdminShell> {
     // dos "agentes automáticos" del sistema (turnos YPF + WhatsApp).
     _ShellSection(
       label: 'Cachatore',
-      icon: Icons.schedule,
+      icon: Icons.schedule_outlined,
       iconActive: Icons.schedule,
       requiredCapability: Capability.verCachatore,
       build: () => const CachatoreHubScreen(),
@@ -328,23 +328,15 @@ class _AdminShellState extends State<AdminShell> {
       body: CommandPaletteShortcut(
         child: Stack(
           children: [
-            // Gradient brand → fondo oscuro (mismo tratamiento que login,
-            // splash y AppScaffold). Se ve a través del rail/bottombar.
-            const Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      AppColors.brandDark,
-                      AppColors.background,
-                      AppColors.background,
-                    ],
-                    stops: [0.0, 0.55, 1.0],
-                  ),
-                ),
-              ),
+            // Núcleo: fondo sólido near-black + ambient sutil en la esquina
+            // superior. Reemplaza el gradient indigo saturado de mayo 2026 que
+            // era el origen del fondo violeta gigante en TODOS los screens admin
+            // (se heredaba al body de cada pantalla embebida en el shell).
+            Positioned.fill(child: ColoredBox(color: context.colors.bg)),
+            const AppAmbient(
+              alignment: Alignment(0.9, -1.1),
+              sizeFactor: 0.8,
+              intensity: 0.4,
             ),
             // Layout responsive
             SafeArea(
