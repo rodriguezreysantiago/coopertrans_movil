@@ -619,4 +619,13 @@ describe('agente — herramientas de flota / operación', () => {
     assert.strictEqual(r.concluidos, 1);
     assert.strictEqual(r.en_curso, 1);
   });
+
+  test('_getEmpleadosDocs cachea por instancia de db (no relee la colección)', async () => {
+    let lecturas = 0;
+    const db = { collection: () => ({ get: async () => { lecturas++; return { docs: [{ id: '1', data: () => ({ NOMBRE: 'X' }) }] }; } }) };
+    const a = await agente._getEmpleadosDocs(db);
+    const b = await agente._getEmpleadosDocs(db);
+    assert.strictEqual(lecturas, 1);
+    assert.strictEqual(a, b);
+  });
 });

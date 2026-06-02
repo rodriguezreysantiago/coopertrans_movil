@@ -28,6 +28,14 @@
       "collectionGroup": "VOLVO_ALERTAS",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "patente", "order": "ASCENDING" },
+        { "fieldPath": "creado_en", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "VOLVO_ALERTAS",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "severidad", "order": "ASCENDING" },
         { "fieldPath": "creado_en", "order": "ASCENDING" }
       ]

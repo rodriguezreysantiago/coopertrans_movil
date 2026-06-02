@@ -42,6 +42,20 @@ const HIST_TTL_MS = parseInt(process.env.AGENTE_HIST_TTL_MS || '900000', 10);
 const HIST_MAX_TURNOS = 8;
 const _histPorClave = new Map();
 
+// Cache corto del roster de EMPLEADOS, por instancia de `db` (WeakMap: en
+// prod el db es singleton → cachea; en tests cada db mock tiene su propio
+// cache → no se cruzan). Evita releer la colección entera en cada tool de
+// una misma conversación.
+const _EMP_TTL_MS = 60000;
+const _empCachePorDb = new WeakMap();
+async function _getEmpleadosDocs(db) {
+  const c = _empCachePorDb.get(db);
+  if (c && Date.now() - c.ts < _EMP_TTL_MS) return c.docs;
+  const snap = await db.collection('EMPLEADOS').get();
+  _empCachePorDb.set(db, { docs: snap.docs, ts: Date.now() });
+  return snap.docs;
+}
+
 let _flagCache = null;
 let _flagCacheTs = 0;
 const _FLAG_TTL_MS = 30000;
@@ -522,7 +536,7 @@ async function _toolBuscarVencimientos(db, args) {
 
   // Por nombre de chofer (filtra en memoria — el roster es chico).
   try {
-    const snap = await db.collection('EMPLEADOS').get();
+    const snap = { docs: await _getEmpleadosDocs(db) };
     const qUp = q.toUpperCase();
     const matches = snap.docs.filter((d) =>
       String(d.data().NOMBRE || '').toUpperCase().includes(qUp)
@@ -622,7 +636,7 @@ async function _toolPonerABuscar(db, persona, args) {
   // Resolver el chofer ACTIVO por nombre (en Cachatore la identidad es el DNI).
   let matches;
   try {
-    const snap = await db.collection('EMPLEADOS').get();
+    const snap = { docs: await _getEmpleadosDocs(db) };
     const qUp = nombreQuery.toUpperCase();
     matches = snap.docs.filter((d) => {
       const data = d.data();
@@ -701,7 +715,7 @@ async function _resolverChoferPorNombre(db, query, soloChofer) {
   if (!q) return { ok: false, error: 'Indicá el nombre.' };
   let snap;
   try {
-    snap = await db.collection('EMPLEADOS').get();
+    snap = { docs: await _getEmpleadosDocs(db) };
   } catch (e) {
     return { ok: false, error: `No pude buscar: ${e.message}` };
   }
@@ -794,7 +808,7 @@ async function _toolVencimientosProximos(db, args) {
   if (isNaN(dias) || dias <= 0) dias = 15;
   const items = [];
   try {
-    const snap = await db.collection('EMPLEADOS').get();
+    const snap = { docs: await _getEmpleadosDocs(db) };
     for (const d of snap.docs) {
       const data = d.data();
       if (data.ACTIVO === false) continue;
@@ -963,21 +977,23 @@ async function _adelantosDe(db, dni, nombre) {
 }
 
 async function _viajesDe(db, dni) {
+  // Limitamos EN LA QUERY (usa el índice chofer_dni+activo+creado_en) en vez
+  // de traer todo el historial del chofer y recortar en memoria.
   let docs;
   try {
-    const snap = await db.collection('VIAJES_LOGISTICA').where('chofer_dni', '==', dni).get();
-    docs = snap.docs.map((d) => d.data()).filter((v) => v.activo !== false);
+    const snap = await db.collection('VIAJES_LOGISTICA')
+      .where('chofer_dni', '==', dni)
+      .where('activo', '==', true)
+      .orderBy('creado_en', 'desc')
+      .limit(8)
+      .get();
+    docs = snap.docs.map((d) => d.data());
   } catch (e) {
     return { error: `No pude leer los viajes: ${e.message}` };
   }
-  docs.sort((a, b) => {
-    const fa = a.creado_en && a.creado_en.toMillis ? a.creado_en.toMillis() : 0;
-    const fb = b.creado_en && b.creado_en.toMillis ? b.creado_en.toMillis() : 0;
-    return fb - fa;
-  });
   return {
     cantidad: docs.length,
-    viajes: docs.slice(0, 8).map((v) => ({
+    viajes: docs.map((v) => ({
       estado: v.estado || null,
       fecha: _fechaIso(v.fecha_carga) || _fechaIso(v.creado_en),
       carga: v.carga_transportada || null,
@@ -1088,17 +1104,20 @@ async function _toolAlertasUnidad(db, args) {
     patente = (r.data.VEHICULO || '').trim().toUpperCase();
     if (!patente) return { encontrado: false, nota: `${r.data.NOMBRE} no tiene unidad asignada.` };
   }
+  // Filtramos por fecha EN LA QUERY (no traer N arbitrarias y filtrar en
+  // memoria): con muchas alertas históricas, un .limit() sin orden podía
+  // devolver solo viejas y perder las de las últimas 24h.
+  const hace24 = admin.firestore.Timestamp.fromMillis(Date.now() - 24 * 60 * 60 * 1000);
   let docs;
   try {
-    docs = (await db.collection('VOLVO_ALERTAS').where('patente', '==', patente).limit(150).get()).docs;
+    docs = (await db.collection('VOLVO_ALERTAS')
+      .where('patente', '==', patente)
+      .where('creado_en', '>=', hace24)
+      .get()).docs;
   } catch (e) {
     return { error: `No pude leer las alertas: ${e.message}` };
   }
-  const hace24 = Date.now() - 24 * 60 * 60 * 1000;
-  const recientes = docs.map((d) => d.data()).filter((a) => {
-    const ms = a.creado_en && a.creado_en.toMillis ? a.creado_en.toMillis() : 0;
-    return ms >= hace24;
-  });
+  const recientes = docs.map((d) => d.data());
   const porTipo = {};
   let criticas = 0;
   for (const a of recientes) {
@@ -1465,7 +1484,10 @@ async function responder({ texto, persona, telefono }, fs) {
         provider, persona, telefono, pregunta: texto, respuesta: null,
         toolsUsadas: r.toolsUsadas, error: r.error || 'sin_texto',
       });
-      return null;
+      // Activo pero sin poder responder: devolvemos un fallback (no null) para
+      // que NADIE quede en silencio — antes el admin no recibía nada ante un
+      // fallo de la API (el acuse es solo para choferes).
+      return 'Disculpá, no pude procesar eso ahora. Probá de nuevo en un rato.';
     }
     // Guardar el intercambio para dar contexto a las próximas preguntas.
     _guardarHistorial(rlKey, [
@@ -1484,7 +1506,7 @@ async function responder({ texto, persona, telefono }, fs) {
       provider, persona, telefono, pregunta: texto, respuesta: null,
       toolsUsadas: [], error: e.message,
     });
-    return null;
+    return 'Disculpá, no pude procesar eso ahora. Probá de nuevo en un rato.';
   }
 }
 
@@ -1508,6 +1530,7 @@ module.exports = {
   _diasHasta,
   _recuperarHistorial,
   _guardarHistorial,
+  _getEmpleadosDocs,
   _resetRateLimit: () => _rlPorClave.clear(),
   _resetHistorial: () => _histPorClave.clear(),
 };
