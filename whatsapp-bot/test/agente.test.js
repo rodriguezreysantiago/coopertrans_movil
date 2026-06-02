@@ -68,9 +68,10 @@ describe('agente._systemPrompt — por rol', () => {
     assert.ok(/NUNCA inventes/i.test(p));
     assert.ok(/rol ADMIN/i.test(p));
   });
-  test('gestión (SEG_HIGIENE): menciona flota/posición, NO Cachatore ni vencimientos (RBAC)', () => {
+  test('gestión (SEG_HIGIENE): menciona jornada + flota/posición, NO Cachatore (RBAC)', () => {
     const p = agente._systemPrompt({ rol: 'SEG_HIGIENE', nombre: 'Molina', data: {} });
     assert.ok(/rol SEG_HIGIENE/i.test(p));
+    assert.ok(/jornada/i.test(p), 'menciona jornada');
     assert.ok(/flota|posici/i.test(p), 'menciona flota/posición');
     assert.ok(!/cachatore/i.test(p), 'NO menciona Cachatore en lo que PODÉS');
     assert.ok(/NUNCA inventes/i.test(p));
@@ -126,9 +127,11 @@ describe('agente — tools por rol y conversores', () => {
       assert.ok(t.includes('poner_a_buscar_turno'), `${rol} poner_a_buscar_turno`);
     }
   });
-  test('SEG_HIGIENE: espeja la app (posición/flota/alertas), NO vencimientos ni cachatore (RBAC)', () => {
+  test('SEG_HIGIENE: jornada (ICM) + posición/flota/alertas; NO vencimientos/cachatore/personal (RBAC)', () => {
     const t = agente._toolsAnthropic('SEG_HIGIENE').map((x) => x.name);
-    // En la app tiene verAlertasVolvo (Mapa Flota + tableros Volvo) → estas 3.
+    // verIcm → jornada de un chofer (conducta de manejo — Molina la necesita).
+    assert.ok(t.includes('jornada_de'), 'SEG_HIGIENE jornada_de (verIcm)');
+    // verAlertasVolvo (Mapa Flota + tableros Volvo) → estas 3.
     assert.ok(t.includes('donde_esta'), 'SEG_HIGIENE donde_esta');
     assert.ok(t.includes('estado_flota'), 'SEG_HIGIENE estado_flota');
     assert.ok(t.includes('alertas_unidad'), 'SEG_HIGIENE alertas_unidad');

@@ -579,7 +579,8 @@ export async function procesarDiaUnChofer(
  *  recién corre mañana 06:30), pulsa "Cargar jornada de hoy" y dispara
  *  esta callable. También sirve para refrescar mid-día.
  *
- *  Region us-central1 + ADMIN/SUPERVISOR. */
+ *  Region us-central1 + ADMIN/SUPERVISOR/SEG_HIGIENE (Seg. e Higiene monitorea
+ *  la conducta de manejo desde el hub ICM y necesita ver la jornada de hoy). */
 export const procesarJornadaHoyChofer = onCall(
   {
     timeoutSeconds: 120,
@@ -588,9 +589,9 @@ export const procesarJornadaHoyChofer = onCall(
   },
   async (req) => {
     const rol = (req.auth?.token?.rol as string | undefined) || "";
-    if (rol !== "ADMIN" && rol !== "SUPERVISOR") {
+    if (rol !== "ADMIN" && rol !== "SUPERVISOR" && rol !== "SEG_HIGIENE") {
       throw new Error(
-        "Solo ADMIN o SUPERVISOR pueden procesar jornadas en vivo.");
+        "Solo ADMIN, SUPERVISOR o SEG_HIGIENE pueden procesar jornadas en vivo.");
     }
     const dni = (req.data?.choferDni as string | undefined)?.trim();
     if (!dni) throw new Error("Falta choferDni.");

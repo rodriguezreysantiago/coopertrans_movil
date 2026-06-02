@@ -472,7 +472,8 @@ const TOOLS_GESTION_FLOTA = [
 // módulo de donde sale el dato (la misma que gatea la pantalla en la app).
 const TOOLS_POR_CAPABILITY = {
   verVencimientos: ['buscar_vencimientos', 'vencimientos_proximos'],
-  verListaPersonal: ['info_chofer', 'jornada_de'],
+  verListaPersonal: ['info_chofer'],
+  verIcm: ['jornada_de'], // la jornada vive dentro del módulo ICM en la app
   verAlertasVolvo: ['donde_esta', 'estado_flota', 'alertas_unidad'],
   verDescargas: ['quien_esta_descargando'],
   verLogistica: ['viajes_resumen'],
@@ -487,7 +488,10 @@ const FRASE_POR_CAPABILITY = {
   verVencimientos:
     'Consultar los vencimientos (papeles) de cualquier chofer o de cualquier unidad.',
   verListaPersonal:
-    'Consultar datos de un chofer (rol, teléfono, unidad, licencia) y su jornada de manejo de hoy.',
+    'Consultar datos de un chofer (rol, teléfono, unidad, licencia).',
+  verIcm:
+    'Ver la jornada de manejo de hoy de un chofer (cuánto manejó, en qué bloque ' +
+    'va, pausas/descanso) — para conducta de manejo y fatiga.',
   verAlertasVolvo:
     'Ver la posición y el estado de cualquier unidad o del camión de un chofer, ' +
     'el resumen de la flota, y las alertas Volvo de las últimas 24h (cómo viene manejando).',
@@ -509,11 +513,14 @@ const FRASE_POR_CAPABILITY = {
 // GOMERIA solo tiene verGomeria (sin tool de gomería todavía) → ambos quedan
 // sin tools de gestión (el agente no les responde, igual que hoy).
 const _CAPS_SUPERVISOR = [
-  'verVencimientos', 'verListaPersonal', 'verAlertasVolvo', 'verDescargas',
-  'verLogistica', 'verMantenimiento', 'verCachatore',
+  'verVencimientos', 'verListaPersonal', 'verIcm', 'verAlertasVolvo',
+  'verDescargas', 'verLogistica', 'verMantenimiento', 'verCachatore',
 ];
 const CAPS_POR_ROL = {
-  SEG_HIGIENE: ['verAlertasVolvo'],
+  // SEG_HIGIENE (Molina): conducta de manejo → jornada de un chofer (verIcm) +
+  // posición/flota/alertas Volvo (verAlertasVolvo). Mismo alcance que el módulo
+  // ICM + Mapa Flota que ve en la app.
+  SEG_HIGIENE: ['verIcm', 'verAlertasVolvo'],
   SUPERVISOR: _CAPS_SUPERVISOR,
   // ADMIN ⊇ SUPERVISOR; sus extras (eliminar, asignar rol, ver bot) no tienen
   // tool de agente, así que en el agente ADMIN == SUPERVISOR.
