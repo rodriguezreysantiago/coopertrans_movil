@@ -33,7 +33,7 @@ const commands = require('./commands');
 const control = require('./control');
 const cron = require('./cron');
 const agente = require('./agente');
-const { normalizarTelefonoAWid } = require('./humano');
+const { normalizarTelefonoAWid, telefonoCanonicalAr } = require('./humano');
 
 // Mapeo de teléfono normalizado (solo dígitos) → DNI del chofer.
 //
@@ -148,6 +148,14 @@ async function _resolverChofer(db, fromNumber) {
           return { dni, data };
         }
       }
+    }
+
+    // Match #3: forma canónica AR — reconcilia el "9" móvil. WhatsApp entrega
+    // el ID SIN el 9 (542915115568) pero los TELEFONOS suelen estar cargados
+    // CON el 9 (5492915115568); sin esto ningún número así matchea (el agente
+    // no respondía a choferes ni supervisores, solo a admins por whitelist).
+    if (telefonoCanonicalAr(fromDigits) === telefonoCanonicalAr(tel)) {
+      return { dni, data };
     }
   }
   return null;
@@ -648,6 +656,10 @@ function _buscarEmpleadoEn(telefono, lista) {
       if (telWid && canonical === String(telWid).replace(/@c\.us$/, '')) {
         return item;
       }
+    }
+    // Reconcilia el "9" móvil AR (mismo motivo que _resolverChofer match #3).
+    if (telefonoCanonicalAr(digits) === telefonoCanonicalAr(tel)) {
+      return item;
     }
   }
   return null;

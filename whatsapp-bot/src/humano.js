@@ -196,6 +196,28 @@ function normalizarTelefonoAWid(telefono) {
 }
 
 /**
+ * Forma canónica de un teléfono para COMPARAR (NO para enviar). Reconcilia
+ * el "9" móvil argentino: WhatsApp entrega el ID de un número AR SIN el 9
+ * (`542915115568`), pero los TELEFONOS en EMPLEADOS suelen estar cargados
+ * CON el 9 (`5492915115568`). Si no unificamos, el match por número falla y
+ * el bot no identifica al remitente — caso real: el agente no respondía a
+ * choferes ni supervisores; solo a admins (que entran por whitelist).
+ *
+ * Quita el `9` inmediatamente después del `54` (indicador de móvil AR;
+ * ningún código de área argentino empieza con 9, así que es seguro). NO se
+ * usa para enviar: el envío sigue con `normalizarTelefonoAWid`.
+ *
+ * @param {string} telefono
+ * @returns {string} dígitos canónicos (sin el 9 móvil AR), o '' si vacío.
+ */
+function telefonoCanonicalAr(telefono) {
+  let d = String(telefono || '').replace(/\D+/g, '');
+  if (!d) return '';
+  if (d.startsWith('549')) d = `54${d.slice(3)}`;
+  return d;
+}
+
+/**
  * Parte un mensaje muy largo en múltiples chunks para evitar que
  * WhatsApp lo flagee como spam.
  *
@@ -264,6 +286,7 @@ module.exports = {
   delayAleatorioMs,
   sleep,
   normalizarTelefonoAWid,
+  telefonoCanonicalAr,
   partirMensajeLargo,
   esTimeSensitive,
   ORIGENES_TIME_SENSITIVE,

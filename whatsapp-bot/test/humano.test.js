@@ -10,7 +10,36 @@ process.env.TZ = 'America/Argentina/Buenos_Aires';
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
-const { normalizarTelefonoAWid, partirMensajeLargo } = require('../src/humano');
+const {
+  normalizarTelefonoAWid,
+  partirMensajeLargo,
+  telefonoCanonicalAr,
+} = require('../src/humano');
+
+describe('telefonoCanonicalAr — reconcilia el "9" movil AR para comparar', () => {
+  test('con-9 y sin-9 del MISMO numero convergen (el bug del agente)', () => {
+    assert.strictEqual(
+      telefonoCanonicalAr('5492915115568'),
+      telefonoCanonicalAr('542915115568')
+    );
+  });
+  test('quita el 9 movil tras el 54', () => {
+    assert.strictEqual(telefonoCanonicalAr('5492915115568'), '542915115568');
+  });
+  test('numero sin el 9 queda igual', () => {
+    assert.strictEqual(telefonoCanonicalAr('542915115568'), '542915115568');
+  });
+  test('limpia separadores antes de canonizar', () => {
+    assert.strictEqual(
+      telefonoCanonicalAr('+54 9 2915 11-5568'),
+      '542915115568'
+    );
+  });
+  test('vacio / null → string vacio', () => {
+    assert.strictEqual(telefonoCanonicalAr(''), '');
+    assert.strictEqual(telefonoCanonicalAr(null), '');
+  });
+});
 
 describe('normalizarTelefonoAWid — formatos validos', () => {
   test('numero AR tipico con +549 movil y espacios → wid limpio', () => {
