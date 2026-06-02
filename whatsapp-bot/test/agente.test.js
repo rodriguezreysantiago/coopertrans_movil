@@ -68,6 +68,13 @@ describe('agente._systemPrompt — por rol', () => {
     assert.ok(/NUNCA inventes/i.test(p));
     assert.ok(/rol ADMIN/i.test(p));
   });
+  test('gestión (SEG_HIGIENE): menciona flota/posición, NO Cachatore ni vencimientos (RBAC)', () => {
+    const p = agente._systemPrompt({ rol: 'SEG_HIGIENE', nombre: 'Molina', data: {} });
+    assert.ok(/rol SEG_HIGIENE/i.test(p));
+    assert.ok(/flota|posici/i.test(p), 'menciona flota/posición');
+    assert.ok(!/cachatore/i.test(p), 'NO menciona Cachatore en lo que PODÉS');
+    assert.ok(/NUNCA inventes/i.test(p));
+  });
 });
 
 describe('agente._textoDeRespuesta', () => {
@@ -108,18 +115,31 @@ describe('agente — tools por rol y conversores', () => {
     );
     assert.ok(gbv.parameters.properties.query); // admin SÍ lleva parameters
   });
-  test('ADMIN/SUPERVISOR: incluyen las tools de Cachatore', () => {
+  test('ADMIN/SUPERVISOR: set completo de gestión (vencimientos + flota + cachatore)', () => {
     for (const rol of ['ADMIN', 'SUPERVISOR']) {
       const t = agente._toolsAnthropic(rol).map((x) => x.name);
       assert.ok(t.includes('buscar_vencimientos'), `${rol} buscar_vencimientos`);
+      assert.ok(t.includes('donde_esta'), `${rol} donde_esta`);
+      assert.ok(t.includes('viajes_resumen'), `${rol} viajes_resumen`);
+      assert.ok(t.includes('service_unidad'), `${rol} service_unidad`);
       assert.ok(t.includes('cachatore_estado'), `${rol} cachatore_estado`);
       assert.ok(t.includes('poner_a_buscar_turno'), `${rol} poner_a_buscar_turno`);
     }
   });
-  test('roles sin tools propias todavía → vacío', () => {
+  test('SEG_HIGIENE: espeja la app (posición/flota/alertas), NO vencimientos ni cachatore (RBAC)', () => {
+    const t = agente._toolsAnthropic('SEG_HIGIENE').map((x) => x.name);
+    // En la app tiene verAlertasVolvo (Mapa Flota + tableros Volvo) → estas 3.
+    assert.ok(t.includes('donde_esta'), 'SEG_HIGIENE donde_esta');
+    assert.ok(t.includes('estado_flota'), 'SEG_HIGIENE estado_flota');
+    assert.ok(t.includes('alertas_unidad'), 'SEG_HIGIENE alertas_unidad');
+    // NO tiene verVencimientos / verCachatore / verListaPersonal en la app.
+    assert.ok(!t.includes('buscar_vencimientos'), 'SEG_HIGIENE sin vencimientos');
+    assert.ok(!t.includes('poner_a_buscar_turno'), 'SEG_HIGIENE sin cachatore');
+    assert.ok(!t.includes('info_chofer'), 'SEG_HIGIENE sin datos de personal');
+  });
+  test('PLANTA / GOMERIA: sin tools (su módulo no tiene tool en el agente todavía)', () => {
     assert.strictEqual(agente._toolsAnthropic('PLANTA').length, 0);
     assert.strictEqual(agente._toolsAnthropic('GOMERIA').length, 0);
-    assert.strictEqual(agente._toolsAnthropic('SEG_HIGIENE').length, 0);
   });
 });
 

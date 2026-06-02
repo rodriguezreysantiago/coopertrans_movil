@@ -464,16 +464,77 @@ const TOOLS_GESTION_FLOTA = [
   },
 ];
 
-// Roles con verCachatore (ven/operan Cachatore) — espejo de capabilities.dart.
-const ROLES_GESTION = new Set(['ADMIN', 'SUPERVISOR']);
+// ─── RBAC del agente = capabilities de la app ───
+// El agente expone, por rol, las MISMAS áreas que el rol puede usar en la app.
+// Fuente de verdad: lib/core/services/capabilities.dart. NO hay código
+// compartido entre la app (Dart) y el bot (Node): si cambian las capabilities
+// allá, actualizar acá. Cada tool de gestión se habilita por la capability del
+// módulo de donde sale el dato (la misma que gatea la pantalla en la app).
+const TOOLS_POR_CAPABILITY = {
+  verVencimientos: ['buscar_vencimientos', 'vencimientos_proximos'],
+  verListaPersonal: ['info_chofer', 'jornada_de'],
+  verAlertasVolvo: ['donde_esta', 'estado_flota', 'alertas_unidad'],
+  verDescargas: ['quien_esta_descargando'],
+  verLogistica: ['viajes_resumen'],
+  verMantenimiento: ['service_unidad'],
+  verCachatore: ['cachatore_estado', 'turnos_ypf_detalle', 'poner_a_buscar_turno'],
+};
+
+// Frase corta por capability para armar el "PODÉS" del system prompt según el
+// rol (en sync con TOOLS_POR_CAPABILITY: si el rol tiene la capability, ve la
+// frase y las tools correspondientes).
+const FRASE_POR_CAPABILITY = {
+  verVencimientos:
+    'Consultar los vencimientos (papeles) de cualquier chofer o de cualquier unidad.',
+  verListaPersonal:
+    'Consultar datos de un chofer (rol, teléfono, unidad, licencia) y su jornada de manejo de hoy.',
+  verAlertasVolvo:
+    'Ver la posición y el estado de cualquier unidad o del camión de un chofer, ' +
+    'el resumen de la flota, y las alertas Volvo de las últimas 24h (cómo viene manejando).',
+  verDescargas:
+    'Ver qué unidades están ahora dentro de una zona de carga/descarga YPF.',
+  verLogistica: 'Ver el resumen de viajes de los últimos días.',
+  verMantenimiento: 'Ver el estado de service de una unidad (horas de motor).',
+  verCachatore:
+    'Ver el estado de Cachatore / turnos YPF, y poner a un chofer a buscar ' +
+    'turno. Esto último es una ACCIÓN que cambia datos: ejecutala solo cuando ' +
+    'tengas claro a QUÉ chofer; si el nombre coincide con varios, NO ejecutes y ' +
+    'pedí que aclaren. Después confirmá de forma explícita chofer, fecha y franja ' +
+    '(con horario) para que puedan verificar.',
+};
+
+// Capabilities (que tienen tool en el agente) por rol — subconjunto de
+// capabilities.dart. CHOFER no figura: usa TOOLS_CHOFER (self-service del shell
+// de chofer, que la app no modela como Capability). PLANTA no entra al panel y
+// GOMERIA solo tiene verGomeria (sin tool de gomería todavía) → ambos quedan
+// sin tools de gestión (el agente no les responde, igual que hoy).
+const _CAPS_SUPERVISOR = [
+  'verVencimientos', 'verListaPersonal', 'verAlertasVolvo', 'verDescargas',
+  'verLogistica', 'verMantenimiento', 'verCachatore',
+];
+const CAPS_POR_ROL = {
+  SEG_HIGIENE: ['verAlertasVolvo'],
+  SUPERVISOR: _CAPS_SUPERVISOR,
+  // ADMIN ⊇ SUPERVISOR; sus extras (eliminar, asignar rol, ver bot) no tienen
+  // tool de agente, así que en el agente ADMIN == SUPERVISOR.
+  ADMIN: _CAPS_SUPERVISOR,
+};
+
+// Catálogo plano de tools de gestión, para resolver por nombre conservando el
+// orden de declaración (VENC → FLOTA → CACHATORE).
+const _TOOLS_GESTION = [
+  ...TOOLS_GESTION_VENC, ...TOOLS_GESTION_FLOTA, ...TOOLS_CACHATORE,
+];
 
 function _toolsDelRol(rol) {
   if (rol === 'CHOFER') return TOOLS_CHOFER;
-  if (ROLES_GESTION.has(rol)) {
-    return [...TOOLS_GESTION_VENC, ...TOOLS_GESTION_FLOTA, ...TOOLS_CACHATORE];
+  const caps = CAPS_POR_ROL[rol] || [];
+  if (caps.length === 0) return []; // PLANTA / GOMERIA / rol desconocido
+  const nombres = new Set();
+  for (const cap of caps) {
+    for (const n of (TOOLS_POR_CAPABILITY[cap] || [])) nombres.add(n);
   }
-  // PLANTA / GOMERIA / SEG_HIGIENE: todavía no tienen consultas propias.
-  return [];
+  return _TOOLS_GESTION.filter((t) => nombres.has(t.name));
 }
 
 function _toolsAnthropic(rol) {
@@ -1271,30 +1332,32 @@ function _systemPrompt(persona) {
     '  asistente del sistema.',
   ];
 
-  if (ROLES_GESTION.has(persona.rol)) {
+  if (persona.rol !== 'CHOFER' && _toolsDelRol(persona.rol).length > 0) {
     const nombre =
       persona.nombre ||
-      (persona.rol === 'ADMIN' ? 'el administrador' : 'el supervisor');
+      (persona.rol === 'ADMIN' ? 'el administrador'
+        : persona.rol === 'SUPERVISOR' ? 'el supervisor'
+          : 'un responsable');
+    // El "PODÉS" se arma desde las capabilities del rol → siempre en sync con
+    // las tools que realmente tiene (antes el texto estaba hardcodeado y negaba
+    // flota/viajes que sí estaban disponibles).
+    const podes = (CAPS_POR_ROL[persona.rol] || [])
+      .filter((c) => FRASE_POR_CAPABILITY[c])
+      .map((c) => `- ${FRASE_POR_CAPABILITY[c]}`);
     return [
       'Sos el asistente por WhatsApp de Coopertrans Móvil (empresa de',
       `transporte Vecchi). Le respondés a ${nombre} (rol ${persona.rol}).`,
       `Hoy es ${_hoyIso()} (zona horaria de Argentina).`,
       '',
       'PODÉS, con las herramientas:',
-      '- Consultar los vencimientos de cualquier chofer o unidad.',
-      '- Consultar el estado de Cachatore / turnos YPF.',
-      '- Poner a un chofer a buscar turno en YPF. Es una ACCIÓN que cambia',
-      '  datos: ejecutala solo cuando tengas claro a QUÉ chofer; si el nombre',
-      '  coincide con varios, NO ejecutes y pedí que aclaren con nombre y',
-      '  apellido. Después de ejecutar, confirmá de forma explícita el chofer,',
-      '  la fecha y la franja (con su horario) para que puedan verificar.',
+      ...podes,
       '',
       'REGLAS:',
-      '- Pueden consultar datos de CUALQUIER chofer o unidad (sin restricción',
-      '  de privacidad).',
-      '- Si piden algo que todavía no está en las herramientas (viajes,',
-      '  sueldos, flota en vivo, reagendar o cancelar turnos), decí que esa',
-      '  función todavía no está disponible. No lo inventes.',
+      '- Solo podés hacer lo que figura en la lista de arriba. Si te piden algo',
+      '  fuera de eso (sueldos, trámites, o datos que no tenés herramienta para',
+      '  traer), decí que esa función todavía no está disponible; no lo inventes.',
+      '- Para lo que SÍ podés, consultás a CUALQUIER chofer o unidad (los',
+      '  responsables no tienen la restricción de privacidad de los choferes).',
       ...comun,
     ].join('\n');
   }
