@@ -399,7 +399,23 @@ function crearHandler(fs, wa) {
       if (eraComando) return;
 
       // ─── Identificar al chofer (necesario para ACUSE y para Fase 3) ───
-      const fromNumber = msg.from.replace('@c.us', '');
+      // Número REAL del remitente. Para @lid (números NO agendados en el bot —
+      // el caso de casi todos los choferes) msg.from es un linked-id interno,
+      // NO el teléfono: hay que pedir el contacto. Sin esto el agente / acuse /
+      // Fase 3 descartaban a TODOS esos choferes (solo los /comandos los
+      // resolvían, porque commands.js ya hace este getContact).
+      let fromNumber = msg.from.replace(/@(c\.us|lid)$/, '');
+      if (tipoChat === 'lid') {
+        try {
+          const contacto = await msg.getContact();
+          if (contacto) {
+            fromNumber =
+                contacto.number || (contacto.id && contacto.id.user) || fromNumber;
+          }
+        } catch (_) {
+          // si falla, seguimos con el linked-id (peor caso: no resuelve)
+        }
+      }
       const chofer = await _resolverChofer(db, fromNumber);
       const persona = await _resolverPersonaAgente(db, fromNumber, chofer);
       if (!persona) {
