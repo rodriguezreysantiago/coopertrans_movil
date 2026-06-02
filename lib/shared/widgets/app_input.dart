@@ -10,6 +10,7 @@
 // (login DNI, settings, configuraciones rápidas).
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../constants/app_colors.dart';
 import '../../core/theme/app_radius.dart';
@@ -32,6 +33,7 @@ class AppInput extends StatefulWidget {
   final bool autofocus;
   final void Function(String)? onSubmitted;
   final TextInputAction? textInputAction;
+  final List<TextInputFormatter>? inputFormatters;
 
   const AppInput({
     super.key,
@@ -51,6 +53,7 @@ class AppInput extends StatefulWidget {
     this.autofocus = false,
     this.onSubmitted,
     this.textInputAction,
+    this.inputFormatters,
   });
 
   @override
@@ -128,6 +131,7 @@ class _AppInputState extends State<AppInput> {
                   onChanged: widget.onChanged,
                   onSubmitted: widget.onSubmitted,
                   textInputAction: widget.textInputAction,
+                  inputFormatters: widget.inputFormatters,
                   style: (widget.mono ? AppType.mono : AppType.body).copyWith(
                     fontSize: 15, color: c.text, height: 1.2,
                     letterSpacing: widget.obscure && _obscured ? 4 : null,

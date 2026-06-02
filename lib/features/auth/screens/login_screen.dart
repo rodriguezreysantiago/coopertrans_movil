@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/prefs_service.dart';
@@ -173,6 +174,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                         autofocus: !_hasLastDni,
                                         mono: true,
                                         keyboardType: TextInputType.number,
+                                        inputFormatters: [
+                                          FilteringTextInputFormatter.digitsOnly
+                                        ],
                                         textInputAction: TextInputAction.next,
                                         onSubmitted: (_) => FocusScope.of(context)
                                             .requestFocus(_passFocus),
