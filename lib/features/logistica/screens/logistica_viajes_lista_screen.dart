@@ -140,13 +140,24 @@ class _LogisticaViajesListaScreenState
                   }
                   final todos = snap.data ?? const <Viaje>[];
                   final filtrados = _aplicarFiltros(todos);
-                  if (filtrados.isEmpty) {
-                    return _EstadoVacio(haDatos: todos.isNotEmpty);
-                  }
-                  return ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-                    itemCount: filtrados.length,
-                    itemBuilder: (_, i) => _ViajeTile(viaje: filtrados[i]),
+                  return Column(
+                    children: [
+                      // Resumen del proto (Logística): KPIs por estado + total
+                      // + pagado a choferes, sobre TODOS los viajes del stream
+                      // (no los filtrados) para que el panorama sea estable.
+                      if (todos.isNotEmpty) _SummaryViajes(viajes: todos),
+                      Expanded(
+                        child: filtrados.isEmpty
+                            ? _EstadoVacio(haDatos: todos.isNotEmpty)
+                            : ListView.builder(
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 8, 16, 80),
+                                itemCount: filtrados.length,
+                                itemBuilder: (_, i) =>
+                                    _ViajeTile(viaje: filtrados[i]),
+                              ),
+                      ),
+                    ],
                   );
                 },
               ),
@@ -541,6 +552,93 @@ class _ChipMini extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Franja de KPIs del módulo viajes (prototipo Núcleo · Logística): counts por
+/// estado + total + pagado a choferes. Sobre TODOS los viajes del stream (no
+/// los filtrados) para que el panorama sea estable. Scroll horizontal → entra
+/// en cualquier ancho sin overflow.
+class _SummaryViajes extends StatelessWidget {
+  final List<Viaje> viajes;
+  const _SummaryViajes({required this.viajes});
+
+  @override
+  Widget build(BuildContext context) {
+    var enCurso = 0, concluidos = 0, planeados = 0;
+    var pagado = 0.0;
+    for (final v in viajes) {
+      switch (v.estado) {
+        case EstadoViaje.enCurso:
+          enCurso++;
+        case EstadoViaje.concluido:
+          concluidos++;
+        case EstadoViaje.planeado:
+          planeados++;
+      }
+      pagado += v.montoChoferRedondeado;
+    }
+    final celdas = <Widget>[
+      _celda('En curso', '$enCurso', AppColors.warning),
+      _celda('Concluidos', '$concluidos', AppColors.success),
+      _celda('Planeados', '$planeados', AppColors.info),
+      _celda('Total', '${viajes.length}', AppColors.textPrimary),
+      _celda('Pagado choferes', AppFormatters.formatearMonto(pagado),
+          AppColors.textPrimary),
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: AppCard(
+        padding: EdgeInsets.zero,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                for (var i = 0; i < celdas.length; i++) ...[
+                  celdas[i],
+                  if (i < celdas.length - 1)
+                    const VerticalDivider(
+                        width: 1, color: AppColors.borderSubtle),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _celda(String label, String valor, Color color) {
+    return SizedBox(
+      width: 134,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label.toUpperCase(),
+                style: AppType.eyebrow,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 6),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                valor,
+                style: AppType.display.copyWith(
+                  color: color,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
