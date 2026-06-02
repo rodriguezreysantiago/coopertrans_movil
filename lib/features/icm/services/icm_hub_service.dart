@@ -37,11 +37,18 @@ class KpisIcmHub {
   /// Top 5 a mejorar (los de ICM más alto).
   final List<ChoferRankingItem> top5Peores;
 
+  /// Mes que efectivamente se está mostrando, ej. "Mayo 2026". Puede NO ser el
+  /// mes en curso: si éste recién arranca y Sitrack todavía no calculó su ICM
+  /// (días 1-2), se cae al último mes con actividad. Vacío si ningún mes tiene
+  /// datos.
+  final String periodoLabel;
+
   const KpisIcmHub({
     required this.icmFlota,
     required this.tendenciaIcm,
     required this.top5Mejores,
     required this.top5Peores,
+    this.periodoLabel = '',
   });
 
   static const KpisIcmHub vacio = KpisIcmHub(
@@ -80,6 +87,9 @@ class IcmHubService {
       tendenciaIcm: tendencia,
       top5Mejores: flotaYTops.top5Mejores,
       top5Peores: flotaYTops.top5Peores,
+      periodoLabel: flotaYTops.periodo.isEmpty
+          ? ''
+          : IcmOficialService.labelPeriodo(flotaYTops.periodo),
     );
   }
 
@@ -108,7 +118,15 @@ class IcmHubService {
     ]);
     final actual = cargados[0];
     final anterior = cargados[1];
-    if (actual == null || actual.vacio) {
+    // El mes en curso recién arranca (días 1-2) → Sitrack todavía no calculó
+    // su ICM mensual y el doc viene con actividad 0 (todos los choferes en
+    // UNAVAILABLE_NO_ACTIVITY). En ese caso caemos al último mes CON actividad
+    // (igual que la tendencia) para no mostrar el hub vacío al comienzo de cada
+    // mes. Si tiene actividad real, usamos el mes en curso.
+    final actualSirve =
+        actual != null && actual.choferesConActividad.isNotEmpty;
+    final fuente = actualSirve ? actual : anterior;
+    if (fuente == null || fuente.choferesConActividad.isEmpty) {
       return const _IcmFlotaYTops(
         actual: 0,
         anterior: 0,
@@ -117,12 +135,16 @@ class IcmHubService {
         top5Peores: [],
       );
     }
+    // La comparativa "vs mes anterior" solo tiene sentido si la fuente es el
+    // mes en curso; si caímos al anterior, no comparamos (0 → la UI pone "—").
+    final comparativa = actualSirve ? (anterior?.icmGeneral ?? 0) : 0.0;
     return _IcmFlotaYTops(
-      actual: actual.icmGeneral,
-      anterior: anterior?.icmGeneral ?? 0,
-      choferesEnPromedio: actual.choferesActivos,
-      top5Mejores: actual.mejores(5).map(_choferAItem).toList(),
-      top5Peores: actual.peores(5).map(_choferAItem).toList(),
+      actual: fuente.icmGeneral,
+      anterior: comparativa,
+      choferesEnPromedio: fuente.choferesActivos,
+      top5Mejores: fuente.mejores(5).map(_choferAItem).toList(),
+      top5Peores: fuente.peores(5).map(_choferAItem).toList(),
+      periodo: fuente.periodo,
     );
   }
 
@@ -196,6 +218,7 @@ class _IcmFlotaYTops {
   final int choferesEnPromedio;
   final List<ChoferRankingItem> top5Mejores;
   final List<ChoferRankingItem> top5Peores;
+  final String periodo;
 
   const _IcmFlotaYTops({
     required this.actual,
@@ -203,5 +226,6 @@ class _IcmFlotaYTops {
     required this.choferesEnPromedio,
     required this.top5Mejores,
     required this.top5Peores,
+    this.periodo = '',
   });
 }

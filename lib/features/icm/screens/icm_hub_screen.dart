@@ -120,6 +120,11 @@ class _SeccionesIcm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final esDesktop = MediaQuery.of(context).size.width >= 800;
+    // Sufijo con el mes que realmente se muestra (puede no ser el actual si
+    // recién arrancó y todavía no hay ICM de Sitrack — el service cae al
+    // último mes con datos).
+    final sufijoPeriodo =
+        kpis.periodoLabel.isEmpty ? '' : ' · ${kpis.periodoLabel}';
     // KPI ICM flota + Tendencias lado a lado en desktop (2026-05-24).
     // Antes la card ICM flota ocupaba toda una fila y debajo iba el
     // gráfico — quedaba mucho aire vertical. Ahora en desktop la card
@@ -134,13 +139,13 @@ class _SeccionesIcm extends StatelessWidget {
     );
     final chartTendencia = TendenciaIcmChart(
       puntos: kpis.tendenciaIcm,
-      titulo: 'ICM oficial Sitrack · por día (mes en curso)',
+      titulo: 'ICM oficial Sitrack · por día$sufijoPeriodo',
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // ─── Personas: top 5 mejores + top 5 a mejorar ───
-        const _SeccionLabel('Personas'),
+        _SeccionLabel('Personas$sufijoPeriodo'),
         const SizedBox(height: AppSpacing.sm),
         if (esDesktop)
           Row(
@@ -182,7 +187,7 @@ class _SeccionesIcm extends StatelessWidget {
         ],
         const SizedBox(height: AppSpacing.xl),
         // ─── ICM flota + Tendencias (lado a lado en desktop) — AL FINAL ───
-        const _SeccionLabel('Panorama'),
+        _SeccionLabel('Panorama$sufijoPeriodo'),
         const SizedBox(height: AppSpacing.sm),
         if (esDesktop)
           IntrinsicHeight(
