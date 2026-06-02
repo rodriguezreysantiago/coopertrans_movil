@@ -77,6 +77,13 @@ describe('commands._esAdmin — fix del bug de match laxo', () => {
     assert.strictEqual(_esAdmin('+54-9-2914567890'), true);
   });
 
+  test('REGRESSION B2: input SIN el 9 movil matchea whitelist CON el 9', () => {
+    // WhatsApp entrega los IDs de moviles AR sin el 9 (542914567890); el
+    // admin suele cargarse en ADMIN_PHONES con el 9 (5492914567890). Antes
+    // de B2 esto daba false y los /comandos del admin rebotaban en silencio.
+    assert.strictEqual(_esAdmin('542914567890'), true);
+  });
+
   test('numero corto (< 10 digitos) → false', () => {
     assert.strictEqual(_esAdmin('123'), false);
     assert.strictEqual(_esAdmin('456789'), false);
@@ -118,9 +125,10 @@ describe('commands._adminWhitelist', () => {
     else process.env.ADMIN_PHONES = ENV_ORIGINAL;
   });
 
-  test('separa por coma y limpia no-digitos', () => {
+  test('separa por coma y limpia no-digitos (canonico AR sin el 9)', () => {
     const wl = _adminWhitelist();
-    assert.deepStrictEqual(wl, ['5492914567890', '5491100000000']);
+    // Canonico AR para comparar = sin el "9" movil (telefonoCanonicalAr).
+    assert.deepStrictEqual(wl, ['542914567890', '541100000000']);
   });
 
   test('descarta entradas con < 10 digitos', () => {

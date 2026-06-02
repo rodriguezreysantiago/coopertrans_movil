@@ -128,6 +128,10 @@ async function _resolverChofer(db, fromNumber) {
   const fromWid = normalizarTelefonoAWid(fromNumber);
   const fromCanonical = fromWid ? String(fromWid).replace(/@c\.us$/, '') : null;
 
+  // Pasada 1: match EXACTO (#1 bruto / #2 WID normalizado). Tiene que ganar
+  // SIEMPRE sobre el laxo: si un empleado iterado antes matchea solo por la
+  // forma canónica AR (#3) pero OTRO es el dueño exacto del número, el exacto
+  // debe ganar (sin esto, el orden de iteración de Firestore decidía).
   for (const { dni, data } of _cacheEmpleados) {
     const tel = String(data.TELEFONO || '').replace(/\D+/g, '');
     if (!tel) continue;
@@ -149,11 +153,16 @@ async function _resolverChofer(db, fromNumber) {
         }
       }
     }
+  }
 
-    // Match #3: forma canónica AR — reconcilia el "9" móvil. WhatsApp entrega
-    // el ID SIN el 9 (542915115568) pero los TELEFONOS suelen estar cargados
-    // CON el 9 (5492915115568); sin esto ningún número así matchea (el agente
-    // no respondía a choferes ni supervisores, solo a admins por whitelist).
+  // Pasada 2: match LAXO (#3) — forma canónica AR, reconcilia el "9" móvil.
+  // WhatsApp entrega el ID SIN el 9 (542915115568) pero los TELEFONOS suelen
+  // estar cargados CON el 9 (5492915115568); sin esto ningún número así matchea
+  // (el agente no respondía a choferes ni supervisores, solo a admins por
+  // whitelist). Solo corre si NINGÚN match exacto en la pasada 1.
+  for (const { dni, data } of _cacheEmpleados) {
+    const tel = String(data.TELEFONO || '').replace(/\D+/g, '');
+    if (!tel) continue;
     if (telefonoCanonicalAr(fromDigits) === telefonoCanonicalAr(tel)) {
       return { dni, data };
     }
@@ -647,6 +656,7 @@ function _buscarEmpleadoEn(telefono, lista) {
   if (!digits) return null;
   const wid = normalizarTelefonoAWid(telefono);
   const canonical = wid ? String(wid).replace(/@c\.us$/, '') : null;
+  // Pasada 1: match EXACTO (bruto o WID). Gana siempre sobre el laxo.
   for (const item of lista) {
     const tel = String(item.data.TELEFONO || '').replace(/\D+/g, '');
     if (!tel) continue;
@@ -657,10 +667,13 @@ function _buscarEmpleadoEn(telefono, lista) {
         return item;
       }
     }
-    // Reconcilia el "9" móvil AR (mismo motivo que _resolverChofer match #3).
-    if (telefonoCanonicalAr(digits) === telefonoCanonicalAr(tel)) {
-      return item;
-    }
+  }
+  // Pasada 2: match LAXO — reconcilia el "9" móvil AR (mismo motivo que
+  // _resolverChofer match #3). Solo corre si ningún exacto en la pasada 1.
+  for (const item of lista) {
+    const tel = String(item.data.TELEFONO || '').replace(/\D+/g, '');
+    if (!tel) continue;
+    if (telefonoCanonicalAr(digits) === telefonoCanonicalAr(tel)) return item;
   }
   return null;
 }
@@ -703,4 +716,5 @@ module.exports = {
   // Exportados para tests:
   _resolverChofer,
   _asociarConAviso,
+  _buscarEmpleadoEn,
 };

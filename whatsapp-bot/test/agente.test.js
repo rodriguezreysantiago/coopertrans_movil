@@ -186,7 +186,7 @@ describe('agente._ejecutarTool — contra Firestore mockeado', () => {
     const persona = {
       rol: 'CHOFER',
       dni: '30111222',
-      data: { NOMBRE: 'PEREZ', VEHICULO: 'AA111AA', LICENCIA_DE_CONDUCIR: '14-06-2026' },
+      data: { NOMBRE: 'PEREZ', VEHICULO: 'AA111AA', VENCIMIENTO_LICENCIA_DE_CONDUCIR: '14-06-2026' },
     };
     const db = dbMock({ vehiculos: { AA111AA: { VENCIMIENTO_RTO: '01-08-2026' } } });
     const r = await agente._ejecutarTool(db, 'mis_vencimientos', persona);
@@ -210,6 +210,21 @@ describe('agente._ejecutarTool — contra Firestore mockeado', () => {
     assert.strictEqual(r.enganche.tipo, 'BATEA');
   });
 
+  test('mis_vencimientos: VEHICULO "-" (sin asignar) → unidad_asignada null (B6)', async () => {
+    const persona = { rol: 'CHOFER', dni: '1', data: { NOMBRE: 'X', VEHICULO: '-' } };
+    const r = await agente._ejecutarTool(dbMock({}), 'mis_vencimientos', persona);
+    assert.strictEqual(r.unidad_asignada, null); // antes daba '-' y consultaba doc('-')
+    assert.deepStrictEqual(r.papeles_de_la_unidad, []);
+  });
+
+  test('mi_unidad: "-" / "SIN ASIGNAR" → tractor y enganche null + nota (B6)', async () => {
+    const persona = { rol: 'CHOFER', dni: '1', data: { VEHICULO: '-', ENGANCHE: 'SIN ASIGNAR' } };
+    const r = await agente._ejecutarTool(dbMock({}), 'mi_unidad', persona);
+    assert.strictEqual(r.tractor, null);
+    assert.strictEqual(r.enganche, null);
+    assert.match(r.nota, /no tenés/i);
+  });
+
   test('buscar_vencimientos por PATENTE (admin)', async () => {
     const db = dbMock({ vehiculos: { AB123CD: { TIPO: 'TRACTOR', VENCIMIENTO_RTO: '10-09-2026' } } });
     const r = await agente._ejecutarTool(db, 'buscar_vencimientos', { rol: 'ADMIN' }, { query: 'AB123CD' });
@@ -221,7 +236,7 @@ describe('agente._ejecutarTool — contra Firestore mockeado', () => {
   test('buscar_vencimientos por NOMBRE (admin)', async () => {
     const db = dbMock({
       empleados: [
-        { id: '30111222', data: { NOMBRE: 'PEREZ JUAN', VEHICULO: 'AA111AA', LICENCIA_DE_CONDUCIR: '14-06-2026' } },
+        { id: '30111222', data: { NOMBRE: 'PEREZ JUAN', VEHICULO: 'AA111AA', VENCIMIENTO_LICENCIA_DE_CONDUCIR: '14-06-2026' } },
         { id: '40555666', data: { NOMBRE: 'GOMEZ LUIS' } },
       ],
     });
@@ -452,7 +467,7 @@ describe('agente — herramientas nuevas (jornada, turno, vencimientos, info)', 
     const hoy = new Date();
     const en = (d) => { const x = new Date(hoy); x.setUTCDate(x.getUTCDate() + d); return x.toISOString().slice(0, 10); };
     const db = dbMockFull({
-      empleados: [{ id: '1', data: { NOMBRE: 'A', ROL: 'CHOFER', ACTIVO: true, LICENCIA_DE_CONDUCIR: en(5) } }],
+      empleados: [{ id: '1', data: { NOMBRE: 'A', ROL: 'CHOFER', ACTIVO: true, VENCIMIENTO_LICENCIA_DE_CONDUCIR: en(5) } }],
       vehiculos: { AA111AA: { VENCIMIENTO_RTO: en(40) } },
     });
     const r = await agente._ejecutarTool(db, 'vencimientos_proximos', { rol: 'ADMIN' }, { dias: 15 });
@@ -461,10 +476,11 @@ describe('agente — herramientas nuevas (jornada, turno, vencimientos, info)', 
   });
 
   test('info_chofer: datos por nombre', async () => {
-    const db = dbMockFull({ empleados: [{ id: '30111222', data: { NOMBRE: 'PEREZ JUAN', ROL: 'CHOFER', ACTIVO: true, TELEFONO: '549', VEHICULO: 'AA111AA' } }] });
+    const db = dbMockFull({ empleados: [{ id: '30111222', data: { NOMBRE: 'PEREZ JUAN', ROL: 'CHOFER', ACTIVO: true, TELEFONO: '549', VEHICULO: 'AA111AA', VENCIMIENTO_LICENCIA_DE_CONDUCIR: '14-06-2026' } }] });
     const r = await agente._ejecutarTool(db, 'info_chofer', { rol: 'ADMIN' }, { query: 'perez' });
     assert.strictEqual(r.dni, '30111222');
     assert.strictEqual(r.unidad, 'AA111AA');
+    assert.strictEqual(r.licencia_vence, '2026-06-14'); // lee VENCIMIENTO_LICENCIA_DE_CONDUCIR (regresión B1)
   });
 
   test('turnos_ypf_detalle: agrupa con nombres', async () => {
@@ -646,6 +662,29 @@ describe('agente — herramientas de flota / operación', () => {
       if (prevP === undefined) delete process.env.AGENTE_PROVIDER; else process.env.AGENTE_PROVIDER = prevP;
       if (prevK === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = prevK;
       if (prevG === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = prevG;
+    }
+  });
+
+  test('responder: audio que supera el tope de tamaño → mensaje claro (B9)', async () => {
+    const prev = {
+      P: process.env.AGENTE_PROVIDER, G: process.env.GEMINI_API_KEY,
+      E: process.env.AGENTE_ENABLED, M: process.env.AGENTE_MAX_AUDIO_B64,
+    };
+    process.env.AGENTE_PROVIDER = 'gemini';
+    process.env.GEMINI_API_KEY = 'g-test';
+    process.env.AGENTE_ENABLED = 'true';
+    process.env.AGENTE_MAX_AUDIO_B64 = '10'; // tope chico para el test
+    try {
+      // base64 de 50 chars > tope 10 → corta antes de llamar a Gemini.
+      const r = await agente.responder(
+        { texto: '', audio: { data: 'X'.repeat(50), mimetype: 'audio/ogg' }, persona: { rol: 'CHOFER', dni: 'b9' }, telefono: 'b9' },
+        { inicializar: () => ({}) }
+      );
+      assert.match(r, /muy largo/);
+    } finally {
+      const set = (k, v) => { if (v === undefined) delete process.env[k]; else process.env[k] = v; };
+      set('AGENTE_PROVIDER', prev.P); set('GEMINI_API_KEY', prev.G);
+      set('AGENTE_ENABLED', prev.E); set('AGENTE_MAX_AUDIO_B64', prev.M);
     }
   });
 });

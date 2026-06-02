@@ -2,8 +2,9 @@
 //
 // MULTI-PROVEEDOR: Google Gemini (free tier) o Anthropic Claude (AGENTE_PROVIDER
 //   o autodetección por la API key cargada; Gemini primero).
-// MULTI-ROL: responde a CHOFERES (solo sus propios datos) y al ADMIN (puede
-//   consultar datos de cualquier chofer/unidad). Cada rol tiene sus tools.
+// MULTI-ROL: responde a CHOFERES (solo sus propios datos) y a roles de GESTIÓN
+//   — ADMIN y SUPERVISOR — que pueden consultar datos de cualquier chofer/
+//   unidad. Cada rol tiene sus tools (TOOLS_CHOFER vs TOOLS_GESTION_*).
 //
 // Engancha donde el bot hoy ignora el texto libre (message_handler). Pilares:
 //   1. NO inventa: solo responde con lo que devuelven las herramientas.
@@ -30,6 +31,10 @@ const MODELO_GEMINI = process.env.AGENTE_MODELO_GEMINI || 'gemini-2.5-flash';
 const MAX_TOKENS = 1024;
 const TIMEOUT_MS = parseInt(process.env.AGENTE_TIMEOUT_MS || '30000', 10);
 const MAX_TOOL_ITERS = 4;
+// Tope de tools EJECUTADAS por iteración: si el modelo pide muchísimas de una,
+// devolvemos error en las que sobran (sin pegarle a Firestore) pero igual
+// respondemos cada tool_use/functionCall para no romper el protocolo (B20).
+const MAX_TOOLS_POR_ITER = 6;
 
 const RL_MAX_POR_HORA = parseInt(process.env.AGENTE_MAX_POR_HORA || '20', 10);
 const _rlPorClave = new Map();
@@ -40,6 +45,9 @@ const _rlPorClave = new Map();
 // tope de turnos para no inflar tokens/costo.
 const HIST_TTL_MS = parseInt(process.env.AGENTE_HIST_TTL_MS || '900000', 10);
 const HIST_MAX_TURNOS = 8;
+// Tope de chars por turno al re-inyectar el historial en el prompt: las
+// respuestas del bot pueden ser largas y 8 turnos sin recorte inflan tokens (B12).
+const HIST_MAX_CHARS = 1500;
 const _histPorClave = new Map();
 
 // Cache corto del roster de EMPLEADOS, por instancia de `db` (WeakMap: en
@@ -110,6 +118,23 @@ function _guardarHistorial(clave, turnos) {
   });
 }
 
+// Barrido periódico: purga el historial expirado y las claves de rate-limit
+// cuyas marcas ya caducaron, para que los Maps no crezcan sin límite en el
+// servicio 24/7 (sin esto, cada número distinto que escribe deja una entrada
+// para siempre). unref() → no impide que el proceso termine (tests/CLI).
+const _SWEEP_MS = parseInt(process.env.AGENTE_SWEEP_MS || '600000', 10);
+const _sweepTimer = setInterval(() => {
+  const ahora = Date.now();
+  const hace1h = ahora - 60 * 60 * 1000;
+  for (const [k, h] of _histPorClave) {
+    if (!h || ahora - h.ts > HIST_TTL_MS) _histPorClave.delete(k);
+  }
+  for (const [k, arr] of _rlPorClave) {
+    if (!arr || !arr.some((t) => t > hace1h)) _rlPorClave.delete(k);
+  }
+}, _SWEEP_MS);
+if (_sweepTimer && typeof _sweepTimer.unref === 'function') _sweepTimer.unref();
+
 async function _agenteActivo(db) {
   const env = process.env.AGENTE_ENABLED;
   if (env != null && String(env).trim() !== '') {
@@ -164,10 +189,13 @@ function _hoyIso() {
   }
 }
 
+// OJO: el campo real en EMPLEADOS lleva el prefijo VENCIMIENTO_ (igual que
+// LABELS_VENC_VEHICULO). Sin el prefijo, _vencimientosDeEmpleado leía undefined
+// y el agente devolvía SIEMPRE "sin vencimientos" para TODO el personal.
 const LABELS_VENC_EMPLEADO = {
-  LICENCIA_DE_CONDUCIR: 'Licencia de conducir',
-  PREOCUPACIONAL: 'Preocupacional',
-  CURSO_DE_MANEJO_DEFENSIVO: 'Curso de manejo defensivo',
+  VENCIMIENTO_LICENCIA_DE_CONDUCIR: 'Licencia de conducir',
+  VENCIMIENTO_PREOCUPACIONAL: 'Preocupacional',
+  VENCIMIENTO_CURSO_DE_MANEJO_DEFENSIVO: 'Curso de manejo defensivo',
 };
 
 const LABELS_VENC_VEHICULO = {
@@ -196,6 +224,17 @@ function _vencimientosDeVehiculo(data) {
 }
 
 const RE_PATENTE = /^[A-Z]{2,3}\d{3}[A-Z]{0,3}$/;
+
+// Trata los centinelas de "sin asignar" como vacío. La app guarda VEHICULO/
+// ENGANCHE como '-' o 'SIN ASIGNAR' cuando no hay unidad; sin esto el agente
+// consultaba VEHICULOS.doc('-') y respondía "tu unidad (-)" en lugar de "no
+// tenés unidad asignada" (B6). Devuelve la patente limpia, o '' si es centinela.
+function _patenteValida(p) {
+  const s = String(p || '').trim();
+  const up = s.toUpperCase();
+  if (!s || up === '-' || up === 'SIN ASIGNAR' || up === 'N/A') return '';
+  return s;
+}
 
 // ───────────────────────── tools ─────────────────────────
 // Formato NEUTRO (name, description, params). Conversores por proveedor abajo.
@@ -464,7 +503,7 @@ function _toolsGemini(rol) {
 async function _toolMisVencimientos(db, persona) {
   const data = persona.data || {};
   const papelesChofer = _vencimientosDeEmpleado(data);
-  const patente = String(data.VEHICULO || '').trim();
+  const patente = _patenteValida(data.VEHICULO);
   let papelesUnidad = [];
   if (patente) {
     try {
@@ -488,7 +527,7 @@ async function _toolMisVencimientos(db, persona) {
 async function _toolMiUnidad(db, persona) {
   const data = persona.data || {};
   async function _detalle(patente) {
-    const p = String(patente || '').trim();
+    const p = _patenteValida(patente);
     if (!p) return null;
     const base = { patente: p };
     try {
@@ -504,9 +543,14 @@ async function _toolMiUnidad(db, persona) {
     }
     return base;
   }
+  const tractor = await _detalle(data.VEHICULO);
+  const enganche = await _detalle(data.ENGANCHE);
   return {
-    tractor: await _detalle(data.VEHICULO),
-    enganche: await _detalle(data.ENGANCHE),
+    tractor,
+    enganche,
+    nota: (!tractor && !enganche)
+      ? 'No tenés unidad ni enganche asignado.'
+      : undefined,
   };
 }
 
@@ -549,7 +593,7 @@ async function _toolBuscarVencimientos(db, args) {
       return {
         nombre: data.NOMBRE || d.id,
         dni: d.id,
-        unidad: data.VEHICULO || null,
+        unidad: _patenteValida(data.VEHICULO) || null,
         papeles: _vencimientosDeEmpleado(data),
       };
     });
@@ -568,7 +612,10 @@ async function _toolBuscarVencimientos(db, args) {
 }
 
 const FRANJAS_VALIDAS = ['madrugada', 'manana', 'tarde', 'noche', 'cualquiera'];
-const ESTADOS_PROBLEMA = ['sin_credenciales', 'sin_patente', 'login_fallo', 'revisar'];
+// 'cancelando' es transitorio (el sniper cancela para reagendar), pero NO es
+// "buscando": lo listamos aparte para no contarlo mal (B14). El LLM ve el
+// estado real en la lista, así que lo describe correctamente.
+const ESTADOS_PROBLEMA = ['sin_credenciales', 'sin_patente', 'login_fallo', 'revisar', 'cancelando'];
 
 function _normalizarFranja(f) {
   let s = String(f || 'cualquiera').trim().toLowerCase();
@@ -863,9 +910,9 @@ async function _toolInfoChofer(db, args) {
     rol: data.ROL || null,
     activo: data.ACTIVO !== false,
     telefono: data.TELEFONO || null,
-    unidad: data.VEHICULO || null,
-    enganche: data.ENGANCHE || null,
-    licencia_vence: _fechaIso(data.LICENCIA_DE_CONDUCIR),
+    unidad: _patenteValida(data.VEHICULO) || null,
+    enganche: _patenteValida(data.ENGANCHE) || null,
+    licencia_vence: _fechaIso(data.VENCIMIENTO_LICENCIA_DE_CONDUCIR),
   };
 }
 
@@ -1009,7 +1056,7 @@ async function _toolMisViajes(db, persona) {
   return await _viajesDe(db, persona.dni);
 }
 async function _toolDondeEstaMiUnidad(db, persona) {
-  const patente = (persona.data && persona.data.VEHICULO || '').trim();
+  const patente = _patenteValida(persona.data && persona.data.VEHICULO);
   if (!patente) return { encontrado: false, nota: 'No tenés una unidad asignada.' };
   const pos = await _posicionUnidad(db, patente);
   return pos || { encontrado: false, nota: `No tengo posición reciente de tu unidad (${patente}).` };
@@ -1025,7 +1072,7 @@ async function _toolDondeEsta(db, args) {
   }
   const r = await _resolverChoferPorNombre(db, q, false);
   if (!r.ok) return r;
-  const patente = (r.data.VEHICULO || '').trim();
+  const patente = _patenteValida(r.data.VEHICULO);
   if (!patente) return { encontrado: false, nota: `${r.data.NOMBRE} no tiene unidad asignada.` };
   const pos = await _posicionUnidad(db, patente);
   return pos
@@ -1066,7 +1113,9 @@ async function _toolViajesResumen(db, args) {
     const v = d.data();
     if (v.activo === false) continue;
     total++;
-    const e = String(v.estado || '').toUpperCase();
+    let e = String(v.estado || '').toUpperCase();
+    if (e === 'PROGRAMADO') e = 'PLANEADO';        // legacy (rename 2026-05-09)
+    else if (e === 'COMPLETADO') e = 'CONCLUIDO';  // legacy (rename 2026-05-11)
     if (e === 'PLANEADO') planeados++;
     else if (e === 'EN_CURSO') enCurso++;
     else if (e === 'CONCLUIDO') concluidos++;
@@ -1101,7 +1150,7 @@ async function _toolAlertasUnidad(db, args) {
   if (!RE_PATENTE.test(patente)) {
     const r = await _resolverChoferPorNombre(db, q, false);
     if (!r.ok) return r;
-    patente = (r.data.VEHICULO || '').trim().toUpperCase();
+    patente = _patenteValida(r.data.VEHICULO).toUpperCase();
     if (!patente) return { encontrado: false, nota: `${r.data.NOMBRE} no tiene unidad asignada.` };
   }
   // Filtramos por fecha EN LA QUERY (no traer N arbitrarias y filtrar en
@@ -1347,32 +1396,44 @@ async function _conversarAnthropic(db, system, historial, userText, persona) {
   const messages = [
     ...historial.map((t) => ({
       role: t.rol === 'assistant' ? 'assistant' : 'user',
-      content: t.texto,
+      content: String(t.texto || '').slice(0, HIST_MAX_CHARS),
     })),
     { role: 'user', content: userText },
   ];
   const toolsUsadas = [];
 
   for (let iter = 0; iter < MAX_TOOL_ITERS; iter++) {
-    const resp = await _fetchJson(ANTHROPIC_API_URL, headers, {
+    // En la última iteración forzamos `tool_choice: none`: el modelo redacta la
+    // respuesta final con los resultados que ya juntó, en vez de pedir otra
+    // tool y dejarnos sin texto (fix B11 — antes caía a un fallback mudo).
+    const ultimaIter = iter === MAX_TOOL_ITERS - 1;
+    const reqBody = {
       model: MODELO_ANTHROPIC,
       max_tokens: MAX_TOKENS,
       system,
       tools: _toolsAnthropic(persona.rol),
       messages,
-    });
+    };
+    if (ultimaIter) reqBody.tool_choice = { type: 'none' };
+    const resp = await _fetchJson(ANTHROPIC_API_URL, headers, reqBody);
 
-    if (resp.stop_reason === 'tool_use') {
+    if (!ultimaIter && resp.stop_reason === 'tool_use') {
       messages.push({ role: 'assistant', content: resp.content });
       const toolResults = [];
+      let ejecutadas = 0;
       for (const bloque of resp.content) {
         if (bloque.type !== 'tool_use') continue;
         toolsUsadas.push(bloque.name);
         let resultado;
-        try {
-          resultado = await _ejecutarTool(db, bloque.name, persona, bloque.input);
-        } catch (e) {
-          resultado = { error: e.message };
+        if (ejecutadas >= MAX_TOOLS_POR_ITER) {
+          resultado = { error: 'Demasiadas consultas en un solo paso; pedímelas de a una.' };
+        } else {
+          ejecutadas++;
+          try {
+            resultado = await _ejecutarTool(db, bloque.name, persona, bloque.input);
+          } catch (e) {
+            resultado = { error: e.message };
+          }
         }
         toolResults.push({
           type: 'tool_result',
@@ -1384,7 +1445,12 @@ async function _conversarAnthropic(db, system, historial, userText, persona) {
       continue;
     }
 
-    return { texto: _textoDeRespuesta(resp), toolsUsadas };
+    const texto = _textoDeRespuesta(resp);
+    // Sin texto y cortado por longitud → error específico (no fallback mudo).
+    if (!texto && resp.stop_reason === 'max_tokens') {
+      return { texto: null, toolsUsadas, error: 'max_tokens' };
+    }
+    return { texto, toolsUsadas };
   }
   return { texto: null, toolsUsadas, error: 'max_tool_iters' };
 }
@@ -1405,30 +1471,44 @@ async function _conversarGemini(db, system, historial, userText, persona) {
   const contents = [
     ...historial.map((t) => ({
       role: t.rol === 'assistant' ? 'model' : 'user',
-      parts: [{ text: t.texto }],
+      parts: [{ text: String(t.texto || '').slice(0, HIST_MAX_CHARS) }],
     })),
     { role: 'user', parts: [{ text: userText }] },
   ];
   const toolsUsadas = [];
 
   for (let iter = 0; iter < MAX_TOOL_ITERS; iter++) {
-    const resp = await _fetchJson(url, headers, { ...base, contents });
-    const parts =
-      (resp && resp.candidates && resp.candidates[0] &&
-        resp.candidates[0].content && resp.candidates[0].content.parts) || [];
+    // En la última iteración desactivamos las tools (mode NONE): el modelo
+    // redacta la respuesta final con lo que ya juntó, en vez de pedir otra
+    // tool y dejarnos sin texto (fix B11 — antes caía a un fallback mudo).
+    const ultimaIter = iter === MAX_TOOL_ITERS - 1;
+    const reqBody = { ...base, contents };
+    if (ultimaIter) {
+      reqBody.toolConfig = { functionCallingConfig: { mode: 'NONE' } };
+    }
+    const resp = await _fetchJson(url, headers, reqBody);
+    const cand = (resp && resp.candidates && resp.candidates[0]) || null;
+    const finishReason = cand && cand.finishReason;
+    const parts = (cand && cand.content && cand.content.parts) || [];
 
-    const llamadas = parts.filter((p) => p.functionCall);
+    const llamadas = ultimaIter ? [] : parts.filter((p) => p.functionCall);
     if (llamadas.length > 0) {
       contents.push({ role: 'model', parts });
       const respParts = [];
+      let ejecutadas = 0;
       for (const p of llamadas) {
         const fc = p.functionCall;
         toolsUsadas.push(fc.name);
         let resultado;
-        try {
-          resultado = await _ejecutarTool(db, fc.name, persona, fc.args || {});
-        } catch (e) {
-          resultado = { error: e.message };
+        if (ejecutadas >= MAX_TOOLS_POR_ITER) {
+          resultado = { error: 'Demasiadas consultas en un solo paso; pedímelas de a una.' };
+        } else {
+          ejecutadas++;
+          try {
+            resultado = await _ejecutarTool(db, fc.name, persona, fc.args || {});
+          } catch (e) {
+            resultado = { error: e.message };
+          }
         }
         respParts.push({
           functionResponse: { name: fc.name, response: { result: resultado } },
@@ -1444,6 +1524,21 @@ async function _conversarGemini(db, system, historial, userText, persona) {
       .join('\n')
       .trim();
     if (!texto) {
+      // Diferenciar truncado/bloqueo de "vacío inexplicable": así el usuario
+      // recibe un mensaje acorde y no siempre el mismo fallback mudo (B7).
+      const bloqueo =
+        (resp && resp.promptFeedback && resp.promptFeedback.blockReason) || null;
+      if (finishReason && finishReason !== 'STOP') {
+        log.warn(
+          `[agente/gemini] sin texto (finish=${finishReason}` +
+            `${bloqueo ? ',block=' + bloqueo : ''})`
+        );
+        return {
+          texto: null,
+          toolsUsadas,
+          error: `gemini:${String(finishReason).toLowerCase()}`,
+        };
+      }
       log.warn(
         `[agente/gemini] respuesta sin texto: ${JSON.stringify(resp).slice(0, 300)}`
       );
@@ -1479,6 +1574,22 @@ async function _loggear(db, { provider, persona, telefono, pregunta, respuesta, 
 }
 
 // ───────────────────────── entrada principal ─────────────────────────
+
+// Mensaje al usuario cuando el agente está activo pero no logró texto. Según
+// la causa damos una pista útil en vez de un fallback genérico siempre igual.
+function _mensajeFallback(error) {
+  const e = String(error || '');
+  if (e === 'max_tokens' || e === 'max_tool_iters') {
+    return 'Tu consulta es un poco larga o compleja para resolverla de una. ' +
+      '¿Me la hacés más corta o por partes?';
+  }
+  if (e.startsWith('gemini:safety') || e.startsWith('gemini:recitation') ||
+      e.startsWith('gemini:prohibited') || e.startsWith('gemini:blocklist')) {
+    return 'No puedo responder eso. Si es una consulta de trabajo, ' +
+      'escribímelo de otra forma o comunicate con la oficina.';
+  }
+  return 'Disculpá, no pude procesar eso ahora. Probá de nuevo en un rato.';
+}
 
 /**
  * Intenta responder una pregunta de texto libre con el agente.
@@ -1517,6 +1628,13 @@ async function responder({ texto, persona, telefono, audio }, fs) {
   // mejorando el bot), y el resto del flujo es idéntico al de un escrito.
   let userText = String(texto || '').slice(0, 2000);
   if (audio) {
+    // Tope de tamaño: un audio enorme infla memoria al serializar el body y
+    // Gemini lo rechaza igual (inlineData tiene límite). Mejor cortar antes
+    // con un mensaje claro (B9). ~7MB de base64 ≈ 5MB de audio ≈ varios min.
+    const MAX_AUDIO_B64 = parseInt(process.env.AGENTE_MAX_AUDIO_B64 || '7000000', 10);
+    if (audio.data && audio.data.length > MAX_AUDIO_B64) {
+      return 'El audio es muy largo para procesarlo. ¿Me lo mandás más corto o me lo escribís?';
+    }
     let transcripcion = null;
     try {
       transcripcion = await _transcribirAudio(audio);
@@ -1545,12 +1663,16 @@ async function responder({ texto, persona, telefono, audio }, fs) {
       });
       // Activo pero sin poder responder: devolvemos un fallback (no null) para
       // que NADIE quede en silencio — antes el admin no recibía nada ante un
-      // fallo de la API (el acuse es solo para choferes).
-      return 'Disculpá, no pude procesar eso ahora. Probá de nuevo en un rato.';
+      // fallo de la API (el acuse es solo para choferes). El mensaje se adapta
+      // a la causa (truncado, bloqueo, etc.) en vez de ser siempre igual (B7).
+      return _mensajeFallback(r.error);
     }
     // Guardar el intercambio para dar contexto a las próximas preguntas.
+    // Re-leemos el historial ACTUAL (no el snapshot de antes del await): si
+    // llegó otro mensaje del mismo usuario mientras esperábamos al LLM, su
+    // turno ya quedó guardado y no lo pisamos (fix race "lost update" B5).
     _guardarHistorial(rlKey, [
-      ...historial,
+      ..._recuperarHistorial(rlKey),
       { rol: 'user', texto: userText },
       { rol: 'assistant', texto: r.texto },
     ]);

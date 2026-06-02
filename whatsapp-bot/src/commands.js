@@ -27,6 +27,7 @@
 
 const admin = require('firebase-admin');
 const log = require('./logger');
+const { telefonoCanonicalAr } = require('./humano');
 
 // Minimo de digitos para que un sufijo cuente como match en lookups
 // de CHOFER por TELEFONO (resolverChoferPorTelefono). El path de
@@ -68,10 +69,12 @@ function _adminWhitelist() {
     .map((s) => {
       // Normalización defensiva: si viene sin +54 9, lo antepone.
       // 10 dígitos → área(3) + abonado(7) → asumimos AR.
-      if (s.length === 10) return `549${s}`;
+      if (s.length === 10) s = `549${s}`;
       // 11 dígitos comenzando con 0 → 0(1) + área + abonado → quitar 0 + AR.
-      if (s.length === 11 && s.startsWith('0')) return `549${s.substring(1)}`;
-      return s;
+      else if (s.length === 11 && s.startsWith('0')) s = `549${s.substring(1)}`;
+      // Canónico AR final: saca el "9" móvil para comparar contra el ID que
+      // entrega WhatsApp (que viene sin el 9).
+      return telefonoCanonicalAr(s);
     });
 }
 
@@ -86,8 +89,11 @@ function _adminWhitelist() {
  * 10 dígitos sin código país pero la combinación área+abonado NO es
  * única globalmente.
  *
- * Ahora normalizamos ambos lados al formato canónico (con +549) y
- * exigimos IGUALDAD ESTRICTA. Sin sufijos, sin endsWith.
+ * Ahora normalizamos ambos lados al MISMO canónico AR (telefonoCanonicalAr:
+ * sin el "9" móvil, porque WhatsApp entrega los IDs SIN él) y exigimos
+ * IGUALDAD ESTRICTA. Sin sufijos, sin endsWith. Antes _esAdmin no sacaba el
+ * 9, así que un admin cargado con el 9 (la forma natural) NO matcheaba el ID
+ * sin-9 que entrega WhatsApp — mismo bug que el del agente con choferes.
  */
 function _esAdmin(fromNumber) {
   let fromDigits = String(fromNumber).replace(/\D+/g, '');
@@ -98,7 +104,7 @@ function _esAdmin(fromNumber) {
     fromDigits = `549${fromDigits.substring(1)}`;
   }
   const whitelist = _adminWhitelist();
-  return whitelist.includes(fromDigits);
+  return whitelist.includes(telefonoCanonicalAr(fromDigits));
 }
 
 /**
