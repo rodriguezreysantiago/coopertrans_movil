@@ -446,10 +446,16 @@ class _AccesoChecklist extends StatelessWidget {
           // .toLocal() defensivo: Timestamp.toDate() en Dart suele
           // devolver local pero no esta garantizado en todos los runtimes.
           // Sin esto, format en zonas UTC podria mostrar dia anterior.
+          // Cast defensivo (Sentry FLUTTER-Y): si el doc llegara con FECHA
+          // null o sin el campo, `as Timestamp` tiraba TypeError y rompía
+          // TODA la pantalla de vencimientos. Mostramos el checklist igual,
+          // sin la fecha, en vez de crashear.
+          final fechaRaw = snap.data!.docs.first['FECHA'];
           final fechaDoc =
-              (snap.data!.docs.first['FECHA'] as Timestamp).toDate().toLocal();
-          mensaje =
-              'Checklist realizado (${AppFormatters.formatearFechaCorta(fechaDoc)})';
+              fechaRaw is Timestamp ? fechaRaw.toDate().toLocal() : null;
+          mensaje = fechaDoc != null
+              ? 'Checklist realizado (${AppFormatters.formatearFechaCorta(fechaDoc)})'
+              : 'Checklist realizado';
           icono = Icons.check_circle;
         } else if (dia > 15) {
           color = AppColors.error;
