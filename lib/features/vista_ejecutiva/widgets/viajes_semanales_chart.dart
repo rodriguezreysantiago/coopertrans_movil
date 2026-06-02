@@ -1,6 +1,15 @@
-// Gráfico de barras: cantidad de viajes por semana, últimas 8.
-// Misma altura que el de tendencia ICM para que el layout
-// horizontal quede prolijo (en desktop van uno al lado del otro).
+// features/vista_ejecutiva/widgets/viajes_semanales_chart.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — re-estilizado SIN cambiar la API pública.
+//
+// Constructor preservado: ViajesSemanalesChart({puntos, titulo}).
+//
+// CAMBIO INTERNO:
+// - Look bento Núcleo: surface2 + border hairline + eyebrow uppercase.
+// - Header: eyebrow + valor hero (último punto) + variación inline.
+// - Barras: brand opaco para la última semana, brand soft para las
+//   anteriores. Grid lines hairline en c.border.
+// - Sin Icon arriba del título — el icono distraía del contenido.
 
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
@@ -11,6 +20,7 @@ import '../services/vista_ejecutiva_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
+
 class ViajesSemanalesChart extends StatelessWidget {
   final List<PuntoTendencia> puntos;
   final String titulo;
@@ -23,42 +33,83 @@ class ViajesSemanalesChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final hayDatos = puntos.any((p) => p.valor > 0);
+    final last = puntos.isNotEmpty ? puntos.last.valor : 0.0;
+    final prev = puntos.length >= 2 ? puntos[puntos.length - 2].valor : 0.0;
+    final delta = prev == 0 ? null : ((last - prev) / prev * 100);
+    final deltaTexto = delta == null
+        ? null
+        : (delta >= 0
+            ? '+${delta.toStringAsFixed(0)}%'
+            : '${delta.toStringAsFixed(0)}%');
+    final maxValor = puntos.fold<double>(
+      0,
+      (acc, p) => p.valor > acc ? p.valor : acc,
+    );
+    final avg = puntos.isEmpty
+        ? 0
+        : puntos.fold<double>(0, (acc, p) => acc + p.valor) / puntos.length;
+
     return AppCard(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      tier: 2,
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // ─── Header ───
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.local_shipping,
-                  color: AppColors.brand, size: 18),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  titulo,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
+              Expanded(child: AppEyebrow(titulo)),
+              if (puntos.isNotEmpty)
+                Text(
+                  'min ${maxValor == 0 ? "—" : _minVal(puntos).toStringAsFixed(0)} · '
+                  'avg ${avg.toStringAsFixed(0)} · '
+                  'max ${maxValor.toStringAsFixed(0)}',
+                  style: AppType.monoSm.copyWith(
+                    color: c.textMuted, fontSize: 10,
                   ),
                 ),
-              ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          if (hayDatos) ...[
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  last.toStringAsFixed(0),
+                  style: AppType.h1.copyWith(
+                    color: c.text,
+                    fontSize: 44,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                if (deltaTexto != null) ...[
+                  const SizedBox(width: AppSpacing.md),
+                  Text(
+                    deltaTexto,
+                    style: AppType.mono.copyWith(
+                      color: (delta ?? 0) >= 0 ? c.success : c.error,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+          const SizedBox(height: AppSpacing.lg),
           SizedBox(
-            height: 180,
+            height: 150,
             child: hayDatos
                 ? _buildChart(context)
                 : Center(
                     child: Text(
                       'Sin viajes cargados en el período',
-                      style:
-                          AppType.label.copyWith(color: Colors.white38),
+                      style: AppType.body.copyWith(color: c.textMuted),
                     ),
                   ),
           ),
@@ -67,65 +118,43 @@ class ViajesSemanalesChart extends StatelessWidget {
     );
   }
 
+  double _minVal(List<PuntoTendencia> ps) =>
+      ps.fold<double>(double.infinity, (acc, p) => p.valor < acc ? p.valor : acc);
+
   Widget _buildChart(BuildContext context) {
-    // Calculamos maxY con un margen del 15% para que las barras más
-    // altas no toquen el techo del chart.
+    final c = context.colors;
     final maxValor = puntos.fold<double>(
       0,
       (acc, p) => p.valor > acc ? p.valor : acc,
     );
-    // Mínimo 5 para que cuando hay pocos viajes el grid no se vea raro.
     final maxY = maxValor < 5 ? 5.0 : (maxValor * 1.15).ceilToDouble();
-    // Interval de la grilla horizontal: divide el rango en ~4-5 líneas
-    // para que se vea limpio.
-    final interval =
-        maxY <= 10 ? 2.0 : (maxY <= 30 ? 5.0 : (maxY / 5).ceilToDouble());
+    final interval = (maxY / 4).ceilToDouble();
 
     return BarChart(
       BarChartData(
         maxY: maxY,
         minY: 0,
-        barGroups: [
-          for (var i = 0; i < puntos.length; i++)
-            BarChartGroupData(
-              x: i,
-              barRods: [
-                BarChartRodData(
-                  toY: puntos[i].valor,
-                  color: puntos[i].valor > 0
-                      ? AppColors.brand
-                      : Colors.white12,
-                  width: 14,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(3),
-                  ),
-                ),
-              ],
-            ),
-        ],
+        alignment: BarChartAlignment.spaceAround,
         gridData: FlGridData(
           show: true,
           horizontalInterval: interval,
           drawVerticalLine: false,
-          getDrawingHorizontalLine: (v) => FlLine(
-            color: Colors.white.withValues(alpha: 0.05),
-            strokeWidth: 1,
+          getDrawingHorizontalLine: (_) => FlLine(
+            color: c.border, strokeWidth: 1,
           ),
         ),
+        borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
-          topTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
+              reservedSize: 30,
               interval: interval,
-              reservedSize: 28,
-              getTitlesWidget: (v, m) => Text(
-                v.toInt().toString(),
-                style:
-                    const TextStyle(color: Colors.white54, fontSize: 10),
+              getTitlesWidget: (value, _) => Text(
+                value.toInt().toString(),
+                style: AppType.monoSm.copyWith(color: c.textMuted, fontSize: 9),
               ),
             ),
           ),
@@ -133,45 +162,35 @@ class ViajesSemanalesChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 22,
-              getTitlesWidget: (v, m) {
-                final idx = v.toInt();
-                if (idx < 0 || idx >= puntos.length) {
-                  return const SizedBox.shrink();
-                }
+              getTitlesWidget: (value, _) {
+                final i = value.toInt();
+                if (i < 0 || i >= puntos.length) return const SizedBox();
                 return Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.only(top: 6),
                   child: Text(
-                    puntos[idx].label,
-                    style: const TextStyle(
-                        color: Colors.white54, fontSize: 9),
+                    puntos[i].label,
+                    style: AppType.monoSm.copyWith(color: c.textMuted, fontSize: 9),
                   ),
                 );
               },
             ),
           ),
         ),
-        borderData: FlBorderData(
-          show: true,
-          border: Border(
-            left: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-            bottom:
-                BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-          ),
-        ),
-        barTouchData: BarTouchData(
-          touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (_) =>
-                Colors.black.withValues(alpha: 0.85),
-            getTooltipItem: (group, _, __, ___) {
-              final p = puntos[group.x];
-              final n = p.valor.toInt();
-              return BarTooltipItem(
-                '${p.label}\n$n viaje${n == 1 ? '' : 's'}',
-                AppType.eyebrow.copyWith(color: Colors.white),
-              );
-            },
-          ),
-        ),
+        barGroups: [
+          for (var i = 0; i < puntos.length; i++)
+            BarChartGroupData(
+              x: i,
+              barRods: [
+                BarChartRodData(
+                  toY: puntos[i].valor,
+                  // último punto destacado en brand, el resto soft
+                  color: i == puntos.length - 1 ? c.brand : c.brand.withValues(alpha: 0.4),
+                  width: 14,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+                ),
+              ],
+            ),
+        ],
       ),
     );
   }

@@ -1,6 +1,17 @@
-// Lista compacta de top N choferes — usada en el hub ICM para "Top 5
-// mejores" y "Top 5 a mejorar". Cada item es tappable y navega al
-// detalle del chofer (mismo destino que el tap desde el ranking).
+// features/vista_ejecutiva/widgets/top_choferes_lista.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — re-estilizado SIN cambiar la API pública.
+//
+// Constructor preservado: TopChoferesLista({titulo, icono, colorTitulo,
+// items, mensajeVacio}).
+//
+// CAMBIO INTERNO:
+// - Look bento (surface2 + border + radius).
+// - Header eyebrow + dot color (no más Icon que distraía).
+// - Filas con AppHairline entre cada uno.
+// - Rank #1/2/3 en mono tabular, ICM en mono a la derecha con
+//   dot semántico según categoria (verde/amarillo/rojo).
+// - Sin "más" tile decorativo — sale más limpio.
 
 import 'package:flutter/material.dart';
 
@@ -11,6 +22,7 @@ import '../services/vista_ejecutiva_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
+
 class TopChoferesLista extends StatelessWidget {
   final String titulo;
   final IconData icono;
@@ -27,58 +39,66 @@ class TopChoferesLista extends StatelessWidget {
     this.mensajeVacio,
   });
 
+  Color _categoriaColor(BuildContext ctx, String cat) {
+    final c = ctx.colors;
+    switch (cat.toLowerCase()) {
+      case 'verde': return c.success;
+      case 'amarillo': return c.warning;
+      case 'rojo': return c.error;
+      default: return c.textMuted;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppCard(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+      tier: 2,
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // ─── Header ───
           Row(
             children: [
-              Icon(icono, color: colorTitulo, size: 18),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  titulo,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: colorTitulo,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    letterSpacing: 0.5,
-                  ),
+              Container(
+                width: 8, height: 8,
+                decoration: BoxDecoration(
+                  color: colorTitulo, shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(color: colorTitulo.withValues(alpha: 0.55), blurRadius: 6),
+                  ],
                 ),
               ),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(child: AppEyebrow(titulo, color: colorTitulo)),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: AppSpacing.md),
+
           if (items.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 18),
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
               child: Center(
                 child: Text(
-                  mensajeVacio ?? 'Sin datos de la semana cerrada',
-                  style:
-                      AppType.label.copyWith(color: Colors.white38),
+                  mensajeVacio ?? 'Sin datos',
+                  style: AppType.body.copyWith(color: c.textMuted),
                 ),
               ),
             )
           else
             ...List.generate(items.length, (i) {
-              final c = items[i];
-              return _ChoferRow(
-                puesto: i + 1,
-                chofer: c,
-                onTap: c.dni.isEmpty
-                    ? null
-                    : () => Navigator.pushNamed(
-                          context,
-                          AppRoutes.adminIcmDetalleChofer,
-                          arguments: c.dni,
-                        ),
+              final item = items[i];
+              return Column(
+                children: [
+                  if (i > 0) const AppHairline(),
+                  _Fila(
+                    rank: i + 1,
+                    item: item,
+                    color: _categoriaColor(context, item.categoria),
+                  ),
+                ],
               );
             }),
         ],
@@ -87,85 +107,60 @@ class TopChoferesLista extends StatelessWidget {
   }
 }
 
-class _ChoferRow extends StatelessWidget {
-  final int puesto;
-  final ChoferRankingItem chofer;
-  /// `null` desactiva el tap (chofer sin DNI no tiene detalle al que ir).
-  final VoidCallback? onTap;
-
-  const _ChoferRow({
-    required this.puesto,
-    required this.chofer,
-    required this.onTap,
-  });
-
-  Color get _colorBadge {
-    switch (chofer.categoria) {
-      case 'verde':
-        return AppColors.success;
-      case 'amarillo':
-        return AppColors.warning;
-      case 'rojo':
-        return AppColors.error;
-      default:
-        return Colors.white24;
-    }
-  }
+class _Fila extends StatelessWidget {
+  final int rank;
+  final ChoferRankingItem item;
+  final Color color;
+  const _Fila({required this.rank, required this.item, required this.color});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
+      onTap: () => Navigator.pushNamed(
+        context,
+        AppRoutes.adminIcmDetalleChofer,
+        arguments: item.dni,
+      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
         child: Row(
           children: [
-            // Puesto
+            // Rank
             SizedBox(
-              width: 24,
+              width: 28,
               child: Text(
-                '$puesto°',
-                style: AppType.label.copyWith(color: Colors.white54, fontWeight: FontWeight.bold),
+                '#$rank',
+                style: AppType.monoSm.copyWith(
+                  color: c.textMuted,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            const SizedBox(width: AppSpacing.xs),
-            // Nombre del chofer
+            // Nombre
             Expanded(
               child: Text(
-                chofer.nombre,
+                item.nombre,
+                style: AppType.body.copyWith(color: c.text),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
-            // Badge con ICM
+            // ICM con dot
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: _colorBadge.withAlpha(35),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: _colorBadge.withAlpha(140),
-                  width: 1,
-                ),
-              ),
-              child: Text(
-                chofer.icm.toStringAsFixed(0),
-                style: AppType.label.copyWith(color: _colorBadge, fontWeight: FontWeight.bold),
+              width: 6, height: 6,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              item.icm.toStringAsFixed(1),
+              style: AppType.mono.copyWith(
+                color: c.text,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
-            if (onTap != null) ...[
-              const SizedBox(width: AppSpacing.xs),
-              const Icon(Icons.chevron_right,
-                  color: Colors.white24, size: 16),
-            ],
           ],
         ),
       ),

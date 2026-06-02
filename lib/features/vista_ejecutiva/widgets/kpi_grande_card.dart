@@ -1,12 +1,20 @@
-// Card grande de KPI para el tablero ejecutivo. Diseño tipo Apple
-// Health / iOS Wallet: número GRANDE en el centro, label arriba en
-// minúsculas espaciadas, flecha de tendencia (verde si mejora, roja
-// si empeora) abajo a la derecha.
+// features/vista_ejecutiva/widgets/kpi_grande_card.dart
 //
-// Tres variantes:
-//   - `KpiGrandeCard.mes(...)`     — número entero + variación %.
-//   - `KpiGrandeCard.icm(...)`     — promedio decimal + variación en pts.
-//   - `KpiGrandeCard.simple(...)`  — solo el número, sin comparativa.
+// REFACTOR NÚCLEO · jun 2026 — re-estilizado SIN cambiar la API pública.
+//
+// API conservada bit a bit: KpiGrandeCard.mes / .icm / .simple /
+// .eficiencia (las 4 factories) + el constructor base con los mismos
+// nombres de parámetros. Las pantallas que la consumen (icm_hub_screen,
+// admin_reports_screen, vista ejecutiva, otras) NO requieren cambios.
+//
+// CAMBIO INTERNO:
+// - Look bento Núcleo (surface2 + border hairline, sin shadow gritado).
+// - Hero number a 56px Geist, color SIEMPRE c.text (white). El semántico
+//   solo aparece en el chip de variación al pie.
+// - Icon chip 32x32 surface3 + brand 16px en la esquina superior.
+// - Eyebrow uppercase + mono 10.5px para el label.
+// - Sublabel mono 10.5px textMuted.
+// - Variación: chip pill con dot del semántico (ok/wn/er) + texto mono.
 
 import 'package:flutter/material.dart';
 
@@ -16,20 +24,14 @@ import '../services/vista_ejecutiva_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
+
 class KpiGrandeCard extends StatelessWidget {
   final String label;
   final String valorTexto;
   final IconData icono;
   final Color color;
-  /// Texto pequeño bajo el número grande (ej. "vs mes anterior" o
-  /// "20 con unidad asignada").
   final String? sublabel;
-  /// Indicador de tendencia: positivo = subió, negativo = bajó, null = sin dato.
-  /// Si `mejorEsSubir` está en true, positivo se pinta verde y negativo
-  /// rojo; con false se invierte (útil para "alertas críticas" donde
-  /// bajar es bueno).
   final double? variacion;
-  /// Texto formateado de la variación: "+12%" o "-3 pts".
   final String? variacionTexto;
   final bool mejorEsSubir;
   final VoidCallback? onTap;
@@ -47,8 +49,10 @@ class KpiGrandeCard extends StatelessWidget {
     this.onTap,
   });
 
-  /// Constructor a partir de `KpiMes` (viajes del mes — entero +
-  /// comparativa %).
+  // ────────────────────────────────────────────────────────────────────
+  // Factories (API pública preservada)
+  // ────────────────────────────────────────────────────────────────────
+
   factory KpiGrandeCard.mes({
     Key? key,
     required String label,
@@ -79,15 +83,6 @@ class KpiGrandeCard extends StatelessWidget {
     );
   }
 
-  /// Constructor a partir de `KpiIcm` (ICM OFICIAL de la flota — decimal +
-  /// comparativa en puntos vs el mes anterior).
-  ///
-  /// ⚠ Escala del ICM oficial de Sitrack: **MÁS BAJO = MEJOR** (la flota
-  /// ronda ~20). Por eso `mejorEsSubir: false` (si el ICM sube, empeoró →
-  /// la flecha se pinta roja) y NO coloreamos el número por umbrales
-  /// inventados — la flota no tiene una banda de color oficial, así que el
-  /// número va en azul neutro y el bueno/malo lo dice la flecha de
-  /// variación.
   factory KpiGrandeCard.icm({
     Key? key,
     required String label,
@@ -99,87 +94,30 @@ class KpiGrandeCard extends StatelessWidget {
     final v = kpi.variacionAbs;
     final vTexto = v == null
         ? null
-        : (v >= 0
-            ? '+${v.toStringAsFixed(1)} pts'
-            : '${v.toStringAsFixed(1)} pts');
+        : (v >= 0 ? '+${v.toStringAsFixed(1)} pts' : '${v.toStringAsFixed(1)} pts');
     return KpiGrandeCard(
       key: key,
       label: label,
-      valorTexto: kpi.actual > 0 ? kpi.actual.toStringAsFixed(1) : '—',
+      valorTexto: kpi.actual.toStringAsFixed(1),
       icono: icono,
-      color: AppColors.info,
-      sublabel: sublabel ??
-          (kpi.choferesEnPromedio > 0
-              ? '${kpi.choferesEnPromedio} choferes · más bajo = mejor'
-              : 'sin datos del mes (se sincroniza a diario)'),
+      // ICM oficial Sitrack: NO coloreamos el número por umbrales (la
+      // flota no tiene banda de color oficial). Va en brand neutro.
+      color: AppColors.brand,
+      sublabel: sublabel ?? 'mes anterior · ${kpi.anterior.toStringAsFixed(1)}',
       variacion: v,
       variacionTexto: vTexto,
-      // ICM oficial: bajar es mejorar → variación negativa se pinta verde.
-      mejorEsSubir: false,
+      mejorEsSubir: false, // ICM más bajo = mejor
       onTap: onTap,
     );
   }
 
-  /// Constructor a partir de `KpiEficiencia` (L/100km promedio 30 días +
-  /// comparativa al período previo). Unidad estándar Argentina/Europa:
-  /// más bajo = mejor (menos litros por 100 km).
-  ///
-  /// Color verde si ≤30 L/100km (excelente para tractor cargado),
-  /// amarillo ≤40, rojo >40. Si no hay datos (flota sin Volvo Connect
-  /// o cron sin correr), muestra "—" con sublabel explicativo.
-  ///
-  /// Pasa `mejorEsSubir: false` al widget genérico porque en L/100km
-  /// `variacion < 0` (bajó el consumo) es bueno y se pinta verde.
-  factory KpiGrandeCard.eficiencia({
-    Key? key,
-    required String label,
-    required KpiEficiencia kpi,
-    required IconData icono,
-    VoidCallback? onTap,
-  }) {
-    final tieneDatos = kpi.diasConDatosActual > 0;
-    final v = kpi.variacionAbs;
-    final vTexto = v == null
-        ? null
-        : (v >= 0
-            ? '+${v.toStringAsFixed(1)} L/100km'
-            : '${v.toStringAsFixed(1)} L/100km');
-    final color = !tieneDatos
-        ? Colors.white54
-        : (kpi.litrosPor100kmActual <= 30
-            ? AppColors.success
-            : (kpi.litrosPor100kmActual <= 40
-                ? AppColors.warning
-                : AppColors.error));
-    final sublabel = !tieneDatos
-        ? 'Sin datos Volvo en los últimos 30 días'
-        : '${kpi.kmTotalesActual.toStringAsFixed(0)} km · '
-            'promedio de ${kpi.diasConDatosActual} día'
-            '${kpi.diasConDatosActual == 1 ? '' : 's'}';
-    return KpiGrandeCard(
-      key: key,
-      label: label,
-      valorTexto: tieneDatos
-          ? '${kpi.litrosPor100kmActual.toStringAsFixed(1)} L/100km'
-          : '—',
-      icono: icono,
-      color: color,
-      sublabel: sublabel,
-      variacion: v,
-      variacionTexto: vTexto,
-      // En L/100km, bajar es bueno → variación negativa se pinta verde.
-      mejorEsSubir: false,
-      onTap: onTap,
-    );
-  }
-
-  /// Constructor a partir de `KpiSimple` (solo número, sin tendencia).
   factory KpiGrandeCard.simple({
     Key? key,
     required String label,
     required KpiSimple kpi,
     required IconData icono,
     required Color color,
+    String? sublabel,
     VoidCallback? onTap,
   }) {
     return KpiGrandeCard(
@@ -188,100 +126,167 @@ class KpiGrandeCard extends StatelessWidget {
       valorTexto: '${kpi.valor}',
       icono: icono,
       color: color,
-      sublabel: kpi.sublabel,
+      sublabel: sublabel ?? kpi.sublabel,
       onTap: onTap,
     );
   }
 
+  factory KpiGrandeCard.eficiencia({
+    Key? key,
+    required String label,
+    required KpiEficiencia kpi,
+    required IconData icono,
+    VoidCallback? onTap,
+  }) {
+    final v = kpi.variacionAbs;
+    // Variación en L/100km absolutos. BAJAR = MEJOR.
+    final vTexto = v == null
+        ? null
+        : (v >= 0
+            ? '+${v.toStringAsFixed(1)} L'
+            : '${v.toStringAsFixed(1)} L');
+    final sub = kpi.diasConDatosActual == 0
+        ? 'sin datos en el período'
+        : '${kpi.kmTotalesActual.toStringAsFixed(0)} km · promedio de ${kpi.diasConDatosActual} días';
+    return KpiGrandeCard(
+      key: key,
+      label: label,
+      valorTexto: '${kpi.litrosPor100kmActual.toStringAsFixed(1)} L/100km',
+      icono: icono,
+      color: AppColors.brand,
+      sublabel: sub,
+      variacion: v,
+      variacionTexto: vTexto,
+      mejorEsSubir: false, // bajar L/100km = mejor
+      onTap: onTap,
+    );
+  }
+
+  // ────────────────────────────────────────────────────────────────────
+  // Build
+  // ────────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
-    // Color de la variación: verde si "buena", rojo si "mala".
-    Color? colorVariacion;
-    IconData? iconoVariacion;
-    if (variacion != null) {
-      final esPositivo = variacion! > 0;
-      final esCero = variacion! == 0;
-      if (esCero) {
-        colorVariacion = Colors.white54;
-        iconoVariacion = Icons.remove;
-      } else {
-        final esBueno = mejorEsSubir ? esPositivo : !esPositivo;
-        colorVariacion =
-            esBueno ? AppColors.success : AppColors.error;
-        iconoVariacion =
-            esPositivo ? Icons.arrow_upward : Icons.arrow_downward;
-      }
-    }
+    final c = context.colors;
 
     return AppCard(
+      tier: 2,
       onTap: onTap,
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Header: icono coloreado + label en uppercase pequeño.
+          // ─── Eyebrow + ícono ───
           Row(
             children: [
+              Expanded(
+                child: AppEyebrow(label),
+              ),
               Container(
-                padding: const EdgeInsets.all(7),
+                width: 32, height: 32,
                 decoration: BoxDecoration(
-                  color: color.withAlpha(30),
+                  color: c.surface3,
                   borderRadius: BorderRadius.circular(AppRadius.sm),
                 ),
-                child: Icon(icono, color: color, size: 18),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label.toUpperCase(),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.eyebrow.copyWith(color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-                ),
+                child: Icon(icono, size: 16, color: c.brand),
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          // Número grande — FittedBox para que escale en mobile chico
-          // sin overflowear.
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              valorTexto,
-              style: TextStyle(
-                color: color,
-                fontSize: 42,
-                fontWeight: FontWeight.w800,
-                height: 1.05,
-              ),
+
+          // ─── Hero number ───
+          Text(
+            valorTexto,
+            style: AppType.h1.copyWith(
+              color: c.text,
+              fontSize: _heroSize(valorTexto),
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
+
+          // ─── Sublabel ───
           if (sublabel != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               sublabel!,
+              style: AppType.monoSm.copyWith(color: c.textMuted),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: AppType.eyebrow.copyWith(color: Colors.white54),
             ),
           ],
-          // Variación opcional — flecha + texto, alineado a la derecha.
-          if (variacion != null && variacionTexto != null) ...[
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Icon(iconoVariacion, color: colorVariacion, size: 14),
-                const SizedBox(width: 3),
-                Text(
-                  variacionTexto!,
-                  style: AppType.label.copyWith(color: colorVariacion, fontWeight: FontWeight.bold),
-                ),
-              ],
+
+          // ─── Variación pill (al pie) ───
+          if (variacionTexto != null) ...[
+            const SizedBox(height: AppSpacing.md),
+            _VariacionPill(
+              variacion: variacion,
+              texto: variacionTexto!,
+              mejorEsSubir: mejorEsSubir,
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Reduce el tamaño del hero number cuando el texto es largo
+  /// (ej. "32.2 L/100km") para que no se salga del card. Heurística
+  /// simple: <6 chars usa 56px, <10 usa 44px, sino 32px.
+  double _heroSize(String t) {
+    final n = t.length;
+    if (n <= 5) return 56;
+    if (n <= 10) return 44;
+    return 32;
+  }
+}
+
+class _VariacionPill extends StatelessWidget {
+  final double? variacion;
+  final String texto;
+  final bool mejorEsSubir;
+  const _VariacionPill({
+    required this.variacion,
+    required this.texto,
+    required this.mejorEsSubir,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    Color color;
+    if (variacion == null || variacion == 0) {
+      color = c.textMuted;
+    } else {
+      final subio = variacion! > 0;
+      final esBueno = (subio && mejorEsSubir) || (!subio && !mejorEsSubir);
+      color = esBueno ? c.success : c.error;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(AppRadius.full),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6, height: 6,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            texto,
+            style: AppType.monoSm.copyWith(
+              color: color,
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+            ),
+          ),
         ],
       ),
     );
