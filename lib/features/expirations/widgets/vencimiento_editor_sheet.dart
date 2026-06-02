@@ -193,27 +193,35 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
           ),
           const Divider(color: AppColors.borderSubtle, height: 25),
 
-          // Selector de fecha
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              'Fecha de vencimiento',
-              style: AppType.label.copyWith(
-                color: AppColors.textSecondary,
-                fontSize: 13,
+          // Selector de fecha. El ListTile va envuelto en un
+          // Material(transparency): el sheet es un DecoratedBox con color
+          // (surface2) y, sin un Material entre medio, el tile pinta su
+          // splash sobre ese DecoratedBox → assert de Flutter 3.44
+          // "background color or ink splashes may be invisible" (Sentry
+          // FLUTTER-27). El Material transparente no cambia layout ni color.
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                'Fecha de vencimiento',
+                style: AppType.label.copyWith(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                ),
               ),
-            ),
-            subtitle: Text(
-              AppFormatters.formatearFecha(_fechaSeleccionada),
-              style: AppType.heading.copyWith(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
+              subtitle: Text(
+                AppFormatters.formatearFecha(_fechaSeleccionada),
+                style: AppType.heading.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
               ),
+              trailing: const Icon(Icons.event_note,
+                  color: AppColors.brand, size: 28),
+              onTap: _seleccionarFecha,
             ),
-            trailing: const Icon(Icons.event_note,
-                color: AppColors.brand, size: 28),
-            onTap: _seleccionarFecha,
           ),
 
           const SizedBox(height: AppSpacing.lg - 1),
