@@ -492,23 +492,24 @@ class _SaludoState extends State<_Saludo> {
     final nombre = _apodoResuelto.isNotEmpty
         ? _apodoResuelto
         : _primerNombre(nombreFull);
-    final saludo =
-        nombre != null ? '${_saludoHora()}, $nombre' : _saludoHora();
     final fechaHoy = AppFormatters.formatearFecha(DateTime.now());
 
     return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.xs, left: AppSpacing.xs),
+      padding: const EdgeInsets.only(top: AppSpacing.sm, left: AppSpacing.xs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            saludo,
+            '${_saludoHora()} · $fechaHoy'.toUpperCase(),
+            style: AppType.eyebrow.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            nombre != null ? 'Hola $nombre.' : 'Panel.',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: AppType.title,
+            style: AppType.h2,
           ),
-          const SizedBox(height: 2),
-          Text(fechaHoy, style: AppType.label),
         ],
       ),
     );
