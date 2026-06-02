@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/prefs_service.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../constants/posiciones.dart';
 import 'gomeria_hub_screen.dart';
@@ -62,6 +63,21 @@ class GomeriaV2HubScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              // Catálogo de modelos (marca + medida + km de vida). Solo ADMIN:
+              // el gomero opera con los modelos ya cargados. La ruta también
+              // está protegida con RoleGuard(admin) en el router.
+              if (PrefsService.rol == AppRoles.admin)
+                Card(
+                  child: ListTile(
+                    leading: const Icon(Icons.category_outlined),
+                    title: const Text('Marcas y modelos'),
+                    subtitle: const Text(
+                        'Agregar o dar de baja modelos de cubierta'),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => Navigator.pushNamed(
+                        context, AppRoutes.adminGomeriaMarcasModelos),
+                  ),
+                ),
               _encabezado(context, 'Tractores (${tractores.length})'),
               for (final d in tractores)
                 _tileUnidad(context, d.id, d.data(),

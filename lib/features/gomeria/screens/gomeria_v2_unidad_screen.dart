@@ -94,51 +94,104 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
     }
     final ejes = porEje.keys.toList()..sort();
 
-    return ListView(
-      padding: const EdgeInsets.all(12),
-      children: [
-        Card(
-          child: ListTile(
-            leading: const Icon(Icons.local_shipping),
-            title: Text(
-              widget.unidadTipo == TipoUnidadCubierta.tractor
-                  ? 'Tractor'
-                  : 'Enganche',
-            ),
-            subtitle: Text('$ocupadas de ${estados.length} posiciones con cubierta'),
-          ),
+    final header = Card(
+      child: ListTile(
+        leading: const Icon(Icons.local_shipping),
+        title: Text(
+          widget.unidadTipo == TipoUnidadCubierta.tractor
+              ? 'Tractor'
+              : 'Enganche',
         ),
-        const SizedBox(height: 8),
-        // Esquema visual: el dibujo de la unidad con cada posición tappeable
-        // (semáforo + % de vida). Pensado para el gomero — tocar la rueda en el
-        // dibujo dispara el mismo montar/retirar que el tile de la lista.
-        EsquemaUnidadV2View(
-          tipo: widget.unidadTipo,
-          estados: estados,
-          onTapPosicion: (e) =>
-              e.montaje == null ? _montar(e) : _retirar(e, e.montaje!),
+        subtitle:
+            Text('$ocupadas de ${estados.length} posiciones con cubierta'),
+      ),
+    );
+
+    // Esquema visual: el dibujo de la unidad con cada posición tappeable
+    // (semáforo + % de vida). Tocar la rueda dispara el mismo montar/retirar
+    // que el tile de la lista.
+    final esquema = EsquemaUnidadV2View(
+      tipo: widget.unidadTipo,
+      estados: estados,
+      onTapPosicion: (e) =>
+          e.montaje == null ? _montar(e) : _retirar(e, e.montaje!),
+    );
+
+    const ayuda = Padding(
+      padding: EdgeInsets.fromLTRB(4, 12, 4, 0),
+      child: Text(
+        'Tocá una rueda en el dibujo (o un ítem de la lista) para montar o '
+        'retirar. El color es el desgaste: verde OK · amarillo cerca del '
+        'límite · rojo pasado · gris sin datos.',
+        style: TextStyle(fontSize: 12, color: Colors.grey),
+      ),
+    );
+
+    // Tiles de posiciones agrupados por eje (lista de la derecha / abajo).
+    final tilesPorEje = <Widget>[
+      for (final eje in ejes) ...[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
+          child: Text('Eje $eje',
+              style: Theme.of(context).textTheme.titleSmall),
         ),
-        const Padding(
-          padding: EdgeInsets.fromLTRB(4, 12, 4, 0),
-          child: Text(
-            'Tocá una rueda en el dibujo (o un ítem de la lista) para montar o '
-            'retirar. El color es el desgaste: verde OK · amarillo cerca del '
-            'límite · rojo pasado · gris sin datos.',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
-        ),
-        const Divider(height: 24),
-        for (final eje in ejes) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 12, 4, 4),
-            child: Text(
-              'Eje $eje',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-          ),
-          for (final e in porEje[eje]!) _tilePosicion(e),
-        ],
+        for (final e in porEje[eje]!) _tilePosicion(e),
       ],
+    ];
+
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        // Tablet apaisada: el dibujo queda FIJO a la izquierda y las posiciones
+        // scrollean (poco) a la derecha → se elimina el scroll largo vertical.
+        if (c.maxWidth >= 900) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 5,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                      child: header,
+                    ),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(12),
+                        child: esquema,
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      child: ayuda,
+                    ),
+                  ],
+                ),
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(
+                flex: 4,
+                child: ListView(
+                  padding: const EdgeInsets.all(12),
+                  children: tilesPorEje,
+                ),
+              ),
+            ],
+          );
+        }
+        // Teléfono / tablet en vertical: una sola columna scrolleable.
+        return ListView(
+          padding: const EdgeInsets.all(12),
+          children: [
+            header,
+            const SizedBox(height: 8),
+            esquema,
+            ayuda,
+            const Divider(height: 24),
+            ...tilesPorEje,
+          ],
+        );
+      },
     );
   }
 
