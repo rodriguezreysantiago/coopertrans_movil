@@ -179,7 +179,7 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
                             title: Text(c.nombre,
                                 style: const TextStyle(color: Colors.white)),
                             subtitle: Text('DNI ${c.dni}',
-                                style: AppType.label.copyWith(color: Colors.white60)),
+                                style: AppType.label.copyWith(color: AppColors.textSecondary)),
                             onTap: () => Navigator.pop(ctx, c),
                           );
                         },
@@ -431,7 +431,7 @@ class _PlaceholderConAccion extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icono, color: Colors.white38, size: 48),
+            Icon(icono, color: AppColors.textTertiary, size: 48),
             const SizedBox(height: AppSpacing.md),
             Text(
               titulo,
@@ -443,7 +443,7 @@ class _PlaceholderConAccion extends StatelessWidget {
             Text(
               subtitulo,
               textAlign: TextAlign.center,
-              style: AppType.label.copyWith(color: Colors.white54),
+              style: AppType.label.copyWith(color: AppColors.textSecondary),
             ),
             if (accion != null) ...[
               const SizedBox(height: AppSpacing.lg),
@@ -744,7 +744,7 @@ class _Placeholder extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icono, color: Colors.white38, size: 48),
+            Icon(icono, color: AppColors.textTertiary, size: 48),
             const SizedBox(height: AppSpacing.md),
             Text(
               titulo,
@@ -755,7 +755,7 @@ class _Placeholder extends StatelessWidget {
             Text(
               subtitulo,
               textAlign: TextAlign.center,
-              style: AppType.label.copyWith(color: Colors.white54),
+              style: AppType.label.copyWith(color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -831,7 +831,7 @@ class _Contenido extends StatelessWidget {
             child: Text(
               'Sin paradas detectadas entre tramos.',
               textAlign: TextAlign.center,
-              style: AppType.label.copyWith(color: Colors.white54),
+              style: AppType.label.copyWith(color: AppColors.textSecondary),
             ),
           ),
         for (final p in jornada.paradas)
@@ -871,7 +871,7 @@ class _ResumenCard extends StatelessWidget {
                 '${_fmtHoraSegun(j.inicio, multiDia: multiDia)} → '
                 '${_fmtHoraSegun(j.fin, multiDia: multiDia)}',
                 style:
-                    AppType.label.copyWith(color: Colors.white70),
+                    AppType.label.copyWith(color: AppColors.textSecondary),
               ),
             ],
           ),
@@ -931,7 +931,7 @@ class _Kpi extends StatelessWidget {
           children: [
             Text(label,
                 style: const TextStyle(
-                    color: Colors.white54,
+                    color: AppColors.textSecondary,
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1)),
@@ -956,7 +956,7 @@ class _GraficoVelocidad extends StatelessWidget {
         child: Center(
           child: Text(
             'Sin serie de velocidad suficiente para graficar.',
-            style: TextStyle(color: Colors.white54),
+            style: TextStyle(color: AppColors.textSecondary),
           ),
         ),
       );
@@ -1018,7 +1018,7 @@ class _GraficoVelocidad extends StatelessWidget {
                       reservedSize: 30,
                       getTitlesWidget: (v, m) => Text(v.toInt().toString(),
                           style: const TextStyle(
-                              color: Colors.white54, fontSize: 10)),
+                              color: AppColors.textSecondary, fontSize: 10)),
                     ),
                   ),
                   bottomTitles: AxisTitles(
@@ -1031,7 +1031,7 @@ class _GraficoVelocidad extends StatelessWidget {
                             DateTime.fromMillisecondsSinceEpoch(v.toInt());
                         return Text(_fmtHoraCorta(d),
                             style: const TextStyle(
-                                color: Colors.white54, fontSize: 10));
+                                color: AppColors.textSecondary, fontSize: 10));
                       },
                     ),
                   ),
@@ -1096,7 +1096,7 @@ class _TramoCard extends StatelessWidget {
                   '${_fmtHM(t.duracionMin)} · '
                   '${t.kmAprox > 0 ? "${t.kmAprox} km · " : ""}'
                   'máx ${t.velocidadMax} · prom ${t.velocidadProm} km/h',
-                  style: AppType.eyebrow.copyWith(color: Colors.white60),
+                  style: AppType.eyebrow.copyWith(color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -1171,7 +1171,7 @@ class _ParadaCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   '${_fmtHM(p.duracionMin)} · $hint',
-                  style: AppType.eyebrow.copyWith(color: Colors.white60),
+                  style: AppType.eyebrow.copyWith(color: AppColors.textSecondary),
                 ),
               ],
             ),
