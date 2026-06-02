@@ -77,7 +77,13 @@ class AppCard extends StatelessWidget {
               : BorderSide(color: baseBorder),
         ),
       ),
-      child: child,
+      // Material(transparency) entre el fondo (este DecoratedBox con color) y
+      // el child: sin él, cualquier ListTile/InkWell dentro de un AppCard
+      // dispara el assert de Flutter 3.44 "background color or ink splashes may
+      // be invisible" (Sentry FLUTTER-27). Es debug-only (no afecta release)
+      // pero ensucia consola/Sentry. Material transparente no pinta ni cambia
+      // layout — solo provee el canvas de ink correcto.
+      child: Material(type: MaterialType.transparency, child: child),
     );
 
     if (glow) {
