@@ -67,117 +67,127 @@ class MainPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppScaffold(
-      // Sin título: el menú de inicio muestra solo el logo (el título era
-      // appName y se duplicaba con el logo, se veía "Coopertrans Móvil" 2 veces).
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.logout_outlined),
-          tooltip: 'Cerrar sesión',
-          onPressed: () => _logout(context),
-        ),
-      ],
-      body: Center(
-        child: ConstrainedBox(
-          // Mobile: full width. Tablet/desktop: cap para que el layout
-          // no se estire ilegible en monitores grandes.
-          constraints: BoxConstraints(
-            maxWidth: AppBreakpoints.contentMaxWidth(context),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: AppSpacing.lg),
-                _GreetingCard(dni: dni, nombre: nombre),
-                const SizedBox(height: AppSpacing.lg),
-                if (_mostrarTilesPersonales) ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _TileSquare(
-                          titulo: 'Mi perfil',
-                          icono: Icons.person_outline,
-                          onTap: () => Navigator.pushNamed(
-                            context,
-                            AppRoutes.perfil,
-                            arguments: dni,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: _TileSquare(
-                          titulo: 'Mi unidad',
-                          icono: Icons.local_shipping_outlined,
-                          onTap: () => Navigator.pushNamed(
-                            context,
-                            AppRoutes.equipo,
-                            arguments: dni,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  _TileVencimientos(dni: dni),
-                ] else
-                  // Roles admin que no conducen (supervisor / gomería / seg.
-                  // higiene): sin "Mi unidad" ni "Mis vencimientos", solo perfil.
-                  _TileWide(
-                    titulo: 'Mi perfil',
-                    subtitulo: 'Tus datos personales',
-                    icono: Icons.person_outline,
-                    onTap: () => Navigator.pushNamed(
-                      context,
-                      AppRoutes.perfil,
-                      arguments: dni,
-                    ),
-                  ),
-                if (_esGomeria) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  _TileWide(
-                    titulo: 'Gomería',
-                    subtitulo: 'Stock, montar y retirar cubiertas',
-                    icono: Icons.tire_repair_outlined,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const GomeriaV2HubScreen(),
-                      ),
-                    ),
-                  ),
-                ] else if (_puedeVerPanelAdmin) ...[
-                  const SizedBox(height: AppSpacing.md),
-                  _TileWide(
-                    titulo: 'Panel de administración',
-                    subtitulo: 'Personal, flota, vencimientos y más',
-                    icono: Icons.admin_panel_settings_outlined,
-                    onTap: () => Navigator.pushNamed(
-                      context,
-                      AppRoutes.adminPanel,
-                    ),
-                  ),
-                ],
-                const Spacer(),
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.lg,
-                    ),
-                    child: Text(
-                      'Legajo $dni · ${rol.toLowerCase()}',
-                      style: AppType.label.copyWith(
-                        color: AppColors.textDisabled,
-                      ),
-                    ),
-                  ),
+    return Scaffold(
+      body: Stack(
+        children: [
+          const AppAmbient(intensity: 0.55),
+          SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: AppBreakpoints.contentMaxWidth(context),
                 ),
-              ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ── Topbar: logo + cerrar sesión ──
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 6, 0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const CoopertransLogo(size: CoopertransLogoSize.s),
+                          IconButton(
+                            icon: const Icon(Icons.logout_outlined),
+                            tooltip: 'Cerrar sesión',
+                            onPressed: () => _logout(context),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // ── Contenido scrolleable ──
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _GreetingCard(dni: dni, nombre: nombre),
+                            const SizedBox(height: AppSpacing.xl),
+                            if (_mostrarTilesPersonales) ...[
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _TileSquare(
+                                      titulo: 'Mi perfil',
+                                      icono: Icons.person_outline,
+                                      onTap: () => Navigator.pushNamed(
+                                        context,
+                                        AppRoutes.perfil,
+                                        arguments: dni,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: AppSpacing.md),
+                                  Expanded(
+                                    child: _TileSquare(
+                                      titulo: 'Mi unidad',
+                                      icono: Icons.local_shipping_outlined,
+                                      onTap: () => Navigator.pushNamed(
+                                        context,
+                                        AppRoutes.equipo,
+                                        arguments: dni,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: AppSpacing.md),
+                              _TileVencimientos(dni: dni),
+                            ] else
+                              _TileWide(
+                                titulo: 'Mi perfil',
+                                subtitulo: 'Tus datos personales',
+                                icono: Icons.person_outline,
+                                onTap: () => Navigator.pushNamed(
+                                  context,
+                                  AppRoutes.perfil,
+                                  arguments: dni,
+                                ),
+                              ),
+                            if (_esGomeria) ...[
+                              const SizedBox(height: AppSpacing.md),
+                              _TileWide(
+                                titulo: 'Gomería',
+                                subtitulo: 'Stock, montar y retirar cubiertas',
+                                icono: Icons.tire_repair_outlined,
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const GomeriaV2HubScreen(),
+                                  ),
+                                ),
+                              ),
+                            ] else if (_puedeVerPanelAdmin) ...[
+                              const SizedBox(height: AppSpacing.md),
+                              _TileWide(
+                                titulo: 'Panel de administración',
+                                subtitulo: 'Personal, flota, vencimientos y más',
+                                icono: Icons.admin_panel_settings_outlined,
+                                onTap: () => Navigator.pushNamed(
+                                  context,
+                                  AppRoutes.adminPanel,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: AppSpacing.lg),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // ── Prompt del agente (decorativo por ahora) ──
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(20, 0, 20, 14),
+                      child: _AiPrompt(),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -257,16 +267,15 @@ class _GreetingCardState extends State<_GreetingCard> {
         ? _apodoResuelto
         : _primerNombre(widget.nombre);
 
-    return AppCard(
-      tier: 2,
-      padding: const EdgeInsets.all(AppSpacing.xl),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 18, 4, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(_saludoHora(), style: AppType.label),
-          const SizedBox(height: AppSpacing.xs),
-          Text(nombre, style: AppType.display),
-          const SizedBox(height: AppSpacing.md),
+          AppEyebrow(_saludoHora(), color: context.colors.textSecondary),
+          const SizedBox(height: 10),
+          Text('Hola $nombre.', style: AppType.h1.copyWith(height: 0.95)),
+          const SizedBox(height: AppSpacing.lg),
           _LineaEstado(dni: widget.dni),
         ],
       ),
@@ -666,5 +675,38 @@ class _TileVencimientos extends StatelessWidget {
       return 'Próximo: $proxLabel en $dias días';
     }
     return 'Todo al día';
+  }
+}
+
+// =============================================================================
+// AI PROMPT — pista del agente de WhatsApp (decorativo)
+// =============================================================================
+
+/// Tira al pie del home que invita a escribirle al bot. Por ahora es
+/// decorativa (el chat real es por WhatsApp); deja sembrada la idea.
+class _AiPrompt extends StatelessWidget {
+  const _AiPrompt();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return AppCard(
+      tier: 2,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          Icon(Icons.auto_awesome, size: 15, color: c.brand),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Preguntale al bot · "¿cuándo se me vence la VTV?"',
+              style: AppType.monoSm.copyWith(color: c.textMuted),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
