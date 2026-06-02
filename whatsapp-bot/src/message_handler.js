@@ -414,23 +414,40 @@ function crearHandler(fs, wa) {
       // apagado, sin API key, sin tools para ese rol, o falla, `responder`
       // devuelve null y seguimos al flujo de siempre (al chofer: acuse /
       // Fase 3; a otros roles: nada). Quote y media van a respuestas-a-avisos.
+      const esAudio =
+        msg.hasMedia &&
+        (msg.type === 'ptt' || msg.type === 'audio') &&
+        !msg.hasQuotedMsg;
       const esTextoLibre =
         !msg.hasMedia &&
         !msg.hasQuotedMsg &&
         typeof msg.body === 'string' &&
         msg.body.trim().length > 0;
-      if (esTextoLibre) {
+      if (esTextoLibre || esAudio) {
         try {
-          const respuestaAgente = await agente.responder(
-            { texto: msg.body, persona, telefono: fromNumber },
-            fs
-          );
-          if (respuestaAgente) {
-            await wa.responder(msg, respuestaAgente);
-            log.info(
-              `Agente respondió a ${persona.rol} ${persona.dni || fromNumber}`
+          // Mensaje de voz: bajamos el audio y se lo pasamos al agente (solo
+          // Gemini lo interpreta). Si no se puede bajar, no llamamos al agente
+          // y seguimos al flujo de siempre.
+          let audio = null;
+          if (esAudio) {
+            const media = await msg.downloadMedia();
+            if (media && media.data) {
+              audio = { data: media.data, mimetype: media.mimetype || 'audio/ogg' };
+            }
+          }
+          if (!esAudio || audio) {
+            const respuestaAgente = await agente.responder(
+              { texto: msg.body || '', persona, telefono: fromNumber, audio },
+              fs
             );
-            return;
+            if (respuestaAgente) {
+              await wa.responder(msg, respuestaAgente);
+              log.info(
+                `Agente respondió a ${persona.rol} ${persona.dni || fromNumber}` +
+                  (esAudio ? ' (audio)' : '')
+              );
+              return;
+            }
           }
         } catch (e) {
           log.warn(`Agente no respondió (${e.message}), sigo al flujo normal`);

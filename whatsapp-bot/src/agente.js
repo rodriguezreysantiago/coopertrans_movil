@@ -1353,7 +1353,7 @@ async function _conversarAnthropic(db, system, historial, userText, persona) {
 
 // ───────────────────────── loop Gemini ─────────────────────────
 
-async function _conversarGemini(db, system, historial, userText, persona) {
+async function _conversarGemini(db, system, historial, userText, persona, audio) {
   const url = `${GEMINI_API_BASE}/${MODELO_GEMINI}:generateContent`;
   const headers = {
     'x-goog-api-key': process.env.GEMINI_API_KEY,
@@ -1364,12 +1364,25 @@ async function _conversarGemini(db, system, historial, userText, persona) {
     tools: _toolsGemini(persona.rol),
     generationConfig: { maxOutputTokens: MAX_TOKENS },
   };
+  // Turno nuevo del usuario: si vino un mensaje de voz, lo adjuntamos como
+  // parte de audio (Gemini lo transcribe/entiende nativamente).
+  const partsUser = [];
+  if (audio && audio.data) {
+    partsUser.push({
+      inlineData: { mimeType: audio.mimetype || 'audio/ogg', data: audio.data },
+    });
+  }
+  partsUser.push({
+    text:
+      userText ||
+      (audio ? 'Mensaje de voz del usuario: interpretá lo que dice y respondé.' : ''),
+  });
   const contents = [
     ...historial.map((t) => ({
       role: t.rol === 'assistant' ? 'model' : 'user',
       parts: [{ text: t.texto }],
     })),
-    { role: 'user', parts: [{ text: userText }] },
+    { role: 'user', parts: partsUser },
   ];
   const toolsUsadas = [];
 
@@ -1445,15 +1458,19 @@ async function _loggear(db, { provider, persona, telefono, pregunta, respuesta, 
 /**
  * Intenta responder una pregunta de texto libre con el agente.
  *
- * @param {{ texto: string, persona: {rol:'CHOFER'|'ADMIN', dni?:string, nombre?:string, data?:object}, telefono?: string }} args
+ * @param {{ texto: string, persona: {rol:'CHOFER'|'ADMIN', dni?:string, nombre?:string, data?:object}, telefono?: string, audio?: {data:string, mimetype:string} }} args
  * @param {object} fs - módulo firestore.js
  * @returns {Promise<string|null>} texto a enviar, o null si el agente no actúa.
  */
-async function responder({ texto, persona, telefono }, fs) {
-  if (!texto || !persona || !persona.rol) return null;
+async function responder({ texto, persona, telefono, audio }, fs) {
+  if ((!texto && !audio) || !persona || !persona.rol) return null;
 
   const provider = _provider();
   if (!provider || !_keyDe(provider)) return null; // sin key → apagado
+
+  // Audio (mensaje de voz): solo Gemini lo interpreta nativamente; con
+  // Anthropic no podemos → caemos al flujo de siempre (acuse/nada).
+  if (audio && provider !== 'gemini') return null;
 
   const db = fs.inicializar();
   if (!(await _agenteActivo(db))) return null; // kill-switch
@@ -1469,13 +1486,13 @@ async function responder({ texto, persona, telefono }, fs) {
   }
 
   const system = _systemPrompt(persona);
-  const userText = String(texto).slice(0, 2000);
+  const userText = String(texto || '').slice(0, 2000);
   const historial = _recuperarHistorial(rlKey);
 
   try {
     const r =
       provider === 'gemini'
-        ? await _conversarGemini(db, system, historial, userText, persona)
+        ? await _conversarGemini(db, system, historial, userText, persona, audio)
         : await _conversarAnthropic(db, system, historial, userText, persona);
 
     if (!r.texto) {
@@ -1492,7 +1509,7 @@ async function responder({ texto, persona, telefono }, fs) {
     // Guardar el intercambio para dar contexto a las próximas preguntas.
     _guardarHistorial(rlKey, [
       ...historial,
-      { rol: 'user', texto: userText },
+      { rol: 'user', texto: userText || '[mensaje de voz]' },
       { rol: 'assistant', texto: r.texto },
     ]);
     await _loggear(db, {

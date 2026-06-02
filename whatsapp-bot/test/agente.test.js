@@ -628,4 +628,24 @@ describe('agente — herramientas de flota / operación', () => {
     assert.strictEqual(lecturas, 1);
     assert.strictEqual(a, b);
   });
+
+  test('responder: audio con proveedor Anthropic → null (Claude no oye audio)', async () => {
+    const prevP = process.env.AGENTE_PROVIDER;
+    const prevK = process.env.ANTHROPIC_API_KEY;
+    const prevG = process.env.GEMINI_API_KEY;
+    process.env.AGENTE_PROVIDER = 'anthropic';
+    process.env.ANTHROPIC_API_KEY = 'sk-test';
+    delete process.env.GEMINI_API_KEY;
+    try {
+      const r = await agente.responder(
+        { texto: '', audio: { data: 'AAA', mimetype: 'audio/ogg' }, persona: { rol: 'CHOFER', dni: '1' }, telefono: '1' },
+        { inicializar: () => ({}) }
+      );
+      assert.strictEqual(r, null);
+    } finally {
+      if (prevP === undefined) delete process.env.AGENTE_PROVIDER; else process.env.AGENTE_PROVIDER = prevP;
+      if (prevK === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = prevK;
+      if (prevG === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = prevG;
+    }
+  });
 });
