@@ -276,25 +276,22 @@ class _ReportCard extends StatelessWidget {
                   titulo,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 15,
-                  ),
+                  style: AppType.body.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   descripcion,
                   maxLines: 3,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.label.copyWith(color: Colors.white54, height: 1.3),
+                  style: AppType.label
+                      .copyWith(color: AppColors.textSecondary, height: 1.3),
                 ),
               ],
             ),
           ),
           const Icon(
             Icons.chevron_right_rounded,
-            color: Colors.white38,
+            color: AppColors.textHint,
             size: 24,
           ),
         ],
@@ -330,18 +327,17 @@ class _CargandoOverlay extends StatelessWidget {
                 children: [
                   const CircularProgressIndicator(color: AppColors.info),
                   const SizedBox(height: 25),
-                  const Text(
+                  Text(
                     'CONECTANDO CON VOLVO',
-                    style: TextStyle(
+                    style: AppType.eyebrow.copyWith(
                       color: AppColors.info,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
                     ),
                   ),
                   const SizedBox(height: 10),
                   Text(
                     'Descargando telemetría de flota...',
-                    style: AppType.label.copyWith(color: Colors.white54),
+                    style: AppType.label.copyWith(color: AppColors.textSecondary),
                   ),
                 ],
               ),
