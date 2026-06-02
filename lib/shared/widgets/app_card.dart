@@ -1,85 +1,122 @@
+// lib/shared/widgets/app_card.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — superficie bento.
+//   1. AppCard()              — neutra, border subtle
+//   2. AppCard(accent: ...)   — borde izquierdo de color semántico (3px)
+//   3. AppCard(glow: true)    — ambient glow del brand en la esquina (signature)
+//
+// SHIM RETROCOMPAT: acepta también la API 2026-05-24 (`margin`, `borderColor`,
+// `highlighted`, `tier` 1/2/3, `borderRadius`) para no romper los call-sites.
+
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_spacing.dart';
 import '../constants/app_colors.dart';
+import '../../core/theme/app_radius.dart';
 
-/// Card unificada — REFACTOR 2026-05-24.
-///
-/// **Cambios vs. la versión anterior:**
-/// - Radius unificado a [AppRadius.lg] (16). Antes: 16 default + algunos
-///   sitios pasaban 22 o 25 a mano.
-/// - Acepta [tier] para elegir surface (1/2/3) en lugar de hardcodear
-///   `colorScheme.surface`. Permite jerarquía visual (card sobre card).
-/// - `highlighted` ahora hace un borde **semántico** (brand por default,
-///   o se puede pasar otro color). Antes usaba primary del theme.
-/// - Padding y margin defaults migrados a [AppSpacing].
 class AppCard extends StatelessWidget {
   final Widget child;
-  final EdgeInsets padding;
-  final EdgeInsets margin;
+  final EdgeInsetsGeometry? padding;
+  final Color? accent;
+  final bool glow;
+  final double radius;
   final VoidCallback? onTap;
-  final Color? borderColor;
-  final double? borderRadius;
-  final bool highlighted;
+  final bool clip;
 
-  /// Surface tier (1 = lista, 2 = card default, 3 = elevada sobre card).
-  /// Default = 2.
-  final int tier;
+  // Compat 2026-05-24
+  final EdgeInsetsGeometry margin;
+  final Color? borderColor;
+  final bool highlighted;
+  final int tier; // 1 = lista, 2 = card default, 3 = elevada
+  final double? borderRadius;
 
   const AppCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(AppSpacing.lg),
-    this.margin = const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+    this.padding,
+    this.accent,
+    this.glow = false,
+    this.radius = AppRadius.xl,
     this.onTap,
+    this.clip = true,
+    this.margin = const EdgeInsets.symmetric(vertical: 4),
     this.borderColor,
-    this.borderRadius,
     this.highlighted = false,
     this.tier = 2,
+    this.borderRadius,
   });
 
-  Color _surfaceForTier(int t) {
-    switch (t) {
+  Color _surface(AppColorsExt c) {
+    switch (tier) {
       case 1:
-        return AppColors.surface1;
+        return c.surface1;
       case 3:
-        return AppColors.surface3;
-      case 2:
+        return c.surface3;
       default:
-        return AppColors.surface2;
+        return c.surface2;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final radius = borderRadius ?? AppRadius.lg;
-    final surface = _surfaceForTier(tier);
-    final defaultBorder = highlighted
-        ? (borderColor ?? AppColors.brand)
-        : AppColors.borderSubtle;
+    final c = context.colors;
+    final r = borderRadius ?? radius;
+    final br = BorderRadius.circular(r);
+    final baseBorder = borderColor ?? (highlighted ? c.brand : c.border);
 
-    final card = Container(
-      margin: margin,
+    Widget inner = Container(
+      padding: padding ?? const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.all(
-          color: borderColor ?? defaultBorder,
-          width: highlighted ? 1.5 : 1,
+        color: _surface(c),
+        borderRadius: br,
+        border: Border(
+          top: BorderSide(color: baseBorder),
+          right: BorderSide(color: baseBorder),
+          bottom: BorderSide(color: baseBorder),
+          left: accent != null
+              ? BorderSide(color: accent!, width: 3)
+              : BorderSide(color: baseBorder),
         ),
       ),
-      child: onTap == null
-          ? Padding(padding: padding, child: child)
-          : Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(radius),
-                onTap: onTap,
-                child: Padding(padding: padding, child: child),
-              ),
-            ),
+      child: child,
     );
 
-    return card;
+    if (glow) {
+      inner = Stack(
+        children: [
+          Positioned(
+            top: -50,
+            right: -50,
+            child: IgnorePointer(
+              child: Container(
+                width: 220,
+                height: 220,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [c.brandGlow, c.brandGlow.withValues(alpha: 0)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          inner,
+        ],
+      );
+    }
+
+    if (clip) inner = ClipRRect(borderRadius: br, child: inner);
+    if (onTap != null) {
+      inner = Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: br,
+          highlightColor: c.surfaceHover.withValues(alpha: 0.5),
+          child: inner,
+        ),
+      );
+    }
+
+    return Container(margin: margin, child: inner);
   }
 }
