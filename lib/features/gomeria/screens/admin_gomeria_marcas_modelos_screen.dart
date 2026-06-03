@@ -11,35 +11,67 @@ import '../models/cubierta_modelo.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
-/// ABM de marcas y modelos de cubiertas. 2 tabs:
+/// ABM de marcas y modelos de cubiertas — REFACTOR NÚCLEO (jun 2026). 2 tabs:
 /// - **Marcas**: solo nombre + activo (soft-delete).
 /// - **Modelos**: marca + modelo + medida + tipo_uso + km_vida_estimada
 ///   (nueva y recapada) + recapable + activo.
 ///
 /// Acceso: ADMIN (las reglas Firestore CUBIERTAS_MARCAS / CUBIERTAS_MODELOS
 /// requieren `isAdmin()` para escritura — el supervisor solo lee).
-class AdminGomeriaMarcasModelosScreen extends StatelessWidget {
+///
+/// SOLO PRESENTACIÓN: los streams (`CUBIERTAS_MARCAS` / `CUBIERTAS_MODELOS`),
+/// los toggles de `activo`, el alta de marca/modelo y la edición inline por
+/// campos quedan intactos — sólo se reescribió el árbol a tokens
+/// (`context.colors`), tabs como pills (`AppFilterChip`) y chips como `AppBadge`.
+class AdminGomeriaMarcasModelosScreen extends StatefulWidget {
   const AdminGomeriaMarcasModelosScreen({super.key});
 
   @override
+  State<AdminGomeriaMarcasModelosScreen> createState() =>
+      _AdminGomeriaMarcasModelosScreenState();
+}
+
+class _AdminGomeriaMarcasModelosScreenState
+    extends State<AdminGomeriaMarcasModelosScreen> {
+  int _tab = 0;
+
+  @override
   Widget build(BuildContext context) {
-    return const DefaultTabController(
-      length: 2,
-      child: AppScaffold(
-        title: 'Marcas y Modelos',
-        bottom: TabBar(
-          tabs: [
-            Tab(text: 'MARCAS'),
-            Tab(text: 'MODELOS'),
-          ],
-          indicatorColor: AppColors.brand,
-        ),
-        body: TabBarView(
-          children: [
-            _MarcasTab(),
-            _ModelosTab(),
-          ],
-        ),
+    return AppScaffold(
+      title: 'Marcas y Modelos',
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+            child: Row(
+              children: [
+                AppFilterChip(
+                  label: 'Marcas',
+                  count: 0,
+                  activo: _tab == 0,
+                  onTap: () => setState(() => _tab = 0),
+                ),
+                const SizedBox(width: 6),
+                AppFilterChip(
+                  label: 'Modelos',
+                  count: 0,
+                  activo: _tab == 1,
+                  onTap: () => setState(() => _tab = 1),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: IndexedStack(
+              index: _tab,
+              children: const [
+                _MarcasTab(),
+                _ModelosTab(),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -54,6 +86,7 @@ class _MarcasTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final col =
         FirebaseFirestore.instance.collection(AppCollections.cubiertasMarcas);
     return Stack(
@@ -68,7 +101,7 @@ class _MarcasTab extends StatelessWidget {
               );
             }
             if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return const AppSkeletonList(count: 6, conAvatar: false);
             }
             final marcas = (snap.data?.docs ?? const [])
                 .map(CubiertaMarca.fromDoc)
@@ -78,38 +111,50 @@ class _MarcasTab extends StatelessWidget {
                 texto: 'No hay marcas cargadas. Tocá + para agregar la primera.',
               );
             }
+            final activas = marcas.where((m) => m.activo).length;
             return ListView.separated(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.md,
-                AppSpacing.md,
-                80,
+                AppSpacing.lg,
+                AppSpacing.xs,
+                AppSpacing.lg,
+                96,
               ),
-              itemCount: marcas.length,
+              itemCount: marcas.length + 1,
               separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
               itemBuilder: (_, i) {
-                final m = marcas[i];
+                if (i == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                    child: _ContadorEyebrow(
+                      label: 'Marcas',
+                      total: marcas.length,
+                      activas: activas,
+                    ),
+                  );
+                }
+                final m = marcas[i - 1];
                 return AppCard(
+                  tier: 1,
                   padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.lg - 2,
+                    horizontal: AppSpacing.md,
                     vertical: AppSpacing.md,
                   ),
                   child: Row(
                     children: [
                       Icon(
                         Icons.label_outline,
-                        color:
-                            m.activo ? AppColors.brand : AppColors.textTertiary,
+                        size: 18,
+                        color: m.activo ? c.brand : c.textMuted,
                       ),
                       const SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: Text(
                           m.nombre,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: AppType.body.copyWith(
-                            color: m.activo
-                                ? AppColors.textPrimary
-                                : AppColors.textTertiary,
-                            fontSize: 15,
+                            color: m.activo ? c.text : c.textMuted,
+                            fontWeight: FontWeight.w600,
                             decoration: m.activo
                                 ? TextDecoration.none
                                 : TextDecoration.lineThrough,
@@ -119,7 +164,7 @@ class _MarcasTab extends StatelessWidget {
                       Switch(
                         value: m.activo,
                         onChanged: (v) => col.doc(m.id).update({'activo': v}),
-                        activeTrackColor: AppColors.brand,
+                        activeTrackColor: c.brand,
                       ),
                     ],
                   ),
@@ -133,7 +178,8 @@ class _MarcasTab extends StatelessWidget {
           bottom: AppSpacing.lg,
           child: FloatingActionButton.extended(
             heroTag: 'fab_marca',
-            backgroundColor: AppColors.brand,
+            backgroundColor: c.brand,
+            foregroundColor: c.brandFg,
             onPressed: () => _abrirAltaMarca(context),
             icon: const Icon(Icons.add),
             label: const Text('Nueva marca'),
@@ -150,7 +196,7 @@ class _MarcasTab extends StatelessWidget {
       result = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.background,
+          backgroundColor: ctx.colors.surface2,
           title: const Text('Nueva marca'),
           content: TextField(
             controller: controller,
@@ -192,6 +238,7 @@ class _ModelosTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final colModelos =
         FirebaseFirestore.instance.collection(AppCollections.cubiertasModelos);
     return Stack(
@@ -206,7 +253,7 @@ class _ModelosTab extends StatelessWidget {
               );
             }
             if (snap.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
+              return const AppSkeletonList(count: 6, conAvatar: false);
             }
             final modelos = (snap.data?.docs ?? const [])
                 .map(CubiertaModelo.fromDoc)
@@ -217,21 +264,33 @@ class _ModelosTab extends StatelessWidget {
                     'No hay modelos cargados. Cargá las marcas y después agregá los modelos.',
               );
             }
+            final activos = modelos.where((m) => m.activo).length;
             return ListView.separated(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md,
-                AppSpacing.md,
-                AppSpacing.md,
-                80,
+                AppSpacing.lg,
+                AppSpacing.xs,
+                AppSpacing.lg,
+                96,
               ),
-              itemCount: modelos.length,
+              itemCount: modelos.length + 1,
               separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
               itemBuilder: (_, i) {
-                final m = modelos[i];
+                if (i == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                    child: _ContadorEyebrow(
+                      label: 'Modelos',
+                      total: modelos.length,
+                      activas: activos,
+                    ),
+                  );
+                }
+                final m = modelos[i - 1];
                 return AppCard(
+                  tier: 1,
                   onTap: () => _abrirEdicion(context, m),
                   padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.lg - 2,
+                    horizontal: AppSpacing.md,
                     vertical: AppSpacing.md,
                   ),
                   child: Column(
@@ -241,19 +300,21 @@ class _ModelosTab extends StatelessWidget {
                         children: [
                           Icon(
                             Icons.tire_repair,
-                            color: m.activo
-                                ? AppColors.brand
-                                : AppColors.textTertiary,
+                            size: 18,
+                            color: m.activo ? c.brand : c.textMuted,
                           ),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: Text(
                               m.etiqueta,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                               style: AppType.body.copyWith(
-                                color: m.activo
-                                    ? AppColors.textPrimary
-                                    : AppColors.textTertiary,
-                                fontWeight: FontWeight.bold,
+                                color: m.activo ? c.text : c.textMuted,
+                                fontWeight: FontWeight.w600,
+                                decoration: m.activo
+                                    ? TextDecoration.none
+                                    : TextDecoration.lineThrough,
                               ),
                             ),
                           ),
@@ -261,32 +322,43 @@ class _ModelosTab extends StatelessWidget {
                             value: m.activo,
                             onChanged: (v) =>
                                 colModelos.doc(m.id).update({'activo': v}),
-                            activeTrackColor: AppColors.brand,
+                            activeTrackColor: c.brand,
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: AppSpacing.sm),
                       Wrap(
-                        spacing: AppSpacing.md,
-                        runSpacing: AppSpacing.xs,
+                        spacing: 6,
+                        runSpacing: 6,
                         children: [
-                          _Chip(
-                            'Vida nueva: ${_kmStr(m.kmVidaEstimadaNueva)}',
+                          AppBadge(
+                            text: 'Vida nueva ${_kmStr(m.kmVidaEstimadaNueva)}',
+                            color: c.textSecondary,
+                            size: AppBadgeSize.sm,
                           ),
-                          _Chip(
-                            'Recapada: ${_kmStr(m.kmVidaEstimadaRecapada)}',
+                          AppBadge(
+                            text: 'Recapada ${_kmStr(m.kmVidaEstimadaRecapada)}',
+                            color: c.textSecondary,
+                            size: AppBadgeSize.sm,
                           ),
-                          _Chip(
-                            m.recapable ? 'Recapable' : 'No recapable',
-                            color: m.recapable
-                                ? AppColors.brandSoft
-                                : AppColors.textTertiary,
+                          AppBadge(
+                            text: m.recapable ? 'Recapable' : 'No recapable',
+                            color: m.recapable ? c.brand : c.textMuted,
+                            size: AppBadgeSize.sm,
                           ),
                           if (m.presionRecomendadaPsi != null)
-                            _Chip('${m.presionRecomendadaPsi} PSI'),
+                            AppBadge(
+                              text: '${m.presionRecomendadaPsi} PSI',
+                              color: c.info,
+                              size: AppBadgeSize.sm,
+                            ),
                           if (m.profundidadBandaMinimaMm != null)
-                            _Chip(
-                                'Banda mín ${m.profundidadBandaMinimaMm} mm'),
+                            AppBadge(
+                              text:
+                                  'Banda mín ${m.profundidadBandaMinimaMm} mm',
+                              color: c.info,
+                              size: AppBadgeSize.sm,
+                            ),
                         ],
                       ),
                     ],
@@ -301,7 +373,8 @@ class _ModelosTab extends StatelessWidget {
           bottom: AppSpacing.lg,
           child: FloatingActionButton.extended(
             heroTag: 'fab_modelo',
-            backgroundColor: AppColors.brand,
+            backgroundColor: c.brand,
+            foregroundColor: c.brandFg,
             onPressed: () => _abrirAltaModelo(context),
             icon: const Icon(Icons.add),
             label: const Text('Nuevo modelo'),
@@ -326,8 +399,11 @@ class _ModelosTab extends StatelessWidget {
   Future<void> _abrirEdicion(BuildContext context, CubiertaModelo m) async {
     await showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.surface2,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+      ),
       builder: (ctx) => _EditarModeloSheet(modelo: m),
     );
   }
@@ -346,6 +422,7 @@ class _EditarModeloSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final ref = FirebaseFirestore.instance
         .collection(AppCollections.cubiertasModelos)
         .doc(modelo.id);
@@ -365,7 +442,7 @@ class _EditarModeloSheet extends StatelessWidget {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: AppColors.textHint,
+              color: c.border,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -378,17 +455,14 @@ class _EditarModeloSheet extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.tire_repair,
-                    color: AppColors.brand),
+                Icon(Icons.tire_repair, color: c.brand),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Text(
                     modelo.etiqueta,
-                    style: AppType.body.copyWith(
-                      color: AppColors.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.h5,
                   ),
                 ),
               ],
@@ -457,10 +531,10 @@ class _EditarModeloSheet extends StatelessWidget {
                 ),
                 SwitchListTile(
                   value: modelo.recapable,
-                  title: const Text('Recapable',
-                      style: TextStyle(color: AppColors.textPrimary)),
+                  title: Text('Recapable',
+                      style: AppType.body.copyWith(color: c.text)),
                   onChanged: (v) => setCampo('recapable', v),
-                  activeTrackColor: AppColors.brand,
+                  activeTrackColor: c.brand,
                 ),
               ],
             ),
@@ -474,13 +548,13 @@ class _EditarModeloSheet extends StatelessWidget {
       {required String etiqueta,
       required String valor,
       required Future<void> Function(String) onSave}) {
+    final c = context.colors;
     return ListTile(
       title: Text(etiqueta,
-          style: AppType.label.copyWith(color: AppColors.textSecondary)),
+          style: AppType.label.copyWith(color: c.textSecondary)),
       subtitle: Text(valor.isEmpty ? '—' : valor,
-          style: AppType.body.copyWith(color: AppColors.textPrimary)),
-      trailing:
-          const Icon(Icons.edit, color: AppColors.textDisabled, size: 18),
+          style: AppType.body.copyWith(color: c.text)),
+      trailing: Icon(Icons.edit, color: c.textMuted, size: 18),
       onTap: () async {
         final ctrl = TextEditingController(text: valor);
         final String? res;
@@ -488,7 +562,7 @@ class _EditarModeloSheet extends StatelessWidget {
           res = await showDialog<String>(
             context: context,
             builder: (ctx) => AlertDialog(
-              backgroundColor: AppColors.background,
+              backgroundColor: ctx.colors.surface2,
               title: Text(etiqueta),
               content: TextField(controller: ctrl, autofocus: true),
               actions: [
@@ -516,14 +590,14 @@ class _EditarModeloSheet extends StatelessWidget {
       required int? valor,
       required String sufijo,
       required Future<void> Function(int?) onSave}) {
+    final c = context.colors;
     return ListTile(
       title: Text(etiqueta,
-          style: AppType.label.copyWith(color: AppColors.textSecondary)),
+          style: AppType.label.copyWith(color: c.textSecondary)),
       subtitle: Text(
           valor == null ? '—' : '${AppFormatters.formatearMiles(valor)} $sufijo',
-          style: AppType.body.copyWith(color: AppColors.textPrimary)),
-      trailing:
-          const Icon(Icons.edit, color: AppColors.textDisabled, size: 18),
+          style: AppType.mono.copyWith(color: c.text)),
+      trailing: Icon(Icons.edit, color: c.textMuted, size: 18),
       onTap: () async {
         final ctrl = TextEditingController(
             text: valor == null ? '' : AppFormatters.formatearMiles(valor));
@@ -532,7 +606,7 @@ class _EditarModeloSheet extends StatelessWidget {
           res = await showDialog<Object?>(
             context: context,
             builder: (ctx) => AlertDialog(
-              backgroundColor: AppColors.background,
+              backgroundColor: ctx.colors.surface2,
               title: Text(etiqueta),
               content: TextField(
                 controller: ctrl,
@@ -575,13 +649,13 @@ class _EditarModeloSheet extends StatelessWidget {
       required double? valor,
       required String sufijo,
       required Future<void> Function(double?) onSave}) {
+    final c = context.colors;
     return ListTile(
       title: Text(etiqueta,
-          style: AppType.label.copyWith(color: AppColors.textSecondary)),
+          style: AppType.label.copyWith(color: c.textSecondary)),
       subtitle: Text(valor == null ? '—' : '$valor $sufijo',
-          style: AppType.body.copyWith(color: AppColors.textPrimary)),
-      trailing:
-          const Icon(Icons.edit, color: AppColors.textDisabled, size: 18),
+          style: AppType.mono.copyWith(color: c.text)),
+      trailing: Icon(Icons.edit, color: c.textMuted, size: 18),
       onTap: () async {
         final ctrl = TextEditingController(
             text: valor == null ? '' : valor.toString());
@@ -590,7 +664,7 @@ class _EditarModeloSheet extends StatelessWidget {
           res = await showDialog<Object?>(
             context: context,
             builder: (ctx) => AlertDialog(
-              backgroundColor: AppColors.background,
+              backgroundColor: ctx.colors.surface2,
               title: Text(etiqueta),
               content: TextField(
                 controller: ctrl,
@@ -635,18 +709,18 @@ class _EditarModeloSheet extends StatelessWidget {
       required String valorActual,
       required Map<String, String> opciones,
       required Future<void> Function(String) onSave}) {
+    final c = context.colors;
     return ListTile(
       title: Text(etiqueta,
-          style: AppType.label.copyWith(color: AppColors.textSecondary)),
+          style: AppType.label.copyWith(color: c.textSecondary)),
       subtitle: Text(opciones[valorActual] ?? valorActual,
-          style: AppType.body.copyWith(color: AppColors.textPrimary)),
-      trailing:
-          const Icon(Icons.edit, color: AppColors.textDisabled, size: 18),
+          style: AppType.body.copyWith(color: c.text)),
+      trailing: Icon(Icons.edit, color: c.textMuted, size: 18),
       onTap: () async {
         final res = await showDialog<String>(
           context: context,
           builder: (ctx) => SimpleDialog(
-            backgroundColor: AppColors.background,
+            backgroundColor: ctx.colors.surface2,
             title: Text(etiqueta),
             children: [
               for (final e in opciones.entries)
@@ -654,8 +728,8 @@ class _EditarModeloSheet extends StatelessWidget {
                   child: Text(e.value,
                       style: TextStyle(
                         color: e.key == valorActual
-                            ? AppColors.brand
-                            : AppColors.textPrimary,
+                            ? ctx.colors.brand
+                            : ctx.colors.text,
                       )),
                   onPressed: () => Navigator.pop(ctx, e.key),
                 ),
@@ -705,8 +779,9 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AlertDialog(
-      backgroundColor: AppColors.background,
+      backgroundColor: c.surface2,
       title: const Text('Nuevo modelo'),
       content: SingleChildScrollView(
         child: Column(
@@ -730,9 +805,9 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
                     .toList()
                   ..sort((a, b) => a.nombre.compareTo(b.nombre));
                 if (marcas.isEmpty) {
-                  return const Text(
+                  return Text(
                     'Cargá primero al menos una marca activa.',
-                    style: TextStyle(color: AppColors.warning),
+                    style: AppType.bodySm.copyWith(color: c.warning),
                   );
                 }
                 return DropdownButtonFormField<CubiertaMarca>(
@@ -822,10 +897,10 @@ class _AltaModeloDialogState extends State<_AltaModeloDialog> {
               title: const Text('Recapable'),
               subtitle: Text(
                 'Si está apagado, no se va a poder mandar a recapar.',
-                style: AppType.label.copyWith(color: AppColors.textSecondary),
+                style: AppType.label.copyWith(color: c.textSecondary),
               ),
               onChanged: (v) => setState(() => _recapable = v),
-              activeTrackColor: AppColors.brand,
+              activeTrackColor: c.brand,
             ),
           ],
         ),
@@ -896,41 +971,36 @@ class _Vacio extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Text(
-          texto,
-          textAlign: TextAlign.center,
-          style: AppType.body.copyWith(color: AppColors.textSecondary),
-        ),
-      ),
+    return AppEmptyState(
+      icon: Icons.category_outlined,
+      title: 'Sin datos',
+      subtitle: texto,
     );
   }
 }
 
-class _Chip extends StatelessWidget {
-  final String texto;
-  final Color? color;
-  const _Chip(this.texto, {this.color});
+/// Eyebrow + contador "N · M activas" para encabezar cada tab del catálogo.
+class _ContadorEyebrow extends StatelessWidget {
+  final String label;
+  final int total;
+  final int activas;
+  const _ContadorEyebrow({
+    required this.label,
+    required this.total,
+    required this.activas,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? AppColors.info;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: 3,
-      ),
-      decoration: BoxDecoration(
-        color: c.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(AppRadius.sm / 2),
-        border: Border.all(color: c, width: 1),
-      ),
-      child: Text(
-        texto,
-        style: AppType.eyebrow.copyWith(color: c, fontWeight: FontWeight.bold),
-      ),
+    final c = context.colors;
+    return Row(
+      children: [
+        Expanded(child: AppEyebrow(label)),
+        Text(
+          '$total · $activas activas',
+          style: AppType.monoSm.copyWith(color: c.textMuted),
+        ),
+      ],
     );
   }
 }

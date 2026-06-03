@@ -3,15 +3,27 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/prefs_service.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
+import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../constants/posiciones.dart';
 import 'gomeria_v2_stock_screen.dart';
 import 'gomeria_v2_unidad_screen.dart';
 
-/// Hub del modelo NUEVO de gomería. La entrada es por BÚSQUEDA (no una lista
-/// larga de 127 unidades, que en tablet era incómoda): el gomero busca por
-/// chofer (le trae su tractor + enganche), o directo un tractor o un enganche
-/// por patente. Arriba quedan los accesos a Stock y (solo admin) al catálogo.
+/// Hub del modelo NUEVO de gomería — REFACTOR NÚCLEO (jun 2026).
+///
+/// La entrada es por BÚSQUEDA (no una lista larga de 127 unidades, que en
+/// tablet era incómoda): el gomero busca por chofer (le trae su tractor +
+/// enganche), o directo un tractor o un enganche por patente. Arriba quedan
+/// los accesos a Stock y (solo admin) al catálogo.
+///
+/// SOLO PRESENTACIÓN: la carga de datos (`_cargar`, split tractor/enganche por
+/// regex de TIPO, choferes con unidad asignada), el ordenamiento, los filtros
+/// de búsqueda y la navegación (`_abrirUnidad`) quedan intactos — sólo se
+/// reescribió el árbol de widgets a tokens (`context.colors`), header eyebrow +
+/// hero number + `AppKpiStrip`, accesos como `AppCard`, buscador `AppInput`,
+/// tabs re-skineadas y filas densas `AppCard(tier:1)`.
 class GomeriaV2HubScreen extends StatefulWidget {
   const GomeriaV2HubScreen({super.key});
 
@@ -111,25 +123,30 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppScaffold(
       title: 'Gomería (nueva)',
       body: _cargando
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppSkeletonList(count: 6)
           : _error != null
               ? AppErrorState(
                   title: 'No se pudieron cargar las unidades',
-                  subtitle: _error!)
+                  subtitle: _error!,
+                  onRetry: () {
+                    setState(() {
+                      _cargando = true;
+                      _error = null;
+                      _tractores.clear();
+                      _enganches.clear();
+                      _choferes.clear();
+                    });
+                    _cargar();
+                  },
+                )
               : Column(
                   children: [
-                    _acciones(),
-                    TabBar(
-                      controller: _tab,
-                      tabs: const [
-                        Tab(text: 'Por chofer'),
-                        Tab(text: 'Tractores'),
-                        Tab(text: 'Enganches'),
-                      ],
-                    ),
+                    _encabezado(),
+                    _Tabs(controller: _tab),
                     Expanded(
                       child: TabBarView(
                         controller: _tab,
@@ -144,35 +161,63 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
                     ),
                   ],
                 ),
-    );
-  }
-
-  // ───────────────────────── acciones (stock / catálogo) ─────────────────
-  Widget _acciones() {
-    final esAdmin = PrefsService.rol == AppRoles.admin;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
-      child: Row(
-        children: [
-          Expanded(
-            child: _accionCard(
-              icon: Icons.inventory_2,
-              label: 'Stock',
-              onTap: () => Navigator.push(
+      floatingActionButton: _cargando || _error != null
+          ? null
+          : FloatingActionButton.extended(
+              backgroundColor: c.brand,
+              foregroundColor: c.brandFg,
+              onPressed: () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const GomeriaV2StockScreen()),
               ),
+              icon: const Icon(Icons.inventory_2_outlined),
+              label: const Text('Stock'),
             ),
+    );
+  }
+
+  // ───────────────────────── encabezado: eyebrow + hero + KPIs + accesos ──
+  Widget _encabezado() {
+    final esAdmin = PrefsService.rol == AppRoles.admin;
+    final total = _tractores.length + _enganches.length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppEyebrow('Gomería'),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                '$total',
+                style: AppType.h2.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Text('unidades', style: AppType.monoSm),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppKpiStrip(
+            stats: [
+              AppStat(label: 'Tractores', value: '${_tractores.length}'),
+              AppStat(label: 'Enganches', value: '${_enganches.length}'),
+              AppStat(label: 'Choferes', value: '${_choferes.length}'),
+            ],
           ),
           if (esAdmin) ...[
-            const SizedBox(width: 8),
-            Expanded(
-              child: _accionCard(
-                icon: Icons.category_outlined,
-                label: 'Marcas y modelos',
-                onTap: () => Navigator.pushNamed(
-                    context, AppRoutes.adminGomeriaMarcasModelos),
-              ),
+            const SizedBox(height: AppSpacing.md),
+            _AccesoCatalogo(
+              onTap: () => Navigator.pushNamed(
+                  context, AppRoutes.adminGomeriaMarcasModelos),
             ),
           ],
         ],
@@ -180,54 +225,17 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
     );
   }
 
-  Widget _accionCard({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return Card(
-      color: Theme.of(context).colorScheme.primaryContainer,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 20),
-              const SizedBox(width: 8),
-              Flexible(
-                child: Text(label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buscador(TextEditingController ctrl, String hint) {
     return Padding(
-      padding: const EdgeInsets.all(12),
-      child: TextField(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+      child: AppInput(
         controller: ctrl,
-        textCapitalization: TextCapitalization.characters,
-        decoration: InputDecoration(
-          prefixIcon: const Icon(Icons.search),
-          hintText: hint,
-          border: const OutlineInputBorder(),
-          isDense: true,
-          suffixIcon: ctrl.text.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: ctrl.clear,
-                ),
-        ),
+        hint: hint,
+        icon: Icons.search,
+        mono: true,
+        trailingAction: ctrl.text.isEmpty ? null : 'Limpiar',
+        onTrailingTap: ctrl.clear,
       ),
     );
   }
@@ -245,57 +253,22 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
         _buscador(_qChofer, 'Buscar chofer por nombre'),
         Expanded(
           child: lista.isEmpty
-              ? const Center(child: Text('Sin resultados'))
+              ? const AppEmptyState(
+                  icon: Icons.person_search_outlined,
+                  title: 'Sin resultados',
+                  subtitle: 'Probá con otro nombre.',
+                )
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg, 0, AppSpacing.lg, 96),
                   itemCount: lista.length,
-                  itemBuilder: (_, i) => _cardChofer(lista[i]),
+                  itemBuilder: (_, i) => _CardChofer(
+                    chofer: lista[i],
+                    onAbrir: _abrirUnidad,
+                  ),
                 ),
         ),
       ],
-    );
-  }
-
-  Widget _cardChofer(_Chofer c) {
-    Widget fila(String etiqueta, String? patente, IconData icono,
-        TipoUnidadCubierta tipo) {
-      if (patente == null) {
-        return ListTile(
-          dense: true,
-          leading: Icon(icono, color: Colors.grey),
-          title: Text(etiqueta),
-          subtitle: const Text('Sin asignar'),
-        );
-      }
-      return ListTile(
-        dense: true,
-        leading: Icon(icono),
-        title: Text(etiqueta),
-        subtitle: Text(patente),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => _abrirUnidad(patente, tipo),
-      );
-    }
-
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Text(c.nombre,
-                style: Theme.of(context).textTheme.titleMedium,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-          ),
-          fila('Tractor', c.tractor, Icons.local_shipping,
-              TipoUnidadCubierta.tractor),
-          fila('Enganche', c.enganche, Icons.rv_hookup,
-              TipoUnidadCubierta.enganche),
-          const SizedBox(height: 4),
-        ],
-      ),
     );
   }
 
@@ -315,7 +288,11 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
         _buscador(ctrl, 'Buscar $nombreTipo por patente'),
         Expanded(
           child: lista.isEmpty
-              ? const Center(child: Text('Sin resultados'))
+              ? const AppEmptyState(
+                  icon: Icons.search_off_outlined,
+                  title: 'Sin resultados',
+                  subtitle: 'Probá con otra patente o marca.',
+                )
               : LayoutBuilder(
                   builder: (_, cns) {
                     final cols = cns.maxWidth >= 1200
@@ -327,21 +304,29 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
                                 : 1;
                     if (cols == 1) {
                       return ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                        padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.lg, 0, AppSpacing.lg, 96),
                         itemCount: lista.length,
-                        itemBuilder: (_, i) => _tileUnidad(lista[i], tipo),
+                        itemBuilder: (_, i) =>
+                            _TileUnidad(unidad: lista[i], tipo: tipo, onAbrir: _abrirUnidad),
                       );
                     }
-                    const sp = 8.0;
-                    final w = (cns.maxWidth - 24 - sp * (cols - 1)) / cols;
+                    const sp = AppSpacing.md;
+                    final w = (cns.maxWidth - AppSpacing.lg * 2 - sp * (cols - 1)) /
+                        cols;
                     return SingleChildScrollView(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.lg, 0, AppSpacing.lg, 96),
                       child: Wrap(
                         spacing: sp,
                         runSpacing: sp,
                         children: [
                           for (final u in lista)
-                            SizedBox(width: w, child: _tileUnidad(u, tipo)),
+                            SizedBox(
+                              width: w,
+                              child: _TileUnidad(
+                                  unidad: u, tipo: tipo, onAbrir: _abrirUnidad),
+                            ),
                         ],
                       ),
                     );
@@ -351,20 +336,242 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
       ],
     );
   }
+}
 
-  Widget _tileUnidad(_Unidad u, TipoUnidadCubierta tipo) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      child: ListTile(
-        leading: Icon(tipo == TipoUnidadCubierta.tractor
-            ? Icons.local_shipping
-            : Icons.rv_hookup),
-        title: Text(u.patente, maxLines: 1, overflow: TextOverflow.ellipsis),
-        subtitle: u.marca.isEmpty
-            ? null
-            : Text(u.marca, maxLines: 1, overflow: TextOverflow.ellipsis),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => _abrirUnidad(u.patente, tipo),
+// =============================================================================
+// TABS Núcleo — fila de pills bajo el header (en lugar del Material TabBar
+// con indicador inferior). El TabController sigue manejando el estado.
+// =============================================================================
+
+class _Tabs extends StatelessWidget {
+  final TabController controller;
+  const _Tabs({required this.controller});
+
+  static const _labels = ['Por chofer', 'Tractores', 'Enganches'];
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xs),
+          child: Row(
+            children: [
+              for (var i = 0; i < _labels.length; i++) ...[
+                if (i > 0) const SizedBox(width: 6),
+                AppFilterChip(
+                  label: _labels[i],
+                  count: 0,
+                  activo: controller.index == i,
+                  onTap: () => controller.animateTo(i),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// =============================================================================
+// ACCESO al catálogo (solo admin) — AppCard tappeable estilo bento.
+// =============================================================================
+
+class _AccesoCatalogo extends StatelessWidget {
+  final VoidCallback onTap;
+  const _AccesoCatalogo({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return AppCard(
+      tier: 1,
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.md),
+      child: Row(
+        children: [
+          Icon(Icons.category_outlined, size: 18, color: c.brand),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Marcas y modelos',
+                  style: AppType.body.copyWith(fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  'Catálogo de cubiertas',
+                  style: AppType.monoSm.copyWith(color: c.textMuted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right, size: 18, color: c.textMuted),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// FILA chofer — AppCard(tier:1) con su tractor + enganche tappeables.
+// =============================================================================
+
+class _CardChofer extends StatelessWidget {
+  final _Chofer chofer;
+  final void Function(String, TipoUnidadCubierta) onAbrir;
+  const _CardChofer({required this.chofer, required this.onAbrir});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      tier: 1,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            chofer.nombre,
+            style: AppType.body.copyWith(fontWeight: FontWeight.w600),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          _FilaUnidadChofer(
+            etiqueta: 'Tractor',
+            icono: Icons.local_shipping_outlined,
+            patente: chofer.tractor,
+            onTap: chofer.tractor == null
+                ? null
+                : () => onAbrir(chofer.tractor!, TipoUnidadCubierta.tractor),
+          ),
+          const SizedBox(height: 6),
+          _FilaUnidadChofer(
+            etiqueta: 'Enganche',
+            icono: Icons.rv_hookup_outlined,
+            patente: chofer.enganche,
+            onTap: chofer.enganche == null
+                ? null
+                : () => onAbrir(chofer.enganche!, TipoUnidadCubierta.enganche),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Una fila tractor/enganche dentro de la card de un chofer. Con patente es
+/// tappeable; sin asignar, muestra "—".
+class _FilaUnidadChofer extends StatelessWidget {
+  final String etiqueta;
+  final IconData icono;
+  final String? patente;
+  final VoidCallback? onTap;
+  const _FilaUnidadChofer({
+    required this.etiqueta,
+    required this.icono,
+    required this.patente,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final asignado = patente != null;
+    final fila = Row(
+      children: [
+        Icon(icono, size: 16, color: asignado ? c.textSecondary : c.textMuted),
+        const SizedBox(width: AppSpacing.sm),
+        Text(
+          etiqueta,
+          style: AppType.bodySm.copyWith(color: c.textSecondary),
+        ),
+        const Spacer(),
+        Text(
+          asignado ? patente! : '—',
+          style: AppType.mono.copyWith(
+            color: asignado ? c.text : c.textMuted,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (asignado) ...[
+          const SizedBox(width: AppSpacing.xs),
+          Icon(Icons.chevron_right, size: 16, color: c.textMuted),
+        ],
+      ],
+    );
+    if (!asignado) return fila;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2),
+        child: fila,
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// TILE de unidad (tractor / enganche) — AppCard(tier:1) tappeable.
+// =============================================================================
+
+class _TileUnidad extends StatelessWidget {
+  final _Unidad unidad;
+  final TipoUnidadCubierta tipo;
+  final void Function(String, TipoUnidadCubierta) onAbrir;
+  const _TileUnidad(
+      {required this.unidad, required this.tipo, required this.onAbrir});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return AppCard(
+      tier: 1,
+      onTap: () => onAbrir(unidad.patente, tipo),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.md),
+      child: Row(
+        children: [
+          Icon(
+            tipo == TipoUnidadCubierta.tractor
+                ? Icons.local_shipping_outlined
+                : Icons.rv_hookup_outlined,
+            size: 18,
+            color: c.textSecondary,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  unidad.patente,
+                  style: AppType.mono.copyWith(fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  unidad.marca.isEmpty ? '—' : unidad.marca,
+                  style: AppType.monoSm.copyWith(color: c.textMuted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right, size: 18, color: c.textMuted),
+        ],
       ),
     );
   }

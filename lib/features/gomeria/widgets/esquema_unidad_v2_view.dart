@@ -2,26 +2,26 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_typography.dart';
+import '../../../shared/constants/app_colors.dart';
 import '../constants/posiciones.dart';
 import '../models/estado_posicion.dart';
 import '../models/nivel_desgaste.dart';
 
 /// Vista esquemática de una unidad (tractor o enganche) desde arriba para el
-/// modelo NUEVO de gomería (rediseño 2026-05-29). Es la versión V2 de
-/// `EsquemaUnidadView`: en vez del modelo viejo `CubiertaInstalada` consume la
-/// lista de `EstadoPosicion` (montaje + % vida + semáforo de desgaste).
+/// modelo NUEVO de gomería (rediseño 2026-05-29), REFACTOR NÚCLEO (jun 2026).
+/// Es la versión V2 de `EsquemaUnidadView`: consume la lista de
+/// `EstadoPosicion` (montaje + % vida + semáforo de desgaste).
 ///
 /// Pensada para gomeros que NO son usuarios técnicos: el render foto-realista
 /// de la unidad + un círculo tappeable por posición, coloreado por el semáforo
-/// y con el % de vida en el centro. Tocar una posición dispara el mismo flujo
-/// de montar/retirar de la pantalla (callback `onTapPosicion`).
+/// (en tokens del tema: verde `success` / ámbar `warning` / coral `error` /
+/// `textMuted` sin datos) y con el % de vida en el centro. Tocar una posición
+/// dispara el mismo flujo de montar/retirar de la pantalla (`onTapPosicion`).
 ///
-/// Diseño del marker:
-/// - Ocupada: anillo + relleno tenue del color del semáforo (verde dentro de
-///   vida / amarillo cerca del límite / rojo pasado / gris sin datos), con el
-///   % de vida en grande al centro.
-/// - Vacía: anillo gris discontinuo, sutil — "acá puede ir una cubierta" sin
-///   tapar el render.
+/// SOLO PRESENTACIÓN: las coordenadas, el indexado por código de posición y el
+/// callback quedan igual; sólo cambió la paleta (de `Colors.*` a `context.colors`)
+/// y la tipografía del número (a `AppType`).
 ///
 /// Las coordenadas (x, y) en [0..1] están calibradas contra los renders
 /// `assets/gomeria/*.webp` (640×800 tractor, 533×800 enganche). Son las mismas
@@ -40,6 +40,7 @@ class EsquemaUnidadV2View extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final esTractor = tipo == TipoUnidadCubierta.tractor;
     // Aspect ratio = ancho / alto del PNG (los 2 son verticales).
     final aspect = esTractor ? 640 / 800 : 533 / 800;
@@ -92,6 +93,7 @@ class EsquemaUnidadV2View extends StatelessWidget {
                       height: markerSize,
                       child: _MarkerV2(
                         estado: estado,
+                        colors: c,
                         onTap: () => onTapPosicion(estado),
                       ),
                     );
@@ -106,16 +108,17 @@ class EsquemaUnidadV2View extends StatelessWidget {
   }
 }
 
-Color _colorNivel(NivelDesgaste n) {
+/// Color semántico del semáforo de desgaste, en tokens del tema.
+Color _colorNivel(NivelDesgaste n, AppColorsExt c) {
   switch (n) {
     case NivelDesgaste.ok:
-      return Colors.green;
+      return c.success;
     case NivelDesgaste.alerta:
-      return Colors.orange;
+      return c.warning;
     case NivelDesgaste.critico:
-      return Colors.red;
+      return c.error;
     case NivelDesgaste.sinDatos:
-      return Colors.grey;
+      return c.textMuted;
   }
 }
 
@@ -157,16 +160,23 @@ const Map<String, Offset> _coordsEnganche = {
 
 class _MarkerV2 extends StatelessWidget {
   final EstadoPosicion estado;
+  final AppColorsExt colors;
   final VoidCallback onTap;
 
-  const _MarkerV2({required this.estado, required this.onTap});
+  const _MarkerV2({
+    required this.estado,
+    required this.colors,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final ocupada = estado.ocupada;
+    // Las vacías usan un trazo tenue del texto (no blanco hardcodeado) para
+    // que el marcador respire sobre el render sin colisionar con el sistema.
     final color = ocupada
-        ? _colorNivel(estado.nivel)
-        : Colors.white.withValues(alpha: 0.55);
+        ? _colorNivel(estado.nivel, colors)
+        : colors.textSecondary;
     final pct = estado.porcentajeVida;
 
     return Material(
@@ -180,7 +190,11 @@ class _MarkerV2 extends StatelessWidget {
           children: [
             Positioned.fill(
               child: CustomPaint(
-                painter: _MarkerPainterV2(color: color, ocupada: ocupada),
+                painter: _MarkerPainterV2(
+                  color: color,
+                  ocupada: ocupada,
+                  glow: colors.brandGlow,
+                ),
               ),
             ),
             // % de vida al centro de las ocupadas que tienen dato.
@@ -191,12 +205,12 @@ class _MarkerV2 extends StatelessWidget {
                   padding: const EdgeInsets.all(2),
                   child: Text(
                     '${pct.round()}',
-                    style: TextStyle(
+                    style: AppType.mono.copyWith(
                       color: color,
                       fontWeight: FontWeight.bold,
                       height: 1.0,
-                      shadows: const [
-                        Shadow(color: Colors.white, blurRadius: 3),
+                      shadows: [
+                        Shadow(color: colors.bg, blurRadius: 3),
                       ],
                     ),
                   ),
@@ -212,8 +226,13 @@ class _MarkerV2 extends StatelessWidget {
 class _MarkerPainterV2 extends CustomPainter {
   final Color color;
   final bool ocupada;
+  final Color glow;
 
-  _MarkerPainterV2({required this.color, required this.ocupada});
+  _MarkerPainterV2({
+    required this.color,
+    required this.ocupada,
+    required this.glow,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -240,7 +259,7 @@ class _MarkerPainterV2 extends CustomPainter {
         ..color = color;
       canvas.drawCircle(centro, radio - 1, ring);
     } else {
-      // Vacía: anillo gris discontinuo, sutil.
+      // Vacía: anillo discontinuo, sutil.
       final stroke = Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.4
