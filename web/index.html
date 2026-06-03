@@ -35,15 +35,17 @@
   <title>Coopertrans Móvil — Sistema de gestión</title>
   <link rel="manifest" href="site.webmanifest">
 
-  <!-- Fondo cobalto durante la carga (evita el flash blanco antes de que
-       CanvasKit renderice la pantalla de login). -->
+  <!-- Fondo near-black Núcleo durante la carga (evita el flash blanco antes
+       de que CanvasKit renderice la pantalla de login). Matchea el splash de
+       la app: near-black + glow indigo sutil arriba. -->
   <style>
-    html, body { margin: 0; padding: 0; background-color: #0B2A6B; }
+    html, body { margin: 0; padding: 0; background-color: #050505; }
     #cargando {
       position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-      color: #cfe0ff; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      font-size: 15px; letter-spacing: .3px;
-      background: linear-gradient(135deg, #08193B 0%, #0B2A6B 60%, #1746A2 100%);
+      color: rgba(250, 250, 250, 0.55);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase;
+      background: radial-gradient(60% 50% at 50% 32%, rgba(124, 131, 255, 0.14), transparent 70%), #050505;
     }
   </style>
 </head>
