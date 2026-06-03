@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/prefs_service.dart';
+import '../../../core/theme/app_breakpoints.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
@@ -12,12 +13,20 @@ import '../services/viajes_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
-/// Lista de viajes — entry point del módulo. Filtros operativos
-/// (estado + liquidado) y FAB para crear viaje nuevo.
+
+/// Lista de viajes — entry point del módulo. REFACTOR NÚCLEO (jun 2026).
 ///
-/// Cada fila muestra los datos clave para identificar el viaje sin
-/// abrir el detalle: fecha, chofer, ruta, monto chofer redondeado y
-/// chips de estado/liquidación. Tap → detalle.
+/// Reescrita al layout del prototipo (`screens-desktop-modules.jsx :: Logistica`):
+/// hero con el conteo real de viajes del mes + [Nuevo viaje], AppKpiStrip con
+/// los counts por estado + total + pagado a choferes, buscador Núcleo,
+/// chips de filtro (estado / liquidación / borrados) y una **tabla** densa en
+/// desktop. En mobile se mantienen cards ricas (re-skineadas a tokens), que
+/// leen mejor en pantalla angosta que una tabla de 6 columnas.
+///
+/// La fila de tabla y la card abren el MISMO detalle (`adminLogisticaViajeDetalle`).
+/// Stream cacheado, filtros (estado / liquidado / búsqueda libre / borrados),
+/// sort (más viejo arriba), KPIs y navegación quedan INTACTOS — solo cambió
+/// la presentación.
 class LogisticaViajesListaScreen extends StatefulWidget {
   const LogisticaViajesListaScreen({super.key});
 
@@ -62,6 +71,7 @@ class _LogisticaViajesListaScreenState
 
   @override
   Widget build(BuildContext context) {
+    final esDesktop = AppBreakpoints.isDesktopOrLarger(context);
     return AppScaffold(
       title: 'Viajes',
       // Ctrl+N → nuevo viaje (operador desktop tipea mucho —
@@ -69,106 +79,81 @@ class _LogisticaViajesListaScreenState
       // mapeamos Ctrl+F.
       body: KeyboardShortcutsScope(
         onNuevo: _abrirNuevoViaje,
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: TextField(
-                controller: _busquedaCtrl,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Buscar por chofer, patente, empresa, producto…',
-                  hintStyle: const TextStyle(color: Colors.white38),
-                  prefixIcon:
-                      const Icon(Icons.search, color: Colors.white54),
-                  suffixIcon: _busqueda.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.clear,
-                              color: Colors.white54),
-                          tooltip: 'Limpiar búsqueda',
-                          onPressed: () {
-                            _busquedaCtrl.clear();
-                            setState(() => _busqueda = '');
-                          },
-                        ),
-                  isDense: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                    borderSide:
-                        const BorderSide(color: Colors.white24),
+        child: AppOfflineBanner<List<Viaje>>(
+          stream: _streamViajes,
+          child: StreamBuilder<List<Viaje>>(
+            stream: _streamViajes,
+            builder: (ctx, snap) {
+              final todos = snap.data ?? const <Viaje>[];
+              final cargando =
+                  snap.connectionState == ConnectionState.waiting;
+              final filtrados = _aplicarFiltros(todos);
+              return Column(
+                children: [
+                  // Hero: VIAJES · conteo del mes + [Nuevo viaje].
+                  _Header(
+                    viajes: todos,
+                    onNuevo: _abrirNuevoViaje,
                   ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                    borderSide:
-                        const BorderSide(color: Colors.white24),
+                  // Buscador Núcleo (misma lógica de búsqueda libre).
+                  _Buscador(
+                    controller: _busquedaCtrl,
+                    tieneTexto: _busqueda.isNotEmpty,
+                    onChanged: (v) =>
+                        setState(() => _busqueda = v.trim().toLowerCase()),
+                    onLimpiar: () {
+                      _busquedaCtrl.clear();
+                      setState(() => _busqueda = '');
+                    },
                   ),
-                ),
-                onChanged: (v) =>
-                    setState(() => _busqueda = v.trim().toLowerCase()),
-              ),
-            ),
-            _BarraFiltros(
-              estado: _filtroEstado,
-              liquidado: _filtroLiquidado,
-              verBorrados: _verBorrados,
-              onEstadoChanged: (v) => setState(() => _filtroEstado = v),
-              onLiquidadoChanged: (v) => setState(() => _filtroLiquidado = v),
-              onVerBorradosChanged: (v) => setState(() {
-                _verBorrados = v;
-                _streamViajes =
-                    ViajesService.streamViajes(incluirInactivos: v);
-              }),
-            ),
-            Expanded(
-              child: StreamBuilder<List<Viaje>>(
-                stream: _streamViajes,
-                builder: (ctx, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const AppSkeletonList(count: 6);
-                  }
-                  if (snap.hasError) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.xl),
-                        child: Text(
-                          'Error: ${snap.error}',
-                          style: const TextStyle(color: AppColors.error),
-                        ),
-                      ),
-                    );
-                  }
-                  final todos = snap.data ?? const <Viaje>[];
-                  final filtrados = _aplicarFiltros(todos);
-                  return Column(
-                    children: [
-                      // Resumen del proto (Logística): KPIs por estado + total
-                      // + pagado a choferes, sobre TODOS los viajes del stream
-                      // (no los filtrados) para que el panorama sea estable.
-                      if (todos.isNotEmpty) _SummaryViajes(viajes: todos),
-                      Expanded(
-                        child: filtrados.isEmpty
-                            ? _EstadoVacio(haDatos: todos.isNotEmpty)
-                            : ListView.builder(
-                                padding:
-                                    const EdgeInsets.fromLTRB(16, 8, 16, 80),
-                                itemCount: filtrados.length,
-                                itemBuilder: (_, i) =>
-                                    _ViajeTile(viaje: filtrados[i]),
-                              ),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ),
-          ],
+                  // KPI strip por estado + total + pagado choferes. Sobre TODOS
+                  // los viajes del stream (no los filtrados) para panorama estable.
+                  if (todos.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
+                      child: _ResumenViajes(viajes: todos),
+                    ),
+                  // Filtros (estado / liquidación / borrados).
+                  _BarraFiltros(
+                    estado: _filtroEstado,
+                    liquidado: _filtroLiquidado,
+                    verBorrados: _verBorrados,
+                    onEstadoChanged: (v) => setState(() => _filtroEstado = v),
+                    onLiquidadoChanged: (v) =>
+                        setState(() => _filtroLiquidado = v),
+                    onVerBorradosChanged: (v) => setState(() {
+                      _verBorrados = v;
+                      _streamViajes =
+                          ViajesService.streamViajes(incluirInactivos: v);
+                    }),
+                  ),
+                  // Encabezado de tabla (solo desktop).
+                  if (esDesktop && !cargando && filtrados.isNotEmpty)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(
+                          AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, 0),
+                      child: _FilaHeader(),
+                    ),
+                  Expanded(
+                    child: _Cuerpo(
+                      cargando: cargando,
+                      error: snap.hasError ? snap.error : null,
+                      esDesktop: esDesktop,
+                      haDatos: todos.isNotEmpty,
+                      filtrados: filtrados,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _abrirNuevoViaje,
-        backgroundColor: AppColors.warning,
-        foregroundColor: Colors.white,
+        backgroundColor: AppColors.brand,
+        foregroundColor: AppColors.surface0,
         icon: const Icon(Icons.add),
         label: const Text('NUEVO VIAJE'),
       ),
@@ -220,6 +205,163 @@ class _LogisticaViajesListaScreenState
   }
 }
 
+// =============================================================================
+// HEADER — eyebrow + hero (conteo del mes) + botón Nuevo viaje
+// =============================================================================
+
+class _Header extends StatelessWidget {
+  final List<Viaje> viajes;
+  final VoidCallback onNuevo;
+  const _Header({required this.viajes, required this.onNuevo});
+
+  @override
+  Widget build(BuildContext context) {
+    // Conteo de viajes del mes corriente, por fecha de referencia. Si un viaje
+    // no tiene fecha, no entra en el conteo del mes (pero sí en la lista).
+    final ahora = DateTime.now();
+    var enElMes = 0;
+    for (final v in viajes) {
+      final f = v.fechaReferencia;
+      if (f != null && f.year == ahora.year && f.month == ahora.month) {
+        enElMes++;
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const AppEyebrow('Viajes'),
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      viajes.isEmpty ? '—' : '$enElMes',
+                      style: AppType.h2.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        'en el mes',
+                        style: AppType.monoSm
+                            .copyWith(color: context.colors.textMuted),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: AppButton.primary(
+              label: 'Nuevo viaje',
+              icon: Icons.add,
+              size: AppButtonSize.sm,
+              onPressed: onNuevo,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// BUSCADOR — input Núcleo (misma lógica de búsqueda libre)
+// =============================================================================
+
+class _Buscador extends StatelessWidget {
+  final TextEditingController controller;
+  final bool tieneTexto;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onLimpiar;
+
+  const _Buscador({
+    required this.controller,
+    required this.tieneTexto,
+    required this.onChanged,
+    required this.onLimpiar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.md),
+      child: AppInput(
+        controller: controller,
+        hint: 'Buscar por chofer, patente, empresa, producto…',
+        icon: Icons.search,
+        onChanged: onChanged,
+        trailingAction: tieneTexto ? 'Limpiar' : null,
+        onTrailingTap: tieneTexto ? onLimpiar : null,
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// RESUMEN — AppKpiStrip por estado + total + pagado choferes
+// =============================================================================
+
+/// KPIs del módulo: counts por estado + total + pagado a choferes. Sobre TODOS
+/// los viajes del stream (no los filtrados) para que el panorama sea estable.
+/// En anchos chicos el AppKpiStrip puede apretarse, así que lo dejamos
+/// scrolleable horizontal: 5 stats en una fila densa.
+class _ResumenViajes extends StatelessWidget {
+  final List<Viaje> viajes;
+  const _ResumenViajes({required this.viajes});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    var enCurso = 0, concluidos = 0, planeados = 0;
+    var pagado = 0.0;
+    for (final v in viajes) {
+      switch (v.estado) {
+        case EstadoViaje.enCurso:
+          enCurso++;
+        case EstadoViaje.concluido:
+          concluidos++;
+        case EstadoViaje.planeado:
+          planeados++;
+      }
+      pagado += v.montoChoferRedondeado;
+    }
+
+    return AppKpiStrip(
+      stats: [
+        AppStat(label: 'Total', value: '${viajes.length}'),
+        AppStat(label: 'En curso', value: '$enCurso', accent: c.warning),
+        AppStat(label: 'Concluidos', value: '$concluidos', accent: c.success),
+        AppStat(label: 'Planeados', value: '$planeados', accent: c.info),
+        AppStat(
+          label: 'Pagado choferes',
+          value: AppFormatters.formatearMonto(pagado),
+          valueStyle: AppType.h4,
+        ),
+      ],
+    );
+  }
+}
+
+// =============================================================================
+// FILTROS — estado / liquidación / mostrar eliminados (pills Núcleo)
+// =============================================================================
+
 // Sentinel para el menú "Todos" — permite distinguir "el user eligio
 // limpiar el filtro" de "el user dismisseo el menu sin elegir" (showMenu
 // devuelve null en ambos por default).
@@ -245,36 +387,33 @@ class _BarraFiltros extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
         children: [
-          _ChipFiltro<EstadoViaje?>(
+          _ChipFiltro(
             label: estado == null ? 'Estado' : estado!.etiqueta,
             seleccionado: estado != null,
-            onSelected: () => _abrirEstadoMenu(context),
+            onTap: () => _abrirEstadoMenu(context),
           ),
-          _ChipFiltro<bool?>(
+          _ChipFiltro(
             label: liquidado == null
                 ? 'Liquidación'
                 : (liquidado! ? 'Liquidados' : 'Sin liquidar'),
             seleccionado: liquidado != null,
-            onSelected: () => _abrirLiquidadoMenu(context),
+            onTap: () => _abrirLiquidadoMenu(context),
           ),
           // Filtro "Mostrar eliminados". Default OFF — los borrados
-          // viven solo para auditoría. Mismo patrón visual que el
-          // chip de adelantos (Santiago 2026-05-14).
-          FilterChip(
-            label: const Text('Mostrar eliminados'),
-            selected: verBorrados,
-            onSelected: onVerBorradosChanged,
-            selectedColor: AppColors.error.withValues(alpha: 0.4),
-            avatar: Icon(
-              verBorrados ? Icons.visibility : Icons.visibility_off,
-              size: 16,
-              color: Colors.white70,
-            ),
+          // viven solo para auditoría. Mismo patrón visual que los otros
+          // chips, pero con tinte error cuando está activo.
+          _ChipFiltro(
+            label: 'Mostrar eliminados',
+            seleccionado: verBorrados,
+            colorActivo: AppColors.error,
+            icono: verBorrados ? Icons.visibility : Icons.visibility_off,
+            onTap: () => onVerBorradosChanged(!verBorrados),
           ),
         ],
       ),
@@ -286,10 +425,6 @@ class _BarraFiltros extends StatelessWidget {
     // eligio Todos (limpiar filtro)" vs "el user dismisseo con back/tap
     // afuera (mantener filtro)". showMenu devuelve null para dismiss —
     // si tambien usamos null para "Todos", no podemos diferenciar.
-    // El comentario anterior decia "dismiss = mantiene filtro" pero la
-    // logica `res != null || (res == null && ctx.mounted)` SIEMPRE era
-    // true cuando el widget esta montado → el filtro se reseteaba al
-    // cerrar el menu con back (auditoria 2026-05-16).
     final res = await showMenu<Object>(
       context: ctx,
       position: const RelativeRect.fromLTRB(40, 120, 40, 0),
@@ -323,52 +458,298 @@ class _BarraFiltros extends StatelessWidget {
   }
 }
 
-class _ChipFiltro<T> extends StatelessWidget {
+/// Pill de filtro estilo Núcleo. Inactivo: transparente con borde. Activo:
+/// tinte del color (brand por default) con borde del mismo color. Soporta
+/// un ícono opcional (toggle de borrados) y un caret cuando abre un menú.
+class _ChipFiltro extends StatelessWidget {
   final String label;
   final bool seleccionado;
-  final VoidCallback onSelected;
+  final VoidCallback onTap;
+  final Color? colorActivo;
+  final IconData? icono;
 
   const _ChipFiltro({
     required this.label,
     required this.seleccionado,
-    required this.onSelected,
+    required this.onTap,
+    this.colorActivo,
+    this.icono,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ActionChip(
-      label: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(label),
-          const SizedBox(width: AppSpacing.xs),
-          const Icon(Icons.arrow_drop_down, size: 18),
-        ],
+    final c = context.colors;
+    final accent = colorActivo ?? c.brand;
+    final fg = seleccionado ? accent : c.textSecondary;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: seleccionado
+              ? accent.withValues(alpha: 0.16)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: seleccionado ? accent.withValues(alpha: 0.5) : c.borderStrong,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icono != null) ...[
+              Icon(icono, size: 14, color: fg),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              label,
+              style: AppType.label.copyWith(
+                color: fg,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            if (icono == null) ...[
+              const SizedBox(width: 4),
+              Icon(Icons.arrow_drop_down, size: 18, color: fg),
+            ],
+          ],
+        ),
       ),
-      backgroundColor: seleccionado
-          ? AppColors.warning.withValues(alpha: 0.2)
-          : null,
-      onPressed: onSelected,
     );
   }
 }
 
-class _ViajeTile extends StatelessWidget {
-  final Viaje viaje;
-  const _ViajeTile({required this.viaje});
+// =============================================================================
+// CUERPO — loading / error / vacío / tabla(desktop) / cards(mobile)
+// =============================================================================
+
+class _Cuerpo extends StatelessWidget {
+  final bool cargando;
+  final Object? error;
+  final bool esDesktop;
+  final bool haDatos;
+  final List<Viaje> filtrados;
+
+  const _Cuerpo({
+    required this.cargando,
+    required this.error,
+    required this.esDesktop,
+    required this.haDatos,
+    required this.filtrados,
+  });
 
   @override
   Widget build(BuildContext context) {
+    if (cargando) {
+      return const AppSkeletonList(count: 6, conAvatar: false);
+    }
+    if (error != null) {
+      return AppErrorState(
+        title: 'No se pudieron cargar los viajes',
+        subtitle: '$error',
+      );
+    }
+    if (filtrados.isEmpty) {
+      return AppEmptyState(
+        icon: Icons.route_outlined,
+        title: haDatos
+            ? 'Sin coincidencias'
+            : 'Todavía no hay viajes registrados',
+        subtitle: haDatos
+            ? 'Ningún viaje coincide con los filtros aplicados.'
+            : 'Tocá NUEVO VIAJE para registrar el primero.',
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, 88),
+      itemCount: filtrados.length,
+      itemBuilder: (_, i) => esDesktop
+          ? _FilaViaje(viaje: filtrados[i])
+          : _ViajeCard(viaje: filtrados[i]),
+    );
+  }
+}
+
+// =============================================================================
+// TABLA (desktop): encabezado + fila
+// =============================================================================
+
+// Flex de las columnas — el header y las filas comparten estos pesos para
+// que queden alineados. FECHA · CHOFER · UNIDAD · RUTA · MONTO · ESTADO · →
+const int _flexFecha = 3;
+const int _flexChofer = 4;
+const int _flexUnidad = 3;
+const int _flexRuta = 6;
+const int _flexMonto = 3;
+const int _flexEstado = 4;
+
+class _FilaHeader extends StatelessWidget {
+  const _FilaHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget h(String t, int flex, {TextAlign align = TextAlign.left}) =>
+        Expanded(
+          flex: flex,
+          child: Text(t.toUpperCase(), style: AppType.eyebrow, textAlign: align),
+        );
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      child: Row(
+        children: [
+          h('Fecha', _flexFecha),
+          h('Chofer', _flexChofer),
+          h('Unidad', _flexUnidad),
+          h('Origen → Destino', _flexRuta),
+          h('Monto', _flexMonto, align: TextAlign.right),
+          h('Estado', _flexEstado),
+          const SizedBox(width: 24),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilaViaje extends StatelessWidget {
+  final Viaje viaje;
+  const _FilaViaje({required this.viaje});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
     final fechaRef = viaje.fechaReferencia;
-    final color = _colorEstado(viaje.estado);
+    final estadoColor = _colorEstado(context, viaje.estado);
 
     return AppCard(
+      tier: 1,
       onTap: () => Navigator.pushNamed(
         context,
         AppRoutes.adminLogisticaViajeDetalle,
         arguments: {'viajeId': viaje.id},
       ),
-      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.md),
+      child: Row(
+        children: [
+          // Fecha (mono tabular).
+          Expanded(
+            flex: _flexFecha,
+            child: Text(
+              fechaRef == null
+                  ? '—'
+                  : AppFormatters.formatearFecha(fechaRef),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.mono.copyWith(
+                color: fechaRef == null ? c.textMuted : c.text,
+              ),
+            ),
+          ),
+          // Chofer.
+          Expanded(
+            flex: _flexChofer,
+            child: Text(
+              viaje.choferNombre ?? 'DNI ${viaje.choferDni}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.body.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+          // Unidad (patente del tractor — mono tabular).
+          Expanded(
+            flex: _flexUnidad,
+            child: Text(
+              _unidad(viaje),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.mono.copyWith(
+                color: viaje.vehiculoId == null ? c.textMuted : c.text,
+              ),
+            ),
+          ),
+          // Origen → Destino.
+          Expanded(
+            flex: _flexRuta,
+            child: _RutaInline(viaje: viaje),
+          ),
+          // Monto chofer redondeado (mono tabular, alineado a la derecha).
+          Expanded(
+            flex: _flexMonto,
+            child: Text(
+              AppFormatters.formatearMonto(viaje.montoChoferRedondeado),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: AppType.mono.copyWith(color: c.text),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          // Estado (+ liquidado / borrado).
+          Expanded(
+            flex: _flexEstado,
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                AppBadge(
+                  text: viaje.estado.etiqueta,
+                  color: estadoColor,
+                  size: AppBadgeSize.sm,
+                  dot: true,
+                ),
+                if (viaje.liquidado)
+                  AppBadge(
+                    text: 'Liquidado',
+                    color: c.success,
+                    size: AppBadgeSize.sm,
+                    icon: Icons.check,
+                  ),
+                if (!viaje.activo)
+                  AppBadge(
+                    text: 'Borrado',
+                    color: c.error,
+                    size: AppBadgeSize.sm,
+                  ),
+              ],
+            ),
+          ),
+          // Acción: restaurar (si borrado) o chevron.
+          if (!viaje.activo)
+            _BotonRestaurar(viaje: viaje)
+          else
+            Icon(Icons.chevron_right, size: 18, color: c.textMuted),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// CARD (mobile): card rica re-skineada a tokens Núcleo
+// =============================================================================
+
+class _ViajeCard extends StatelessWidget {
+  final Viaje viaje;
+  const _ViajeCard({required this.viaje});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final fechaRef = viaje.fechaReferencia;
+    final estadoColor = _colorEstado(context, viaje.estado);
+
+    return AppCard(
+      tier: 1,
+      accent: estadoColor,
+      onTap: () => Navigator.pushNamed(
+        context,
+        AppRoutes.adminLogisticaViajeDetalle,
+        arguments: {'viajeId': viaje.id},
+      ),
       padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -376,96 +757,162 @@ class _ViajeTile extends StatelessWidget {
           // Línea 1: fecha + chofer + estado.
           Row(
             children: [
-              Icon(Icons.local_shipping_outlined, size: 18, color: color),
-              const SizedBox(width: 6),
               Text(
                 fechaRef == null
-                    ? 'Sin fecha'
+                    ? '—'
                     : AppFormatters.formatearFecha(fechaRef),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
+                style: AppType.mono.copyWith(
+                  color: fechaRef == null ? c.textMuted : c.text,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(width: AppSpacing.md),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   viaje.choferNombre ?? 'DNI ${viaje.choferDni}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  style: AppType.bodySm,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              _ChipMini(label: viaje.estado.etiqueta, color: color),
+              AppBadge(
+                text: viaje.estado.etiqueta,
+                color: estadoColor,
+                size: AppBadgeSize.sm,
+                dot: true,
+              ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           // Línea 2: ruta.
+          _RutaInline(viaje: viaje),
+          const SizedBox(height: 8),
+          // Línea 3: unidad + monto chofer + flags.
           Row(
             children: [
-              const Icon(Icons.place_outlined,
-                  size: 14, color: Colors.white38),
-              const SizedBox(width: AppSpacing.xs),
-              Expanded(
-                child: Text(
-                  viaje.rutaEtiqueta,
-                  style: AppType.label.copyWith(color: Colors.white60),
-                  overflow: TextOverflow.ellipsis,
+              Icon(Icons.local_shipping_outlined, size: 14, color: c.textMuted),
+              const SizedBox(width: 4),
+              Text(
+                _unidad(viaje),
+                style: AppType.monoSm.copyWith(
+                  color: viaje.vehiculoId == null ? c.textMuted : c.textSecondary,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          // Línea 3: monto chofer redondeado + flags.
-          Row(
-            children: [
-              const Icon(Icons.attach_money,
-                  size: 14, color: Colors.white38),
-              const SizedBox(width: 2),
+              const Spacer(),
               Text(
                 AppFormatters.formatearMonto(viaje.montoChoferRedondeado),
-                style: AppType.label.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
+                style: AppType.mono.copyWith(
+                  color: c.text,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              if (viaje.liquidado)
-                const _ChipMini(
-                  label: 'LIQUIDADO',
-                  color: AppColors.success,
-                  icono: Icons.check,
-                ),
-              if (!viaje.activo) ...[
-                const _ChipMini(
-                  label: 'BORRADO',
-                  color: AppColors.error,
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                // Botón rápido restaurar — evita abrir el detalle solo
-                // para reactivar. Confirmación inline en diálogo corto.
-                Builder(
-                  builder: (ctx) => IconButton(
-                    icon: const Icon(Icons.restore,
-                        size: 18, color: AppColors.warning),
-                    tooltip: 'Reactivar viaje',
-                    visualDensity: VisualDensity.compact,
-                    constraints: const BoxConstraints(),
-                    padding: const EdgeInsets.all(AppSpacing.xs),
-                    onPressed: () => _confirmarReactivar(ctx, viaje),
-                  ),
-                ),
-              ],
             ],
           ),
+          if (viaje.liquidado || !viaje.activo) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (viaje.liquidado)
+                  AppBadge(
+                    text: 'Liquidado',
+                    color: c.success,
+                    size: AppBadgeSize.sm,
+                    icon: Icons.check,
+                  ),
+                if (viaje.liquidado && !viaje.activo)
+                  const SizedBox(width: 6),
+                if (!viaje.activo)
+                  AppBadge(
+                    text: 'Borrado',
+                    color: c.error,
+                    size: AppBadgeSize.sm,
+                  ),
+                const Spacer(),
+                if (!viaje.activo) _BotonRestaurar(viaje: viaje),
+              ],
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+// =============================================================================
+// HELPERS COMPARTIDOS
+// =============================================================================
+
+/// Origen → Destino con la flecha en tinte muted, estilo prototipo.
+/// El texto se trunca con ellipsis para no desbordar la columna.
+class _RutaInline extends StatelessWidget {
+  final Viaje viaje;
+  const _RutaInline({required this.viaje});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final origen = viaje.tramoPrincipal.tarifaSnapshot.origenEtiqueta;
+    final destino = viaje.tramoFinal.tarifaSnapshot.destinoEtiqueta;
+    final multi = viaje.esMultiTramo;
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            origen.isEmpty ? '—' : origen,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.bodySm.copyWith(color: c.text),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Text('→', style: AppType.bodySm.copyWith(color: c.textMuted)),
+        ),
+        Flexible(
+          child: Text(
+            destino.isEmpty ? '—' : destino,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.bodySm.copyWith(color: c.text),
+          ),
+        ),
+        if (multi) ...[
+          const SizedBox(width: 6),
+          Text(
+            '· ${viaje.cantidadTramos} tramos',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.monoSm.copyWith(color: c.textMuted),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Botón rápido restaurar — evita abrir el detalle solo para reactivar.
+/// Confirmación inline en diálogo corto. Misma lógica que la versión previa.
+class _BotonRestaurar extends StatelessWidget {
+  final Viaje viaje;
+  const _BotonRestaurar({required this.viaje});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(Icons.restore, size: 18, color: context.colors.brand),
+      tooltip: 'Reactivar viaje',
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(),
+      padding: const EdgeInsets.all(AppSpacing.xs),
+      onPressed: () => _confirmarReactivar(context, viaje),
     );
   }
 
   Future<void> _confirmarReactivar(BuildContext ctx, Viaje v) async {
     final messenger = ScaffoldMessenger.of(ctx);
     final fecha = v.fechaReferencia;
-    final fechaStr = fecha == null
-        ? 'sin fecha'
-        : AppFormatters.formatearFecha(fecha);
+    final fechaStr =
+        fecha == null ? 'sin fecha' : AppFormatters.formatearFecha(fecha);
     final ok = await showDialog<bool>(
       context: ctx,
       builder: (dCtx) => AlertDialog(
@@ -482,8 +929,8 @@ class _ViajeTile extends StatelessWidget {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.warning,
-              foregroundColor: Colors.black,
+              backgroundColor: AppColors.brand,
+              foregroundColor: AppColors.surface0,
             ),
             onPressed: () => Navigator.pop(dCtx, true),
             child: const Text('REACTIVAR'),
@@ -507,168 +954,23 @@ class _ViajeTile extends StatelessWidget {
       );
     }
   }
-
-  Color _colorEstado(EstadoViaje e) {
-    switch (e) {
-      case EstadoViaje.planeado:
-        return AppColors.info;
-      case EstadoViaje.enCurso:
-        return AppColors.warning;
-      case EstadoViaje.concluido:
-        return AppColors.success;
-    }
-  }
 }
 
-class _ChipMini extends StatelessWidget {
-  final String label;
-  final Color color;
-  final IconData? icono;
-  const _ChipMini({required this.label, required this.color, this.icono});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icono != null) ...[
-            Icon(icono, size: 11, color: color),
-            const SizedBox(width: 3),
-          ],
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+/// Patente del tractor del viaje. Si no hay vehículo asignado → `—`.
+String _unidad(Viaje v) {
+  final u = v.vehiculoId?.trim();
+  return (u == null || u.isEmpty) ? '—' : u;
 }
 
-/// Franja de KPIs del módulo viajes (prototipo Núcleo · Logística): counts por
-/// estado + total + pagado a choferes. Sobre TODOS los viajes del stream (no
-/// los filtrados) para que el panorama sea estable. Scroll horizontal → entra
-/// en cualquier ancho sin overflow.
-class _SummaryViajes extends StatelessWidget {
-  final List<Viaje> viajes;
-  const _SummaryViajes({required this.viajes});
-
-  @override
-  Widget build(BuildContext context) {
-    var enCurso = 0, concluidos = 0, planeados = 0;
-    var pagado = 0.0;
-    for (final v in viajes) {
-      switch (v.estado) {
-        case EstadoViaje.enCurso:
-          enCurso++;
-        case EstadoViaje.concluido:
-          concluidos++;
-        case EstadoViaje.planeado:
-          planeados++;
-      }
-      pagado += v.montoChoferRedondeado;
-    }
-    final celdas = <Widget>[
-      _celda('En curso', '$enCurso', AppColors.warning),
-      _celda('Concluidos', '$concluidos', AppColors.success),
-      _celda('Planeados', '$planeados', AppColors.info),
-      _celda('Total', '${viajes.length}', AppColors.textPrimary),
-      _celda('Pagado choferes', AppFormatters.formatearMonto(pagado),
-          AppColors.textPrimary),
-    ];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      child: AppCard(
-        padding: EdgeInsets.zero,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: IntrinsicHeight(
-            child: Row(
-              children: [
-                for (var i = 0; i < celdas.length; i++) ...[
-                  celdas[i],
-                  if (i < celdas.length - 1)
-                    const VerticalDivider(
-                        width: 1, color: AppColors.borderSubtle),
-                ],
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _celda(String label, String valor, Color color) {
-    return SizedBox(
-      width: 134,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label.toUpperCase(),
-                style: AppType.eyebrow,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 6),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                valor,
-                style: AppType.display.copyWith(
-                  color: color,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _EstadoVacio extends StatelessWidget {
-  final bool haDatos;
-  const _EstadoVacio({required this.haDatos});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.route_outlined,
-                size: 64, color: Colors.white24),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              haDatos
-                  ? 'Ningún viaje coincide con los filtros aplicados.'
-                  : 'Todavía no hay viajes registrados.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white60),
-            ),
-          ],
-        ),
-      ),
-    );
+/// Color semántico por estado (resuelto contra el theme activo).
+Color _colorEstado(BuildContext context, EstadoViaje e) {
+  final c = context.colors;
+  switch (e) {
+    case EstadoViaje.planeado:
+      return c.info;
+    case EstadoViaje.enCurso:
+      return c.warning;
+    case EstadoViaje.concluido:
+      return c.success;
   }
 }
