@@ -11,7 +11,7 @@ import '../services/whatsapp_historico_service.dart';
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// M8 + M10 — Pantalla "Historial WhatsApp": auditar mensajes pasados
-/// del bot (ENVIADO / ERROR) con filtros y buscador.
+/// del bot (ENVIADO / ERROR) con filtros y buscador. REFACTOR NÚCLEO (jun 2026).
 ///
 /// COLA_WHATSAPP tiene TTL muy corto (horas) porque su rol es "cola de
 /// trabajo". Esto rompía el flujo "¿se mandó el aviso del lunes?" — para
@@ -23,6 +23,11 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// origen) — los compound indexes solo cubren un filtro + registrado_en.
 /// Client-side: buscador full-text sobre los resultados (rápido porque
 /// la página es 50).
+///
+/// Layout Núcleo: header eyebrow + hero (cantidad de resultados),
+/// AppKpiStrip total/entregados/leídos, card de filtros con tokens,
+/// buscador Núcleo, filas AppCard con badge de estado + ack ✓✓ y
+/// timestamps/origen en mono. Consulta, filtros y paginación INTACTOS.
 class AdminWhatsappHistoricoScreen extends StatefulWidget {
   /// M6 — filtro inicial por origen, para deep-link "Ver último enviado"
   /// desde la card "Reglas de notificación" del dashboard del bot. Si
@@ -102,12 +107,10 @@ class _AdminWhatsappHistoricoScreenState
     });
     try {
       final snap = await _service.consultar(
-        destinatarioId: _dniCtrl.text.trim().isEmpty
-            ? null
-            : _dniCtrl.text.trim(),
-        origen: _origenCtrl.text.trim().isEmpty
-            ? null
-            : _origenCtrl.text.trim(),
+        destinatarioId:
+            _dniCtrl.text.trim().isEmpty ? null : _dniCtrl.text.trim(),
+        origen:
+            _origenCtrl.text.trim().isEmpty ? null : _origenCtrl.text.trim(),
         estado: _filtroEstado,
         desde: _desde,
         hasta: _hasta,
@@ -148,8 +151,8 @@ class _AdminWhatsappHistoricoScreenState
     final ahora = DateTime.now();
     final picked = await showDateRangePicker(
       context: context,
-      firstDate: ahora.subtract(
-          const Duration(days: WhatsAppHistoricoService.ttlDias)),
+      firstDate:
+          ahora.subtract(const Duration(days: WhatsAppHistoricoService.ttlDias)),
       lastDate: ahora,
       initialDateRange: DateTimeRange(start: _desde, end: _hasta),
     );
@@ -165,181 +168,168 @@ class _AdminWhatsappHistoricoScreenState
 
   @override
   Widget build(BuildContext context) {
+    final filtrados = _filtrarPorQuery(_docs);
     return AppScaffold(
       title: 'Historial WhatsApp',
-      body: Padding(
-        padding: const EdgeInsets.fromLTRB(
-            AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _Header(
+            cantidad: _cargando ? null : filtrados.length,
+            rango: '${AppFormatters.formatearFechaCorta(_desde)} → '
+                '${AppFormatters.formatearFechaCorta(_hasta)}',
+            onCambiarRango: _elegirRango,
+          ),
+          // KPIs sobre los resultados cargados (no los filtrados client-side,
+          // para que el panorama del rango sea estable mientras se busca).
+          if (!_cargando && _error == null && _docs.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
+              child: _ResumenHistorico(docs: _docs),
+            ),
+          _filtrosCard(),
+          const SizedBox(height: AppSpacing.sm),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            child: _busquedaInput(),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Expanded(child: _lista(filtrados)),
+        ],
+      ),
+    );
+  }
+
+  Widget _filtrosCard() {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      child: AppCard(
+        tier: 2,
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _filtrosCard(),
-            const SizedBox(height: AppSpacing.sm),
-            _busquedaInput(),
-            const SizedBox(height: AppSpacing.sm),
-            Expanded(child: _lista()),
+            // Chips de estado.
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _chipEstado(null, 'Todos'),
+                _chipEstado('ENVIADO', 'Enviados'),
+                _chipEstado('ERROR', 'Errores'),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            // DNI + origen + botón buscar.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: AppInput(
+                    controller: _dniCtrl,
+                    hint: 'DNI destinatario',
+                    mono: true,
+                    keyboardType: TextInputType.number,
+                    onSubmitted: (_) => _ejecutarConsulta(),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: AppInput(
+                    controller: _origenCtrl,
+                    hint: 'Origen',
+                    mono: true,
+                    onSubmitted: (_) => _ejecutarConsulta(),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                _BotonBuscar(onTap: _ejecutarConsulta),
+              ],
+            ),
+            if (_filtrosServerActivos > 1)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.sm),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: c.warning),
+                    const SizedBox(width: AppSpacing.xs),
+                    Expanded(
+                      child: Text(
+                        'Combinar estado + DNI + origen puede requerir un índice '
+                        'extra. Si la consulta tarda o falla, dejá un solo filtro '
+                        'server-side y refiná con la búsqueda.',
+                        style: AppType.label.copyWith(color: c.warning),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _filtrosCard() {
-    final formatRango = '${AppFormatters.formatearFechaCorta(_desde)} → '
-        '${AppFormatters.formatearFechaCorta(_hasta)}';
-    return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.calendar_today,
-                  color: AppColors.info, size: 16),
-              const SizedBox(width: 6),
-              Expanded(
-                child: InkWell(
-                  onTap: _elegirRango,
-                  child: Text(
-                    formatRango,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-              AppButton.ghost(
-                label: 'Cambiar',
-                size: AppButtonSize.sm,
-                onPressed: _elegirRango,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              Text('Estado:',
-                  style: AppType.label.copyWith(color: Colors.white60)),
-              const SizedBox(width: AppSpacing.sm),
-              _chipEstado(null, 'Todos'),
-              const SizedBox(width: 6),
-              _chipEstado('ENVIADO', 'Enviados'),
-              const SizedBox(width: 6),
-              _chipEstado('ERROR', 'Errores'),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _dniCtrl,
-                  style: AppType.label.copyWith(color: Colors.white),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    labelText: 'DNI destinatario (opcional)',
-                    labelStyle: AppType.eyebrow.copyWith(color: Colors.white60),
-                    border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm + 2, vertical: AppSpacing.sm),
-                  ),
-                  onSubmitted: (_) => _ejecutarConsulta(),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: TextField(
-                  controller: _origenCtrl,
-                  style: AppType.label.copyWith(color: Colors.white),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    labelText: 'Origen (opcional)',
-                    labelStyle: AppType.eyebrow.copyWith(color: Colors.white60),
-                    border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm + 2, vertical: AppSpacing.sm),
-                  ),
-                  onSubmitted: (_) => _ejecutarConsulta(),
-                ),
-              ),
-              const SizedBox(width: 6),
-              IconButton(
-                icon: const Icon(Icons.search, color: AppColors.info),
-                tooltip: 'Buscar',
-                onPressed: _ejecutarConsulta,
-              ),
-            ],
-          ),
-          if (_filtrosServerActivos > 1)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                'Aviso: combinar estado + DNI + origen puede requerir '
-                'un índice extra. Si la consulta tarda mucho o falla, '
-                'dejá solo un filtro server-side y refiná con la búsqueda.',
-                style: AppType.eyebrow.copyWith(color: AppColors.warning),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
   Widget _chipEstado(String? value, String label) {
+    final c = context.colors;
     final selected = _filtroEstado == value;
-    return ChoiceChip(
-      label: Text(label, style: AppType.eyebrow),
-      selected: selected,
-      onSelected: (sel) {
+    // Color semántico según el estado representado por el chip.
+    final accent = value == 'ENVIADO'
+        ? c.success
+        : value == 'ERROR'
+            ? c.error
+            : c.brand;
+    return InkWell(
+      onTap: () {
         setState(() => _filtroEstado = value);
         _ejecutarConsulta();
       },
-      selectedColor: AppColors.info.withAlpha(80),
-      backgroundColor: AppColors.surface,
-      labelStyle: TextStyle(
-        color: selected ? AppColors.info : Colors.white70,
-        fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+      borderRadius: BorderRadius.circular(AppRadius.full),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color:
+              selected ? accent.withValues(alpha: 0.16) : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: Border.all(
+            color: selected ? accent.withValues(alpha: 0.5) : c.borderStrong,
+          ),
+        ),
+        child: Text(
+          label,
+          style: AppType.label.copyWith(
+            color: selected ? accent : c.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
     );
   }
 
   Widget _busquedaInput() {
-    return TextField(
+    return AppInput(
       controller: _searchCtrl,
-      style: const TextStyle(color: Colors.white, fontSize: 13),
-      decoration: InputDecoration(
-        isDense: true,
-        prefixIcon:
-            const Icon(Icons.search, color: Colors.white54, size: 20),
-        suffixIcon: _query.isEmpty
-            ? null
-            : IconButton(
-                icon: const Icon(Icons.clear,
-                    color: Colors.white54, size: 18),
-                onPressed: () {
-                  _searchCtrl.clear();
-                  setState(() => _query = '');
-                },
-              ),
-        hintText: 'Buscar dentro de los resultados (texto / teléfono / patente)',
-        hintStyle:
-            AppType.label.copyWith(color: Colors.white38),
-        border: const OutlineInputBorder(),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 10),
-      ),
+      hint: 'Buscar dentro de los resultados (texto / teléfono / patente)',
+      icon: Icons.search,
       onChanged: (v) => setState(() => _query = v),
+      trailingAction: _query.isEmpty ? null : 'Limpiar',
+      onTrailingTap: _query.isEmpty
+          ? null
+          : () {
+              _searchCtrl.clear();
+              setState(() => _query = '');
+            },
     );
   }
 
-  Widget _lista() {
+  Widget _lista(List<QueryDocumentSnapshot<Map<String, dynamic>>> filtrados) {
     if (_cargando) return const AppLoadingState();
     if (_error != null) {
       return AppErrorState(subtitle: _error!);
     }
-    final filtrados = _filtrarPorQuery(_docs);
     if (filtrados.isEmpty) {
       return AppEmptyState(
         icon: Icons.history_toggle_off,
@@ -351,25 +341,12 @@ class _AdminWhatsappHistoricoScreenState
       );
     }
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: 80),
-      itemCount: filtrados.length + 1,
-      itemBuilder: (ctx, i) {
-        if (i == 0) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.sm, left: AppSpacing.xs),
-            child: Text(
-              '${filtrados.length} mensaje(s)'
-              '${_query.isNotEmpty || _filtrosServerActivos > 0 ? " coinciden" : ""}',
-              style: AppType.label.copyWith(color: Colors.white60),
-            ),
-          );
-        }
-        final doc = filtrados[i - 1];
-        return _ItemHistorico(
-          doc: doc,
-          onTap: () => _mostrarDetalle(context, doc),
-        );
-      },
+      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, 88),
+      itemCount: filtrados.length,
+      itemBuilder: (ctx, i) => _ItemHistorico(
+        doc: filtrados[i],
+        onTap: () => _mostrarDetalle(context, filtrados[i]),
+      ),
     );
   }
 
@@ -380,14 +357,183 @@ class _AdminWhatsappHistoricoScreenState
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: context.colors.surface2,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
       ),
       builder: (sCtx) => _DetalleHistoricoSheet(doc: doc),
     );
   }
 }
+
+// =============================================================================
+// HEADER — eyebrow + hero (cantidad) + pill de rango de fechas
+// =============================================================================
+
+class _Header extends StatelessWidget {
+  /// Cantidad de mensajes (null mientras carga → muestra "—").
+  final int? cantidad;
+  final String rango;
+  final VoidCallback onCambiarRango;
+
+  const _Header({
+    required this.cantidad,
+    required this.rango,
+    required this.onCambiarRango,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const AppEyebrow('Historial WhatsApp'),
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      cantidad == null ? '—' : '$cantidad',
+                      style: AppType.h2.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        cantidad == 1 ? 'mensaje' : 'mensajes',
+                        style: AppType.monoSm.copyWith(color: c.textMuted),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          // Pill tappable con el rango de fechas activo.
+          _PillRango(rango: rango, onTap: onCambiarRango),
+        ],
+      ),
+    );
+  }
+}
+
+/// Pill de rango de fechas. Tap abre el date range picker.
+class _PillRango extends StatelessWidget {
+  final String rango;
+  final VoidCallback onTap;
+  const _PillRango({required this.rango, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.full),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: Border.all(color: c.borderStrong),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.calendar_today_outlined, size: 14, color: c.textSecondary),
+            const SizedBox(width: 6),
+            Text(
+              rango,
+              style: AppType.monoSm.copyWith(
+                color: c.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_drop_down, size: 18, color: c.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// RESUMEN — AppKpiStrip total / entregados / leídos (M11 acks)
+// =============================================================================
+
+class _ResumenHistorico extends StatelessWidget {
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  const _ResumenHistorico({required this.docs});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    var enviados = 0, errores = 0, entregados = 0, leidos = 0;
+    for (final doc in docs) {
+      final m = doc.data();
+      final estado = (m['estado'] ?? '').toString();
+      if (estado == 'ERROR') {
+        errores++;
+      } else {
+        enviados++;
+      }
+      if (m['entregado_en'] is Timestamp) entregados++;
+      if (m['leido_en'] is Timestamp) leidos++;
+    }
+
+    return AppKpiStrip(
+      stats: [
+        AppStat(label: 'Total', value: '${docs.length}'),
+        AppStat(label: 'Enviados', value: '$enviados', accent: c.success),
+        AppStat(label: 'Entregados', value: '$entregados', accent: c.info),
+        AppStat(label: 'Leídos', value: '$leidos', accent: c.brand),
+        if (errores > 0)
+          AppStat(label: 'Errores', value: '$errores', accent: c.error),
+      ],
+    );
+  }
+}
+
+/// Botón cuadrado de búsqueda (dispara la consulta server-side).
+class _BotonBuscar extends StatelessWidget {
+  final VoidCallback onTap;
+  const _BotonBuscar({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: Container(
+        height: 46,
+        width: 46,
+        decoration: BoxDecoration(
+          color: c.surface3,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: c.borderStrong),
+        ),
+        child: Icon(Icons.search, size: 18, color: c.textSecondary),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// ITEM — fila AppCard con badge de estado + ack ✓✓ + mono
+// =============================================================================
 
 class _ItemHistorico extends StatelessWidget {
   final QueryDocumentSnapshot<Map<String, dynamic>> doc;
@@ -396,10 +542,11 @@ class _ItemHistorico extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final m = doc.data();
     final estado = (m['estado'] ?? '').toString();
     final esError = estado == 'ERROR';
-    final color = esError ? AppColors.error : AppColors.success;
+    final color = esError ? c.error : c.success;
     final telefono = (m['telefono'] ?? '').toString();
     final mensaje = (m['mensaje'] ?? '').toString();
     final origen = (m['origen'] ?? '').toString();
@@ -408,85 +555,67 @@ class _ItemHistorico extends StatelessWidget {
     final leidoEn = m['leido_en']; // M11
     final hora = registradoEn is Timestamp
         ? AppFormatters.formatearFechaHoraSinSegundos(registradoEn.toDate())
-        : '';
-    final preview = mensaje.length > 100
-        ? '${mensaje.substring(0, 100)}…'
-        : mensaje;
-    return Card(
-      color: AppColors.surface,
-      margin: const EdgeInsets.only(bottom: 6),
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        : '—';
+    final preview =
+        mensaje.length > 100 ? '${mensaje.substring(0, 100)}…' : mensaje;
+
+    return AppCard(
+      tier: 1,
+      accent: color,
+      onTap: onTap,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: color.withAlpha(40),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: color.withAlpha(120)),
-                    ),
-                    child: Text(
-                      estado,
-                      style: TextStyle(
-                        color: color,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  // M11 — checkmarks de ack (gris/azul). Solo si NO es
-                  // error y el mensaje fue al menos enviado.
-                  if (!esError)
-                    _AckIcon(
-                      entregadoEn: entregadoEn is Timestamp
-                          ? entregadoEn.toDate()
-                          : null,
-                      leidoEn:
-                          leidoEn is Timestamp ? leidoEn.toDate() : null,
-                    ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      PhoneFormatter.paraMostrar(telefono),
-                      style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  Text(
-                    hora,
-                    style: AppType.eyebrow.copyWith(color: Colors.white60),
-                  ),
-                ],
+              AppBadge(
+                text: estado.isEmpty ? '—' : estado,
+                color: color,
+                size: AppBadgeSize.sm,
+                dot: true,
               ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                preview,
-                style:
-                    AppType.label.copyWith(color: Colors.white70),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (origen.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  origen,
-                  style: const TextStyle(
-                    color: Colors.white38,
-                    fontSize: 10,
-                    fontFamily: 'monospace',
-                  ),
+              // M11 — checkmarks de ack. Solo si NO es error.
+              if (!esError) ...[
+                const SizedBox(width: 6),
+                _AckIcon(
+                  entregadoEn:
+                      entregadoEn is Timestamp ? entregadoEn.toDate() : null,
+                  leidoEn: leidoEn is Timestamp ? leidoEn.toDate() : null,
                 ),
               ],
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  PhoneFormatter.paraMostrar(telefono),
+                  style: AppType.mono.copyWith(fontWeight: FontWeight.w600),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Text(
+                hora,
+                style: AppType.monoSm.copyWith(color: c.textMuted),
+              ),
             ],
           ),
-        ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            preview,
+            style: AppType.bodySm.copyWith(color: c.textSecondary),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (origen.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              origen,
+              style: AppType.monoSm.copyWith(color: c.textMuted),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -498,10 +627,11 @@ class _DetalleHistoricoSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final m = doc.data();
     final estado = (m['estado'] ?? '').toString();
     final esError = estado == 'ERROR';
-    final color = esError ? AppColors.error : AppColors.success;
+    final color = esError ? c.error : c.success;
     final telefono = (m['telefono'] ?? '').toString();
     final mensaje = (m['mensaje'] ?? '').toString();
     final origen = (m['origen'] ?? '').toString();
@@ -515,7 +645,7 @@ class _DetalleHistoricoSheet extends StatelessWidget {
     final leido = m['leido_en']; // M11
     final fechaTxt = registrado is Timestamp
         ? AppFormatters.formatearFechaHoraSinSegundos(registrado.toDate())
-        : '';
+        : '—';
     final entregadoTxt = entregado is Timestamp
         ? AppFormatters.formatearFechaHoraSinSegundos(entregado.toDate())
         : '';
@@ -523,141 +653,163 @@ class _DetalleHistoricoSheet extends StatelessWidget {
         ? AppFormatters.formatearFechaHoraSinSegundos(leido.toDate())
         : '';
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    esError ? Icons.error_outline : Icons.check_circle_outline,
-                    color: color,
-                    size: 22,
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Text(
-                    estado,
-                    style: AppType.heading.copyWith(color: color, fontWeight: FontWeight.bold),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white60),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              _fila('Teléfono', PhoneFormatter.paraMostrar(telefono)),
-              _fila('Enviado', fechaTxt),
-              if (entregadoTxt.isNotEmpty)
-                _fila('Entregado ✓✓', entregadoTxt),
-              if (leidoTxt.isNotEmpty)
-                _fila('Leído ✓✓ (azul)', leidoTxt),
-              if (origen.isNotEmpty) _fila('Origen', origen),
-              if (destinatarioId.isNotEmpty)
-                _fila('Destinatario', destinatarioId),
-              if (destinatarioColec.isNotEmpty)
-                _fila('Colección', destinatarioColec),
-              if (alertPatente.isNotEmpty) _fila('Patente', alertPatente),
-              if (waId.isNotEmpty) _fila('WhatsApp ID', waId),
-              const SizedBox(height: AppSpacing.md),
-              Text(
-                'Mensaje',
-                style: AppType.eyebrow.copyWith(color: Colors.white60, fontWeight: FontWeight.bold, letterSpacing: 1),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(10),
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.95,
+      builder: (ctx, scrollCtl) => SingleChildScrollView(
+        controller: scrollCtl,
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.xxl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(6),
-                  border:
-                      Border.all(color: Colors.white12),
-                ),
-                child: SelectableText(
-                  mensaje,
-                  style: const TextStyle(
-                      color: Colors.white, fontSize: 13),
+                  color: c.borderStrong,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              if (error.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.md),
-                Text(
-                  'Error',
-                  style: AppType.eyebrow.copyWith(color: AppColors.error, fontWeight: FontWeight.bold, letterSpacing: 1),
+            ),
+            Row(
+              children: [
+                Icon(
+                  esError ? Icons.error_outline : Icons.check_circle_outline,
+                  color: color,
+                  size: 22,
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.error.withAlpha(30),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: AppColors.error.withAlpha(80)),
-                  ),
-                  child: SelectableText(
-                    error,
-                    style: AppType.label.copyWith(color: AppColors.error),
-                  ),
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  estado.isEmpty ? '—' : estado,
+                  style: AppType.h4.copyWith(color: color),
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: Icon(Icons.close, size: 18, color: c.textMuted),
+                  onPressed: () => Navigator.pop(context),
                 ),
               ],
-              const SizedBox(height: AppSpacing.lg),
-              Center(
-                child: AppButton.ghost(
-                  label: doc.id,
-                  icon: Icons.copy,
-                  size: AppButtonSize.sm,
-                  onPressed: () {
-                    final messenger = ScaffoldMessenger.of(context);
-                    AppFeedback.successOn(
-                      messenger,
-                      'Doc ID copiado: ${doc.id}',
-                    );
-                  },
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            _fila('Teléfono', PhoneFormatter.paraMostrar(telefono)),
+            _fila('Enviado', fechaTxt),
+            if (entregadoTxt.isNotEmpty) _fila('Entregado ✓✓', entregadoTxt),
+            if (leidoTxt.isNotEmpty) _fila('Leído ✓✓ (azul)', leidoTxt),
+            if (origen.isNotEmpty) _fila('Origen', origen),
+            if (destinatarioId.isNotEmpty) _fila('Destinatario', destinatarioId),
+            if (destinatarioColec.isNotEmpty) _fila('Colección', destinatarioColec),
+            if (alertPatente.isNotEmpty) _fila('Patente', alertPatente),
+            if (waId.isNotEmpty) _fila('WhatsApp ID', waId),
+            const SizedBox(height: AppSpacing.md),
+            const _SeccionTituloHist(
+                icono: Icons.message_outlined, texto: 'Mensaje'),
+            const SizedBox(height: 6),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              decoration: BoxDecoration(
+                color: c.surface3,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                border: Border.all(color: c.border),
+              ),
+              child: SelectableText(mensaje, style: AppType.body),
+            ),
+            if (error.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.md),
+              _SeccionTituloHist(
+                  icono: Icons.error_outline, texto: 'Error', color: c.error),
+              const SizedBox(height: 6),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: c.errorSoft,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  border: Border.all(color: c.error.withValues(alpha: 0.4)),
+                ),
+                child: SelectableText(
+                  error,
+                  style: AppType.mono.copyWith(color: c.error),
                 ),
               ),
             ],
-          ),
+            const SizedBox(height: AppSpacing.lg),
+            Center(
+              child: AppButton.ghost(
+                label: doc.id,
+                icon: Icons.copy,
+                size: AppButtonSize.sm,
+                onPressed: () {
+                  final messenger = ScaffoldMessenger.of(context);
+                  AppFeedback.successOn(
+                    messenger,
+                    'Doc ID copiado: ${doc.id}',
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );
   }
 
   Widget _fila(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 110,
-            child: Text(
-              label,
-              style: AppType.eyebrow.copyWith(color: Colors.white60),
+    return Builder(builder: (context) {
+      final c = context.colors;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 120,
+              child: Text(
+                label,
+                style: AppType.label.copyWith(color: c.textMuted),
+              ),
             ),
-          ),
-          Expanded(
-            child: SelectableText(
-              value,
-              style: AppType.label.copyWith(color: Colors.white),
+            Expanded(
+              child: SelectableText(value, style: AppType.mono),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      );
+    });
+  }
+}
+
+/// Eyebrow de sección con ícono para el sheet del histórico.
+class _SeccionTituloHist extends StatelessWidget {
+  final IconData icono;
+  final String texto;
+  final Color? color;
+  const _SeccionTituloHist({
+    required this.icono,
+    required this.texto,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final col = color ?? context.colors.textSecondary;
+    return Row(
+      children: [
+        Icon(icono, color: col, size: 16),
+        const SizedBox(width: AppSpacing.sm),
+        AppEyebrow(texto, color: col),
+      ],
     );
   }
 }
 
-
 /// M11 — Mini-widget con los ✓/✓✓/✓✓-azul al estilo WhatsApp.
-/// gris/blanco = solo enviado; gris/blanco con doble = entregado;
-/// azul con doble = leído. Solo se renderiza si hay al menos un
-/// timestamp; sino devuelve un SizedBox chico para mantener alineado.
+/// gris = solo enviado; gris con doble = entregado; brand con doble = leído.
 class _AckIcon extends StatelessWidget {
   final DateTime? entregadoEn;
   final DateTime? leidoEn;
@@ -665,10 +817,11 @@ class _AckIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (entregadoEn == null && leidoEn == null) {
-      return const Icon(Icons.check, size: 14, color: Colors.white38);
+      return Icon(Icons.check, size: 14, color: c.textMuted);
     }
-    final color = leidoEn != null ? AppColors.info : Colors.white60;
+    final color = leidoEn != null ? c.brand : c.textSecondary;
     return Icon(Icons.done_all, size: 14, color: color);
   }
 }

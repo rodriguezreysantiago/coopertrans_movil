@@ -1,40 +1,44 @@
 // =============================================================================
 // COMPONENTES VISUALES de la cola WhatsApp — extraídos para mantener
 // navegable el screen principal. Comparten privacidad via `part of`.
+// REFACTOR NÚCLEO (jun 2026): tokens, AppKpiStrip, AppBadge, AppFilterChip,
+// mono tabular para teléfonos/timestamps/IDs.
 // =============================================================================
 
 part of 'admin_whatsapp_cola_screen.dart';
 
 // =============================================================================
-// RESUMEN COMPACTO ARRIBA
+// ENCABEZADO — eyebrow + hero (pendientes) + AppKpiStrip + chips de filtro
 // =============================================================================
 
-/// Mini-row con conteos por estado (PENDIENTE / PROCESANDO / ENVIADO /
-/// ERROR). Lee del mismo stream que la lista, así que se actualiza
-/// solo cuando el bot mueve docs entre estados.
+/// Bloque superior de la cola: título Núcleo + KPIs por estado +
+/// chips de filtro. Lee su propio stream (limit 200) para que el
+/// panorama sea estable e independiente del filtro activo del listado.
 ///
-/// Cada contador es clickeable y filtra la lista al estado tocado.
-/// Tap al contador ya activo lo desactiva (toggle). Esto reemplaza la
-/// versión solo-lectura anterior.
-class _ResumenContador extends StatelessWidget {
-  /// Estado activo (resaltado). Null = sin filtro, todos opacos.
+/// Cada chip filtra la lista al estado tocado; tap al chip ya activo lo
+/// desactiva (toggle). Esto preserva el comportamiento de la versión
+/// solo-lectura + filtro anterior.
+class _Encabezado extends StatelessWidget {
+  /// Estado activo (resaltado). Null = sin filtro.
   final String? filtroActivo;
 
   /// Callback con el código del estado tocado ('PENDIENTE', 'ERROR', ...).
   final void Function(String estado) onTapEstado;
 
-  const _ResumenContador({
+  const _Encabezado({
     required this.filtroActivo,
     required this.onTapEstado,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return StreamBuilder<QuerySnapshot>(
       stream: WhatsAppColaService().streamCola(limit: 200),
       builder: (ctx, snap) {
         var pendientes = 0, procesando = 0, enviados = 0, errores = 0;
-        if (snap.hasData) {
+        final tieneDatos = snap.hasData;
+        if (tieneDatos) {
           for (final doc in snap.data!.docs) {
             final data = doc.data() as Map<String, dynamic>;
             final estado = (data['estado'] ?? '').toString();
@@ -44,53 +48,136 @@ class _ResumenContador extends StatelessWidget {
             if (estado == 'ERROR') errores++;
           }
         }
-        return Padding(
-          padding: const EdgeInsets.all(AppSpacing.xs),
-          child: Row(
-            children: [
-              _MiniContador(
-                  label: 'Pendientes',
-                  count: pendientes,
-                  color: AppColors.warning,
-                  activo: filtroActivo == 'PENDIENTE',
-                  onTap: () => onTapEstado('PENDIENTE')),
-              const SizedBox(width: AppSpacing.sm),
-              _MiniContador(
-                  label: 'En envío',
-                  count: procesando,
-                  color: AppColors.info,
-                  activo: filtroActivo == 'PROCESANDO',
-                  onTap: () => onTapEstado('PROCESANDO')),
-              const SizedBox(width: AppSpacing.sm),
-              _MiniContador(
-                  label: 'Enviados',
-                  count: enviados,
-                  color: AppColors.success,
-                  activo: filtroActivo == 'ENVIADO',
-                  onTap: () => onTapEstado('ENVIADO')),
-              const SizedBox(width: AppSpacing.sm),
-              _MiniContador(
-                  label: 'Con error',
-                  count: errores,
-                  color: AppColors.error,
-                  activo: filtroActivo == 'ERROR',
-                  onTap: () => onTapEstado('ERROR')),
-            ],
-          ),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Hero: COLA · pendientes.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const AppEyebrow('Cola de WhatsApp'),
+                      const SizedBox(height: 6),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            tieneDatos ? '$pendientes' : '—',
+                            style: AppType.h2.copyWith(
+                              fontFeatures: const [
+                                FontFeature.tabularFigures()
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              'pendientes',
+                              style: AppType.monoSm
+                                  .copyWith(color: c.textMuted),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // KPI strip por estado (panorama estable sobre los 200).
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
+              child: AppKpiStrip(
+                stats: [
+                  AppStat(
+                    label: 'Pendientes',
+                    value: tieneDatos ? '$pendientes' : '—',
+                    accent: c.warning,
+                  ),
+                  AppStat(
+                    label: 'En envío',
+                    value: tieneDatos ? '$procesando' : '—',
+                    accent: c.info,
+                  ),
+                  AppStat(
+                    label: 'Enviados',
+                    value: tieneDatos ? '$enviados' : '—',
+                    accent: c.success,
+                  ),
+                  AppStat(
+                    label: 'Con error',
+                    value: tieneDatos ? '$errores' : '—',
+                    accent: c.error,
+                  ),
+                ],
+              ),
+            ),
+            // Chips de filtro (toggle por estado).
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _ChipEstado(
+                    label: 'Pendientes',
+                    count: pendientes,
+                    color: c.warning,
+                    activo: filtroActivo == 'PENDIENTE',
+                    onTap: () => onTapEstado('PENDIENTE'),
+                  ),
+                  _ChipEstado(
+                    label: 'En envío',
+                    count: procesando,
+                    color: c.info,
+                    activo: filtroActivo == 'PROCESANDO',
+                    onTap: () => onTapEstado('PROCESANDO'),
+                  ),
+                  _ChipEstado(
+                    label: 'Enviados',
+                    count: enviados,
+                    color: c.success,
+                    activo: filtroActivo == 'ENVIADO',
+                    onTap: () => onTapEstado('ENVIADO'),
+                  ),
+                  _ChipEstado(
+                    label: 'Con error',
+                    count: errores,
+                    color: c.error,
+                    activo: filtroActivo == 'ERROR',
+                    onTap: () => onTapEstado('ERROR'),
+                  ),
+                ],
+              ),
+            ),
+          ],
         );
       },
     );
   }
 }
 
-class _MiniContador extends StatelessWidget {
+/// Pill de filtro por estado, estilo Núcleo. Inactivo: transparente con
+/// borde. Activo: tinte del color semántico del estado + borde del mismo.
+/// El contador va en mono tabular.
+class _ChipEstado extends StatelessWidget {
   final String label;
   final int count;
   final Color color;
   final bool activo;
   final VoidCallback onTap;
 
-  const _MiniContador({
+  const _ChipEstado({
     required this.label,
     required this.count,
     required this.color,
@@ -100,55 +187,38 @@ class _MiniContador extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // El estado activo se distingue con fondo y borde más fuertes; los
-    // inactivos quedan tenues para no distraer cuando se está mirando
-    // un filtro puntual.
-    final fondoAlpha = activo ? 60 : 15;
-    final bordeAlpha = activo ? 200 : 60;
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm, horizontal: 6),
-            decoration: BoxDecoration(
-              color: color.withAlpha(fondoAlpha),
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              border: Border.all(
-                color: color.withAlpha(bordeAlpha),
-                width: activo ? 2 : 1,
+    final c = context.colors;
+    final fg = activo ? color : c.textSecondary;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.full),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: activo ? color.withValues(alpha: 0.16) : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: Border.all(
+            color: activo ? color.withValues(alpha: 0.5) : c.borderStrong,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: AppType.label.copyWith(
+                color: fg,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            child: Column(
-              children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    '$count',
-                    maxLines: 1,
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
-                ),
-                Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: activo ? Colors.white : Colors.white60,
-                    fontSize: 10,
-                    fontWeight: activo ? FontWeight.bold : FontWeight.normal,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+            const SizedBox(width: 6),
+            Text(
+              '$count',
+              style: AppType.monoSm.copyWith(
+                color: activo ? color : c.textMuted,
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -165,9 +235,7 @@ class _ItemCola extends StatelessWidget {
   final VoidCallback onEliminar;
 
   /// Tap general en el item (afuera de los botones inferiores) abre el
-  /// BottomSheet con el detalle completo. La firma es opcional para no
-  /// romper otros usos del widget si los hubiera; cuando es null el
-  /// item se comporta como antes (no clickeable).
+  /// BottomSheet con el detalle completo.
   final VoidCallback? onTap;
 
   const _ItemCola({
@@ -179,6 +247,7 @@ class _ItemCola extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final data = doc.data() as Map<String, dynamic>;
     final estado = (data['estado'] ?? 'PENDIENTE').toString();
     // Mostramos el teléfono en formato local (sin prefijo 549).
@@ -197,13 +266,17 @@ class _ItemCola extends StatelessWidget {
         (data['items_agrupados'] as List<dynamic>?) ?? const [];
 
     final esError = estado == 'ERROR';
+    final estadoColor = _colorEstado(context, estado);
 
-    final card = AppCard(
-      borderColor: _colorEstado(estado).withAlpha(esError ? 150 : 40),
-      padding: const EdgeInsets.all(14),
+    return AppCard(
+      tier: 1,
+      accent: estadoColor,
+      onTap: onTap,
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Línea 1: badge estado + (agrupado) + teléfono + intentos.
           Row(
             children: [
               _BadgeEstado(estado: estado),
@@ -211,11 +284,11 @@ class _ItemCola extends StatelessWidget {
                 const SizedBox(width: 6),
                 _BadgeAgrupado(cantidad: itemsAgrupados.length),
               ],
-              const SizedBox(width: 10),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   telefono,
-                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: AppType.mono.copyWith(fontWeight: FontWeight.w600),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -223,34 +296,42 @@ class _ItemCola extends StatelessWidget {
               if (intentos > 1)
                 Text(
                   'x$intentos',
-                  style: AppType.eyebrow.copyWith(color: Colors.white38, fontWeight: FontWeight.bold),
+                  style: AppType.monoSm.copyWith(color: c.textMuted),
                 ),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
             mensaje,
-            style: AppType.label.copyWith(color: Colors.white70, height: 1.4),
+            style: AppType.bodySm.copyWith(color: c.textSecondary),
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.sm),
+          // Timeline compacta: encolado + (enviado).
           Row(
             children: [
-              const Icon(Icons.schedule, size: 11, color: Colors.white38),
+              Icon(Icons.schedule, size: 13, color: c.textMuted),
               const SizedBox(width: AppSpacing.xs),
-              Text(
-                _formatTs(encoladoTs, prefijo: 'Encolado'),
-                style: const TextStyle(color: Colors.white38, fontSize: 10),
+              Flexible(
+                child: Text(
+                  _formatTs(encoladoTs, prefijo: 'Encolado'),
+                  style: AppType.monoSm.copyWith(color: c.textMuted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               if (enviadoTs != null) ...[
                 const SizedBox(width: AppSpacing.md),
-                const Icon(Icons.check, size: 11, color: AppColors.success),
+                Icon(Icons.check, size: 13, color: c.success),
                 const SizedBox(width: AppSpacing.xs),
-                Text(
-                  _formatTs(enviadoTs, prefijo: 'Enviado'),
-                  style: const TextStyle(
-                      color: AppColors.success, fontSize: 10),
+                Flexible(
+                  child: Text(
+                    _formatTs(enviadoTs, prefijo: 'Enviado'),
+                    style: AppType.monoSm.copyWith(color: c.success),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ],
@@ -258,75 +339,70 @@ class _ItemCola extends StatelessWidget {
           if (esError && error.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.sm),
             Container(
+              width: double.infinity,
               padding: const EdgeInsets.all(AppSpacing.sm),
               decoration: BoxDecoration(
-                color: AppColors.error.withAlpha(15),
-                borderRadius: BorderRadius.circular(6),
+                color: c.errorSoft,
+                borderRadius: BorderRadius.circular(AppRadius.md),
               ),
               child: Text(
                 error,
-                style: AppType.eyebrow.copyWith(color: AppColors.error, height: 1.3),
+                style: AppType.monoSm.copyWith(color: c.error),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
-          const SizedBox(height: AppSpacing.sm),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (esError || estado == 'PENDIENTE')
+          // Acciones (solo cuando hay algo que hacer).
+          if (esError || estado == 'PENDIENTE') ...[
+            const SizedBox(height: AppSpacing.md),
+            const AppHairline(),
+            const SizedBox(height: AppSpacing.md),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
                 AppButton.ghost(
                   label: 'Eliminar',
                   icon: Icons.delete_outline,
                   size: AppButtonSize.sm,
                   onPressed: onEliminar,
                 ),
-              if (esError) ...[
-                const SizedBox(width: AppSpacing.xs),
-                AppButton.ghost(
-                  label: 'Reintentar',
-                  icon: Icons.refresh,
-                  size: AppButtonSize.sm,
-                  onPressed: onReintentar,
-                ),
+                if (esError) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  AppButton.secondary(
+                    label: 'Reintentar',
+                    icon: Icons.refresh,
+                    size: AppButtonSize.sm,
+                    onPressed: onReintentar,
+                  ),
+                ],
               ],
-            ],
-          ),
+            ),
+          ],
         ],
-      ),
-    );
-
-    // Si hay onTap, hacemos el card clickeable. AppCard ya tiene su
-    // propio padding/borde, asi que el InkWell va por afuera con el
-    // mismo borderRadius para que el ripple se vea bien recortado.
-    if (onTap == null) return card;
-    return Material(
-      color: Colors.transparent,
-      borderRadius: BorderRadius.circular(AppRadius.md),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        child: card,
       ),
     );
   }
 
-  static Color _colorEstado(String estado) {
+  /// Color semántico por estado, resuelto contra el theme activo.
+  static Color _colorEstado(BuildContext context, String estado) {
+    final c = context.colors;
     switch (estado) {
       case 'PENDIENTE':
-        return AppColors.warning;
+        return c.warning;
       case 'PROCESANDO':
-        return AppColors.info;
+        return c.info;
       case 'ENVIADO':
-        return AppColors.success;
+        return c.success;
       case 'ERROR':
-        return AppColors.error;
+        return c.error;
       default:
-        return Colors.white38;
+        return c.textMuted;
     }
   }
 
   static String _formatTs(dynamic ts, {String prefijo = ''}) {
-    if (ts is! Timestamp) return prefijo;
+    if (ts is! Timestamp) return prefijo.isEmpty ? '—' : prefijo;
     final txt = AppFormatters.formatearFechaHoraCorta(ts.toDate());
     return prefijo.isEmpty ? txt : '$prefijo $txt';
   }
@@ -338,28 +414,16 @@ class _BadgeEstado extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = _ItemCola._colorEstado(estado);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withAlpha(25),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withAlpha(80)),
-      ),
-      child: Text(
-        estado,
-        style: TextStyle(
-          color: color,
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.8,
-        ),
-      ),
+    return AppBadge(
+      text: estado,
+      color: _ItemCola._colorEstado(context, estado),
+      size: AppBadgeSize.sm,
+      dot: true,
     );
   }
 }
 
-/// Pequeno chip que aparece junto al badge de estado cuando el item es
+/// Pequeño chip que aparece junto al badge de estado cuando el item es
 /// un mensaje agrupado (varios papeles del mismo chofer en uno solo).
 /// Muestra el icono + cantidad de papeles incluidos.
 class _BadgeAgrupado extends StatelessWidget {
@@ -368,28 +432,11 @@ class _BadgeAgrupado extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-      decoration: BoxDecoration(
-        color: AppColors.brand.withAlpha(25),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: AppColors.brand.withAlpha(80)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.attach_file, size: 10, color: AppColors.brand),
-          const SizedBox(width: 3),
-          Text(
-            '${cantidad}x',
-            style: const TextStyle(
-              color: AppColors.brand,
-              fontSize: 9,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
-      ),
+    return AppBadge(
+      text: '${cantidad}x',
+      color: context.colors.brand,
+      size: AppBadgeSize.sm,
+      icon: Icons.attach_file,
     );
   }
 }
@@ -401,10 +448,9 @@ class _BadgeAgrupado extends StatelessWidget {
 /// Sheet desplegable con TODA la info del doc de la cola: mensaje sin
 /// truncar, lista de items_agrupados (cuando aplica), todos los
 /// timestamps, origen, error completo, intentos, IDs de
-/// destinatario/admin. Reemplaza al "tap inerte" anterior - ahora cada
-/// item es la puerta de entrada al detalle.
+/// destinatario/admin.
 ///
-/// Read-only por diseno: las acciones (eliminar / reintentar) siguen en
+/// Read-only por diseño: las acciones (eliminar / reintentar) siguen en
 /// la card para evitar que el sheet crezca con responsabilidades.
 class _DetalleColaSheet extends StatelessWidget {
   final QueryDocumentSnapshot doc;
@@ -412,6 +458,7 @@ class _DetalleColaSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final data = doc.data() as Map<String, dynamic>;
     final estado = (data['estado'] ?? '').toString();
     final telefono = PhoneFormatter.paraMostrar(data['telefono']?.toString());
@@ -436,7 +483,8 @@ class _DetalleColaSheet extends StatelessWidget {
       maxChildSize: 0.95,
       builder: (ctx, scrollCtl) => SingleChildScrollView(
         controller: scrollCtl,
-        padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.xxl),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -444,9 +492,9 @@ class _DetalleColaSheet extends StatelessWidget {
               child: Container(
                 width: 40,
                 height: 4,
-                margin: const EdgeInsets.only(bottom: 14),
+                margin: const EdgeInsets.only(bottom: AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: Colors.white24,
+                  color: c.borderStrong,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -458,15 +506,18 @@ class _DetalleColaSheet extends StatelessWidget {
                   const SizedBox(width: 6),
                   _BadgeAgrupado(cantidad: itemsAgrupados.length),
                 ],
-                const SizedBox(width: 10),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     telefono,
-                    style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: AppType.mono.copyWith(
+                        fontSize: 16, fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white54),
+                  icon: Icon(Icons.close, size: 18, color: c.textMuted),
                   tooltip: 'Cerrar',
                   onPressed: () => Navigator.of(ctx).pop(),
                 ),
@@ -487,26 +538,21 @@ class _DetalleColaSheet extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(AppSpacing.md),
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha(8),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                border: Border.all(color: Colors.white12),
+                color: c.surface3,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                border: Border.all(color: c.border),
               ),
               child: SelectableText(
                 mensaje,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  height: 1.5,
-                ),
+                style: AppType.body,
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
             const _SeccionTitulo(
-                icono: Icons.access_time, texto: 'Linea de tiempo'),
+                icono: Icons.access_time, texto: 'Línea de tiempo'),
             const SizedBox(height: 6),
             _FilaDato(
-                label: 'Encolado',
-                valor: _ItemCola._formatTs(encoladoTs)),
+                label: 'Encolado', valor: _ItemCola._formatTs(encoladoTs)),
             _FilaDato(
                 label: 'Enviado',
                 valor: enviadoTs == null
@@ -514,43 +560,43 @@ class _DetalleColaSheet extends StatelessWidget {
                     : _ItemCola._formatTs(enviadoTs)),
             if (proximoTs != null)
               _FilaDato(
-                  label: 'Proximo reintento',
+                  label: 'Próximo reintento',
                   valor: _ItemCola._formatTs(proximoTs)),
             _FilaDato(label: 'Intentos', valor: '$intentos'),
             const SizedBox(height: AppSpacing.lg),
-            const _SeccionTitulo(
-                icono: Icons.info_outline, texto: 'Metadata'),
+            const _SeccionTitulo(icono: Icons.info_outline, texto: 'Metadata'),
             const SizedBox(height: 6),
-            _FilaDato(label: 'Origen', valor: origen.isEmpty ? '-' : origen),
+            _FilaDato(label: 'Origen', valor: origen.isEmpty ? '—' : origen),
             _FilaDato(
-                label: 'Campo base', valor: campoBase.isEmpty ? '-' : campoBase),
+                label: 'Campo base',
+                valor: campoBase.isEmpty ? '—' : campoBase),
             _FilaDato(
                 label: 'Destinatario (DNI)',
-                valor: destinatarioId.isEmpty ? '-' : destinatarioId),
+                valor: destinatarioId.isEmpty ? '—' : destinatarioId),
             _FilaDato(
-                label: 'Admin que encolo',
+                label: 'Admin que encoló',
                 valor: adminNombre.isEmpty
-                    ? (adminDni.isEmpty ? '-' : adminDni)
+                    ? (adminDni.isEmpty ? '—' : adminDni)
                     : '$adminNombre ($adminDni)'),
             _FilaDato(label: 'ID del doc', valor: doc.id, copiable: true),
             if (error.isNotEmpty) ...[
               const SizedBox(height: AppSpacing.lg),
-              const _SeccionTitulo(
+              _SeccionTitulo(
                   icono: Icons.error_outline,
                   texto: 'Error',
-                  color: AppColors.error),
+                  color: c.error),
               const SizedBox(height: 6),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: AppColors.error.withAlpha(15),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                  border: Border.all(color: AppColors.error.withAlpha(80)),
+                  color: c.errorSoft,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  border: Border.all(color: c.error.withValues(alpha: 0.4)),
                 ),
                 child: SelectableText(
                   error,
-                  style: AppType.label.copyWith(color: AppColors.error, fontFamily: 'monospace', height: 1.4),
+                  style: AppType.mono.copyWith(color: c.error),
                 ),
               ),
             ],
@@ -564,23 +610,21 @@ class _DetalleColaSheet extends StatelessWidget {
 class _SeccionTitulo extends StatelessWidget {
   final IconData icono;
   final String texto;
-  final Color color;
+  final Color? color;
   const _SeccionTitulo({
     required this.icono,
     required this.texto,
-    this.color = AppColors.success,
+    this.color,
   });
 
   @override
   Widget build(BuildContext context) {
+    final col = color ?? context.colors.textSecondary;
     return Row(
       children: [
-        Icon(icono, color: color, size: 16),
+        Icon(icono, color: col, size: 16),
         const SizedBox(width: AppSpacing.sm),
-        Text(
-          texto.toUpperCase(),
-          style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.bold, letterSpacing: 1),
-        ),
+        AppEyebrow(texto, color: col),
       ],
     );
   }
@@ -602,6 +646,7 @@ class _FilaDato extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
@@ -611,18 +656,18 @@ class _FilaDato extends StatelessWidget {
             width: 130,
             child: Text(
               label,
-              style: AppType.label.copyWith(color: Colors.white54),
+              style: AppType.label.copyWith(color: c.textMuted),
             ),
           ),
           Expanded(
             child: copiable
                 ? SelectableText(
                     valor,
-                    style: AppType.label.copyWith(color: Colors.white, fontFamily: 'monospace'),
+                    style: AppType.mono,
                   )
                 : Text(
                     valor,
-                    style: AppType.label.copyWith(color: Colors.white),
+                    style: AppType.mono,
                   ),
           ),
         ],
@@ -638,6 +683,7 @@ class _FilaItemAgrupado extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (item is! Map) return const SizedBox.shrink();
+    final c = context.colors;
     final m = item;
     final tipoDoc = (m['tipoDoc'] ?? m['campoBase'] ?? '').toString();
     final fecha = (m['fecha'] ?? '').toString();
@@ -648,25 +694,27 @@ class _FilaItemAgrupado extends StatelessWidget {
       final d = dias.toInt();
       if (d < 0) {
         estadoLegible = 'vencido hace ${d.abs()}d';
-        colorDias = AppColors.error;
+        colorDias = c.error;
       } else if (d == 0) {
         estadoLegible = 'vence hoy';
-        colorDias = AppColors.warning;
+        colorDias = c.warning;
       } else {
         estadoLegible = 'vence en ${d}d';
-        colorDias = d <= 7 ? AppColors.warning : AppColors.success;
+        colorDias = d <= 7 ? c.warning : c.success;
       }
     } else {
-      estadoLegible = '-';
-      colorDias = Colors.white54;
+      estadoLegible = '—';
+      colorDias = c.textMuted;
     }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         decoration: BoxDecoration(
-          color: Colors.white.withAlpha(8),
-          borderRadius: BorderRadius.circular(6),
+          color: c.surface3,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: c.border),
         ),
         child: Row(
           children: [
@@ -675,21 +723,24 @@ class _FilaItemAgrupado extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    tipoDoc,
-                    style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                    tipoDoc.isEmpty ? '—' : tipoDoc,
+                    style: AppType.body.copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   if (fecha.isNotEmpty)
                     Text(
                       'Vence: $fecha',
-                      style: const TextStyle(
-                          color: Colors.white54, fontSize: 10),
+                      style: AppType.monoSm.copyWith(color: c.textMuted),
                     ),
                 ],
               ),
             ),
+            const SizedBox(width: AppSpacing.sm),
             Text(
               estadoLegible,
-              style: AppType.eyebrow.copyWith(color: colorDias, fontWeight: FontWeight.bold),
+              style: AppType.monoSm.copyWith(
+                  color: colorDias, fontWeight: FontWeight.w600),
             ),
           ],
         ),

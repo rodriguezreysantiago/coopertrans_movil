@@ -10,7 +10,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Bandeja de respuestas que el bot recibió pero no pudo asociar
-/// automáticamente a un aviso (Fase 3).
+/// automáticamente a un aviso (Fase 3). REFACTOR NÚCLEO (jun 2026).
 ///
 /// Casos:
 /// - El chofer mandó una foto sin tener un aviso reciente del bot.
@@ -19,6 +19,11 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 ///
 /// El admin las procesa acá: ve el mensaje + foto + fecha detectada y
 /// puede convertirlas en revisión eligiendo el papel, o descartarlas.
+///
+/// Reescrita al layout Núcleo: header eyebrow + hero (conteo de la
+/// bandeja), filas AppCard con hairline, badge semántico de razón,
+/// DNI/timestamps en mono tabular. Stream, batch de conversión, descarte
+/// y el sheet de candidatos quedan INTACTOS — solo cambió la presentación.
 class AdminBotBandejaScreen extends StatelessWidget {
   const AdminBotBandejaScreen({super.key});
 
@@ -85,32 +90,40 @@ class AdminBotBandejaScreen extends StatelessWidget {
     // pendientes de respuesta para este chofer).
     final elegido = await showModalBottomSheet<Map<String, dynamic>>(
       context: context,
-      backgroundColor: AppColors.surface2,
+      backgroundColor: context.colors.surface2,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
       ),
-      builder: (sCtx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(AppSpacing.xl),
-              child: Text('¿A QUÉ PAPEL CORRESPONDE?', style: AppType.eyebrow),
-            ),
-            ...candidatos.map((c) {
-              final cMap = c as Map<String, dynamic>;
-              return ListTile(
-                leading: const Icon(Icons.event_note, color: AppColors.brand),
-                title: Text(
-                  (cMap['campo_base'] ?? 'Documento').toString(),
-                ),
-                onTap: () => Navigator.pop(sCtx, cMap),
-              );
-            }),
-            const SizedBox(height: AppSpacing.md),
-          ],
-        ),
-      ),
+      builder: (sCtx) {
+        final c = sCtx.colors;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(
+                    AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, AppSpacing.md),
+                child: AppEyebrow('¿A qué papel corresponde?'),
+              ),
+              ...candidatos.map((cand) {
+                final cMap = cand as Map<String, dynamic>;
+                return ListTile(
+                  leading: Icon(Icons.event_note_outlined,
+                      size: 20, color: c.brand),
+                  title: Text(
+                    (cMap['campo_base'] ?? 'Documento').toString(),
+                    style: AppType.body,
+                  ),
+                  trailing: Icon(Icons.chevron_right, size: 18, color: c.textMuted),
+                  onTap: () => Navigator.pop(sCtx, cMap),
+                );
+              }),
+              const SizedBox(height: AppSpacing.md),
+            ],
+          ),
+        );
+      },
     );
 
     if (elegido == null) return;
@@ -178,41 +191,31 @@ class AdminBotBandejaScreen extends StatelessWidget {
           }
           if (!snap.hasData) return const AppLoadingState();
           final docs = snap.data!.docs;
-          if (docs.isEmpty) {
-            return const AppEmptyState(
-              icon: Icons.inbox_outlined,
-              title: 'Bandeja vacía',
-              subtitle:
-                  'Las respuestas que el bot no pueda asociar con un aviso van a aparecer acá.',
-            );
-          }
           // Si llegamos al límite, avisamos al admin que puede haber más.
           final llegoAlLimite = docs.length >= 200;
           return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (llegoAlLimite)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.lg, vertical: AppSpacing.md),
-                  color: AppColors.warning.withAlpha(30),
-                  child: Text(
-                    'Mostrando los 200 más recientes. Procesá los antiguos para ver más.',
-                    style: AppType.label.copyWith(color: AppColors.warning),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
+              _Header(cantidad: docs.length),
+              if (llegoAlLimite) const _BannerLimite(),
               Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.xxxl),
-                  itemCount: docs.length,
-                  itemBuilder: (ctx, i) => _ItemAmbiguo(
-                    doc: docs[i],
-                    onConvertir: () =>
-                        _convertirEnRevision(context, docs[i]),
-                    onDescartar: () => _descartar(context, docs[i].id),
-                  ),
-                ),
+                child: docs.isEmpty
+                    ? const AppEmptyState(
+                        icon: Icons.inbox_outlined,
+                        title: 'Bandeja vacía',
+                        subtitle:
+                            'Las respuestas que el bot no pueda asociar con un aviso van a aparecer acá.',
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xxxl),
+                        itemCount: docs.length,
+                        itemBuilder: (ctx, i) => _ItemAmbiguo(
+                          doc: docs[i],
+                          onConvertir: () => _convertirEnRevision(context, docs[i]),
+                          onDescartar: () => _descartar(context, docs[i].id),
+                        ),
+                      ),
               ),
             ],
           );
@@ -221,6 +224,94 @@ class AdminBotBandejaScreen extends StatelessWidget {
     );
   }
 }
+
+// =============================================================================
+// HEADER — eyebrow + hero (conteo de la bandeja)
+// =============================================================================
+
+class _Header extends StatelessWidget {
+  final int cantidad;
+  const _Header({required this.cantidad});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const AppEyebrow('Bandeja del bot'),
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      '$cantidad',
+                      style: AppType.h2.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        'sin asignar',
+                        style: AppType.monoSm.copyWith(color: c.textMuted),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BannerLimite extends StatelessWidget {
+  const _BannerLimite();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.warningSoft,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: c.warning.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, size: 16, color: c.warning),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              'Mostrando los 200 más recientes. Procesá los antiguos para ver más.',
+              style: AppType.label.copyWith(color: c.warning),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// ITEM — fila AppCard con hairline interno
+// =============================================================================
 
 class _ItemAmbiguo extends StatelessWidget {
   final QueryDocumentSnapshot doc;
@@ -234,12 +325,13 @@ class _ItemAmbiguo extends StatelessWidget {
   });
 
   String _formatTs(dynamic ts) {
-    if (ts is! Timestamp) return '';
+    if (ts is! Timestamp) return '—';
     return AppFormatters.formatearFechaHoraCorta(ts.toDate());
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final data = doc.data() as Map<String, dynamic>;
     final nombre = (data['nombre_usuario'] ?? data['dni'] ?? '?').toString();
     final dni = (data['dni'] ?? '').toString();
@@ -251,79 +343,89 @@ class _ItemAmbiguo extends StatelessWidget {
         (data['candidatos'] as List<dynamic>? ?? const []).length;
 
     return AppCard(
-      borderColor: AppColors.warning.withAlpha(80),
+      tier: 1,
+      accent: c.warning,
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Línea 1: icono + nombre + timestamp de detección.
           Row(
             children: [
-              const Icon(Icons.smart_toy_outlined,
-                  size: 18, color: AppColors.warning),
+              Icon(Icons.smart_toy_outlined, size: 20, color: c.textSecondary),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   nombre,
-                  style: AppType.body.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.body.copyWith(fontWeight: FontWeight.w600),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               Text(
                 _formatTs(data['creado_en']),
-                style: AppType.eyebrow.copyWith(color: AppColors.textDisabled),
+                style: AppType.monoSm.copyWith(color: c.textMuted),
               ),
             ],
           ),
           if (dni.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.only(left: 26, top: 2),
+              padding: const EdgeInsets.only(left: 28, top: 2),
               child: Text(
                 'DNI $dni',
-                style: AppType.eyebrow.copyWith(color: AppColors.textDisabled),
+                style: AppType.monoSm.copyWith(color: c.textMuted),
               ),
             ),
           const SizedBox(height: AppSpacing.md),
-          if (urlArchivo.isNotEmpty)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              child: AppFileThumbnail(
-                url: urlArchivo,
-                tituloVisor: 'Comprobante de $nombre',
-                size: 80,
-              ),
-            ),
-          if (urlArchivo.isNotEmpty) const SizedBox(height: AppSpacing.md),
-          if (mensaje.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: AppColors.borderSubtle,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-              ),
-              child: Text(
-                mensaje,
-                style: AppType.label.copyWith(color: AppColors.textSecondary, height: 1.4),
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-              ),
+          // Foto + mensaje en una fila para aprovechar el ancho.
+          if (urlArchivo.isNotEmpty || mensaje.isNotEmpty)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (urlArchivo.isNotEmpty) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    child: AppFileThumbnail(
+                      url: urlArchivo,
+                      tituloVisor: 'Comprobante de $nombre',
+                      size: 76,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.md),
+                ],
+                if (mensaje.isNotEmpty)
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      decoration: BoxDecoration(
+                        color: c.surface3,
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
+                        border: Border.all(color: c.border),
+                      ),
+                      child: Text(
+                        mensaje,
+                        style: AppType.bodySm.copyWith(color: c.textSecondary),
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           const SizedBox(height: AppSpacing.md),
+          // Línea de meta: fecha detectada + badge de razón.
           Row(
             children: [
               if (fechaDet.isNotEmpty) ...[
-                const Icon(Icons.event_note,
-                    size: 12, color: AppColors.success),
+                Icon(Icons.event_available_outlined,
+                    size: 14, color: c.success),
                 const SizedBox(width: AppSpacing.xs),
                 Flexible(
                   child: Text(
-                    'Fecha detectada: $fechaDet',
+                    'Detectada: $fechaDet',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.eyebrow.copyWith(color: AppColors.success),
+                    style: AppType.monoSm.copyWith(color: c.success),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
@@ -333,18 +435,23 @@ class _ItemAmbiguo extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.md),
+          const AppHairline(),
+          const SizedBox(height: AppSpacing.md),
+          // Acciones.
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               AppButton.ghost(
                 label: 'Descartar',
                 icon: Icons.delete_outline,
+                size: AppButtonSize.sm,
                 onPressed: onDescartar,
               ),
-              const SizedBox(width: AppSpacing.xs),
-              AppButton(
+              const SizedBox(width: AppSpacing.sm),
+              AppButton.primary(
                 label: 'Convertir en revisión',
                 icon: Icons.check,
+                size: AppButtonSize.sm,
                 onPressed: onConvertir,
               ),
             ],
@@ -355,6 +462,8 @@ class _ItemAmbiguo extends StatelessWidget {
   }
 }
 
+/// Badge semántico de la razón por la que el mensaje quedó sin asignar.
+/// "ambiguo" → cantidad de candidatos; "sin_aviso_reciente" → "sin aviso".
 class _BadgeRazon extends StatelessWidget {
   final String razon;
   final int candidatos;
@@ -362,22 +471,16 @@ class _BadgeRazon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final etiqueta = razon == 'ambiguo'
         ? '$candidatos candidatos'
         : razon == 'sin_aviso_reciente'
             ? 'sin aviso'
-            : razon;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: 2),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withAlpha(20),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: AppColors.warning.withAlpha(80)),
-      ),
-      child: Text(
-        etiqueta.toUpperCase(),
-        style: AppType.eyebrow.copyWith(color: AppColors.warning),
-      ),
+            : (razon.isEmpty ? '—' : razon);
+    return AppBadge(
+      text: etiqueta,
+      color: c.warning,
+      size: AppBadgeSize.sm,
     );
   }
 }

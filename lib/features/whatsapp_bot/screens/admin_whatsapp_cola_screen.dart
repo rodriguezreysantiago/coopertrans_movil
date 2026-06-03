@@ -16,16 +16,21 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 part 'admin_whatsapp_cola_widgets.dart';
 
 /// Pantalla "Cola de WhatsApp" — panel del admin para ver el estado
-/// de los mensajes encolados al bot.
+/// de los mensajes encolados al bot. REFACTOR NÚCLEO (jun 2026).
 ///
 /// Cada doc se muestra con su estado (PENDIENTE / PROCESANDO / ENVIADO
 /// / ERROR), número, mensaje (truncado) y timestamp de encolado. Las
-/// filas con error tienen botón "REINTENTAR" que vuelve el estado a
+/// filas con error tienen botón "Reintentar" que vuelve el estado a
 /// PENDIENTE para que el bot lo levante de nuevo.
 ///
 /// El stream es `orderBy(encolado_en, desc).limit(100)` — para una
 /// flota chica esto cubre semanas de avisos. Si crece, se puede
 /// agregar paginación.
+///
+/// Layout Núcleo: header eyebrow + hero (pendientes), AppKpiStrip con los
+/// 4 conteos por estado, chips de filtro (toggle), buscador Núcleo, filas
+/// AppCard con badge de estado y timestamps en mono tabular. Streams,
+/// filtros, búsqueda y acciones quedan INTACTOS — solo cambió la UI.
 ///
 /// **Deep-link**: el dashboard "Estado del Bot" abre esta pantalla con
 /// `initialFilter` seteado en uno de los estados (PENDIENTE, ERROR,
@@ -149,7 +154,7 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
           // Listado vacío total → "No hay mensajes en cola" solo
           // cuando NO hay filtro activo. Con filtro activo se muestra
           // el mensaje "Sin mensajes con estado X" más abajo.
-          if (docs.isEmpty && _filtroEstado == null) {
+          if (docs.isEmpty && _filtroEstado == null && _query.isEmpty) {
             return const AppEmptyState(
               icon: Icons.smart_toy_outlined,
               title: 'No hay mensajes en cola',
@@ -158,11 +163,12 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
             );
           }
           final filtrados = _filtrarPorQuery(docs);
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md, AppSpacing.sm, AppSpacing.md, 80),
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _ResumenContador(
+              // Header + KPIs + chips de filtro (lee su propio stream
+              // de 200 para que el panorama sea estable).
+              _Encabezado(
                 filtroActivo: _filtroEstado,
                 onTapEstado: (estado) {
                   // Tap a un chip ya activo lo desactiva (toggle).
@@ -171,55 +177,49 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
                   });
                 },
               ),
-              const SizedBox(height: AppSpacing.sm),
               // Búsqueda free-form (M2, 2026-05-24): DNI / patente /
               // teléfono / origen / texto. Útil cuando un chofer reclama
               // "no me llegó X" y hay que ver qué pasó con el mensaje.
-              TextField(
-                controller: _searchCtrl,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: InputDecoration(
-                  isDense: true,
-                  prefixIcon: const Icon(Icons.search,
-                      color: Colors.white54, size: 20),
-                  suffixIcon: _query.isEmpty
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
+                child: AppInput(
+                  controller: _searchCtrl,
+                  hint: 'Buscar DNI / patente / teléfono / origen / texto',
+                  icon: Icons.search,
+                  onChanged: (v) => setState(() => _query = v),
+                  trailingAction: _query.isEmpty ? null : 'Limpiar',
+                  onTrailingTap: _query.isEmpty
                       ? null
-                      : IconButton(
-                          icon: const Icon(Icons.clear,
-                              color: Colors.white54, size: 18),
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            setState(() => _query = '');
-                          },
-                        ),
-                  hintText: 'Buscar DNI / patente / teléfono / origen / texto',
-                  hintStyle: AppType.label.copyWith(color: Colors.white38),
-                  border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md, vertical: 10),
+                      : () {
+                          _searchCtrl.clear();
+                          setState(() => _query = '');
+                        },
                 ),
-                onChanged: (v) => setState(() => _query = v),
               ),
-              const SizedBox(height: AppSpacing.sm),
-              if (filtrados.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 40),
-                  child: Center(
-                    child: Text(
-                      _query.isNotEmpty
-                          ? 'Sin coincidencias para "$_query"'
-                          : 'Sin mensajes con estado "${_filtroEstado ?? ''}"',
-                      style: const TextStyle(color: Colors.white54),
-                    ),
-                  ),
-                )
-              else
-                ...filtrados.map((doc) => _ItemCola(
-                      doc: doc,
-                      onReintentar: () => _reintentar(doc.id),
-                      onEliminar: () => _eliminar(doc.id),
-                      onTap: () => _mostrarDetalle(context, doc),
-                    )),
+              Expanded(
+                child: filtrados.isEmpty
+                    ? AppEmptyState(
+                        icon: Icons.search_off,
+                        title: _query.isNotEmpty
+                            ? 'Sin coincidencias'
+                            : 'Sin mensajes',
+                        subtitle: _query.isNotEmpty
+                            ? 'Ningún mensaje coincide con "$_query".'
+                            : 'No hay mensajes con estado "${_filtroEstado ?? ''}".',
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.lg, 0, AppSpacing.lg, 88),
+                        itemCount: filtrados.length,
+                        itemBuilder: (_, i) => _ItemCola(
+                          doc: filtrados[i],
+                          onReintentar: () => _reintentar(filtrados[i].id),
+                          onEliminar: () => _eliminar(filtrados[i].id),
+                          onTap: () => _mostrarDetalle(context, filtrados[i]),
+                        ),
+                      ),
+              ),
             ],
           );
         },
@@ -235,12 +235,11 @@ class _AdminWhatsAppColaScreenState extends State<AdminWhatsAppColaScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: context.colors.surface2,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
       ),
       builder: (sCtx) => _DetalleColaSheet(doc: doc),
     );
   }
 }
-
