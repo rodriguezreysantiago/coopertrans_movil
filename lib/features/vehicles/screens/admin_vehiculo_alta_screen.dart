@@ -156,97 +156,129 @@ class _AdminVehiculoAltaScreenState
           child: Focus(
             autofocus: true,
             child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _VInput(
-                  label: 'Patente / Dominio',
-                  controller: _patenteCtrl,
-                  icon: Icons.pin,
-                  hint: 'Ej: AA123BB o AAA123',
-                  isPatente: true,
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ─── IDENTIFICACIÓN ────────────────────────────────
+                    const _SeccionEyebrow('Identificación'),
+                    AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _VInput(
+                            label: 'Patente / Dominio',
+                            controller: _patenteCtrl,
+                            icon: Icons.pin,
+                            hint: 'Ej: AA123BB o AAA123',
+                            isPatente: true,
+                          ),
+                          const _LabelCampo('Tipo de unidad'),
+                          const SizedBox(height: AppSpacing.sm),
+                          _SelectorTipo(
+                            tipo: _tipo,
+                            enabled: !_guardando,
+                            onChanged: (val) {
+                              setState(() {
+                                _tipo = val;
+                                // Limpiamos el VIN si cambia a un acoplado
+                                if (val != 'TRACTOR') _vinCtrl.clear();
+                                // Marca: para TRACTOR Vecchi opera 100% VOLVO;
+                                // para acoplados (BATEA, TOLVA, BIVUELCO,
+                                // TANQUE) la marca varía — dejamos el campo
+                                // editable y limpiamos el default VOLVO si se
+                                // cambia desde TRACTOR. Si vuelve a TRACTOR
+                                // restauramos el default.
+                                if (val == 'TRACTOR') {
+                                  if (_marcaCtrl.text.trim().isEmpty) {
+                                    _marcaCtrl.text = 'VOLVO';
+                                  }
+                                } else {
+                                  if (_marcaCtrl.text.trim().toUpperCase() ==
+                                      'VOLVO') {
+                                    _marcaCtrl.clear();
+                                  }
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // ─── DATOS TÉCNICOS ────────────────────────────────
+                    const _SeccionEyebrow('Datos técnicos'),
+                    AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _VInput(
+                            label: 'Marca',
+                            controller: _marcaCtrl,
+                            icon: Icons.factory,
+                            // TRACTOR es siempre VOLVO en la flota Vecchi (read
+                            // only); para acoplados la marca es libre.
+                            readOnly: _tipo == 'TRACTOR',
+                          ),
+                          _VInput(
+                            label: 'Modelo',
+                            controller: _modeloCtrl,
+                            icon: Icons.commute,
+                          ),
+                          _VInput(
+                            label: 'Año (modelo)',
+                            controller: _anioCtrl,
+                            icon: Icons.calendar_today,
+                            isNumeric: true,
+                            maxLength: 4,
+                            isAnio: true,
+                            isLast: _tipo != 'TRACTOR',
+                          ),
+                          if (_tipo == 'TRACTOR')
+                            _VInput(
+                              label: 'Código VIN',
+                              controller: _vinCtrl,
+                              icon: Icons.fingerprint,
+                              hint: 'Obligatorio (17 caracteres)',
+                              isVin: true,
+                              textInputAction: TextInputAction.done,
+                              isLast: true,
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // ─── PROPIEDAD ─────────────────────────────────────
+                    const _SeccionEyebrow('Propiedad'),
+                    AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const _LabelCampo('Empresa propietaria'),
+                          _DropdownEmpresa(
+                            value: _empresa,
+                            empresas: _empresas,
+                            enabled: !_guardando,
+                            onChanged: (val) =>
+                                setState(() => _empresa = val ?? _empresa),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xxl),
+                    _BotonGuardar(
+                      guardando: _guardando,
+                      onPressed: _guardar,
+                    ),
+                  ],
                 ),
-                const _LabelCampo('Tipo de unidad'),
-                const SizedBox(height: AppSpacing.sm),
-                _SelectorTipo(
-                  tipo: _tipo,
-                  enabled: !_guardando,
-                  onChanged: (val) {
-                    setState(() {
-                      _tipo = val;
-                      // Limpiamos el VIN si cambia a un acoplado
-                      if (val != 'TRACTOR') _vinCtrl.clear();
-                      // Marca: para TRACTOR Vecchi opera 100% VOLVO;
-                      // para acoplados (BATEA, TOLVA, BIVUELCO,
-                      // TANQUE) la marca varía — dejamos el campo
-                      // editable y limpiamos el default VOLVO si se
-                      // cambia desde TRACTOR. Si vuelve a TRACTOR
-                      // restauramos el default.
-                      if (val == 'TRACTOR') {
-                        if (_marcaCtrl.text.trim().isEmpty) {
-                          _marcaCtrl.text = 'VOLVO';
-                        }
-                      } else {
-                        if (_marcaCtrl.text.trim().toUpperCase() ==
-                            'VOLVO') {
-                          _marcaCtrl.clear();
-                        }
-                      }
-                    });
-                  },
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                _VInput(
-                  label: 'Marca',
-                  controller: _marcaCtrl,
-                  icon: Icons.factory,
-                  // TRACTOR es siempre VOLVO en la flota Vecchi (read
-                  // only); para acoplados la marca es libre.
-                  readOnly: _tipo == 'TRACTOR',
-                ),
-                _VInput(
-                  label: 'Modelo',
-                  controller: _modeloCtrl,
-                  icon: Icons.commute,
-                ),
-                _VInput(
-                  label: 'Año (modelo)',
-                  controller: _anioCtrl,
-                  icon: Icons.calendar_today,
-                  isNumeric: true,
-                  maxLength: 4,
-                  isAnio: true,
-                ),
-                if (_tipo == 'TRACTOR')
-                  _VInput(
-                    label: 'Código VIN',
-                    controller: _vinCtrl,
-                    icon: Icons.fingerprint,
-                    hint: 'Obligatorio (17 caracteres)',
-                    isVin: true,
-                    textInputAction: TextInputAction.done,
-                  ),
-                const _LabelCampo('Empresa propietaria'),
-                const SizedBox(height: AppSpacing.sm),
-                _DropdownEmpresa(
-                  value: _empresa,
-                  empresas: _empresas,
-                  enabled: !_guardando,
-                  onChanged: (val) =>
-                      setState(() => _empresa = val ?? _empresa),
-                ),
-                const SizedBox(height: AppSpacing.xxl),
-                _BotonGuardar(
-                  guardando: _guardando,
-                  onPressed: _guardar,
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
           ),
         ),
       ),
@@ -258,15 +290,33 @@ class _AdminVehiculoAltaScreenState
 // COMPONENTES (similares a admin_personal_form pero con validaciones de patente/VIN/año)
 // =============================================================================
 
+/// Eyebrow de sección (IDENTIFICACIÓN / DATOS TÉCNICOS / PROPIEDAD) — precede
+/// a cada AppCard del bento. Mismo gesto que el form de Personal migrado.
+class _SeccionEyebrow extends StatelessWidget {
+  final String texto;
+  const _SeccionEyebrow(this.texto);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding:
+          const EdgeInsets.only(left: AppSpacing.xs, bottom: AppSpacing.sm),
+      child: AppEyebrow(texto),
+    );
+  }
+}
+
+/// Label de un campo dentro de una card (Tipo / Empresa). Usa el eyebrow
+/// uppercase/mono del sistema para alinear con los inputs.
 class _LabelCampo extends StatelessWidget {
   final String label;
   const _LabelCampo(this.label);
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: AppType.eyebrow.copyWith(color: AppColors.textSecondary),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: AppEyebrow(label),
     );
   }
 }
@@ -284,6 +334,11 @@ class _VInput extends StatelessWidget {
   final bool readOnly;
   final TextInputAction textInputAction;
 
+  /// Si es true, este campo es el ÚLTIMO de su card → sin padding inferior
+  /// (la card ya aporta su inset). Solo presentación; no afecta la lógica
+  /// de entrada/validación.
+  final bool isLast;
+
   const _VInput({
     required this.label,
     required this.controller,
@@ -296,12 +351,14 @@ class _VInput extends StatelessWidget {
     this.isAnio = false,
     this.readOnly = false,
     this.textInputAction = TextInputAction.next,
+    this.isLast = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+      padding: EdgeInsets.only(bottom: isLast ? 0 : AppSpacing.lg),
       child: TextFormField(
         controller: controller,
         keyboardType:
@@ -317,17 +374,15 @@ class _VInput extends StatelessWidget {
             ? [DigitOnlyFormatter(maxLength: maxLength)]
             : null,
         style: AppType.body.copyWith(
-            color: readOnly ? AppColors.textTertiary : AppColors.textPrimary),
+            color: readOnly ? c.textMuted : c.text),
         decoration: InputDecoration(
           counterText: '',
           labelText: label,
           hintText: hint,
-          hintStyle: AppType.eyebrow.copyWith(color: AppColors.textHint),
+          hintStyle: AppType.eyebrow.copyWith(color: c.textPlaceholder),
           prefixIcon: Icon(
             icon,
-            color: readOnly
-                ? AppColors.textHint
-                : Theme.of(context).colorScheme.primary,
+            color: readOnly ? c.textPlaceholder : c.brand,
             size: 20,
           ),
         ),
@@ -391,6 +446,7 @@ class _SelectorTipo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     const tipos = AppTiposVehiculo.seleccionables;
     return SizedBox(
       width: double.infinity,
@@ -403,20 +459,25 @@ class _SelectorTipo extends StatelessWidget {
             avatar: Icon(
               _iconos[t] ?? Icons.directions_car,
               size: 16,
-              color: seleccionado
-                  ? Colors.black
-                  : Theme.of(context).colorScheme.primary,
+              color: seleccionado ? c.brandFg : c.brand,
             ),
             label: Text(
               _label(t),
               style: AppType.label.copyWith(
-                  color: seleccionado ? Colors.black : AppColors.textPrimary,
-                  fontWeight:
-                      seleccionado ? FontWeight.bold : FontWeight.normal),
+                color: seleccionado ? c.brandFg : c.text,
+                fontWeight:
+                    seleccionado ? FontWeight.w600 : FontWeight.w400,
+              ),
             ),
             selected: seleccionado,
-            onSelected:
-                enabled ? (selected) => onChanged(t) : null,
+            showCheckmark: false,
+            backgroundColor: c.surface3,
+            selectedColor: c.brand,
+            side: BorderSide(color: seleccionado ? c.brand : c.border),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.full),
+            ),
+            onSelected: enabled ? (selected) => onChanged(t) : null,
           );
         }).toList(),
       ),
@@ -439,20 +500,20 @@ class _DropdownEmpresa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.borderSubtle),
+        color: c.surface3,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: c.border),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
           isExpanded: true,
-          dropdownColor: Theme.of(context).colorScheme.surface,
-          style: AppType.label.copyWith(color: AppColors.textPrimary),
+          dropdownColor: c.surface3,
+          style: AppType.body.copyWith(color: c.text),
           items: empresas
               .map((e) => DropdownMenuItem(
                     value: e,

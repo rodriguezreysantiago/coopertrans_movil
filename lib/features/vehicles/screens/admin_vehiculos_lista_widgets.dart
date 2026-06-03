@@ -59,7 +59,11 @@ class _ListaPorTipo extends StatelessWidget {
 }
 
 // =============================================================================
-// TARJETA DE VEHÍCULO (vista colapsada)
+// FILA DE VEHÍCULO (Núcleo) — AppCard(tier:1) por fila. Hero de patente en mono,
+// AppBadge de estado, km/marca en mono, mini-vencimientos en Wrap. El borde de
+// las cards adyacentes hace de hairline natural entre filas. Indigo es la única
+// tinta de marca; los colores semánticos (estados de vencimiento, telemetría)
+// se conservan por su carga de info operativa.
 // =============================================================================
 
 class _VehiculoCard extends StatelessWidget {
@@ -68,10 +72,13 @@ class _VehiculoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final data = doc.data() as Map<String, dynamic>;
     final patente = doc.id;
-    final marca = (data['MARCA'] ?? 'S/D').toString();
-    final modelo = (data['MODELO'] ?? 'S/D').toString();
+    final marca = (data['MARCA'] ?? '').toString().trim();
+    final modelo = (data['MODELO'] ?? '').toString().trim();
+    final marcaModelo =
+        [marca, modelo].where((s) => s.isNotEmpty).join(' ');
     final estado = (data['ESTADO'] ?? 'LIBRE').toString().toUpperCase();
     final km = data['KM_ACTUAL'];
     // Avatar de la unidad: si tiene foto cargada, la mostramos circular.
@@ -91,95 +98,101 @@ class _VehiculoCard extends StatelessWidget {
       ),
       builder: (ctx, state, _) {
         return AppCard(
+          tier: 1,
           onTap: () => _abrirDetalle(context, patente, data),
           highlighted: state.success || state.error != null,
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md, vertical: AppSpacing.md),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Avatar de la unidad — mismo patrón que _EmpleadoCard.
-              // Foto si la cargó el admin; si no, ícono temático (camión
-              // para tractor, enganche para acoplados).
+              // Avatar de la unidad — foto si la cargó el admin; si no,
+              // ícono temático (camión para tractor, enganche para acoplados).
               CircleAvatar(
-                radius: 24,
-                backgroundColor: AppColors.surface3,
+                radius: 22,
+                backgroundColor: c.surface3,
                 backgroundImage: tieneFoto ? NetworkImage(urlFoto) : null,
                 child: !tieneFoto
                     ? Icon(
                         esTractor ? Icons.local_shipping : Icons.rv_hookup,
-                        color: AppColors.textTertiary,
-                        size: 22,
+                        color: c.textMuted,
+                        size: 20,
                       )
                     : null,
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header: patente + badge estado + indicadores
+                    // Header: patente (hero mono) + badge estado + indicador
+                    // de sync.
                     Row(
                       children: [
-                        Text(
-                          patente.toUpperCase(),
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                            letterSpacing: 1.5,
+                        Flexible(
+                          child: Text(
+                            patente.toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppType.h5.copyWith(
+                              fontFamily: 'GeistMono',
+                              letterSpacing: 0.5,
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        _EstadoBadge(estado: estado),
+                        const SizedBox(width: AppSpacing.sm),
+                        AppBadge(
+                          text: _estadoLabel(estado),
+                          color: _estadoColor(estado, c),
+                          dot: true,
+                          size: AppBadgeSize.sm,
+                        ),
                         const Spacer(),
                         if (state.loading)
-                          const SizedBox(
+                          SizedBox(
                             width: 14,
                             height: 14,
-                            child:
-                                CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: c.brand),
                           ),
                         if (state.success)
-                          const Icon(Icons.check_circle,
-                              color: AppColors.success, size: 16),
+                          Icon(Icons.check_circle,
+                              color: c.success, size: 16),
                         if (state.error != null)
-                          const Icon(Icons.error_outline,
-                              color: AppColors.error, size: 16),
+                          Icon(Icons.error_outline, color: c.error, size: 16),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    // Subtítulo: marca/modelo + km
+                    const SizedBox(height: 4),
+                    // Subtítulo: marca/modelo + km (ambos en mono).
                     Row(
                       children: [
-                        const Icon(Icons.local_shipping,
-                            size: 12, color: AppColors.textHint),
-                        const SizedBox(width: 6),
                         Expanded(
                           child: Text(
-                            '$marca $modelo',
-                            style: AppType.label.copyWith(color: AppColors.textSecondary),
+                            marcaModelo.isEmpty ? '—' : marcaModelo,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                            style:
+                                AppType.monoSm.copyWith(color: c.textSecondary),
                           ),
                         ),
-                        const Icon(Icons.speed,
-                            size: 12, color: AppColors.textHint),
+                        const SizedBox(width: AppSpacing.sm),
+                        Icon(Icons.speed, size: 12, color: c.textMuted),
                         const SizedBox(width: AppSpacing.xs),
                         Text(
                           '${AppFormatters.formatearKilometraje(km)} km',
-                          style: AppType.label.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
+                          style: AppType.mono.copyWith(color: c.text),
                         ),
                       ],
                     ),
                     // Telemetría compacta (combustible + autonomía). Solo
-                    // se muestra si la unidad reporta esos datos vía
-                    // Volvo. Para unidades sin telemetría, esta fila no
-                    // aparece y el card queda como antes.
+                    // se muestra si la unidad reporta esos datos vía Volvo.
                     _TelemetriaCompacta(data: data),
-                    const SizedBox(height: 10),
-                    // Vista rápida de vencimientos (badges compactos).
-                    // Wrap para que en pantallas chicas los extintores
-                    // bajen a una segunda línea sin truncarse.
+                    const SizedBox(height: AppSpacing.sm),
+                    // Vista rápida de vencimientos (badges compactos). Wrap
+                    // para que en pantallas chicas los extintores bajen a una
+                    // segunda línea sin truncarse.
                     Wrap(
-                      spacing: 14,
+                      spacing: AppSpacing.md,
                       runSpacing: 6,
                       children: [
                         _MiniVencimiento(
@@ -209,6 +222,33 @@ class _VehiculoCard extends StatelessWidget {
   void _abrirDetalle(BuildContext context, String patente,
           Map<String, dynamic> data) =>
       abrirDetalleVehiculo(context, patente, data);
+}
+
+/// Color semántico del estado de la unidad (token del tema activo).
+Color _estadoColor(String estado, AppColorsExt c) {
+  switch (estado.toUpperCase()) {
+    case 'LIBRE':
+      return c.success;
+    case 'OCUPADO':
+    case 'ASIGNADO':
+      return c.info;
+    case 'TALLER':
+    case 'MANTENIMIENTO':
+      return c.warning;
+    case 'BAJA':
+    case 'INACTIVO':
+      return c.error;
+    default:
+      return c.textMuted;
+  }
+}
+
+/// Etiqueta legible del estado. Capitaliza (LIBRE → Libre) para no gritar
+/// en la pill; '—' si viene vacío.
+String _estadoLabel(String estado) {
+  final e = estado.trim();
+  if (e.isEmpty) return '—';
+  return e[0].toUpperCase() + e.substring(1).toLowerCase();
 }
 
 /// Abre el detalle (bottom sheet) de un vehículo desde cualquier parte
@@ -269,8 +309,9 @@ class _AccionesVehiculoMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return PopupMenuButton<String>(
-      icon: const Icon(Icons.more_vert, color: AppColors.textSecondary, size: 20),
+      icon: Icon(Icons.more_vert, color: c.textSecondary, size: 20),
       tooltip: 'Más acciones',
       onSelected: (val) async {
         switch (val) {
@@ -429,6 +470,7 @@ class _DetalleVehiculo extends StatelessWidget {
   }
 
   Widget _buildBody(BuildContext context, Map<String, dynamic> data) {
+    final c = context.colors;
     final marca = (data['MARCA'] ?? '').toString();
     final modelo = (data['MODELO'] ?? '').toString();
     final anioInt =
@@ -469,19 +511,23 @@ class _DetalleVehiculo extends StatelessWidget {
                         .ifEmpty('SIN DATOS'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.heading,
+                    style: AppType.h5,
                   ),
                   if (anioInt > 0)
                     Text(
                       'Año $anioInt',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.label.copyWith(color: AppColors.textTertiary),
+                      style: AppType.monoSm.copyWith(color: c.textMuted),
                     ),
                 ],
               ),
             ),
-            _EstadoBadge(estado: estado),
+            AppBadge(
+              text: _estadoLabel(estado),
+              color: _estadoColor(estado, c),
+              dot: true,
+            ),
           ],
         ),
         const SizedBox(height: AppSpacing.lg),
@@ -567,26 +613,14 @@ class _DetalleVehiculo extends StatelessWidget {
             children: [
               Text(
                 _formatTimestamp(data['ULTIMA_SINCRO']),
-                style:
-                    AppType.label.copyWith(color: AppColors.textSecondary),
+                style: AppType.mono.copyWith(color: c.textSecondary),
               ),
               const SizedBox(width: AppSpacing.sm),
               if ((data['SINCRO_TIPO'] ?? '') != '')
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.brand.withAlpha(20),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    (data['SINCRO_TIPO'] ?? '').toString(),
-                    style: const TextStyle(
-                      color: AppColors.brand,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                AppBadge(
+                  text: (data['SINCRO_TIPO'] ?? '').toString(),
+                  color: c.brand,
+                  size: AppBadgeSize.sm,
                 ),
             ],
           ),
@@ -649,6 +683,7 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final activo = AppActivo.esActivo(data);
     // Dar de baja / reactivar (campo ACTIVO) quedó solo-ADMIN (2026-06-01).
     final puedeBaja =
@@ -661,14 +696,11 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
             context,
             patente: patente,
           ),
-          icon: const Icon(Icons.do_not_disturb_on_outlined,
-              color: AppColors.error),
-          label: const Text(
+          icon: Icon(Icons.do_not_disturb_on_outlined, color: c.error),
+          label: Text(
             'Dar de baja',
-            style: TextStyle(
-              color: AppColors.error,
-              fontWeight: FontWeight.bold,
-            ),
+            style: AppType.body
+                .copyWith(color: c.error, fontWeight: FontWeight.w600),
           ),
         ),
       );
@@ -682,34 +714,30 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.warning.withAlpha(20),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.warning.withAlpha(80)),
+        color: c.warningSoft,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(color: c.warning.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.archive_outlined,
-                  color: AppColors.warning, size: 18),
+              Icon(Icons.archive_outlined, color: c.warning, size: 18),
               const SizedBox(width: AppSpacing.sm),
-              Text(
-                'UNIDAD DADA DE BAJA',
-                style: AppType.label.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-              ),
+              AppEyebrow('Unidad dada de baja', color: c.warning),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
             'Fecha: $bajaEnFmt',
-            style: AppType.label.copyWith(color: AppColors.textSecondary),
+            style: AppType.label.copyWith(color: c.textSecondary),
           ),
           if (motivo.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Motivo: $motivo',
-              style: AppType.label.copyWith(color: AppColors.textSecondary),
+              style: AppType.label.copyWith(color: c.textSecondary),
             ),
           ],
           if (puedeBaja) ...[
@@ -720,63 +748,16 @@ class _BotonBajaReactivarVehiculo extends StatelessWidget {
                   context,
                   patente: patente,
                 ),
-                icon: const Icon(Icons.unarchive_outlined,
-                    color: AppColors.success),
-                label: const Text(
+                icon: Icon(Icons.unarchive_outlined, color: c.success),
+                label: Text(
                   'Reactivar',
-                  style: TextStyle(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: AppType.body
+                      .copyWith(color: c.success, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-class _EstadoBadge extends StatelessWidget {
-  final String estado;
-  const _EstadoBadge({required this.estado});
-
-  Color get _color {
-    switch (estado.toUpperCase()) {
-      case 'LIBRE':
-        return AppColors.success;
-      case 'OCUPADO':
-      case 'ASIGNADO':
-        return AppColors.info;
-      case 'TALLER':
-      case 'MANTENIMIENTO':
-        return AppColors.warning;
-      case 'BAJA':
-      case 'INACTIVO':
-        return AppColors.error;
-      default:
-        return AppColors.textTertiary;
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: _color.withAlpha(30),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: _color.withAlpha(80)),
-      ),
-      child: Text(
-        estado,
-        style: TextStyle(
-          color: _color,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 0.5,
-        ),
       ),
     );
   }
@@ -789,14 +770,11 @@ class _MiniVencimiento extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Icon(Icons.event_note, size: 12, color: AppColors.textHint),
-        const SizedBox(width: AppSpacing.xs),
-        Text(label,
-            style:
-                AppType.eyebrow.copyWith(color: AppColors.textTertiary)),
+        Text(label, style: AppType.eyebrow.copyWith(color: c.textMuted)),
         const SizedBox(width: 6),
         VencimientoBadge(fecha: fecha, compact: true),
       ],
@@ -811,16 +789,14 @@ class _SectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: Row(
         children: [
-          Icon(icon, color: AppColors.success, size: 16),
+          Icon(icon, color: c.brand, size: 15),
           const SizedBox(width: AppSpacing.sm),
-          Text(
-            label.toUpperCase(),
-            style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-          ),
+          AppEyebrow(label, color: c.textSecondary),
         ],
       ),
     );
@@ -857,6 +833,7 @@ class _TelemetriaCompacta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final fuel = _toDouble(data['NIVEL_COMBUSTIBLE']);
     final adblue = _toDouble(data['NIVEL_ADBLUE']);
     final auton = _toDouble(data['AUTONOMIA_KM']);
@@ -886,7 +863,7 @@ class _TelemetriaCompacta extends StatelessWidget {
           if (auton != null)
             _ChipTelemetria(
               icono: Icons.route,
-              color: AppColors.brand,
+              color: c.brand,
               texto: '${auton.toStringAsFixed(0)} km',
             ),
         ],
@@ -911,9 +888,9 @@ class _ChipTelemetria extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: color.withAlpha(60)),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(color: color.withValues(alpha: 0.30)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -922,7 +899,7 @@ class _ChipTelemetria extends StatelessWidget {
           const SizedBox(width: AppSpacing.xs),
           Text(
             texto,
-            style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.bold),
+            style: AppType.monoSm.copyWith(color: color),
           ),
         ],
       ),
@@ -939,6 +916,7 @@ class _PanelTelemetria extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final km = _toDouble(data['KM_ACTUAL']);
     final fuel = _toDouble(data['NIVEL_COMBUSTIBLE']);
     final adblue = _toDouble(data['NIVEL_ADBLUE']);
@@ -948,9 +926,9 @@ class _PanelTelemetria extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       decoration: BoxDecoration(
-        color: AppColors.success.withAlpha(15),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.success.withAlpha(40)),
+        color: c.surface2,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(color: c.border),
       ),
       child: hayTelemetria
           // Hasta 4 celdas (ODÓMETRO, COMBUSTIBLE, ADBLUE, AUTONOMÍA).
@@ -968,7 +946,7 @@ class _PanelTelemetria extends StatelessWidget {
                     width: celdaWidth,
                     child: _CeldaTelemetria(
                       icono: Icons.speed,
-                      color: AppColors.success,
+                      color: c.brand,
                       valor: km != null
                           ? AppFormatters.formatearKilometraje(km)
                           : '—',
@@ -999,7 +977,7 @@ class _PanelTelemetria extends StatelessWidget {
                       width: celdaWidth,
                       child: _CeldaTelemetria(
                         icono: Icons.route,
-                        color: AppColors.brand,
+                        color: c.brand,
                         valor: auton.toStringAsFixed(0),
                         unidad: 'km',
                         etiqueta: 'AUTONOMÍA',
@@ -1013,20 +991,18 @@ class _PanelTelemetria extends StatelessWidget {
                 );
               },
             )
-          // Fallback: igual que antes para unidades sin combustible/autonomía.
+          // Fallback: solo KM para unidades sin combustible/autonomía.
           : Row(
               children: [
-                const Icon(Icons.speed, color: AppColors.success),
+                Icon(Icons.speed, color: c.brand, size: 20),
                 const SizedBox(width: 10),
                 Text('Kilometraje',
-                    style: AppType.label.copyWith(color: AppColors.textSecondary)),
+                    style: AppType.label.copyWith(color: c.textSecondary)),
                 const Spacer(),
                 Text(
                   '${AppFormatters.formatearKilometraje(km)} km',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
+                  style: AppType.h5.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ],
@@ -1052,38 +1028,30 @@ class _CeldaTelemetria extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Column(
       children: [
         Icon(icono, color: color, size: 22),
         const SizedBox(height: 6),
         RichText(
+          textAlign: TextAlign.center,
           text: TextSpan(
             children: [
               TextSpan(
                 text: valor,
-                style: AppType.heading,
+                style: AppType.h5.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
               TextSpan(
                 text: ' $unidad',
-                style: const TextStyle(
-                  color: AppColors.textTertiary,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: AppType.monoSm.copyWith(color: c.textMuted),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 2),
-        Text(
-          etiqueta,
-          style: const TextStyle(
-            color: AppColors.textHint,
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
-        ),
+        const SizedBox(height: 4),
+        AppEyebrow(etiqueta, color: c.textMuted),
       ],
     );
   }
@@ -1107,6 +1075,7 @@ class _CeldaPorcentaje extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final pct = porcentaje.clamp(0.0, 100.0);
     final color = _colorCombustible(pct);
 
@@ -1116,31 +1085,26 @@ class _CeldaPorcentaje extends StatelessWidget {
         const SizedBox(height: 6),
         Text(
           '${pct.toStringAsFixed(0)}%',
-          style: AppType.heading.copyWith(color: color, fontWeight: FontWeight.bold),
+          style: AppType.h5.copyWith(
+            color: color,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
         const SizedBox(height: AppSpacing.xs),
         SizedBox(
           width: 60,
           height: 4,
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(AppRadius.full),
             child: LinearProgressIndicator(
               value: pct / 100,
-              backgroundColor: AppColors.surface3,
+              backgroundColor: c.surface3,
               valueColor: AlwaysStoppedAnimation<Color>(color),
             ),
           ),
         ),
-        const SizedBox(height: 2),
-        Text(
-          etiqueta,
-          style: const TextStyle(
-            color: AppColors.textHint,
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1,
-          ),
-        ),
+        const SizedBox(height: 4),
+        AppEyebrow(etiqueta, color: c.textMuted),
       ],
     );
   }
@@ -1167,6 +1131,7 @@ class _VencimientoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final tieneFecha = fecha != null && fecha.toString().isNotEmpty;
     // Tappeable: abre el sheet de VehiculoActions.documento (mismo
     // patrón que la ficha de Personal). Permite editar la fecha o
@@ -1193,10 +1158,10 @@ class _VencimientoRow extends StatelessWidget {
               // "EXTINTOR EXTERIOR" o "INSPECCIÓN TÉCNICA" en mobile.
               width: 110,
               child: Text(
-                etiqueta,
+                etiqueta.toUpperCase(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppType.eyebrow.copyWith(color: AppColors.textTertiary, fontWeight: FontWeight.bold),
+                style: AppType.eyebrow.copyWith(color: c.textMuted),
               ),
             ),
             Expanded(
@@ -1204,13 +1169,12 @@ class _VencimientoRow extends StatelessWidget {
                 tieneFecha ? AppFormatters.formatearFecha(fecha) : '—',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppType.label.copyWith(color: AppColors.textPrimary),
+                style: AppType.mono.copyWith(color: c.text),
               ),
             ),
             VencimientoBadge(fecha: fecha),
             const SizedBox(width: AppSpacing.xs),
-            const Icon(Icons.edit_outlined,
-                size: 14, color: AppColors.textHint),
+            Icon(Icons.edit_outlined, size: 14, color: c.textMuted),
           ],
         ),
       ),
@@ -1238,11 +1202,12 @@ class _DatoEditableEmpresa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(
         'EMPRESA',
-        style: AppType.eyebrow.copyWith(color: AppColors.textHint),
+        style: AppType.eyebrow.copyWith(color: c.textMuted),
       ),
       subtitle: Text(
         valor.isEmpty ? '—' : valor,
@@ -1250,15 +1215,18 @@ class _DatoEditableEmpresa extends StatelessWidget {
         // se cortaba feo en mobile. 2 líneas + ellipsis para prolijidad.
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+        style: AppType.body.copyWith(fontWeight: FontWeight.w600, color: c.text),
       ),
-      trailing: const Icon(Icons.business_center,
-          color: AppColors.success, size: 20),
+      // Accent verde para alinear con los `DatoEditable*` compartidos que
+      // conviven en esta misma sección de Identificación (no migrables —
+      // viven en lib/shared/).
+      trailing: Icon(Icons.business_center, color: c.success, size: 20),
       onTap: () => _seleccionar(context),
     );
   }
 
   void _seleccionar(BuildContext context) {
+    final c = context.colors;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1275,12 +1243,12 @@ class _DatoEditableEmpresa extends StatelessWidget {
                   esActual
                       ? Icons.radio_button_checked
                       : Icons.radio_button_off,
-                  color: esActual ? AppColors.success : AppColors.textHint,
+                  color: esActual ? c.success : c.textMuted,
                   size: 18,
                 ),
                 title: Text(
                   e,
-                  style: AppType.label.copyWith(color: AppColors.textPrimary),
+                  style: AppType.label.copyWith(color: c.text),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -1307,23 +1275,26 @@ class _DatoEditableAnio extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return ListTile(
       contentPadding: EdgeInsets.zero,
       title: Text(
         'AÑO',
-        style: AppType.eyebrow.copyWith(color: AppColors.textHint),
+        style: AppType.eyebrow.copyWith(color: c.textMuted),
       ),
       subtitle: Text(
         valorActual?.toString() ?? '—',
-        style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+        style: AppType.body.copyWith(fontWeight: FontWeight.w600, color: c.text),
       ),
-      trailing: const Icon(Icons.calendar_view_month,
-          color: AppColors.success, size: 20),
+      // Accent verde para alinear con los `DatoEditable*` compartidos de la
+      // misma sección (no migrables — viven en lib/shared/).
+      trailing: Icon(Icons.calendar_view_month, color: c.success, size: 20),
       onTap: () => _seleccionar(context),
     );
   }
 
   void _seleccionar(BuildContext context) {
+    final c = context.colors;
     final ahora = DateTime.now().year;
     // Últimos 30 años + 1 (incluye año actual). Más que eso es ruido.
     final anios = [for (var a = ahora; a >= ahora - 30; a--) a];
@@ -1345,12 +1316,12 @@ class _DatoEditableAnio extends StatelessWidget {
                   esActual
                       ? Icons.radio_button_checked
                       : Icons.radio_button_off,
-                  color: esActual ? AppColors.success : AppColors.textHint,
+                  color: esActual ? c.success : c.textMuted,
                   size: 18,
                 ),
                 title: Text(
                   a.toString(),
-                  style: AppType.body.copyWith(color: AppColors.textPrimary),
+                  style: AppType.body.copyWith(color: c.text),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -1376,6 +1347,7 @@ class _ResumenService extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final fechaRaw = data['ULTIMO_SERVICE_FECHA']?.toString();
     final hayFecha = fechaRaw != null && fechaRaw.isNotEmpty && fechaRaw != '-';
     final ultimoKm = (data['ULTIMO_SERVICE_KM'] as num?)?.toDouble();
@@ -1394,12 +1366,12 @@ class _ResumenService extends StatelessWidget {
     }
 
     final colorRestantes = kmRestantes == null
-        ? AppColors.textSecondary
+        ? c.textSecondary
         : kmRestantes < 0
-            ? AppColors.error
+            ? c.error
             : kmRestantes < 2000
-                ? AppColors.warning
-                : AppColors.success;
+                ? c.warning
+                : c.success;
 
     final sinDatos = !hayFecha && ultimoKm == null;
 
@@ -1411,12 +1383,12 @@ class _ResumenService extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                const Icon(Icons.info_outline, size: 16, color: AppColors.textHint),
+                Icon(Icons.info_outline, size: 16, color: c.textMuted),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'Sin último service cargado.',
-                    style: AppType.label.copyWith(color: AppColors.textSecondary),
+                    style: AppType.label.copyWith(color: c.textSecondary),
                   ),
                 ),
               ],
@@ -1427,12 +1399,11 @@ class _ResumenService extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                const Icon(Icons.event_available,
-                    size: 16, color: AppColors.textTertiary),
+                Icon(Icons.event_available, size: 16, color: c.textMuted),
                 const SizedBox(width: 6),
                 Text(
                   'Último service: ${AppFormatters.formatearFecha(fechaRaw)}',
-                  style: AppType.label.copyWith(color: AppColors.textSecondary),
+                  style: AppType.label.copyWith(color: c.textSecondary),
                 ),
               ],
             ),
@@ -1442,12 +1413,11 @@ class _ResumenService extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
-                const Icon(Icons.speed_outlined,
-                    size: 16, color: AppColors.textTertiary),
+                Icon(Icons.speed_outlined, size: 16, color: c.textMuted),
                 const SizedBox(width: 6),
                 Text(
                   'KM al hacerlo: ${AppFormatters.formatearMiles(ultimoKm)}',
-                  style: AppType.label.copyWith(color: AppColors.textSecondary),
+                  style: AppType.label.copyWith(color: c.textSecondary),
                 ),
               ],
             ),
@@ -1469,7 +1439,8 @@ class _ResumenService extends StatelessWidget {
                   kmRestantes < 0
                       ? 'Service VENCIDO hace ${AppFormatters.formatearMiles(kmRestantes.abs())} km'
                       : 'Próximo service en ${AppFormatters.formatearMiles(kmRestantes)} km',
-                  style: AppType.label.copyWith(color: colorRestantes, fontWeight: FontWeight.bold),
+                  style: AppType.label
+                      .copyWith(color: colorRestantes, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -1482,15 +1453,15 @@ class _ResumenService extends StatelessWidget {
           padding: const EdgeInsets.only(top: 4),
           child: Row(
             children: [
-              const Icon(Icons.cloud_done_outlined,
-                  size: 14, color: AppColors.textHint),
+              Icon(Icons.cloud_done_outlined, size: 14, color: c.textMuted),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   sinDatos
                       ? 'Se actualiza solo desde Volvo Connect.'
                       : 'Dato automático desde Volvo Connect.',
-                  style: AppType.eyebrow.copyWith(color: AppColors.textHint, fontStyle: FontStyle.italic),
+                  style: AppType.eyebrow
+                      .copyWith(color: c.textMuted, fontStyle: FontStyle.italic),
                 ),
               ),
             ],

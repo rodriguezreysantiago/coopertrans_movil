@@ -32,6 +32,7 @@ class _FotoUnidad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final tieneFoto = url != null && url!.isNotEmpty;
 
     return Center(
@@ -44,12 +45,12 @@ class _FotoUnidad extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 50,
-                  backgroundColor: AppColors.surface3,
+                  backgroundColor: c.surface3,
                   backgroundImage:
                       tieneFoto ? NetworkImage(url!) : null,
                   child: !tieneFoto
-                      ? const Icon(Icons.local_shipping,
-                          size: 44, color: AppColors.textHint)
+                      ? Icon(Icons.local_shipping,
+                          size: 44, color: c.textMuted)
                       : null,
                 ),
                 if (subiendo)
@@ -57,12 +58,12 @@ class _FotoUnidad extends StatelessWidget {
                     width: 100,
                     height: 100,
                     decoration: BoxDecoration(
-                      color: Colors.black.withAlpha(140),
+                      color: Colors.black.withValues(alpha: 0.55),
                       shape: BoxShape.circle,
                     ),
-                    child: const Center(
+                    child: Center(
                       child: CircularProgressIndicator(
-                        color: AppColors.success,
+                        color: c.brand,
                         strokeWidth: 3,
                       ),
                     ),
@@ -89,12 +90,9 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.md, left: 5),
-      child: Text(
-        label.toUpperCase(),
-        style: AppType.eyebrow
-            .copyWith(color: AppColors.success, letterSpacing: 1.5),
-      ),
+      padding: const EdgeInsets.only(
+          bottom: AppSpacing.sm, left: AppSpacing.xs),
+      child: AppEyebrow(label),
     );
   }
 }
@@ -106,18 +104,25 @@ class _FInput extends StatelessWidget {
   final bool isNumber;
   final TextInputAction textInputAction;
 
+  /// Si es true, este campo es el ÚLTIMO de su card → sin padding inferior
+  /// (la card ya aporta su inset). Solo presentación; no toca la lógica de
+  /// entrada/validación.
+  final bool isLast;
+
   const _FInput({
     required this.controller,
     required this.label,
     required this.icon,
     this.isNumber = false,
     this.textInputAction = TextInputAction.next,
+    this.isLast = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: isLast ? 0 : AppSpacing.lg),
       child: TextFormField(
         controller: controller,
         keyboardType:
@@ -127,15 +132,10 @@ class _FInput extends StatelessWidget {
         // Solo dígitos en KM. Sin esto, el admin podía pegar "100.000"
         // o "100 km" desde el clipboard y romper la sincronización Volvo.
         inputFormatters: isNumber ? [DigitOnlyFormatter()] : null,
-        style:
-            AppType.body.copyWith(color: AppColors.textPrimary, fontSize: 15),
+        style: AppType.body.copyWith(color: c.text),
         decoration: InputDecoration(
           labelText: label,
-          prefixIcon: Icon(
-            icon,
-            color: Theme.of(context).colorScheme.primary,
-            size: 20,
-          ),
+          prefixIcon: Icon(icon, color: c.brand, size: 20),
         ),
         validator: (value) {
           if (value == null || value.trim().isEmpty) {
@@ -163,12 +163,18 @@ class _BloqueVolvo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.info.withAlpha(20),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.info.withAlpha(50)),
+        color: c.surface3,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border(
+          top: BorderSide(color: c.border),
+          right: BorderSide(color: c.border),
+          bottom: BorderSide(color: c.border),
+          left: BorderSide(color: c.brand, width: 3),
+        ),
       ),
       child: Column(
         children: [
@@ -177,12 +183,13 @@ class _BloqueVolvo extends StatelessWidget {
             label: 'Código VIN (Volvo)',
             icon: Icons.fingerprint,
             textInputAction: TextInputAction.done,
+            isLast: true,
           ),
-          const SizedBox(height: AppSpacing.sm),
+          const SizedBox(height: AppSpacing.md),
           if (isSyncing)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
-              child: CircularProgressIndicator(color: AppColors.info),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+              child: CircularProgressIndicator(color: c.brand),
             )
           else
             AppButton.secondary(
@@ -215,36 +222,34 @@ class _EmpresaTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppCard(
       onTap: onTap,
       margin: EdgeInsets.zero,
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
-          const Icon(Icons.business, color: AppColors.success),
+          Icon(Icons.business, color: c.brand, size: 20),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Empresa titular',
-                  style:
-                      AppType.eyebrow.copyWith(color: AppColors.textTertiary),
-                ),
+                const AppEyebrow('Empresa titular'),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  empresa,
+                  empresa.isEmpty ? '—' : empresa,
                   // Razón social larga ("VECCHI ARIEL Y …") rompía
                   // la card en mobile. 2 líneas + ellipsis para prolijidad.
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.heading.copyWith(fontSize: 13),
+                  style: AppType.body.copyWith(fontWeight: FontWeight.w600),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.edit, color: AppColors.textHint, size: 18),
+          const SizedBox(width: AppSpacing.sm),
+          Icon(Icons.edit, color: c.textMuted, size: 18),
         ],
       ),
     );
@@ -270,15 +275,16 @@ class _DateTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final tieneArchivo = url != null && url!.isNotEmpty && url != '-';
+    final tieneFecha = fecha != null && fecha!.isNotEmpty;
 
     // No usamos ListTile.onTap porque colisiona con los taps internos de
     // los iconos. En lugar de eso, hacemos clickeable solo la zona del
     // título/fecha (que abre el date picker) y dejamos los iconos del
     // trailing como botones explícitos: Ver + Reemplazar/Subir.
     return Padding(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 5, vertical: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
         children: [
           AppFileThumbnail(
@@ -298,18 +304,19 @@ class _DateTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      label,
+                      label.toUpperCase(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style:
-                          AppType.label.copyWith(color: AppColors.textTertiary),
+                      style: AppType.eyebrow.copyWith(color: c.textMuted),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      AppFormatters.formatearFecha(fecha ?? ''),
+                      tieneFecha
+                          ? AppFormatters.formatearFecha(fecha)
+                          : '—',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.heading.copyWith(fontSize: 15),
+                      style: AppType.mono.copyWith(color: c.text),
                     ),
                   ],
                 ),
@@ -326,8 +333,7 @@ class _DateTile extends StatelessWidget {
               visualDensity: VisualDensity.compact,
               padding: const EdgeInsets.all(6),
               constraints: const BoxConstraints(),
-              icon: const Icon(Icons.visibility,
-                  color: AppColors.success, size: 22),
+              icon: Icon(Icons.visibility, color: c.brand, size: 22),
               tooltip: 'Ver archivo',
               onPressed: () => Navigator.push(
                 context,
@@ -344,7 +350,7 @@ class _DateTile extends StatelessWidget {
             constraints: const BoxConstraints(),
             icon: Icon(
               tieneArchivo ? Icons.file_upload_outlined : Icons.upload_file,
-              color: tieneArchivo ? AppColors.info : AppColors.textTertiary,
+              color: tieneArchivo ? c.brand : c.textMuted,
               size: 22,
             ),
             tooltip:
@@ -397,39 +403,34 @@ class _FechaTileSimple extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final tiene = fecha != null && fecha!.isNotEmpty;
     return AppCard(
       onTap: onTap,
       margin: EdgeInsets.zero,
+      tier: 3,
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
-          Icon(icono, color: AppColors.success),
+          Icon(icono, color: c.brand, size: 20),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style:
-                      AppType.eyebrow.copyWith(color: AppColors.textTertiary),
-                ),
+                AppEyebrow(label),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  tiene
-                      ? AppFormatters.formatearFecha(fecha!)
-                      : 'Sin cargar',
-                  style: AppType.heading.copyWith(
-                    color: tiene ? AppColors.textPrimary : AppColors.textHint,
-                    fontSize: 13,
+                  tiene ? AppFormatters.formatearFecha(fecha!) : 'Sin cargar',
+                  style: AppType.mono.copyWith(
+                    color: tiene ? c.text : c.textMuted,
                   ),
                 ),
               ],
             ),
           ),
-          const Icon(Icons.edit_calendar,
-              color: AppColors.textHint, size: 18),
+          const SizedBox(width: AppSpacing.sm),
+          Icon(Icons.edit_calendar, color: c.textMuted, size: 18),
         ],
       ),
     );

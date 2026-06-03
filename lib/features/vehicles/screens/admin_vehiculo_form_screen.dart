@@ -319,40 +319,38 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
   }
 
   Future<_FuenteArchivo?> _elegirFuenteArchivo() {
+    final c = context.colors;
     return showModalBottomSheet<_FuenteArchivo>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
+          color: c.surface2,
           borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
-          border: const Border(
-              top: BorderSide(color: AppColors.success, width: 2)),
+              const BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+          border: Border(top: BorderSide(color: c.border)),
         ),
         child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Padding(
-                padding: EdgeInsets.all(AppSpacing.md),
-                child: Text(
-                  'Adjuntar documento',
-                  style: AppType.heading,
+                padding: EdgeInsets.all(AppSpacing.lg),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: AppEyebrow('Adjuntar documento'),
                 ),
               ),
               ListTile(
-                leading:
-                    const Icon(Icons.camera_alt, color: AppColors.success),
-                title: const Text('Tomar foto',
-                    style: TextStyle(color: AppColors.textPrimary)),
+                leading: Icon(Icons.camera_alt, color: c.brand),
+                title: Text('Tomar foto',
+                    style: AppType.body.copyWith(color: c.text)),
                 onTap: () => Navigator.pop(ctx, _FuenteArchivo.camera),
               ),
               ListTile(
-                leading:
-                    const Icon(Icons.file_present, color: AppColors.info),
-                title: const Text('Seleccionar archivo (PDF/imagen)',
-                    style: TextStyle(color: AppColors.textPrimary)),
+                leading: Icon(Icons.file_present, color: c.brand),
+                title: Text('Seleccionar archivo (PDF/imagen)',
+                    style: AppType.body.copyWith(color: c.text)),
                 onTap: () => Navigator.pop(ctx, _FuenteArchivo.fileSystem),
               ),
               const SizedBox(height: AppSpacing.sm),
@@ -437,6 +435,7 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
   }
 
   void _seleccionarEmpresa() {
+    final c = context.colors;
     const empresas = [
       'VECCHI ARIEL Y VECCHI GRACIELA S.R.L: (30-70910015-3)',
       'SUCESION DE VECCHI CARLOS LUIS: (20-08569424-4)',
@@ -452,8 +451,7 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
                     contentPadding: EdgeInsets.zero,
                     title: Text(
                       e,
-                      style: AppType.body.copyWith(
-                          color: AppColors.textPrimary, fontSize: 13),
+                      style: AppType.bodySm.copyWith(color: c.text),
                     ),
                     onTap: () {
                       setState(() => _empresaCtrl.text = e);
@@ -681,7 +679,8 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
             child: Form(
           key: _formKey,
           child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.xl),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
             children: [
               // Identificación visual: foto circular grande + botón
               // "Cambiar foto". Para que el admin reconozca la unidad
@@ -692,96 +691,125 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
                 onTap: _cambiarFotoVehiculo,
               ),
               const SizedBox(height: AppSpacing.xl),
+
+              // ─── INFORMACIÓN TÉCNICA ───────────────────────────────
               const _SectionTitle('Información técnica'),
-              _FInput(
-                controller: _marcaCtrl,
-                label: 'Marca del fabricante',
-                icon: Icons.branding_watermark,
-              ),
-              _FInput(
-                controller: _modeloCtrl,
-                label: 'Modelo de la unidad',
-                icon: Icons.directions_car,
-              ),
-              _FInput(
-                controller: _anioCtrl,
-                label: 'Año de fabricación',
-                icon: Icons.calendar_today,
-                isNumber: true,
-              ),
-              if (esVolvo) ...[
-                const SizedBox(height: AppSpacing.sm),
-                _BloqueVolvo(
-                  vinController: _vinCtrl,
-                  isSyncing: _isSyncing,
-                  onSync: _sincronizarConVolvo,
-                  onDiagnostico: _abrirDiagnostico,
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _FInput(
+                      controller: _marcaCtrl,
+                      label: 'Marca del fabricante',
+                      icon: Icons.branding_watermark,
+                    ),
+                    _FInput(
+                      controller: _modeloCtrl,
+                      label: 'Modelo de la unidad',
+                      icon: Icons.directions_car,
+                    ),
+                    _FInput(
+                      controller: _anioCtrl,
+                      label: 'Año de fabricación',
+                      icon: Icons.calendar_today,
+                      isNumber: true,
+                    ),
+                    if (esVolvo) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      _BloqueVolvo(
+                        vinController: _vinCtrl,
+                        isSyncing: _isSyncing,
+                        onSync: _sincronizarConVolvo,
+                        onDiagnostico: _abrirDiagnostico,
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                    ],
+                    _FInput(
+                      controller: _kmCtrl,
+                      label: 'Kilometraje actual',
+                      icon: Icons.speed,
+                      isNumber: true,
+                      textInputAction: TextInputAction.done,
+                      isLast: true,
+                    ),
+                  ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
-              ],
-              _FInput(
-                controller: _kmCtrl,
-                label: 'Kilometraje actual',
-                icon: Icons.speed,
-                isNumber: true,
-                textInputAction: TextInputAction.done,
               ),
-              const SizedBox(height: AppSpacing.sm),
+              const SizedBox(height: AppSpacing.lg),
+
+              // ─── PROPIEDAD ─────────────────────────────────────────
+              const _SectionTitle('Propiedad'),
               _EmpresaTile(
                 empresa: _empresaCtrl.text,
                 onTap: _seleccionarEmpresa,
               ),
+
               if (esTractor) ...[
-                const SizedBox(height: AppSpacing.xxl),
+                const SizedBox(height: AppSpacing.xl),
                 const _SectionTitle('Mantenimiento preventivo'),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-                  child: Text(
-                    'Cargá los datos del último service realizado en el taller. '
-                    'La distancia al próximo service la calcula Volvo automáticamente.',
-                    style: AppType.eyebrow
-                        .copyWith(color: AppColors.textTertiary),
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding:
+                            const EdgeInsets.only(bottom: AppSpacing.md),
+                        child: Text(
+                          'Cargá los datos del último service realizado en el taller. '
+                          'La distancia al próximo service la calcula Volvo automáticamente.',
+                          style: AppType.bodySm
+                              .copyWith(color: context.colors.textMuted),
+                        ),
+                      ),
+                      _FInput(
+                        controller: _ultimoServiceKmCtrl,
+                        label: 'KM al hacer el último service',
+                        icon: Icons.build,
+                        isNumber: true,
+                        isLast: true,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      _FechaTileSimple(
+                        label: 'Fecha del último service',
+                        fecha: _ultimoServiceFecha,
+                        icono: Icons.event_available,
+                        onTap: _seleccionarFechaUltimoService,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                _FInput(
-                  controller: _ultimoServiceKmCtrl,
-                  label: 'KM al hacer el último service',
-                  icon: Icons.build,
-                  isNumber: true,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                _FechaTileSimple(
-                  label: 'Fecha del último service',
-                  fecha: _ultimoServiceFecha,
-                  icono: Icons.event_available,
-                  onTap: _seleccionarFechaUltimoService,
-                ),
               ],
-              const SizedBox(height: AppSpacing.xxl),
+              const SizedBox(height: AppSpacing.xl),
+
+              // ─── AUDITORÍA DE VENCIMIENTOS ─────────────────────────
               const _SectionTitle('Auditoría de vencimientos'),
               // Tiles generados desde la lista de specs: sumar un
               // VencimientoSpec a AppVencimientos.tractor / .enganche y
               // automáticamente aparece acá.
-              for (int i = 0; i < _vencimientos.length; i++) ...[
-                _DateTile(
-                  label: 'Vencimiento ${_vencimientos[i].etiqueta}',
-                  fecha: _fechas[_vencimientos[i].campoFecha],
-                  url: _urls[_vencimientos[i].campoArchivo],
-                  onTapDate: () => _seleccionarFecha(_vencimientos[i]),
-                  onTapFile: () => _subirDocumento(_vencimientos[i]),
-                  tituloVisor:
-                      '${_vencimientos[i].etiqueta} ${widget.vehiculoId}',
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int i = 0; i < _vencimientos.length; i++) ...[
+                      _DateTile(
+                        label: 'Vencimiento ${_vencimientos[i].etiqueta}',
+                        fecha: _fechas[_vencimientos[i].campoFecha],
+                        url: _urls[_vencimientos[i].campoArchivo],
+                        onTapDate: () => _seleccionarFecha(_vencimientos[i]),
+                        onTapFile: () => _subirDocumento(_vencimientos[i]),
+                        tituloVisor:
+                            '${_vencimientos[i].etiqueta} ${widget.vehiculoId}',
+                      ),
+                      if (i < _vencimientos.length - 1) const AppHairline(),
+                    ],
+                  ],
                 ),
-                if (i < _vencimientos.length - 1)
-                  const Divider(color: AppColors.borderSubtle, height: 1),
-              ],
+              ),
               const SizedBox(height: AppSpacing.xxl),
               _BotonGuardar(
                 guardando: _isSaving,
                 onPressed: _guardar,
               ),
-              const SizedBox(height: AppSpacing.xl),
             ],
           ),
         ),

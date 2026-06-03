@@ -146,29 +146,18 @@ class _AdminVehiculosListaScreenState
               : null,
       body: Column(
         children: [
-          // Chips de filtro por tipo (mismo look Núcleo que Personal). El
-          // contador refleja las unidades VISIBLES de cada tipo, así que
-          // respeta los toggles de inactivos/excluidos del AppBar. Scroll
-          // horizontal: con 5 tipos no entran cómodos en mobile.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final t in tipos) ...[
-                    _ChipTipo(
-                      tipo: t,
-                      activo: _tipoSeleccionado == t,
-                      visible: _visible,
-                      onTap: () => setState(() => _tipoSeleccionado = t),
-                    ),
-                    if (t != tipos.last) const SizedBox(width: 6),
-                  ],
-                ],
-              ),
-            ),
+          // Encabezado Núcleo: eyebrow del tipo seleccionado + número hero
+          // + AppKpiStrip (libres · asignados · taller · inactivos) de ESE
+          // segmento de flota. Se alimenta del MISMO stream por-tipo que
+          // consume la lista (cero lecturas extra), así los números nunca
+          // divergen de lo que se ve. Debajo, los chips Núcleo siguen siendo
+          // el filtro INTERACTIVO entre tipos (lógica intacta).
+          _HeroFlota(
+            tipo: _tipoSeleccionado,
+            tipos: tipos,
+            onTipo: (t) => setState(() => _tipoSeleccionado = t),
+            visible: _visible,
+            mostrarInactivos: _mostrarInactivos,
           ),
           Expanded(
             child: _ListaPorTipo(
@@ -179,6 +168,146 @@ class _AdminVehiculosListaScreenState
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Encabezado Núcleo de Gestión de Flota.
+///
+/// Replica el gesto del header de Personal: `AppEyebrow` (plural del tipo
+/// seleccionado) + número hero (`AppType.h2`) + `AppKpiStrip` con el
+/// desglose por estado (libres · asignados · taller · inactivos) de ESE
+/// segmento. Debajo van los `AppFilterChip` de filtro por tipo.
+///
+/// El hero/KPI se derivan del MISMO stream por-tipo que ya consume la lista
+/// (`getVehiculosPorTipo`) — cero lecturas extra y números que coinciden con
+/// lo que se ve. Los contadores respetan el predicado de visibilidad
+/// (`_visible`), salvo el de "inactivos" que se calcula aparte para que el
+/// KPI tenga sentido aun con el toggle apagado.
+class _HeroFlota extends StatelessWidget {
+  final String tipo;
+  final List<String> tipos;
+  final ValueChanged<String> onTipo;
+  final bool Function(Map<String, dynamic> data, String patente) visible;
+  final bool mostrarInactivos;
+
+  const _HeroFlota({
+    required this.tipo,
+    required this.tipos,
+    required this.onTipo,
+    required this.visible,
+    required this.mostrarInactivos,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final pluralLabel =
+        AppTiposVehiculo.pluralEtiquetas[tipo] ?? tipo.toUpperCase();
+
+    return Consumer<VehiculoProvider>(
+      builder: (ctx, provider, _) => StreamBuilder<QuerySnapshot>(
+        stream: provider.getVehiculosPorTipo(tipo),
+        builder: (ctx, snap) {
+          final docs = snap.data?.docs ?? const [];
+
+          // Un solo barrido sobre el segmento del tipo seleccionado. El
+          // total visible respeta los toggles; los KPIs de estado se cuentan
+          // entre los visibles, e "inactivos" se cuenta sin importar el
+          // toggle (es la utilidad del KPI: saber cuántos hay aunque estén
+          // ocultos). Todo derivado de la base — cero números hardcodeados.
+          var totalVisibles = 0;
+          var libres = 0;
+          var asignados = 0;
+          var taller = 0;
+          var inactivos = 0;
+          for (final d in docs) {
+            final data = d.data() as Map<String, dynamic>;
+            if (!AppActivo.esActivo(data)) inactivos++;
+            if (!visible(data, d.id)) continue;
+            totalVisibles++;
+            final estado =
+                (data['ESTADO'] ?? 'LIBRE').toString().toUpperCase();
+            switch (estado) {
+              case 'OCUPADO':
+              case 'ASIGNADO':
+                asignados++;
+              case 'TALLER':
+              case 'MANTENIMIENTO':
+                taller++;
+              case 'LIBRE':
+                libres++;
+            }
+          }
+
+          final tieneDatos = snap.hasData;
+          final unidadesTxt = mostrarInactivos
+              ? 'unidades (incl. inactivas)'
+              : 'unidades';
+
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppEyebrow(pluralLabel),
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      tieneDatos ? '$totalVisibles' : '—',
+                      style: AppType.h2.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(unidadesTxt, style: AppType.monoSm),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                AppKpiStrip(
+                  stats: [
+                    AppStat(label: 'Libres', value: '$libres'),
+                    AppStat(label: 'Asignados', value: '$asignados'),
+                    AppStat(label: 'Taller', value: '$taller'),
+                    AppStat(
+                      label: 'Inactivos',
+                      value: '$inactivos',
+                      accent: inactivos > 0 ? c.warning : null,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                // Chips Núcleo de filtro por tipo. El contador de cada chip
+                // refleja las unidades VISIBLES de ese tipo (respeta toggles).
+                // Scroll horizontal: con 5 tipos no entran cómodos en mobile.
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final t in tipos) ...[
+                        _ChipTipo(
+                          tipo: t,
+                          activo: tipo == t,
+                          visible: visible,
+                          onTap: () => onTipo(t),
+                        ),
+                        if (t != tipos.last) const SizedBox(width: 6),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
