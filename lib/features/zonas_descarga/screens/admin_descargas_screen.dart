@@ -1,15 +1,44 @@
+// lib/features/zonas_descarga/screens/admin_descargas_screen.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — cola en vivo + histórico en lenguaje bento.
+//
+// SOLO PRESENTACIÓN. Se preserva intacto:
+//   - el stream de zonas (`ZonasDescargaService.stream()`),
+//   - los streams Firestore de cola en vivo (`ZONA_DESCARGA_COLA`) e
+//     histórico (`ZONA_DESCARGA_HISTORICO`) con sus where/orderBy/limit,
+//   - el agregado de KPIs por `.get()` one-shot (NO snapshots, límite 5000)
+//     que se recalcula al cambiar zona/rango (didUpdateWidget),
+//   - el State (slug seleccionado + rango desde/hasta) y `_elegirRango`
+//     (date range picker es/AR con la regla "si hasta == hoy → ahora"),
+//   - la navegación al CRUD de zonas (`AppRoutes.adminZonasDescarga`).
+//
+// Layout Núcleo:
+//   ┌─ Hero: eyebrow DESCARGAS · zona + hero number "N descargando ahora" ─┐
+//   ├─ Acciones: gestionar zonas · rango (chip mono) ─────────────────────┤
+//   ├─ Selector de zona (AppFilterChip) si hay > 1 ───────────────────────┤
+//   ├─ AppKpiStrip: descargas · promedio · más lenta ─────────────────────┤
+//   ├─ Cola en vivo (AppCard + AppHairline por fila, mono "hace X min") ──┤
+//   └─ Histórico del rango (AppCard + AppHairline por fila) ──────────────┘
+//
+// Reglas duras: tokens (context.colors), números en AppType.mono, faltante
+// → "—", embedded (AppScaffold auto-detecta el shell), sin overflow.
+//
+// La cola en vivo se LEVANTA al tope (un único StreamBuilder) para que el
+// hero number, el dot de estado y la lista compartan la misma fuente —
+// antes el stream vivía adentro de la sección de cola.
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../models/zona_descarga.dart';
 import '../services/zonas_descarga_service.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Módulo "Descargas" — cola en vivo + recién descargaron + KPIs.
 ///
 /// Reemplazó al detector PTO Volvo (eliminado 2026-05-24) que daba
@@ -18,7 +47,7 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// CF `zonaDescargaPoller` cruza con Sitrack — cubre la flota completa.
 ///
 /// Para que funcione tienen que estar cargadas las zonas desde
-/// "Zonas de descarga" (admin). Si no hay zonas → pantalla vacía con
+/// "Zonas de descarga" (admin). Si no hay zonas → estado vacío con
 /// CTA a esa pantalla.
 class AdminDescargasScreen extends StatefulWidget {
   const AdminDescargasScreen({super.key});
@@ -76,7 +105,7 @@ class _AdminDescargasScreenState extends State<AdminDescargasScreen> {
         stream: ZonasDescargaService.stream(),
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const AppSkeletonList(count: 4, conAvatar: false);
           }
           final zonas = (snap.data ?? const <ZonaDescarga>[])
               .where((z) => z.activo)
@@ -89,49 +118,79 @@ class _AdminDescargasScreenState extends State<AdminDescargasScreen> {
             (z) => z.slug == _slugSeleccionado,
             orElse: () => zonas.first,
           );
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.xxl,
+            ),
             children: [
-              // Acceso permanente al CRUD de zonas — visible aunque ya
-              // haya zonas cargadas. Sin esto, una vez que existe la
-              // primera zona el _SinZonas (con su CTA "Cargar zona")
-              // desaparece y no quedaba forma de crear/editar/desactivar
-              // más zonas desde acá.
-              _BotonGestionarZonas(
-                onTap: () => Navigator.pushNamed(
-                    context, AppRoutes.adminZonasDescarga),
+              // Cola en vivo levantada al tope: alimenta el hero number, el
+              // dot de estado y la lista, con un único listener.
+              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance
+                    .collection(AppCollections.zonaDescargaCola)
+                    .where('slug_zona', isEqualTo: zonaActual.slug)
+                    .snapshots(),
+                builder: (cctx, csnap) {
+                  final cargandoCola =
+                      csnap.connectionState == ConnectionState.waiting;
+                  final docsCola = (csnap.data?.docs ?? const []).toList()
+                    ..sort((a, b) {
+                      final ta = (a.data()['entrada_ts'] as Timestamp?);
+                      final tb = (b.data()['entrada_ts'] as Timestamp?);
+                      if (ta == null && tb == null) return 0;
+                      if (ta == null) return 1;
+                      if (tb == null) return -1;
+                      return ta.compareTo(tb);
+                    });
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _Hero(
+                        zona: zonaActual,
+                        enCola: docsCola.length,
+                        cargando: cargandoCola,
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      _Acciones(
+                        desde: _desde,
+                        hasta: _hasta,
+                        onRango: _elegirRango,
+                        onGestionarZonas: () => Navigator.pushNamed(
+                            context, AppRoutes.adminZonasDescarga),
+                      ),
+                      if (zonas.length > 1) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        _SelectorZona(
+                          zonas: zonas,
+                          seleccionada: zonaActual.slug,
+                          onChanged: (s) =>
+                              setState(() => _slugSeleccionado = s),
+                        ),
+                      ],
+                      const SizedBox(height: AppSpacing.lg),
+                      _KpisZona(
+                        slug: zonaActual.slug,
+                        desde: _desde,
+                        hasta: _hasta,
+                      ),
+                      const SizedBox(height: AppSpacing.lg),
+                      _ColaEnVivo(
+                        zona: zonaActual,
+                        cargando: cargandoCola,
+                        docs: docsCola,
+                      ),
+                    ],
+                  );
+                },
               ),
-              if (zonas.length > 1)
-                _SelectorZona(
-                  zonas: zonas,
-                  seleccionada: zonaActual.slug,
-                  onChanged: (s) =>
-                      setState(() => _slugSeleccionado = s),
-                ),
-              _BotonRango(
+              const SizedBox(height: AppSpacing.lg),
+              _DescargasDelRango(
+                slug: zonaActual.slug,
                 desde: _desde,
                 hasta: _hasta,
-                onTap: _elegirRango,
-              ),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  children: [
-                    _KpisZona(
-                      slug: zonaActual.slug,
-                      desde: _desde,
-                      hasta: _hasta,
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    _ColaEnVivo(zona: zonaActual),
-                    const SizedBox(height: AppSpacing.lg),
-                    _DescargasDelRango(
-                      slug: zonaActual.slug,
-                      desde: _desde,
-                      hasta: _hasta,
-                    ),
-                  ],
-                ),
               ),
             ],
           );
@@ -141,15 +200,93 @@ class _AdminDescargasScreenState extends State<AdminDescargasScreen> {
   }
 }
 
-/// Botón único con el rango actual visible. Tap → date range picker.
-class _BotonRango extends StatelessWidget {
+// =============================================================================
+// HERO · eyebrow DESCARGAS · zona + hero number "N descargando ahora"
+// =============================================================================
+
+class _Hero extends StatelessWidget {
+  final ZonaDescarga zona;
+  final int enCola;
+  final bool cargando;
+  const _Hero({
+    required this.zona,
+    required this.enCola,
+    required this.cargando,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final hayActividad = enCola > 0;
+    return AppCard(
+      tier: 2,
+      glow: hayActividad,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(child: AppEyebrow('DESCARGAS')),
+              AppBadge(
+                text: zona.nombre.toUpperCase(),
+                color: c.brand,
+                size: AppBadgeSize.sm,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                cargando ? '—' : '$enCola',
+                style: AppType.mega.copyWith(
+                  fontSize: 72,
+                  color: hayActividad ? c.text : c.textMuted,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Row(
+                  children: [
+                    AppDot(
+                      hayActividad ? c.success : c.textMuted,
+                      size: 7,
+                      glow: hayActividad,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'descargando ahora',
+                      style: AppType.monoSm.copyWith(color: c.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// ACCIONES · gestionar zonas + rango (chip mono)
+// =============================================================================
+
+class _Acciones extends StatelessWidget {
   final DateTime desde;
   final DateTime hasta;
-  final VoidCallback onTap;
-  const _BotonRango({
+  final VoidCallback onRango;
+  final VoidCallback onGestionarZonas;
+  const _Acciones({
     required this.desde,
     required this.hasta,
-    required this.onTap,
+    required this.onRango,
+    required this.onGestionarZonas,
   });
 
   String _fmt(DateTime d) =>
@@ -158,54 +295,55 @@ class _BotonRango extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        child: Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 14, vertical: AppSpacing.md),
-          decoration: BoxDecoration(
-            color: AppColors.brand.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            border: Border.all(
-              color: AppColors.brand.withValues(alpha: 0.4),
+    final c = context.colors;
+    return Row(
+      children: [
+        // Chip de rango — tappeable, muestra el rango actual en mono.
+        Expanded(
+          child: InkWell(
+            onTap: onRango,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md, vertical: 10),
+              decoration: BoxDecoration(
+                color: c.surface2,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                border: Border.all(color: c.border),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.date_range, size: 15, color: c.textMuted),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const AppEyebrow('RANGO'),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${_fmt(desde)} → ${_fmt(hasta)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.monoSm.copyWith(color: c.text),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          child: Row(
-            children: [
-              const Icon(Icons.date_range,
-                  color: AppColors.brand, size: 22),
-              const SizedBox(width: AppSpacing.md),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'RANGO DE DESCARGAS',
-                      style: TextStyle(
-                        color: AppColors.brand,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${_fmt(desde)} → ${_fmt(hasta)}',
-                      style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.calendar_today,
-                  color: Colors.white54, size: 18),
-            ],
-          ),
         ),
-      ),
+        const SizedBox(width: AppSpacing.sm),
+        AppButton.secondary(
+          label: 'Zonas',
+          icon: Icons.tune,
+          size: AppButtonSize.sm,
+          onPressed: onGestionarZonas,
+        ),
+      ],
     );
   }
 }
@@ -215,65 +353,16 @@ class _SinZonas extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.add_location_alt_outlined,
-                color: Colors.white24, size: 72),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              'No hay zonas de descarga cargadas',
-              style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Cargá la primera zona (por ej. YPF Añelo) para que el '
-              'sistema empiece a detectar entradas y salidas.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.45),
-                fontSize: 13,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 20),
-            AppButton(
-              label: 'Cargar zona',
-              icon: Icons.add,
-              onPressed: () => Navigator.pushNamed(
-                  context, AppRoutes.adminZonasDescarga),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Botón compacto arriba a la derecha — acceso permanente al CRUD de
-/// zonas (`AdminZonasDescargaScreen`). Se renderiza siempre que hay
-/// al menos una zona; cuando no hay ninguna, el `_SinZonas` cubre el
-/// caso con su propio CTA.
-class _BotonGestionarZonas extends StatelessWidget {
-  final VoidCallback onTap;
-  const _BotonGestionarZonas({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
-      child: Align(
-        alignment: Alignment.centerRight,
-        child: AppButton.secondary(
-          label: 'Gestionar zonas',
-          icon: Icons.tune,
-          size: AppButtonSize.sm,
-          onPressed: onTap,
-        ),
+    return AppEmptyState(
+      icon: Icons.add_location_alt_outlined,
+      title: 'No hay zonas de descarga cargadas',
+      subtitle: 'Cargá la primera zona (por ej. YPF Añelo) para que el '
+          'sistema empiece a detectar entradas y salidas.',
+      action: AppButton(
+        label: 'Cargar zona',
+        icon: Icons.add,
+        onPressed: () =>
+            Navigator.pushNamed(context, AppRoutes.adminZonasDescarga),
       ),
     );
   }
@@ -291,19 +380,18 @@ class _SelectorZona extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
-      child: Wrap(
-        spacing: 8,
-        children: zonas
-            .map((z) => ChoiceChip(
-                  label: Text(z.nombre),
-                  selected: z.slug == seleccionada,
-                  onSelected: (_) => onChanged(z.slug),
-                ))
-            .toList(),
-      ),
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final z in zonas)
+          AppFilterChip(
+            label: z.nombre,
+            count: z.estadiaMinMin,
+            activo: z.slug == seleccionada,
+            onTap: () => onChanged(z.slug),
+          ),
+      ],
     );
   }
 }
@@ -361,9 +449,11 @@ class _KpisZonaState extends State<_KpisZona> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return FutureBuilder<QuerySnapshot<Map<String, dynamic>>>(
       future: _future,
       builder: (ctx, snap) {
+        final cargando = snap.connectionState == ConnectionState.waiting;
         final docs = snap.data?.docs ?? const [];
         final count = docs.length;
         var sum = 0;
@@ -378,27 +468,27 @@ class _KpisZonaState extends State<_KpisZona> {
           }
         }
         final promedio = count > 0 ? (sum / count).round() : 0;
-        return Row(
-          children: [
-            _KpiCard(
+        return AppKpiStrip(
+          stats: [
+            AppStat(
               label: 'Descargas',
-              valor: '$count',
-              color: AppColors.info,
-              icon: Icons.local_shipping,
+              value: cargando ? '—' : '$count',
+              valueStyle: AppType.h3,
             ),
-            const SizedBox(width: AppSpacing.sm),
-            _KpiCard(
+            AppStat(
               label: 'Promedio',
-              valor: '$promedio min',
-              color: AppColors.warning,
-              icon: Icons.timer,
+              value: cargando ? '—' : (count > 0 ? '$promedio' : '—'),
+              unit: count > 0 ? 'min' : null,
+              valueStyle: AppType.h3,
             ),
-            const SizedBox(width: AppSpacing.sm),
-            _KpiCard(
-              label: maxPat.isEmpty ? 'Más lenta' : 'Más lenta · $maxPat',
-              valor: maxDur > 0 ? '$maxDur min' : '—',
-              color: AppColors.error,
-              icon: Icons.priority_high,
+            AppStat(
+              label: maxPat.isEmpty ? 'Más lenta' : 'Más lenta',
+              value: cargando ? '—' : (maxDur > 0 ? '$maxDur' : '—'),
+              unit: maxDur > 0 ? 'min' : null,
+              valueStyle: AppType.h3,
+              accent: maxDur > 90 ? c.error : null,
+              delta: maxPat.isEmpty ? null : maxPat,
+              deltaColor: c.textMuted,
             ),
           ],
         );
@@ -407,112 +497,78 @@ class _KpisZonaState extends State<_KpisZona> {
   }
 }
 
-class _KpiCard extends StatelessWidget {
-  final String label;
-  final String valor;
-  final Color color;
-  final IconData icon;
-  const _KpiCard({
-    required this.label,
-    required this.valor,
-    required this.color,
-    required this.icon,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: AppCard(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: color, size: 18),
-            const SizedBox(height: 6),
-            Text(valor,
-                style: AppType.title.copyWith(color: color, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 2),
-            Text(label,
-                style: AppType.eyebrow.copyWith(color: Colors.white60)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 // ─── Cola en vivo ────────────────────────────────────────────────
 
 class _ColaEnVivo extends StatelessWidget {
   final ZonaDescarga zona;
-  const _ColaEnVivo({required this.zona});
+  final bool cargando;
+  final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
+  const _ColaEnVivo({
+    required this.zona,
+    required this.cargando,
+    required this.docs,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.queue, color: AppColors.success, size: 18),
-            const SizedBox(width: 6),
-            Text(
-              'COLA EN VIVO — ${zona.nombre.toUpperCase()}',
-              style: AppType.label.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 0.5),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection(AppCollections.zonaDescargaCola)
-              .where('slug_zona', isEqualTo: zona.slug)
-              .snapshots(),
-          builder: (ctx, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Padding(
-                padding: EdgeInsets.all(AppSpacing.xl),
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-            final docs = (snap.data?.docs ?? const []).toList()
-              ..sort((a, b) {
-                final ta = (a.data()['entrada_ts'] as Timestamp?);
-                final tb = (b.data()['entrada_ts'] as Timestamp?);
-                if (ta == null && tb == null) return 0;
-                if (ta == null) return 1;
-                if (tb == null) return -1;
-                return ta.compareTo(tb);
-              });
-            // Filtro por estadía mínima (la cola del Firestore puede
-            // incluir entradas recientes que aún no califican). Mostramos
-            // todas igual pero las que no cumplen van con badge "esperando".
-            if (docs.isEmpty) {
-              return const AppCard(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 18),
-                  child: Center(
-                    child: Text(
-                      'No hay unidades en la zona ahora',
-                      style: TextStyle(color: Colors.white54),
-                    ),
-                  ),
+    final c = context.colors;
+    return AppCard(
+      tier: 2,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              AppDot(c.success, size: 7, glow: docs.isNotEmpty),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: AppEyebrow('COLA EN VIVO · ${zona.nombre}',
+                    color: c.success),
+              ),
+              if (!cargando)
+                Text(
+                  '${docs.length}',
+                  style: AppType.monoSm.copyWith(color: c.textMuted),
                 ),
-              );
-            }
-            return Column(
-              children: List.generate(docs.length, (i) {
-                final d = docs[i].data();
-                return _FilaCola(
-                  posicion: i + 1,
-                  data: d,
-                  estadiaMinMin: zona.estadiaMinMin,
-                );
-              }),
-            );
-          },
-        ),
-      ],
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (cargando)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+              child: Center(
+                child: SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: c.brand),
+                ),
+              ),
+            )
+          else if (docs.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+              child: Text(
+                'No hay unidades en la zona ahora',
+                style: AppType.bodySm.copyWith(color: c.textMuted),
+              ),
+            )
+          else
+            for (var i = 0; i < docs.length; i++) ...[
+              if (i > 0) ...[
+                const SizedBox(height: AppSpacing.md),
+                const AppHairline(),
+                const SizedBox(height: AppSpacing.md),
+              ],
+              _FilaCola(
+                posicion: i + 1,
+                data: docs[i].data(),
+                estadiaMinMin: zona.estadiaMinMin,
+              ),
+            ],
+        ],
+      ),
     );
   }
 }
@@ -529,82 +585,107 @@ class _FilaCola extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final entrada = (data['entrada_ts'] as Timestamp?)?.toDate();
     final ahora = DateTime.now();
-    final minDentro = entrada == null
-        ? 0
-        : ahora.difference(entrada).inMinutes;
+    final minDentro =
+        entrada == null ? 0 : ahora.difference(entrada).inMinutes;
     final cumple = minDentro >= estadiaMinMin;
     final patente = (data['patente'] ?? '?').toString();
     final chofer = (data['chofer_nombre'] ?? '').toString().trim();
     final dni = (data['chofer_dni'] ?? '').toString();
+    // Color de la posición: #1 en brand (la que más tiempo lleva), las
+    // primeras 3 en warning, el resto muted. Es jerarquía visual, no estado.
     final colorPos = posicion == 1
-        ? AppColors.error
-        : (posicion <= 3 ? AppColors.warning : Colors.white54);
-    return Card(
-      elevation: 1,
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        side: BorderSide(
-            color: colorPos.withValues(alpha: 0.5), width: 1),
-      ),
-      child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        leading: CircleAvatar(
-          radius: 18,
-          backgroundColor: colorPos,
+        ? c.brand
+        : (posicion <= 3 ? c.warning : c.textMuted);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Posición en círculo mono.
+        Container(
+          width: 30,
+          height: 30,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: colorPos.withValues(alpha: 0.14),
+            shape: BoxShape.circle,
+            border: Border.all(color: colorPos.withValues(alpha: 0.5)),
+          ),
           child: Text(
-            '#$posicion',
-            style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+            '$posicion',
+            style: AppType.monoSm.copyWith(
+              color: colorPos,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
-        title: Row(
-          children: [
-            Text(
-              patente,
-              style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                chofer.isNotEmpty ? chofer : '(sin chofer iButton)',
-                maxLines: 1,
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    patente,
+                    style: AppType.mono.copyWith(
+                      color: c.text,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      chofer.isNotEmpty ? chofer : '(sin chofer iButton)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.bodySm.copyWith(
+                        color: chofer.isNotEmpty ? c.text : c.textMuted,
+                        fontStyle:
+                            chofer.isNotEmpty ? null : FontStyle.italic,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 3),
+              Text(
+                [
+                  _textoTiempo(minDentro),
+                  if (entrada != null)
+                    'entró ${AppFormatters.formatearFechaHoraSinSegundos(entrada)}',
+                  if (dni.isNotEmpty) 'DNI $dni',
+                ].join('  ·  '),
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: chofer.isNotEmpty
-                      ? Colors.white70
-                      : Colors.white38,
-                  fontSize: 13,
-                  fontStyle:
-                      chofer.isNotEmpty ? null : FontStyle.italic,
-                ),
+                style: AppType.monoSm.copyWith(color: c.textMuted),
               ),
-            ),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 3),
-          child: Text(
-            '${_textoTiempo(minDentro)}'
-            '${entrada != null ? " · entró ${AppFormatters.formatearFechaHoraSinSegundos(entrada)}" : ""}'
-            '${dni.isNotEmpty ? " · DNI $dni" : ""}',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: AppType.eyebrow.copyWith(color: Colors.white54),
+            ],
           ),
         ),
-        trailing: cumple
-            ? null
-            : Tooltip(
-                message:
-                    'Aún no cumple estadía mínima ($estadiaMinMin min). '
-                    'Si se va antes no se cuenta como descarga.',
-                child: const Icon(Icons.hourglass_empty,
-                    color: Colors.white38, size: 18),
-              ),
-      ),
+        const SizedBox(width: AppSpacing.sm),
+        // Estado de estadía: si todavía no cumple la mínima, badge "esperando".
+        if (cumple)
+          AppBadge(
+            text: 'EN ZONA',
+            color: c.success,
+            dot: true,
+            size: AppBadgeSize.sm,
+          )
+        else
+          Tooltip(
+            message: 'Aún no cumple estadía mínima ($estadiaMinMin min). '
+                'Si se va antes no se cuenta como descarga.',
+            child: AppBadge(
+              text: 'ESPERANDO',
+              color: c.textMuted,
+              size: AppBadgeSize.sm,
+            ),
+          ),
+      ],
     );
   }
 
@@ -630,64 +711,77 @@ class _DescargasDelRango extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.history, color: AppColors.brandSoft, size: 18),
-            const SizedBox(width: 6),
-            Text(
-              'DESCARGAS DEL RANGO',
-              style: AppType.label.copyWith(color: AppColors.brandSoft, fontWeight: FontWeight.bold, letterSpacing: 0.5),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          // Filtra por ENTRADA en el rango (cuándo empezó la descarga).
-          // Si una descarga empezó dentro pero terminó después de "hasta",
-          // igual aparece — útil para "qué descargas hubo en este turno"
-          // sin perder las que se extendieron al siguiente.
-          stream: FirebaseFirestore.instance
-              .collection(AppCollections.zonaDescargaHistorico)
-              .where('slug_zona', isEqualTo: slug)
-              .where('entrada_ts',
-                  isGreaterThanOrEqualTo: Timestamp.fromDate(desde))
-              .where('entrada_ts',
-                  isLessThanOrEqualTo: Timestamp.fromDate(hasta))
-              .orderBy('entrada_ts', descending: true)
-              .limit(500)
-              .snapshots(),
-          builder: (ctx, snap) {
-            if (snap.connectionState == ConnectionState.waiting) {
-              return const Padding(
-                padding: EdgeInsets.all(AppSpacing.xl),
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-            final docs = snap.data?.docs ?? const [];
-            if (docs.isEmpty) {
-              return const AppCard(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 18),
+    final c = context.colors;
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      // Filtra por ENTRADA en el rango (cuándo empezó la descarga).
+      // Si una descarga empezó dentro pero terminó después de "hasta",
+      // igual aparece — útil para "qué descargas hubo en este turno"
+      // sin perder las que se extendieron al siguiente.
+      stream: FirebaseFirestore.instance
+          .collection(AppCollections.zonaDescargaHistorico)
+          .where('slug_zona', isEqualTo: slug)
+          .where('entrada_ts',
+              isGreaterThanOrEqualTo: Timestamp.fromDate(desde))
+          .where('entrada_ts',
+              isLessThanOrEqualTo: Timestamp.fromDate(hasta))
+          .orderBy('entrada_ts', descending: true)
+          .limit(500)
+          .snapshots(),
+      builder: (ctx, snap) {
+        final cargando = snap.connectionState == ConnectionState.waiting;
+        final docs = snap.data?.docs ?? const [];
+        return AppCard(
+          tier: 2,
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.history, size: 15, color: c.textMuted),
+                  const SizedBox(width: AppSpacing.sm),
+                  const Expanded(child: AppEyebrow('DESCARGAS DEL RANGO')),
+                  if (!cargando)
+                    Text(
+                      '${docs.length}',
+                      style: AppType.monoSm.copyWith(color: c.textMuted),
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              if (cargando)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
                   child: Center(
-                    child: Text(
-                      'Sin descargas en el rango seleccionado',
-                      style: TextStyle(color: Colors.white54),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: c.brand),
                     ),
                   ),
-                ),
-              );
-            }
-            return Column(
-              children: docs
-                  .map((d) => _FilaHistorico(data: d.data()))
-                  .toList(),
-            );
-          },
-        ),
-      ],
+                )
+              else if (docs.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  child: Text(
+                    'Sin descargas en el rango seleccionado',
+                    style: AppType.bodySm.copyWith(color: c.textMuted),
+                  ),
+                )
+              else
+                for (var i = 0; i < docs.length; i++) ...[
+                  if (i > 0) ...[
+                    const SizedBox(height: AppSpacing.md),
+                    const AppHairline(),
+                    const SizedBox(height: AppSpacing.md),
+                  ],
+                  _FilaHistorico(data: docs[i].data()),
+                ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -698,87 +792,69 @@ class _FilaHistorico extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final patente = (data['patente'] ?? '?').toString();
     final chofer = (data['chofer_nombre'] ?? '').toString().trim();
     final dur = ((data['duracion_min'] ?? 0) as num).toInt();
     final entrada = (data['entrada_ts'] as Timestamp?)?.toDate();
     final salida = (data['salida_ts'] as Timestamp?)?.toDate();
-    final colorDur = dur > 90
-        ? AppColors.error
-        : (dur > 60 ? AppColors.warning : AppColors.success);
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.symmetric(vertical: 2),
-      color: Colors.white.withValues(alpha: 0.04),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(6),
-        side: const BorderSide(color: Colors.white12),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    final colorDur =
+        dur > 90 ? c.error : (dur > 60 ? c.warning : c.success);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        patente,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            letterSpacing: 1),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          chofer.isNotEmpty
-                              ? chofer
-                              : '(sin chofer iButton)',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppType.label.copyWith(color: chofer.isNotEmpty
-                                ? Colors.white70
-                                : Colors.white38),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
                   Text(
-                    [
-                      if (entrada != null)
-                        'Entró ${AppFormatters.formatearFechaHoraSinSegundos(entrada)}',
-                      if (salida != null)
-                        'Salió ${AppFormatters.formatearFechaHoraSinSegundos(salida)}',
-                    ].join(' · '),
-                    style: AppType.eyebrow.copyWith(color: Colors.white54),
+                    patente,
+                    style: AppType.mono.copyWith(
+                      color: c.text,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      chofer.isNotEmpty ? chofer : '(sin chofer iButton)',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.bodySm.copyWith(
+                        color: chofer.isNotEmpty ? c.text : c.textMuted,
+                        fontStyle:
+                            chofer.isNotEmpty ? null : FontStyle.italic,
+                      ),
+                    ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: colorDur.withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(6),
-                border:
-                    Border.all(color: colorDur.withValues(alpha: 0.5)),
+              const SizedBox(height: 3),
+              Text(
+                [
+                  if (entrada != null)
+                    'Entró ${AppFormatters.formatearFechaHoraSinSegundos(entrada)}',
+                  if (salida != null)
+                    'Salió ${AppFormatters.formatearFechaHoraSinSegundos(salida)}',
+                ].join('  ·  '),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.monoSm.copyWith(color: c.textMuted),
               ),
-              child: Text(
-                '$dur min',
-                style: AppType.label.copyWith(color: colorDur, fontWeight: FontWeight.bold),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
-      ),
+        const SizedBox(width: AppSpacing.sm),
+        // Duración como pill semántica: verde < 60, ámbar 60-90, coral > 90.
+        AppBadge(
+          text: '$dur min',
+          color: colorDur,
+          size: AppBadgeSize.sm,
+        ),
+      ],
     );
   }
 }

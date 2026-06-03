@@ -1,3 +1,25 @@
+// lib/features/zonas_descarga/screens/admin_zonas_descarga_screen.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — CRUD de geocercas en lenguaje bento.
+//
+// SOLO PRESENTACIÓN. Se preserva intacto:
+//   - el stream de zonas (`ZonasDescargaService.stream()`),
+//   - el CRUD completo (`crear` / `editar` / `setActivo` / `eliminar` +
+//     `slugDesdeNombre`) con sus diálogos de confirmación,
+//   - el `_ZonaForm` entero: controllers, validators, parseo de vértices,
+//     máquina del mapa (tap mueve centro / agrega vértice, deshacer,
+//     limpiar, centrar, toggle satélite, debounce de rebuild) y `_guardar`,
+//   - el `_MapaEditor` (FlutterMap + Circle/Polygon/Polyline/Marker layers),
+//   - la navegación.
+//
+// Layout Núcleo:
+//   ┌─ Hero: eyebrow ZONAS DE DESCARGA · hero number (n zonas) + nueva ──┐
+//   ├─ Banner explicativo (AppCard accent info) ─────────────────────────┤
+//   └─ Lista de zonas (AppCard por zona, dot estado + resumen geom mono) ┘
+//
+// Reglas duras: tokens (context.colors), números/coords en mono, faltante
+// → "—", embedded (AppScaffold auto-detecta el shell), sin overflow.
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -5,14 +27,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/constants/map_constants.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../models/zona_descarga.dart';
 import '../services/zonas_descarga_service.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla admin para crear/editar zonas de descarga. El operador
 /// define cada zona (YPF Añelo, otras plantas) con su geometría
 /// (círculo o polígono). La CF `zonaDescargaPoller` las consume cada
@@ -28,45 +50,29 @@ class AdminZonasDescargaScreen extends StatelessWidget {
         stream: ZonasDescargaService.stream(),
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const AppSkeletonList(count: 4, conAvatar: false);
           }
           final zonas = snap.data ?? const <ZonaDescarga>[];
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.lg,
+              AppSpacing.xxl,
+            ),
             children: [
+              _Hero(
+                total: zonas.length,
+                activas: zonas.where((z) => z.activo).length,
+                onNueva: () => _abrirForm(context, null),
+              ),
+              const SizedBox(height: AppSpacing.md),
               const _BannerExplicativo(),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.xs),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        zonas.isEmpty
-                            ? 'Sin zonas cargadas todavía'
-                            : '${zonas.length} zona${zonas.length == 1 ? "" : "s"}',
-                        style: AppType.label.copyWith(color: Colors.white60),
-                      ),
-                    ),
-                    AppButton(
-                      label: 'Nueva zona',
-                      icon: Icons.add,
-                      size: AppButtonSize.sm,
-                      onPressed: () => _abrirForm(context, null),
-                    ),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: zonas.isEmpty
-                    ? const _EstadoVacio()
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-                        itemCount: zonas.length,
-                        itemBuilder: (c, i) => _ZonaCard(zona: zonas[i]),
-                      ),
-              ),
+              const SizedBox(height: AppSpacing.lg),
+              if (zonas.isEmpty)
+                const _EstadoVacio()
+              else
+                for (final z in zonas) _ZonaCard(zona: z),
             ],
           );
         },
@@ -75,14 +81,87 @@ class AdminZonasDescargaScreen extends StatelessWidget {
   }
 
   static void _abrirForm(BuildContext context, ZonaDescarga? z) {
+    final c = context.colors;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surface,
+      backgroundColor: c.surface2,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
       ),
       builder: (_) => _ZonaForm(zonaExistente: z),
+    );
+  }
+}
+
+// =============================================================================
+// HERO · eyebrow ZONAS DE DESCARGA · hero number (n zonas) + nueva
+// =============================================================================
+
+class _Hero extends StatelessWidget {
+  final int total;
+  final int activas;
+  final VoidCallback onNueva;
+  const _Hero({
+    required this.total,
+    required this.activas,
+    required this.onNueva,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const AppEyebrow('ZONAS DE DESCARGA'),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    '$total',
+                    style: AppType.h2.copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      total == 0
+                          ? 'sin zonas'
+                          : (total == 1 ? 'zona' : 'zonas'),
+                      style: AppType.monoSm,
+                    ),
+                  ),
+                  if (total > 0) ...[
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '· $activas activa${activas == 1 ? "" : "s"}',
+                        style: AppType.monoSm.copyWith(color: c.success),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            AppButton(
+              label: 'Nueva zona',
+              icon: Icons.add,
+              size: AppButtonSize.sm,
+              onPressed: onNueva,
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -92,29 +171,23 @@ class _BannerExplicativo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(
-          AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
-      padding: const EdgeInsets.symmetric(
-          horizontal: 14, vertical: AppSpacing.md),
-      decoration: BoxDecoration(
-        color: AppColors.info.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(
-          color: AppColors.info.withValues(alpha: 0.30),
-        ),
-      ),
+    final c = context.colors;
+    return AppCard(
+      tier: 2,
+      accent: c.info,
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline, color: AppColors.info, size: 20),
-          const SizedBox(width: 10),
+          Icon(Icons.info_outline, color: c.info, size: 18),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Text(
               'Cada zona define un lugar de descarga (ej. YPF Añelo). El '
               'sistema detecta cuándo entra y sale cada unidad para armar '
               'la cola en vivo del módulo "Descargas". Definila como '
               'círculo (centro + radio) o polígono (puntos).',
-              style: AppType.label.copyWith(color: Colors.white70),
+              style: AppType.bodySm.copyWith(color: c.textSecondary),
             ),
           ),
         ],
@@ -128,32 +201,11 @@ class _EstadoVacio extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.add_location_alt_outlined,
-                color: Colors.white24, size: 64),
-            const SizedBox(height: AppSpacing.lg),
-            const Text(
-              'Sin zonas cargadas',
-              style: AppType.heading,
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              'Cargá la primera zona (YPF Añelo) para que el módulo '
-              '"Descargas" empiece a detectar entradas y salidas.',
-              textAlign: TextAlign.center,
-              style: AppType.body.copyWith(
-                color: AppColors.textTertiary,
-                height: 1.4,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return const AppEmptyState(
+      icon: Icons.add_location_alt_outlined,
+      title: 'Sin zonas cargadas',
+      subtitle: 'Cargá la primera zona (YPF Añelo) para que el módulo '
+          '"Descargas" empiece a detectar entradas y salidas.',
     );
   }
 }
@@ -165,64 +217,75 @@ class _ZonaCard extends StatelessWidget {
   String get _resumenGeom {
     if (zona.shape == ZonaShape.circulo) {
       if (zona.centro == null || zona.radioMts == null) return 'Sin centro';
-      return 'Círculo · ${zona.radioMts!.toStringAsFixed(0)} m radio · '
+      return '${zona.radioMts!.toStringAsFixed(0)} m radio · '
           '${zona.centro!.latitud.toStringAsFixed(5)}, '
           '${zona.centro!.longitud.toStringAsFixed(5)}';
     }
-    return 'Polígono · ${zona.vertices.length} puntos';
+    return '${zona.vertices.length} puntos';
   }
 
   @override
   Widget build(BuildContext context) {
-    final color = zona.activo ? AppColors.success : Colors.white24;
+    final c = context.colors;
+    final color = zona.activo ? c.success : c.textMuted;
+    final notas = (zona.notas ?? '').trim();
     return AppCard(
-      onTap: () =>
-          AdminZonasDescargaScreen._abrirForm(context, zona),
+      tier: 2,
+      onTap: () => AdminZonasDescargaScreen._abrirForm(context, zona),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Opacity(
-        opacity: zona.activo ? 1.0 : 0.55,
+        opacity: zona.activo ? 1.0 : 0.6,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                      color: color, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 10),
+                AppDot(color, size: 8, glow: zona.activo),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     zona.nombre,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.body.copyWith(fontWeight: FontWeight.w600),
+                    style: AppType.h5,
                   ),
                 ),
-                Text(
-                  zona.activo ? 'Activa' : 'Pausada',
-                  style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.w600),
+                const SizedBox(width: AppSpacing.sm),
+                AppBadge(
+                  text: zona.activo ? 'ACTIVA' : 'PAUSADA',
+                  color: color,
+                  dot: true,
+                  size: AppBadgeSize.sm,
                 ),
+                Icon(Icons.chevron_right, size: 18, color: c.textMuted),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              _resumenGeom,
-              style: AppType.label.copyWith(color: Colors.white60),
+            const SizedBox(height: AppSpacing.md),
+            const AppHairline(),
+            const SizedBox(height: AppSpacing.md),
+            // Geometría + estadía en filas label/valor mono.
+            _LineaMeta(
+              label: zona.shape == ZonaShape.circulo ? 'Círculo' : 'Polígono',
+              valor: _resumenGeom,
             ),
-            const SizedBox(height: 2),
-            Text(
-              'Estadía mínima: ${zona.estadiaMinMin} min · slug ${zona.slug}',
-              style: AppType.eyebrow.copyWith(color: Colors.white38),
+            const SizedBox(height: 4),
+            _LineaMeta(
+              label: 'Estadía mín.',
+              valor: '${zona.estadiaMinMin} min',
             ),
-            if ((zona.notas ?? '').isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: 4),
+            _LineaMeta(label: 'Slug', valor: zona.slug),
+            if (notas.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
               Text(
-                zona.notas!,
-                style: AppType.eyebrow.copyWith(color: Colors.white54, fontStyle: FontStyle.italic),
+                notas,
+                style: AppType.bodySm
+                    .copyWith(color: c.textMuted, fontStyle: FontStyle.italic),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
+            const SizedBox(height: AppSpacing.sm),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -235,10 +298,12 @@ class _ZonaCard extends StatelessWidget {
                   onPressed: () =>
                       ZonasDescargaService.setActivo(zona.slug, !zona.activo),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline,
-                      color: AppColors.error),
-                  tooltip: 'Eliminar zona',
+                const SizedBox(width: AppSpacing.sm),
+                AppButton.danger(
+                  label: 'Eliminar',
+                  icon: Icons.delete_outline,
+                  size: AppButtonSize.sm,
+                  glow: false,
                   onPressed: () => _confirmarBorrar(context, zona),
                 ),
               ],
@@ -250,13 +315,17 @@ class _ZonaCard extends StatelessWidget {
   }
 
   Future<void> _confirmarBorrar(BuildContext context, ZonaDescarga z) async {
+    final c = context.colors;
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
+        backgroundColor: c.surface2,
         title: const Text('Eliminar zona'),
         content: Text(
-            'Vas a eliminar "${z.nombre}". La cola activa y el histórico '
-            'no se borran pero quedan huérfanos. ¿Confirmás?'),
+          'Vas a eliminar "${z.nombre}". La cola activa y el histórico '
+          'no se borran pero quedan huérfanos. ¿Confirmás?',
+          style: AppType.body.copyWith(color: c.textSecondary),
+        ),
         actions: [
           AppButton.ghost(
             label: 'Cancelar',
@@ -270,6 +339,34 @@ class _ZonaCard extends StatelessWidget {
       ),
     );
     if (ok == true) await ZonasDescargaService.eliminar(z.slug);
+  }
+}
+
+/// Fila label (izq) / valor mono (der) para la meta de una zona.
+class _LineaMeta extends StatelessWidget {
+  final String label;
+  final String valor;
+  const _LineaMeta({required this.label, required this.valor});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: AppType.bodySm.copyWith(color: c.textMuted)),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Text(
+            valor,
+            textAlign: TextAlign.right,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.monoSm.copyWith(color: c.textSecondary),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -425,13 +522,17 @@ class _ZonaFormState extends State<_ZonaForm> {
   /// Limpia todos los vértices del polígono (con confirmación).
   Future<void> _limpiarVertices() async {
     if (_verticesFromText.isEmpty) return;
+    final c = context.colors;
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
+        backgroundColor: c.surface2,
         title: const Text('Limpiar vértices'),
         content: Text(
-            'Vas a borrar los ${_verticesFromText.length} puntos del polígono. '
-            '¿Confirmás?'),
+          'Vas a borrar los ${_verticesFromText.length} puntos del polígono. '
+          '¿Confirmás?',
+          style: AppType.body.copyWith(color: c.textSecondary),
+        ),
         actions: [
           AppButton.ghost(
             label: 'Cancelar',
@@ -535,11 +636,13 @@ class _ZonaFormState extends State<_ZonaForm> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return Padding(
       padding: EdgeInsets.only(bottom: bottomInset),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
         child: Form(
           key: _formKey,
           child: Column(
@@ -548,16 +651,24 @@ class _ZonaFormState extends State<_ZonaForm> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      _esEdicion ? 'Editar zona' : 'Nueva zona',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 17),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AppEyebrow(_esEdicion ? 'EDITAR ZONA' : 'NUEVA ZONA'),
+                        const SizedBox(height: 4),
+                        Text(
+                          _esEdicion
+                              ? widget.zonaExistente!.nombre
+                              : 'Geocerca de descarga',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.h5,
+                        ),
+                      ],
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white70),
+                    icon: Icon(Icons.close, color: c.textSecondary),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -565,7 +676,7 @@ class _ZonaFormState extends State<_ZonaForm> {
               const SizedBox(height: AppSpacing.md),
               TextFormField(
                 controller: _nombre,
-                style: const TextStyle(color: Colors.white),
+                style: AppType.body.copyWith(color: c.text),
                 decoration: const InputDecoration(
                   labelText: 'Nombre',
                   hintText: 'Ej. YPF Añelo',
@@ -575,7 +686,7 @@ class _ZonaFormState extends State<_ZonaForm> {
                     (v == null || v.trim().isEmpty) ? 'Obligatorio' : null,
                 readOnly: _esEdicion, // slug no se cambia
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpacing.lg),
               SegmentedButton<ZonaShape>(
                 segments: const [
                   ButtonSegment(
@@ -590,7 +701,7 @@ class _ZonaFormState extends State<_ZonaForm> {
                 selected: {_shape},
                 onSelectionChanged: (s) => setState(() => _shape = s.first),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpacing.lg),
               // Mini mapa interactivo. En modo círculo, tap mueve el
               // centro y se puede ajustar el radio con slider. En modo
               // polígono, cada tap agrega un vértice. Permite dibujar
@@ -613,14 +724,14 @@ class _ZonaFormState extends State<_ZonaForm> {
                 onLimpiarVertices:
                     _shape == ZonaShape.poligono ? _limpiarVertices : null,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpacing.lg),
               if (_shape == ZonaShape.circulo) ...[
                 Row(
                   children: [
                     Expanded(
                       child: TextFormField(
                         controller: _lat,
-                        style: const TextStyle(color: Colors.white),
+                        style: AppType.mono.copyWith(color: c.text),
                         decoration: const InputDecoration(
                           labelText: 'Latitud',
                           hintText: '-38.352740',
@@ -638,11 +749,11 @@ class _ZonaFormState extends State<_ZonaForm> {
                                 : null,
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: TextFormField(
                         controller: _lng,
-                        style: const TextStyle(color: Colors.white),
+                        style: AppType.mono.copyWith(color: c.text),
                         decoration: const InputDecoration(
                           labelText: 'Longitud',
                           hintText: '-68.711630',
@@ -662,10 +773,10 @@ class _ZonaFormState extends State<_ZonaForm> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: AppSpacing.lg),
                 TextFormField(
                   controller: _radio,
-                  style: const TextStyle(color: Colors.white),
+                  style: AppType.mono.copyWith(color: c.text),
                   decoration: const InputDecoration(
                     labelText: 'Radio (metros)',
                     hintText: '200',
@@ -690,7 +801,7 @@ class _ZonaFormState extends State<_ZonaForm> {
                   max: 3000,
                   divisions: 59, // 50m de paso
                   label: '${_radioFromText.round()} m',
-                  activeColor: AppColors.brand,
+                  activeColor: c.brand,
                   onChanged: (v) {
                     setState(() => _radio.text = v.round().toString());
                   },
@@ -698,7 +809,7 @@ class _ZonaFormState extends State<_ZonaForm> {
               ] else ...[
                 TextFormField(
                   controller: _verticesText,
-                  style: AppType.label.copyWith(color: Colors.white, fontFamily: 'monospace'),
+                  style: AppType.mono.copyWith(color: c.text),
                   decoration: const InputDecoration(
                     labelText: 'Vértices (lat, lng — uno por línea)',
                     hintText:
@@ -715,10 +826,10 @@ class _ZonaFormState extends State<_ZonaForm> {
                   },
                 ),
               ],
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpacing.lg),
               TextFormField(
                 controller: _estadia,
-                style: const TextStyle(color: Colors.white),
+                style: AppType.body.copyWith(color: c.text),
                 decoration: const InputDecoration(
                   labelText: 'Estadía mínima (minutos)',
                   helperText:
@@ -735,36 +846,38 @@ class _ZonaFormState extends State<_ZonaForm> {
                   return null;
                 },
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpacing.lg),
               TextFormField(
                 controller: _notas,
-                style: const TextStyle(color: Colors.white),
+                style: AppType.body.copyWith(color: c.text),
                 decoration: const InputDecoration(
                   labelText: 'Notas (opcional)',
                   border: OutlineInputBorder(),
                 ),
                 maxLines: 2,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpacing.lg),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Zona activa',
-                    style: TextStyle(color: Colors.white)),
+                activeThumbColor: c.brand,
+                title: Text('Zona activa',
+                    style: AppType.body.copyWith(color: c.text)),
                 subtitle: Text(
                   'Si está pausada, el sistema no detecta entradas ni salidas '
                   'pero la configuración queda guardada.',
-                  style: AppType.label.copyWith(color: Colors.white54),
+                  style: AppType.bodySm.copyWith(color: c.textMuted),
                 ),
                 value: _activo,
                 onChanged: (v) => setState(() => _activo = v),
               ),
               if (_error != null) ...[
                 const SizedBox(height: AppSpacing.sm),
-                Text(_error!,
-                    style: const TextStyle(
-                        color: AppColors.error, fontSize: 13)),
+                Text(
+                  _error!,
+                  style: AppType.bodySm.copyWith(color: c.error),
+                ),
               ],
-              const SizedBox(height: 18),
+              const SizedBox(height: AppSpacing.lg),
               AppButton(
                 label: _esEdicion ? 'Guardar cambios' : 'Crear zona',
                 icon: Icons.save,
@@ -830,35 +943,36 @@ class _MapaEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // Helper de uso — texto chico arriba del mapa, distinto según
         // el shape activo. Le dice al usuario QUÉ hace el tap.
         Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
           child: Row(
             children: [
-              const Icon(Icons.touch_app, size: 14, color: Colors.white54),
+              Icon(Icons.touch_app, size: 14, color: c.textMuted),
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
                   shape == ZonaShape.circulo
                       ? 'Tocá el mapa para ubicar el centro · ajustá el radio con el slider'
                       : 'Cada toque agrega un vértice · mínimo 3 puntos',
-                  style: AppType.label.copyWith(color: Colors.white60),
+                  style: AppType.bodySm.copyWith(color: c.textMuted),
                 ),
               ),
               if (shape == ZonaShape.poligono && vertices.isNotEmpty)
                 Text(
                   '${vertices.length} pts',
-                  style: AppType.eyebrow.copyWith(color: AppColors.brand, fontWeight: FontWeight.bold),
+                  style: AppType.monoSm.copyWith(color: c.brand),
                 ),
             ],
           ),
         ),
         ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
+          borderRadius: BorderRadius.circular(AppRadius.xl),
           child: SizedBox(
             height: 300,
             child: Stack(
@@ -892,8 +1006,8 @@ class _MapaEditor extends StatelessWidget {
                         polygons: [
                           Polygon(
                             points: vertices,
-                            color: AppColors.brand.withValues(alpha: 0.20),
-                            borderColor: AppColors.brand,
+                            color: c.brand.withValues(alpha: 0.20),
+                            borderColor: c.brand,
                             borderStrokeWidth: 2.5,
                           ),
                         ],
@@ -905,7 +1019,7 @@ class _MapaEditor extends StatelessWidget {
                         polylines: [
                           Polyline(
                             points: vertices,
-                            color: AppColors.brand,
+                            color: c.brand,
                             strokeWidth: 2,
                           ),
                         ],
@@ -919,8 +1033,8 @@ class _MapaEditor extends StatelessWidget {
                             point: centroCirculo!,
                             radius: radioMts,
                             useRadiusInMeter: true,
-                            color: AppColors.brand.withValues(alpha: 0.20),
-                            borderColor: AppColors.brand,
+                            color: c.brand.withValues(alpha: 0.20),
+                            borderColor: c.brand,
                             borderStrokeWidth: 2.5,
                           ),
                         ],
@@ -934,11 +1048,11 @@ class _MapaEditor extends StatelessWidget {
                             point: centroCirculo!,
                             width: 24,
                             height: 24,
-                            child: const Icon(
+                            child: Icon(
                               Icons.place,
-                              color: AppColors.brand,
+                              color: c.brand,
                               size: 24,
-                              shadows: [
+                              shadows: const [
                                 Shadow(color: Colors.black54, blurRadius: 4),
                               ],
                             ),
@@ -951,18 +1065,17 @@ class _MapaEditor extends StatelessWidget {
                               height: 28,
                               child: Container(
                                 decoration: BoxDecoration(
-                                  color: AppColors.brand,
+                                  color: c.brand,
                                   shape: BoxShape.circle,
                                   border: Border.all(
-                                      color: Colors.white, width: 2),
+                                      color: c.text, width: 2),
                                 ),
                                 alignment: Alignment.center,
                                 child: Text(
                                   '${e.key + 1}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
+                                  style: AppType.monoSm.copyWith(
+                                    color: c.brandFg,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ),
@@ -1040,12 +1153,12 @@ class _BotonMapa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Material(
-      color: AppColors.surface.withValues(alpha: 0.92),
-      shape: const CircleBorder(),
-      elevation: 2,
+      color: c.surface2.withValues(alpha: 0.92),
+      shape: CircleBorder(side: BorderSide(color: c.border)),
       child: IconButton(
-        icon: Icon(icon, size: 18, color: Colors.white),
+        icon: Icon(icon, size: 18, color: c.text),
         tooltip: tooltip,
         constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
         padding: EdgeInsets.zero,
