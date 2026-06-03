@@ -1,3 +1,28 @@
+// lib/features/jornada_historico/screens/jornada_dia_screen.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — jornada de manejo del chofer en lenguaje bento.
+//
+// SOLO PRESENTACIÓN. Se preserva intacto:
+//   - el stream del doc (`JornadaHistoricoService.streamDia` /
+//     `streamPorRango`, colección `VOLVO_JORNADAS_HISTORICO`),
+//   - el modelo `JornadaDia` (tramos, paradas, serie de velocidad, KPIs),
+//   - la fusión client-side de varios días (`_combinarJornadas`),
+//   - la callable `procesarJornadaHoyChofer` (POST HTTPS con idToken),
+//   - el stream de EMPLEADOS para el dropdown de choferes (`_cargarChoferes`),
+//   - el State (chofer/rango seleccionados, `_esUnSoloDia`, `_esHoy`),
+//   - el `LineChart` de fl_chart (mismos spots/ejes; solo recoloreado).
+//
+// Layout Núcleo:
+//   ┌─ Selectores (chofer · rango fechas) — pills tappables ──────────┐
+//   ├─ Hero: eyebrow JORNADA · fecha/rango · patente · inicio→fin ────┤
+//   ├─ AppKpiStrip: manejo · km · vel máx · paradas ──────────────────┤
+//   ├─ Gráfico de velocidad (fl_chart envuelto en AppCard) ───────────┤
+//   ├─ TRAMOS DE MANEJO (filas + AppHairline, horarios en mono) ──────┤
+//   └─ PARADAS (AppDot/AppBadge por tipo, horarios en mono) ──────────┘
+//
+// Reglas duras: tokens (context.colors), números/horarios en AppType.mono,
+// embedded (sin fondo full-screen propio), faltante → "—", sin overflow.
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,13 +30,14 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
+import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../models/jornada_dia.dart';
 import '../services/jornada_historico_service.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla "Jornada del día" — muestra la jornada reconstruida de un
 /// chofer en una fecha específica:
 ///
@@ -97,7 +123,8 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
         if (_choferDni != null) {
           final hit = lista.firstWhere(
             (c) => c.dni == _choferDni,
-            orElse: () => _ChoferOpt(dni: _choferDni!, nombre: _choferDni!, activo: true),
+            orElse: () =>
+                _ChoferOpt(dni: _choferDni!, nombre: _choferDni!, activo: true),
           );
           _choferNombre = hit.nombre;
         }
@@ -132,14 +159,16 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
     final elegido = await showModalBottomSheet<_ChoferOpt>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.colors.surface2,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
       ),
       builder: (ctx) {
+        final c = ctx.colors;
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.md),
             child: StatefulBuilder(builder: (ctx, setStateSheet) {
               final q = ctrl.text.trim().toUpperCase();
               final filtrados = q.isEmpty
@@ -154,36 +183,59 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Elegir chofer',
-                        style: AppType.heading.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 10),
-                    TextField(
+                    const AppEyebrow('ELEGIR CHOFER'),
+                    const SizedBox(height: AppSpacing.md),
+                    AppInput(
                       controller: ctrl,
                       autofocus: true,
-                      textCapitalization: TextCapitalization.characters,
-                      style: const TextStyle(color: AppColors.textPrimary),
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search),
-                        labelText: 'Buscar por nombre o DNI',
-                        border: OutlineInputBorder(),
-                      ),
+                      icon: Icons.search,
+                      hint: 'Buscar por nombre o DNI',
                       onChanged: (_) => setStateSheet(() {}),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: AppSpacing.md),
                     Expanded(
-                      child: ListView.builder(
-                        itemCount: filtrados.length,
-                        itemBuilder: (ctx, i) {
-                          final c = filtrados[i];
-                          return ListTile(
-                            title: Text(c.nombre,
-                                style: const TextStyle(color: AppColors.textPrimary)),
-                            subtitle: Text('DNI ${c.dni}',
-                                style: AppType.label.copyWith(color: AppColors.textSecondary)),
-                            onTap: () => Navigator.pop(ctx, c),
-                          );
-                        },
-                      ),
+                      child: filtrados.isEmpty
+                          ? const AppEmptyState(
+                              icon: Icons.person_search,
+                              title: 'Sin coincidencias',
+                              subtitle: 'Probá con otro nombre o DNI.',
+                            )
+                          : ListView.separated(
+                              itemCount: filtrados.length,
+                              separatorBuilder: (_, __) => const AppHairline(),
+                              itemBuilder: (ctx, i) {
+                                final opt = filtrados[i];
+                                return InkWell(
+                                  onTap: () => Navigator.pop(ctx, opt),
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadius.lg),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: AppSpacing.md,
+                                        horizontal: AppSpacing.sm),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            opt.nombre,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppType.body
+                                                .copyWith(color: c.text),
+                                          ),
+                                        ),
+                                        const SizedBox(width: AppSpacing.md),
+                                        Text(
+                                          'DNI ${opt.dni}',
+                                          style: AppType.monoSm
+                                              .copyWith(color: c.textMuted),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
                     ),
                   ],
                 ),
@@ -209,6 +261,7 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
         children: [
           _Selectores(
             choferLabel: _choferNombre ?? 'Elegir chofer…',
+            choferElegido: _choferNombre != null,
             rangoLabel: _esUnSoloDia
                 ? _fmtFecha(_desde)
                 : '${_fmtFecha(_desde)} → ${_fmtFecha(_hasta)}',
@@ -218,14 +271,13 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
           ),
           Expanded(
             child: _choferDni == null
-                ? const _Placeholder(
-                    icono: Icons.person_search,
-                    titulo: 'Elegí un chofer para ver su jornada',
-                    subtitulo: 'Tocá "Elegir chofer" arriba.',
+                ? const AppEmptyState(
+                    icon: Icons.person_search,
+                    title: 'Elegí un chofer para ver su jornada',
+                    subtitle: 'Tocá "Elegir chofer" arriba.',
                   )
                 : (_esUnSoloDia
-                    ? _DetalleUnDia(
-                        choferDni: _choferDni!, fecha: _desde)
+                    ? _DetalleUnDia(choferDni: _choferDni!, fecha: _desde)
                     : _ListaRango(
                         choferDni: _choferDni!,
                         desde: _desde,
@@ -239,7 +291,7 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
 }
 
 /// Stream de UN solo día — detalle completo (resumen + gráfico + tramos
-/// + paradas) usando los widgets viejos.
+/// + paradas).
 ///
 /// Caso HOY: el cron `reconstruirJornadasDiario` corre a las 06:30 ART
 /// procesando AYER, así que HOY no existe en `VOLVO_JORNADAS_HISTORICO`
@@ -248,7 +300,7 @@ class _JornadaDiaScreenState extends State<JornadaDiaScreen> {
 /// — procesa los eventos parciales (hoy 00:00 ART → ahora) y persiste
 /// al mismo doc, por lo que el StreamBuilder se actualiza solo al
 /// terminar. Si el doc ya existe (porque el admin ya lo cargó antes
-/// hoy o estamos viendo ayer), aparece un FAB para "Actualizar".
+/// hoy o estamos viendo ayer), aparece un botón flotante para "Actualizar".
 class _DetalleUnDia extends StatefulWidget {
   final String choferDni;
   final DateTime fecha;
@@ -341,63 +393,53 @@ class _DetalleUnDiaState extends State<_DetalleUnDia> {
           choferDni: widget.choferDni, fecha: widget.fecha),
       builder: (ctx, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(
-              child: CircularProgressIndicator(
-                  color: AppColors.success));
+          return const AppSkeletonList(count: 4, conAvatar: false);
         }
         if (snap.hasError) {
-          return _Placeholder(
-            icono: Icons.error_outline,
-            titulo: 'Error al cargar la jornada',
-            subtitulo: snap.error.toString(),
+          return AppErrorState(
+            title: 'Error al cargar la jornada',
+            subtitle: snap.error.toString(),
           );
         }
         final j = snap.data;
         if (j == null) {
-          // Placeholder con CTA específico cuando es HOY — sino el
+          // Estado vacío con CTA específico cuando es HOY — sino el
           // usuario no tendría forma de pedir el procesamiento parcial.
-          return _PlaceholderConAccion(
-            icono: Icons.event_busy,
-            titulo: _esHoy
+          return AppEmptyState(
+            icon: Icons.event_busy,
+            title: _esHoy
                 ? 'Jornada de hoy no procesada todavía'
                 : 'Sin jornada procesada',
-            subtitulo: _esHoy
+            subtitle: _esHoy
                 ? 'El cron procesa los días completos a las 06:30 ART. '
                     'Tocá "Cargar jornada de hoy" para reconstruir lo que '
                     'lleva el día hasta ahora.'
                 : 'Este chofer no manejó ese día.',
-            accion: _esHoy
-                ? _AccionPlaceholder(
-                    label: 'Cargar jornada de hoy',
-                    icono: Icons.refresh,
-                    onTap: _procesarHoy,
-                    cargando: _procesando,
+            action: _esHoy
+                ? AppButton.primary(
+                    label: _procesando
+                        ? 'Procesando…'
+                        : 'Cargar jornada de hoy',
+                    icon: Icons.refresh,
+                    loading: _procesando,
+                    onPressed: _procesando ? null : _procesarHoy,
                   )
                 : null,
           );
         }
-        // Hay jornada — si es HOY, dejamos un FAB para refrescar.
+        // Hay jornada — si es HOY, dejamos un botón flotante para refrescar.
         return Stack(
           children: [
             _Contenido(jornada: j),
             if (_esHoy)
               Positioned(
-                right: AppSpacing.md,
-                bottom: AppSpacing.md,
-                child: FloatingActionButton.extended(
-                  heroTag: 'jornada_hoy_refrescar',
-                  backgroundColor: AppColors.success,
-                  foregroundColor: Colors.white,
+                right: AppSpacing.lg,
+                bottom: AppSpacing.lg,
+                child: AppButton.primary(
+                  label: _procesando ? 'Actualizando…' : 'Actualizar',
+                  icon: Icons.refresh,
+                  loading: _procesando,
                   onPressed: _procesando ? null : _procesarHoy,
-                  icon: _procesando
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              color: Colors.white, strokeWidth: 2),
-                        )
-                      : const Icon(Icons.refresh, size: 18),
-                  label: Text(_procesando ? 'Actualizando…' : 'Actualizar'),
                 ),
               ),
           ],
@@ -405,73 +447,6 @@ class _DetalleUnDiaState extends State<_DetalleUnDia> {
       },
     );
   }
-}
-
-/// Placeholder con un botón de acción opcional. Variante del `_Placeholder`
-/// original que solo mostraba texto — necesario para el CTA "Cargar
-/// jornada de hoy" cuando no hay doc todavía.
-class _PlaceholderConAccion extends StatelessWidget {
-  final IconData icono;
-  final String titulo;
-  final String subtitulo;
-  final _AccionPlaceholder? accion;
-
-  const _PlaceholderConAccion({
-    required this.icono,
-    required this.titulo,
-    required this.subtitulo,
-    this.accion,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icono, color: AppColors.textTertiary, size: 48),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              titulo,
-              textAlign: TextAlign.center,
-              style: AppType.body.copyWith(
-                  color: AppColors.textPrimary, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              subtitulo,
-              textAlign: TextAlign.center,
-              style: AppType.label.copyWith(color: AppColors.textSecondary),
-            ),
-            if (accion != null) ...[
-              const SizedBox(height: AppSpacing.lg),
-              AppButton(
-                label: accion!.cargando ? 'Procesando…' : accion!.label,
-                icon: accion!.icono,
-                isLoading: accion!.cargando,
-                onPressed: accion!.cargando ? null : accion!.onTap,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AccionPlaceholder {
-  final String label;
-  final IconData icono;
-  final VoidCallback onTap;
-  final bool cargando;
-  const _AccionPlaceholder({
-    required this.label,
-    required this.icono,
-    required this.onTap,
-    required this.cargando,
-  });
 }
 
 /// Stream de varios días — los **combina en una sola jornada continua**
@@ -494,9 +469,7 @@ class _ListaRango extends StatelessWidget {
   final DateTime desde;
   final DateTime hasta;
   const _ListaRango(
-      {required this.choferDni,
-      required this.desde,
-      required this.hasta});
+      {required this.choferDni, required this.desde, required this.hasta});
 
   @override
   Widget build(BuildContext context) {
@@ -505,23 +478,20 @@ class _ListaRango extends StatelessWidget {
           choferDni: choferDni, desde: desde, hasta: hasta),
       builder: (ctx, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(
-              child: CircularProgressIndicator(
-                  color: AppColors.success));
+          return const AppSkeletonList(count: 4, conAvatar: false);
         }
         if (snap.hasError) {
-          return _Placeholder(
-            icono: Icons.error_outline,
-            titulo: 'Error al cargar las jornadas del rango',
-            subtitulo: snap.error.toString(),
+          return AppErrorState(
+            title: 'Error al cargar las jornadas del rango',
+            subtitle: snap.error.toString(),
           );
         }
         final jornadas = snap.data ?? const [];
         if (jornadas.isEmpty) {
-          return const _Placeholder(
-            icono: Icons.event_busy,
-            titulo: 'Sin jornadas en el rango',
-            subtitulo:
+          return const AppEmptyState(
+            icon: Icons.event_busy,
+            title: 'Sin jornadas en el rango',
+            subtitle:
                 'No hay jornadas procesadas para este chofer entre las fechas '
                 'elegidas (o no manejó esos días).',
           );
@@ -600,8 +570,7 @@ JornadaDia _combinarJornadas(List<JornadaDia> jornadas) {
     choferNombre: ordenadas.first.choferNombre,
     patentePrincipal: patentePrincipal,
     patentes: patentes.toList()..sort(),
-    fecha:
-        '${ordenadas.first.fecha} → ${ordenadas.last.fecha}',
+    fecha: '${ordenadas.first.fecha} → ${ordenadas.last.fecha}',
     inicio: ordenadas.first.inicio,
     fin: ordenadas.last.fin,
     manejoMin: manejoMin,
@@ -634,8 +603,13 @@ class _ChoferOpt {
       {required this.dni, required this.nombre, required this.activo});
 }
 
+// =============================================================================
+// SELECTORES · chofer · rango fechas (pills tappables Núcleo)
+// =============================================================================
+
 class _Selectores extends StatelessWidget {
   final String choferLabel;
+  final bool choferElegido;
   final String rangoLabel;
   final bool cargandoChoferes;
   final VoidCallback onChofer;
@@ -643,6 +617,7 @@ class _Selectores extends StatelessWidget {
 
   const _Selectores({
     required this.choferLabel,
+    required this.choferElegido,
     required this.rangoLabel,
     required this.cargandoChoferes,
     required this.onChofer,
@@ -652,25 +627,26 @@ class _Selectores extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
       child: Row(
         children: [
           Expanded(
-            child: _PillButton(
+            child: _SelectorPill(
               icono: cargandoChoferes
                   ? Icons.hourglass_empty
                   : Icons.person_outline,
               label: choferLabel,
-              color: AppColors.info,
+              muted: !choferElegido,
               onTap: cargandoChoferes ? null : onChofer,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
-            child: _PillButton(
+            child: _SelectorPill(
               icono: Icons.date_range,
               label: rangoLabel,
-              color: AppColors.brandSoft,
+              mono: true,
               onTap: onRango,
             ),
           ),
@@ -680,92 +656,71 @@ class _Selectores extends StatelessWidget {
   }
 }
 
-class _PillButton extends StatelessWidget {
+/// Pill tappable estilo Núcleo: surface2 + hairline, icono brand,
+/// label en una línea. Se usa para los selectores de chofer y rango.
+class _SelectorPill extends StatelessWidget {
   final IconData icono;
   final String label;
-  final Color color;
+  final bool muted;
+  final bool mono;
   final VoidCallback? onTap;
 
-  const _PillButton(
-      {required this.icono,
-      required this.label,
-      required this.color,
-      this.onTap});
+  const _SelectorPill({
+    required this.icono,
+    required this.label,
+    this.muted = false,
+    this.mono = false,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.sm),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          border: Border.all(color: color.withValues(alpha: 0.4)),
-        ),
-        child: Row(
-          children: [
-            Icon(icono, color: color, size: 18),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
+    final c = context.colors;
+    final enabled = onTap != null;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: c.surface2,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: c.border),
+          ),
+          child: Row(
+            children: [
+              Icon(icono,
+                  size: 16,
+                  color: enabled ? c.brand : c.textMuted),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: (mono ? AppType.mono : AppType.body).copyWith(
+                    color: muted ? c.textMuted : c.text,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _Placeholder extends StatelessWidget {
-  final IconData icono;
-  final String titulo;
-  final String subtitulo;
-  const _Placeholder(
-      {required this.icono,
-      required this.titulo,
-      required this.subtitulo});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icono, color: AppColors.textTertiary, size: 48),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              titulo,
-              textAlign: TextAlign.center,
-              style: AppType.body.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Text(
-              subtitulo,
-              textAlign: TextAlign.center,
-              style: AppType.label.copyWith(color: AppColors.textSecondary),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// =============================================================================
+// CONTENIDO · hero + KPIs + gráfico + tramos + paradas
+// =============================================================================
 
 class _Contenido extends StatelessWidget {
   final JornadaDia jornada;
+
   /// Opcional: cuando esta jornada es una fusión de varios días, este
   /// label se muestra arriba ("3 días combinados"). Si es null, se
   /// renderea la vista normal de 1 día.
@@ -775,131 +730,110 @@ class _Contenido extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final multiDia = rangoLabel != null;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.sm,
+        AppSpacing.lg,
+        AppSpacing.xxl,
+      ),
       children: [
-        if (rangoLabel != null) ...[
-          Container(
-            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-            padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: AppColors.brandSoft.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              border: Border.all(
-                  color: AppColors.brandSoft.withValues(alpha: 0.40)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.merge_type,
-                    color: AppColors.brandSoft, size: 16),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    'VISTA COMBINADA — $rangoLabel',
-                    style: AppType.eyebrow.copyWith(
-                      color: AppColors.brandSoft,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-        _ResumenCard(j: jornada, multiDia: rangoLabel != null),
-        const SizedBox(height: AppSpacing.md),
+        _Hero(j: jornada, rangoLabel: rangoLabel),
+        const SizedBox(height: AppSpacing.mdDense),
+        _KpiStripJornada(j: jornada),
+        const SizedBox(height: AppSpacing.mdDense),
         _GraficoVelocidad(j: jornada),
-        const SizedBox(height: AppSpacing.lg),
-        _SeccionLabel(
-          icono: Icons.timeline,
-          texto: 'TRAMOS DE MANEJO (${jornada.tramos.length})',
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        for (final t in jornada.tramos)
-          _TramoCard(t: t, multiDia: rangoLabel != null),
-        const SizedBox(height: AppSpacing.lg),
-        _SeccionLabel(
-          icono: Icons.local_parking,
-          texto: 'PARADAS (${jornada.paradas.length})',
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        if (jornada.paradas.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(
-              'Sin paradas detectadas entre tramos.',
-              textAlign: TextAlign.center,
-              style: AppType.label.copyWith(color: AppColors.textSecondary),
-            ),
-          ),
-        for (final p in jornada.paradas)
-          _ParadaCard(p: p, multiDia: rangoLabel != null),
+        const SizedBox(height: AppSpacing.mdDense),
+        _SeccionTramos(j: jornada, multiDia: multiDia),
+        const SizedBox(height: AppSpacing.mdDense),
+        _SeccionParadas(j: jornada, multiDia: multiDia),
       ],
     );
   }
 }
 
-class _ResumenCard extends StatelessWidget {
+// =============================================================================
+// HERO · eyebrow JORNADA · fecha/rango · patente · inicio→fin
+// =============================================================================
+
+class _Hero extends StatelessWidget {
   final JornadaDia j;
-  final bool multiDia;
-  const _ResumenCard({required this.j, this.multiDia = false});
+  final String? rangoLabel;
+  const _Hero({required this.j, this.rangoLabel});
 
   @override
   Widget build(BuildContext context) {
-    final patentes = j.patentes.length > 1
-        ? '${j.patentePrincipal} (+${j.patentes.length - 1})'
-        : j.patentePrincipal;
+    final c = context.colors;
+    final multiDia = rangoLabel != null;
+    final patente = j.patentePrincipal.isNotEmpty ? j.patentePrincipal : '—';
+    final patenteExtra =
+        j.patentes.length > 1 ? '+${j.patentes.length - 1}' : null;
+    final chofer = j.choferNombre?.trim();
+    final tieneChofer = chofer != null && chofer.isNotEmpty;
+
     return AppCard(
-      padding: const EdgeInsets.all(14),
+      tier: 2,
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.local_shipping_outlined,
-                  color: AppColors.success, size: 20),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  patentes,
-                  style: AppType.heading.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.bold),
+              const AppEyebrow('JORNADA'),
+              const Spacer(),
+              if (multiDia)
+                AppBadge(
+                  text: 'COMBINADA',
+                  color: c.brand,
+                  dot: true,
+                  size: AppBadgeSize.sm,
                 ),
-              ),
-              Text(
-                '${_fmtHoraSegun(j.inicio, multiDia: multiDia)} → '
-                '${_fmtHoraSegun(j.fin, multiDia: multiDia)}',
-                style:
-                    AppType.label.copyWith(color: AppColors.textSecondary),
-              ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
+          // Fecha (o rango) — hero del bloque.
+          Text(
+            _fmtFechaLarga(j.fecha),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.h4.copyWith(color: c.text),
+          ),
+          if (multiDia) ...[
+            const SizedBox(height: 2),
+            Text(
+              rangoLabel!,
+              style: AppType.bodySm.copyWith(color: c.textSecondary),
+            ),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          const AppHairline(),
+          const SizedBox(height: AppSpacing.md),
           Wrap(
-            spacing: 18,
-            runSpacing: 10,
+            spacing: AppSpacing.lg,
+            runSpacing: AppSpacing.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _Kpi(
-                  label: 'MANEJO',
-                  valor: _fmtHM(j.manejoMin),
-                  icono: Icons.directions_car,
-                  color: AppColors.info),
-              _Kpi(
-                  label: 'PARADAS',
-                  valor: _fmtHM(j.paradasMin),
-                  icono: Icons.local_parking,
-                  color: AppColors.warning),
-              _Kpi(
-                  label: 'KM',
-                  valor: j.kmTotal.toString(),
-                  icono: Icons.route,
-                  color: AppColors.brandSoft),
-              _Kpi(
-                  label: 'VEL MÁX',
-                  valor: '${j.velocidadMax} km/h',
-                  icono: Icons.speed,
-                  color: AppColors.error),
+              _HeroMeta(
+                icon: Icons.local_shipping_outlined,
+                label: 'Unidad',
+                value: patenteExtra != null ? '$patente ($patenteExtra)' : patente,
+                mono: true,
+              ),
+              if (tieneChofer)
+                _HeroMeta(
+                  icon: Icons.person_outline,
+                  label: chofer,
+                  value: 'DNI ${j.choferDni}',
+                  mono: true,
+                ),
+              _HeroMeta(
+                icon: Icons.schedule,
+                label: 'Inicio → fin',
+                value: '${_fmtHoraSegun(j.inicio, multiDia: multiDia)} → '
+                    '${_fmtHoraSegun(j.fin, multiDia: multiDia)}',
+                mono: true,
+              ),
             ],
           ),
         ],
@@ -908,35 +842,36 @@ class _ResumenCard extends StatelessWidget {
   }
 }
 
-class _Kpi extends StatelessWidget {
+class _HeroMeta extends StatelessWidget {
+  final IconData icon;
   final String label;
-  final String valor;
-  final IconData icono;
-  final Color color;
-  const _Kpi(
-      {required this.label,
-      required this.valor,
-      required this.icono,
-      required this.color});
+  final String value;
+  final bool mono;
+  const _HeroMeta({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.mono = false,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icono, color: color, size: 18),
-        const SizedBox(width: 6),
+        Icon(icon, size: 15, color: c.textMuted),
+        const SizedBox(width: AppSpacing.sm),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(label,
-                style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1)),
-            Text(valor,
-                style: AppType.body.copyWith(color: AppColors.textPrimary, fontWeight: FontWeight.bold)),
+                style: AppType.bodySm.copyWith(color: c.text), maxLines: 1),
+            Text(value,
+                style: (mono ? AppType.monoSm : AppType.bodySm)
+                    .copyWith(color: c.textMuted),
+                maxLines: 1),
           ],
         ),
       ],
@@ -944,20 +879,93 @@ class _Kpi extends StatelessWidget {
   }
 }
 
+// =============================================================================
+// KPI STRIP · manejo · km · vel máx · paradas
+// =============================================================================
+
+class _KpiStripJornada extends StatelessWidget {
+  final JornadaDia j;
+  const _KpiStripJornada({required this.j});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final stats = <AppStat>[
+      AppStat(
+        label: 'Manejo',
+        value: _fmtHM(j.manejoMin),
+        valueStyle: AppType.h4,
+        accent: c.text,
+      ),
+      AppStat(
+        label: 'Km',
+        value: j.kmTotal > 0 ? AppFormatters.formatearMiles(j.kmTotal) : '—',
+        valueStyle: AppType.h4,
+        accent: j.kmTotal > 0 ? c.brand : c.textMuted,
+      ),
+      AppStat(
+        label: 'Vel máx',
+        value: j.velocidadMax > 0 ? '${j.velocidadMax}' : '—',
+        unit: j.velocidadMax > 0 ? 'km/h' : null,
+        valueStyle: AppType.h4,
+        accent: j.velocidadMax > 0 ? c.text : c.textMuted,
+      ),
+      AppStat(
+        label: 'Paradas',
+        value: _fmtHM(j.paradasMin),
+        valueStyle: AppType.h4,
+        accent: c.text,
+        delta: j.paradas.isNotEmpty
+            ? '${j.paradas.length} parada${j.paradas.length == 1 ? "" : "s"}'
+            : null,
+        deltaColor: c.textMuted,
+      ),
+    ];
+
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        // En anchos chicos un strip de 4 columnas aprieta los hero
+        // numbers. Bajo cierto umbral lo partimos en dos strips (2 + 2).
+        if (constraints.maxWidth < 460) {
+          return Column(
+            children: [
+              AppKpiStrip(stats: stats.sublist(0, 2)),
+              const SizedBox(height: AppSpacing.sm),
+              AppKpiStrip(stats: stats.sublist(2)),
+            ],
+          );
+        }
+        return AppKpiStrip(stats: stats);
+      },
+    );
+  }
+}
+
+// =============================================================================
+// GRÁFICO DE VELOCIDAD · fl_chart envuelto en AppCard (chart preservado)
+// =============================================================================
+
 class _GraficoVelocidad extends StatelessWidget {
   final JornadaDia j;
   const _GraficoVelocidad({required this.j});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (j.serieVelocidad.length < 2) {
-      return const AppCard(
-        padding: EdgeInsets.all(AppSpacing.lg),
-        child: Center(
-          child: Text(
-            'Sin serie de velocidad suficiente para graficar.',
-            style: TextStyle(color: AppColors.textSecondary),
-          ),
+      return AppCard(
+        tier: 2,
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const AppEyebrow('VELOCIDAD'),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'Sin serie de velocidad suficiente para graficar.',
+              style: AppType.bodySm.copyWith(color: c.textMuted),
+            ),
+          ],
         ),
       );
     }
@@ -972,23 +980,22 @@ class _GraficoVelocidad extends StatelessWidget {
     final intervaloX = (maxTs - minTs) / 5;
 
     return AppCard(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+      tier: 2,
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.speed,
-                  color: AppColors.brandSoft, size: 18),
-              SizedBox(width: AppSpacing.sm),
-              Text('Velocidad (km/h)',
-                  style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13)),
+              AppDot(c.brand, size: 7),
+              const SizedBox(width: AppSpacing.sm),
+              AppEyebrow('VELOCIDAD', color: c.brand),
+              const Spacer(),
+              Text('km/h',
+                  style: AppType.monoSm.copyWith(color: c.textMuted)),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.md),
           SizedBox(
             height: 200,
             child: LineChart(
@@ -1002,7 +1009,7 @@ class _GraficoVelocidad extends StatelessWidget {
                   drawVerticalLine: false,
                   horizontalInterval: 25,
                   getDrawingHorizontalLine: (v) => FlLine(
-                    color: Colors.white.withValues(alpha: 0.05),
+                    color: c.border,
                     strokeWidth: 1,
                   ),
                 ),
@@ -1016,9 +1023,10 @@ class _GraficoVelocidad extends StatelessWidget {
                       showTitles: true,
                       interval: 25,
                       reservedSize: 30,
-                      getTitlesWidget: (v, m) => Text(v.toInt().toString(),
-                          style: const TextStyle(
-                              color: AppColors.textSecondary, fontSize: 10)),
+                      getTitlesWidget: (v, m) => Text(
+                        v.toInt().toString(),
+                        style: AppType.monoSm.copyWith(color: c.textMuted),
+                      ),
                     ),
                   ),
                   bottomTitles: AxisTitles(
@@ -1029,9 +1037,10 @@ class _GraficoVelocidad extends StatelessWidget {
                       getTitlesWidget: (v, m) {
                         final d =
                             DateTime.fromMillisecondsSinceEpoch(v.toInt());
-                        return Text(_fmtHoraCorta(d),
-                            style: const TextStyle(
-                                color: AppColors.textSecondary, fontSize: 10));
+                        return Text(
+                          _fmtHoraCorta(d),
+                          style: AppType.monoSm.copyWith(color: c.textMuted),
+                        );
                       },
                     ),
                   ),
@@ -1041,12 +1050,19 @@ class _GraficoVelocidad extends StatelessWidget {
                   LineChartBarData(
                     spots: spots,
                     isCurved: false,
-                    color: AppColors.brandSoft,
+                    color: c.brand,
                     barWidth: 1.5,
                     dotData: const FlDotData(show: false),
                     belowBarData: BarAreaData(
                       show: true,
-                      color: AppColors.brandSoft.withValues(alpha: 0.15),
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          c.brand.withValues(alpha: 0.22),
+                          c.brand.withValues(alpha: 0),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -1059,157 +1075,269 @@ class _GraficoVelocidad extends StatelessWidget {
   }
 }
 
-class _TramoCard extends StatelessWidget {
+// =============================================================================
+// SECCIÓN · primitiva bento (eyebrow + dot opcional + contenido)
+// =============================================================================
+
+class _Seccion extends StatelessWidget {
+  final String titulo;
+  final Color? accentDot;
+  final Widget? trailing;
+  final List<Widget> children;
+
+  const _Seccion({
+    required this.titulo,
+    this.accentDot,
+    this.trailing,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      tier: 2,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (accentDot != null) ...[
+                AppDot(accentDot!, size: 7),
+                const SizedBox(width: AppSpacing.sm),
+              ],
+              Expanded(child: AppEyebrow(titulo, color: accentDot)),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// TRAMOS DE MANEJO · filas separadas por hairline, horarios en mono
+// =============================================================================
+
+class _SeccionTramos extends StatelessWidget {
+  final JornadaDia j;
+  final bool multiDia;
+  const _SeccionTramos({required this.j, required this.multiDia});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final n = j.tramos.length;
+    return _Seccion(
+      titulo: 'TRAMOS DE MANEJO',
+      accentDot: c.info,
+      trailing: Text(
+        '$n',
+        style: AppType.monoSm.copyWith(color: c.textMuted),
+      ),
+      children: [
+        if (n == 0)
+          Text(
+            'Sin tramos de manejo detectados.',
+            style: AppType.bodySm.copyWith(color: c.textMuted),
+          )
+        else
+          for (var i = 0; i < n; i++) ...[
+            if (i > 0) ...[
+              const SizedBox(height: AppSpacing.md),
+              const AppHairline(),
+              const SizedBox(height: AppSpacing.md),
+            ],
+            _FilaTramo(t: j.tramos[i], multiDia: multiDia),
+          ],
+      ],
+    );
+  }
+}
+
+class _FilaTramo extends StatelessWidget {
   final TramoManejo t;
   final bool multiDia;
-  const _TramoCard({required this.t, this.multiDia = false});
+  const _FilaTramo({required this.t, required this.multiDia});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppColors.info.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: AppColors.info.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.directions_car,
-              color: AppColors.info, size: 22),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '${_fmtHoraSegun(t.desde, multiDia: multiDia)} → '
-                  '${_fmtHoraSegun(t.hasta, multiDia: multiDia)}',
-                  style: const TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${_fmtHM(t.duracionMin)} · '
-                  '${t.kmAprox > 0 ? "${t.kmAprox} km · " : ""}'
-                  'máx ${t.velocidadMax} · prom ${t.velocidadProm} km/h',
-                  style: AppType.eyebrow.copyWith(color: AppColors.textSecondary),
-                ),
-              ],
-            ),
+    final c = context.colors;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: AppDot(c.info, size: 6),
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${_fmtHoraSegun(t.desde, multiDia: multiDia)} → '
+                '${_fmtHoraSegun(t.hasta, multiDia: multiDia)}',
+                style: AppType.mono.copyWith(color: c.text),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${_fmtHM(t.duracionMin)} · '
+                '${t.kmAprox > 0 ? "${AppFormatters.formatearMiles(t.kmAprox)} km · " : ""}'
+                'máx ${t.velocidadMax} · prom ${t.velocidadProm} km/h',
+                style: AppType.bodySm.copyWith(color: c.textSecondary),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-class _ParadaCard extends StatelessWidget {
+// =============================================================================
+// PARADAS · AppDot/AppBadge por tipo (corte de bloque / descanso 8h)
+// =============================================================================
+
+class _SeccionParadas extends StatelessWidget {
+  final JornadaDia j;
+  final bool multiDia;
+  const _SeccionParadas({required this.j, required this.multiDia});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final n = j.paradas.length;
+    return _Seccion(
+      titulo: 'PARADAS',
+      accentDot: c.warning,
+      trailing: Text(
+        '$n',
+        style: AppType.monoSm.copyWith(color: c.textMuted),
+      ),
+      children: [
+        if (n == 0)
+          Text(
+            'Sin paradas detectadas entre tramos.',
+            style: AppType.bodySm.copyWith(color: c.textMuted),
+          )
+        else
+          for (var i = 0; i < n; i++) ...[
+            if (i > 0) ...[
+              const SizedBox(height: AppSpacing.md),
+              const AppHairline(),
+              const SizedBox(height: AppSpacing.md),
+            ],
+            _FilaParada(p: j.paradas[i], multiDia: multiDia),
+          ],
+      ],
+    );
+  }
+}
+
+class _FilaParada extends StatelessWidget {
   final Parada p;
   final bool multiDia;
-  const _ParadaCard({required this.p, this.multiDia = false});
+  const _FilaParada({required this.p, required this.multiDia});
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        p.cumple8h ? AppColors.success :
-        p.cumple15min ? AppColors.brandSoft :
-        AppColors.warning;
-    final hint = p.cumple8h
-        ? '✓ Descanso entre jornadas (≥ 8h)'
+    final c = context.colors;
+    // Color semántico según la política Vecchi v2:
+    //   - descanso entre jornadas (≥8h) → verde
+    //   - corte de bloque suficiente (≥15 min) → indigo (brand)
+    //   - insuficiente para cortar bloque → ámbar
+    final color = p.cumple8h
+        ? c.success
         : p.cumple15min
-            ? '✓ Corte de bloque suficiente (≥ 15 min)'
+            ? c.brand
+            : c.warning;
+    final hint = p.cumple8h
+        ? 'Descanso entre jornadas (≥ 8h)'
+        : p.cumple15min
+            ? 'Corte de bloque suficiente (≥ 15 min)'
             : 'Insuficiente para cortar bloque (< 15 min)';
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.local_parking, color: color, size: 22),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: AppDot(color, size: 6),
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
                       '${_fmtHoraSegun(p.desde, multiDia: multiDia)} → '
                       '${_fmtHoraSegun(p.hasta, multiDia: multiDia)}',
-                      style: const TextStyle(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13),
+                      style: AppType.mono.copyWith(color: c.text),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        p.etiqueta,
-                        style: TextStyle(
-                            color: color,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${_fmtHM(p.duracionMin)} · $hint',
-                  style: AppType.eyebrow.copyWith(color: AppColors.textSecondary),
-                ),
-              ],
-            ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  AppBadge(
+                    text: p.etiqueta.toUpperCase(),
+                    color: color,
+                    size: AppBadgeSize.sm,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                '${_fmtHM(p.duracionMin)} · $hint',
+                style: AppType.bodySm.copyWith(color: c.textSecondary),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-class _SeccionLabel extends StatelessWidget {
-  final IconData icono;
-  final String texto;
-  const _SeccionLabel({required this.icono, required this.texto});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, top: 6),
-      child: Row(
-        children: [
-          Icon(icono, color: AppColors.success, size: 14),
-          const SizedBox(width: 6),
-          Text(
-            texto,
-            style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.5),
-          ),
-        ],
-      ),
-    );
-  }
-}
+// =============================================================================
+// FORMATTERS LOCALES (sin cambios de lógica)
+// =============================================================================
 
 String _fmtFecha(DateTime d) =>
     '${d.day.toString().padLeft(2, '0')}-${d.month.toString().padLeft(2, '0')}-${d.year}';
 
 String _fmtHoraCorta(DateTime d) =>
     '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+/// Convierte el `fecha` del modelo (`YYYY-MM-DD`, o `YYYY-MM-DD → YYYY-MM-DD`
+/// en vista combinada) al formato AR `DD-MM-AAAA`. Si no parsea, devuelve
+/// el original tal cual (nunca inventa).
+String _fmtFechaLarga(String iso) {
+  String uno(String s) {
+    final partes = s.trim().split('-');
+    if (partes.length != 3) return s.trim();
+    return '${partes[2]}-${partes[1]}-${partes[0]}';
+  }
+
+  if (iso.contains('→')) {
+    final lados = iso.split('→');
+    if (lados.length == 2) {
+      return '${uno(lados[0])} → ${uno(lados[1])}';
+    }
+  }
+  return uno(iso);
+}
 
 /// Cuando la jornada cruza varios días (vista combinada), agregar
 /// "DD/MM" delante para distinguir tramos/paradas del día 1 vs día 2.
