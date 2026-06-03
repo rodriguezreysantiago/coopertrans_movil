@@ -9,12 +9,14 @@
 // es uniforme.
 
 /// Tipo de uso de la cubierta. Define en qué posiciones se puede
-/// instalar — la validación es ESTRICTA: cubiertas DIRECCION solo van
-/// en posiciones DIRECCION, TRACCION solo en TRACCION. Confirmado por
-/// Santiago: "que no le permita, sería un error de tipeo seguramente".
+/// instalar — la validación es ESTRICTA: cada tipo va solo en su posición
+/// (DIRECCIÓN → eje delantero del tractor; TRACCIÓN → ejes motrices del
+/// tractor; ARRASTRE → ejes del enganche, libres). Confirmado por Santiago:
+/// "que no le permita, sería un error de tipeo seguramente".
 enum TipoUsoCubierta {
   direccion('DIRECCION', 'Dirección'),
-  traccion('TRACCION', 'Tracción');
+  traccion('TRACCION', 'Tracción'),
+  arrastre('ARRASTRE', 'Arrastre');
 
   final String codigo;
   final String etiqueta;
@@ -195,13 +197,14 @@ const List<PosicionCubierta> posicionesTractor = [
 // BIVUELCOS, TANQUES) tienen el MISMO layout. Si en el futuro hay
 // una variante, modelar como override por TIPO de unidad.
 //
-// Todas las posiciones de enganche son TRACCION (sin dirección).
+// Todas las posiciones de enganche son ARRASTRE (ejes libres: ni dirección
+// ni tracción). Antes estaban como TRACCIÓN por falta del tipo ARRASTRE.
 
 List<PosicionCubierta> _generarEjeEnganche(int eje) => [
       PosicionCubierta(
         codigo: 'ENG${eje}_IZQ_EXT',
         etiqueta: 'Eje $eje Izquierda Externa',
-        tipoUsoRequerido: TipoUsoCubierta.traccion,
+        tipoUsoRequerido: TipoUsoCubierta.arrastre,
         tipoUnidad: TipoUnidadCubierta.enganche,
         eje: eje,
         lado: 'IZQ_EXT',
@@ -209,7 +212,7 @@ List<PosicionCubierta> _generarEjeEnganche(int eje) => [
       PosicionCubierta(
         codigo: 'ENG${eje}_IZQ_INT',
         etiqueta: 'Eje $eje Izquierda Interna',
-        tipoUsoRequerido: TipoUsoCubierta.traccion,
+        tipoUsoRequerido: TipoUsoCubierta.arrastre,
         tipoUnidad: TipoUnidadCubierta.enganche,
         eje: eje,
         lado: 'IZQ_INT',
@@ -217,7 +220,7 @@ List<PosicionCubierta> _generarEjeEnganche(int eje) => [
       PosicionCubierta(
         codigo: 'ENG${eje}_DER_INT',
         etiqueta: 'Eje $eje Derecha Interna',
-        tipoUsoRequerido: TipoUsoCubierta.traccion,
+        tipoUsoRequerido: TipoUsoCubierta.arrastre,
         tipoUnidad: TipoUnidadCubierta.enganche,
         eje: eje,
         lado: 'DER_INT',
@@ -225,7 +228,7 @@ List<PosicionCubierta> _generarEjeEnganche(int eje) => [
       PosicionCubierta(
         codigo: 'ENG${eje}_DER_EXT',
         etiqueta: 'Eje $eje Derecha Externa',
-        tipoUsoRequerido: TipoUsoCubierta.traccion,
+        tipoUsoRequerido: TipoUsoCubierta.arrastre,
         tipoUnidad: TipoUnidadCubierta.enganche,
         eje: eje,
         lado: 'DER_EXT',

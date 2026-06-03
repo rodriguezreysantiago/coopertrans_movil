@@ -47,15 +47,21 @@ void main() {
       expect(trac, 8);
     });
 
-    test('enganche: 0 posiciones DIRECCION, 12 TRACCION', () {
+    test('enganche: 0 DIRECCION, 0 TRACCION, 12 ARRASTRE', () {
+      // Los ejes del enganche son libres (de arrastre): ni dirección ni
+      // tracción. Antes estaban como TRACCIÓN por falta del tipo ARRASTRE.
       final dir = posicionesEnganche
           .where((p) => p.tipoUsoRequerido == TipoUsoCubierta.direccion)
           .length;
       final trac = posicionesEnganche
           .where((p) => p.tipoUsoRequerido == TipoUsoCubierta.traccion)
           .length;
+      final arr = posicionesEnganche
+          .where((p) => p.tipoUsoRequerido == TipoUsoCubierta.arrastre)
+          .length;
       expect(dir, 0);
-      expect(trac, 12);
+      expect(trac, 0);
+      expect(arr, 12);
     });
 
     test('todas las posiciones de enganche son del mismo tipoUnidad', () {
@@ -107,13 +113,25 @@ void main() {
           isFalse);
     });
 
-    test('cubierta TRACCION en posición TRACCION → OK', () {
+    test('cubierta TRACCION en posición TRACCION del tractor → OK', () {
       expect(posTractorTrac1IzqExt.aceptaTipoUso(TipoUsoCubierta.traccion),
           isTrue);
-      // Idem para enganche (todas son TRACCION).
+    });
+
+    test('posición de enganche acepta SOLO ARRASTRE (no traccion ni direccion)',
+        () {
       final pEng = posicionesEnganche.first;
-      expect(pEng.aceptaTipoUso(TipoUsoCubierta.traccion), isTrue);
+      expect(pEng.tipoUsoRequerido, TipoUsoCubierta.arrastre);
+      expect(pEng.aceptaTipoUso(TipoUsoCubierta.arrastre), isTrue);
+      expect(pEng.aceptaTipoUso(TipoUsoCubierta.traccion), isFalse);
       expect(pEng.aceptaTipoUso(TipoUsoCubierta.direccion), isFalse);
+    });
+
+    test('cubierta ARRASTRE en posición de tractor → RECHAZA', () {
+      // Una cubierta de arrastre no entra ni en dirección ni en tracción.
+      expect(posTractorTrac1IzqExt.aceptaTipoUso(TipoUsoCubierta.arrastre),
+          isFalse);
+      expect(posTractorDirIzq.aceptaTipoUso(TipoUsoCubierta.arrastre), isFalse);
     });
   });
 
@@ -123,6 +141,8 @@ void main() {
           TipoUsoCubierta.direccion);
       expect(TipoUsoCubierta.fromCodigo('TRACCION'),
           TipoUsoCubierta.traccion);
+      expect(TipoUsoCubierta.fromCodigo('ARRASTRE'),
+          TipoUsoCubierta.arrastre);
     });
 
     test('case-insensitive y trimmed', () {
