@@ -12,8 +12,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../shared/constants/app_colors.dart';
-
 class PlatformChrome {
   PlatformChrome._();
 
@@ -29,20 +27,31 @@ class PlatformChrome {
     }
 
     final isDark = brightness == Brightness.dark;
-    final palette = isDark ? AppColors.dark : AppColors.light;
+
+    // Edge-to-edge real (Android 15 / SDK 35): el contenido se dibuja DEBAJO de
+    // las barras del sistema. Es la forma Flutter-nativa de opt-in — el engine
+    // hace el setup correcto para SDK 35 (sin tocar las APIs nativas deprecadas
+    // de color de barra) y los insets los toma SafeArea en cada Scaffold. En
+    // iOS/desktop es no-op. Reemplaza al (intransitable) enableEdgeToEdge() de
+    // androidx en MainActivity.
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
     // -------------------------------------------------------------------------
-    // iOS · Android — status bar + bottom nav
+    // iOS · Android — status bar + bottom nav (edge-to-edge, SDK 35+)
     // -------------------------------------------------------------------------
+    // Las barras van TRANSPARENTES: en Android 15 el contenido se dibuja detrás
+    // de ellas (edge-to-edge) y los insets los maneja SafeArea en cada Scaffold.
+    // Setear un color OPACO en la nav bar usa setNavigationBarColor, deprecado
+    // en SDK 35 y disparador del warning de Play Console. Solo controlamos el
+    // brillo de los íconos para que contrasten con el fondo near-black.
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-      // Status bar
       statusBarColor: Colors.transparent,
       statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
       statusBarBrightness: isDark ? Brightness.dark : Brightness.light, // iOS
-      // Android system nav (bottom)
-      systemNavigationBarColor: palette.bg,
-      systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
-      systemNavigationBarDividerColor: palette.border,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness:
+          isDark ? Brightness.light : Brightness.dark,
+      systemNavigationBarContrastEnforced: false,
     ));
 
     // -------------------------------------------------------------------------

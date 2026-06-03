@@ -8,23 +8,15 @@ import io.flutter.plugins.GeneratedPluginRegistrant
 
 class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Android 15+ (API 35+) renderiza edge-to-edge por default.
-        // Opt-in explícito recomendado por Google para compat con
-        // versiones previas + silenciar el warning "es posible que la
-        // pantalla de borde a borde no se muestre para todos los
-        // usuarios" en Play Console.
-        //
-        // Bug 2026-05-25: probamos primero con `enableEdgeToEdge()` de
-        // `androidx.activity` pero el build de Android falló con
-        // "receiver type mismatch" — la extension function requiere
-        // ComponentActivity y `FlutterActivity` actual no la matchea
-        // limpio en el classpath. La API legacy
-        // `WindowCompat.setDecorFitsSystemWindows(window, false)` hace
-        // lo mismo a más bajo nivel y NO requiere downstream casting.
-        //
-        // Flutter ya maneja SafeArea internamente desde los Scaffolds,
-        // así que este call solo asegura que el sistema sepa que la
-        // app es consciente del modo edge-to-edge.
+        // Android 15+ (API 35+): edge-to-edge. NO se puede usar el helper
+        // androidx.activity `enableEdgeToEdge()`: el compilador de Kotlin lo
+        // rechaza con "receiver type mismatch" — la ComponentActivity que
+        // hereda FlutterActivity es de un artefacto androidx distinto al de la
+        // extension (VERIFICADO: compileDebugKotlin falla, igual que 2026-05).
+        // Equivalente de bajo nivel que SÍ compila y no está deprecado:
+        // setDecorFitsSystemWindows(false). El modo edge-to-edge real lo activa
+        // Flutter desde Dart con SystemChrome.setEnabledSystemUIMode(edgeToEdge)
+        // (ver PlatformChrome.apply); los insets los maneja SafeArea.
         WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
     }
