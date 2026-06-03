@@ -102,6 +102,10 @@ service cloud.firestore {
       // SEG_HIGIENE también — necesita resolver DNI → nombre en el módulo
       // ICM (icm_ranking_screen, icm_detalle_chofer_screen) y en el mapa
       // Volvo para mostrar quien manejaba cuando ocurrio un evento.
+      // GOMERIA también — el hub del módulo (gomeria_v2_hub_screen) cruza
+      // VEHICULOS con EMPLEADOS para mostrar qué chofer tiene asignada cada
+      // unidad (tractor/enganche). Sin esto el hub tira permission-denied al
+      // hacer el .get() de la colección (bug RIOS GABRIEL, 2026-06-03).
       //
       // NOTA SOBRE CONTRASEÑA (auditoria 2026-05-17): Firestore NO
       // soporta field-level security. La rule permite al chofer leer
