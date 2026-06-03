@@ -4,6 +4,14 @@
 // Extraído de logistica_viaje_form_screen.dart 2026-05-18 (split del
 // archivo principal de 2823 LOC). Comparten privacidad via `part of`.
 //
+// REFACTOR NÚCLEO · jun 2026 — SOLO PRESENTACIÓN. Se preserva VERBATIM:
+//   - `_abrirSelectorTarifa` (showModalBottomSheet<TarifaLogistica>).
+//   - `_aplicarFiltro` (filtro token-based contra TODOS los campos).
+//   - El StreamBuilder `LogisticaService.streamTarifas(soloActivas: true)`.
+//   - `onTap: () => Navigator.pop(t)` (selección de la tarifa).
+//   - `_ItemTarifaPicker` (lógica dador/ruta).
+// Solo cambia el chrome del sheet (surface, handle, buscador, items) a tokens.
+//
 // Reemplazó al `DropdownButtonFormField` simple a partir del 2026-05-13.
 // Con > 30 tarifas el dropdown se volvía impráctico (scroll infinito sin
 // filtro). El sheet tiene buscador token-based contra empresa origen /
@@ -31,9 +39,9 @@ Future<TarifaLogistica?> _abrirSelectorTarifa(
   return showModalBottomSheet<TarifaLogistica>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: AppColors.background,
+    backgroundColor: context.colors.surface1,
     shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
     ),
     builder: (_) => _TarifaPickerSheet(tarifaActualId: tarifaActual?.id),
   );
@@ -78,7 +86,8 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    // El sheet ocupa hasta ~80% de la pantalla. El `viewInsets` del
+    final c = context.colors;
+    // El sheet ocupa hasta ~85% de la pantalla. El `viewInsets` del
     // bottom evita que el teclado tape el campo de búsqueda en
     // mobile.
     final media = MediaQuery.of(context);
@@ -97,23 +106,16 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
               margin: const EdgeInsets.only(
                   top: AppSpacing.sm, bottom: AppSpacing.xs),
               decoration: BoxDecoration(
-                color: AppColors.borderStrong,
-                borderRadius: BorderRadius.circular(2),
+                color: c.border,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
+            const Padding(
+              padding: EdgeInsets.fromLTRB(
                   AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.xs),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text(
-                  'ELEGIR TARIFA',
-                  style: AppType.eyebrow.copyWith(
-                    color: AppColors.textPrimary,
-                    fontSize: 13,
-                    letterSpacing: 1.4,
-                  ),
-                ),
+                child: AppEyebrow('Elegir tarifa'),
               ),
             ),
             // Buscador.
@@ -123,17 +125,15 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
               child: TextField(
                 controller: _ctrl,
                 autofocus: true,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search, size: 20),
+                style: AppType.body.copyWith(color: c.text),
+                decoration: _inputDecoration(
+                  context,
                   hintText: 'Buscar por empresa, ubicación, dador, producto…',
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md, vertical: AppSpacing.md),
+                  prefixIcon: Icon(Icons.search, size: 18, color: c.textMuted),
                   suffixIcon: _filtro.isEmpty
                       ? null
                       : IconButton(
-                          icon: const Icon(Icons.close, size: 18),
+                          icon: Icon(Icons.close, size: 18, color: c.textMuted),
                           tooltip: 'Limpiar búsqueda',
                           onPressed: () {
                             _ctrl.clear();
@@ -150,41 +150,32 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
                 stream: LogisticaService.streamTarifas(soloActivas: true),
                 builder: (ctx, snap) {
                   if (snap.hasError) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.lg),
-                        child: Text(
-                          'Error: ${snap.error}',
-                          style: const TextStyle(color: AppColors.error),
-                        ),
-                      ),
+                    return AppErrorState(
+                      title: 'No se pudieron cargar las tarifas',
+                      subtitle: snap.error.toString(),
                     );
                   }
                   if (!snap.hasData) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const AppSkeletonList(count: 6, conAvatar: false);
                   }
                   final filtradas = _aplicarFiltro(snap.data!);
                   if (filtradas.isEmpty) {
-                    return Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.xl),
-                        child: Text(
-                          _filtro.isEmpty
-                              ? 'No hay tarifas activas cargadas.'
-                              : 'Sin coincidencias con "$_filtro".',
-                          style: AppType.body.copyWith(
-                              color: AppColors.textSecondary, fontSize: 13),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
+                    return AppEmptyState(
+                      icon: Icons.local_offer_outlined,
+                      title: _filtro.isEmpty
+                          ? 'Sin tarifas activas'
+                          : 'Sin coincidencias',
+                      subtitle: _filtro.isEmpty
+                          ? 'Cargá una tarifa desde el catálogo Tarifas.'
+                          : 'Probá con otro texto.',
                     );
                   }
                   return ListView.separated(
                     padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.sm, 0, AppSpacing.sm, AppSpacing.lg),
+                        AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.xl),
                     itemCount: filtradas.length,
-                    separatorBuilder: (_, __) => const Divider(
-                        height: 1, color: AppColors.borderSubtle),
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: AppSpacing.xs),
                     itemBuilder: (_, i) {
                       final t = filtradas[i];
                       final esActual = t.id == widget.tarifaActualId;
@@ -233,47 +224,51 @@ class _ItemTarifaPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final dador = tarifa.dadorNombre?.trim();
     final tieneDador = dador != null && dador.isNotEmpty;
     final ruta = '${tarifa.origenDisplay} → ${tarifa.destinoDisplay}';
-    return InkWell(
+    return AppCard(
+      tier: 1,
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.sm, vertical: AppSpacing.md),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+      accent: esActual ? c.brand : null,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+      child: Row(
+        children: [
+          Icon(Icons.local_offer_outlined, size: 18, color: c.brandSoft),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  tieneDador ? dador : ruta,
+                  style: AppType.body.copyWith(
+                    color: c.text,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                if (tieneDador) ...[
+                  const SizedBox(height: 2),
                   Text(
-                    tieneDador ? dador : ruta,
-                    style: AppType.heading.copyWith(fontSize: 14),
+                    ruta,
+                    style: AppType.monoSm.copyWith(color: c.textMuted),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (tieneDador) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      ruta,
-                      style: AppType.label
-                          .copyWith(color: AppColors.textSecondary),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
                 ],
-              ),
+              ],
             ),
-            if (esActual)
-              const Padding(
-                padding: EdgeInsets.only(left: AppSpacing.sm),
-                child: Icon(Icons.check_circle,
-                    color: AppColors.success, size: 20),
-              ),
-          ],
-        ),
+          ),
+          if (esActual)
+            Padding(
+              padding: const EdgeInsets.only(left: AppSpacing.sm),
+              child: Icon(Icons.check_circle, color: c.success, size: 20),
+            ),
+        ],
       ),
     );
   }

@@ -4,11 +4,23 @@
 // Extraído de logistica_viaje_form_screen.dart 2026-05-18 (split del
 // archivo principal de 2823 LOC). Comparten privacidad via `part of`.
 //
+// REFACTOR NÚCLEO · jun 2026 — SOLO PRESENTACIÓN. Se preserva VERBATIM:
+//   - `_TramoEditState` ENTERO (controllers, factories `vacio`/`fromTramoViaje`,
+//     `snapshotConOverride`, `toTramoViaje`, `dispose`) — es PURA lógica.
+//   - `_pickRemito` (FilePicker + bytes pendientes).
+//   - El armado del campo Tarifa (tap → `_abrirSelectorTarifa` → reset producto
+//     + sincronizar override monto fijo).
+//   - El toggle 18%/monto-fijo de `_OverridePagoChofer` y su parser.
+//   - `_DropdownProducto` con su Future MEMORIZADO (clave del foco) + fallback
+//     a texto libre.
+// Solo cambia el chrome a tokens (`context.colors`), bento y mono para números.
+//
 // Componentes:
-//   - _TramoEditState  — estado mutable de UN tramo (controllers + datos).
-//   - _TramoCard       — UI de un tramo (carga + descarga + producto + gastos).
+//   - _TramoEditState   — estado mutable de UN tramo (controllers + datos).
+//   - _TramoCard        — UI de un tramo (carga + descarga + producto + gastos).
+//   - _OverridePagoChofer — toggle "18% / monto fijo" + campo de monto.
 //   - _BotonAgregarTramo — botón "+ AGREGAR TRAMO" debajo de la lista.
-//   - _BannerEncadenamiento — warning amarillo cuando fechas no encadenan.
+//   - _BannerEncadenamiento — warning cuando ubicaciones/fechas no encadenan.
 //   - _DropdownProducto — dropdown poblado con productos de la empresa origen.
 
 part of 'logistica_viaje_form_screen.dart';
@@ -19,11 +31,13 @@ class _TramoEditState {
 
   TarifaLogistica? tarifa;
   String? producto;
+
   /// Controller del campo "producto libre" — solo se usa cuando la
   /// empresa origen NO tiene productos catalogados (fallback). Vive
   /// en el state del tramo (no se recrea en cada build) para no
   /// perder el foco al tipear.
   final TextEditingController productoLibreCtrl;
+
   /// Override "monto fijo del chofer" a nivel TRAMO. Si `true`, este
   /// tramo paga al chofer el valor de [montoFijoChoferCtrl] (flat,
   /// sin TN ni 18%). Si `false`, calcula con el 18% sobre la tarifa
@@ -181,6 +195,7 @@ class _TramoEditState {
 class _TramoCard extends StatelessWidget {
   final int numero;
   final _TramoEditState state;
+
   /// Mensaje de warning sobre las fechas del propio tramo (descarga
   /// anterior a carga). Null si no hay problema. Calculado por el
   /// padre, no por este widget — así el padre puede usar la misma
@@ -220,18 +235,19 @@ class _TramoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final esTn = state.tarifa?.unidadTarifa == UnidadTarifa.porTonelada;
     final tarifa = state.tarifa;
     return _SeccionCard(
       titulo: 'TRAMO $numero',
       icono: Icons.alt_route_outlined,
+      accentDot: c.brand,
       // Botones "↑ ↓ duplicar" del header se quitaron 2026-05-14 por
       // pedido de Santiago — innecesarios en la práctica. Queda solo
       // el "eliminar" para el caso de tramo sobrante.
       trailing: puedeEliminar
           ? IconButton(
-              icon: const Icon(Icons.delete_outline,
-                  color: AppColors.error, size: 18),
+              icon: Icon(Icons.delete_outline, color: c.error, size: 18),
               onPressed: onEliminar,
               tooltip: 'Eliminar tramo',
               visualDensity: VisualDensity.compact,
@@ -274,32 +290,59 @@ class _TramoCard extends StatelessWidget {
                 : '';
             onCambio();
           },
-          borderRadius: BorderRadius.circular(4),
-          child: InputDecorator(
-            decoration: InputDecoration(
-              labelText: 'Tarifa',
-              border: const OutlineInputBorder(),
-              suffixIcon: Icon(
-                tarifa == null ? Icons.search : Icons.edit_outlined,
-                size: 20,
-              ),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md, vertical: AppSpacing.md),
+            decoration: BoxDecoration(
+              color: c.surface3,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: c.border),
             ),
-            isEmpty: tarifa == null,
-            // Consistente con el picker (commit 2026-05-28): mostrar
-            // dador + ruta. El detalle (precios, unidad, producto) está
-            // en `_ResumenTarifa` abajo, no hace falta repetirlo acá.
-            child: tarifa == null
-                ? null
-                : Text(
-                    [
-                      if ((tarifa.dadorNombre ?? '').trim().isNotEmpty)
-                        tarifa.dadorNombre!.trim(),
-                      '${tarifa.origenDisplay} → ${tarifa.destinoDisplay}',
-                    ].join(' · '),
-                    style: const TextStyle(color: Colors.white),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+            child: Row(
+              children: [
+                Icon(
+                  tarifa == null ? Icons.search : Icons.local_offer_outlined,
+                  size: 18,
+                  color: c.textMuted,
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const AppEyebrow('Tarifa'),
+                      const SizedBox(height: 2),
+                      // Consistente con el picker: mostrar dador + ruta. El
+                      // detalle (precios, unidad, producto) está en
+                      // `_ResumenTarifa` abajo, no hace falta repetirlo acá.
+                      Text(
+                        tarifa == null
+                            ? 'Seleccionar…'
+                            : [
+                                if ((tarifa.dadorNombre ?? '')
+                                    .trim()
+                                    .isNotEmpty)
+                                  tarifa.dadorNombre!.trim(),
+                                '${tarifa.origenDisplay} → ${tarifa.destinoDisplay}',
+                              ].join(' · '),
+                        style: AppType.body.copyWith(
+                          color: tarifa == null ? c.textMuted : c.text,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
+                ),
+                Icon(
+                  tarifa == null ? Icons.chevron_right : Icons.edit_outlined,
+                  size: 18,
+                  color: c.textMuted,
+                ),
+              ],
+            ),
           ),
         ),
         if (tarifa != null) ...[
@@ -313,6 +356,8 @@ class _TramoCard extends StatelessWidget {
           // tramo, así el catálogo de tarifas queda intacto.
           _OverridePagoChofer(state: state, onCambio: onCambio),
         ],
+        const SizedBox(height: AppSpacing.lg),
+        const AppHairline(),
         const SizedBox(height: AppSpacing.md),
 
         // CARGA — fecha + kg + producto + descripción libre.
@@ -330,10 +375,11 @@ class _TramoCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           TextField(
             controller: state.kgCargadosCtrl,
-            decoration: const InputDecoration(
+            style: AppType.mono.copyWith(color: c.text),
+            decoration: _inputDecoration(
+              context,
               labelText: 'Kg cargados',
               suffixText: 'kg',
-              border: OutlineInputBorder(),
             ),
             keyboardType: TextInputType.number,
             inputFormatters: [AppFormatters.inputMiles],
@@ -357,14 +403,17 @@ class _TramoCard extends StatelessWidget {
         const SizedBox(height: AppSpacing.sm),
         TextField(
           controller: state.descripcionCargaCtrl,
-          decoration: const InputDecoration(
+          style: AppType.body.copyWith(color: c.text),
+          decoration: _inputDecoration(
+            context,
             labelText: 'Descripción / observación (opcional)',
-            border: OutlineInputBorder(),
           ),
           maxLines: 2,
           onChanged: (_) => onCambio(),
         ),
         const SizedBox(height: AppSpacing.lg),
+        const AppHairline(),
+        const SizedBox(height: AppSpacing.md),
 
         // DESCARGA — fecha + remito + comprobante + kg descargados.
         const _SubseccionTitulo('DESCARGA'),
@@ -380,39 +429,46 @@ class _TramoCard extends StatelessWidget {
         const SizedBox(height: AppSpacing.sm),
         TextField(
           controller: state.remitoNumeroCtrl,
-          decoration: const InputDecoration(
+          style: AppType.mono.copyWith(color: c.text),
+          decoration: _inputDecoration(
+            context,
             labelText: 'Número de remito',
-            border: OutlineInputBorder(),
           ),
           onChanged: (_) => onCambio(),
         ),
         const SizedBox(height: AppSpacing.sm),
-        OutlinedButton.icon(
+        AppButton.secondary(
+          label: state.remitoNombreLocal ??
+              (state.remitoUrl != null
+                  ? 'Reemplazar comprobante'
+                  : 'Subir comprobante firmado (PDF / foto)'),
+          icon: Icons.attach_file,
+          size: AppButtonSize.sm,
+          expand: true,
           onPressed: () => _pickRemito(context),
-          icon: const Icon(Icons.attach_file, size: 18),
-          label: Text(
-            state.remitoNombreLocal ??
-                (state.remitoUrl != null
-                    ? 'Reemplazar comprobante'
-                    : 'Subir comprobante firmado (PDF / foto)'),
-            overflow: TextOverflow.ellipsis,
-          ),
         ),
         if (state.remitoUrl != null && state.remitoNombreLocal == null) ...[
           const SizedBox(height: AppSpacing.xs),
-          Text(
-            '✓ Comprobante ya cargado.',
-            style: AppType.eyebrow.copyWith(color: AppColors.success),
+          Row(
+            children: [
+              Icon(Icons.check_circle_outline, size: 14, color: c.success),
+              const SizedBox(width: AppSpacing.xs),
+              Text(
+                'Comprobante ya cargado.',
+                style: AppType.monoSm.copyWith(color: c.success),
+              ),
+            ],
           ),
         ],
         if (esTn) ...[
           const SizedBox(height: AppSpacing.sm),
           TextField(
             controller: state.kgDescargadosCtrl,
-            decoration: const InputDecoration(
+            style: AppType.mono.copyWith(color: c.text),
+            decoration: _inputDecoration(
+              context,
               labelText: 'Kg descargados (cifra final para liquidar)',
               suffixText: 'kg',
-              border: OutlineInputBorder(),
               helperText:
                   'Si está vacío, se calcula con kg cargados (estimado).',
             ),
@@ -427,6 +483,8 @@ class _TramoCard extends StatelessWidget {
         // Antes vivían a nivel viaje pero un viaje multi-tramo tiene
         // peajes / lavados distintos por tramo, así que se separan.
         const SizedBox(height: AppSpacing.lg),
+        const AppHairline(),
+        const SizedBox(height: AppSpacing.md),
         _SeccionGastos(
           gastos: state.gastos,
           onChanged: (l) {
@@ -460,45 +518,37 @@ class _OverridePagoChofer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'PAGO AL CHOFER (ESTE TRAMO)',
-          style: TextStyle(
-            color: Colors.white54,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.2,
-          ),
-        ),
-        const SizedBox(height: 6),
+        const _SubseccionTitulo('PAGO AL CHOFER (ESTE TRAMO)'),
+        const SizedBox(height: AppSpacing.sm),
         Wrap(
-          spacing: 8,
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
           children: [
-            ChoiceChip(
-              label: const Text('18%'),
-              selected: !state.montoFijoChoferActivo,
-              onSelected: (sel) {
-                if (sel) {
+            _PillSelector(
+              label: '18%',
+              seleccionado: !state.montoFijoChoferActivo,
+              acento: c.info,
+              onTap: () {
+                if (state.montoFijoChoferActivo) {
                   state.montoFijoChoferActivo = false;
                   onCambio();
                 }
               },
-              selectedColor: AppColors.info.withValues(alpha: 0.4),
-              visualDensity: VisualDensity.compact,
             ),
-            ChoiceChip(
-              label: const Text('Monto fijo'),
-              selected: state.montoFijoChoferActivo,
-              onSelected: (sel) {
-                if (sel) {
+            _PillSelector(
+              label: 'Monto fijo',
+              seleccionado: state.montoFijoChoferActivo,
+              acento: c.warning,
+              onTap: () {
+                if (!state.montoFijoChoferActivo) {
                   state.montoFijoChoferActivo = true;
                   onCambio();
                 }
               },
-              selectedColor: AppColors.warning.withValues(alpha: 0.4),
-              visualDensity: VisualDensity.compact,
             ),
           ],
         ),
@@ -508,18 +558,17 @@ class _OverridePagoChofer extends StatelessWidget {
             controller: state.montoFijoChoferCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [AppFormatters.inputMilesDecimal],
-            decoration: const InputDecoration(
+            style: AppType.mono.copyWith(color: c.text, fontWeight: FontWeight.w600),
+            decoration: _inputDecoration(
+              context,
               labelText: 'Monto al chofer (por viaje)',
               prefixText: '\$ ',
               prefixStyle: TextStyle(
-                color: AppColors.warning,
+                color: c.warning,
                 fontWeight: FontWeight.bold,
               ),
               suffixText: '/viaje',
-              border: OutlineInputBorder(),
-              isDense: true,
             ),
-            style: const TextStyle(color: Colors.white, fontSize: 15),
             onChanged: (_) => onCambio(),
           ),
         ],
@@ -534,52 +583,45 @@ class _BotonAgregarTramo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton.icon(
+    return AppButton.secondary(
+      label: 'Agregar tramo',
+      icon: Icons.add,
+      size: AppButtonSize.md,
+      expand: true,
       onPressed: onPressed,
-      icon: const Icon(Icons.add),
-      label: const Text('AGREGAR TRAMO'),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.info,
-        side: const BorderSide(color: AppColors.info),
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        textStyle: const TextStyle(
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1,
-        ),
-      ),
     );
   }
 }
 
-/// Banner amarillo que avisa cuando el origen de un tramo no encadena
-/// con el destino del anterior. NO bloquea — es un warning informativo
-/// (hay casos legítimos: el tractor pasa por la base entre tramos).
-/// Visualmente se inserta ENTRE dos cards de tramo.
+/// Banner que avisa cuando el origen de un tramo no encadena con el destino
+/// del anterior (o las fechas no son cronológicas). NO bloquea — es un
+/// warning informativo (hay casos legítimos: el tractor pasa por la base
+/// entre tramos). Visualmente se inserta ENTRE dos cards de tramo o arriba
+/// de los campos del tramo.
 class _BannerEncadenamiento extends StatelessWidget {
   final String mensaje;
   const _BannerEncadenamiento({required this.mensaje});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(10),
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(
-            color: AppColors.warning.withValues(alpha: 0.5)),
+        color: c.warningSoft,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: c.warning.withValues(alpha: 0.4)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.warning_amber_outlined,
-              size: 18, color: AppColors.warning),
+          Icon(Icons.warning_amber_outlined, size: 18, color: c.warning),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               mensaje,
-              style: AppType.label.copyWith(color: AppColors.warning),
+              style: AppType.bodySm.copyWith(color: c.warning),
             ),
           ),
         ],
@@ -595,6 +637,7 @@ class _BannerEncadenamiento extends StatelessWidget {
 class _DropdownProducto extends StatefulWidget {
   final String? empresaOrigenId;
   final String? valor;
+
   /// Controller para el fallback de texto libre (cuando la empresa
   /// origen no tiene productos catalogados). Debe vivir en el state
   /// del padre — si se crea acá en cada build, se pierde el foco al
@@ -649,14 +692,40 @@ class _DropdownProductoState extends State<_DropdownProducto> {
     }
   }
 
+  /// Caja decorada (surface3 + border + label eyebrow) que envuelve un
+  /// dropdown o el progress mientras carga. Mantiene el gesto Núcleo sin
+  /// migrar el dropdown a un widget que rompa la lógica del valor.
+  Widget _caja(BuildContext context, {required String label, required Widget child}) {
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.surface3,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: c.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AppEyebrow(label),
+          const SizedBox(height: 2),
+          child,
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (_empresaFuture == null) {
-      return const TextField(
-        enabled: false,
-        decoration: InputDecoration(
-          labelText: 'Producto (elegí primero una tarifa)',
-          border: OutlineInputBorder(),
+      return _caja(
+        context,
+        label: 'Producto',
+        child: Text(
+          'Elegí primero una tarifa',
+          style: AppType.body.copyWith(color: c.textMuted),
         ),
       );
     }
@@ -665,14 +734,12 @@ class _DropdownProductoState extends State<_DropdownProducto> {
       builder: (ctx, snap) {
         final productos = snap.data?.productos ?? const <String>[];
         if (snap.connectionState == ConnectionState.waiting) {
-          return const InputDecorator(
-            decoration: InputDecoration(
-              labelText: 'Producto',
-              border: OutlineInputBorder(),
-            ),
-            child: SizedBox(
-              height: 20,
-              child: LinearProgressIndicator(),
+          return _caja(
+            context,
+            label: 'Producto',
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 6),
+              child: LinearProgressIndicator(minHeight: 2),
             ),
           );
         }
@@ -682,9 +749,10 @@ class _DropdownProductoState extends State<_DropdownProducto> {
           // afuera (persistente) para no perder foco en cada keystroke.
           return TextField(
             controller: widget.libreCtrl,
-            decoration: const InputDecoration(
+            style: AppType.body.copyWith(color: c.text),
+            decoration: _inputDecoration(
+              context,
               labelText: 'Producto (libre — la empresa no tiene catálogo)',
-              border: OutlineInputBorder(),
             ),
             onChanged: widget.onChanged,
           );
@@ -698,17 +766,30 @@ class _DropdownProductoState extends State<_DropdownProducto> {
             !items.contains(widget.valor)) {
           items.add(widget.valor!);
         }
-        return DropdownButtonFormField<String>(
-          initialValue: items.contains(widget.valor) ? widget.valor : null,
-          decoration: const InputDecoration(
-            labelText: 'Producto',
-            border: OutlineInputBorder(),
+        return _caja(
+          context,
+          label: 'Producto',
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: items.contains(widget.valor) ? widget.valor : null,
+              isExpanded: true,
+              isDense: true,
+              dropdownColor: c.surface3,
+              icon: Icon(Icons.expand_more, color: c.textMuted),
+              hint: Text(
+                'Seleccionar…',
+                style: AppType.body.copyWith(color: c.textMuted),
+              ),
+              style: AppType.body.copyWith(color: c.text),
+              items: items
+                  .map((p) => DropdownMenuItem(
+                        value: p,
+                        child: Text(p, overflow: TextOverflow.ellipsis),
+                      ))
+                  .toList(),
+              onChanged: widget.onChanged,
+            ),
           ),
-          isExpanded: true,
-          items: items
-              .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-              .toList(),
-          onChanged: widget.onChanged,
         );
       },
     );

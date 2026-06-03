@@ -4,6 +4,16 @@
 // Extraído de logistica_viaje_form_screen.dart 2026-05-18 (split del
 // archivo principal de 2823 LOC). Comparten privacidad via `part of`.
 //
+// REFACTOR NÚCLEO · jun 2026 — SOLO PRESENTACIÓN. Toda la lógica intacta:
+//   - `_SeccionResumen` lee los MISMOS campos de `MontosViaje`.
+//   - `_SeccionEstado` mantiene `EstadoViaje.values` + callbacks.
+//   - `_SeccionChofer` conserva VERBATIM el RawAutocomplete (controller +
+//     focusNode + optionsBuilder + onSelected) y el StreamBuilder de CHOFER.
+//   - `_SeccionUnidad` conserva los inputFormatters (patente + uppercase) y
+//     `maxLength: 7`.
+//   - `_SeccionAdelantoAsociado` conserva el StreamBuilder + filtro client-side.
+// Solo cambia el chrome a tokens (`context.colors`), bento y mono para plata.
+//
 // Componentes:
 //   - _SeccionResumen + _LineaResumen — totales en vivo arriba del form.
 //   - _SeccionEstado — dropdown del estado del viaje.
@@ -19,41 +29,52 @@ class _SeccionResumen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return _SeccionCard(
       titulo: 'RESUMEN',
       icono: Icons.summarize_outlined,
+      accentDot: montos == null ? null : c.success,
       children: [
         if (montos == null)
           Text(
             'Agregá al menos 1 tramo con tarifa para ver el cálculo.',
-            style: AppType.label.copyWith(color: AppColors.textSecondary),
+            style: AppType.bodySm.copyWith(color: c.textMuted),
           )
         else ...[
-          _LineaResumen(
+          _Linea(
             label: 'Facturado a empresa',
-            valor: '\$${AppFormatters.formatearMonto(montos!.montoVecchi)}',
+            valor: '\$ ${AppFormatters.formatearMonto(montos!.montoVecchi)}',
+            mono: true,
           ),
-          _LineaResumen(
+          _Linea(
             label:
                 'Comisión chofer (${montos!.comisionChoferPct.toStringAsFixed(0)}%)',
-            valor: '\$${AppFormatters.formatearMonto(montos!.montoChofer)}',
+            valor: '\$ ${AppFormatters.formatearMonto(montos!.montoChofer)}',
+            sub: true,
+            mono: true,
           ),
-          _LineaResumen(
+          _Linea(
             label: 'Comisión chofer (redondeada)',
             valor:
-                '\$${AppFormatters.formatearMonto(montos!.montoChoferRedondeado)}',
-            destacado: true,
+                '\$ ${AppFormatters.formatearMonto(montos!.montoChoferRedondeado)}',
+            highlight: true,
+            mono: true,
           ),
-          _LineaResumen(
+          _Linea(
             label: 'Gastos extras',
-            valor: '+ \$${AppFormatters.formatearMonto(montos!.gastosTotal)}',
+            valor:
+                '+ \$ ${AppFormatters.formatearMonto(montos!.gastosTotal)}',
+            mono: true,
           ),
-          const Divider(color: AppColors.borderStrong, height: AppSpacing.lg),
-          _LineaResumen(
+          const SizedBox(height: AppSpacing.sm),
+          const AppHairline(),
+          const SizedBox(height: AppSpacing.sm),
+          _Linea(
             label: 'Liquidación final al chofer',
             valor:
-                '\$${AppFormatters.formatearMonto(montos!.liquidacionChofer)}',
-            destacado: true,
+                '\$ ${AppFormatters.formatearMonto(montos!.liquidacionChofer)}',
+            highlight: true,
+            mono: true,
           ),
         ],
       ],
@@ -61,47 +82,9 @@ class _SeccionResumen extends StatelessWidget {
   }
 }
 
-class _LineaResumen extends StatelessWidget {
-  final String label;
-  final String valor;
-  final bool destacado;
-  const _LineaResumen({
-    required this.label,
-    required this.valor,
-    this.destacado = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: AppType.body.copyWith(
-                color: destacado
-                    ? AppColors.textPrimary
-                    : AppColors.textSecondary,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          Text(
-            valor,
-            style: AppType.body.copyWith(
-              color: destacado ? AppColors.success : AppColors.textPrimary,
-              fontSize: destacado ? 16 : 14,
-              fontWeight: destacado ? FontWeight.bold : FontWeight.normal,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+// _LineaResumen reemplazada por la primitiva `_Linea` (Núcleo) compartida con
+// el viaje_detalle. Se mantiene el nombre del concepto en los call-sites de
+// arriba para no perder trazabilidad del refactor.
 
 class _SeccionEstado extends StatelessWidget {
   final EstadoViaje estado;
@@ -109,6 +92,7 @@ class _SeccionEstado extends StatelessWidget {
   final DateTime? fechaPostergadoA;
   final ValueChanged<EstadoViaje> onEstadoChanged;
   final ValueChanged<DateTime?> onFechaChanged;
+
   /// Hook genérico para auto-save del borrador. Se invoca cuando
   /// cambia algún campo "menor" (texto del motivo) que no tiene
   /// callback dedicado pero igual queremos persistirlo.
@@ -123,34 +107,39 @@ class _SeccionEstado extends StatelessWidget {
     required this.onCambio,
   });
 
+  /// Color semántico del estado, alineado con el viaje_detalle ya migrado.
+  Color _colorEstado(BuildContext context, EstadoViaje e) {
+    final c = context.colors;
+    return switch (e) {
+      EstadoViaje.planeado => c.info,
+      EstadoViaje.enCurso => c.brand,
+      EstadoViaje.concluido => c.success,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     return _SeccionCard(
       titulo: 'ESTADO',
       icono: Icons.flag_outlined,
       children: [
-        DropdownButtonFormField<EstadoViaje>(
-          initialValue: estado,
-          decoration: const InputDecoration(
-            labelText: 'Estado',
-            border: OutlineInputBorder(),
-          ),
-          items: EstadoViaje.values
-              .map(
-                (e) => DropdownMenuItem(
-                  value: e,
-                  child: Text(e.etiqueta),
-                ),
-              )
-              .toList(),
-          onChanged: (e) {
-            if (e != null) onEstadoChanged(e);
-          },
+        // Estado como pills Núcleo (reemplaza el DropdownButtonFormField).
+        // El set de estados es chico (3) — pills entran cómodas y mantienen
+        // el gesto del sistema. La lógica `onEstadoChanged` queda igual.
+        // Estados removidos 2026-05-14 (Santiago): "cancelado" y "postergado".
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: [
+            for (final e in EstadoViaje.values)
+              _PillSelector(
+                label: e.etiqueta,
+                seleccionado: estado == e,
+                acento: _colorEstado(context, e),
+                onTap: () => onEstadoChanged(e),
+              ),
+          ],
         ),
-        // Estados removidos 2026-05-14 (Santiago): "cancelado" y
-        // "postergado". Si querés cancelar un viaje, ahora lo borrás
-        // (soft-delete con motivo). Postergar = se queda en planeado
-        // hasta que se haga.
       ],
     );
   }
@@ -231,6 +220,7 @@ class _SeccionChoferState extends State<_SeccionChofer> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return _SeccionCard(
       titulo: 'CHOFER',
       icono: Icons.person_outline,
@@ -288,15 +278,17 @@ class _SeccionChoferState extends State<_SeccionChofer> {
                   controller: ctrl,
                   focusNode: fn,
                   textCapitalization: TextCapitalization.characters,
-                  decoration: InputDecoration(
+                  style: AppType.body.copyWith(color: c.text),
+                  decoration: _inputDecoration(
+                    context,
                     labelText: 'Chofer',
                     hintText: 'Tipeá para filtrar (ej. PEREZ)',
-                    prefixIcon: const Icon(Icons.search, size: 20),
-                    border: const OutlineInputBorder(),
+                    prefixIcon:
+                        Icon(Icons.search, size: 18, color: c.textMuted),
                     suffixIcon: ctrl.text.isEmpty
                         ? null
                         : IconButton(
-                            icon: const Icon(Icons.clear, size: 18),
+                            icon: Icon(Icons.clear, size: 18, color: c.textMuted),
                             tooltip: 'Limpiar',
                             onPressed: () {
                               ctrl.clear();
@@ -311,11 +303,10 @@ class _SeccionChoferState extends State<_SeccionChofer> {
                   alignment: Alignment.topLeft,
                   child: Material(
                     elevation: 6,
-                    color: Theme.of(context).colorScheme.surface,
+                    color: c.surface3,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.sm),
-                      side:
-                          const BorderSide(color: AppColors.borderStrong),
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      side: BorderSide(color: c.borderStrong),
                     ),
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(
@@ -345,17 +336,15 @@ class _SeccionChoferState extends State<_SeccionChofer> {
                                         ? Icons.check_circle
                                         : Icons.person_outline,
                                     size: 16,
-                                    color: esActual
-                                        ? AppColors.success
-                                        : AppColors.textTertiary,
+                                    color: esActual ? c.success : c.textMuted,
                                   ),
                                   const SizedBox(width: AppSpacing.sm),
                                   Expanded(
                                     child: Text(
                                       nom,
                                       overflow: TextOverflow.ellipsis,
-                                      style: AppType.body.copyWith(
-                                          color: AppColors.textPrimary),
+                                      style:
+                                          AppType.body.copyWith(color: c.text),
                                     ),
                                   ),
                                 ],
@@ -389,6 +378,7 @@ class _SeccionUnidad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     // Formatter que solo permite letras+digitos, hace UPPER y quita
     // espacios/guiones — para que la patente quede normalizada al
     // formato canonico (UPPERCASE sin separadores) que matchea las
@@ -403,32 +393,45 @@ class _SeccionUnidad extends StatelessWidget {
       children: [
         TextField(
           controller: vehiculoCtrl,
-          decoration: const InputDecoration(
+          style: AppType.mono.copyWith(color: c.text),
+          decoration: _inputDecoration(
+            context,
             labelText: 'Patente tractor',
-            border: OutlineInputBorder(),
             hintText: 'AB123CD o ABC123',
           ),
           textCapitalization: TextCapitalization.characters,
           inputFormatters: [patenteFormatter, _UpperCaseFormatter()],
           maxLength: 7,
+          buildCounter: _sinContador,
           onChanged: (_) => onChanged(),
         ),
-        const SizedBox(height: AppSpacing.sm),
+        const SizedBox(height: AppSpacing.md),
         TextField(
           controller: engancheCtrl,
-          decoration: const InputDecoration(
+          style: AppType.mono.copyWith(color: c.text),
+          decoration: _inputDecoration(
+            context,
             labelText: 'Patente enganche',
-            border: OutlineInputBorder(),
             hintText: 'AB123CD o ABC123',
           ),
           textCapitalization: TextCapitalization.characters,
           inputFormatters: [patenteFormatter, _UpperCaseFormatter()],
           maxLength: 7,
+          buildCounter: _sinContador,
           onChanged: (_) => onChanged(),
         ),
       ],
     );
   }
+
+  /// Oculta el contador "x/7" de `maxLength` (gesto Núcleo: el límite es
+  /// silencioso, no se muestra debajo del campo). NO cambia la lógica de
+  /// `maxLength`, solo su presentación.
+  static Widget? _sinContador(BuildContext context,
+          {required int currentLength,
+          required bool isFocused,
+          required int? maxLength}) =>
+      null;
 }
 
 /// Formatter que fuerza UPPERCASE en cada keystroke. Necesario porque
@@ -467,6 +470,7 @@ class _UpperCaseFormatter extends TextInputFormatter {
 /// `LogisticaAdelantosScreen` y vuelve a este form.
 class _SeccionAdelantoAsociado extends StatelessWidget {
   final String? choferDni;
+
   /// Si es edición, traemos los adelantos ya asociados a este viaje
   /// además de los libres. Null en modo alta.
   final String? viajeIdActual;
@@ -482,14 +486,16 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return _SeccionCard(
       titulo: 'ADELANTO ASOCIADO (OPCIONAL)',
       icono: Icons.payments_outlined,
+      accentDot: c.warning,
       children: [
         if (choferDni == null || choferDni!.isEmpty)
           Text(
             'Seleccioná un chofer primero — los adelantos viven por chofer.',
-            style: AppType.label.copyWith(color: AppColors.textSecondary),
+            style: AppType.bodySm.copyWith(color: c.textMuted),
           )
         else
           StreamBuilder<List<AdelantoChofer>>(
@@ -498,7 +504,7 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
               if (snap.hasError) {
                 return Text(
                   'Error cargando adelantos: ${snap.error}',
-                  style: AppType.label.copyWith(color: AppColors.error),
+                  style: AppType.bodySm.copyWith(color: c.error),
                 );
               }
               if (!snap.hasData) {
@@ -523,51 +529,61 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
                   children: [
                     Text(
                       'No hay adelantos libres de este chofer.',
-                      style: AppType.label
-                          .copyWith(color: AppColors.textSecondary),
+                      style: AppType.bodySm.copyWith(color: c.textSecondary),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
                       'Si necesitás crear uno, andá a LOGÍSTICA → '
                       'ADELANTOS y volvé.',
-                      style: AppType.eyebrow
-                          .copyWith(color: AppColors.textHint),
+                      style: AppType.monoSm.copyWith(color: c.textMuted),
                     ),
                   ],
                 );
               }
-              return DropdownButtonFormField<String?>(
-                initialValue: adelantoSeleccionadoId,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Adelanto del chofer',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md, vertical: AppSpacing.md),
+              return Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md, vertical: 2),
+                decoration: BoxDecoration(
+                  color: c.surface3,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  border: Border.all(color: c.border),
                 ),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    value: null,
-                    child: Text('(sin adelanto asociado)'),
-                  ),
-                  ...candidatos.map((a) {
-                    final fecha = AppFormatters.formatearFecha(a.fecha);
-                    final monto = AppFormatters.formatearMonto(a.monto);
-                    final medio = a.medioPago.etiqueta;
-                    final obs = a.observacion?.trim().isNotEmpty == true
-                        ? ' · ${a.observacion!.trim()}'
-                        : '';
-                    return DropdownMenuItem<String?>(
-                      value: a.id,
-                      child: Text(
-                        '$fecha · \$ $monto · $medio$obs',
-                        overflow: TextOverflow.ellipsis,
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String?>(
+                    value: adelantoSeleccionadoId,
+                    isExpanded: true,
+                    isDense: true,
+                    dropdownColor: c.surface3,
+                    icon: Icon(Icons.expand_more, color: c.textMuted),
+                    style: AppType.body.copyWith(color: c.text),
+                    items: [
+                      DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text(
+                          '(sin adelanto asociado)',
+                          style: AppType.body.copyWith(color: c.textMuted),
+                        ),
                       ),
-                    );
-                  }),
-                ],
-                onChanged: onChanged,
+                      ...candidatos.map((a) {
+                        final fecha = AppFormatters.formatearFecha(a.fecha);
+                        final monto = AppFormatters.formatearMonto(a.monto);
+                        final medio = a.medioPago.etiqueta;
+                        final obs = a.observacion?.trim().isNotEmpty == true
+                            ? ' · ${a.observacion!.trim()}'
+                            : '';
+                        return DropdownMenuItem<String?>(
+                          value: a.id,
+                          child: Text(
+                            '$fecha · \$ $monto · $medio$obs',
+                            overflow: TextOverflow.ellipsis,
+                            style: AppType.body.copyWith(color: c.text),
+                          ),
+                        );
+                      }),
+                    ],
+                    onChanged: onChanged,
+                  ),
+                ),
               );
             },
           ),

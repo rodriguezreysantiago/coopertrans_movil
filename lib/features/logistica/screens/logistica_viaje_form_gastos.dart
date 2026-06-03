@@ -4,6 +4,13 @@
 // Extraído de logistica_viaje_form_screen.dart 2026-05-18 (split del
 // archivo principal de 2823 LOC). Comparten privacidad via `part of`.
 //
+// REFACTOR NÚCLEO · jun 2026 — SOLO PRESENTACIÓN. Se preserva VERBATIM:
+//   - `_agregar` (dialog + dispose de controllers + parser + cap 1.000.000).
+//   - El confirm de eliminar (AppConfirmDialog) y el `removeAt(i)`.
+//   - El callback `onChanged([...gastos, nuevo])`.
+// Solo cambia el chrome a tokens (`context.colors`), mono para plata, y el
+// dialog adopta la superficie surface2 + inputs Núcleo.
+//
 // Desde 2026-05-13 los gastos viven POR TRAMO, no por viaje (un viaje
 // multi-tramo tiene peajes/lavados distintos por tramo). Cada `_TramoCard`
 // incluye su `_SeccionGastos` inline (modo `enmarcadoComoSubseccion`).
@@ -13,6 +20,7 @@ part of 'logistica_viaje_form_screen.dart';
 class _SeccionGastos extends StatelessWidget {
   final List<GastoViaje> gastos;
   final ValueChanged<List<GastoViaje>> onChanged;
+
   /// Si verdadero, el widget se renderea como sub-bloque inline (sin
   /// el chrome de `_SeccionCard` con título + ícono propios). Usado
   /// cuando la sección va ADENTRO de la card de un tramo — no
@@ -77,32 +85,35 @@ class _SeccionGastos extends StatelessWidget {
     DateTime fecha,
     void Function(DateTime) onFechaChange,
   ) {
+    final c = dCtx.colors;
     return StatefulBuilder(builder: (sCtx, setStateDialog) {
       return AlertDialog(
-        backgroundColor: Theme.of(dCtx).colorScheme.surface,
-        title: const Text('Agregar gasto'),
+        backgroundColor: c.surface2,
+        title: Text('Agregar gasto', style: AppType.h5.copyWith(color: c.text)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: montoCtrl,
-              decoration: const InputDecoration(
+              style: AppType.mono.copyWith(color: c.text, fontWeight: FontWeight.w600),
+              decoration: _inputDecoration(
+                dCtx,
                 labelText: 'Monto',
                 prefixText: '\$ ',
-                border: OutlineInputBorder(),
               ),
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [AppFormatters.inputMilesDecimal],
             ),
-            const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: AppSpacing.md),
             TextField(
               controller: detalleCtrl,
-              decoration: const InputDecoration(
+              style: AppType.body.copyWith(color: c.text),
+              decoration: _inputDecoration(
+                dCtx,
                 labelText: 'Detalle (peaje, combustible, etc.)',
-                border: OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: AppSpacing.md),
             _BotonFecha(
               label: 'Fecha del gasto',
               fecha: fecha,
@@ -117,13 +128,13 @@ class _SeccionGastos extends StatelessWidget {
           ],
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.of(dCtx).pop(false),
-            child: const Text('Cancelar'),
           ),
-          FilledButton(
+          AppButton.primary(
+            label: 'Agregar',
             onPressed: () => Navigator.of(dCtx).pop(true),
-            child: const Text('Agregar'),
           ),
         ],
       );
@@ -135,12 +146,13 @@ class _SeccionGastos extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final total = gastos.fold<double>(0, (a, g) => a + g.monto);
     final children = <Widget>[
       if (gastos.isEmpty)
         Text(
           'Sin gastos cargados.',
-          style: AppType.label.copyWith(color: Colors.white60),
+          style: AppType.bodySm.copyWith(color: c.textMuted),
         )
       else
         ...gastos.asMap().entries.map((entry) {
@@ -150,28 +162,27 @@ class _SeccionGastos extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 2),
             child: Row(
               children: [
-                const Icon(Icons.add_circle_outline,
-                    size: 16, color: AppColors.success),
-                const SizedBox(width: 6),
+                Icon(Icons.add_circle_outline, size: 15, color: c.brandSoft),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     '${g.detalle ?? 'Gasto'} '
                     '(${AppFormatters.formatearFecha(g.fecha)})',
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    style: AppType.bodySm.copyWith(color: c.textSecondary),
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: AppSpacing.sm),
                 Text(
-                  '\$${AppFormatters.formatearMonto(g.monto)}',
-                  style: const TextStyle(
-                    color: AppColors.success,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
+                  '\$ ${AppFormatters.formatearMonto(g.monto)}',
+                  style: AppType.mono.copyWith(
+                    color: c.brandSoft,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.delete_outline,
-                      size: 18, color: Colors.white54),
+                  icon: Icon(Icons.delete_outline, size: 18, color: c.textMuted),
                   tooltip: 'Eliminar gasto',
                   onPressed: () async {
                     // Confirm (auditoria 2026-05-17): antes el delete era
@@ -200,26 +211,23 @@ class _SeccionGastos extends StatelessWidget {
           );
         }),
       if (gastos.isNotEmpty) ...[
-        const Divider(color: Colors.white24, height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Total gastos del tramo',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
-            ),
-            Text(
-              '\$${AppFormatters.formatearMonto(total)}',
-              style: AppType.body.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
-            ),
-          ],
+        const SizedBox(height: AppSpacing.sm),
+        const AppHairline(),
+        const SizedBox(height: AppSpacing.sm),
+        _Linea(
+          label: 'Total gastos del tramo',
+          valor: '\$ ${AppFormatters.formatearMonto(total)}',
+          highlight: true,
+          mono: true,
         ),
       ],
       const SizedBox(height: AppSpacing.sm),
-      OutlinedButton.icon(
+      AppButton.secondary(
+        label: 'Agregar gasto',
+        icon: Icons.add,
+        size: AppButtonSize.sm,
+        expand: true,
         onPressed: () => _agregar(context),
-        icon: const Icon(Icons.add, size: 18),
-        label: const Text('AGREGAR GASTO'),
       ),
     ];
     if (enmarcadoComoSubseccion) {
