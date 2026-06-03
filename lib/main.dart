@@ -15,6 +15,7 @@ import 'core/services/notification_service.dart';
 import 'routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/platform_chrome.dart';
+import 'core/window/desktop_window.dart';
 import 'core/constants/app_constants.dart';
 
 // 🔹 DEPENDENCIAS
@@ -41,6 +42,10 @@ const Duration _sentryDedupWindow = Duration(seconds: 10);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Desktop (Windows/macOS/Linux): ventana nativa — tamaño mínimo 1200×720,
+  // título y fondo near-black (sin flash blanco al abrir). No-op en móvil/web.
+  await initDesktopWindow();
 
   // Refactor Núcleo: status bar transparente + íconos claros y system nav bar
   // near-black (iOS/Android). No-op en web/desktop. Idempotente.

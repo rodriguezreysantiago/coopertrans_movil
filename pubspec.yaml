@@ -14,8 +14,13 @@ dependencies:
 
   # ================= UI / TIPOGRAFÍA =================
   # Refactor Núcleo (jun 2026): Geist + Geist Mono vía google_fonts.
-  # window_manager (title bar custom desktop) se agrega en Fase 5, cuando se usa.
   google_fonts: ^6.2.1
+
+  # ================= DESKTOP (Windows/macOS/Linux) =================
+  # Ventana nativa: tamaño mínimo, título y fondo near-black (sin flash blanco
+  # al abrir). Solo desktop — conditional import en core/window/desktop_window
+  # → window_manager (importa dart:io) nunca entra al build web.
+  window_manager: ^0.4.2
 
   # ================= ESTADO GLOBAL =================
   provider: ^6.1.2   # ✅ AGREGADO
