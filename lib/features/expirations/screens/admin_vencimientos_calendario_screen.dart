@@ -238,15 +238,19 @@ class _AdminVencimientosCalendarioScreenState
           const SizedBox(height: AppSpacing.lg),
           // Bento: calendario + lista del día.
           if (esAncho)
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(flex: 8, child: calendario),
-                  const SizedBox(width: AppSpacing.mdDense),
-                  Expanded(flex: 4, child: listaDia),
-                ],
-              ),
+            // OJO: nada de IntrinsicHeight acá. TableCalendar usa un PageView
+            // internamente que NO reporta bien su altura intrínseca, así que
+            // IntrinsicHeight le calculaba una altura menor a la real y lo
+            // RECORTABA (se veían solo 2-3 filas del mes). Con start cada
+            // columna toma su altura natural, alineadas arriba — el calendario
+            // se muestra completo y el panel queda a su lado.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 8, child: calendario),
+                const SizedBox(width: AppSpacing.mdDense),
+                Expanded(flex: 4, child: listaDia),
+              ],
             )
           else ...[
             calendario,
