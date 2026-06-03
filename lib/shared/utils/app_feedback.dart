@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/shared/constants/app_colors.dart';
 /// Helper centralizado para mostrar SnackBars con paleta y duración
 /// consistentes en toda la app.
 ///
@@ -33,13 +34,15 @@ import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 class AppFeedback {
   AppFeedback._();
 
-  // Paleta semántica. Todas las pantallas que necesiten estos colores
-  // (badges, bordes, etc.) deberían referenciar estas constantes en vez
-  // de hardcodear `Colors.green` / `AppColors.error`.
-  static const Color colorSuccess = Color(0xFF2E7D32); // green 800
-  static const Color colorError = Color(0xFFD32F2F);   // red 700
-  static const Color colorWarning = Color(0xFFEF6C00); // orange 800
-  static const Color colorInfo = Color(0xFF1565C0);    // blue 800
+  // Acentos semánticos del Núcleo (paleta brillante pensada como acento sobre
+  // superficie near-black). Se usan como color del ícono + barra lateral del
+  // SnackBar, NO como fondo: el fondo es oscuro y el texto claro (ver `_build`),
+  // así estos tonos brillantes quedan legibles. Las pantallas que necesiten un
+  // color semántico deberían usar `context.colors` (success/error/...).
+  static const Color colorSuccess = AppColors.success; // #4ADE80
+  static const Color colorError = AppColors.error;     // #FB7185
+  static const Color colorWarning = AppColors.warning; // #FBBF24
+  static const Color colorInfo = AppColors.info;       // #60A5FA
 
   static const Duration _durationDefault = Duration(seconds: 3);
   static const Duration _durationLong = Duration(seconds: 5);
@@ -171,21 +174,34 @@ class AppFeedback {
     Duration? duration,
   }) {
     return SnackBar(
-      backgroundColor: color,
+      backgroundColor: AppColors.surface3, // near-black elevado (Núcleo)
       behavior: SnackBarBehavior.floating,
+      elevation: 0,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        side: const BorderSide(color: AppColors.borderStrong), // hairline
       ),
       duration: duration ?? _durationDefault,
       content: Row(
         children: [
-          Icon(icono, color: Colors.white, size: 20),
+          // Barra de acento del color semántico: el color "habla" desde acá
+          // (+ el ícono), no desde el fondo, para que el texto quede legible.
+          Container(
+            width: 3,
+            height: 26,
+            decoration: BoxDecoration(
+              color: color,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+          ),
           const SizedBox(width: AppSpacing.md),
+          Icon(icono, color: color, size: 20),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               mensaje,
               style: const TextStyle(
-                color: Colors.white,
+                color: AppColors.textPrimary,
                 fontWeight: FontWeight.w500,
               ),
             ),
