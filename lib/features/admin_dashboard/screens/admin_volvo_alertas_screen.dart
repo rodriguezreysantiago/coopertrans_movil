@@ -292,7 +292,11 @@ class _AdminVolvoAlertasScreenState extends State<AdminVolvoAlertasScreen> {
               if (mounted) setState(() => _pagina = 0);
             });
           }
-          final inicio = _pagina * _itemsPorPagina;
+          // clamp(inicio) además del fin: si _pagina quedó alto tras un filtro
+          // agresivo, el reset a 0 es post-frame (un frame después), así que en
+          // ESTE build inicio podía superar a fin y sublist tiraba RangeError.
+          final inicio =
+              (_pagina * _itemsPorPagina).clamp(0, docsFiltrados.length);
           final fin =
               (inicio + _itemsPorPagina).clamp(0, docsFiltrados.length);
           final pagina = docsFiltrados.sublist(inicio, fin);
