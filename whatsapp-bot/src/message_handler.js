@@ -377,7 +377,24 @@ function crearHandler(fs, wa) {
   return async (msg) => {
     try {
       // ─── Filtros básicos ───
-      if (msg.fromMe) return; // mensajes del propio bot
+      // Descartar nuestros propios mensajes (salientes). Ademas de msg.fromMe,
+      // miramos el id serializado de wweb.js ("<fromMe>_<chat>_<id>", ej.
+      // "true_549...@c.us_XXXX", string crudo del MsgKey): en una sesion RECIEN
+      // vinculada el getter msg.fromMe a veces NO viene confiable y el bot
+      // procesaba sus PROPIOS avisos como entrantes -> se AUTO-RESPONDIA con el
+      // acuse, duplicando envios (agravo el ban del numero nuevo, 2026-06-03).
+      const idSer = String((msg.id && msg.id._serialized) || '');
+      if (msg.fromMe || idSer.startsWith('true_')) {
+        // Rastro si el id lo marco propio pero el getter fromMe NO: confirma el
+        // caso "sesion nueva" la proxima vez (para el fix fino si hiciera falta).
+        if (!msg.fromMe && idSer.startsWith('true_')) {
+          log.warn(
+            `[handler] saliente propio atrapado por id (fromMe=${msg.fromMe}, ` +
+            `id=${idSer.slice(0, 48)})`
+          );
+        }
+        return;
+      }
       if (msg.isStatus) return; // status updates
       if (msg.from && msg.from.endsWith('@g.us')) return; // grupo
       // Aceptamos @c.us (chats con contactos) y @lid (linked-id de
