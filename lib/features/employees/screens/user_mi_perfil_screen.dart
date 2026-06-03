@@ -20,8 +20,7 @@ import '../../../shared/utils/phone_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../../shared/widgets/foto_perfil_avatar.dart';
 
-/// Perfil del chofer (vista del usuario, no admin) — REFACTOR 2026-05-28
-/// (gold-standard cleanup post design-system).
+/// Perfil del chofer (vista del usuario, no admin) — REFACTOR NÚCLEO (jun 2026).
 ///
 /// **Cambios vs. la versión previa** (que era una "isla" — el sweep
 /// mecánico no la tocó porque usaba `Colors.green` / `Colors.whiteNN`

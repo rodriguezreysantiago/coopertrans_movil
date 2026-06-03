@@ -17,7 +17,7 @@ import '../../gomeria/screens/gomeria_v2_hub_screen.dart';
 import '../../vehicles/providers/vehiculo_provider.dart';
 import '../../vehicles/services/vehiculo_repository.dart';
 
-/// Panel principal — REFACTOR 2026-05-24.
+/// Panel principal del CHOFER — REFACTOR NÚCLEO (jun 2026).
 ///
 /// **Antes:** grid 2×2 con tiles de colores neón (azul / naranja / verde /
 /// rojo), saludo "BIENVENIDO" + nombre en 32px, footer "Legajo: X · Rol: Y".

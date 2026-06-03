@@ -28,6 +28,16 @@ import 'admin_panel_screen.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
+/// Shell admin · REFACTOR NÚCLEO (jun 2026).
+///
+/// Fix crítico del fondo: el LinearGradient(brandDark) saturado de mayo
+/// 2026 fue reemplazado por ColoredBox(context.colors.bg) + AppAmbient
+/// sutil. Eso resuelve el "fondo violeta gigante" que afectaba TODAS las
+/// pantallas admin renderizadas dentro del shell.
+///
+/// Las 15 secciones del menú conservan su `requiredCapability` — el RBAC
+/// NO se tocó en el refactor visual.
+///
 /// Shell principal del admin con navegación lateral.
 ///
 /// - **Desktop (≥ 800px)**: NavigationRail a la izquierda con labels.
