@@ -12,7 +12,7 @@ process.env.TZ = 'America/Argentina/Buenos_Aires';
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
-const { _buscarEmpleadoEn, _buscarPorPushname } = require('../src/message_handler');
+const { _buscarEmpleadoEn, _buscarPorLid } = require('../src/message_handler');
 
 const emp = (dni, telefono, nombre) => ({
   dni,
@@ -53,52 +53,45 @@ describe('_buscarEmpleadoEn — matching de teléfono', () => {
   });
 });
 
-// ─── Fallback por PUSHNAME (chats @lid sin teléfono real) ───
-// Casi todos los choferes mandan desde @lid: WhatsApp ya no entrega su teléfono
-// real, así que el match por teléfono falla y el resolver cae a identificar por
-// el nombre de WhatsApp. Confirmado 2026-06-03: el agente solo respondía a
-// admins porque ningún chofer/supervisor @lid resolvía por teléfono.
-const empPN = (dni, nombre, apodo, activo = true) => ({
-  dni,
-  data: { NOMBRE: nombre, APODO: apodo, ACTIVO: activo },
-});
+// ─── Match por WA_LID memorizado (chats @lid sin teléfono real) ───
+// Casi todos los choferes mandan desde @lid: WhatsApp ya no entrega su teléfono.
+// La 1ª vez que el bot los reconoce por teléfono (estando agendados) memoriza su
+// "linked id" (WA_LID); de ahí en más los reconoce EXACTO por ese lid. Igualdad
+// estricta — sin heurísticas de nombre (el match por pushname se descartó por
+// inseguro 2026-06-03: podía confundir dos personas y filtrar datos sensibles).
+const empLid = (dni, waLid) => ({ dni, data: { WA_LID: waLid } });
 
-describe('_buscarPorPushname — fallback por nombre de WhatsApp (@lid)', () => {
+describe('_buscarPorLid — match exacto por WA_LID memorizado (@lid)', () => {
   const roster = [
-    empPN('1', 'BASTIAS HORACIO RENE', ''),
-    empPN('2', 'PEREZ JUAN CARLOS', 'PIPI'),
-    empPN('3', 'GOMEZ MARIA', ''),
+    empLid('1', '259463437111345'),
+    empLid('2', '188900112233445'),
+    { dni: '3', data: {} }, // sin WA_LID aprendido todavía
   ];
 
-  test('NOMBRE contiene todos los tokens del pushname → matchea', () => {
-    const r = _buscarPorPushname('Bastias Horacio', roster);
+  test('lid memorizado → matchea exacto', () => {
+    const r = _buscarPorLid('259463437111345', roster);
     assert.ok(r);
     assert.strictEqual(r.dni, '1');
   });
 
-  test('APODO exacto (case-insensitive) → matchea', () => {
-    const r = _buscarPorPushname('pipi', roster);
+  test('lid con caracteres no-dígito se normaliza igual', () => {
+    const r = _buscarPorLid('259463437111345@lid', roster);
     assert.ok(r);
-    assert.strictEqual(r.dni, '2');
+    assert.strictEqual(r.dni, '1');
   });
 
-  test('un solo token (sin apodo) → null (evita falsos positivos)', () => {
-    assert.strictEqual(_buscarPorPushname('Horacio', roster), null);
+  test('lid desconocido → null (no adivina)', () => {
+    assert.strictEqual(_buscarPorLid('999999999999999', roster), null);
   });
 
-  test('pushname que matchea 2 empleados → null (ambiguo)', () => {
-    const dup = [empPN('1', 'PEREZ JUAN', ''), empPN('2', 'PEREZ JUANA', '')];
-    assert.strictEqual(_buscarPorPushname('Perez Juan', dup), null);
+  test('empleado sin WA_LID nunca matchea', () => {
+    assert.strictEqual(_buscarPorLid('', roster), null);
+    // un lid vacío no debe colapsar contra el empleado sin WA_LID (dni 3)
+    assert.strictEqual(_buscarPorLid('   ', roster), null);
   });
 
-  test('empleado ACTIVO=false no matchea', () => {
-    const inactivo = [empPN('1', 'BASTIAS HORACIO RENE', '', false)];
-    assert.strictEqual(_buscarPorPushname('Bastias Horacio', inactivo), null);
-  });
-
-  test('pushname vacío / muy corto / lista nula → null', () => {
-    assert.strictEqual(_buscarPorPushname('', roster), null);
-    assert.strictEqual(_buscarPorPushname('ab', roster), null);
-    assert.strictEqual(_buscarPorPushname('Bastias Horacio', null), null);
+  test('inputs nulos → null', () => {
+    assert.strictEqual(_buscarPorLid(null, roster), null);
+    assert.strictEqual(_buscarPorLid('259463437111345', null), null);
   });
 });

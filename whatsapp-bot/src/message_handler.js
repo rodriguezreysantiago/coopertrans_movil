@@ -107,78 +107,48 @@ async function asegurarCacheEmpleados(db) {
   }
 }
 
-async function _resolverChofer(db, fromNumber, pushname = '') {
+async function _resolverChofer(db, fromNumber, fromLid = null) {
   const fromDigits = String(fromNumber).replace(/\D+/g, '');
-  if (!fromDigits && !String(pushname).trim()) return null;
+  if (!fromDigits && !fromLid) return null;
 
   // Refresh cache si nunca se cargo o si expiro el TTL.
   await asegurarCacheEmpleados(db);
 
-  // Fix M3 (auditoria 24/7 2026-05-18): match ESTRICTO por
-  // normalizacion E.164, no por sufijo. El match por sufijo de 10
-  // digitos permitia spoofing entre 2 choferes con los mismos
-  // ultimos 10 digitos (raro pero posible — caso real: chofer con
-  // numero internacional cuyos ultimos 10 digitos coinciden con
-  // un argentino). Normalizar ambos a WID canonico (5492914567890)
-  // y comparar igualdad estricta.
-  //
-  // `normalizarTelefonoAWid` agrega prefijo pais 54 + mobile prefix 9
-  // si falta, y devuelve `<digitos>@c.us`. Quitamos el sufijo `@c.us`
-  // para comparar solo digitos.
+  // Pasada 0: match EXACTO por WA_LID memorizado. Si ya "aprendimos" el lid de
+  // este chofer (la 1ª vez que resolvió por teléfono, ver _aprenderLid), lo
+  // reconocemos aunque WhatsApp ya no entregue su teléfono. Gana sobre todo.
+  const porLid = _buscarPorLid(fromLid, _cacheEmpleados);
+  if (porLid) return { ...porLid, _via: 'lid' };
+
+  // Resto: match por TELÉFONO. Solo aplica si llegó un teléfono real (chofer
+  // AGENDADO → @c.us, o getContact() resolvió el número). Igualdad ESTRICTA
+  // sobre el canónico E.164 (fix M3: nada de sufijos, evita spoofing entre dos
+  // choferes con los mismos últimos 10 dígitos).
+  if (!fromDigits) return null;
   const fromWid = normalizarTelefonoAWid(fromNumber);
   const fromCanonical = fromWid ? String(fromWid).replace(/@c\.us$/, '') : null;
 
-  // Pasada 1: match EXACTO (#1 bruto / #2 WID normalizado). Tiene que ganar
-  // SIEMPRE sobre el laxo: si un empleado iterado antes matchea solo por la
-  // forma canónica AR (#3) pero OTRO es el dueño exacto del número, el exacto
-  // debe ganar (sin esto, el orden de iteración de Firestore decidía).
+  // Pasada 1: EXACTO (#1 bruto / #2 WID normalizado). Gana sobre el laxo.
   for (const { dni, data } of _cacheEmpleados) {
     const tel = String(data.TELEFONO || '').replace(/\D+/g, '');
     if (!tel) continue;
-
-    // Match #1: exacto bruto (sin normalizacion). Cubre el caso
-    // donde el TELEFONO en EMPLEADOS ya esta en E.164 canonico.
-    if (fromDigits === tel) {
-      return { dni, data };
-    }
-
-    // Match #2: comparar normalizados a E.164. Si ambos se
-    // normalizan al mismo WID, es match estricto.
+    if (fromDigits === tel) return { dni, data, _via: 'tel' };
     if (fromCanonical) {
       const telWid = normalizarTelefonoAWid(tel);
-      if (telWid) {
-        const telCanonical = String(telWid).replace(/@c\.us$/, '');
-        if (fromCanonical === telCanonical) {
-          return { dni, data };
-        }
+      if (telWid && fromCanonical === String(telWid).replace(/@c\.us$/, '')) {
+        return { dni, data, _via: 'tel' };
       }
     }
   }
 
-  // Pasada 2: match LAXO (#3) — forma canónica AR, reconcilia el "9" móvil.
-  // WhatsApp entrega el ID SIN el 9 (542915115568) pero los TELEFONOS suelen
-  // estar cargados CON el 9 (5492915115568); sin esto ningún número así matchea
-  // (el agente no respondía a choferes ni supervisores, solo a admins por
-  // whitelist). Solo corre si NINGÚN match exacto en la pasada 1.
+  // Pasada 2: LAXO (#3) — forma canónica AR, reconcilia el "9" móvil que
+  // WhatsApp NO entrega (542915115568) vs el TELEFONO cargado con-9.
   for (const { dni, data } of _cacheEmpleados) {
     const tel = String(data.TELEFONO || '').replace(/\D+/g, '');
     if (!tel) continue;
     if (telefonoCanonicalAr(fromDigits) === telefonoCanonicalAr(tel)) {
-      return { dni, data };
+      return { dni, data, _via: 'tel' };
     }
-  }
-
-  // Pasada 3: fallback por PUSHNAME (nombre de WhatsApp). Casi todos los
-  // choferes mandan desde @lid (números no agendados) y WhatsApp ya no expone
-  // su teléfono real, así que las pasadas por teléfono no matchean. Sin esto el
-  // agente quedaba mudo con TODOS los choferes (confirmado 2026-06-03). Mismo
-  // criterio conservador que commands._resolverChoferPorTelefono.
-  const m = _buscarPorPushname(pushname, _cacheEmpleados);
-  if (m) {
-    log.info(
-      `Chofer resuelto por pushname "${String(pushname).trim()}" → DNI ${m.dni} (@lid, sin match por teléfono)`
-    );
-    return m;
   }
   return null;
 }
@@ -435,27 +405,36 @@ function crearHandler(fs, wa) {
       // Fase 3 descartaban a TODOS esos choferes (solo los /comandos los
       // resolvían, porque commands.js ya hace este getContact).
       let fromNumber = msg.from.replace(/@(c\.us|lid)$/, '');
-      // Pushname (nombre que el remitente puso en su perfil de WhatsApp). Es el
-      // ÚNICO identificador confiable cuando el chat es @lid: WhatsApp ya no
-      // expone el teléfono real de números no agendados (getContact().number
-      // viene vacío), así que el match por teléfono falla y el resolver cae a
-      // esto. Confirmado 2026-06-03: 21d de AGENTE_CONVERSACIONES eran 100%
-      // ADMIN porque ningún chofer/supervisor @lid resolvía.
-      let pushname = (msg._data && msg._data.notifyName) || '';
+      // LID crudo del remitente (el "linked id" de WhatsApp, estable por
+      // usuario). Para chats @lid es el ÚNICO identificador que llega: WhatsApp
+      // ya no expone el teléfono real de números no agendados. Lo usamos para
+      // reconocer EXACTO a quien ya "aprendimos" antes (ver _aprenderLid).
+      const fromLid = (tipoChat === 'lid')
+        ? String(fromNumber).replace(/\D+/g, '')
+        : null;
       if (tipoChat === 'lid') {
         try {
           const contacto = await msg.getContact();
           if (contacto) {
+            // Si el chofer está AGENDADO en la cuenta del bot, getContact()
+            // devuelve su teléfono real → match exacto por teléfono. Si no,
+            // queda el lid (y caemos al match por WA_LID ya aprendido).
             fromNumber =
                 contacto.number || (contacto.id && contacto.id.user) || fromNumber;
-            pushname = pushname || contacto.pushname || contacto.name || '';
           }
         } catch (_) {
           // si falla, seguimos con el linked-id (peor caso: no resuelve)
         }
       }
-      const chofer = await _resolverChofer(db, fromNumber, pushname);
-      const persona = await _resolverPersonaAgente(db, fromNumber, chofer, pushname);
+      const chofer = await _resolverChofer(db, fromNumber, fromLid);
+      const persona = await _resolverPersonaAgente(db, fromNumber, chofer, fromLid);
+      // Aprendizaje de LID: si identificamos a la persona por TELÉFONO (match
+      // estricto) y el chat vino por @lid, memorizamos su lid en EMPLEADOS para
+      // reconocerla EXACTO la próxima vez aunque WhatsApp esconda el teléfono.
+      // Fire-and-forget (no bloquea la respuesta).
+      if (persona && persona.dni && fromLid && persona._via === 'tel') {
+        _aprenderLid(db, persona.dni, fromLid);
+      }
       if (!persona) {
         log.debug(`Mensaje de número no registrado ${fromNumber}, ignoro.`);
         return;
@@ -671,37 +650,45 @@ function _normalizarRol(rol) {
 }
 
 /**
- * Match conservador de un empleado por su PUSHNAME (nombre de WhatsApp).
- * Fallback para chats @lid donde WhatsApp no entrega el teléfono real. Match
- * único, sin arriesgar falsos positivos:
- *   - APODO exacto (case-insensitive), o
- *   - NOMBRE conteniendo TODOS los tokens (>=3 chars) del pushname (>=2 tokens).
- * Si 0 o >1 empleados matchean, devuelve null (ambiguo → no resuelve).
+ * Match EXACTO de un empleado por su WA_LID memorizado (el "linked id" de
+ * WhatsApp, estable por usuario). Es la forma robusta de reconocer a quien
+ * escribe desde un chat @lid donde WhatsApp ya no entrega el teléfono: el lid
+ * se aprende la 1ª vez que el chofer resuelve por teléfono (ver _aprenderLid).
+ * Igualdad ESTRICTA sobre dígitos — sin heurísticas de nombre, sin falsos
+ * positivos. (El match por pushname se descartó el 2026-06-03 por inseguro:
+ * podía confundir a dos personas con nombre parecido y filtrar datos sensibles.)
  */
-function _buscarPorPushname(pushname, lista) {
-  const pn = String(pushname || '').trim();
-  if (pn.length < 3 || !lista) return null;
-  const pushUp = pn.toUpperCase();
-  const pushTokens = pushUp.split(/\s+/).filter((t) => t.length >= 3);
-  const matches = [];
+function _buscarPorLid(fromLid, lista) {
+  const lidNorm = String(fromLid || '').replace(/\D+/g, '');
+  if (!lidNorm || !lista) return null;
   for (const item of lista) {
-    const data = item.data || {};
-    if (data.ACTIVO === false) continue;
-    const nombre = String(data.NOMBRE || '').toUpperCase();
-    const apodo = String(data.APODO || '').toUpperCase();
-    if (apodo && apodo === pushUp) {
-      matches.push(item);
-      continue;
-    }
-    if (
-      nombre &&
-      pushTokens.length >= 2 &&
-      pushTokens.every((t) => nombre.includes(t))
-    ) {
-      matches.push(item);
-    }
+    const waLid = String((item.data || {}).WA_LID || '').replace(/\D+/g, '');
+    if (waLid && waLid === lidNorm) return item;
   }
-  return matches.length === 1 ? matches[0] : null;
+  return null;
+}
+
+/**
+ * Memoriza el WA_LID de un empleado en EMPLEADOS (merge). Se llama cuando lo
+ * identificamos por TELÉFONO (match estricto) y el chat vino por @lid: así la
+ * próxima vez lo reconocemos EXACTO por su lid, sin depender de que WhatsApp
+ * entregue el teléfono. Idempotente; invalida el cache para tomarlo enseguida.
+ * Como solo se memoriza tras un match por teléfono, el lid queda asociado al
+ * chofer correcto — nunca a uno adivinado.
+ */
+async function _aprenderLid(db, dni, fromLid) {
+  const lidNorm = String(fromLid || '').replace(/\D+/g, '');
+  if (!dni || !lidNorm) return;
+  try {
+    await db.collection('EMPLEADOS').doc(String(dni)).set(
+      { WA_LID: lidNorm },
+      { merge: true }
+    );
+    invalidarCacheEmpleados();
+    log.info(`[lid-learning] WA_LID ${lidNorm} → DNI ${dni} memorizado`);
+  } catch (e) {
+    log.warn(`[lid-learning] no pude guardar WA_LID de ${dni}: ${e.message}`);
+  }
 }
 
 /** Busca el {dni, data} de un empleado por teléfono (E.164) en `lista`. */
@@ -740,16 +727,16 @@ function _buscarEmpleadoEn(telefono, lista) {
  *   - ADMIN si su teléfono está en ADMIN_PHONES (gana sobre lo anterior).
  * Devuelve null si el número no pertenece a ningún empleado ni admin.
  */
-async function _resolverPersonaAgente(db, fromNumber, chofer, pushname = '') {
+async function _resolverPersonaAgente(db, fromNumber, chofer, fromLid = null) {
   // Admin gana SIEMPRE (su teléfono/lid está en ADMIN_PHONES). Va PRIMERO para
-  // que un eventual match de pushname con un chofer homónimo no lo degrade a
-  // CHOFER (vos sos el usuario crítico: no podés perder tus tools de gestión).
+  // que nada lo degrade (vos sos el usuario crítico: no podés perder tools).
   if (commands._esAdmin(fromNumber)) {
     return {
       rol: 'ADMIN',
       dni: chofer ? chofer.dni : null,
       nombre: chofer ? chofer.data.NOMBRE : nombrePorTelefonoTodos(fromNumber),
       data: chofer ? chofer.data : {},
+      _via: chofer ? chofer._via : 'admin',
     };
   }
   if (chofer) {
@@ -758,34 +745,33 @@ async function _resolverPersonaAgente(db, fromNumber, chofer, pushname = '') {
       dni: chofer.dni,
       nombre: chofer.data.NOMBRE,
       data: chofer.data,
+      _via: chofer._via,
     };
   }
   await asegurarCacheEmpleados(db);
-  const emp = _buscarEmpleadoEn(fromNumber, _rosterConId || []);
-  let rol = emp ? _normalizarRol(emp.data.ROL) : null;
-  if (commands._esAdmin(fromNumber)) rol = 'ADMIN';
-  // Fallback por pushname para roles de GESTIÓN (supervisores como Molina) que
-  // mandan desde @lid y no resolvieron por teléfono ni están en ADMIN_PHONES.
-  // Devuelve el ROL REAL del empleado (no asume CHOFER). Los choferes ya los
-  // cubre _resolverChofer (que también cae a pushname).
-  if (!emp && rol !== 'ADMIN') {
-    const m = _buscarPorPushname(pushname, _rosterConId || []);
-    if (m) {
-      return {
-        rol: _normalizarRol(m.data.ROL),
-        dni: m.dni,
-        nombre: m.data.NOMBRE,
-        data: m.data,
-      };
-    }
+  // Roles de GESTIÓN (supervisores como Molina): EXACTO por WA_LID memorizado,
+  // o por teléfono. Sin heurísticas de nombre — devuelve el ROL REAL.
+  const porLid = _buscarPorLid(fromLid, _rosterConId || []);
+  if (porLid) {
+    return {
+      rol: _normalizarRol(porLid.data.ROL),
+      dni: porLid.dni,
+      nombre: porLid.data.NOMBRE,
+      data: porLid.data,
+      _via: 'lid',
+    };
   }
-  if (!rol) return null;
-  return {
-    rol,
-    dni: emp ? emp.dni : null,
-    nombre: emp ? emp.data.NOMBRE : nombrePorTelefonoTodos(fromNumber),
-    data: emp ? emp.data : {},
-  };
+  const emp = _buscarEmpleadoEn(fromNumber, _rosterConId || []);
+  if (emp) {
+    return {
+      rol: _normalizarRol(emp.data.ROL),
+      dni: emp.dni,
+      nombre: emp.data.NOMBRE,
+      data: emp.data,
+      _via: 'tel',
+    };
+  }
+  return null;
 }
 
 module.exports = {
@@ -798,5 +784,5 @@ module.exports = {
   _resolverChofer,
   _asociarConAviso,
   _buscarEmpleadoEn,
-  _buscarPorPushname,
+  _buscarPorLid,
 };
