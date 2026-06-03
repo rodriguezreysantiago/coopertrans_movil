@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#E8EAED</color>
+    <!-- Splash / window background near-black (Núcleo). Evita el flash blanco
+         al abrir en frío con el SO en modo claro + Android 12+ SplashScreen. -->
+    <color name="splashBackground">#FF050505</color>
 </resources>
