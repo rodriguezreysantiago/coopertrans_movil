@@ -1810,17 +1810,48 @@ function _esCuota(e) {
  *  una vez y, si sigue, cae a Anthropic (si hay key). Sin Anthropic, el
  *  reintento igual cubre los 429 transitorios; el resto sube al catch que
  *  responde "probá en un rato". */
-async function _conversarRobusto(provider, db, system, historial, userText, persona) {
-  const args = [db, system, historial, userText, persona];
-  // Provider forzado por env (AGENTE_PROVIDER): groq/anthropic directo, sin la
-  // cadena de fallback (que solo aplica cuando el primario es Gemini). Sirve
-  // para PROBAR Groq aislado sin esperar a un 429 real.
-  if (provider === 'groq') return _conversarGroq(...args);
-  if (provider !== 'gemini') {
+// Cadena de fallback GRATIS->pago: Groq (si hay key) y por ultimo Claude.
+// Devuelve la respuesta, o null si no hay NINGUN fallback configurado.
+async function _fallbackLLM(args) {
+  if (process.env.GROQ_API_KEY) {
+    log.warn('[agente] fallback a Groq (Llama, gratis)');
+    try {
+      return await _conversarGroq(...args);
+    } catch (e) {
+      log.warn(`[agente] Groq fallo (${String(e.message).slice(0, 80)})`);
+      if (process.env.ANTHROPIC_API_KEY) {
+        log.warn('[agente] -> fallback final a Anthropic (Claude)');
+        return _conversarAnthropic(...args);
+      }
+      throw e;
+    }
+  }
+  if (process.env.ANTHROPIC_API_KEY) {
+    log.warn('[agente] fallback a Anthropic (Claude)');
     return _conversarAnthropic(...args);
   }
+  return null; // sin fallback configurado
+}
+
+// Errores donde otro modelo NO ayuda (el contenido es el problema): bloqueos
+// de safety/recitation. El resto de los "sin texto" (vacio inexplicable,
+// max_tool_iters) SI vale reintentarlos con el fallback — el free tier de
+// Gemini saturado a veces devuelve VACIO en vez de 429 (caso real 2026-06-03).
+function _esBloqueoContenido(error) {
+  return typeof error === 'string' &&
+    /safety|recitation|blocked|prohibited/i.test(error);
+}
+
+async function _conversarRobusto(provider, db, system, historial, userText, persona) {
+  const args = [db, system, historial, userText, persona];
+  // Provider forzado por env (AGENTE_PROVIDER): groq/anthropic directo. Sirve
+  // para PROBAR un proveedor aislado sin esperar a que Gemini falle.
+  if (provider === 'groq') return _conversarGroq(...args);
+  if (provider !== 'gemini') return _conversarAnthropic(...args);
+
+  let r;
   try {
-    return await _conversarGemini(...args);
+    r = await _conversarGemini(...args);
   } catch (e) {
     if (!_esCuota(e)) throw e;
     log.warn(
@@ -1829,31 +1860,22 @@ async function _conversarRobusto(provider, db, system, historial, userText, pers
     );
     await _sleep(RETRY_429_MS);
     try {
-      return await _conversarGemini(...args);
+      r = await _conversarGemini(...args);
     } catch (e2) {
       if (!_esCuota(e2)) throw e2;
-      // Cadena de fallback: primero el GRATIS (Groq/Llama), después Claude
-      // (pago) si hay key. Cada eslabón solo si su API key está configurada.
-      if (process.env.GROQ_API_KEY) {
-        log.warn('[agente] Gemini sin cuota → fallback a Groq (Llama, gratis)');
-        try {
-          return await _conversarGroq(...args);
-        } catch (e3) {
-          log.warn(`[agente] Groq también falló (${String(e3.message).slice(0, 80)})`);
-          if (process.env.ANTHROPIC_API_KEY) {
-            log.warn('[agente] → fallback final a Anthropic (Claude)');
-            return _conversarAnthropic(...args);
-          }
-          throw e3;
-        }
-      }
-      if (process.env.ANTHROPIC_API_KEY) {
-        log.warn('[agente] Gemini sin cuota → fallback a Anthropic (Claude)');
-        return _conversarAnthropic(...args);
-      }
-      throw e2;
+      const fb = await _fallbackLLM(args);
+      if (fb) return fb;
+      throw e2; // sin fallback: que el catch responda "proba en un rato"
     }
   }
+  // Gemini respondio SIN texto y NO es un bloqueo de safety -> saturacion
+  // encubierta o se quedo sin pasos: intentar el fallback antes del mensaje mudo.
+  if (r && !r.texto && !_esBloqueoContenido(r.error)) {
+    log.warn(`[agente] Gemini sin texto (${r.error || 'vacio'}); intento fallback`);
+    const fb = await _fallbackLLM(args);
+    if (fb && fb.texto) return fb;
+  }
+  return r;
 }
 
 // ───────────────────────── logging ─────────────────────────
