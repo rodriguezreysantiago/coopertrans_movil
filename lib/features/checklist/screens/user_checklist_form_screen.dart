@@ -13,12 +13,20 @@ import '../data/checklist_data.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
+
 /// Checklist mensual del chofer (sobre tractor o batea/tolva).
 ///
 /// El chofer responde BUE/REG/MAL para cada item. Si elige REG o MAL,
 /// debe completar una observación. Al guardar, el documento se sube a
 /// Firestore (con soporte offline: si no hay red, queda en cache local
 /// y se sube cuando recupera conexión).
+///
+/// REFACTOR NÚCLEO · jun 2026 — solo el árbol de widgets. Es del CHOFER:
+/// va full-screen (AppScaffold con fondo). El estado del form
+/// (`_respuestas` / `_observaciones` / `_preguntasConError`), la
+/// validación, el guardado con timeout offline, los `TextEditingController`
+/// de observación (preservados en `_ItemPreguntaState`) y la navegación
+/// quedaron INTACTOS.
 class UserChecklistFormScreen extends StatefulWidget {
   final String tipo; // "TRACTOR" o "BATEA"
   final String patente;
@@ -60,7 +68,7 @@ class _UserChecklistFormScreenState
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.lg,
-                  AppSpacing.sm,
+                  AppSpacing.md,
                   AppSpacing.lg,
                   AppSpacing.lg,
                 ),
@@ -218,29 +226,30 @@ class _HeaderInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
-        vertical: AppSpacing.xs + 2,
+        vertical: AppSpacing.md,
       ),
       decoration: BoxDecoration(
-        color: AppColors.success.withAlpha(15),
-        border: Border(
-          bottom: BorderSide(color: AppColors.success.withAlpha(40)),
-        ),
+        color: c.surface1,
+        border: Border(bottom: BorderSide(color: c.border)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.tag, color: AppColors.success, size: 18),
-          const SizedBox(width: AppSpacing.sm),
-          Text('Unidad: ',
-              style: AppType.label.copyWith(color: AppColors.textSecondary)),
-          Text(
-            patente,
-            style: AppType.body.copyWith(
-              color: AppColors.success,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
+          const AppEyebrow('Unidad'),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              patente,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.mono.copyWith(
+                color: c.brand,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 1.5,
+              ),
             ),
           ),
         ],
@@ -258,25 +267,24 @@ class _AvisoObligatorio extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: AppColors.warning.withAlpha(20),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.warning.withAlpha(50)),
+        color: c.surface1,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: c.border),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline,
-              color: AppColors.warning, size: 20),
+          Icon(Icons.info_outline, color: c.textMuted, size: 18),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Text(
-              'Es obligatorio completar todos los puntos. Detalle cualquier novedad en el campo de texto.',
-              style: AppType.label.copyWith(
-                color: AppColors.textSecondary,
-                fontStyle: FontStyle.italic,
-              ),
+              'Es obligatorio completar todos los puntos. Detallá cualquier '
+              'novedad en el campo de texto.',
+              style: AppType.bodySm.copyWith(color: c.textSecondary),
             ),
           ),
         ],
@@ -313,26 +321,12 @@ class _Seccion extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header de la sección
-        Container(
-          padding: const EdgeInsets.symmetric(
-            vertical: AppSpacing.md,
-            horizontal: AppSpacing.lg,
-          ),
-          width: double.infinity,
-          decoration: BoxDecoration(
-            color: AppColors.brand.withAlpha(30),
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            border: Border.all(
-              color: AppColors.brand.withAlpha(50),
-            ),
-          ),
-          child: Text(
-            titulo.toUpperCase(),
-            style: AppType.eyebrow.copyWith(color: AppColors.brand),
-          ),
+        // Header de la sección — eyebrow Núcleo.
+        Padding(
+          padding: const EdgeInsets.only(
+              left: AppSpacing.xs, bottom: AppSpacing.md),
+          child: AppEyebrow(titulo),
         ),
-        const SizedBox(height: AppSpacing.md),
         ...items.map(
           (item) => _ItemPregunta(
             item: item,
@@ -396,41 +390,41 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
     super.dispose();
   }
 
-  Color _colorEstado(String estado) {
+  Color _colorEstado(BuildContext context, String estado) {
+    final c = context.colors;
     switch (estado) {
       case 'BUE':
-        return AppColors.success;
+        return c.success;
       case 'REG':
-        return AppColors.warning;
+        return c.warning;
       case 'MAL':
-        return AppColors.error;
+        return c.error;
       default:
-        return AppColors.textHint;
+        return c.textMuted;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final mostrarObservacion =
         widget.respuesta == 'REG' || widget.respuesta == 'MAL';
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      margin: const EdgeInsets.only(bottom: AppSpacing.mdDense),
       padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.surface2,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
+        color: c.surface2,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
         border: Border.all(
-          color: widget.tieneError
-              ? AppColors.error
-              : AppColors.borderSubtle,
-          width: widget.tieneError ? 2 : 1,
+          color: widget.tieneError ? c.error : c.border,
+          width: widget.tieneError ? 1.5 : 1,
         ),
         boxShadow: widget.tieneError
             ? [
                 BoxShadow(
-                  color: AppColors.error.withAlpha(50),
+                  color: c.error.withValues(alpha: 0.2),
                   blurRadius: 8,
                   spreadRadius: 1,
                 )
@@ -443,77 +437,60 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
           Text(
             widget.item,
             style: AppType.body.copyWith(
-              color: AppColors.textPrimary,
-              fontSize: 15,
+              color: c.text,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: AppSpacing.lg - 2),
-          // Wrap en lugar de Row: si en pantalla angosta los 3 chips
-          // no entran, se reacomodan en lugar de overflowing.
-          Wrap(
-            spacing: AppSpacing.md,
-            runSpacing: AppSpacing.sm,
-            alignment: WrapAlignment.spaceEvenly,
-            children: ['BUE', 'REG', 'MAL'].map((estado) {
-              final seleccionado = widget.respuesta == estado;
-              return ChoiceChip(
-                label: SizedBox(
-                  width: 50,
-                  child: Center(
-                    child: Text(
-                      estado,
-                      style: AppType.label.copyWith(
-                        color: seleccionado
-                            ? Colors.black
-                            : AppColors.textPrimary,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+          const SizedBox(height: AppSpacing.md),
+          // Segmented control de 3 estados (BUE/REG/MAL). Mantiene el
+          // callback `onEstado` por estado — solo cambia el visual.
+          Row(
+            children: [
+              for (final estado in const ['BUE', 'REG', 'MAL']) ...[
+                Expanded(
+                  child: _ChipEstado(
+                    estado: estado,
+                    seleccionado: widget.respuesta == estado,
+                    color: _colorEstado(context, estado),
+                    onTap: () => widget.onEstado(estado),
                   ),
                 ),
-                selected: seleccionado,
-                selectedColor: _colorEstado(estado),
-                backgroundColor: AppColors.surface0,
-                side: BorderSide(
-                  color: seleccionado
-                      ? _colorEstado(estado)
-                      : AppColors.textHint,
-                ),
-                onSelected: (_) => widget.onEstado(estado),
-              );
-            }).toList(),
+                if (estado != 'MAL') const SizedBox(width: AppSpacing.sm),
+              ],
+            ],
           ),
           AnimatedSize(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
             child: mostrarObservacion
                 ? Padding(
-                    padding: const EdgeInsets.only(top: AppSpacing.lg - 2),
+                    padding: const EdgeInsets.only(top: AppSpacing.md),
                     child: TextField(
                       controller: _obsController,
-                      style: AppType.body.copyWith(
-                        color: AppColors.textPrimary,
-                      ),
+                      style: AppType.body.copyWith(color: c.text),
                       maxLines: 2,
                       textCapitalization: TextCapitalization.sentences,
                       decoration: InputDecoration(
-                        hintText: 'Explique la novedad encontrada...',
-                        hintStyle: const TextStyle(
-                          color: AppColors.textDisabled,
-                        ),
+                        isDense: true,
+                        hintText: 'Explicá la novedad encontrada…',
+                        hintStyle:
+                            AppType.body.copyWith(color: c.textPlaceholder),
                         filled: true,
-                        fillColor: AppColors.surface0,
+                        fillColor: c.surface1,
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                         border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.md),
-                          borderSide: BorderSide.none,
+                          borderRadius: BorderRadius.circular(AppRadius.lg),
+                          borderSide: BorderSide(color: c.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(AppRadius.lg),
+                          borderSide: BorderSide(color: c.border),
                         ),
                         focusedBorder: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppRadius.md),
+                          borderRadius: BorderRadius.circular(AppRadius.lg),
                           borderSide: BorderSide(
-                            color: _colorEstado(widget.respuesta!),
+                            color: _colorEstado(context, widget.respuesta!),
                           ),
                         ),
                       ),
@@ -523,6 +500,51 @@ class _ItemPreguntaState extends State<_ItemPregunta> {
                 : const SizedBox.shrink(),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Botón de estado del checklist (BUE/REG/MAL). Seleccionado: relleno con
+/// el color de estado y texto sobre el fondo. Inactivo: borde hairline.
+class _ChipEstado extends StatelessWidget {
+  final String estado;
+  final bool seleccionado;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ChipEstado({
+    required this.estado,
+    required this.seleccionado,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm + 2),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: seleccionado ? color : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(
+            color: seleccionado ? color : c.border,
+          ),
+        ),
+        child: Text(
+          estado,
+          style: AppType.label.copyWith(
+            color: seleccionado ? c.bg : c.textSecondary,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.5,
+          ),
+        ),
       ),
     );
   }
@@ -543,17 +565,12 @@ class _BotonEnviar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      decoration: const BoxDecoration(
-        color: AppColors.surface2,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.surface0,
-            blurRadius: 10,
-            offset: Offset(0, -5),
-          ),
-        ],
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: c.surface1,
+        border: Border(top: BorderSide(color: c.border)),
       ),
       child: SafeArea(
         top: false,

@@ -7,6 +7,7 @@ import '../services/chofer_actividad_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
+
 /// Tablero personal del chofer: km manejados, tractores que usó y
 /// eventos Volvo asociados, en una ventana de 7/30/90 días.
 ///
@@ -16,6 +17,10 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Fase 2) y `volvoAlertasPoller` (con `chofer_dni` snapshoteado).
 ///
 /// Es read-only — el admin solo consume métricas, no edita nada acá.
+///
+/// REFACTOR NÚCLEO · jun 2026 — solo el árbol de widgets. El
+/// FutureBuilder, `ChoferActividadService.resumen`, el selector de
+/// ventana (7/30/90) y el modelo de datos quedaron INTACTOS.
 class ChoferActividadScreen extends StatefulWidget {
   final String dni;
   final String nombreCompleto;
@@ -66,7 +71,10 @@ class _ChoferActividadScreenState extends State<ChoferActividadScreen> {
               future: _futuro,
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
-                  return const AppSkeletonList(count: 5);
+                  return const Padding(
+                    padding: EdgeInsets.only(top: AppSpacing.lg),
+                    child: AppSkeletonList(count: 5, conAvatar: false),
+                  );
                 }
                 if (snap.hasError) {
                   return AppErrorState(
@@ -89,7 +97,7 @@ class _ChoferActividadScreenState extends State<ChoferActividadScreen> {
 }
 
 // =============================================================================
-// HEADER
+// HEADER — eyebrow + nombre + DNI mono
 // =============================================================================
 
 class _Header extends StatelessWidget {
@@ -99,12 +107,23 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.person, color: AppColors.success, size: 22),
-          const SizedBox(width: 10),
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: c.surface3,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: Icon(Icons.person_outline, color: c.brand, size: 18),
+          ),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,13 +132,14 @@ class _Header extends StatelessWidget {
                   nombre,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: AppType.h5.copyWith(color: c.text),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   'DNI $dni',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.eyebrow.copyWith(color: Colors.white54),
+                  style: AppType.monoSm.copyWith(color: c.textMuted),
                 ),
               ],
             ),
@@ -131,7 +151,7 @@ class _Header extends StatelessWidget {
 }
 
 // =============================================================================
-// SELECTOR DE PERÍODO
+// SELECTOR DE PERÍODO — chips pill estilo Núcleo
 // =============================================================================
 
 class _SelectorPeriodo extends StatelessWidget {
@@ -144,12 +164,17 @@ class _SelectorPeriodo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.md),
       child: Row(
         children: [
           for (final d in _opciones) ...[
-            Expanded(child: _Chip(dias: d, selected: d == diasActuales, onTap: () => onCambio(d))),
-            if (d != _opciones.last) const SizedBox(width: AppSpacing.sm),
+            _ChipPeriodo(
+              label: 'Últimos $d días',
+              activo: d == diasActuales,
+              onTap: () => onCambio(d),
+            ),
+            if (d != _opciones.last) const SizedBox(width: AppSpacing.xs),
           ],
         ],
       ),
@@ -157,31 +182,40 @@ class _SelectorPeriodo extends StatelessWidget {
   }
 }
 
-class _Chip extends StatelessWidget {
-  final int dias;
-  final bool selected;
+class _ChipPeriodo extends StatelessWidget {
+  final String label;
+  final bool activo;
   final VoidCallback onTap;
-  const _Chip({required this.dias, required this.selected, required this.onTap});
+  const _ChipPeriodo({
+    required this.label,
+    required this.activo,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.success : Colors.white38;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.success.withAlpha(25)
-              : Colors.white.withAlpha(8),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withAlpha(80)),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          'Últimos $dias días',
-          style: AppType.label.copyWith(color: color, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+    final c = context.colors;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: activo ? c.text : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.full),
+            border: activo ? null : Border.all(color: c.border),
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.label.copyWith(
+              color: activo ? c.bg : c.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
       ),
     );
@@ -198,6 +232,7 @@ class _Resumen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final hayActividad = resumen.kmTotales > 0 ||
         resumen.totalEventos > 0 ||
         resumen.tractores.isNotEmpty ||
@@ -213,103 +248,116 @@ class _Resumen extends StatelessWidget {
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.xxl),
       children: [
-        // ─── KPIs ───
-        Row(
-          children: [
-            Expanded(
-              child: _KpiCard(
-                label: 'KM RECORRIDOS',
-                valor: _formatearMiles(resumen.kmTotales),
-                unidad: 'km',
-                color: AppColors.success,
-                icono: Icons.straighten,
+        // ─── Hero: km recorridos ───
+        _HeroKm(km: resumen.kmTotales),
+        const SizedBox(height: AppSpacing.mdDense),
+
+        // ─── KPIs en grilla 2×2 (AppStat) ───
+        AppCard(
+          margin: EdgeInsets.zero,
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              IntrinsicHeight(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _StatCell(
+                        stat: AppStat(
+                          label: 'Eventos Volvo',
+                          value: '${resumen.totalEventos}',
+                          valueStyle: AppType.h3,
+                          accent: resumen.totalEventos > 0
+                              ? c.warning
+                              : c.textMuted,
+                        ),
+                        borderRight: true,
+                      ),
+                    ),
+                    Expanded(
+                      child: _StatCell(
+                        stat: AppStat(
+                          label: 'Asignaciones',
+                          value: '${resumen.asignaciones}',
+                          valueStyle: AppType.h3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: _KpiCard(
-                label: 'EVENTOS VOLVO',
-                valor: '${resumen.totalEventos}',
-                color: resumen.totalEventos > 0
-                    ? AppColors.warning
-                    : Colors.white54,
-                icono: Icons.bolt,
+              AppHairline(color: c.border),
+              IntrinsicHeight(
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _StatCell(
+                        stat: AppStat(
+                          label: 'Tractores',
+                          value: '${resumen.tractores.length}',
+                          valueStyle: AppType.h3,
+                        ),
+                        borderRight: true,
+                      ),
+                    ),
+                    Expanded(
+                      child: _StatCell(
+                        stat: AppStat(
+                          label: 'Sin telemetría',
+                          value: '${resumen.asignacionesSinTelemetria}',
+                          valueStyle: AppType.h3,
+                          accent: resumen.asignacionesSinTelemetria > 0
+                              ? c.textSecondary
+                              : c.textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.md),
-        Row(
-          children: [
-            Expanded(
-              child: _KpiCard(
-                label: 'ASIGNACIONES',
-                valor: '${resumen.asignaciones}',
-                color: AppColors.info,
-                icono: Icons.swap_horiz,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: _KpiCard(
-                label: 'TRACTORES',
-                valor: '${resumen.tractores.length}',
-                color: AppColors.info,
-                icono: Icons.local_shipping,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
 
         // Aviso de datos parciales si hay asignaciones legacy.
         if (resumen.asignacionesSinTelemetria > 0) ...[
-          const SizedBox(height: AppSpacing.md),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(8),
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              border: Border.all(color: Colors.white24),
-            ),
-            child: Row(
+          const SizedBox(height: AppSpacing.mdDense),
+          _AvisoParcial(cantidad: resumen.asignacionesSinTelemetria),
+        ],
+
+        // ─── Tractores manejados ───
+        if (resumen.tractores.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xl),
+          const _Titulo(label: 'Tractores manejados'),
+          const SizedBox(height: AppSpacing.sm),
+          AppCard(
+            margin: EdgeInsets.zero,
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
+            child: Column(
               children: [
-                const Icon(Icons.info_outline, size: 14, color: Colors.white54),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    '${resumen.asignacionesSinTelemetria} asignación'
-                    '${resumen.asignacionesSinTelemetria == 1 ? '' : 'es'} '
-                    'sin datos de odómetro Sitrack — los km de '
-                    '${resumen.asignacionesSinTelemetria == 1 ? 'esa' : 'esas'} '
-                    'no se pudieron contar.',
-                    style: AppType.eyebrow.copyWith(color: Colors.white54),
-                  ),
-                ),
+                for (var i = 0; i < resumen.tractores.length; i++) ...[
+                  if (i > 0) AppHairline(color: c.border),
+                  _TractorTile(tractor: resumen.tractores[i]),
+                ],
               ],
             ),
           ),
         ],
 
-        const SizedBox(height: AppSpacing.xl),
-
-        // ─── Tractores manejados ───
-        if (resumen.tractores.isNotEmpty) ...[
-          const _Titulo(label: 'TRACTORES MANEJADOS', icono: Icons.local_shipping),
-          const SizedBox(height: AppSpacing.sm),
-          ...resumen.tractores.map((t) => _TractorTile(tractor: t)),
-          const SizedBox(height: AppSpacing.xl),
-        ],
-
         // ─── Eventos por severidad ───
         if (resumen.totalEventos > 0) ...[
-          const _Titulo(label: 'EVENTOS VOLVO', icono: Icons.bolt),
+          const SizedBox(height: AppSpacing.xl),
+          const _Titulo(label: 'Eventos Volvo'),
           const SizedBox(height: AppSpacing.sm),
           _EventosPorSeveridadCard(eventos: resumen.eventosPorSeveridad),
-          const SizedBox(height: AppSpacing.md),
-          if (resumen.eventosPorTipo.isNotEmpty)
+          if (resumen.eventosPorTipo.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.mdDense),
             _EventosPorTipoCard(eventos: resumen.eventosPorTipo),
+          ],
         ],
       ],
     );
@@ -336,63 +384,39 @@ class _Resumen extends StatelessWidget {
 // COMPONENTES
 // =============================================================================
 
-class _KpiCard extends StatelessWidget {
-  final String label;
-  final String valor;
-  final String? unidad;
-  final Color color;
-  final IconData icono;
-
-  const _KpiCard({
-    required this.label,
-    required this.valor,
-    required this.color,
-    required this.icono,
-    this.unidad,
-  });
+/// Hero number del período: km recorridos en grande (neutro, blanco) con
+/// la unidad mono al lado. El número héroe nunca lleva color semántico.
+class _HeroKm extends StatelessWidget {
+  final double km;
+  const _HeroKm({required this.km});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: color.withAlpha(60)),
-      ),
+    final c = context.colors;
+    final hayKm = km > 0;
+    return AppCard(
+      glow: hayKm,
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(icono, color: color, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color.withAlpha(180),
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.6,
-                ),
-              ),
-            ],
-          ),
+          const AppEyebrow('Km recorridos'),
           const SizedBox(height: AppSpacing.sm),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                valor,
-                style: AppType.title.copyWith(color: color, fontWeight: FontWeight.bold),
-              ),
-              if (unidad != null) ...[
-                const SizedBox(width: AppSpacing.xs),
-                Text(
-                  unidad!,
-                  style: AppType.label.copyWith(color: color.withAlpha(180)),
+                hayKm ? _Resumen._formatearMiles(km) : '—',
+                style: AppType.h1.copyWith(
+                  color: c.text,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
+              ),
+              if (hayKm) ...[
+                const SizedBox(width: AppSpacing.sm),
+                Text('km', style: AppType.mono.copyWith(color: c.textMuted)),
               ],
             ],
           ),
@@ -402,23 +426,71 @@ class _KpiCard extends StatelessWidget {
   }
 }
 
-class _Titulo extends StatelessWidget {
-  final String label;
-  final IconData icono;
-  const _Titulo({required this.label, required this.icono});
+/// Celda de un AppStat dentro de la grilla 2×2, con un border hairline a la
+/// derecha opcional (separa columnas). Patrón del detalle de Flota.
+class _StatCell extends StatelessWidget {
+  final AppStat stat;
+  final bool borderRight;
+  const _StatCell({required this.stat, this.borderRight = false});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Icon(icono, color: AppColors.success, size: 16),
-        const SizedBox(width: AppSpacing.sm),
-        Text(
-          label,
-          style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-        ),
-      ],
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.lg),
+      decoration: BoxDecoration(
+        border: borderRight
+            ? Border(right: BorderSide(color: c.border))
+            : null,
+      ),
+      child: stat,
     );
+  }
+}
+
+class _AvisoParcial extends StatelessWidget {
+  final int cantidad;
+  const _AvisoParcial({required this.cantidad});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final plural = cantidad == 1 ? '' : 'es';
+    final esa = cantidad == 1 ? 'esa' : 'esas';
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.surface1,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: c.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, size: 14, color: c.textMuted),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              '$cantidad asignación$plural sin datos de odómetro Sitrack — '
+              'los km de $esa no se pudieron contar.',
+              style: AppType.bodySm.copyWith(color: c.textMuted),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Titulo extends StatelessWidget {
+  final String label;
+  const _Titulo({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppEyebrow(label);
   }
 }
 
@@ -428,64 +500,41 @@ class _TractorTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final km = tractor.kmEnPeriodo;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(8),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: Colors.white12),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
       child: Row(
         children: [
           Text(
             tractor.patente,
-            style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+            style: AppType.mono.copyWith(
+                color: c.text, fontWeight: FontWeight.w600, letterSpacing: 0.5),
           ),
           const SizedBox(width: AppSpacing.sm),
           if (tractor.activaActual)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppColors.success.withAlpha(25),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: AppColors.success.withAlpha(80)),
-              ),
-              child: const Text(
-                'ACTUAL',
-                style: TextStyle(
-                  color: AppColors.success,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.6,
-                ),
-              ),
+            AppBadge(
+              text: 'ACTUAL',
+              color: c.success,
+              size: AppBadgeSize.sm,
             ),
           const Spacer(),
           if (km == null)
-            const Text(
+            Text(
               '— km',
-              style: TextStyle(
-                color: Colors.white38,
-                fontSize: 13,
-                fontStyle: FontStyle.italic,
-              ),
+              style: AppType.mono.copyWith(color: c.textMuted),
             )
           else ...[
             Text(
               '${_Resumen._formatearMiles(km)} km',
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
+              style: AppType.mono.copyWith(
+                  color: c.text, fontWeight: FontWeight.w500),
             ),
             if (tractor.esParcial) ...[
               const SizedBox(width: AppSpacing.xs),
-              const Tooltip(
+              Tooltip(
                 message: 'Asignación en curso — km parcial',
-                child: Icon(Icons.history, size: 13, color: Colors.white38),
+                child: Icon(Icons.history, size: 13, color: c.textMuted),
               ),
             ],
           ],
@@ -501,26 +550,34 @@ class _EventosPorSeveridadCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final high = eventos['HIGH'] ?? 0;
     final medium = eventos['MEDIUM'] ?? 0;
     final low = eventos['LOW'] ?? 0;
-    return Row(
-      children: [
-        Expanded(
-          child: _SeveridadMini(
-              label: 'HIGH', valor: high, color: AppColors.error),
+    return AppCard(
+      margin: EdgeInsets.zero,
+      padding: EdgeInsets.zero,
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            Expanded(
+              child: _SeveridadMini(
+                  label: 'HIGH', valor: high, color: c.error, borderRight: true),
+            ),
+            Expanded(
+              child: _SeveridadMini(
+                  label: 'MEDIUM',
+                  valor: medium,
+                  color: c.warning,
+                  borderRight: true),
+            ),
+            Expanded(
+              child: _SeveridadMini(
+                  label: 'LOW', valor: low, color: c.success),
+            ),
+          ],
         ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: _SeveridadMini(
-              label: 'MEDIUM', valor: medium, color: AppColors.warning),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: _SeveridadMini(
-              label: 'LOW', valor: low, color: AppColors.success),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -529,41 +586,46 @@ class _SeveridadMini extends StatelessWidget {
   final String label;
   final int valor;
   final Color color;
+  final bool borderRight;
   const _SeveridadMini({
     required this.label,
     required this.valor,
     required this.color,
+    this.borderRight = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+    final activo = valor > 0;
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
       decoration: BoxDecoration(
-        color: valor > 0 ? color.withAlpha(20) : Colors.white.withAlpha(8),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(
-          color: valor > 0 ? color.withAlpha(80) : Colors.white12,
-        ),
+        border: borderRight
+            ? Border(right: BorderSide(color: c.border))
+            : null,
       ),
       child: Column(
         children: [
           Text(
             '$valor',
-            style: TextStyle(
-              color: valor > 0 ? color : Colors.white54,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
+            style: AppType.h3.copyWith(
+              color: activo ? color : c.textMuted,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
-          Text(
-            label,
-            style: TextStyle(
-              color: valor > 0 ? color : Colors.white54,
-              fontSize: 9,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.6,
-            ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              AppDot(activo ? color : c.textMuted, size: 6),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: AppType.eyebrow.copyWith(
+                    color: activo ? color : c.textMuted),
+              ),
+            ],
           ),
         ],
       ),
@@ -577,54 +639,47 @@ class _EventosPorTipoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     // Mostrar máx 6 — si hay más, "y N más" abajo.
     const maxItems = 6;
     final aMostrar = eventos.take(maxItems).toList();
     final restantes = eventos.length - aMostrar.length;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(8),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white12),
-      ),
+    return AppCard(
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Por tipo de evento',
-            style: TextStyle(
-              color: Colors.white54,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.6,
-            ),
-          ),
+          const AppEyebrow('Por tipo de evento'),
           const SizedBox(height: AppSpacing.sm),
-          for (final e in aMostrar)
+          for (var i = 0; i < aMostrar.length; i++) ...[
+            if (i > 0) AppHairline(color: c.border),
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
-                      etiquetaAlertaVolvo(e.tipo),
-                      style: AppType.label.copyWith(color: Colors.white),
+                      etiquetaAlertaVolvo(aMostrar[i].tipo),
+                      style: AppType.body.copyWith(color: c.text),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  const SizedBox(width: AppSpacing.sm),
                   Text(
-                    '${e.cantidad}',
-                    style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                    '${aMostrar[i].cantidad}',
+                    style: AppType.mono.copyWith(
+                        color: c.text, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
             ),
+          ],
           if (restantes > 0) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
               'Y $restantes tipo${restantes == 1 ? '' : 's'} más',
-              style: AppType.eyebrow.copyWith(color: Colors.white54),
+              style: AppType.monoSm.copyWith(color: c.textMuted),
             ),
           ],
         ],
