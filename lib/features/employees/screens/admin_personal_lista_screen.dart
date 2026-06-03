@@ -30,13 +30,20 @@ part 'admin_personal_lista_widgets.dart';
 /// Pantalla de Gestión de Personal — REFACTOR NÚCLEO (jun 2026).
 ///
 /// Reescrita al layout del prototipo (`screens-desktop-core.jsx :: Personal`):
-/// hero con el conteo real de activos + chips de filtro por rol + **tabla**
-/// densa en desktop. En mobile se mantienen las cards ricas (`_EmpleadoCard`),
-/// que ya son Núcleo por tokens y no conviene degradar a una tabla angosta.
+/// encabezado `PERSONAL · n empleados` + `AppKpiStrip` (activos · choferes ·
+/// supervisores · gomería · admin) + chips de filtro por rol + lista densa
+/// (`_FilaPersona`) en una superficie `AppCard(tier:1)` por fila, con
+/// `AppHairline` implícita entre filas (borde de cards adyacentes).
 ///
-/// La fila de tabla abre el MISMO detalle que la card (`_DetalleChofer.abrir`),
-/// así que no se pierde ninguna acción. Búsqueda (AppListPage), filtros de
-/// inactivos/excluidos, FAB "Nuevo" y navegación quedan intactos.
+/// La fila es responsive (desktop spread en columnas; mobile apila rol/empresa
+/// bajo el nombre) y abre el MISMO detalle (`_DetalleChofer.abrir`), así que no
+/// se pierde ninguna acción. La capa de datos NO cambia: stream EMPLEADOS,
+/// `_visible()` (activo/excluido/rol), filtro de búsqueda de `AppListPage`,
+/// toggles de inactivos/excluidos, FAB "Nuevo" y navegación quedan intactos.
+///
+/// El KpiStrip es el resumen at-a-glance; los `AppFilterChip` siguen siendo el
+/// mecanismo INTERACTIVO de filtro por rol (`_rolFiltro` / `onRol`), arreglado
+/// recientemente — no tocar esa lógica.
 class AdminPersonalListaScreen extends StatefulWidget {
   const AdminPersonalListaScreen({super.key});
 
@@ -134,48 +141,22 @@ class _AdminPersonalListaScreenState
               : null,
       body: Column(
         children: [
-          // Hero (conteo real) + chips de filtro por rol.
+          // Encabezado "PERSONAL · n empleados" + AppKpiStrip + chips de
+          // filtro por rol. El conteo y los KPIs salen del MISMO stream que
+          // alimenta la lista, así nunca divergen de lo que se ve.
           StreamBuilder<QuerySnapshot>(
             stream: _empleadosStream,
             builder: (ctx, snap) => _HeroYChips(
               docs: snap.data?.docs ?? const [],
               excluidos: _excluidos,
               mostrarExcluidos: _mostrarExcluidos,
+              mostrarInactivos: _mostrarInactivos,
               rolFiltro: _rolFiltro,
               onRol: (r) => setState(() => _rolFiltro = r),
+              onToggleInactivos: () =>
+                  setState(() => _mostrarInactivos = !_mostrarInactivos),
             ),
           ),
-          // Toggle "mostrar inactivos".
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
-            child: Row(
-              children: [
-                FilterChip(
-                  label: const Text('Mostrar inactivos'),
-                  selected: _mostrarInactivos,
-                  onSelected: (v) => setState(() => _mostrarInactivos = v),
-                  selectedColor: AppColors.warning.withValues(alpha: 0.6),
-                  avatar: Icon(
-                    _mostrarInactivos
-                        ? Icons.visibility
-                        : Icons.visibility_off,
-                    size: 16,
-                    color: _mostrarInactivos
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Encabezado de tabla (solo desktop).
-          if (esDesktop)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(
-                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xs),
-              child: _FilaHeader(),
-            ),
           Expanded(
             child: AppListPage(
               stream: _empleadosStream,
@@ -183,6 +164,8 @@ class _AdminPersonalListaScreenState
               emptyTitle: 'Sin choferes cargados',
               emptySubtitle: 'Tocá el botón + para agregar uno',
               emptyIcon: Icons.badge_outlined,
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, 96),
               filter: (doc, q) {
                 final data = doc.data() as Map<String, dynamic>;
                 if (!_visible(data, doc.id)) return false;
@@ -192,9 +175,8 @@ class _AdminPersonalListaScreenState
                     .toUpperCase();
                 return hay.contains(q);
               },
-              itemBuilder: (ctx, doc) => esDesktop
-                  ? _FilaPersona(doc: doc)
-                  : _EmpleadoCard(doc: doc),
+              itemBuilder: (ctx, doc) =>
+                  _FilaPersona(doc: doc, esDesktop: esDesktop),
             ),
           ),
         ],
@@ -211,34 +193,47 @@ class _HeroYChips extends StatelessWidget {
   final List<QueryDocumentSnapshot> docs;
   final ExcluidosSet? excluidos;
   final bool mostrarExcluidos;
+  final bool mostrarInactivos;
   final String? rolFiltro;
   final ValueChanged<String?> onRol;
+  final VoidCallback onToggleInactivos;
 
   const _HeroYChips({
     required this.docs,
     required this.excluidos,
     required this.mostrarExcluidos,
+    required this.mostrarInactivos,
     required this.rolFiltro,
     required this.onRol,
+    required this.onToggleInactivos,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Conteo de activos (no excluidos) total + por rol. El hero refleja la
-    // realidad de la base, no datos hardcodeados.
-    var activos = 0;
-    final porRol = <String, int>{};
+    final c = context.colors;
+
+    // Un solo barrido sobre los docs aplicando los filtros de VISIBILIDAD
+    // (excluidos + inactivos) — los mismos que `_visible`, salvo el rol (el
+    // strip y los chips muestran TODOS los roles, sin importar el filtro de
+    // rol activo). Todo se deriva de la base: cero números hardcodeados.
+    var totalVisibles = 0; // empleados que entran a la lista (sin filtro rol)
+    var activos = 0; // de esos, los que están ACTIVO != false
+    final porRol = <String, int>{}; // por rol, solo entre los activos
     for (final d in docs) {
       final data = d.data() as Map<String, dynamic>;
-      if (!AppActivo.esActivo(data)) continue;
       if (!mostrarExcluidos &&
           ExcluidosService.esExcluido(excluidos, dni: d.id)) {
         continue;
       }
+      final esActivo = AppActivo.esActivo(data);
+      if (!mostrarInactivos && !esActivo) continue;
+      totalVisibles++;
+      if (!esActivo) continue;
       activos++;
       final rol = AppRoles.normalizar(data['ROL']?.toString());
       porRol[rol] = (porRol[rol] ?? 0) + 1;
     }
+    // Chips: orden estable por frecuencia (igual que antes).
     final roles = porRol.keys.toList()
       ..sort((a, b) => porRol[b]!.compareTo(porRol[a]!));
 
@@ -248,26 +243,64 @@ class _HeroYChips extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('EQUIPO', style: AppType.eyebrow),
+          // Encabezado: "PERSONAL · n empleados" + toggle inactivos.
+          Row(
+            children: [
+              const Expanded(child: AppEyebrow('Personal')),
+              _ToggleInactivos(
+                activo: mostrarInactivos,
+                onTap: onToggleInactivos,
+              ),
+            ],
+          ),
           const SizedBox(height: 6),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                docs.isEmpty ? '—' : '$activos',
+                docs.isEmpty ? '—' : '$totalVisibles',
                 style: AppType.h2.copyWith(
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
               const SizedBox(width: 8),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 4),
-                child: Text('activos', style: AppType.monoSm),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  mostrarInactivos ? 'empleados (incl. inactivos)' : 'empleados',
+                  style: AppType.monoSm,
+                ),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          const SizedBox(height: AppSpacing.md),
+          // KPIs at-a-glance: activos · choferes · supervisores · gomería ·
+          // admin. Resumen no interactivo; el filtro vive en los chips.
+          AppKpiStrip(
+            stats: [
+              AppStat(label: 'Activos', value: '$activos'),
+              AppStat(
+                label: 'Choferes',
+                value: '${porRol[AppRoles.chofer] ?? 0}',
+              ),
+              AppStat(
+                label: 'Supervisores',
+                value: '${porRol[AppRoles.supervisor] ?? 0}',
+              ),
+              AppStat(
+                label: 'Gomería',
+                value: '${porRol[AppRoles.gomeria] ?? 0}',
+              ),
+              AppStat(
+                label: 'Admin',
+                value: '${porRol[AppRoles.admin] ?? 0}',
+                accent: c.brand,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // Chips INTERACTIVOS de filtro por rol (mecanismo recién arreglado).
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -293,159 +326,294 @@ class _HeroYChips extends StatelessWidget {
   }
 }
 
-// =============================================================================
-// TABLA (desktop): encabezado + fila
-// =============================================================================
-
-// Flex de las columnas — el header y las filas comparten estos pesos para
-// que queden alineados.
-const int _flexPersona = 3;
-const int _flexRol = 2;
-const int _flexLegajo = 2;
-const int _flexUnidad = 2;
-const int _flexEstado = 2;
-
-class _FilaHeader extends StatelessWidget {
-  const _FilaHeader();
+/// Toggle compacto "Mostrar inactivos" en estilo Núcleo (pill con borde),
+/// reemplaza al `FilterChip` Material del header viejo.
+class _ToggleInactivos extends StatelessWidget {
+  final bool activo;
+  final VoidCallback onTap;
+  const _ToggleInactivos({required this.activo, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    Widget h(String t, int flex) => Expanded(
-          flex: flex,
-          child: Text(t.toUpperCase(), style: AppType.eyebrow),
-        );
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-      child: Row(
-        children: [
-          h('Persona', _flexPersona),
-          h('Rol', _flexRol),
-          h('Legajo', _flexLegajo),
-          h('Unidad', _flexUnidad),
-          h('Estado', _flexEstado),
-          const SizedBox(width: 24),
-        ],
+    final c = context.colors;
+    final color = activo ? c.warning : c.textMuted;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: activo ? c.warningSoft : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: activo ? color : c.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              activo ? Icons.visibility : Icons.visibility_off,
+              size: 14,
+              color: color,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Inactivos',
+              style: AppType.label.copyWith(
+                color: activo ? color : c.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
+// =============================================================================
+// FILA DE LA LISTA (Núcleo) — AppCard(tier:1) por fila. Las cards adyacentes
+// dejan una hairline natural entre filas (su borde). Responsive: en desktop
+// se despliega en columnas; en mobile apila rol/empresa bajo el nombre para
+// no romper layout en pantallas angostas.
+// =============================================================================
+
 class _FilaPersona extends StatelessWidget {
   final QueryDocumentSnapshot doc;
-  const _FilaPersona({required this.doc});
+  final bool esDesktop;
+  const _FilaPersona({required this.doc, required this.esDesktop});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final data = doc.data() as Map<String, dynamic>;
     final dni = doc.id;
     final nombre = (data['NOMBRE'] ?? 'Sin nombre').toString();
     final apodo = (data['APODO'] ?? '').toString().trim();
     final rol = AppRoles.normalizar(data['ROL']?.toString());
-    final area = (data['AREA'] ?? AppAreas.manejo).toString();
-    final mostrarFlota = area == AppAreas.manejo;
-    final tractor = (data['VEHICULO'] ?? '-').toString();
-    final urlPerfil = data['ARCHIVO_PERFIL']?.toString();
+    final empresa = _empresaCorta((data['EMPRESA'] ?? '').toString());
     final activo = AppActivo.esActivo(data);
+    final urlPerfil = data['ARCHIVO_PERFIL']?.toString();
+    // Peor vencimiento personal (licencia/preocupacional/manejo defensivo) —
+    // dato real, no inventado. Solo se muestra cuando hay algo que avisar.
+    final venc = _peorVencimiento(data);
+
+    final nombreVisible = apodo.isNotEmpty ? '$nombre  ($apodo)' : nombre;
+
+    final avatar = FotoPerfilAvatar(url: urlPerfil, nombre: nombre, radius: 18);
+
+    // Bloque persona: avatar + nombre + (sub-línea de alerta de vencimiento).
+    Widget persona() => Row(
+          children: [
+            avatar,
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    nombreVisible,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.body.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 2),
+                  if (venc != null)
+                    Row(
+                      children: [
+                        AppDot(venc.color, size: 5),
+                        const SizedBox(width: 5),
+                        Flexible(
+                          child: Text(
+                            venc.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppType.monoSm.copyWith(color: venc.color),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    Text(
+                      dni,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.monoSm.copyWith(color: c.textMuted),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        );
+
+    final rolBadge = AppBadge(
+      text: AppRoles.etiquetas[rol] ?? _rolLabel(rol),
+      color: _colorRol(rol, c),
+      size: AppBadgeSize.sm,
+    );
+
+    final estadoBadge = AppBadge(
+      text: activo ? 'Activo' : 'Inactivo',
+      color: activo ? c.success : c.textMuted,
+      dot: true,
+      size: AppBadgeSize.sm,
+    );
+
+    final chevron =
+        Icon(Icons.chevron_right, size: 18, color: c.textMuted);
 
     return AppCard(
       tier: 1,
       onTap: () => _DetalleChofer.abrir(context, dni),
       padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md, vertical: AppSpacing.md),
-      child: Row(
-        children: [
-          // Persona — avatar + nombre (+ apodo).
-          Expanded(
-            flex: _flexPersona,
-            child: Row(
+      child: esDesktop
+          // DESKTOP: columnas Persona / Rol / Legajo / Empresa / Estado / →
+          ? Row(
               children: [
-                FotoPerfilAvatar(url: urlPerfil, nombre: nombre, radius: 16),
+                Expanded(flex: 4, child: persona()),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(flex: 2, child: Align(
+                  alignment: Alignment.centerLeft, child: rolBadge)),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
+                  flex: 2,
                   child: Text(
-                    apodo.isNotEmpty ? '$nombre  ($apodo)' : nombre,
+                    dni,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.body.copyWith(fontWeight: FontWeight.w600),
+                    style: AppType.mono.copyWith(color: c.textSecondary),
                   ),
                 ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    empresa,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.bodySm,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(flex: 2, child: Align(
+                  alignment: Alignment.centerLeft, child: estadoBadge)),
+                chevron,
               ],
-            ),
-          ),
-          // Rol.
-          Expanded(
-            flex: _flexRol,
-            child: Text(
-              _rolLabel(rol),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppType.bodySm,
-            ),
-          ),
-          // Legajo (DNI).
-          Expanded(
-            flex: _flexLegajo,
-            child: Text(dni, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: AppType.mono.copyWith(color: AppColors.textSecondary)),
-          ),
-          // Unidad.
-          Expanded(
-            flex: _flexUnidad,
-            child: Text(
-              mostrarFlota ? tractor : '—',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppType.mono.copyWith(
-                color: mostrarFlota
-                    ? AppColors.textPrimary
-                    : AppColors.textTertiary,
-              ),
-            ),
-          ),
-          // Estado.
-          Expanded(
-            flex: _flexEstado,
-            child: Row(
+            )
+          // MOBILE: persona arriba + (rol · empresa) y estado debajo.
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                AppDot(activo ? AppColors.success : AppColors.textTertiary,
-                    size: 6),
-                const SizedBox(width: 6),
-                Flexible(
-                  child: Text(
-                    activo ? 'Activo' : 'Inactivo',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppType.monoSm.copyWith(
-                      color: activo
-                          ? AppColors.textSecondary
-                          : AppColors.textTertiary,
+                Row(
+                  children: [
+                    Expanded(child: persona()),
+                    const SizedBox(width: AppSpacing.sm),
+                    estadoBadge,
+                    const SizedBox(width: 4),
+                    chevron,
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Row(
+                  children: [
+                    rolBadge,
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        empresa,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                        style: AppType.monoSm.copyWith(color: c.textMuted),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ],
             ),
-          ),
-          const Icon(Icons.chevron_right,
-              size: 18, color: AppColors.textHint),
-        ],
-      ),
     );
   }
 }
 
-/// Etiqueta legible para un rol normalizado.
-String _rolLabel(String rol) {
-  switch (rol) {
-    case AppRoles.chofer:
-      return 'Chofer';
-    case AppRoles.admin:
-      return 'Admin';
-    case AppRoles.supervisor:
-      return 'Supervisor';
-    case AppRoles.planta:
-      return 'Planta';
+/// Acorta la razón social larga para la columna EMPRESA. Quita el CUIT
+/// entre paréntesis y normaliza " S.R.L:" → " SRL". Dato faltante → '—'.
+String _empresaCorta(String raw) {
+  final t = raw.trim();
+  if (t.isEmpty || t == '-') return '—';
+  // Cortamos en el primer '(' o ':' (donde suele arrancar el CUIT).
+  var s = t;
+  final corte = s.indexOf(RegExp(r'[(:]'));
+  if (corte > 0) s = s.substring(0, corte);
+  return s.trim().isEmpty ? t : s.trim();
+}
+
+/// Estado de vencimiento resumido para la sub-línea de la fila.
+class _VencResumen {
+  final String label;
+  final Color color;
+  const _VencResumen(this.label, this.color);
+}
+
+/// Devuelve el PEOR (más urgente) de los 3 vencimientos personales, o `null`
+/// si ninguno amerita alerta (todos OK / sin fecha). Reusa la lógica y umbrales
+/// canónicos de `vencimiento_badge.dart` — no inventa nada.
+_VencResumen? _peorVencimiento(Map<String, dynamic> data) {
+  const items = <(String, String)>[
+    ('Licencia', 'VENCIMIENTO_LICENCIA_DE_CONDUCIR'),
+    ('Preocupacional', 'VENCIMIENTO_PREOCUPACIONAL'),
+    ('Manejo def.', 'VENCIMIENTO_CURSO_DE_MANEJO_DEFENSIVO'),
+  ];
+  VencimientoEstado? peorEstado;
+  String? peorEtiqueta;
+  int? peorDias;
+  for (final (etiqueta, campo) in items) {
+    final fecha = data[campo];
+    final tieneFecha = fecha != null && fecha.toString().isNotEmpty;
+    if (!tieneFecha) continue;
+    final dias = AppFormatters.calcularDiasRestantes(fecha);
+    final estado = calcularEstadoVencimiento(dias, tieneFecha: tieneFecha);
+    // Solo nos interesan los accionables: vencido/critico/proximo/invalida.
+    if (estado == VencimientoEstado.ok ||
+        estado == VencimientoEstado.sinFecha) {
+      continue;
+    }
+    // Menor index = más urgente (ver enum VencimientoEstado).
+    if (peorEstado == null || estado.index < peorEstado.index) {
+      peorEstado = estado;
+      peorEtiqueta = etiqueta;
+      peorDias = dias;
+    }
   }
+  if (peorEstado == null) return null;
+  final sufijo = switch (peorEstado) {
+    VencimientoEstado.vencido => 'vencido',
+    VencimientoEstado.invalida => 'fecha inválida',
+    _ => peorDias != null ? '${peorDias}d' : '',
+  };
+  final label = sufijo.isEmpty ? peorEtiqueta! : '$peorEtiqueta · $sufijo';
+  return _VencResumen(label, peorEstado.color);
+}
+
+/// Color de la pill de rol. CHOFER neutro (caso esperado), ADMIN en brand
+/// (atención), supervisor ámbar, el resto info.
+Color _colorRol(String rol, AppColorsExt c) {
+  switch (rol) {
+    case AppRoles.admin:
+      return c.brand;
+    case AppRoles.supervisor:
+      return c.warning;
+    case AppRoles.chofer:
+      return c.textSecondary;
+  }
+  return c.info;
+}
+
+/// Etiqueta legible para un rol normalizado. Usa `AppRoles.etiquetas` (fuente
+/// de verdad de los 6 roles) con fallback capitalizado.
+String _rolLabel(String rol) {
+  final etiqueta = AppRoles.etiquetas[rol];
+  if (etiqueta != null) return etiqueta;
   if (rol.isEmpty) return '—';
   return rol[0].toUpperCase() + rol.substring(1).toLowerCase();
 }
