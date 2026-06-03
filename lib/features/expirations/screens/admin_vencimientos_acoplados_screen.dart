@@ -4,7 +4,10 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/vencimientos_config.dart';
 import '../../../shared/utils/formatters.dart';
+import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 import '../widgets/vencimiento_editor_sheet.dart';
 import '../widgets/vencimiento_item.dart';
 import '../widgets/vencimiento_item_card.dart';
@@ -107,14 +110,61 @@ class _AdminVencimientosAcopladosScreenState
             );
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
-            itemCount: items.length,
-            itemBuilder: (ctx, idx) => VencimientoItemCard(
-              item: items[idx],
-              onTap: () =>
-                  VencimientoEditorSheet.show(context, items[idx]),
-            ),
+          final c = context.colors;
+          final vencidos =
+              items.where((it) => it.dias != null && it.dias! < 0).length;
+          final en7 = items
+              .where((it) => it.dias != null && it.dias! >= 0 && it.dias! <= 7)
+              .length;
+          final en30 = items
+              .where((it) => it.dias != null && it.dias! >= 0 && it.dias! <= 30)
+              .length;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md, AppSpacing.lg, AppSpacing.md, AppSpacing.sm),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const AppEyebrow('Enganches · auditoría'),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${items.length} vencimientos críticos',
+                      style: AppType.h3.copyWith(color: c.text),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md, 0, AppSpacing.md, AppSpacing.md),
+                child: AppKpiStrip(stats: [
+                  AppStat(label: 'Críticos', value: '${items.length}'),
+                  AppStat(
+                    label: 'Vencidos',
+                    value: '$vencidos',
+                    delta: vencidos > 0 ? 'requiere acción' : null,
+                    deltaColor: c.error,
+                  ),
+                  AppStat(label: '≤7 días', value: '$en7'),
+                  AppStat(label: '≤30 días', value: '$en30'),
+                ]),
+              ),
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 80),
+                  itemCount: items.length,
+                  itemBuilder: (ctx, idx) => VencimientoItemCard(
+                    item: items[idx],
+                    onTap: () =>
+                        VencimientoEditorSheet.show(context, items[idx]),
+                  ),
+                ),
+              ),
+            ],
           );
         },
       ),
