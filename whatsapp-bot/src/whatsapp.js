@@ -678,11 +678,35 @@ async function destroy() {
   }
 }
 
+/**
+ * Resuelve el teléfono real (PN) de un chat @lid. WhatsApp moderno entrega los
+ * mensajes como @lid (linked id) y OCULTA el número (getContact().number viene
+ * vacío), pero `getContactLidAndPhone` lo FUERZA vía el Store interno de
+ * WhatsApp Web — funciona para contactos AGENDADOS (el caso de los choferes,
+ * todos agendados en el teléfono del bot). Devuelve el teléfono en solo-dígitos
+ * (549XXXXXXXXXX) o null si no se pudo resolver. Best-effort: cualquier fallo
+ * cae a null y el caller sigue con su fallback (getContact / lid aprendido).
+ */
+async function obtenerTelefonoDeLid(lid) {
+  if (!client || !listo || !lid) return null;
+  const lidId = String(lid).includes('@') ? String(lid) : `${lid}@lid`;
+  try {
+    const res = await client.getContactLidAndPhone([lidId]);
+    const pn = res && res[0] && res[0].pn; // "549XXXXXXXXXX@c.us"
+    if (!pn) return null;
+    return String(pn).replace(/\D+/g, '');
+  } catch (e) {
+    log.warn(`obtenerTelefonoDeLid(${lid}) falló: ${e.message}`);
+    return null;
+  }
+}
+
 module.exports = {
   inicializar,
   tieneWhatsApp,
   enviarMensaje,
   onMensajeEntrante,
   responder,
+  obtenerTelefonoDeLid,
   destroy,
 };

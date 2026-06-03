@@ -413,17 +413,25 @@ function crearHandler(fs, wa) {
         ? String(fromNumber).replace(/\D+/g, '')
         : null;
       if (tipoChat === 'lid') {
-        try {
-          const contacto = await msg.getContact();
-          if (contacto) {
-            // Si el chofer está AGENDADO en la cuenta del bot, getContact()
-            // devuelve su teléfono real → match exacto por teléfono. Si no,
-            // queda el lid (y caemos al match por WA_LID ya aprendido).
-            fromNumber =
-                contacto.number || (contacto.id && contacto.id.user) || fromNumber;
+        // WhatsApp moderno manda @lid y OCULTA el teléfono; lo FORZAMOS con
+        // getContactLidAndPhone (recupera el número del Store interno para los
+        // contactos agendados — todos los choferes lo están). Si lo logramos,
+        // el match es EXACTO por teléfono.
+        const telReal = await wa.obtenerTelefonoDeLid(msg.from);
+        if (telReal) {
+          fromNumber = telReal;
+        } else {
+          // Fallback: getContact() (por si alguna versión sí lo trae). Si
+          // tampoco, queda el lid → caemos al match por WA_LID ya aprendido.
+          try {
+            const contacto = await msg.getContact();
+            if (contacto) {
+              fromNumber =
+                  contacto.number || (contacto.id && contacto.id.user) || fromNumber;
+            }
+          } catch (_) {
+            // si falla, seguimos con el linked-id (peor caso: no resuelve)
           }
-        } catch (_) {
-          // si falla, seguimos con el linked-id (peor caso: no resuelve)
         }
       }
       const chofer = await _resolverChofer(db, fromNumber, fromLid);
