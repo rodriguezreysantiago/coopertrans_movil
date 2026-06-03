@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/excluidos_service.dart';
 import '../../../core/services/prefs_service.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
@@ -17,8 +19,28 @@ import '../services/adelantos_service.dart';
 import '../services/recibos_adelanto_service.dart';
 import '../services/report_adelantos.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
+// REFACTOR NÚCLEO · jun 2026 — lista de adelantos en lenguaje bento.
+//
+// SOLO PRESENTACIÓN del listado. Se preserva intacto:
+//   - los streams (`AdelantosService.streamAdelantos` /
+//     `streamAdelantosEnRango`), filtros (vista/fecha/empleado/texto) y
+//     orden (más viejo primero),
+//   - el modelo `AdelantoChofer` y `AdelantosService` (setPagado,
+//     eliminar/restaurar, alta/edición, cuotas, correlativos),
+//   - la selección para imprimir + `ReportAdelantosService.generar`,
+//   - el form de alta/edición (`_AdelantoFormDialog`), el selector de
+//     empleado (`_DialogSeleccionarEmpleado`) y los helpers de impresión
+//     (`_ComprobantePrinter`) — son modales Material, fuera de la
+//     superficie bento del listado, y NO se tocan para no romper la
+//     lógica de plata/impresión.
+//
+// Layout Núcleo del listado:
+//   ┌─ Hero: eyebrow ADELANTOS + total pendiente (hero) + [Nuevo] ──────┐
+//   ├─ AppKpiStrip: pendiente · pagado · cantidad (sobre lo visible) ───┤
+//   ├─ Buscador Núcleo + rango de fechas + filtro empleado + vista ─────┤
+//   ├─ Barra de selección (imprimir resumen) ──────────────────────────┤
+//   └─ Filas AppCard + AppHairline · estado (AppBadge) · monto (mono) ──┘
+
 /// ABM de adelantos a chofer. Lista por fecha desc, alta vía dialog,
 /// edición inline al tocar la card, eliminar con confirmación,
 /// imprimir comprobante (asigna correlativo server-side la primera vez,
@@ -38,6 +60,10 @@ class LogisticaAdelantosScreen extends StatefulWidget {
 
 class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
   String _filtro = '';
+
+  /// Controller del buscador Núcleo (AppInput). Lo necesitamos para
+  /// poder limpiarlo desde el trailing "Limpiar".
+  final TextEditingController _buscarCtrl = TextEditingController();
 
   /// FocusNode del campo de búsqueda — Ctrl+F lo enfoca.
   final FocusNode _buscarFocus = FocusNode();
@@ -76,8 +102,23 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
 
   @override
   void dispose() {
+    _buscarCtrl.dispose();
     _buscarFocus.dispose();
     super.dispose();
+  }
+
+  /// Etiqueta corta para los pills de vista.
+  static String _etiquetaVista(_VistaAdelantos v) {
+    switch (v) {
+      case _VistaAdelantos.pendientes:
+        return 'Pendientes';
+      case _VistaAdelantos.pagados:
+        return 'Pagados';
+      case _VistaAdelantos.eliminados:
+        return 'Eliminados';
+      case _VistaAdelantos.todos:
+        return 'Todos';
+    }
   }
 
   /// IDs de adelantos PENDIENTES deseleccionados para el resumen.
@@ -135,7 +176,8 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
       title: 'Adelantos',
       floatingActionButton: Builder(
         builder: (ctx) => FloatingActionButton.extended(
-          backgroundColor: AppColors.success,
+          backgroundColor: AppColors.brand,
+          foregroundColor: AppColors.surface0,
           onPressed: () => _abrirAlta(ctx),
           icon: const Icon(Icons.add),
           label: const Text('NUEVO ADELANTO'),
@@ -150,122 +192,90 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
         buscarFocusNode: _buscarFocus,
         child: Column(
         children: [
+          // Buscador Núcleo (misma lógica de búsqueda token-based).
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: TextField(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+            child: AppInput(
+              controller: _buscarCtrl,
               focusNode: _buscarFocus,
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search, size: 20),
-                hintText: 'Buscar por chofer, observación…',
-                border: const OutlineInputBorder(),
-                isDense: true,
-                suffixIcon: _filtro.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        tooltip: 'Limpiar búsqueda',
-                        onPressed: () => setState(() => _filtro = ''),
-                      ),
-              ),
+              hint: 'Buscar por chofer, observación…',
+              icon: Icons.search,
               onChanged: (v) => setState(() => _filtro = v),
-            ),
-          ),
-          // ─── Filtro de rango de fechas (1 calendario, 2 puntas) ─
-          // Antes había 2 botones separados (DESDE / HASTA) que
-          // abrían pickers de fecha individuales. Santiago pidió un
-          // solo botón que abra `showDateRangePicker` — el operador
-          // marca inicio y fin en el mismo calendario, más natural.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _BotonRangoFechas(
-                    desde: _fechaDesde,
-                    hasta: _fechaHasta,
-                    onChanged: (desde, hasta) {
-                      setState(() {
-                        _fechaDesde = desde;
-                        _fechaHasta = hasta;
-                      });
+              trailingAction: _filtro.isEmpty ? null : 'Limpiar',
+              onTrailingTap: _filtro.isEmpty
+                  ? null
+                  : () {
+                      _buscarCtrl.clear();
+                      setState(() => _filtro = '');
                     },
-                  ),
-                ),
-                if (_fechaDesde != null || _fechaHasta != null)
-                  IconButton(
-                    icon: const Icon(Icons.clear, size: 18),
-                    tooltip: 'Limpiar fechas',
-                    onPressed: () => setState(() {
-                      _fechaDesde = null;
-                      _fechaHasta = null;
-                    }),
-                  ),
-              ],
             ),
           ),
-          // ─── Filtros: Empleado + Vista ───────────────────────────
-          // Filtro por empleado (Santiago 2026-05-19): ver "cuántos
-          // adelantos tuvo X en el rango". Tappeable, abre dialog con
-          // lista de empleados. Cuando hay filtro activo el chip se
-          // pinta y muestra el nombre con botón × para limpiar.
+          // ─── Rango de fechas + filtro de empleado (pills Núcleo) ─
+          // El rango abre `showDateRangePicker` (1 calendario, 2 puntas);
+          // el chip de empleado abre el dialog con buscador. Misma lógica
+          // de filtro que antes — solo cambió el look a tokens.
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-            child: _ChipFiltroEmpleado(
-              empleadoDni: _empleadoFiltroDni,
-              empleadoNombre: _empleadoFiltroNombre,
-              onSeleccionar: (dni, nombre) {
-                setState(() {
-                  _empleadoFiltroDni = dni;
-                  _empleadoFiltroNombre = nombre;
-                });
-              },
-              onLimpiar: () => setState(() {
-                _empleadoFiltroDni = null;
-                _empleadoFiltroNombre = null;
-              }),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _BotonRangoFechas(
+                  desde: _fechaDesde,
+                  hasta: _fechaHasta,
+                  onChanged: (desde, hasta) {
+                    setState(() {
+                      _fechaDesde = desde;
+                      _fechaHasta = hasta;
+                    });
+                  },
+                  onLimpiar: (_fechaDesde != null || _fechaHasta != null)
+                      ? () => setState(() {
+                            _fechaDesde = null;
+                            _fechaHasta = null;
+                          })
+                      : null,
+                ),
+                _ChipFiltroEmpleado(
+                  empleadoDni: _empleadoFiltroDni,
+                  empleadoNombre: _empleadoFiltroNombre,
+                  onSeleccionar: (dni, nombre) {
+                    setState(() {
+                      _empleadoFiltroDni = dni;
+                      _empleadoFiltroNombre = nombre;
+                    });
+                  },
+                  onLimpiar: () => setState(() {
+                    _empleadoFiltroDni = null;
+                    _empleadoFiltroNombre = null;
+                  }),
+                ),
+              ],
             ),
           ),
           // Toggle de vista — 4 opciones mutuamente exclusivas
           // (Santiago 2026-05-19): pendientes (default), pagados,
           // eliminados, todos. Reemplaza al FilterChip "Mostrar
-          // eliminados" anterior.
+          // eliminados" anterior. Pills Núcleo, scrolleables en angosto.
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
-              child: SegmentedButton<_VistaAdelantos>(
-                segments: const [
-                  ButtonSegment(
-                    value: _VistaAdelantos.pendientes,
-                    label: Text('PENDIENTES'),
-                    icon: Icon(Icons.schedule, size: 14),
-                  ),
-                  ButtonSegment(
-                    value: _VistaAdelantos.pagados,
-                    label: Text('PAGADOS'),
-                    icon: Icon(Icons.check_circle_outline, size: 14),
-                  ),
-                  ButtonSegment(
-                    value: _VistaAdelantos.eliminados,
-                    label: Text('ELIMINADOS'),
-                    icon: Icon(Icons.delete_outline, size: 14),
-                  ),
-                  ButtonSegment(
-                    value: _VistaAdelantos.todos,
-                    label: Text('TODOS'),
-                    icon: Icon(Icons.list, size: 14),
-                  ),
+              child: Row(
+                children: [
+                  for (final v in _VistaAdelantos.values) ...[
+                    _PillVista(
+                      label: _etiquetaVista(v),
+                      seleccionada: _vista == v,
+                      onTap: () => setState(() => _vista = v),
+                    ),
+                    if (v != _VistaAdelantos.values.last)
+                      const SizedBox(width: 8),
+                  ],
                 ],
-                selected: {_vista},
-                onSelectionChanged: (sel) =>
-                    setState(() => _vista = sel.first),
-                showSelectedIcon: false,
-                style: ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                  textStyle: WidgetStatePropertyAll(
-                    AppType.eyebrow.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                ),
               ),
             ),
           ),
@@ -294,8 +304,7 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                   return const AppSkeletonList(count: 8);
                 }
                 if (snap.hasError) {
-                  return AppEmptyState(
-                    icon: Icons.error_outline,
+                  return AppErrorState(
                     title: 'Error cargando adelantos',
                     subtitle: snap.error.toString(),
                   );
@@ -329,16 +338,21 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                     .toList();
                 return Column(
                   children: [
-                    // Mini-resumen del empleado filtrado (Santiago
-                    // 2026-05-19): muestra "PEREZ JUAN — 8 adelantos
-                    // en rango, $X pendiente / $Y entregado". Solo
-                    // aparece si hay filtro de empleado activo.
-                    if (_empleadoFiltroDni != null)
-                      _ResumenEmpleadoFiltrado(
-                        nombre: _empleadoFiltroNombre ??
-                            'DNI $_empleadoFiltroDni',
+                    // Resumen Núcleo: hero del total pendiente + AppKpiStrip
+                    // (pendiente / pagado / cantidad) sobre lo VISIBLE
+                    // (filtrado), no sobre el stream crudo — así refleja lo
+                    // que el operador está mirando.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
+                      child: _ResumenAdelantos(
                         adelantos: filtrados,
+                        empleadoNombre: _empleadoFiltroDni == null
+                            ? null
+                            : (_empleadoFiltroNombre ??
+                                'DNI $_empleadoFiltroDni'),
                       ),
+                    ),
                     _BarraSeleccion(
                       totalPendientes: seleccionables.length,
                       totalSeleccionados: seleccionados.length,
@@ -352,12 +366,10 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                           : () => _imprimirResumen(seleccionados),
                     ),
                     Expanded(
-                      child: ListView.separated(
-                        padding:
-                            const EdgeInsets.fromLTRB(12, 4, 12, 90),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, 90),
                         itemCount: filtrados.length,
-                        separatorBuilder: (_, __) =>
-                            const SizedBox(height: AppSpacing.sm),
                         itemBuilder: (_, i) {
                           final a = filtrados[i];
                           return _CardAdelanto(
@@ -524,31 +536,17 @@ class _ChipFiltroEmpleado extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final hayFiltro = empleadoDni != null && empleadoDni!.isNotEmpty;
     final label = hayFiltro
         ? (empleadoNombre?.trim().isNotEmpty == true
             ? empleadoNombre!.toUpperCase()
             : 'DNI $empleadoDni')
-        : 'Empleado: TODOS';
-    return ActionChip(
-      avatar: Icon(
-        hayFiltro ? Icons.person : Icons.people_outline,
-        size: 16,
-        color: hayFiltro ? AppColors.info : Colors.white60,
-      ),
-      label: Text(
-        label,
-        style: AppType.label.copyWith(color: hayFiltro ? Colors.white : Colors.white60, fontWeight: hayFiltro ? FontWeight.bold : FontWeight.normal),
-      ),
-      backgroundColor: hayFiltro
-          ? AppColors.info.withValues(alpha: 0.2)
-          : null,
-      side: BorderSide(
-        color: hayFiltro
-            ? AppColors.info
-            : Colors.white24,
-      ),
-      onPressed: () async {
+        : 'Empleado: todos';
+    final accent = c.brand;
+    final fg = hayFiltro ? accent : c.textSecondary;
+    return InkWell(
+      onTap: () async {
         final res = await showDialog<_EmpleadoElegido>(
           context: context,
           builder: (_) => const _DialogSeleccionarEmpleado(),
@@ -561,6 +559,33 @@ class _ChipFiltroEmpleado extends StatelessWidget {
           }
         }
       },
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: hayFiltro ? accent.withValues(alpha: 0.16) : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: hayFiltro ? accent.withValues(alpha: 0.5) : c.borderStrong,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(hayFiltro ? Icons.person : Icons.people_outline,
+                size: 14, color: fg),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: AppType.label.copyWith(color: fg, fontWeight: FontWeight.w600),
+            ),
+            if (hayFiltro) ...[
+              const SizedBox(width: 6),
+              Icon(Icons.close, size: 13, color: fg),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
@@ -735,56 +760,82 @@ class _DialogSeleccionarEmpleadoState
   }
 }
 
+/// Pill Núcleo que abre un selector de RANGO de fechas
+/// (`showDateRangePicker`). Si hay rango activo se pinta con la tinta
+/// brand y muestra una × para limpiar (también limpia con long-press).
+/// La lógica del picker es idéntica a la versión previa.
 class _BotonRangoFechas extends StatelessWidget {
   final DateTime? desde;
   final DateTime? hasta;
   final void Function(DateTime? desde, DateTime? hasta) onChanged;
+  final VoidCallback? onLimpiar;
 
   const _BotonRangoFechas({
     required this.desde,
     required this.hasta,
     required this.onChanged,
+    this.onLimpiar,
   });
+
+  Future<void> _abrir(BuildContext context) async {
+    final ahora = DateTime.now();
+    final inicial = desde != null && hasta != null
+        ? DateTimeRange(start: desde!, end: hasta!)
+        : DateTimeRange(start: ahora, end: ahora);
+    final rango = await showDateRangePicker(
+      context: context,
+      initialDateRange: inicial,
+      firstDate: DateTime(ahora.year - 2),
+      lastDate: DateTime(ahora.year + 1),
+      // En Windows desktop el picker se ve mejor como dialog (más
+      // chico, sin ocupar toda la pantalla). En mobile queda
+      // full-screen por default, que también está OK.
+      initialEntryMode: DatePickerEntryMode.calendar,
+      helpText: 'Elegí el rango de fechas',
+      saveText: 'APLICAR',
+      cancelText: 'CANCELAR',
+    );
+    if (rango != null) onChanged(rango.start, rango.end);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final hayRango = desde != null || hasta != null;
-    final label = _renderLabel();
-    return OutlinedButton.icon(
-      onPressed: () async {
-        final ahora = DateTime.now();
-        final inicial = desde != null && hasta != null
-            ? DateTimeRange(start: desde!, end: hasta!)
-            : DateTimeRange(start: ahora, end: ahora);
-        final rango = await showDateRangePicker(
-          context: context,
-          initialDateRange: inicial,
-          firstDate: DateTime(ahora.year - 2),
-          lastDate: DateTime(ahora.year + 1),
-          // En Windows desktop el picker se ve mejor como dialog (más
-          // chico, sin ocupar toda la pantalla). En mobile queda
-          // full-screen por default, que también está OK.
-          initialEntryMode: DatePickerEntryMode.calendar,
-          helpText: 'Elegí el rango de fechas',
-          saveText: 'APLICAR',
-          cancelText: 'CANCELAR',
-        );
-        if (rango != null) onChanged(rango.start, rango.end);
-      },
+    final accent = c.brand;
+    final fg = hayRango ? accent : c.textSecondary;
+    return InkWell(
+      onTap: () => _abrir(context),
       onLongPress: hayRango ? () => onChanged(null, null) : null,
-      icon: const Icon(Icons.date_range_outlined, size: 16),
-      label: Text(
-        label,
-        style: AppType.label,
-        overflow: TextOverflow.ellipsis,
-      ),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: hayRango ? Colors.white : Colors.white60,
-        side: BorderSide(
-          color: hayRango ? AppColors.success : Colors.white24,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: hayRango ? accent.withValues(alpha: 0.16) : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: hayRango ? accent.withValues(alpha: 0.5) : c.borderStrong,
+          ),
         ),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        visualDensity: VisualDensity.compact,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.date_range_outlined, size: 14, color: fg),
+            const SizedBox(width: 6),
+            Text(
+              _renderLabel(),
+              style: AppType.label.copyWith(color: fg, fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (hayRango && onLimpiar != null) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: onLimpiar,
+                child: Icon(Icons.close, size: 13, color: fg),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -792,7 +843,7 @@ class _BotonRangoFechas extends StatelessWidget {
   String _renderLabel() {
     final d = desde;
     final h = hasta;
-    if (d == null && h == null) return 'RANGO DE FECHAS';
+    if (d == null && h == null) return 'Rango de fechas';
     const fmt = AppFormatters.formatearFecha;
     if (d != null && h != null) {
       // Si ambas puntas son el mismo día, mostramos una sola fecha
@@ -805,146 +856,138 @@ class _BotonRangoFechas extends StatelessWidget {
   }
 }
 
-/// Barra que muestra cuántos adelantos están seleccionados +
-/// botones para seleccionar/deseleccionar todos + botón EXPORTAR.
-/// Aparece arriba de la lista cuando hay al menos 1 adelanto visible.
-/// Mini-resumen que aparece arriba de la lista cuando hay filtro de
-/// empleado activo. Muestra cantidad de adelantos en el rango y
-/// montos totales por estado. Pedido Santiago 2026-05-19: "ver
-/// cuántos adelantos tuvo en el lapso seleccionado".
-class _ResumenEmpleadoFiltrado extends StatelessWidget {
-  final String nombre;
-  final List<AdelantoChofer> adelantos;
-
-  const _ResumenEmpleadoFiltrado({
-    required this.nombre,
-    required this.adelantos,
+/// Pill de vista (PENDIENTES / PAGADOS / ELIMINADOS / TODOS) estilo
+/// Núcleo. Activo = tinte brand; inactivo = transparente con borde.
+class _PillVista extends StatelessWidget {
+  final String label;
+  final bool seleccionada;
+  final VoidCallback onTap;
+  const _PillVista({
+    required this.label,
+    required this.seleccionada,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Excluimos los eliminados de los totales en plata (no son plata
-    // real). Pero los contamos en "total registros" por transparencia.
-    final activos = adelantos.where((a) => !a.eliminado).toList();
-    final pendientes =
-        activos.where((a) => !a.pagado).toList();
-    final entregados =
-        activos.where((a) => a.pagado).toList();
-    final totalPendiente =
-        pendientes.fold<double>(0, (acc, a) => acc + a.monto);
-    final totalEntregado =
-        entregados.fold<double>(0, (acc, a) => acc + a.monto);
-
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.info.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(
-          color: AppColors.info.withValues(alpha: 0.4),
+    final c = context.colors;
+    final fg = seleccionada ? c.brand : c.textSecondary;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: seleccionada
+              ? c.brand.withValues(alpha: 0.16)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: seleccionada
+                ? c.brand.withValues(alpha: 0.5)
+                : c.borderStrong,
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.person, size: 16, color: AppColors.info),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  nombre.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Text(
-                '${adelantos.length} '
-                'adelanto${adelantos.length == 1 ? '' : 's'} en rango',
-                style: AppType.eyebrow.copyWith(color: Colors.white70),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Row(
-            children: [
-              Expanded(
-                child: _ChipResumen(
-                  label: 'Pendiente',
-                  cant: pendientes.length,
-                  monto: totalPendiente,
-                  color: AppColors.warning,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: _ChipResumen(
-                  label: 'Entregado',
-                  cant: entregados.length,
-                  monto: totalEntregado,
-                  color: AppColors.success,
-                ),
-              ),
-            ],
-          ),
-        ],
+        child: Text(
+          label,
+          style: AppType.label.copyWith(color: fg, fontWeight: FontWeight.w600),
+        ),
       ),
     );
   }
 }
 
-class _ChipResumen extends StatelessWidget {
-  final String label;
-  final int cant;
-  final double monto;
-  final Color color;
-  const _ChipResumen({
-    required this.label,
-    required this.cant,
-    required this.monto,
-    required this.color,
+/// Resumen Núcleo del listado: hero del total PENDIENTE (lo que falta
+/// pagar) + AppKpiStrip (pendiente · pagado · cantidad), todo sobre los
+/// adelantos VISIBLES (la lista filtrada). Si hay un empleado filtrado
+/// se muestra su nombre en el eyebrow ("ADELANTOS · PEREZ JUAN").
+///
+/// Los eliminados se excluyen de los montos en plata (no son plata real)
+/// pero igual cuentan en "registros" por transparencia.
+class _ResumenAdelantos extends StatelessWidget {
+  final List<AdelantoChofer> adelantos;
+  final String? empleadoNombre;
+
+  const _ResumenAdelantos({
+    required this.adelantos,
+    required this.empleadoNombre,
   });
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Row(
+    final c = context.colors;
+    final activos = adelantos.where((a) => !a.eliminado).toList();
+    final pendientes = activos.where((a) => !a.pagado).toList();
+    final entregados = activos.where((a) => a.pagado).toList();
+    final totalPendiente =
+        pendientes.fold<double>(0, (acc, a) => acc + a.monto);
+    final totalEntregado =
+        entregados.fold<double>(0, (acc, a) => acc + a.monto);
+
+    final eyebrowTxt = empleadoNombre == null
+        ? 'Adelantos'
+        : 'Adelantos · ${empleadoNombre!.toUpperCase()}';
+
+    return AppCard(
+      tier: 2,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 4, height: 18,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(2),
-            ),
+          Row(
+            children: [
+              Expanded(child: AppEyebrow(eyebrowTxt)),
+              Text(
+                '${adelantos.length} en lista',
+                style: AppType.monoSm.copyWith(color: c.textMuted),
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 6),
+          // Hero: total pendiente (lo que falta pagar — caso operativo).
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                '$label · $cant',
-                style: TextStyle(
-                  color: color,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
+                '\$ ${AppFormatters.formatearMonto(totalPendiente)}',
+                style: AppType.h3.copyWith(
+                  color: c.text,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  'pendiente',
+                  style: AppType.monoSm.copyWith(color: c.textMuted),
                 ),
               ),
-              Text(
-                '\$ ${AppFormatters.formatearMonto(monto)}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppKpiStrip(
+            stats: [
+              AppStat(
+                label: 'Pendiente',
+                value: '${pendientes.length}',
+                accent: c.warning,
+                delta: '\$ ${AppFormatters.formatearMonto(totalPendiente)}',
+                deltaColor: c.warning,
+              ),
+              AppStat(
+                label: 'Pagado',
+                value: '${entregados.length}',
+                accent: c.success,
+                delta: '\$ ${AppFormatters.formatearMonto(totalEntregado)}',
+                deltaColor: c.success,
+              ),
+              AppStat(
+                label: 'Registros',
+                value: '${adelantos.length}',
               ),
             ],
           ),
@@ -973,64 +1016,79 @@ class _BarraSeleccion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
       child: Row(
         children: [
-          Text(
-            totalPendientes == 0
-                ? 'Sin adelantos en rango'
-                : '$totalSeleccionados / $totalPendientes seleccionado(s)',
-            style: AppType.label.copyWith(color: Colors.white70),
-          ),
-          const Spacer(),
-          Tooltip(
-            message: 'Marcar TODOS los adelantos visibles para imprimir',
-            child: TextButton(
-              onPressed: totalSeleccionados == totalPendientes
-                  ? null
-                  : onSeleccionarTodos,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                minimumSize: const Size(0, 32),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Text('TODOS', style: AppType.eyebrow),
+          Expanded(
+            child: Text(
+              totalPendientes == 0
+                  ? 'Sin adelantos en rango'
+                  : '$totalSeleccionados / $totalPendientes seleccionado(s)',
+              style: AppType.bodySm.copyWith(color: c.textSecondary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          Tooltip(
-            message: 'Desmarcar todos (no imprimir nada)',
-            child: TextButton(
-              onPressed:
-                  totalSeleccionados == 0 ? null : onDeseleccionarTodos,
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
-                minimumSize: const Size(0, 32),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: const Text('NINGUNO', style: AppType.eyebrow),
-            ),
+          _AccionTexto(
+            label: 'Todos',
+            tooltip: 'Marcar TODOS los adelantos visibles para imprimir',
+            onTap: totalSeleccionados == totalPendientes
+                ? null
+                : onSeleccionarTodos,
           ),
-          const SizedBox(width: AppSpacing.xs),
-          ElevatedButton.icon(
+          _AccionTexto(
+            label: 'Ninguno',
+            tooltip: 'Desmarcar todos (no imprimir nada)',
+            onTap: totalSeleccionados == 0 ? null : onDeseleccionarTodos,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          // Label genérico — desde 2026-05-19 el resumen mezcla
+          // pendientes/entregados/eliminados según selección.
+          AppButton.primary(
+            label: 'Imprimir ($totalSeleccionados)',
+            icon: Icons.print_outlined,
+            size: AppButtonSize.sm,
             onPressed: onImprimir,
-            icon: const Icon(Icons.print_outlined, size: 16),
-            // Label genérico — desde 2026-05-19 el resumen mezcla
-            // pendientes/entregados/eliminados según selección.
-            label: Text(
-              'IMPRIMIR SELECCIONADOS ($totalSeleccionados)',
-              style: AppType.eyebrow,
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.info,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              minimumSize: const Size(0, 32),
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              textStyle: const TextStyle(fontWeight: FontWeight.bold),
-            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Acción de texto compacta (TODOS / NINGUNO) en tinta brand, deshabilitada
+/// cuando [onTap] es null.
+class _AccionTexto extends StatelessWidget {
+  final String label;
+  final String tooltip;
+  final VoidCallback? onTap;
+  const _AccionTexto({
+    required this.label,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final enabled = onTap != null;
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          child: Text(
+            label.toUpperCase(),
+            style: AppType.eyebrow.copyWith(
+              color: enabled ? c.brand : c.textMuted,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1058,6 +1116,7 @@ class _CardAdelanto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final fechaFmt = AppFormatters.formatearFecha(adelanto.fecha);
     final montoFmt = AppFormatters.formatearMonto(adelanto.monto);
     final chofer = adelanto.choferNombre?.trim().isNotEmpty == true
@@ -1077,9 +1136,16 @@ class _CardAdelanto extends StatelessWidget {
         ? 0.35
         : (pagado ? 0.40 : (seleccionado ? 1.0 : 0.55));
 
+    // Acento del borde izquierdo de la card según estado.
+    final Color accent = eliminado
+        ? c.error
+        : (pagado ? c.success : (seleccionado ? c.brand : c.textMuted));
+
     return Opacity(
       opacity: opacidad,
       child: AppCard(
+        tier: 1,
+        accent: accent,
         // Eliminados NO abren el form de edición — están "congelados".
         onTap: eliminado
             ? null
@@ -1087,7 +1153,7 @@ class _CardAdelanto extends StatelessWidget {
                   context: context,
                   builder: (_) => _AdelantoFormDialog(adelanto: adelanto),
                 ),
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1095,58 +1161,48 @@ class _CardAdelanto extends StatelessWidget {
             // el motivo si lo hay (Santiago 2026-05-14: queremos saber
             // por qué se quemó cada número de recibo).
             if (eliminado) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.error.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                      color:
-                          AppColors.error.withValues(alpha: 0.4)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.delete_forever,
-                        size: 14, color: AppColors.error),
-                    const SizedBox(width: 6),
-                    Text(
-                      'ELIMINADO',
-                      style: AppType.eyebrow.copyWith(color: AppColors.error, fontWeight: FontWeight.bold, letterSpacing: 1),
-                    ),
-                    if (adelanto.eliminadoEn != null) ...[
-                      const SizedBox(width: 6),
-                      Text(
+              Row(
+                children: [
+                  AppBadge(
+                    text: 'Eliminado',
+                    color: c.error,
+                    size: AppBadgeSize.sm,
+                    icon: Icons.delete_forever,
+                  ),
+                  if (adelanto.eliminadoEn != null) ...[
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
                         AppFormatters.formatearFechaHoraSinSegundos(
                             adelanto.eliminadoEn!),
-                        style: const TextStyle(
-                          color: Colors.white60,
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: () => _restaurar(context),
-                      icon: const Icon(Icons.restore, size: 14),
-                      label: const Text('RESTAURAR'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.info,
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        style: AppType.monoSm.copyWith(color: c.textMuted),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                  ],
-                ),
+                  ] else
+                    const Spacer(),
+                  AppButton.ghost(
+                    label: 'Restaurar',
+                    icon: Icons.restore,
+                    size: AppButtonSize.compact,
+                    onPressed: () => _restaurar(context),
+                  ),
+                ],
               ),
               if (adelanto.eliminadoMotivo != null &&
                   adelanto.eliminadoMotivo!.trim().isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   'Motivo: ${adelanto.eliminadoMotivo!.trim()}',
-                  style: AppType.eyebrow.copyWith(color: Colors.white60, fontStyle: FontStyle.italic),
+                  style: AppType.bodySm.copyWith(
+                    color: c.textMuted,
+                    fontStyle: FontStyle.italic,
+                  ),
                 ),
               ],
+              const SizedBox(height: AppSpacing.sm),
+              const AppHairline(),
               const SizedBox(height: AppSpacing.sm),
             ],
             Row(
@@ -1155,18 +1211,17 @@ class _CardAdelanto extends StatelessWidget {
                 // muestran un ícono de check fijo. Los eliminados un ícono
                 // de basura.
                 if (eliminado)
-                  const SizedBox(
+                  SizedBox(
                     width: 28,
                     height: 28,
-                    child: Icon(Icons.delete_outline,
-                        color: AppColors.error, size: 20),
+                    child: Icon(Icons.delete_outline, color: c.error, size: 20),
                   )
                 else if (pagado)
-                  const SizedBox(
+                  SizedBox(
                     width: 28,
                     height: 28,
-                    child: Icon(Icons.check_circle,
-                        color: AppColors.success, size: 20),
+                    child:
+                        Icon(Icons.check_circle, color: c.success, size: 20),
                   )
                 else
                   SizedBox(
@@ -1176,130 +1231,111 @@ class _CardAdelanto extends StatelessWidget {
                       value: seleccionado,
                       onChanged: (_) => onToggleSeleccion(),
                       visualDensity: VisualDensity.compact,
-                      activeColor: AppColors.info,
+                      activeColor: c.brand,
                     ),
                   ),
-                const SizedBox(width: AppSpacing.xs),
-                const Icon(Icons.payments_outlined,
-                    size: 20, color: AppColors.success),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     chofer,
-                    style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: AppType.body.copyWith(
+                        color: c.text, fontWeight: FontWeight.w700),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                const SizedBox(width: AppSpacing.sm),
+                // Monto en mono tabular, tinta neutra (hero number). El
+                // color semántico queda para el badge de estado.
                 Text(
                   '\$ $montoFmt',
-                  style: AppType.heading.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
+                  style: AppType.mono.copyWith(
+                    color: c.text,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 if (!eliminado)
                   IconButton(
-                    icon: const Icon(Icons.delete_outline,
-                        color: AppColors.error),
+                    icon: Icon(Icons.delete_outline, color: c.error, size: 18),
                     tooltip: 'Eliminar adelanto',
                     onPressed: () => _confirmarEliminar(context),
                     visualDensity: VisualDensity.compact,
+                    constraints: const BoxConstraints(),
+                    padding: const EdgeInsets.only(left: AppSpacing.sm),
                   ),
               ],
             ),
-          const SizedBox(height: AppSpacing.xs),
-          Wrap(
-            spacing: 12,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.calendar_today_outlined,
-                      size: 12, color: Colors.white54),
-                  const SizedBox(width: AppSpacing.xs),
-                  Text(
-                    fechaFmt,
-                    style:
-                        AppType.label.copyWith(color: Colors.white60),
-                  ),
-                ],
-              ),
-              // Chip de medio de pago. Color: amber para transferencia
-              // (porque suele requerir más seguimiento — comprobante
-              // bancario, etc.), teal para efectivo (entrega directa).
-              _ChipMedioPago(medio: adelanto.medioPago),
-              // Chip de cuota (si es parte de un plan en cuotas).
-              if (adelanto.esCuota)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.info.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                    border: Border.all(
-                        color: AppColors.info.withValues(alpha: 0.5)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.repeat,
-                          size: 11, color: AppColors.info),
-                      const SizedBox(width: AppSpacing.xs),
-                      Text(
-                        'CUOTA ${adelanto.cuotaNumero}/${adelanto.cuotasTotal}',
-                        style: const TextStyle(
-                          color: AppColors.info,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.6,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              // Chip tappeable de estado de pago. PENDIENTE = naranja,
-              // PAGADO = verde con fecha. Tap → toggle (con feedback
-              // del service). Si el adelanto está eliminado, NO es
-              // tappeable (no tiene sentido marcar pagado algo que
-              // ya cancelaste).
-              InkWell(
-                onTap: eliminado ? null : onTogglePagado,
-                child: _ChipEstadoPago(
-                  pagado: pagado,
-                  pagadoEn: adelanto.pagadoEn,
-                ),
-              ),
-              if (yaImpreso)
+            const SizedBox(height: AppSpacing.sm),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                // Fecha (mono muted, técnico).
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.receipt_long_outlined,
-                        size: 12, color: AppColors.info),
+                    Icon(Icons.calendar_today_outlined,
+                        size: 12, color: c.textMuted),
                     const SizedBox(width: AppSpacing.xs),
                     Text(
-                      'Recibo N° ${adelanto.numeroRecibo!.toString().padLeft(6, '0')}',
-                      style: AppType.label.copyWith(color: AppColors.info),
+                      fechaFmt,
+                      style: AppType.monoSm.copyWith(color: c.textMuted),
                     ),
                   ],
                 ),
-            ],
-          ),
-          if (adelanto.observacion != null &&
-              adelanto.observacion!.trim().isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              adelanto.observacion!,
-              style: AppType.label.copyWith(color: Colors.white70),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+                // Medio de pago — efectivo (info) / transferencia (warning).
+                _BadgeMedioPago(medio: adelanto.medioPago),
+                // Cuota (si es parte de un plan en cuotas).
+                if (adelanto.esCuota)
+                  AppBadge(
+                    text: 'CUOTA ${adelanto.cuotaNumero}/${adelanto.cuotasTotal}',
+                    color: c.brand,
+                    size: AppBadgeSize.sm,
+                    icon: Icons.repeat,
+                  ),
+                // Estado de pago tappeable. PENDIENTE = warning,
+                // PAGADO = success con fecha. Tap → toggle (con feedback
+                // del service). Eliminado → NO tappeable.
+                InkWell(
+                  onTap: eliminado ? null : onTogglePagado,
+                  borderRadius: BorderRadius.circular(AppRadius.full),
+                  child: _BadgeEstadoPago(
+                    pagado: pagado,
+                    pagadoEn: adelanto.pagadoEn,
+                  ),
+                ),
+                if (yaImpreso)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.receipt_long_outlined,
+                          size: 12, color: c.textMuted),
+                      const SizedBox(width: AppSpacing.xs),
+                      Text(
+                        'Recibo N° ${adelanto.numeroRecibo!.toString().padLeft(6, '0')}',
+                        style: AppType.monoSm.copyWith(color: c.textSecondary),
+                      ),
+                    ],
+                  ),
+              ],
             ),
-          ],
+            if (adelanto.observacion != null &&
+                adelanto.observacion!.trim().isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                adelanto.observacion!,
+                style: AppType.bodySm.copyWith(color: c.textSecondary),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
             // El botón de imprimir comprobante NO se muestra en
             // adelantos eliminados — si el adelanto está cancelado,
-            // imprimirle un comprobante "queman" más papel sin sentido.
+            // imprimirle un comprobante "quema" más papel sin sentido.
             // Las reimpresiones de adelantos válidos sí están OK.
             if (!eliminado) ...[
-              const SizedBox(height: AppSpacing.sm),
+              const SizedBox(height: AppSpacing.md),
               SizedBox(
                 width: double.infinity,
                 child: _BotonImprimirComprobante(adelanto: adelanto),
@@ -1873,27 +1909,13 @@ class _BotonImprimirComprobanteState
   @override
   Widget build(BuildContext context) {
     final esReimpresion = widget.adelanto.numeroRecibo != null;
-    return OutlinedButton.icon(
+    return AppButton.secondary(
+      label: esReimpresion ? 'Reimprimir comprobante' : 'Imprimir comprobante',
+      icon: esReimpresion ? Icons.refresh : Icons.print_outlined,
+      size: AppButtonSize.sm,
+      full: true,
+      loading: _generando,
       onPressed: _generando ? null : _imprimir,
-      icon: _generando
-          ? const SizedBox(
-              width: 16,
-              height: 16,
-              child: CircularProgressIndicator(
-                  strokeWidth: 2, color: AppColors.success),
-            )
-          : Icon(esReimpresion ? Icons.refresh : Icons.print_outlined,
-              size: 18),
-      label: Text(esReimpresion
-          ? 'REIMPRIMIR COMPROBANTE'
-          : 'IMPRIMIR COMPROBANTE'),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: AppColors.success,
-        side: const BorderSide(color: AppColors.success),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        textStyle:
-            const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1),
-      ),
     );
   }
 
@@ -2105,91 +2127,53 @@ class _PreviewCuotas extends StatelessWidget {
   }
 }
 
-/// Chip compacto para mostrar el medio de pago del adelanto en la
-/// card de la lista. Efectivo → teal (entrega directa); transferencia
-/// → amber (suele requerir comprobante bancario adjunto).
-class _ChipMedioPago extends StatelessWidget {
+/// Badge del medio de pago del adelanto. Efectivo → info (entrega
+/// directa); transferencia → warning (suele requerir comprobante
+/// bancario adjunto).
+class _BadgeMedioPago extends StatelessWidget {
   final MedioPagoAdelanto medio;
-  const _ChipMedioPago({required this.medio});
+  const _BadgeMedioPago({required this.medio});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final esEfectivo = medio == MedioPagoAdelanto.efectivo;
-    final color = esEfectivo ? AppColors.brandSoft : AppColors.warning;
-    final icono = esEfectivo
-        ? Icons.payments_outlined
-        : Icons.account_balance_outlined;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icono, size: 11, color: color),
-          const SizedBox(width: AppSpacing.xs),
-          Text(
-            medio.etiqueta.toUpperCase(),
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.6,
-            ),
-          ),
-        ],
-      ),
+    return AppBadge(
+      text: medio.etiqueta.toUpperCase(),
+      color: esEfectivo ? c.info : c.warning,
+      size: AppBadgeSize.sm,
+      icon: esEfectivo
+          ? Icons.payments_outlined
+          : Icons.account_balance_outlined,
     );
   }
 }
 
-/// Chip que muestra el estado de pago al chofer: PENDIENTE (naranja)
-/// o PAGADO (verde con fecha). El operador hace tap → toggle. Pagado
-/// excluye al adelanto del próximo resumen de pendientes.
-class _ChipEstadoPago extends StatelessWidget {
+/// Badge del estado de pago al chofer: PENDIENTE (warning) o PAGADO
+/// (success, con fecha si la hay). El operador hace tap → toggle.
+/// Pagado excluye al adelanto del próximo resumen de pendientes.
+class _BadgeEstadoPago extends StatelessWidget {
   final bool pagado;
   final DateTime? pagadoEn;
 
-  const _ChipEstadoPago({
+  const _BadgeEstadoPago({
     required this.pagado,
     required this.pagadoEn,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = pagado ? AppColors.success : AppColors.warning;
-    final icono = pagado ? Icons.check_circle : Icons.schedule;
+    final c = context.colors;
     final texto = pagado && pagadoEn != null
         ? 'PAGADO ${AppFormatters.formatearFecha(pagadoEn!)}'
         : pagado
             ? 'PAGADO'
             : 'PENDIENTE';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: color.withValues(alpha: 0.6)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icono, size: 11, color: color),
-          const SizedBox(width: AppSpacing.xs),
-          Text(
-            texto,
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.6,
-            ),
-          ),
-        ],
-      ),
+    return AppBadge(
+      text: texto,
+      color: pagado ? c.success : c.warning,
+      size: AppBadgeSize.sm,
+      icon: pagado ? Icons.check_circle : Icons.schedule,
     );
   }
 }

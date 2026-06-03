@@ -1,8 +1,35 @@
+// lib/features/logistica/screens/logistica_liquidacion_screen.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — liquidación de choferes en lenguaje bento.
+//
+// SOLO PRESENTACIÓN. Se preserva intacto:
+//   - los streams (`LiquidacionService.streamEmpleadosCache`,
+//     `streamViajesEnRango`, `AdelantosService.streamAdelantosEnRango`),
+//   - los filtros (mes / empresa empleadora / chofer / estado liquidación),
+//   - TODAS las agregaciones financieras (facturado = ∑ montoVecchi,
+//     ganancia chofer = ∑ montoChoferRedondeado, adelantos, gastos, neto =
+//     chofer − adelantos + gastos), por chofer y por viaje,
+//   - la acción `marcarLiquidadosBulk` con su confirm + feedback,
+//   - la exportación a Excel (`ReportLiquidacionService.generar`),
+//   - la navegación al detalle del viaje.
+//
+// Layout Núcleo:
+//   ┌─ Filtros: hero del mes (◀ MES ▶) + empresa + chofer + pills estado ─┐
+//   ├─ AppKpiStrip: facturado · ganancia chofer · adelantos · gastos · neto ┤
+//   ├─ Acciones (liquidar bulk / exportar Excel) ────────────────────────┤
+//   ├─ POR CHOFER (cards bento, hairlines, montos en mono) ──────────────┤
+//   └─ ó VIAJES + ADELANTOS del chofer (si hay chofer filtrado) ─────────┘
+//
+// Reglas duras: tokens (context.colors), montos en AppType.mono, embedded
+// (sin fondo full-screen propio), faltante → "—", sin overflow.
+
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/excluidos_service.dart';
 import '../../../core/services/prefs_service.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
@@ -13,8 +40,6 @@ import '../services/adelantos_service.dart';
 import '../services/report_liquidacion.dart';
 import '../services/liquidacion_service.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla LIQUIDACIÓN — agregaciones financieras de los viajes
 /// del mes filtrados por **empresa empleadora del chofer** (no por
 /// cliente del flete) + chofer opcional.
@@ -257,7 +282,7 @@ class _LogisticaLiquidacionScreenState
 }
 
 // ============================================================================
-// BARRA DE FILTROS (mes + empresa + chofer + liquidado)
+// BARRA DE FILTROS (mes + empresa + chofer + liquidado) — Núcleo
 // ============================================================================
 
 class _BarraFiltros extends StatelessWidget {
@@ -285,19 +310,27 @@ class _BarraFiltros extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
-      color: AppColors.surface2,
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.md),
+      decoration: BoxDecoration(
+        color: c.surface1,
+        border: Border(bottom: BorderSide(color: c.border)),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Fila 1: mes (con flechas) + empresa
+          // Hero del mes: eyebrow + (◀ MES ▶). El mes es el dato rector
+          // de la pantalla — va prominente arriba.
+          const AppEyebrow('Liquidación · período'),
+          const SizedBox(height: 6),
           Row(
             children: [
-              IconButton(
-                icon: const Icon(Icons.chevron_left, size: 20),
+              _FlechaMes(
+                icon: Icons.chevron_left,
                 tooltip: 'Mes anterior',
-                onPressed: () {
+                onTap: () {
                   final m = mes.month;
                   final y = mes.year;
                   onMesChanged(
@@ -308,14 +341,16 @@ class _BarraFiltros extends StatelessWidget {
                 child: Center(
                   child: Text(
                     AppFormatters.formatearMes(mes).toUpperCase(),
-                    style: AppType.heading.copyWith(letterSpacing: 1.1),
+                    style: AppType.h4.copyWith(letterSpacing: -0.2),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.chevron_right, size: 20),
+              _FlechaMes(
+                icon: Icons.chevron_right,
                 tooltip: 'Mes siguiente',
-                onPressed: () {
+                onTap: () {
                   final m = mes.month;
                   final y = mes.year;
                   onMesChanged(
@@ -324,18 +359,11 @@ class _BarraFiltros extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
-          // Fila 2: empresa empleadora dropdown
-          DropdownButtonFormField<String?>(
-            initialValue: empresaCuit,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Empresa empleadora del chofer',
-              border: OutlineInputBorder(),
-              isDense: true,
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
-            ),
+          const SizedBox(height: AppSpacing.md),
+          // Empresa empleadora + chofer (dropdowns Núcleo).
+          _DropdownNucleo<String?>(
+            label: 'Empresa empleadora',
+            value: empresaCuit,
             items: [
               const DropdownMenuItem<String?>(
                 value: null,
@@ -351,17 +379,9 @@ class _BarraFiltros extends StatelessWidget {
             onChanged: onEmpresaChanged,
           ),
           const SizedBox(height: AppSpacing.sm),
-          // Fila 3: chofer dropdown (filtrado por empresa si aplica)
-          DropdownButtonFormField<String?>(
-            initialValue: choferDni,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              labelText: 'Chofer',
-              border: OutlineInputBorder(),
-              isDense: true,
-              contentPadding:
-                  EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
-            ),
+          _DropdownNucleo<String?>(
+            label: 'Chofer',
+            value: choferDni,
             items: [
               const DropdownMenuItem<String?>(
                 value: null,
@@ -378,30 +398,121 @@ class _BarraFiltros extends StatelessWidget {
             ],
             onChanged: onChoferChanged,
           ),
-          const SizedBox(height: AppSpacing.sm),
-          // Fila 4: chips estado liquidación
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _ChipFiltro(
-                  label: 'No liquidados',
-                  selected: filtroLiquidado == false,
-                  onTap: () => onLiquidadoChanged(false),
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                _ChipFiltro(
-                  label: 'Liquidados',
-                  selected: filtroLiquidado == true,
-                  onTap: () => onLiquidadoChanged(true),
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                _ChipFiltro(
-                  label: 'Todos',
-                  selected: filtroLiquidado == null,
-                  onTap: () => onLiquidadoChanged(null),
-                ),
-              ],
+          const SizedBox(height: AppSpacing.md),
+          // Pills de estado de liquidación (mismo look que viajes lista).
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _PillEstado(
+                label: 'Sin liquidar',
+                seleccionado: filtroLiquidado == false,
+                onTap: () => onLiquidadoChanged(false),
+              ),
+              _PillEstado(
+                label: 'Liquidados',
+                seleccionado: filtroLiquidado == true,
+                onTap: () => onLiquidadoChanged(true),
+              ),
+              _PillEstado(
+                label: 'Todos',
+                seleccionado: filtroLiquidado == null,
+                onTap: () => onLiquidadoChanged(null),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Botón de flecha para navegar mes a mes — superficie tier-3 con borde.
+class _FlechaMes extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  const _FlechaMes({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: c.surface3,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: c.borderStrong),
+          ),
+          child: Icon(icon, size: 20, color: c.textSecondary),
+        ),
+      ),
+    );
+  }
+}
+
+/// Dropdown estilo Núcleo: surface2 + borde + label uppercase/mono a la
+/// izquierda. Reemplaza al DropdownButtonFormField Material (que pinta su
+/// propio fondo claro). La lógica (items / onChanged / value) es idéntica.
+class _DropdownNucleo<T> extends StatelessWidget {
+  final String label;
+  final T value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T> onChanged;
+
+  const _DropdownNucleo({
+    required this.label,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      decoration: BoxDecoration(
+        color: c.surface2,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: c.border),
+      ),
+      child: Row(
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 64),
+            child: Text(
+              label.toUpperCase(),
+              style: AppType.eyebrow.copyWith(color: c.textMuted),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<T>(
+                value: value,
+                isExpanded: true,
+                isDense: true,
+                dropdownColor: c.surface3,
+                iconEnabledColor: c.textMuted,
+                style: AppType.body.copyWith(color: c.text),
+                items: items,
+                // `T` es nullable (`String?`) acá, por eso el `null` de
+                // "Todas/Todos" es un valor válido y se reenvía tal cual.
+                onChanged: (v) => onChanged(v as T),
+              ),
             ),
           ),
         ],
@@ -410,28 +521,43 @@ class _BarraFiltros extends StatelessWidget {
   }
 }
 
-class _ChipFiltro extends StatelessWidget {
+/// Pill seleccionable de estado de liquidación (look del prototipo
+/// Núcleo, igual que en viajes lista). Activo = tinte brand.
+class _PillEstado extends StatelessWidget {
   final String label;
-  final bool selected;
+  final bool seleccionado;
   final VoidCallback onTap;
-  const _ChipFiltro({
+  const _PillEstado({
     required this.label,
-    required this.selected,
+    required this.seleccionado,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      labelStyle: AppType.label.copyWith(
-        color: selected ? AppColors.surface0 : AppColors.textSecondary,
-        fontWeight: FontWeight.w600,
+    final c = context.colors;
+    final fg = seleccionado ? c.brand : c.textSecondary;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: seleccionado
+              ? c.brand.withValues(alpha: 0.16)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: seleccionado
+                ? c.brand.withValues(alpha: 0.5)
+                : c.borderStrong,
+          ),
+        ),
+        child: Text(
+          label,
+          style: AppType.label.copyWith(color: fg, fontWeight: FontWeight.w600),
+        ),
       ),
-      selectedColor: AppColors.brand,
-      backgroundColor: AppColors.surface0,
     );
   }
 }
@@ -486,9 +612,11 @@ class _Contenido extends StatelessWidget {
     // (Adelantos ya se le entregaron, gastos se le devuelven.)
     final netoChofer = totalChofer - totalAdelantos + totalGastos;
     final hayPendientes = viajes.any((v) => !v.liquidado);
+    final cantPendientes = viajes.where((v) => !v.liquidado).length;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.xxxl),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xxxl),
       children: [
         _SeccionKPIs(
           totalFacturado: totalFacturado,
@@ -500,22 +628,22 @@ class _Contenido extends StatelessWidget {
           cantAdelantos: adelantos.length,
         ),
         const SizedBox(height: AppSpacing.lg),
-        if (hayPendientes)
-          AppButton(
-            label:
-                'Marcar ${viajes.where((v) => !v.liquidado).length} viaje(s) como liquidados',
+        if (hayPendientes) ...[
+          AppButton.primary(
+            label: 'Marcar $cantPendientes viaje(s) como liquidados',
             icon: Icons.check_circle_outline,
-            expand: true,
+            full: true,
             onPressed: onLiquidarBulk,
           ),
-        if (hayPendientes) const SizedBox(height: AppSpacing.sm),
+          const SizedBox(height: AppSpacing.sm),
+        ],
         // Exportar a Excel — siempre disponible si hay datos. Útil para
         // mandar al contador, imprimir o auditar offline. 3 hojas:
         // RESUMEN por chofer, VIAJES uno por uno, ADELANTOS uno por uno.
         AppButton.secondary(
           label: 'Exportar a Excel',
           icon: Icons.file_download_outlined,
-          expand: true,
+          full: true,
           onPressed: onExportarExcel,
         ),
         const SizedBox(height: AppSpacing.lg),
@@ -535,7 +663,50 @@ class _Contenido extends StatelessWidget {
 }
 
 // ============================================================================
-// KPIs grandes
+// SECCIÓN bento reutilizable (eyebrow + dot opcional + contenido)
+// ============================================================================
+
+class _Seccion extends StatelessWidget {
+  final String titulo;
+  final Color? accentDot;
+  final Widget? trailing;
+  final List<Widget> children;
+
+  const _Seccion({
+    required this.titulo,
+    this.accentDot,
+    this.trailing,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      tier: 2,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (accentDot != null) ...[
+                AppDot(accentDot!, size: 7),
+                const SizedBox(width: AppSpacing.sm),
+              ],
+              Expanded(child: AppEyebrow(titulo, color: accentDot)),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// KPIs — AppKpiStrip (hero numbers) + desglose firma del neto
 // ============================================================================
 
 class _SeccionKPIs extends StatelessWidget {
@@ -559,93 +730,131 @@ class _SeccionKPIs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.account_balance_wallet,
-                  size: 20, color: AppColors.success),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  'Resumen — $cantViajes viaje(s) · '
-                  '$cantAdelantos adelanto(s)',
-                  style: AppType.heading,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          _LineaKPI(
-            label: 'Facturado a empresa',
-            valor: totalFacturado,
-            color: AppColors.info,
-          ),
-          _LineaKPI(
-            label: 'Ganancia chofer (redondeado)',
-            valor: totalChofer,
-            color: AppColors.brandSoft,
-          ),
-          _LineaKPI(
-            label: 'Adelantos entregados',
-            valor: -totalAdelantos,
-            color: AppColors.warning,
-          ),
-          _LineaKPI(
-            label: 'Gastos a reembolsar',
-            valor: totalGastos,
-            color: AppColors.warning,
-          ),
-          const Divider(color: AppColors.borderStrong, height: AppSpacing.xl),
-          _LineaKPI(
-            label: 'Neto a pagar al chofer',
-            valor: netoChofer,
-            color:
-                netoChofer >= 0 ? AppColors.success : AppColors.error,
-            destacado: true,
-          ),
-        ],
+    final c = context.colors;
+    String monto(double m) => '\$ ${AppFormatters.formatearMonto(m)}';
+
+    // Strip principal con los 3 números héroe. En ancho chico se aprieta,
+    // así que partimos a 2 strips apilados bajo cierto umbral.
+    final statsTop = <AppStat>[
+      AppStat(
+        label: 'Facturado',
+        value: monto(totalFacturado),
+        valueStyle: AppType.h4,
+        accent: c.info,
       ),
+      AppStat(
+        label: 'Ganancia chofer',
+        value: monto(totalChofer),
+        valueStyle: AppType.h4,
+        accent: c.brandSoft,
+      ),
+      AppStat(
+        label: 'Neto a pagar',
+        value: monto(netoChofer),
+        valueStyle: AppType.h4,
+        accent: netoChofer >= 0 ? c.success : c.error,
+      ),
+    ];
+
+    return _Seccion(
+      titulo: 'RESUMEN',
+      accentDot: c.success,
+      trailing: Text(
+        '$cantViajes viaje(s) · $cantAdelantos adel.',
+        style: AppType.monoSm.copyWith(color: c.textMuted),
+      ),
+      children: [
+        LayoutBuilder(
+          builder: (ctx, constraints) {
+            if (constraints.maxWidth < 420) {
+              return Column(
+                children: [
+                  AppKpiStrip(stats: statsTop.sublist(0, 2)),
+                  const SizedBox(height: AppSpacing.sm),
+                  AppKpiStrip(stats: statsTop.sublist(2)),
+                ],
+              );
+            }
+            return AppKpiStrip(stats: statsTop);
+          },
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        // Desglose del neto en filas label/valor (mono). Es el detalle
+        // que arma el neto — mismo orden y signo que antes.
+        _LineaMonto(label: 'Facturado a empresa', valor: totalFacturado),
+        _LineaMonto(
+            label: 'Ganancia chofer (redondeado)', valor: totalChofer),
+        _LineaMonto(
+          label: 'Adelantos entregados',
+          valor: -totalAdelantos,
+          color: c.warning,
+        ),
+        _LineaMonto(
+          label: 'Gastos a reembolsar',
+          valor: totalGastos,
+          color: c.warning,
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        const AppHairline(),
+        const SizedBox(height: AppSpacing.sm),
+        _LineaMonto(
+          label: 'Neto a pagar al chofer',
+          valor: netoChofer,
+          destacado: true,
+        ),
+      ],
     );
   }
 }
 
-class _LineaKPI extends StatelessWidget {
+/// Fila label (izq) / monto (der) en mono. `destacado` engrosa y resalta;
+/// los montos siguen pintándose verde/coral según signo cuando se destacan,
+/// o con el color informativo pasado en [color].
+class _LineaMonto extends StatelessWidget {
   final String label;
   final double valor;
-  final Color color;
+  final Color? color;
   final bool destacado;
-  const _LineaKPI({
+  const _LineaMonto({
     required this.label,
     required this.valor,
-    required this.color,
+    this.color,
     this.destacado = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+    final valColor = destacado
+        ? (valor >= 0 ? c.success : c.error)
+        : (color ?? c.text);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
+            flex: 5,
             child: Text(
               label,
-              style: (destacado ? AppType.body : AppType.label).copyWith(
-                color: destacado ? AppColors.textPrimary : AppColors.textSecondary,
-                fontWeight: destacado ? FontWeight.bold : FontWeight.normal,
+              style: AppType.bodySm.copyWith(
+                color: destacado ? c.text : c.textSecondary,
+                fontWeight: destacado ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
           ),
-          Text(
-            '\$${AppFormatters.formatearMonto(valor)}',
-            style: (destacado ? AppType.title : AppType.heading).copyWith(
-              color: color,
-              fontWeight: FontWeight.bold,
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            flex: 4,
+            child: Text(
+              '\$ ${AppFormatters.formatearMonto(valor)}',
+              textAlign: TextAlign.right,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: (destacado ? AppType.mono : AppType.monoSm).copyWith(
+                color: valColor,
+                fontWeight: destacado ? FontWeight.w700 : FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -671,6 +880,7 @@ class _TablaPorChofer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     // Agrupar viajes y adelantos por chofer DNI. Cada chofer puede
     // tener viajes, adelantos, o ambos (caso adelanto de sueldo sin
     // viaje en el mes).
@@ -697,127 +907,109 @@ class _TablaPorChofer extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(AppSpacing.xs, AppSpacing.xs, AppSpacing.xs, AppSpacing.sm),
-          child: Text('POR CHOFER', style: AppType.eyebrow),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xs, 0, AppSpacing.xs, AppSpacing.sm),
+          child: AppEyebrow('Por chofer · ${dnis.length}'),
         ),
-        ...dnis.map((dni) {
-          final vs = viajesPorChofer[dni] ?? const <Viaje>[];
-          final ads = adelantosPorChofer[dni] ?? const <AdelantoChofer>[];
-          final nombre = empleados[dni]?.nombre ?? 'DNI $dni';
-          final facturado = vs.fold<double>(0, (a, v) => a + v.montoVecchi);
-          final chofer =
-              vs.fold<double>(0, (a, v) => a + v.montoChoferRedondeado);
-          // Solo adelantos NUEVOS (colección) — los legacy del viaje
-          // son data de testeo y no se contabilizan (Santiago decidió
-          // no migrar 2026-05-13).
-          final adelantosTotal = ads.fold<double>(0, (a, ad) => a + ad.monto);
-          final gastos = vs.fold<double>(0, (a, v) => a + v.gastosTotal);
-          final neto = chofer - adelantosTotal + gastos;
-          final pendientes = vs.where((v) => !v.liquidado).length;
-          return AppCard(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.md),
-            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        nombre.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppType.label.copyWith(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      vs.isEmpty
-                          ? 'sin viajes'
-                          : '${vs.length} viaje${vs.length == 1 ? "" : "s"}',
-                      style: AppType.eyebrow,
-                    ),
-                    if (ads.isNotEmpty) ...[
-                      const SizedBox(width: AppSpacing.xs),
-                      Text(
-                        '·  ${ads.length} adel.',
-                        style: AppType.eyebrow.copyWith(color: AppColors.info),
-                      ),
-                    ],
-                    if (pendientes > 0) ...[
-                      const SizedBox(width: AppSpacing.xs),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.xs, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.warning.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(AppRadius.sm),
-                          border: Border.all(
-                              color: AppColors.warning, width: 0.6),
-                        ),
-                        child: Text(
-                          '$pendientes pend.',
-                          style: AppType.eyebrow.copyWith(color: AppColors.warning),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                _MiniCelda(label: 'Facturado', valor: facturado),
-                _MiniCelda(label: 'Ganancia chofer', valor: chofer),
-                _MiniCelda(label: 'Adelantos', valor: -adelantosTotal),
-                _MiniCelda(label: 'Gastos', valor: gastos),
-                const Divider(color: AppColors.borderSubtle, height: AppSpacing.md),
-                _MiniCelda(
-                    label: 'Neto a pagar', valor: neto, destacado: true),
-              ],
-            ),
-          );
-        }),
+        for (final dni in dnis) ...[
+          _CardChofer(
+            nombre: empleados[dni]?.nombre ?? 'DNI $dni',
+            viajes: viajesPorChofer[dni] ?? const <Viaje>[],
+            adelantos: adelantosPorChofer[dni] ?? const <AdelantoChofer>[],
+          ),
+          const SizedBox(height: AppSpacing.md),
+        ],
+        if (dnis.isEmpty)
+          Text(
+            'Sin choferes en el período.',
+            style: AppType.bodySm.copyWith(color: c.textMuted),
+          ),
       ],
     );
   }
 }
 
-class _MiniCelda extends StatelessWidget {
-  final String label;
-  final double valor;
-  final bool destacado;
-  const _MiniCelda({
-    required this.label,
-    required this.valor,
-    this.destacado = false,
+/// Card bento de un chofer en la tabla agregada: nombre + badges de
+/// conteo, y las filas de montos (facturado / ganancia / adelantos /
+/// gastos / neto). Mismos cálculos que la versión previa.
+class _CardChofer extends StatelessWidget {
+  final String nombre;
+  final List<Viaje> viajes;
+  final List<AdelantoChofer> adelantos;
+
+  const _CardChofer({
+    required this.nombre,
+    required this.viajes,
+    required this.adelantos,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
+    final c = context.colors;
+    final facturado = viajes.fold<double>(0, (a, v) => a + v.montoVecchi);
+    final chofer =
+        viajes.fold<double>(0, (a, v) => a + v.montoChoferRedondeado);
+    // Solo adelantos NUEVOS (colección) — los legacy del viaje
+    // son data de testeo y no se contabilizan (Santiago decidió
+    // no migrar 2026-05-13).
+    final adelantosTotal = adelantos.fold<double>(0, (a, ad) => a + ad.monto);
+    final gastos = viajes.fold<double>(0, (a, v) => a + v.gastosTotal);
+    final neto = chofer - adelantosTotal + gastos;
+    final pendientes = viajes.where((v) => !v.liquidado).length;
+
+    return AppCard(
+      tier: 1,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Text(
-              label,
-              style: AppType.eyebrow.copyWith(
-                color: destacado ? AppColors.textPrimary : AppColors.textSecondary,
-                fontWeight: destacado ? FontWeight.bold : FontWeight.normal,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  nombre.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.body.copyWith(
+                    color: c.text,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-            ),
+              if (pendientes > 0) ...[
+                const SizedBox(width: AppSpacing.sm),
+                AppBadge(
+                  text: '$pendientes pend.',
+                  color: c.warning,
+                  size: AppBadgeSize.sm,
+                ),
+              ],
+            ],
           ),
+          const SizedBox(height: 4),
+          // Conteos en mono muted (técnico).
           Text(
-            '\$${AppFormatters.formatearMonto(valor)}',
-            style: AppType.label.copyWith(
-              color: destacado
-                  ? (valor >= 0 ? AppColors.success : AppColors.error)
-                  : AppColors.textPrimary,
-              fontSize: destacado ? 13 : 12,
-              fontWeight: FontWeight.w600,
-            ),
+            [
+              viajes.isEmpty
+                  ? 'sin viajes'
+                  : '${viajes.length} viaje${viajes.length == 1 ? "" : "s"}',
+              if (adelantos.isNotEmpty) '${adelantos.length} adel.',
+            ].join('  ·  '),
+            style: AppType.monoSm.copyWith(color: c.textMuted),
           ),
+          const SizedBox(height: AppSpacing.sm),
+          const AppHairline(),
+          const SizedBox(height: AppSpacing.sm),
+          _LineaMonto(label: 'Facturado', valor: facturado),
+          _LineaMonto(label: 'Ganancia chofer', valor: chofer),
+          _LineaMonto(
+              label: 'Adelantos', valor: -adelantosTotal, color: c.warning),
+          _LineaMonto(label: 'Gastos', valor: gastos, color: c.warning),
+          const SizedBox(height: AppSpacing.xs),
+          const AppHairline(),
+          const SizedBox(height: AppSpacing.xs),
+          _LineaMonto(label: 'Neto a pagar', valor: neto, destacado: true),
         ],
       ),
     );
@@ -839,19 +1031,27 @@ class _ListaViajes extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (viajes.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(AppSpacing.xs, AppSpacing.xs, AppSpacing.xs, AppSpacing.sm),
-            child: Text('VIAJES DEL CHOFER', style: AppType.eyebrow),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xs, 0, AppSpacing.xs, AppSpacing.sm),
+            child: AppEyebrow('Viajes del chofer · ${viajes.length}'),
           ),
-          ...viajes.map((v) => _ViajeCardLiquidacion(v: v)),
+          for (final v in viajes) ...[
+            _ViajeCardLiquidacion(v: v),
+            const SizedBox(height: AppSpacing.md),
+          ],
         ],
         if (adelantos.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.sm),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(AppSpacing.xs, AppSpacing.xs, AppSpacing.xs, AppSpacing.sm),
-            child: Text('ADELANTOS DEL CHOFER', style: AppType.eyebrow),
+          const SizedBox(height: AppSpacing.xs),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xs, 0, AppSpacing.xs, AppSpacing.sm),
+            child: AppEyebrow('Adelantos del chofer · ${adelantos.length}'),
           ),
-          ...adelantos.map((a) => _AdelantoCardLiquidacion(a: a)),
+          for (final a in adelantos) ...[
+            _AdelantoCardLiquidacion(a: a),
+            const SizedBox(height: AppSpacing.md),
+          ],
         ],
       ],
     );
@@ -868,46 +1068,51 @@ class _AdelantoCardLiquidacion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppCard(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.md),
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      tier: 1,
+      accent: c.warning,
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
-          const Icon(Icons.payments_outlined,
-              size: 18, color: AppColors.info),
-          const SizedBox(width: AppSpacing.sm),
+          Icon(Icons.payments_outlined, size: 18, color: c.warning),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   AppFormatters.formatearFecha(a.fecha),
-                  style: AppType.label.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.bold,
+                  style: AppType.mono.copyWith(
+                    color: c.text,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-                if (a.observacion != null && a.observacion!.isNotEmpty)
+                if (a.observacion != null && a.observacion!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
                   Text(
                     a.observacion!,
-                    style: AppType.eyebrow,
+                    style: AppType.bodySm.copyWith(color: c.textSecondary),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                if (a.numeroRecibo != null)
+                ],
+                if (a.numeroRecibo != null) ...[
+                  const SizedBox(height: 2),
                   Text(
-                    'Recibo Nº ${a.numeroRecibo.toString().padLeft(6, '0')}',
-                    style: AppType.eyebrow.copyWith(color: AppColors.textDisabled),
+                    'Recibo N° ${a.numeroRecibo.toString().padLeft(6, '0')}',
+                    style: AppType.monoSm.copyWith(color: c.textMuted),
                   ),
+                ],
               ],
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
+          const SizedBox(width: AppSpacing.md),
           Text(
-            '−\$${AppFormatters.formatearMonto(a.monto)}',
-            style: AppType.body.copyWith(
-              color: AppColors.warning,
-              fontWeight: FontWeight.bold,
+            '−\$ ${AppFormatters.formatearMonto(a.monto)}',
+            style: AppType.mono.copyWith(
+              color: c.warning,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -934,13 +1139,15 @@ class _ViajeCardLiquidacionState extends State<_ViajeCardLiquidacion> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final v = widget.v;
     final fecha = v.fechaReferencia != null
         ? AppFormatters.formatearFecha(v.fechaReferencia!)
         : '—';
     return AppCard(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.md),
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      tier: 1,
+      accent: v.liquidado ? c.success : c.warning,
+      padding: const EdgeInsets.all(AppSpacing.lg),
       onTap: () => Navigator.pushNamed(
         context,
         AppRoutes.adminLogisticaViajeDetalle,
@@ -951,72 +1158,78 @@ class _ViajeCardLiquidacionState extends State<_ViajeCardLiquidacion> {
         children: [
           Row(
             children: [
-              Expanded(
-                child: Text(
-                  '$fecha · ${v.rutaEtiqueta}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.label.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.bold,
-                  ),
+              Text(
+                fecha,
+                style: AppType.mono.copyWith(
+                  color: v.fechaReferencia == null ? c.textMuted : c.text,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              if (v.liquidado)
-                const Icon(Icons.check_circle,
-                    size: 14, color: AppColors.success)
-              else
-                const Icon(Icons.schedule,
-                    size: 14, color: AppColors.warning),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  v.rutaEtiqueta,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.bodySm.copyWith(color: c.textSecondary),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              AppBadge(
+                text: v.liquidado ? 'Liquidado' : 'Pendiente',
+                color: v.liquidado ? c.success : c.warning,
+                size: AppBadgeSize.sm,
+                dot: !v.liquidado,
+                icon: v.liquidado ? Icons.check : null,
+              ),
             ],
           ),
-          const SizedBox(height: AppSpacing.xs),
-          _MiniCelda(label: 'Facturado', valor: v.montoVecchi),
-          _MiniCelda(
-              label: 'Ganancia chofer', valor: v.montoChoferRedondeado),
+          const SizedBox(height: AppSpacing.sm),
+          const AppHairline(),
+          const SizedBox(height: AppSpacing.sm),
+          _LineaMonto(label: 'Facturado', valor: v.montoVecchi),
+          _LineaMonto(label: 'Ganancia chofer', valor: v.montoChoferRedondeado),
           if ((v.adelantoMonto ?? 0) > 0)
-            _MiniCelda(label: 'Adelanto', valor: -(v.adelantoMonto ?? 0)),
+            _LineaMonto(
+                label: 'Adelanto', valor: -(v.adelantoMonto ?? 0), color: c.warning),
           if (v.gastosTotal > 0)
-            _MiniCelda(label: 'Gastos', valor: v.gastosTotal),
-          const Divider(color: AppColors.borderSubtle, height: AppSpacing.md),
-          _MiniCelda(
-            label: 'Neto',
-            valor: v.liquidacionChofer,
-            destacado: true,
-          ),
+            _LineaMonto(label: 'Gastos', valor: v.gastosTotal, color: c.warning),
+          const SizedBox(height: AppSpacing.xs),
+          const AppHairline(),
+          const SizedBox(height: AppSpacing.xs),
+          _LineaMonto(label: 'Neto', valor: v.liquidacionChofer, destacado: true),
           // Toggle desplegable solo si tiene más de 1 tramo.
           if (v.esMultiTramo) ...[
-            const SizedBox(height: AppSpacing.xs),
+            const SizedBox(height: AppSpacing.sm),
             InkWell(
               onTap: () => setState(() => _expandido = !_expandido),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    _expandido
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                    size: 16,
-                    color: AppColors.textTertiary,
-                  ),
-                  const SizedBox(width: AppSpacing.xs),
-                  Text(
-                    _expandido
-                        ? 'Ocultar tramos'
-                        : 'Ver detalle de ${v.cantidadTramos} tramos',
-                    style: AppType.eyebrow,
-                  ),
-                ],
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      _expandido
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      size: 16,
+                      color: c.textMuted,
+                    ),
+                    const SizedBox(width: AppSpacing.xs),
+                    Text(
+                      _expandido
+                          ? 'Ocultar tramos'
+                          : 'Ver detalle de ${v.cantidadTramos} tramos',
+                      style: AppType.eyebrow.copyWith(color: c.textMuted),
+                    ),
+                  ],
+                ),
               ),
             ),
-            if (_expandido) ...[
-              const SizedBox(height: AppSpacing.xs),
-              ...v.tramos.asMap().entries.map((entry) {
-                final i = entry.key;
-                final t = entry.value;
-                return _DetalleTramoLiquidacion(numero: i + 1, tramo: t);
-              }),
-            ],
+            if (_expandido)
+              for (var i = 0; i < v.tramos.length; i++)
+                _DetalleTramoLiquidacion(numero: i + 1, tramo: v.tramos[i]),
           ],
         ],
       ),
@@ -1039,6 +1252,7 @@ class _DetalleTramoLiquidacion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final ts = tramo.tarifaSnapshot;
     final fc = tramo.fechaCarga != null
         ? AppFormatters.formatearFecha(tramo.fechaCarga!)
@@ -1053,43 +1267,51 @@ class _DetalleTramoLiquidacion extends StatelessWidget {
         ? '${AppFormatters.formatearMiles(tramo.kgDescargados!.toInt())} kg'
         : null;
     return Container(
-      margin: const EdgeInsets.only(top: AppSpacing.xs),
-      padding: const EdgeInsets.all(AppSpacing.sm),
+      margin: const EdgeInsets.only(top: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: AppColors.borderSubtle,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: AppColors.borderSubtle),
+        color: c.surface3,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: c.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'TRAMO $numero · ${ts.origenEtiqueta} → ${ts.destinoEtiqueta}',
-            style: AppType.eyebrow.copyWith(color: AppColors.info),
-            overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              AppDot(c.brand, size: 6),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'TRAMO $numero · ${ts.origenEtiqueta} → ${ts.destinoEtiqueta}',
+                  style: AppType.eyebrow.copyWith(color: c.brand),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.xs),
           if (tramo.producto != null && tramo.producto!.isNotEmpty)
             Text(
               tramo.producto!,
-              style: AppType.eyebrow.copyWith(color: AppColors.textSecondary),
+              style: AppType.bodySm.copyWith(color: c.textSecondary),
             ),
           Text(
             'Carga: $fc${kgC != null ? "  ·  $kgC" : ""}',
-            style: AppType.eyebrow,
+            style: AppType.monoSm.copyWith(color: c.textSecondary),
           ),
           Text(
             'Descarga: $fd${kgD != null ? "  ·  $kgD" : ""}',
-            style: AppType.eyebrow,
+            style: AppType.monoSm.copyWith(color: c.textSecondary),
           ),
           if (tramo.remitoNumero != null && tramo.remitoNumero!.isNotEmpty)
             Text(
-              'Remito Nº ${tramo.remitoNumero}',
-              style: AppType.eyebrow,
+              'Remito N° ${tramo.remitoNumero}',
+              style: AppType.monoSm.copyWith(color: c.textMuted),
             ),
         ],
       ),
     );
   }
 }
-
