@@ -319,6 +319,48 @@ class AppFormatters {
     final hoyNormalizado = DateTime(ahora.year, ahora.month, ahora.day);
     return vtoNormalizado.difference(hoyNormalizado).inDays;
   }
+
+  /// Edad en años cumplidos a partir de una fecha de nacimiento (acepta
+  /// los mismos formatos que [tryParseFecha]: ISO, DD-MM-YYYY, DateTime).
+  /// Devuelve `null` si no parsea o si el resultado es absurdo (< 0 o
+  /// > 120 — típicamente un typo en el año). La edad se calcula en vivo,
+  /// no se guarda en la BD (así nunca queda desactualizada).
+  static int? edadDesde(dynamic fechaNacimiento) {
+    final f = _parseUniversalDate(fechaNacimiento);
+    if (f == null) return null;
+    final hoy = DateTime.now();
+    var edad = hoy.year - f.year;
+    // Si todavía no cumplió años este año, restar uno.
+    if (hoy.month < f.month || (hoy.month == f.month && hoy.day < f.day)) {
+      edad--;
+    }
+    if (edad < 0 || edad > 120) return null;
+    return edad;
+  }
+
+  /// Antigüedad legible a partir de una fecha de ingreso: `"18 años"`,
+  /// `"1 año y 3 meses"`, `"5 meses"`, `"menos de 1 mes"`. Devuelve
+  /// `null` si no parsea o si la fecha es futura (sin sentido). Igual que
+  /// [edadDesde], se calcula en vivo — no se persiste.
+  static String? antiguedadTexto(dynamic fechaIngreso) {
+    final f = _parseUniversalDate(fechaIngreso);
+    if (f == null) return null;
+    final hoy = DateTime.now();
+    var anios = hoy.year - f.year;
+    var meses = hoy.month - f.month;
+    if (hoy.day < f.day) meses--;
+    if (meses < 0) {
+      anios--;
+      meses += 12;
+    }
+    if (anios < 0) return null; // ingreso futuro → sin sentido
+    String plural(int n, String singular, String pluralStr) =>
+        '$n ${n == 1 ? singular : pluralStr}';
+    if (anios == 0 && meses == 0) return 'menos de 1 mes';
+    if (anios == 0) return plural(meses, 'mes', 'meses');
+    if (meses == 0) return plural(anios, 'año', 'años');
+    return '${plural(anios, 'año', 'años')} y ${plural(meses, 'mes', 'meses')}';
+  }
 }
 
 /// Implementación interna del input formatter expuesto como

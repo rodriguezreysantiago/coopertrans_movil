@@ -71,6 +71,9 @@ class _DetalleChofer extends StatelessWidget {
     // GOMERIA, etc, no tiene sentido mostrar tractor/enganche.
     final area = (data['AREA'] ?? AppAreas.manejo).toString();
     final esDeManejo = area == AppAreas.manejo;
+    // Edad y antigüedad se calculan en vivo de las fechas — no se guardan.
+    final edad = AppFormatters.edadDesde(data['FECHA_NACIMIENTO']);
+    final antiguedad = AppFormatters.antiguedadTexto(data['FECHA_INGRESO']);
 
     return ListView(
       controller: scrollController,
@@ -192,6 +195,43 @@ class _DetalleChofer extends StatelessWidget {
         _DatoEditableEmpresa(
           valor: (data['EMPRESA'] ?? '-').toString(),
           onSave: (v) => EmpleadoActions.dato(context, dni, 'EMPRESA', v),
+        ),
+
+        const Divider(color: Colors.white10),
+        const _SectionTitle(
+            icon: Icons.contact_page, label: 'Datos personales'),
+        // Fecha de nacimiento + edad calculada (la edad NO se guarda en BD).
+        _DatoEditableFecha(
+          dni: dni,
+          etiqueta: 'FECHA DE NACIMIENTO',
+          campo: 'FECHA_NACIMIENTO',
+          valorActual: data['FECHA_NACIMIENTO'],
+          titulo: 'Fecha de nacimiento',
+          minimo: DateTime(1940),
+          maximo: DateTime.now(),
+          extra: edad != null ? '$edad años' : null,
+        ),
+        _DatoEditableTexto(
+          etiqueta: 'DOMICILIO',
+          valor: ((data['DOMICILIO'] ?? '').toString().trim().isEmpty
+              ? '-'
+              : data['DOMICILIO'].toString()),
+          // Domicilio respeta como lo tipea el admin (no MAYÚSCULAS):
+          // "Francisco Hernandez 855" se lee mejor que en bloque.
+          aplicarMayusculas: false,
+          onSave: (v) => EmpleadoActions.dato(
+              context, dni, 'DOMICILIO', v.trim().isEmpty ? null : v.trim()),
+        ),
+        // Fecha de ingreso + antigüedad calculada (no se guarda).
+        _DatoEditableFecha(
+          dni: dni,
+          etiqueta: 'FECHA DE INGRESO',
+          campo: 'FECHA_INGRESO',
+          valorActual: data['FECHA_INGRESO'],
+          titulo: 'Fecha de ingreso',
+          minimo: DateTime(1980),
+          maximo: DateTime.now(),
+          extra: antiguedad,
         ),
 
         const Divider(color: Colors.white10),
@@ -769,6 +809,67 @@ class _DatoEditableEnum extends StatelessWidget {
             );
           }).toList(),
         ),
+      ),
+    );
+  }
+}
+
+/// Editor de una FECHA del legajo SIN archivo adjunto (fecha de
+/// nacimiento, fecha de ingreso). A diferencia de [_FilaVencimiento]
+/// (que además gestiona un documento y muestra el badge de vencimiento),
+/// esto es solo la fecha + un texto auxiliar opcional [extra] (la edad o
+/// la antigüedad calculadas en vivo). Mismo look que [_DatoEditableTexto].
+class _DatoEditableFecha extends StatelessWidget {
+  final String dni;
+  final String etiqueta;
+  final String campo;
+  final dynamic valorActual;
+  final String titulo;
+  final DateTime? minimo;
+  final DateTime? maximo;
+  final String? extra;
+
+  const _DatoEditableFecha({
+    required this.dni,
+    required this.etiqueta,
+    required this.campo,
+    required this.valorActual,
+    required this.titulo,
+    this.minimo,
+    this.maximo,
+    this.extra,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tieneFecha =
+        valorActual != null && valorActual.toString().trim().isNotEmpty;
+    final valorTxt = tieneFecha
+        ? AppFormatters.formatearFecha(valorActual) +
+            (extra != null ? '   ·   $extra' : '')
+        : 'Sin fecha';
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(
+        etiqueta,
+        style: AppType.eyebrow.copyWith(color: AppColors.textDisabled),
+      ),
+      subtitle: Text(
+        valorTxt,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppType.body
+            .copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+      ),
+      trailing: const Icon(Icons.event, size: 20, color: AppColors.success),
+      onTap: () => EmpleadoActions.fecha(
+        context,
+        dni,
+        campo,
+        valorActual?.toString(),
+        titulo: titulo,
+        minimo: minimo,
+        maximo: maximo,
       ),
     );
   }

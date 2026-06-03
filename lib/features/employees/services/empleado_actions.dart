@@ -766,6 +766,35 @@ class EmpleadoActions {
     }
   }
 
+  /// Edita una fecha GENÉRICA del legajo (nacimiento, ingreso, etc.) — NO
+  /// vencimientos (esos van por [documento], que además maneja el archivo
+  /// adjunto). Abre el date picker con título y rango configurable y
+  /// persiste como `YYYY-MM-DD` vía [dato] (update + audit + feedback).
+  ///
+  /// [minimo]/[maximo] acotan el picker: para fecha de nacimiento/ingreso
+  /// el máximo es hoy (nadie nace ni ingresa en el futuro).
+  static Future<void> fecha(
+    BuildContext context,
+    String dni,
+    String campo,
+    String? fechaActual, {
+    required String titulo,
+    DateTime? minimo,
+    DateTime? maximo,
+  }) async {
+    final initial = AppFormatters.tryParseFecha(fechaActual ?? '');
+    final picked = await pickFecha(
+      context,
+      initial: initial,
+      titulo: titulo,
+      minimo: minimo,
+      maximo: maximo,
+    );
+    if (picked != null && context.mounted) {
+      await dato(context, dni, campo, AppFormatters.aIsoFechaLocal(picked));
+    }
+  }
+
   /// Selector de unidad (tractor o enganche).
   static void unidad(
     BuildContext context,

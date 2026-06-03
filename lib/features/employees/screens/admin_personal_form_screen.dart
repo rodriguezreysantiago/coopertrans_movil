@@ -11,9 +11,11 @@ import '../../../core/services/prefs_service.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/digit_only_formatter.dart';
+import '../../../shared/utils/formatters.dart';
 import '../../../shared/utils/password_hasher.dart';
 import '../../../shared/utils/upper_case_formatter.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../../../shared/widgets/fecha_dialog.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
@@ -37,6 +39,13 @@ class _AdminPersonalFormScreenState
   final _mailCtrl = TextEditingController();
   final _iButtonCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
+  final _domicilioCtrl = TextEditingController();
+
+  // Datos de RRHH incorporados desde la planilla de personal (2026-06).
+  // Opcionales al alta; se guardan como 'YYYY-MM-DD' igual que los
+  // vencimientos. Edad/antigüedad se calculan, no se guardan.
+  DateTime? _fechaNac;
+  DateTime? _fechaIngreso;
 
   String _rol = AppRoles.chofer;
   String _area = AppAreas.manejo;
@@ -58,7 +67,30 @@ class _AdminPersonalFormScreenState
     _mailCtrl.dispose();
     _iButtonCtrl.dispose();
     _passCtrl.dispose();
+    _domicilioCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickFechaNac() async {
+    final picked = await pickFecha(
+      context,
+      initial: _fechaNac,
+      titulo: 'Fecha de nacimiento',
+      minimo: DateTime(1940),
+      maximo: DateTime.now(),
+    );
+    if (picked != null) setState(() => _fechaNac = picked);
+  }
+
+  Future<void> _pickFechaIngreso() async {
+    final picked = await pickFecha(
+      context,
+      initial: _fechaIngreso,
+      titulo: 'Fecha de ingreso',
+      minimo: DateTime(1980),
+      maximo: DateTime.now(),
+    );
+    if (picked != null) setState(() => _fechaIngreso = picked);
   }
 
   Future<void> _guardar() async {
@@ -103,6 +135,16 @@ class _AdminPersonalFormScreenState
             ? null
             : _apodoCtrl.text.trim(),
         'CUIL': _cuilCtrl.text.trim(),
+        // Datos de RRHH (planilla de personal). Opcionales al alta — se
+        // completan/editan después desde la ficha. Fechas como 'YYYY-MM-DD'.
+        'DOMICILIO': _domicilioCtrl.text.trim().isEmpty
+            ? null
+            : _domicilioCtrl.text.trim(),
+        'FECHA_NACIMIENTO':
+            _fechaNac != null ? AppFormatters.aIsoFechaLocal(_fechaNac!) : null,
+        'FECHA_INGRESO': _fechaIngreso != null
+            ? AppFormatters.aIsoFechaLocal(_fechaIngreso!)
+            : null,
         'MAIL': _mailCtrl.text.trim().toLowerCase(),
         // Código del iButton/tarjeta Sitrack del chofer. Opcional al
         // alta — si no lo cargás ahora, lo sumás después desde la
@@ -232,6 +274,26 @@ class _AdminPersonalFormScreenState
                             isNumeric: true,
                             maxLength: 11,
                             isCuil: true,
+                          ),
+                          _FormInput(
+                            label: 'Domicilio (opcional)',
+                            controller: _domicilioCtrl,
+                            icon: Icons.home_outlined,
+                            // Domicilio respeta como lo tipea el admin.
+                            toUpperCase: false,
+                            isOptional: true,
+                          ),
+                          _CampoFecha(
+                            label: 'Fecha de nacimiento (opcional)',
+                            icon: Icons.cake_outlined,
+                            valor: _fechaNac,
+                            onTap: _guardando ? null : _pickFechaNac,
+                          ),
+                          _CampoFecha(
+                            label: 'Fecha de ingreso (opcional)',
+                            icon: Icons.event_available_outlined,
+                            valor: _fechaIngreso,
+                            onTap: _guardando ? null : _pickFechaIngreso,
                             isLast: true,
                           ),
                         ],
@@ -717,6 +779,52 @@ class _BotonGuardar extends StatelessWidget {
       expand: true,
       isLoading: guardando,
       onPressed: guardando ? null : onPressed,
+    );
+  }
+}
+
+/// Campo tappable de FECHA para el form de alta. Muestra la fecha elegida
+/// (o un placeholder) con el mismo look que [_FormInput] (InputDecorator +
+/// prefixIcon brand), y al tocar abre el date picker del sistema. `onTap`
+/// null lo deshabilita (mientras se guarda).
+class _CampoFecha extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final DateTime? valor;
+  final VoidCallback? onTap;
+  final bool isLast;
+
+  const _CampoFecha({
+    required this.label,
+    required this.icon,
+    required this.valor,
+    required this.onTap,
+    this.isLast = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Padding(
+      padding: EdgeInsets.only(bottom: isLast ? 0 : AppSpacing.lg),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: label,
+            prefixIcon: Icon(icon, color: c.brand, size: 20),
+          ),
+          child: Text(
+            valor != null
+                ? AppFormatters.formatearFecha(valor)
+                : 'Sin especificar',
+            style: AppType.body.copyWith(
+              color: valor != null ? c.text : c.textMuted,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

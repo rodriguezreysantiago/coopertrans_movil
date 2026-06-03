@@ -578,6 +578,20 @@ class _DatosCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Edad y antigüedad se calculan en vivo de las fechas (no se guardan).
+    final edad = AppFormatters.edadDesde(data['FECHA_NACIMIENTO']);
+    final fechaNacTxt =
+        AppFormatters.tryParseFecha(data['FECHA_NACIMIENTO']) != null
+            ? '${AppFormatters.formatearFecha(data['FECHA_NACIMIENTO'])}'
+                '${edad != null ? '   ·   $edad años' : ''}'
+            : '—';
+    final domicilio = (data['DOMICILIO'] ?? '').toString().trim();
+    final antiguedad = AppFormatters.antiguedadTexto(data['FECHA_INGRESO']);
+    final fechaIngTxt =
+        AppFormatters.tryParseFecha(data['FECHA_INGRESO']) != null
+            ? '${AppFormatters.formatearFecha(data['FECHA_INGRESO'])}'
+                '${antiguedad != null ? '   ·   $antiguedad' : ''}'
+            : '—';
     return AppCard(
       padding: EdgeInsets.zero,
       margin: EdgeInsets.zero,
@@ -599,6 +613,18 @@ class _DatosCard extends StatelessWidget {
             label: 'CUIL',
             valor: AppFormatters.formatearCUIL(data['CUIL'] ?? '—'),
             icon: Icons.assignment_ind,
+          ),
+          const _SeparadorTile(),
+          _InfoTile(
+            label: 'Fecha de nacimiento',
+            valor: fechaNacTxt,
+            icon: Icons.cake_outlined,
+          ),
+          const _SeparadorTile(),
+          _InfoTile(
+            label: 'Domicilio',
+            valor: domicilio.isEmpty ? '—' : domicilio,
+            icon: Icons.home_outlined,
           ),
           const _SeparadorTile(),
           // Teléfono editable: el chofer puede actualizar su número de
@@ -630,6 +656,12 @@ class _DatosCard extends StatelessWidget {
             transformarLowercase: true,
             hint: 'tu@email.com',
             onSave: (v) => onActualizarCampo('MAIL', v),
+          ),
+          const _SeparadorTile(),
+          _InfoTile(
+            label: 'Fecha de ingreso',
+            valor: fechaIngTxt,
+            icon: Icons.event_available_outlined,
           ),
         ],
       ),
