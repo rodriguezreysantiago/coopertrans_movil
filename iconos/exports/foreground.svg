@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 432 432">
+  <defs>
+    <linearGradient id="cFill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A5ACFF"></stop>
+      <stop offset="100%" stop-color="#7C83FF"></stop>
+    </linearGradient>
+  </defs>
+  <g transform="translate(178 216) scale(0.62)">
+    <path d="M 220 -250 A 320 320 0 1 0 220 250 L 220 130 A 200 200 0 1 1 220 -130 Z" fill="url(#cFill)"></path>
+  </g>
+</svg>

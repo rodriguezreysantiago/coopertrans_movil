@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#7C83FF" stop-opacity="0.35"></stop>
+      <stop offset="100%" stop-color="#7C83FF" stop-opacity="0"></stop>
+    </radialGradient>
+    <linearGradient id="cFill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#A5ACFF"></stop>
+      <stop offset="100%" stop-color="#7C83FF"></stop>
+    </linearGradient>
+    <clipPath id="squircle"><rect x="100" y="100" width="824" height="824" rx="184" ry="184"></rect></clipPath>
+  </defs>
+  <g clip-path="url(#squircle)">
+    <rect x="100" y="100" width="824" height="824" fill="#050505"></rect>
+    <rect x="100" y="100" width="824" height="824" fill="url(#glow)"></rect>
+    <g transform="translate(452 512) scale(0.82)">
+      <path d="M 220 -250 A 320 320 0 1 0 220 250 L 220 130 A 200 200 0 1 1 220 -130 Z" fill="url(#cFill)"></path>
+    </g>
+  </g>
+</svg>
