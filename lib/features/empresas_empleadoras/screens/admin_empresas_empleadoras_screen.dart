@@ -1,15 +1,17 @@
 // Pantalla admin: ABM de los documentos laborales que viven a nivel
-// EMPRESA empleadora (Póliza ART + Formulario 931). Una tarjeta por
-// empresa del catálogo (`AppEmpresasEmpleadoras.catalogo`); cada
-// tarjeta tiene 2 filas editables — fecha + archivo PDF.
+// EMPRESA empleadora (Póliza ART, Formulario 931, SCVO, Libre Deuda
+// Sindical). Una tarjeta por empresa del catálogo
+// (`AppEmpresasEmpleadoras.catalogo`); cada tarjeta tiene una fila
+// editable por documento — fecha + archivo PDF.
 //
-// Si el doc no existe todavía en Firestore, las filas muestran "Sin
-// fecha"/"Sin archivo" — al primer save se crea con `set(merge: true)`
-// (ver `EmpresaEmpleadoraService`).
+// Si el doc no existe todavía en Firestore, las filas muestran "—"
+// (sin fecha / sin archivo) — al primer save se crea con
+// `set(merge: true)` (ver `EmpresaEmpleadoraService`).
 //
-// Diseño paralelo a la sección "Seguros y aportes" del form admin de
-// empleado, pero sobre EMPRESAS_EMPLEADORAS — para que el admin no
-// tenga que aprender una UX distinta.
+// REFACTOR NÚCLEO · jun 2026 — solo el árbol de widgets. Datos
+// (StreamBuilder por CUIT), `EmpresaEmpleadoraService`, edición de
+// fecha (`pickFecha`), subida/reemplazo de archivo (ImagePicker /
+// FilePicker) y navegación quedaron INTACTOS.
 
 import 'dart:typed_data';
 
@@ -29,6 +31,7 @@ import '../services/empresa_empleadora_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
+
 class AdminEmpresasEmpleadorasScreen extends StatelessWidget {
   const AdminEmpresasEmpleadorasScreen({super.key});
 
@@ -38,28 +41,65 @@ class AdminEmpresasEmpleadorasScreen extends StatelessWidget {
     return AppScaffold(
       title: 'Empresas y seguros',
       body: ListView(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: AppSpacing.md),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxl),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xs, 0, AppSpacing.xs, AppSpacing.md),
-            child: Text(
-              'Acá cargás la Póliza ART y el Formulario 931 de cada '
-              'empresa empleadora UNA SOLA VEZ. Todos los empleados '
-              'que figuran en esa empresa los ven en su MIS '
-              'VENCIMIENTOS sin poder editar.',
-              style: AppType.label.copyWith(color: AppColors.textSecondary),
-            ),
-          ),
-          for (final e in empresas) _CardEmpresa(info: e),
-          const SizedBox(height: AppSpacing.xxl),
+          const _Intro(),
+          const SizedBox(height: AppSpacing.lg),
+          for (final e in empresas) ...[
+            _CardEmpresa(info: e),
+            const SizedBox(height: AppSpacing.mdDense),
+          ],
         ],
       ),
     );
   }
 }
 
+/// Aviso de encabezado — explica qué se carga acá y que es por empresa,
+/// una sola vez. Estilo Núcleo: superficie surface1 con eyebrow + body.
+class _Intro extends StatelessWidget {
+  const _Intro();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      decoration: BoxDecoration(
+        color: c.surface1,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(color: c.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, size: 18, color: c.textMuted),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const AppEyebrow('Una sola carga por empresa'),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Acá cargás la Póliza ART, el Formulario 931, el SCVO y '
+                  'el Libre Deuda Sindical de cada empresa empleadora UNA '
+                  'SOLA VEZ. Todos los empleados de esa empresa los ven en '
+                  'su MIS VENCIMIENTOS sin poder editar.',
+                  style: AppType.bodySm.copyWith(color: c.textSecondary),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Tarjeta de una empresa: header (avatar + razón social + CUIT mono) +
+/// las 4 filas de documentos a nivel empresa, separadas por hairlines.
 class _CardEmpresa extends StatelessWidget {
   final EmpresaEmpleadoraInfo info;
 
@@ -67,10 +107,10 @@ class _CardEmpresa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppCard(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      padding: const EdgeInsets.fromLTRB(
-          AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.sm),
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(AppSpacing.xl),
       child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
         stream: EmpresaEmpleadoraService.stream(info.cuit),
         builder: (ctx, snap) {
@@ -78,16 +118,19 @@ class _CardEmpresa extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header de la empresa.
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(AppSpacing.sm),
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
-                      color: AppColors.info.withAlpha(35),
-                      shape: BoxShape.circle,
+                      color: c.surface3,
+                      borderRadius: BorderRadius.circular(AppRadius.md),
                     ),
-                    child: const Icon(Icons.business,
-                        color: AppColors.info, size: 20),
+                    child: Icon(Icons.business_outlined,
+                        color: c.brand, size: 18),
                   ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
@@ -98,25 +141,22 @@ class _CardEmpresa extends StatelessWidget {
                           info.nombre.toUpperCase(),
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: AppType.body.copyWith(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.4),
+                          style: AppType.h5.copyWith(color: c.text),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'CUIT ${info.cuit}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppType.eyebrow
-                              .copyWith(color: AppColors.textTertiary),
+                          style: AppType.monoSm.copyWith(color: c.textMuted),
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-              const Divider(color: AppColors.borderSubtle, height: 24),
+              const SizedBox(height: AppSpacing.md),
+              AppHairline(color: c.border),
               _FilaDocEmpresa(
                 cuit: info.cuit,
                 etiqueta: AppDocsEmpresa.etiquetaPolizaArt,
@@ -124,7 +164,7 @@ class _CardEmpresa extends StatelessWidget {
                 campoUrl: AppDocsEmpresa.campoArchivoPolizaArt,
                 data: data,
               ),
-              const Divider(color: AppColors.borderSubtle, height: 8),
+              AppHairline(color: c.border),
               _FilaDocEmpresa(
                 cuit: info.cuit,
                 etiqueta: AppDocsEmpresa.etiquetaForm931,
@@ -132,7 +172,7 @@ class _CardEmpresa extends StatelessWidget {
                 campoUrl: AppDocsEmpresa.campoArchivoForm931,
                 data: data,
               ),
-              const Divider(color: AppColors.borderSubtle, height: 8),
+              AppHairline(color: c.border),
               _FilaDocEmpresa(
                 cuit: info.cuit,
                 etiqueta: AppDocsEmpresa.etiquetaScvoAdmin,
@@ -140,7 +180,7 @@ class _CardEmpresa extends StatelessWidget {
                 campoUrl: AppDocsEmpresa.campoArchivoScvo,
                 data: data,
               ),
-              const Divider(color: AppColors.borderSubtle, height: 8),
+              AppHairline(color: c.border),
               _FilaDocEmpresa(
                 cuit: info.cuit,
                 etiqueta: AppDocsEmpresa.etiquetaLibreDeudaSindical,
@@ -156,8 +196,8 @@ class _CardEmpresa extends StatelessWidget {
   }
 }
 
-/// Fila editable: thumbnail + etiqueta + fecha + badge + chevron. Tap
-/// abre un sheet con "editar fecha", "ver archivo", "subir/reemplazar".
+/// Fila editable: thumbnail + etiqueta + fecha (mono) + badge + chevron.
+/// Tap abre un sheet con "editar fecha", "ver archivo", "subir/reemplazar".
 class _FilaDocEmpresa extends StatelessWidget {
   final String cuit;
   final String etiqueta;
@@ -175,49 +215,65 @@ class _FilaDocEmpresa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final fecha = data[campoFecha];
     final url = data[campoUrl]?.toString();
     final tieneFecha = fecha != null && fecha.toString().isNotEmpty;
 
-    return InkWell(
-      onTap: () => _abrirSheet(context, urlActual: url, fechaActual: fecha?.toString()),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-        child: Row(
-          children: [
-            AppFileThumbnail(
-              url: url,
-              tituloVisor: '$etiqueta - $cuit',
-            ),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    etiqueta,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppType.eyebrow
-                        .copyWith(color: AppColors.textTertiary),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    tieneFecha
-                        ? AppFormatters.formatearFecha(fecha)
-                        : 'Sin fecha',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppType.heading.copyWith(fontSize: 13),
-                  ),
-                ],
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _abrirSheet(context,
+            urlActual: url, fechaActual: fecha?.toString()),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+          child: Row(
+            children: [
+              AppFileThumbnail(
+                url: url,
+                tituloVisor: '$etiqueta - $cuit',
               ),
-            ),
-            VencimientoBadge(fecha: fecha),
-            const SizedBox(width: AppSpacing.xs),
-            const Icon(Icons.chevron_right,
-                color: AppColors.textHint, size: 18),
-          ],
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      etiqueta,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.bodyLg
+                          .copyWith(color: c.text, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Row(
+                      children: [
+                        Text('Vence  ',
+                            style:
+                                AppType.bodySm.copyWith(color: c.textMuted)),
+                        Flexible(
+                          child: Text(
+                            tieneFecha
+                                ? AppFormatters.formatearFecha(fecha)
+                                : '—',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                AppType.monoSm.copyWith(color: c.textMuted),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              VencimientoBadge(fecha: fecha),
+              const SizedBox(width: AppSpacing.sm),
+              Icon(Icons.chevron_right, color: c.textMuted, size: 18),
+            ],
+          ),
         ),
       ),
     );
@@ -232,77 +288,87 @@ class _FilaDocEmpresa extends StatelessWidget {
     required String? urlActual,
     required String? fechaActual,
   }) {
+    final c = context.colors;
     final tieneArchivo =
         urlActual != null && urlActual.isNotEmpty && urlActual != '-';
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (bCtx) => Container(
-        padding: const EdgeInsets.all(AppSpacing.xl),
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.xl),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
+          color: c.surface2,
           borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
-          border: const Border(
-              top: BorderSide(color: AppColors.success, width: 2)),
+              const BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+          border: Border.all(color: c.border),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              etiqueta,
-              style: AppType.heading.copyWith(fontSize: 18),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            ListTile(
-              leading: const Icon(Icons.event_note,
-                  color: AppColors.info),
-              title: const Text('Editar fecha de vencimiento',
-                  style: TextStyle(color: AppColors.textPrimary)),
-              onTap: () {
-                Navigator.pop(bCtx);
-                _editarFecha(context, fechaActual);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.visibility,
-                  color: AppColors.success),
-              title: const Text('Ver documento digital',
-                  style: TextStyle(color: AppColors.textPrimary)),
-              enabled: tieneArchivo,
-              onTap: () {
-                Navigator.pop(bCtx);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => PreviewScreen(
-                      url: urlActual!,
-                      titulo: '$etiqueta - $cuit',
-                    ),
+        child: SafeArea(
+          top: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: c.border,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                   ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.upload_file,
-                  color: AppColors.warning),
-              title: Text(
-                tieneArchivo
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              const AppEyebrow('Documento de empresa'),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                etiqueta,
+                style: AppType.h5.copyWith(color: c.text),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              _AccionSheet(
+                icono: Icons.event_note_outlined,
+                titulo: 'Editar fecha de vencimiento',
+                color: c.brand,
+                onTap: () {
+                  Navigator.pop(bCtx);
+                  _editarFecha(context, fechaActual);
+                },
+              ),
+              _AccionSheet(
+                icono: Icons.visibility_outlined,
+                titulo: 'Ver documento digital',
+                color: tieneArchivo ? c.success : c.textMuted,
+                enabled: tieneArchivo,
+                onTap: () {
+                  Navigator.pop(bCtx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PreviewScreen(
+                        url: urlActual!,
+                        titulo: '$etiqueta - $cuit',
+                      ),
+                    ),
+                  );
+                },
+              ),
+              _AccionSheet(
+                icono: Icons.upload_file_outlined,
+                titulo: tieneArchivo
                     ? 'Reemplazar archivo cargado'
                     : 'Subir archivo nuevo',
-                style: const TextStyle(color: AppColors.textPrimary),
+                subtitulo: 'Foto o PDF — el cambio se ve para todos los '
+                    'empleados de esta empresa.',
+                color: c.warning,
+                onTap: () {
+                  Navigator.pop(bCtx);
+                  _subirArchivo(context);
+                },
               ),
-              subtitle: Text(
-                'Foto o PDF — el cambio se ve para todos los empleados '
-                'de esta empresa.',
-                style: AppType.eyebrow.copyWith(color: AppColors.textHint),
-              ),
-              onTap: () {
-                Navigator.pop(bCtx);
-                _subirArchivo(context);
-              },
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -338,54 +404,56 @@ class _FilaDocEmpresa extends StatelessWidget {
   }
 
   Future<void> _subirArchivo(BuildContext context) async {
+    final c = context.colors;
     final fuente = await showModalBottomSheet<_Fuente>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (sCtx) => Container(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.xl),
         decoration: BoxDecoration(
-          color: Theme.of(sCtx).colorScheme.surface,
+          color: c.surface2,
           borderRadius:
-              const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
-          border: const Border(
-              top: BorderSide(color: AppColors.success, width: 2)),
+              const BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+          border: Border.all(color: c.border),
         ),
         child: SafeArea(
+          top: false,
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.all(AppSpacing.xl),
-                child: Text(
-                  etiqueta.toUpperCase(),
-                  style: AppType.eyebrow.copyWith(
-                    color: AppColors.success,
-                    fontSize: 13,
-                    letterSpacing: 1.2,
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: c.border,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                   ),
                 ),
               ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt,
-                    color: AppColors.success),
-                title: const Text('Tomar foto con la cámara',
-                    style: TextStyle(color: AppColors.textPrimary)),
+              const SizedBox(height: AppSpacing.lg),
+              AppEyebrow(etiqueta),
+              const SizedBox(height: AppSpacing.md),
+              _AccionSheet(
+                icono: Icons.camera_alt_outlined,
+                titulo: 'Tomar foto con la cámara',
+                color: c.brand,
                 onTap: () => Navigator.pop(sCtx, _Fuente.camara),
               ),
-              ListTile(
-                leading: const Icon(Icons.photo_library,
-                    color: AppColors.info),
-                title: const Text('Foto desde la galería',
-                    style: TextStyle(color: AppColors.textPrimary)),
+              _AccionSheet(
+                icono: Icons.photo_library_outlined,
+                titulo: 'Foto desde la galería',
+                color: c.info,
                 onTap: () => Navigator.pop(sCtx, _Fuente.galeria),
               ),
-              ListTile(
-                leading: const Icon(Icons.picture_as_pdf,
-                    color: AppColors.error),
-                title: const Text('PDF / archivo del dispositivo',
-                    style: TextStyle(color: AppColors.textPrimary)),
+              _AccionSheet(
+                icono: Icons.picture_as_pdf_outlined,
+                titulo: 'PDF / archivo del dispositivo',
+                color: c.error,
                 onTap: () => Navigator.pop(sCtx, _Fuente.archivo),
               ),
-              const SizedBox(height: AppSpacing.xl),
             ],
           ),
         ),
@@ -452,6 +520,79 @@ class _FilaDocEmpresa extends StatelessWidget {
         stack: s,
       );
     }
+  }
+}
+
+/// Fila de acción dentro de un bottom sheet (ícono en cápsula + título +
+/// subtítulo opcional). Estilo Núcleo — reemplaza al ListTile Material.
+class _AccionSheet extends StatelessWidget {
+  final IconData icono;
+  final String titulo;
+  final String? subtitulo;
+  final Color color;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  const _AccionSheet({
+    required this.icono,
+    required this.titulo,
+    required this.color,
+    required this.onTap,
+    this.subtitulo,
+    this.enabled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Opacity(
+          opacity: enabled ? 1 : 0.4,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: Icon(icono, color: color, size: 18),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        titulo,
+                        style: AppType.body.copyWith(
+                            color: c.text, fontWeight: FontWeight.w600),
+                      ),
+                      if (subtitulo != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          subtitulo!,
+                          style:
+                              AppType.bodySm.copyWith(color: c.textMuted),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
