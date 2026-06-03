@@ -5,9 +5,10 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
-import '../../../shared/widgets/coopertrans_logo.dart';
+import '../../../shared/widgets/app_widgets.dart'; // CoopertransLogo + AppAmbient
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Splash inicial al abrir la app.
 ///
 /// Es 100% cosmético: muestra el logo grande sobre un gradient oscuro
@@ -70,54 +71,49 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              AppColors.brandDark,
-              AppColors.background,
-            ],
+      backgroundColor: AppColors.background,
+      body: Stack(
+        children: [
+          // Ambient sutil — gesto firma Núcleo. Anclado al centro superior
+          // porque el logo va en el medio.
+          const AppAmbient(
+            alignment: Alignment.topCenter,
+            sizeFactor: 0.9,
+            intensity: 0.45,
           ),
-        ),
-        child: const Stack(
-          children: [
-            Center(
-              child: CoopertransLogo(
-                size: CoopertransLogoSize.xl,
-                centered: true,
-              ),
+          // Logo centrado vertical y horizontalmente.
+          const Center(
+            child: CoopertransLogo(
+              size: CoopertransLogoSize.xl,
+              centered: true,
             ),
-            Positioned(
-              bottom: 60,
-              left: 0,
-              right: 0,
-              child: Column(
-                children: [
-                  SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
-                      valueColor: AlwaysStoppedAnimation(AppColors.brand),
-                    ),
+          ),
+          // Loader + tagline al pie.
+          Positioned(
+            bottom: 60,
+            left: 0,
+            right: 0,
+            child: Column(
+              children: [
+                SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation(context.colors.brand),
                   ),
-                  SizedBox(height: AppSpacing.lg),
-                  Text(
-                    AppTexts.tagline,
-                    style: TextStyle(
-                      color: Colors.white38,
-                      fontSize: 10,
-                      letterSpacing: 1.5,
-                      fontWeight: FontWeight.bold,
-                    ),
+                ),
+                const SizedBox(height: AppSpacing.lg),
+                Text(
+                  AppTexts.tagline,
+                  style: AppType.eyebrow.copyWith(
+                    color: context.colors.textMuted,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
