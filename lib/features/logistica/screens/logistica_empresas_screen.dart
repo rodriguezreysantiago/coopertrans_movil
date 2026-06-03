@@ -1,6 +1,30 @@
+// lib/features/logistica/screens/logistica_empresas_screen.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — ABM de empresas en lenguaje bento.
+//
+// SOLO PRESENTACIÓN. Se preserva intacto:
+//   - los tabs CLIENTES / DADORES (DefaultTabController),
+//   - el stream `LogisticaService.streamEmpresas(tipo:)`, el filtro
+//     token-based (`_aplicarFiltro`), el alta (`_AltaEmpresaDialog` +
+//     `LogisticaService.crearEmpresa`), la edición inline (sheet +
+//     `actualizarEmpresa` / `setProductosDeEmpresa` /
+//     `setUbicacionesDeEmpresa`), el toggle activa, la eliminación con
+//     check de referencias server-side, las validaciones de CUIT /
+//     teléfono y los atajos de teclado (`KeyboardShortcutsScope`),
+//   - los formatters (CUIT / teléfono / dígitos).
+//
+// Material en formularios: los inputs del alta y de los diálogos (CUIT,
+// producto) siguen siendo `TextField` reskineados por el theme; los campos
+// del sheet de edición usan los `DatoEditable*` compartidos — NO se tocan
+// para no romper la lógica de persistencia. Lo que cambió es la superficie:
+// buscador Núcleo (AppInput), cards re-skineadas a tokens (AppCard tier-1 +
+// AppBadge + chips bento), FAB brand, bloques productos/ubicaciones a tokens.
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/cuit_formatter.dart';
@@ -13,8 +37,6 @@ import '../models/empresa_logistica.dart';
 import '../models/ubicacion_logistica.dart';
 import '../services/logistica_service.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// ABM de empresas con tabs (CLIENTES / DADORES). Cada tipo en una
 /// solapa distinta para evitar que el operador se confunda al armar
 /// tarifas — un cliente nunca debería figurar en el dropdown de
@@ -24,18 +46,22 @@ class LogisticaEmpresasScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const DefaultTabController(
+    final c = context.colors;
+    return DefaultTabController(
       length: 2,
       child: AppScaffold(
         title: 'Empresas',
         bottom: TabBar(
-          tabs: [
+          tabs: const [
             Tab(text: 'CLIENTES'),
             Tab(text: 'DADORES'),
           ],
-          indicatorColor: AppColors.info,
+          indicatorColor: c.brand,
+          labelColor: c.text,
+          unselectedLabelColor: c.textMuted,
+          labelStyle: AppType.label.copyWith(fontWeight: FontWeight.w600),
         ),
-        body: TabBarView(
+        body: const TabBarView(
           children: [
             _ListaEmpresas(tipo: TipoEmpresaLogistica.cliente),
             _ListaEmpresas(tipo: TipoEmpresaLogistica.dadorTransporte),
@@ -57,9 +83,17 @@ class _ListaEmpresas extends StatefulWidget {
 class _ListaEmpresasState extends State<_ListaEmpresas> {
   String _filtro = '';
   final FocusNode _buscarFocus = FocusNode();
+  late final TextEditingController _buscarCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _buscarCtrl = TextEditingController();
+  }
 
   @override
   void dispose() {
+    _buscarCtrl.dispose();
     _buscarFocus.dispose();
     super.dispose();
   }
@@ -90,101 +124,97 @@ class _ListaEmpresasState extends State<_ListaEmpresas> {
 
   @override
   Widget build(BuildContext context) {
+    final esCliente = widget.tipo == TipoEmpresaLogistica.cliente;
     return KeyboardShortcutsScope(
       onNuevo: _abrirAlta,
       buscarFocusNode: _buscarFocus,
       child: Stack(
-      children: [
-        Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-              child: TextField(
-                focusNode: _buscarFocus,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search, size: 20),
-                  hintText: widget.tipo == TipoEmpresaLogistica.cliente
+        children: [
+          Column(
+            children: [
+              // Buscador Núcleo (misma lógica de filtro token-based).
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+                child: AppInput(
+                  controller: _buscarCtrl,
+                  focusNode: _buscarFocus,
+                  hint: esCliente
                       ? 'Buscar por nombre, CUIT, contacto, producto…'
                       : 'Buscar por nombre, CUIT, contacto…',
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  suffixIcon: _filtro.isEmpty
+                  icon: Icons.search,
+                  onChanged: (v) => setState(() => _filtro = v),
+                  trailingAction: _filtro.isEmpty ? null : 'Limpiar',
+                  onTrailingTap: _filtro.isEmpty
                       ? null
-                      : IconButton(
-                          icon: const Icon(Icons.clear, size: 18),
-                          tooltip: 'Limpiar búsqueda',
-                          onPressed: () => setState(() => _filtro = ''),
-                        ),
+                      : () {
+                          _buscarCtrl.clear();
+                          setState(() => _filtro = '');
+                        },
                 ),
-                onChanged: (v) => setState(() => _filtro = v),
               ),
-            ),
-            Expanded(
-              child: StreamBuilder<List<EmpresaLogistica>>(
-                stream: LogisticaService.streamEmpresas(tipo: widget.tipo),
-                builder: (ctx, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) {
-                    return const AppSkeletonList(count: 8);
-                  }
-                  // Mostrar error real (típico: "requires an index" si falta
-                  // el índice compuesto en firestore.indexes.json). Sin esto
-                  // el StreamBuilder mostraría empty state y el operador
-                  // pensaría que "no se guarda nada" cuando en realidad la
-                  // query falla en Firestore.
-                  if (snap.hasError) {
-                    return AppEmptyState(
-                      icon: Icons.error_outline,
-                      title: 'Error cargando la lista',
-                      subtitle: snap.error.toString(),
+              Expanded(
+                child: StreamBuilder<List<EmpresaLogistica>>(
+                  stream: LogisticaService.streamEmpresas(tipo: widget.tipo),
+                  builder: (ctx, snap) {
+                    if (snap.connectionState == ConnectionState.waiting) {
+                      return const AppSkeletonList(count: 8, conAvatar: false);
+                    }
+                    // Mostrar error real (típico: "requires an index" si falta
+                    // el índice compuesto en firestore.indexes.json). Sin esto
+                    // el StreamBuilder mostraría empty state y el operador
+                    // pensaría que "no se guarda nada" cuando en realidad la
+                    // query falla en Firestore.
+                    if (snap.hasError) {
+                      return AppErrorState(
+                        title: 'Error cargando la lista',
+                        subtitle: snap.error.toString(),
+                      );
+                    }
+                    final items = snap.data ?? const [];
+                    if (items.isEmpty) {
+                      return AppEmptyState(
+                        icon: Icons.business_outlined,
+                        title: esCliente
+                            ? 'Sin clientes cargados'
+                            : 'Sin dadores de transporte cargados',
+                        subtitle: 'Tocá + para agregar el primero',
+                      );
+                    }
+                    final filtrados = _aplicarFiltro(items);
+                    if (filtrados.isEmpty) {
+                      return AppEmptyState(
+                        icon: Icons.search_off,
+                        title: 'Sin resultados',
+                        subtitle:
+                            'Ninguna empresa coincide con "$_filtro". Probá '
+                            'con otra palabra o limpiá el filtro.',
+                      );
+                    }
+                    return ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, 90),
+                      itemCount: filtrados.length,
+                      itemBuilder: (_, i) => _CardEmpresa(empresa: filtrados[i]),
                     );
-                  }
-                  final items = snap.data ?? const [];
-                  if (items.isEmpty) {
-                    return AppEmptyState(
-                      icon: Icons.business_outlined,
-                      title: widget.tipo == TipoEmpresaLogistica.cliente
-                          ? 'Sin clientes cargados'
-                          : 'Sin dadores de transporte cargados',
-                      subtitle: 'Tocá + para agregar el primero',
-                    );
-                  }
-                  final filtrados = _aplicarFiltro(items);
-                  if (filtrados.isEmpty) {
-                    return AppEmptyState(
-                      icon: Icons.search_off,
-                      title: 'Sin resultados',
-                      subtitle:
-                          'Ninguna empresa coincide con "$_filtro". Probá '
-                          'con otra palabra o limpiá el filtro.',
-                    );
-                  }
-                  return ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
-                    itemCount: filtrados.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-                    itemBuilder: (_, i) => _CardEmpresa(empresa: filtrados[i]),
-                  );
-                },
+                  },
+                ),
               ),
-            ),
-          ],
-        ),
-        Positioned(
-          right: 16,
-          bottom: 16,
-          child: FloatingActionButton.extended(
-            heroTag: 'fab_empresa_${widget.tipo.codigo}',
-            backgroundColor: AppColors.info,
-            onPressed: _abrirAlta,
-            icon: const Icon(Icons.add),
-            label: Text(
-              widget.tipo == TipoEmpresaLogistica.cliente
-                  ? 'NUEVO CLIENTE'
-                  : 'NUEVO DADOR',
+            ],
+          ),
+          Positioned(
+            right: AppSpacing.lg,
+            bottom: AppSpacing.lg,
+            child: FloatingActionButton.extended(
+              heroTag: 'fab_empresa_${widget.tipo.codigo}',
+              backgroundColor: AppColors.brand,
+              foregroundColor: AppColors.surface0,
+              onPressed: _abrirAlta,
+              icon: const Icon(Icons.add),
+              label: Text(esCliente ? 'NUEVO CLIENTE' : 'NUEVO DADOR'),
             ),
           ),
-        ),
-      ],
+        ],
       ),
     );
   }
@@ -203,18 +233,24 @@ class _CardEmpresa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        empresa.activa ? AppColors.info : Colors.white24;
+    final c = context.colors;
+    final activa = empresa.activa;
+    final accent = activa ? c.brand : c.textMuted;
+    final tituloColor = activa ? c.text : c.textMuted;
+
     return AppCard(
+      tier: 1,
+      accent: accent,
       onTap: () => _abrirEdicion(context),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.business, color: color),
-              const SizedBox(width: AppSpacing.md),
+              Icon(Icons.business_outlined, color: accent, size: 18),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -223,11 +259,10 @@ class _CardEmpresa extends StatelessWidget {
                       empresa.etiquetaPrincipal,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: empresa.activa ? Colors.white : Colors.white38,
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        decoration: empresa.activa
+                      style: AppType.body.copyWith(
+                        color: tituloColor,
+                        fontWeight: FontWeight.w700,
+                        decoration: activa
                             ? TextDecoration.none
                             : TextDecoration.lineThrough,
                       ),
@@ -238,31 +273,38 @@ class _CardEmpresa extends StatelessWidget {
                         empresa.etiquetaSecundaria!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: AppType.label.copyWith(color: empresa.activa
-                              ? Colors.white54
-                              : Colors.white24, decoration: empresa.activa
+                        style: AppType.bodySm.copyWith(
+                          color: c.textMuted,
+                          decoration: activa
                               ? TextDecoration.none
-                              : TextDecoration.lineThrough),
+                              : TextDecoration.lineThrough,
+                        ),
                       ),
                     ],
                   ],
                 ),
               ),
+              if (!activa) ...[
+                AppBadge(
+                  text: 'Inactiva',
+                  color: c.textMuted,
+                  size: AppBadgeSize.sm,
+                ),
+                const SizedBox(width: AppSpacing.xs),
+              ],
+              // Switch activa/inactiva. El check de referencias en
+              // tarifas + ubicaciones se hace server-side; si la empresa
+              // está en uso, no se borra y mostramos un mensaje accionable.
               Switch(
-                value: empresa.activa,
+                value: activa,
                 onChanged: (v) => LogisticaService.actualizarEmpresa(
                   id: empresa.id,
                   cambios: {'activa': v},
                 ),
-                activeTrackColor: AppColors.info,
+                activeTrackColor: c.brand,
               ),
-              // Botón eliminar al lado del switch. El check de
-              // referencias en tarifas + ubicaciones se hace
-              // server-side; si la empresa está en uso, no se borra
-              // y mostramos un mensaje accionable.
               IconButton(
-                icon: const Icon(Icons.delete_outline,
-                    color: AppColors.error),
+                icon: Icon(Icons.delete_outline, color: c.error, size: 18),
                 tooltip: 'Eliminar empresa',
                 onPressed: () => _confirmarEliminar(context),
                 visualDensity: VisualDensity.compact,
@@ -272,10 +314,10 @@ class _CardEmpresa extends StatelessWidget {
           if (empresa.cuit != null ||
               empresa.contacto != null ||
               empresa.nombreContacto != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: AppSpacing.sm),
             Wrap(
-              spacing: 12,
-              runSpacing: 4,
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.xs,
               children: [
                 if (empresa.cuit != null) _Chip('CUIT ${empresa.cuit}'),
                 // Si tiene tel + nombre, los unimos en un solo chip
@@ -297,7 +339,7 @@ class _CardEmpresa extends StatelessWidget {
   Future<void> _abrirEdicion(BuildContext context) async {
     await showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.surface2,
       isScrollControlled: true,
       builder: (_) => _EditarEmpresaSheet(empresa: empresa),
     );
@@ -320,28 +362,27 @@ class _CardEmpresa extends StatelessWidget {
   /// uso. En ese caso mostramos el mensaje exacto del service en
   /// SnackBar y no se hace el delete.
   Future<void> _confirmarEliminar(BuildContext context) async {
+    final c = context.colors;
     final messenger = ScaffoldMessenger.of(context);
     final confirma = await showDialog<bool>(
       context: context,
       builder: (dCtx) => AlertDialog(
-        backgroundColor: Theme.of(dCtx).colorScheme.surface,
+        backgroundColor: dCtx.colors.surface2,
         title: const Text('¿Eliminar empresa?'),
         content: Text(
           '${empresa.nombre}\n\n'
           'Esta acción no se puede deshacer. Si la empresa está usada '
           'por alguna tarifa o ubicación, no se va a poder borrar.',
+          style: AppType.body.copyWith(color: c.textSecondary),
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.of(dCtx).pop(false),
-            child: const Text('CANCELAR'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
-            ),
+          AppButton.danger(
+            label: 'Eliminar',
             onPressed: () => Navigator.of(dCtx).pop(true),
-            child: const Text('ELIMINAR'),
           ),
         ],
       ),
@@ -390,8 +431,7 @@ class _EditarEmpresaSheet extends StatelessWidget {
         final actual = (snap.hasData &&
                 snap.data!.exists &&
                 snap.data!.data() != null)
-            ? EmpresaLogistica.fromMap(
-                snap.data!.id, snap.data!.data()!)
+            ? EmpresaLogistica.fromMap(snap.data!.id, snap.data!.data()!)
             : empresa;
         return _EditarEmpresaSheetBody(empresa: actual);
       },
@@ -408,6 +448,7 @@ class _EditarEmpresaSheetBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final messenger = ScaffoldMessenger.of(context);
     Future<void> setCampo(String campo, dynamic valor) async {
       await LogisticaService.actualizarEmpresa(
@@ -424,38 +465,47 @@ class _EditarEmpresaSheetBody extends StatelessWidget {
       builder: (ctx, controller) => Column(
         children: [
           Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
+            margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white24,
+              color: c.borderStrong,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.md),
             child: Row(
               children: [
-                const Icon(Icons.business, color: AppColors.info),
-                const SizedBox(width: 10),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: c.surface3,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                  child: Icon(Icons.business_outlined, size: 16, color: c.brand),
+                ),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         empresa.etiquetaPrincipal,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                        ),
+                        style: AppType.h5.copyWith(color: c.text),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       if (empresa.etiquetaSecundaria != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 2),
                           child: Text(
                             empresa.etiquetaSecundaria!,
-                            style: AppType.label.copyWith(color: Colors.white54),
+                            style: AppType.monoSm.copyWith(color: c.textMuted),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                     ],
@@ -467,7 +517,8 @@ class _EditarEmpresaSheetBody extends StatelessWidget {
           Expanded(
             child: ListView(
               controller: controller,
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xxl),
               children: [
                 DatoEditableTexto(
                   etiqueta: 'Nombre (razón social)',
@@ -608,7 +659,7 @@ class _BloqueUbicacionesDeEmpresa extends StatelessWidget {
   ) async {
     final res = await showModalBottomSheet<Set<String>>(
       context: context,
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.surface2,
       isScrollControlled: true,
       builder: (_) => _SeleccionUbicacionesSheet(
         todas: todasLasUbicaciones,
@@ -633,6 +684,7 @@ class _BloqueUbicacionesDeEmpresa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return StreamBuilder<List<UbicacionLogistica>>(
       stream: LogisticaService.streamUbicaciones(),
       builder: (ctx, snap) {
@@ -646,68 +698,46 @@ class _BloqueUbicacionesDeEmpresa extends StatelessWidget {
         return Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.04),
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            border: Border.all(color: Colors.white12),
+            color: c.surface1,
+            borderRadius: BorderRadius.circular(AppRadius.xl),
+            border: Border.all(color: c.border),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Row(
                 children: [
-                  const Icon(Icons.place_outlined,
-                      color: AppColors.brandSoft, size: 16),
-                  const SizedBox(width: 6),
-                  Text(
-                    'UBICACIONES DE ESTA EMPRESA',
-                    style: AppType.eyebrow.copyWith(color: Colors.white54, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-                  ),
+                  Icon(Icons.place_outlined, color: c.brand, size: 14),
+                  const SizedBox(width: AppSpacing.xs),
+                  const AppEyebrow('Ubicaciones de esta empresa'),
                 ],
               ),
               const SizedBox(height: AppSpacing.sm),
               if (asociadas.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 6),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Text(
                     'Sin ubicaciones asignadas',
-                    style: TextStyle(color: Colors.white38, fontSize: 13),
+                    style: AppType.bodySm.copyWith(color: c.textMuted),
                   ),
                 )
               else
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
-                  children: asociadas.map((u) {
-                    return Chip(
-                      label: Text(
-                        u.nombre,
-                        style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-                      ),
-                      backgroundColor:
-                          AppColors.brandSoft.withValues(alpha: 0.25),
-                      side: BorderSide(
-                        color: AppColors.brandSoft.withValues(alpha: 0.6),
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize:
-                          MaterialTapTargetSize.shrinkWrap,
-                    );
-                  }).toList(),
+                  children: asociadas
+                      .map((u) => _Tag(u.nombre, color: c.brand))
+                      .toList(),
                 ),
               const SizedBox(height: AppSpacing.sm),
-              OutlinedButton.icon(
+              AppButton.secondary(
+                label: asociadas.isEmpty
+                    ? 'Asignar ubicaciones'
+                    : 'Editar ubicaciones',
+                icon: Icons.add,
+                size: AppButtonSize.sm,
+                full: true,
                 onPressed: () => _editar(context, todas, asociadasIds),
-                icon: const Icon(Icons.add, size: 16),
-                label: Text(
-                  asociadas.isEmpty
-                      ? 'ASIGNAR UBICACIONES'
-                      : 'EDITAR UBICACIONES',
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.brandSoft,
-                  side: const BorderSide(color: AppColors.brandSoft),
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                ),
               ),
             ],
           ),
@@ -746,6 +776,7 @@ class _SeleccionUbicacionesSheetState
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final filtroLower = _filtro.toLowerCase();
     final ubicacionesFiltradas = widget.todas.where((u) {
       if (filtroLower.isEmpty) return true;
@@ -760,37 +791,35 @@ class _SeleccionUbicacionesSheetState
       builder: (ctx, controller) => Column(
         children: [
           Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
+            margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white24,
+              color: c.borderStrong,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: Text(
-              'SELECCIONAR UBICACIONES',
-              style: AppType.eyebrow.copyWith(color: Colors.white60, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: AppEyebrow('Seleccionar ubicaciones'),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-            child: TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search, size: 18),
-                hintText: 'Buscar por nombre o localidad…',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
+            child: AppInput(
+              hint: 'Buscar por nombre o localidad…',
+              icon: Icons.search,
               onChanged: (v) => setState(() => _filtro = v),
             ),
           ),
           Expanded(
             child: ListView.builder(
               controller: controller,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
               itemCount: ubicacionesFiltradas.length,
               itemBuilder: (_, i) {
                 final u = ubicacionesFiltradas[i];
@@ -808,13 +837,13 @@ class _SeleccionUbicacionesSheetState
                   },
                   title: Text(
                     u.nombre,
-                    style: AppType.body.copyWith(color: Colors.white),
+                    style: AppType.body.copyWith(color: c.text),
                   ),
                   subtitle: Text(
                     u.etiquetaCompleta,
-                    style: AppType.label.copyWith(color: Colors.white54),
+                    style: AppType.bodySm.copyWith(color: c.textMuted),
                   ),
-                  activeColor: AppColors.brandSoft,
+                  activeColor: c.brand,
                   dense: true,
                 );
               },
@@ -823,27 +852,22 @@ class _SeleccionUbicacionesSheetState
           SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.md),
               child: Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton(
+                    child: AppButton.ghost(
+                      label: 'Cancelar',
                       onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('CANCELAR'),
                     ),
                   ),
                   const SizedBox(width: AppSpacing.md),
                   Expanded(
-                    child: FilledButton(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: AppColors.brandSoft,
-                      ),
+                    child: AppButton.primary(
+                      label: 'Guardar (${_seleccionadas.length})',
                       onPressed: () =>
                           Navigator.of(context).pop(_seleccionadas),
-                      child: Text(
-                        'GUARDAR (${_seleccionadas.length})',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
                     ),
                   ),
                 ],
@@ -889,8 +913,9 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AlertDialog(
-      backgroundColor: AppColors.background,
+      backgroundColor: c.surface2,
       title: Text(
         widget.tipo == TipoEmpresaLogistica.cliente
             ? 'Nuevo cliente'
@@ -954,27 +979,21 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
               const SizedBox(height: AppSpacing.md),
               Text(
                 _error!,
-                style: const TextStyle(color: AppColors.error),
+                style: AppType.bodySm.copyWith(color: c.error),
               ),
             ],
           ],
         ),
       ),
       actions: [
-        TextButton(
+        AppButton.ghost(
+          label: 'Cancelar',
           onPressed: _guardando ? null : () => Navigator.pop(context),
-          child: const Text('CANCELAR'),
         ),
-        ElevatedButton(
+        AppButton.primary(
+          label: 'Guardar',
+          loading: _guardando,
           onPressed: _guardando ? null : _guardar,
-          child: _guardando
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
-                )
-              : const Text('GUARDAR'),
         ),
       ],
     );
@@ -1041,33 +1060,80 @@ class _AltaEmpresaDialogState extends State<_AltaEmpresaDialog> {
 }
 
 // =============================================================================
-// CHIP COMPARTIDO
+// CHIPS / TAGS COMPARTIDOS
 // =============================================================================
 
+/// Chip neutro de dato (CUIT, contacto). Hairline + texto eyebrow muted.
 class _Chip extends StatelessWidget {
   final String texto;
   const _Chip(this.texto);
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        color: c.surface3,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: c.border),
       ),
       child: Text(
         texto,
-        style: AppType.eyebrow.copyWith(color: Colors.white70),
+        style: AppType.eyebrow.copyWith(color: c.textSecondary),
+      ),
+    );
+  }
+}
+
+/// Tag de color tenue (ubicación / producto asignado). Tinte del color +
+/// borde del mismo color a baja opacidad.
+class _Tag extends StatelessWidget {
+  final String texto;
+  final Color color;
+  final VoidCallback? onDeleted;
+  const _Tag(this.texto, {required this.color, this.onDeleted});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(10, 5, onDeleted != null ? 5 : 10, 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(AppRadius.full),
+        border: Border.all(color: color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Text(
+              texto,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.label.copyWith(
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (onDeleted != null) ...[
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: onDeleted,
+              borderRadius: BorderRadius.circular(AppRadius.full),
+              child: Icon(Icons.close, size: 14, color: color),
+            ),
+          ],
+        ],
       ),
     );
   }
 }
 
 // =============================================================================
-// BLOQUE DE PRODUCTOS — chips con cada producto + botón "+ Agregar"
-// que abre un dialog con TextField. Tap en X de un chip lo borra.
+// BLOQUE DE PRODUCTOS — tags con cada producto + botón "Agregar producto"
+// que abre un dialog con TextField. Tap en X de un tag lo borra.
 // Persiste con setProductosDeEmpresa (lista completa, dedup
 // case-insensitive en el service).
 // =============================================================================
@@ -1089,7 +1155,7 @@ class _BloqueProductos extends StatelessWidget {
         context: context,
         builder: (ctx) {
           return AlertDialog(
-            backgroundColor: AppColors.background,
+            backgroundColor: ctx.colors.surface2,
             title: const Text('Agregar producto'),
             content: TextField(
               controller: ctrl,
@@ -1101,13 +1167,13 @@ class _BloqueProductos extends StatelessWidget {
               onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
             ),
             actions: [
-              TextButton(
+              AppButton.ghost(
+                label: 'Cancelar',
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('CANCELAR'),
               ),
-              ElevatedButton(
+              AppButton.primary(
+                label: 'Agregar',
                 onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-                child: const Text('AGREGAR'),
               ),
             ],
           );
@@ -1135,74 +1201,56 @@ class _BloqueProductos extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: Colors.white12),
+        color: c.surface1,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(color: c.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(Icons.inventory_2_outlined,
-                  color: AppColors.warning, size: 16),
-              const SizedBox(width: 6),
-              Text(
-                'PRODUCTOS QUE CARGA',
-                style: AppType.eyebrow.copyWith(color: Colors.white54, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-              ),
+              Icon(Icons.inventory_2_outlined, color: c.warning, size: 14),
+              const SizedBox(width: AppSpacing.xs),
+              const AppEyebrow('Productos que carga'),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
           if (productos.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
               child: Text(
                 'Sin productos cargados',
-                style: TextStyle(color: Colors.white38, fontSize: 13),
+                style: AppType.bodySm.copyWith(color: c.textMuted),
               ),
             )
           else
             Wrap(
               spacing: 6,
               runSpacing: 6,
-              children: List.generate(productos.length, (i) {
-                return Chip(
-                  label: Text(
-                    productos[i],
-                    style: AppType.label.copyWith(color: Colors.white),
-                  ),
-                  backgroundColor:
-                      AppColors.warning.withValues(alpha: 0.2),
-                  side: BorderSide(
-                    color: AppColors.warning.withValues(alpha: 0.5),
-                  ),
-                  deleteIcon: const Icon(Icons.close, size: 14),
-                  deleteIconColor: Colors.white70,
+              children: List.generate(
+                productos.length,
+                (i) => _Tag(
+                  productos[i],
+                  color: c.warning,
                   onDeleted: () => _quitar(i),
-                  visualDensity: VisualDensity.compact,
-                  materialTapTargetSize:
-                      MaterialTapTargetSize.shrinkWrap,
-                );
-              }),
+                ),
+              ),
             ),
           const SizedBox(height: AppSpacing.sm),
-          OutlinedButton.icon(
+          AppButton.secondary(
+            label: 'Agregar producto',
+            icon: Icons.add,
+            size: AppButtonSize.sm,
+            full: true,
             onPressed: () => _agregar(context),
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('AGREGAR PRODUCTO'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.warning,
-              side: const BorderSide(color: AppColors.warning),
-              padding: const EdgeInsets.symmetric(vertical: 8),
-            ),
           ),
         ],
       ),
     );
   }
 }
-

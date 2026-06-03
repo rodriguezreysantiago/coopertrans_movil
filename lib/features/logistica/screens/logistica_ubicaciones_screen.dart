@@ -1,7 +1,31 @@
+// lib/features/logistica/screens/logistica_ubicaciones_screen.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — ABM de ubicaciones en lenguaje bento.
+//
+// SOLO PRESENTACIÓN. Se preserva intacto:
+//   - el stream `LogisticaService.streamUbicaciones`, el filtro token-based
+//     (`_aplicarFiltro`), el alta (`_AltaUbicacionDialog` +
+//     `crearUbicacion`), la edición inline (sheet + `actualizarUbicacion`),
+//     la eliminación con check de referencias server-side,
+//   - TODA la lógica de mapa: `UbicacionMapPicker.abrir`, el reverse
+//     geocoding/autocompletar, el parseo de links de Google Maps
+//     (`GoogleMapsUrlParser`), `AccionesNavegacionSheet`, `MiniMapaThumbnail`,
+//   - las validaciones de lat/lng (rango, 0/0 océano, parseable) y los
+//     atajos de teclado (`KeyboardShortcutsScope`).
+//
+// Material en formularios: los TextField del alta (lat/lng, nombre, etc.),
+// los `DatoEditable*` del sheet y el dialog de "pegar link" siguen siendo
+// Material reskineado por el theme — NO se tocan para no romper la lógica
+// de persistencia/geo. Lo que cambió es la superficie: buscador Núcleo
+// (AppInput), cards re-skineadas a tokens (AppCard tier-1 + coords mono +
+// AppBadge), FAB brand, bloque de coordenadas a tokens.
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/widgets/app_widgets.dart';
@@ -15,8 +39,6 @@ import '../widgets/acciones_navegacion_sheet.dart';
 import '../widgets/mini_mapa_thumbnail.dart';
 import '../widgets/ubicacion_map_picker.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// ABM de ubicaciones físicas (puntos de carga / descarga). Reusable
 /// entre tarifas: una misma ubicación puede ser origen de una tarifa y
 /// destino de otra.
@@ -37,9 +59,17 @@ class _LogisticaUbicacionesScreenState
   /// (todo case-insensitive).
   String _filtro = '';
   final FocusNode _buscarFocus = FocusNode();
+  late final TextEditingController _buscarCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _buscarCtrl = TextEditingController();
+  }
 
   @override
   void dispose() {
+    _buscarCtrl.dispose();
     _buscarFocus.dispose();
     super.dispose();
   }
@@ -73,7 +103,8 @@ class _LogisticaUbicacionesScreenState
       title: 'Ubicaciones',
       floatingActionButton: Builder(
         builder: (ctx) => FloatingActionButton.extended(
-          backgroundColor: AppColors.brandSoft,
+          backgroundColor: AppColors.brand,
+          foregroundColor: AppColors.surface0,
           onPressed: () => _abrirAlta(ctx),
           icon: const Icon(Icons.add),
           label: const Text('NUEVA UBICACIÓN'),
@@ -83,75 +114,71 @@ class _LogisticaUbicacionesScreenState
         onNuevo: () => _abrirAlta(context),
         buscarFocusNode: _buscarFocus,
         child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: TextField(
-              focusNode: _buscarFocus,
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search, size: 20),
-                hintText: 'Buscar por nombre, localidad, empresa…',
-                border: const OutlineInputBorder(),
-                isDense: true,
-                // Botón X para limpiar — útil cuando se filtró mucho
-                // y querés volver a la lista completa.
-                suffixIcon: _filtro.isEmpty
+          children: [
+            // Buscador Núcleo (misma lógica de filtro token-based).
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+              child: AppInput(
+                controller: _buscarCtrl,
+                focusNode: _buscarFocus,
+                hint: 'Buscar por nombre, localidad, empresa…',
+                icon: Icons.search,
+                onChanged: (v) => setState(() => _filtro = v),
+                trailingAction: _filtro.isEmpty ? null : 'Limpiar',
+                onTrailingTap: _filtro.isEmpty
                     ? null
-                    : IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        tooltip: 'Limpiar búsqueda',
-                        onPressed: () => setState(() => _filtro = ''),
-                      ),
+                    : () {
+                        _buscarCtrl.clear();
+                        setState(() => _filtro = '');
+                      },
               ),
-              onChanged: (v) => setState(() => _filtro = v),
             ),
-          ),
-          Expanded(
-            child: StreamBuilder<List<UbicacionLogistica>>(
-              stream: LogisticaService.streamUbicaciones(),
-              builder: (ctx, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const AppSkeletonList(count: 8, conAvatar: false);
-                }
-                if (snap.hasError) {
-                  return AppEmptyState(
-                    icon: Icons.error_outline,
-                    title: 'Error cargando la lista',
-                    subtitle: snap.error.toString(),
+            Expanded(
+              child: StreamBuilder<List<UbicacionLogistica>>(
+                stream: LogisticaService.streamUbicaciones(),
+                builder: (ctx, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const AppSkeletonList(count: 8, conAvatar: false);
+                  }
+                  if (snap.hasError) {
+                    return AppErrorState(
+                      title: 'Error cargando la lista',
+                      subtitle: snap.error.toString(),
+                    );
+                  }
+                  final items = snap.data ?? const [];
+                  if (items.isEmpty) {
+                    return const AppEmptyState(
+                      icon: Icons.place_outlined,
+                      title: 'Sin ubicaciones cargadas',
+                      subtitle:
+                          'Tocá + para agregar la primera (silos, plantas, '
+                          'puertos, fábricas).',
+                    );
+                  }
+                  final filtrados = _aplicarFiltro(items);
+                  if (filtrados.isEmpty) {
+                    return AppEmptyState(
+                      icon: Icons.search_off,
+                      title: 'Sin resultados',
+                      subtitle:
+                          'Ninguna ubicación coincide con "$_filtro". Probá '
+                          'con otra palabra o limpiá el filtro.',
+                    );
+                  }
+                  return ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, 90),
+                    itemCount: filtrados.length,
+                    itemBuilder: (_, i) =>
+                        _CardUbicacion(ubicacion: filtrados[i]),
                   );
-                }
-                final items = snap.data ?? const [];
-                if (items.isEmpty) {
-                  return const AppEmptyState(
-                    icon: Icons.place_outlined,
-                    title: 'Sin ubicaciones cargadas',
-                    subtitle:
-                        'Tocá + para agregar la primera (silos, plantas, '
-                        'puertos, fábricas).',
-                  );
-                }
-                final filtrados = _aplicarFiltro(items);
-                if (filtrados.isEmpty) {
-                  return AppEmptyState(
-                    icon: Icons.search_off,
-                    title: 'Sin resultados',
-                    subtitle:
-                        'Ninguna ubicación coincide con "$_filtro". Probá '
-                        'con otra palabra o limpiá el filtro.',
-                  );
-                }
-                return ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
-                  itemCount: filtrados.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-                  itemBuilder: (_, i) =>
-                      _CardUbicacion(ubicacion: filtrados[i]),
-                );
-              },
+                },
+              ),
             ),
-          ),
-        ],
-      ),
+          ],
+        ),
       ),
     );
   }
@@ -170,22 +197,35 @@ class _CardUbicacion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        ubicacion.activa ? AppColors.brandSoft : Colors.white24;
+    final c = context.colors;
+    final activa = ubicacion.activa;
+    final accent = activa ? c.brand : c.textMuted;
+    final tieneCoords = ubicacion.lat != null && ubicacion.lng != null;
+
     return AppCard(
+      tier: 1,
+      accent: accent,
       onTap: () => _abrirEdicion(context),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Row(
         children: [
           // Thumbnail del mapa si tiene coords; sino ícono genérico.
-          if (ubicacion.lat != null && ubicacion.lng != null)
+          if (tieneCoords)
             MiniMapaThumbnail(
               lat: ubicacion.lat!,
               lng: ubicacion.lng!,
               size: 56,
             )
           else
-            Icon(Icons.place, color: color, size: 28),
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: c.surface3,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              child: Icon(Icons.place_outlined, color: accent, size: 24),
+            ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
@@ -195,21 +235,24 @@ class _CardUbicacion extends StatelessWidget {
                   ubicacion.nombre,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.body.copyWith(color: ubicacion.activa ? Colors.white : Colors.white38, fontWeight: FontWeight.bold, decoration: ubicacion.activa
+                  style: AppType.body.copyWith(
+                    color: activa ? c.text : c.textMuted,
+                    fontWeight: FontWeight.w700,
+                    decoration: activa
                         ? TextDecoration.none
-                        : TextDecoration.lineThrough),
+                        : TextDecoration.lineThrough,
+                  ),
                 ),
                 if (ubicacion.empresaNombres.isNotEmpty) ...[
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      const Icon(Icons.business_outlined,
-                          color: AppColors.info, size: 12),
+                      Icon(Icons.business_outlined, color: c.textMuted, size: 12),
                       const SizedBox(width: AppSpacing.xs),
                       Expanded(
                         child: Text(
                           ubicacion.etiquetaEmpresas,
-                          style: AppType.eyebrow.copyWith(color: AppColors.info, fontWeight: FontWeight.bold),
+                          style: AppType.monoSm.copyWith(color: c.textSecondary),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -221,14 +264,13 @@ class _CardUbicacion extends StatelessWidget {
                   ubicacion.etiquetaCompleta,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.label.copyWith(color: Colors.white60),
+                  style: AppType.bodySm.copyWith(color: c.textMuted),
                 ),
-                if (ubicacion.lat != null && ubicacion.lng != null) ...[
+                if (tieneCoords) ...[
                   const SizedBox(height: AppSpacing.xs),
                   Row(
                     children: [
-                      const Icon(Icons.my_location,
-                          color: AppColors.brandSoft, size: 12),
+                      Icon(Icons.my_location, color: c.brand, size: 12),
                       const SizedBox(width: AppSpacing.xs),
                       Flexible(
                         child: Text(
@@ -236,7 +278,7 @@ class _CardUbicacion extends StatelessWidget {
                           '${ubicacion.lng!.toStringAsFixed(4)}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppType.eyebrow.copyWith(color: AppColors.brandSoft, fontFamily: 'monospace'),
+                          style: AppType.monoSm.copyWith(color: c.textSecondary),
                         ),
                       ),
                       const SizedBox(width: AppSpacing.sm),
@@ -247,11 +289,12 @@ class _CardUbicacion extends StatelessWidget {
                           lng: ubicacion.lng!,
                           label: ubicacion.nombre,
                         ),
-                        child: const Padding(
-                          padding: EdgeInsets.all(2),
+                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
                           child: Icon(
                             Icons.navigation_outlined,
-                            color: AppColors.info,
+                            color: c.brand,
                             size: 16,
                           ),
                         ),
@@ -268,10 +311,10 @@ class _CardUbicacion extends StatelessWidget {
           // ubicación, la borra. El check de referencias en tarifas
           // del service evita borrar algo que esté en uso.
           IconButton(
-            icon: const Icon(Icons.delete_outline,
-                color: AppColors.error),
+            icon: Icon(Icons.delete_outline, color: c.error, size: 18),
             tooltip: 'Eliminar ubicación',
             onPressed: () => _confirmarEliminar(context),
+            visualDensity: VisualDensity.compact,
           ),
         ],
       ),
@@ -281,7 +324,7 @@ class _CardUbicacion extends StatelessWidget {
   Future<void> _abrirEdicion(BuildContext context) async {
     await showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.surface2,
       isScrollControlled: true,
       builder: (_) => _EditarUbicacionSheet(ubicacion: ubicacion),
     );
@@ -291,28 +334,27 @@ class _CardUbicacion extends StatelessWidget {
   /// está en uso por alguna tarifa, el service tira StateError con
   /// mensaje accionable que mostramos en SnackBar.
   Future<void> _confirmarEliminar(BuildContext context) async {
+    final c = context.colors;
     final messenger = ScaffoldMessenger.of(context);
     final confirma = await showDialog<bool>(
       context: context,
       builder: (dCtx) => AlertDialog(
-        backgroundColor: Theme.of(dCtx).colorScheme.surface,
+        backgroundColor: dCtx.colors.surface2,
         title: const Text('¿Eliminar ubicación?'),
         content: Text(
           '${ubicacion.nombre}\n\n'
           'Esta acción no se puede deshacer. Si la ubicación está usada '
           'por alguna tarifa, no se va a poder borrar.',
+          style: AppType.body.copyWith(color: c.textSecondary),
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.of(dCtx).pop(false),
-            child: const Text('CANCELAR'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
-            ),
+          AppButton.danger(
+            label: 'Eliminar',
             onPressed: () => Navigator.of(dCtx).pop(true),
-            child: const Text('ELIMINAR'),
           ),
         ],
       ),
@@ -439,6 +481,7 @@ class _EditarUbicacionSheetState extends State<_EditarUbicacionSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.7,
@@ -447,28 +490,35 @@ class _EditarUbicacionSheetState extends State<_EditarUbicacionSheet> {
       builder: (ctx, controller) => Column(
         children: [
           Container(
-            margin: const EdgeInsets.symmetric(vertical: 8),
+            margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white24,
+              color: c.borderStrong,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.md),
             child: Row(
               children: [
-                const Icon(Icons.place, color: AppColors.brandSoft),
-                const SizedBox(width: 10),
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: c.surface3,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                  child: Icon(Icons.place_outlined, size: 16, color: c.brand),
+                ),
+                const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     _ubicacion.nombre,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppType.h5.copyWith(color: c.text),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -477,7 +527,8 @@ class _EditarUbicacionSheetState extends State<_EditarUbicacionSheet> {
           Expanded(
             child: ListView(
               controller: controller,
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xxl),
               children: [
                 DatoEditableTexto(
                   etiqueta: 'Nombre / Alias',
@@ -529,19 +580,11 @@ class _EditarUbicacionSheetState extends State<_EditarUbicacionSheet> {
                 // tarifas. Si la ubicación está en uso, el service
                 // tira StateError con un mensaje accionable que
                 // mostramos al operador.
-                OutlinedButton.icon(
+                AppButton.danger(
+                  label: 'Eliminar ubicación',
+                  icon: Icons.delete_outline,
+                  full: true,
                   onPressed: _eliminar,
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  label: const Text('ELIMINAR UBICACIÓN'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.error,
-                    side: const BorderSide(color: AppColors.error),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    textStyle: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
                 ),
               ],
             ),
@@ -555,29 +598,28 @@ class _EditarUbicacionSheetState extends State<_EditarUbicacionSheet> {
   /// uso. Si está usada por tarifas, el service tira un StateError con
   /// mensaje claro y lo mostramos en SnackBar.
   Future<void> _eliminar() async {
+    final c = context.colors;
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
     final confirma = await showDialog<bool>(
       context: context,
       builder: (dCtx) => AlertDialog(
-        backgroundColor: Theme.of(dCtx).colorScheme.surface,
+        backgroundColor: dCtx.colors.surface2,
         title: const Text('¿Eliminar ubicación?'),
         content: Text(
           '${_ubicacion.nombre}\n\n'
           'Esta acción no se puede deshacer. Si la ubicación está usada '
           'por alguna tarifa, no se va a poder borrar.',
+          style: AppType.body.copyWith(color: c.textSecondary),
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.of(dCtx).pop(false),
-            child: const Text('CANCELAR'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
-            ),
+          AppButton.danger(
+            label: 'Eliminar',
             onPressed: () => Navigator.of(dCtx).pop(true),
-            child: const Text('ELIMINAR'),
           ),
         ],
       ),
@@ -622,32 +664,29 @@ class _FilaCoords extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final tieneCoords = lat != null && lng != null;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: Colors.white10,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: Colors.white12),
+        color: c.surface1,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(color: c.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              const Icon(Icons.my_location,
-                  color: AppColors.brandSoft, size: 18),
+              Icon(Icons.my_location, color: c.brand, size: 16),
               const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  'COORDENADAS GEOGRÁFICAS',
-                  style: AppType.eyebrow.copyWith(color: Colors.white54, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-                ),
+              const Expanded(
+                child: AppEyebrow('Coordenadas geográficas'),
               ),
               if (tieneCoords)
                 Text(
                   '${lat!.toStringAsFixed(5)}, ${lng!.toStringAsFixed(5)}',
-                  style: AppType.label.copyWith(color: AppColors.brandSoft, fontFamily: 'monospace'),
+                  style: AppType.monoSm.copyWith(color: c.textSecondary),
                 ),
             ],
           ),
@@ -656,18 +695,16 @@ class _FilaCoords extends StatelessWidget {
             Text(
               'Sin coordenadas. Elegí un punto en el mapa para que '
               'aparezca en el mapa de tarifas y se calcule la distancia.',
-              style: AppType.label.copyWith(color: Colors.white60),
+              style: AppType.bodySm.copyWith(color: c.textMuted),
             ),
           ],
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
+          const SizedBox(height: AppSpacing.sm),
+          AppButton.secondary(
+            label: tieneCoords ? 'Cambiar en mapa' : 'Elegir en mapa',
+            icon: Icons.map_outlined,
+            size: AppButtonSize.sm,
+            full: true,
             onPressed: onElegirEnMapa,
-            icon: const Icon(Icons.map_outlined),
-            label: Text(tieneCoords ? 'CAMBIAR EN MAPA' : 'ELEGIR EN MAPA'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.brandSoft,
-              side: const BorderSide(color: AppColors.brandSoft),
-            ),
           ),
           // Alternativa rápida: pegar el link de Google Maps. Lo
           // parseamos al toque y aplicamos las coords. Atajo útil
@@ -675,14 +712,12 @@ class _FilaCoords extends StatelessWidget {
           // (más rápido que volver a buscarlo en el picker).
           if (onLatManual != null && onLngManual != null) ...[
             const SizedBox(height: 6),
-            OutlinedButton.icon(
+            AppButton.ghost(
+              label: 'Pegar link de Google Maps',
+              icon: Icons.link,
+              size: AppButtonSize.sm,
+              full: true,
               onPressed: () => _pegarLinkGoogleMaps(context),
-              icon: const Icon(Icons.link, size: 18),
-              label: const Text('PEGAR LINK DE GOOGLE MAPS'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white70,
-                side: const BorderSide(color: Colors.white30),
-              ),
             ),
           ],
         ],
@@ -700,64 +735,67 @@ class _FilaCoords extends StatelessWidget {
     try {
       result = await showDialog<({double lat, double lng})?>(
         context: context,
-        builder: (dCtx) => AlertDialog(
-          backgroundColor: Theme.of(dCtx).colorScheme.surface,
-          title: const Text('Pegar link de Google Maps'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Pegá el link completo de Google Maps o las coordenadas:',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Ej. "https://www.google.com/maps/place/.../@-38.71,-62.27,15z" '
-                'o "-38.71, -62.27".',
-                style: AppType.eyebrow.copyWith(color: Colors.white38),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: ctrl,
-                autofocus: true,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                  hintText: 'Pegá acá…',
+        builder: (dCtx) {
+          final c = dCtx.colors;
+          return AlertDialog(
+            backgroundColor: c.surface2,
+            title: const Text('Pegar link de Google Maps'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Pegá el link completo de Google Maps o las coordenadas:',
+                  style: AppType.bodySm.copyWith(color: c.textSecondary),
                 ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  'Ej. "https://www.google.com/maps/place/.../@-38.71,-62.27,15z" '
+                  'o "-38.71, -62.27".',
+                  style: AppType.eyebrow.copyWith(color: c.textMuted),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    hintText: 'Pegá acá…',
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              AppButton.ghost(
+                label: 'Cancelar',
+                onPressed: () => Navigator.of(dCtx).pop(null),
+              ),
+              AppButton.primary(
+                label: 'Aplicar',
+                onPressed: () {
+                  final input = ctrl.text;
+                  if (GoogleMapsUrlParser.esShortUrl(input)) {
+                    // Las short URLs requerirían un HTTP request para
+                    // expandirlas — no vale la pena el flow, mejor que el
+                    // operador la abra en el browser primero.
+                    Navigator.of(dCtx).pop(null);
+                    AppFeedback.warningOn(
+                      messenger,
+                      'Es un link acortado (goo.gl). Abrilo en el browser '
+                      'para que se expanda, después copiá el link largo de '
+                      'la barra de direcciones y pegalo acá.',
+                    );
+                    return;
+                  }
+                  final coords = GoogleMapsUrlParser.extraer(input);
+                  Navigator.of(dCtx).pop(coords);
+                },
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dCtx).pop(null),
-              child: const Text('CANCELAR'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final input = ctrl.text;
-                if (GoogleMapsUrlParser.esShortUrl(input)) {
-                  // Las short URLs requerirían un HTTP request para
-                  // expandirlas — no vale la pena el flow, mejor que el
-                  // operador la abra en el browser primero.
-                  Navigator.of(dCtx).pop(null);
-                  AppFeedback.warningOn(
-                    messenger,
-                    'Es un link acortado (goo.gl). Abrilo en el browser '
-                    'para que se expanda, después copiá el link largo de '
-                    'la barra de direcciones y pegalo acá.',
-                  );
-                  return;
-                }
-                final coords = GoogleMapsUrlParser.extraer(input);
-                Navigator.of(dCtx).pop(coords);
-              },
-              child: const Text('APLICAR'),
-            ),
-          ],
-        ),
+          );
+        },
       );
     } finally {
       ctrl.dispose();
@@ -843,8 +881,9 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AlertDialog(
-      backgroundColor: AppColors.background,
+      backgroundColor: c.surface2,
       title: const Text('Nueva ubicación'),
       content: SizedBox(
         width: (MediaQuery.of(context).size.width - 80).clamp(240.0, 400.0),
@@ -891,23 +930,21 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
                   labelText: 'Dirección (opcional)',
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: AppSpacing.md),
               // Bloque coords: 2 TextFields + botón "Elegir en mapa".
               // El picker autocompleta lat/lng y, si están vacíos,
               // localidad/provincia/dirección via reverse geocoding.
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: Colors.white10,
-                  borderRadius: BorderRadius.circular(6),
+                  color: c.surface1,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  border: Border.all(color: c.border),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'COORDENADAS (OPCIONAL)',
-                      style: AppType.eyebrow.copyWith(color: Colors.white54, fontWeight: FontWeight.bold, letterSpacing: 1.2),
-                    ),
+                    const AppEyebrow('Coordenadas (opcional)'),
                     const SizedBox(height: AppSpacing.sm),
                     Row(
                       children: [
@@ -947,42 +984,36 @@ class _AltaUbicacionDialogState extends State<_AltaUbicacionDialog> {
                       ],
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    OutlinedButton.icon(
+                    AppButton.secondary(
+                      label: 'Elegir en mapa',
+                      icon: Icons.map_outlined,
+                      size: AppButtonSize.sm,
+                      full: true,
                       onPressed: _abrirPicker,
-                      icon: const Icon(Icons.map_outlined),
-                      label: const Text('ELEGIR EN MAPA'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.brandSoft,
-                        side: const BorderSide(color: AppColors.brandSoft),
-                      ),
                     ),
                   ],
                 ),
               ),
               if (_error != null) ...[
                 const SizedBox(height: AppSpacing.md),
-                Text(_error!,
-                    style: const TextStyle(color: AppColors.error)),
+                Text(
+                  _error!,
+                  style: AppType.bodySm.copyWith(color: c.error),
+                ),
               ],
             ],
           ),
         ),
       ),
       actions: [
-        TextButton(
+        AppButton.ghost(
+          label: 'Cancelar',
           onPressed: _guardando ? null : () => Navigator.pop(context),
-          child: const Text('CANCELAR'),
         ),
-        ElevatedButton(
+        AppButton.primary(
+          label: 'Guardar',
+          loading: _guardando,
           onPressed: _guardando ? null : _guardar,
-          child: _guardando
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
-                )
-              : const Text('GUARDAR'),
         ),
       ],
     );
