@@ -15,30 +15,32 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 ///
 /// Layout (de arriba abajo):
 ///
-///   1. Banner explicativo (escala oficial Sitrack — más bajo = mejor).
-///   2. KPI grande: ICM flota del mes + variación vs mes anterior.
-///   3. Tendencia ICM oficial Sitrack — por día del mes en curso.
-///   4. Grid de 3 sub-pantallas:
-///      - RANKING: choferes ordenados por ICM (con buscador).
-///      - REPORTE MENSUAL: flota + severidad + top 5.
-///      - MAPA DE CALOR: distribución geográfica de infracciones.
-///   5. Top 5 mejores choferes (verde).
-///   6. Top 5 a mejorar (rojo).
+///   1. Grid de navegación (bento): Ranking / Reporte mensual / Mapa de calor /
+///      Jornada — las acciones que el operador más usa, arriba de todo.
+///   2. Personas: top 5 mejores (verde) + top 5 a mejorar (rojo).
+///   3. Panorama: KPI ICM flota del mes + tendencia ICM oficial Sitrack diaria.
 ///
 /// Tile "DETALLE POR CHOFER" eliminado 2026-05-23 — el operador prefiere
 /// abrir el portal Sitrack para drill-down real; la pantalla daba poco
 /// valor agregado (mismos números que ya aparecen en el reporte).
 ///
-/// Los widgets 2-3-5-6 antes vivían en el panel de inicio del admin
-/// (mudados al ICM Hub 2026-05-23 por decisión de Santiago — pertenecen
-/// más a este módulo que al tablero general). Comparten clases con
-/// `VistaEjecutivaService` (KpiIcm, PuntoTendencia, ChoferRankingItem)
-/// para reusar los widgets sin tocarlos.
+/// Los widgets ricos (KpiGrandeCard, TendenciaIcmChart, TopChoferesLista)
+/// antes vivían en el panel de inicio del admin (mudados al ICM Hub
+/// 2026-05-23 por decisión de Santiago). Ya están migrados a Núcleo y se
+/// reusan TAL CUAL (no se tocan acá). Comparten clases con
+/// `VistaEjecutivaService` (KpiIcm, PuntoTendencia, ChoferRankingItem).
 ///
 /// El número que muestra el módulo es EL que audita YPF: lo calcula
 /// Sitrack con su cartografía de segmento vial (urbano/no-urbano), dato
 /// que nosotros no tenemos. Se ingiere a `ICM_OFICIAL/{YYYY-MM}` con el
 /// scraper `sitrack_sync/sync_icm.py` (1 vez al día).
+///
+/// REFACTOR NÚCLEO (jun 2026): re-estilizado SIN tocar la capa de datos.
+/// El State (`_futureKpis`, `_cargar`, `_refrescar`), `IcmHubService.cargarKpis`,
+/// `KpisIcmHub`/`periodoLabel` y la navegación quedan intactos — sólo se
+/// reescribió el árbol de widgets: tiles de navegación a bento (icon chip
+/// indigo + eyebrow), labels de sección en `textMuted` y los widgets ricos
+/// (ya Núcleo) reordenados alrededor.
 class IcmHubScreen extends StatefulWidget {
   const IcmHubScreen({super.key});
 
@@ -69,36 +71,34 @@ class _IcmHubScreenState extends State<IcmHubScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppScaffold(
       title: 'ICM — Conducta de Manejo',
       body: RefreshIndicator(
         onRefresh: _refrescar,
-        color: AppColors.success,
-        backgroundColor: AppColors.surface,
+        color: c.brand,
+        backgroundColor: c.surface2,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
-            // Orden 2026-05-24: primero los iconos de acceso (Ranking,
-            // Reporte mensual, Mapa de calor, Jornada), después Personas
-            // y al final los gráficos. Antes era al revés (gráficos
-            // arriba) y el operador tenía que scrollear para llegar a
-            // las acciones que más usa.
+            // Orden 2026-05-24: primero los accesos (Ranking, Reporte mensual,
+            // Mapa de calor, Jornada), después Personas y al final los
+            // gráficos. Antes era al revés (gráficos arriba) y el operador
+            // tenía que scrollear para llegar a las acciones que más usa.
             const _GridSubpantallas(),
             const SizedBox(height: AppSpacing.xl),
             FutureBuilder<KpisIcmHub>(
               future: _futureKpis,
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
-                  return const Padding(
-                    padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
-                    child: AppSkeleton.box(height: 180),
-                  );
+                  return const _SeccionesSkeleton();
                 }
                 if (snap.hasError) {
-                  return _ErrorReintentar(
-                    error: snap.error.toString(),
-                    onReintentar: _cargar,
+                  return AppErrorState(
+                    title: 'No se pudieron cargar los KPIs del ICM',
+                    subtitle: snap.error.toString(),
+                    onRetry: _cargar,
                   );
                 }
                 final kpis = snap.data ?? KpisIcmHub.vacio;
@@ -112,7 +112,9 @@ class _IcmHubScreenState extends State<IcmHubScreen> {
   }
 }
 
-/// Las 3 secciones ricas del hub: KPI ICM flota + tendencia + 2 top 5.
+/// Las 3 secciones ricas del hub: Personas (2 top 5) + Panorama (KPI ICM
+/// flota + tendencia). Reusa los widgets de `vista_ejecutiva` (ya migrados
+/// a Núcleo) sin tocarlos.
 class _SeccionesIcm extends StatelessWidget {
   final KpisIcmHub kpis;
   const _SeccionesIcm({required this.kpis});
@@ -125,11 +127,8 @@ class _SeccionesIcm extends StatelessWidget {
     // último mes con datos).
     final sufijoPeriodo =
         kpis.periodoLabel.isEmpty ? '' : ' · ${kpis.periodoLabel}';
-    // KPI ICM flota + Tendencias lado a lado en desktop (2026-05-24).
-    // Antes la card ICM flota ocupaba toda una fila y debajo iba el
-    // gráfico — quedaba mucho aire vertical. Ahora en desktop la card
-    // queda a la izquierda (ancho fijo 280) y el gráfico ocupa el
-    // resto. En mobile siguen apilados, card primero.
+    // KPI ICM flota + Tendencias lado a lado en desktop. En mobile siguen
+    // apilados, card primero.
     final cardIcm = KpiGrandeCard.icm(
       label: 'ICM flota',
       kpi: kpis.icmFlota,
@@ -145,7 +144,7 @@ class _SeccionesIcm extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // ─── Personas: top 5 mejores + top 5 a mejorar ───
-        _SeccionLabel('Personas$sufijoPeriodo'),
+        AppEyebrow('Personas$sufijoPeriodo'),
         const SizedBox(height: AppSpacing.sm),
         if (esDesktop)
           Row(
@@ -159,7 +158,7 @@ class _SeccionesIcm extends StatelessWidget {
                   items: kpis.top5Mejores,
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              const SizedBox(width: AppSpacing.mdDense),
               Expanded(
                 child: TopChoferesLista(
                   titulo: 'TOP 5 — A MEJORAR',
@@ -177,7 +176,7 @@ class _SeccionesIcm extends StatelessWidget {
             colorTitulo: AppColors.success,
             items: kpis.top5Mejores,
           ),
-          const SizedBox(height: AppSpacing.sm),
+          const SizedBox(height: AppSpacing.mdDense),
           TopChoferesLista(
             titulo: 'TOP 5 — A MEJORAR',
             icono: Icons.priority_high,
@@ -187,7 +186,7 @@ class _SeccionesIcm extends StatelessWidget {
         ],
         const SizedBox(height: AppSpacing.xl),
         // ─── ICM flota + Tendencias (lado a lado en desktop) — AL FINAL ───
-        _SeccionLabel('Panorama$sufijoPeriodo'),
+        AppEyebrow('Panorama$sufijoPeriodo'),
         const SizedBox(height: AppSpacing.sm),
         if (esDesktop)
           IntrinsicHeight(
@@ -195,14 +194,14 @@ class _SeccionesIcm extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SizedBox(width: 280, child: cardIcm),
-                const SizedBox(width: AppSpacing.md),
+                const SizedBox(width: AppSpacing.mdDense),
                 Expanded(child: chartTendencia),
               ],
             ),
           )
         else ...[
           cardIcm,
-          const SizedBox(height: AppSpacing.md),
+          const SizedBox(height: AppSpacing.mdDense),
           chartTendencia,
         ],
       ],
@@ -210,64 +209,29 @@ class _SeccionesIcm extends StatelessWidget {
   }
 }
 
-class _SeccionLabel extends StatelessWidget {
-  final String texto;
-  const _SeccionLabel(this.texto);
+/// Skeleton de las secciones ricas mientras carga el future (en lugar de un
+/// box gris pelado — imita la silueta de Personas + Panorama).
+class _SeccionesSkeleton extends StatelessWidget {
+  const _SeccionesSkeleton();
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 6, top: AppSpacing.xs),
-      child: Text(
-        texto.toUpperCase(),
-        style: AppType.eyebrow
-            .copyWith(color: AppColors.success, letterSpacing: 1.5),
-      ),
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppSkeleton.box(height: 14, width: 120),
+        SizedBox(height: AppSpacing.md),
+        AppSkeleton.box(height: 180),
+        SizedBox(height: AppSpacing.xl),
+        AppSkeleton.box(height: 14, width: 120),
+        SizedBox(height: AppSpacing.md),
+        AppSkeleton.box(height: 200),
+      ],
     );
   }
 }
 
-class _ErrorReintentar extends StatelessWidget {
-  final String error;
-  final VoidCallback onReintentar;
-  const _ErrorReintentar({required this.error, required this.onReintentar});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-      child: Column(
-        children: [
-          const Icon(Icons.error_outline,
-              color: AppColors.error, size: 36),
-          const SizedBox(height: AppSpacing.sm),
-          Text(
-            'No se pudieron cargar los KPIs del ICM',
-            style: AppType.body.copyWith(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 6),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xl),
-            child: Text(
-              error,
-              textAlign: TextAlign.center,
-              style: AppType.eyebrow.copyWith(color: AppColors.textHint),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          AppButton(
-            label: 'Reintentar',
-            icon: Icons.refresh,
-            onPressed: onReintentar,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Grid de 4 sub-pantallas (lo único que tenía el hub antes del mudaje
-/// de los widgets ricos 2026-05-23).
+/// Grid de las 4 sub-pantallas de navegación, en bento Núcleo.
 class _GridSubpantallas extends StatelessWidget {
   const _GridSubpantallas();
 
@@ -276,43 +240,38 @@ class _GridSubpantallas extends StatelessWidget {
     return LayoutBuilder(
       builder: (ctx, constraints) {
         final w = constraints.maxWidth;
-        // 3 tiles (antes 4; el de DETALLE POR CHOFER se sacó 2026-05-23).
-        // Desktop 3×1, tablet 2×2 con el 3º solo en la 2ª fila, mobile 1 col.
+        // Desktop 4×1, tablet 2×2, mobile 1 col.
         final cols = w >= 800 ? 4 : (w >= 540 ? 2 : 1);
         return GridView.count(
           crossAxisCount: cols,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          crossAxisSpacing: AppSpacing.md,
-          mainAxisSpacing: AppSpacing.md,
-          childAspectRatio: cols == 1 ? 2.4 : 1.3,
+          crossAxisSpacing: AppSpacing.mdDense,
+          mainAxisSpacing: AppSpacing.mdDense,
+          childAspectRatio: cols == 1 ? 3.0 : 1.25,
           children: const [
             _HubTile(
-              titulo: 'RANKING',
+              titulo: 'Ranking',
               subtitulo: 'Choferes ordenados por ICM (#1 = mejor)',
               icono: Icons.leaderboard_outlined,
-              color: AppColors.info,
               ruta: AppRoutes.adminIcmRanking,
             ),
             _HubTile(
-              titulo: 'REPORTE MENSUAL',
+              titulo: 'Reporte mensual',
               subtitulo: 'Flota + severidad + top 5',
               icono: Icons.assessment_outlined,
-              color: AppColors.success,
               ruta: AppRoutes.adminIcmReporteSemanal,
             ),
             _HubTile(
-              titulo: 'MAPA DE CALOR',
+              titulo: 'Mapa de calor',
               subtitulo: 'Lugares y horarios con más infracciones',
               icono: Icons.map_outlined,
-              color: AppColors.warning,
               ruta: AppRoutes.adminIcmMapaCalor,
             ),
             _HubTile(
-              titulo: 'JORNADA',
+              titulo: 'Jornada',
               subtitulo: 'Inicio, paradas y descansos por chofer + día',
               icono: Icons.timeline,
-              color: AppColors.brandSoft,
               ruta: AppRoutes.adminIcmJornadaDia,
             ),
           ],
@@ -322,49 +281,63 @@ class _GridSubpantallas extends StatelessWidget {
   }
 }
 
+/// Tile de navegación bento: icon chip indigo (única tinta) + título + sub.
+/// Alineado a la izquierda (no centrado) — patrón de tile de acción del
+/// sistema. El acento de color es siempre brand; lo semántico queda para
+/// dots/badges de datos, no para chrome de navegación.
 class _HubTile extends StatelessWidget {
   final String titulo;
   final String subtitulo;
   final IconData icono;
-  final Color color;
   final String ruta;
 
   const _HubTile({
     required this.titulo,
     required this.subtitulo,
     required this.icono,
-    required this.color,
     required this.ruta,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppCard(
+      tier: 1,
       onTap: () => Navigator.pushNamed(context, ruta),
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icono, color: color, size: 36),
-          const SizedBox(height: AppSpacing.sm),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              titulo,
-              style: AppType.body.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                  letterSpacing: 0.5),
-            ),
+          Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: c.surface3,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Icon(icono, size: 16, color: c.brand),
+              ),
+              const Spacer(),
+              Icon(Icons.arrow_outward, size: 14, color: c.textMuted),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            titulo,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.h5.copyWith(color: c.text),
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
             subtitulo,
-            textAlign: TextAlign.center,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: AppType.eyebrow.copyWith(color: AppColors.textSecondary),
+            style: AppType.monoSm.copyWith(color: c.textMuted),
           ),
         ],
       ),

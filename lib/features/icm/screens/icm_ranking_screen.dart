@@ -18,6 +18,15 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 ///
 /// Reemplaza el ranking CESVI estimado (que daba números optimistas que no
 /// coincidían con el tablero de YPF). Período mensual: mes actual / anterior.
+///
+/// REFACTOR NÚCLEO (jun 2026): re-estilizado SIN tocar la capa de datos.
+/// El estado (`_Periodo`, `_normalizar`, `_ref`, `_cargar`), el FutureBuilder,
+/// el orden/posiciones y la navegación al detalle quedan intactos — sólo se
+/// reescribió el árbol de widgets al sistema bento: header con hero number
+/// (ICM flota en `c.text`, nunca semántico), `AppFilterChip` para el período,
+/// `AppInput` para el buscador, filas `AppCard(tier:1)` con `AppDot` semántico
+/// + rank/score en `AppType.mono` tabular, y estados empty/loading/error con
+/// los widgets del sistema.
 class IcmRankingScreen extends StatefulWidget {
   const IcmRankingScreen({super.key});
 
@@ -138,20 +147,22 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
                   return const AppSkeletonList(count: 8);
                 }
                 if (snap.hasError) {
-                  return _MensajeCentro(
-                    'Error cargando el ranking: ${snap.error}',
-                    color: AppColors.error,
+                  return AppErrorState(
+                    title: 'No se pudo cargar el ranking',
+                    subtitle: '${snap.error}',
+                    onRetry: () => setState(_recargar),
                   );
                 }
                 final periodo = snap.data;
                 if (periodo == null || periodo.vacio) {
-                  return _MensajeCentro(
-                    'Aún no hay datos del ICM oficial de '
-                    '${_ref(_periodo).label}.\n\n'
-                    'Se sincroniza una vez al día desde el portal de Sitrack. '
-                    'Si recién arranca el período, esperá a la próxima '
-                    'madrugada.',
-                    color: Colors.white54,
+                  return AppEmptyState(
+                    icon: Icons.leaderboard_outlined,
+                    title: 'Aún no hay datos del ICM oficial de '
+                        '${_ref(_periodo).label}',
+                    subtitle:
+                        'Se sincroniza una vez al día desde el portal de '
+                        'Sitrack. Si recién arranca el período, esperá a la '
+                        'próxima madrugada.',
                   );
                 }
                 // ORDEN: mejor arriba (#1 = mejor chofer del período).
@@ -173,22 +184,26 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
                         .toList();
                 final label = _ref(_periodo).label;
                 if (filas.isEmpty) {
-                  return Column(
+                  return ListView(
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.lg),
                     children: [
                       _HeaderFlota(periodo: periodo, label: label),
-                      _MensajeCentro(
-                        'Sin coincidencias para "${_busqueda.text}".',
-                        color: Colors.white54,
-                      ),
+                      const SizedBox(height: AppSpacing.xl),
+                      _SinResultados(consulta: _busqueda.text),
                     ],
                   );
                 }
                 return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.xxl),
                   itemCount: filas.length + 1,
                   itemBuilder: (ctx, i) {
                     if (i == 0) {
-                      return _HeaderFlota(periodo: periodo, label: label);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                        child: _HeaderFlota(periodo: periodo, label: label),
+                      );
                     }
                     final c = filas[i - 1];
                     // Posición = índice en el orden ORIGINAL (no en el
@@ -213,6 +228,7 @@ class _IcmRankingScreenState extends State<IcmRankingScreen> {
   }
 }
 
+/// Buscador estilo Núcleo (AppInput con lupa + limpiar).
 class _Buscador extends StatelessWidget {
   final TextEditingController controller;
   const _Buscador({required this.controller});
@@ -220,64 +236,47 @@ class _Buscador extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-      child: TextField(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.sm),
+      child: AppInput(
         controller: controller,
-        style: AppType.body.copyWith(color: Colors.white),
-        decoration: InputDecoration(
-          hintText: 'Buscar por nombre o DNI',
-          hintStyle:
-              const TextStyle(color: Colors.white38, fontSize: 13),
-          prefixIcon: const Icon(Icons.search,
-              color: Colors.white54, size: 20),
-          suffixIcon: controller.text.isEmpty
-              ? null
-              : IconButton(
-                  icon: const Icon(Icons.close,
-                      color: Colors.white54, size: 18),
-                  splashRadius: 18,
-                  visualDensity: VisualDensity.compact,
-                  onPressed: controller.clear,
-                ),
-          isDense: true,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            borderSide:
-                const BorderSide(color: Colors.white24, width: 1),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            borderSide:
-                const BorderSide(color: Colors.white24, width: 1),
-          ),
-        ),
+        hint: 'Buscar por nombre o DNI',
+        icon: Icons.search,
+        trailingAction: controller.text.isEmpty ? null : 'Limpiar',
+        onTrailingTap: controller.clear,
       ),
     );
   }
 }
 
-class _MensajeCentro extends StatelessWidget {
-  final String texto;
-  final Color color;
-  const _MensajeCentro(this.texto, {required this.color});
+/// Mensaje "sin coincidencias" en estilo bento (no centrado a pantalla
+/// completa porque va debajo del header de flota).
+class _SinResultados extends StatelessWidget {
+  final String consulta;
+  const _SinResultados({required this.consulta});
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(28),
-        child: Text(
-          texto,
-          textAlign: TextAlign.center,
-          style: AppType.body.copyWith(color: color, height: 1.4),
-        ),
+    final c = context.colors;
+    return AppCard(
+      tier: 1,
+      child: Row(
+        children: [
+          Icon(Icons.search_off_outlined, size: 20, color: c.textMuted),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              'Sin coincidencias para "$consulta".',
+              style: AppType.body.copyWith(color: c.textSecondary),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
+/// Selector de período — pills Núcleo (AppFilterChip sin contador visible).
 class _BarraFiltros extends StatelessWidget {
   final _Periodo periodoActual;
   final ValueChanged<_Periodo> onChanged;
@@ -287,24 +286,26 @@ class _BarraFiltros extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xs),
       child: Wrap(
-        spacing: 8,
+        spacing: 6,
+        runSpacing: 6,
         children: [
-          ChoiceChip(
-            label: const Text('Semana actual'),
-            selected: periodoActual == _Periodo.semanaActual,
-            onSelected: (_) => onChanged(_Periodo.semanaActual),
+          _ChipPeriodo(
+            label: 'Semana actual',
+            activo: periodoActual == _Periodo.semanaActual,
+            onTap: () => onChanged(_Periodo.semanaActual),
           ),
-          ChoiceChip(
-            label: const Text('Mes actual'),
-            selected: periodoActual == _Periodo.mesActual,
-            onSelected: (_) => onChanged(_Periodo.mesActual),
+          _ChipPeriodo(
+            label: 'Mes actual',
+            activo: periodoActual == _Periodo.mesActual,
+            onTap: () => onChanged(_Periodo.mesActual),
           ),
-          ChoiceChip(
-            label: const Text('Mes anterior'),
-            selected: periodoActual == _Periodo.mesAnterior,
-            onSelected: (_) => onChanged(_Periodo.mesAnterior),
+          _ChipPeriodo(
+            label: 'Mes anterior',
+            activo: periodoActual == _Periodo.mesAnterior,
+            onTap: () => onChanged(_Periodo.mesAnterior),
           ),
         ],
       ),
@@ -312,7 +313,43 @@ class _BarraFiltros extends StatelessWidget {
   }
 }
 
+/// Pill de período (mismo look que AppFilterChip pero sin contador, ya que el
+/// período no tiene un "n" asociado — es una elección, no un filtro contable).
+class _ChipPeriodo extends StatelessWidget {
+  final String label;
+  final bool activo;
+  final VoidCallback onTap;
+  const _ChipPeriodo(
+      {required this.label, required this.activo, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.full),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: activo ? c.text : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: activo ? null : Border.all(color: c.borderStrong),
+        ),
+        child: Text(
+          label,
+          style: AppType.label.copyWith(
+            color: activo ? c.bg : c.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Cabecera con el ICM de la flota (oficial) + cómo leerlo + distribución.
+/// Hero number en `c.text` (nunca semántico en el número) — la lectura
+/// semántica vive en los badges de distribución.
 class _HeaderFlota extends StatelessWidget {
   final IcmOficialPeriodo periodo;
   final String label;
@@ -320,123 +357,113 @@ class _HeaderFlota extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final conteo = periodo.conteoPorSeveridad;
     final altos = conteo[SeveridadIcm.alto] ?? 0;
     final medios = conteo[SeveridadIcm.medio] ?? 0;
     final bajos = (conteo[SeveridadIcm.bajo] ?? 0) +
         (conteo[SeveridadIcm.sinInfracciones] ?? 0);
     return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      periodo.icmGeneral.toStringAsFixed(1),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 30,
-                        fontWeight: FontWeight.bold,
-                        height: 1.0,
-                      ),
-                    ),
-                    Text(
-                      'ICM flota (oficial Sitrack)',
-                      style: AppType.eyebrow.copyWith(color: Colors.white60),
-                    ),
-                  ],
+      tier: 2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Eyebrow + label del período (a la derecha).
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Expanded(child: AppEyebrow('ICM flota · oficial Sitrack')),
+              Flexible(
+                child: Text(
+                  label,
+                  textAlign: TextAlign.end,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.monoSm.copyWith(color: c.textSecondary),
                 ),
-                const SizedBox(width: AppSpacing.lg),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        label,
-                        textAlign: TextAlign.end,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${periodo.choferesConActividad.length} choferes '
-                        'rankeables · '
-                        '${AppFormatters.formatearMiles(periodo.distanciaTotalKm)} km',
-                        textAlign: TextAlign.end,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppType.eyebrow.copyWith(color: Colors.white54),
-                      ),
-                    ],
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          // Hero number + sub-línea de contexto (choferes rankeables · km).
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                periodo.icmGeneral.toStringAsFixed(1),
+                style: AppType.h1.copyWith(
+                  color: c.text,
+                  fontSize: 56,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    '${periodo.choferesConActividad.length} rankeables · '
+                    '${AppFormatters.formatearMiles(periodo.distanciaTotalKm)} km',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.monoSm.copyWith(color: c.textMuted),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _ChipSeveridad(
-                    label: 'Alto', n: altos, color: Colors.red.shade600),
-                _ChipSeveridad(
-                    label: 'Medio', n: medios, color: Colors.amber.shade700),
-                _ChipSeveridad(
-                    label: 'Bajo/Sin', n: bajos, color: Colors.green.shade600),
-                const Text(
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // Distribución por severidad (badges semánticos) + "más bajo = mejor".
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              AppBadge(
+                text: 'Alto $altos',
+                color: c.error,
+                dot: true,
+                size: AppBadgeSize.sm,
+              ),
+              AppBadge(
+                text: 'Medio $medios',
+                color: c.warning,
+                dot: true,
+                size: AppBadgeSize.sm,
+              ),
+              AppBadge(
+                text: 'Bajo/Sin $bajos',
+                color: c.success,
+                dot: true,
+                size: AppBadgeSize.sm,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 2),
+                child: Text(
                   'más bajo = mejor',
-                  style: TextStyle(
-                    color: Colors.white38,
-                    fontSize: 10,
+                  style: AppType.monoSm.copyWith(
+                    color: c.textMuted,
                     fontStyle: FontStyle.italic,
                   ),
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 }
 
-class _ChipSeveridad extends StatelessWidget {
-  final String label;
-  final int n;
-  final Color color;
-  const _ChipSeveridad(
-      {required this.label, required this.n, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.45)),
-      ),
-      child: Text(
-        '$label $n',
-        style: AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.w600),
-      ),
-    );
-  }
-}
-
+/// Fila de un chofer en el ranking — `AppCard(tier:1)` con `AppDot` semántico
+/// (verde/ámbar/rojo según severidad Sitrack), rank y score en `AppType.mono`
+/// tabular. El borde de cada card hace de hairline entre filas.
 class _FilaChofer extends StatelessWidget {
   /// Posición en el ranking (`null` = sin actividad/DNI, no compite).
   final int? posicion;
 
   /// Cantidad total de choferes rankeables del período (para mostrar
-  /// "#3 de 28" — da contexto del podio).
+  /// "#3 / 28" — da contexto del podio).
   final int totalRankeables;
 
   final IcmOficialChofer chofer;
@@ -449,7 +476,9 @@ class _FilaChofer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = colorSeveridadIcm(chofer.severidad);
+    final c = context.colors;
+    // Color semántico de la severidad → al dot/score, NUNCA al nombre.
+    final color = _colorSeveridad(context, chofer.severidad);
     final icmStr =
         chofer.sinActividad ? '—' : chofer.icm.toStringAsFixed(1);
     final dniStr = chofer.tieneDni
@@ -457,88 +486,118 @@ class _FilaChofer extends StatelessWidget {
         : 'Sin chofer identificado';
     final posStr = posicion == null
         ? '—'
-        : '#$posicion${totalRankeables > 0 ? '/$totalRankeables' : ''}';
+        : '#$posicion${totalRankeables > 0 ? ' / $totalRankeables' : ''}';
     // Drill-down disponible solo si hay DNI real (Sitrack a veces tiene
     // unidades sin chofer asignado, esos no entran al detalle).
     final esNavegable = chofer.tieneDni && !chofer.sinActividad;
-    return Card(
-      elevation: 1,
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        side: BorderSide(color: color.withValues(alpha: 0.40), width: 1),
-      ),
-      child: ListTile(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        leading: SizedBox(
-          width: 64,
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                posStr,
-                style: AppType.eyebrow.copyWith(color: Colors.white60),
-              ),
-              const SizedBox(height: 2),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color,
-                  borderRadius: BorderRadius.circular(6),
+
+    return AppCard(
+      tier: 1,
+      onTap: esNavegable
+          ? () => Navigator.pushNamed(
+                context,
+                AppRoutes.adminIcmDetalleChofer,
+                arguments: chofer.dni,
+              )
+          : null,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.md),
+      child: Row(
+        children: [
+          // Rank + score: bloque mono tabular a la izquierda.
+          SizedBox(
+            width: 58,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  posStr,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.monoSm.copyWith(color: c.textMuted),
                 ),
-                child: Text(
-                  icmStr,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                  ),
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    AppDot(color, size: 6),
+                    const SizedBox(width: 5),
+                    Text(
+                      icmStr,
+                      style: AppType.mono.copyWith(
+                        color: c.text,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
-        title: Text(
-          chofer.nombre.isEmpty ? '(sin nombre)' : chofer.nombre,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '$dniStr · ${AppFormatters.formatearMiles(chofer.distanciaKm)} km',
-                style: AppType.eyebrow.copyWith(color: Colors.white54),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                chofer.sinActividad
-                    ? 'Sin actividad en el período'
-                    : '${chofer.severidadLabel} · ${chofer.totalInfracciones} '
-                        'infracciones (${chofer.infAltas}A · '
-                        '${chofer.infMedias}M · ${chofer.infLeves}L)',
-                style: AppType.eyebrow.copyWith(color: color),
-              ),
-            ],
+          const SizedBox(width: AppSpacing.md),
+          // Nombre + sub-líneas (DNI · km, severidad/infracciones).
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  chofer.nombre.isEmpty ? '(sin nombre)' : chofer.nombre,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.body.copyWith(
+                      color: c.text, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '$dniStr · ${AppFormatters.formatearMiles(chofer.distanciaKm)} km',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.monoSm.copyWith(color: c.textMuted),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  chofer.sinActividad
+                      ? 'Sin actividad en el período'
+                      : '${chofer.severidadLabel} · ${chofer.totalInfracciones} '
+                          'infracciones (${chofer.infAltas}A · '
+                          '${chofer.infMedias}M · ${chofer.infLeves}L)',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.monoSm.copyWith(color: color),
+                ),
+              ],
+            ),
           ),
-        ),
-        trailing: esNavegable
-            ? const Icon(Icons.chevron_right, color: Colors.white38)
-            : null,
-        onTap: esNavegable
-            ? () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.adminIcmDetalleChofer,
-                  arguments: chofer.dni,
-                )
-            : null,
+          if (esNavegable) ...[
+            const SizedBox(width: AppSpacing.sm),
+            Icon(Icons.chevron_right, size: 18, color: c.textMuted),
+          ],
+        ],
       ),
     );
+  }
+
+  /// Color semántico de la severidad oficial Sitrack mapeado a tokens del
+  /// tema (success/warning/error/textMuted). Reemplaza al `colorSeveridadIcm`
+  /// de hex Material (`Colors.green.shade600`, etc.) para respetar la paleta
+  /// Núcleo. La clasificación NO cambia: usamos el enum de severidad ya
+  /// calculado por Sitrack, sin inventar umbrales.
+  Color _colorSeveridad(BuildContext context, String severidadRaw) {
+    final c = context.colors;
+    switch (severidadIcmDesde(severidadRaw)) {
+      case SeveridadIcm.sinInfracciones:
+      case SeveridadIcm.bajo:
+        return c.success;
+      case SeveridadIcm.medio:
+        return c.warning;
+      case SeveridadIcm.alto:
+        return c.error;
+      case SeveridadIcm.sinActividad:
+      case SeveridadIcm.desconocida:
+        return c.textMuted;
+    }
   }
 }
