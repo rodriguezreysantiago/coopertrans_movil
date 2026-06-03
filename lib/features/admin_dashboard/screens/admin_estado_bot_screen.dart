@@ -69,6 +69,7 @@ class _AdminEstadoBotScreenState extends State<AdminEstadoBotScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppScaffold(
       title: 'Estado del Bot',
       actions: [
@@ -76,7 +77,9 @@ class _AdminEstadoBotScreenState extends State<AdminEstadoBotScreen> {
         // dashboard muestra "Cola en vivo" (TTL horas); el histórico
         // resuelve "¿se mandó tal mensaje el lunes?".
         IconButton(
-          icon: const Icon(Icons.history, color: Colors.white),
+          icon: const Icon(Icons.history),
+          iconSize: 18,
+          color: c.textMuted,
           tooltip: 'Historial de mensajes (30 días)',
           onPressed: () {
             Navigator.of(context).push(
@@ -94,23 +97,19 @@ class _AdminEstadoBotScreenState extends State<AdminEstadoBotScreen> {
             .snapshots(),
         builder: (ctx, snap) {
           if (snap.hasError) {
-            return _Mensaje(
-              icono: Icons.error_outline,
-              color: AppColors.error,
-              texto: 'Error leyendo BOT_HEALTH: ${snap.error}',
+            return AppErrorState(
+              title: 'No se pudo leer el estado del bot',
+              subtitle: '${snap.error}',
             );
           }
           if (!snap.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppColors.success),
-            );
+            return const AppLoadingState();
           }
           if (!snap.data!.exists) {
-            return const _Mensaje(
-              icono: Icons.help_outline,
-              color: AppColors.warning,
-              texto:
-                  'El bot nunca reportó estado.\n\n'
+            return const AppEmptyState(
+              icon: Icons.smart_toy_outlined,
+              title: 'El bot nunca reportó estado',
+              subtitle:
                   'Verificá en la PC del bot que esté corriendo:\n'
                   'cd whatsapp-bot && npm start',
             );
@@ -145,16 +144,13 @@ class AdminReglasNotificacionScreen extends StatelessWidget {
             .snapshots(),
         builder: (ctx, snap) {
           if (snap.hasError) {
-            return _Mensaje(
-              icono: Icons.error_outline,
-              color: AppColors.error,
-              texto: 'Error leyendo BOT_HEALTH: ${snap.error}',
+            return AppErrorState(
+              title: 'No se pudo leer el estado del bot',
+              subtitle: '${snap.error}',
             );
           }
           if (!snap.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppColors.success),
-            );
+            return const AppLoadingState();
           }
           final data =
               (snap.data!.data() as Map<String, dynamic>?) ?? const {};

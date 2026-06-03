@@ -18,6 +18,8 @@ class _DashboardBot extends StatelessWidget {
     final estadoCliente = (data['estadoCliente'] ?? 'INICIANDO').toString();
     final ultimoHb = _toDate(data['ultimoHeartbeat']);
     final salud = _evaluarSalud(estadoCliente, ultimoHb);
+    final cola = (data['cola'] as Map?) ?? const {};
+    final mensajes = (data['mensajes'] as Map?) ?? const {};
 
     return ListView(
       padding: const EdgeInsets.symmetric(
@@ -25,13 +27,20 @@ class _DashboardBot extends StatelessWidget {
         vertical: AppSpacing.md,
       ),
       children: [
-        _BannerEstado(salud: salud, estadoCliente: estadoCliente, ultimoHb: ultimoHb),
-        const SizedBox(height: AppSpacing.lg),
-        const _ToggleKillSwitch(),
+        // Header (eyebrow + hero) + KpiStrip + AppServiceCard, mismo patrón
+        // que el hub de Cachatore (REFACTOR NÚCLEO jun 2026).
+        _Header(mensajes: mensajes, ultimoHb: ultimoHb),
         const SizedBox(height: AppSpacing.md),
-        _CardCola(cola: (data['cola'] as Map?) ?? const {}),
+        _KpiStrip(cola: cola, mensajes: mensajes, ultimoHb: ultimoHb),
+        const SizedBox(height: AppSpacing.mdDense),
+        // Bloque de estado del servicio: el kill-switch (pausar/reanudar) va
+        // adentro como control, igual que el interruptor maestro de Cachatore.
+        _BannerEstado(
+            salud: salud, estadoCliente: estadoCliente, ultimoHb: ultimoHb),
+        const SizedBox(height: AppSpacing.mdDense),
+        _CardCola(cola: cola),
         const SizedBox(height: AppSpacing.md),
-        _CardMensajes(mensajes: (data['mensajes'] as Map?) ?? const {}),
+        _CardMensajes(mensajes: mensajes),
         const SizedBox(height: AppSpacing.md),
         const _CardSparklineEnviados(),
         const SizedBox(height: AppSpacing.md),
@@ -47,6 +56,114 @@ class _DashboardBot extends StatelessWidget {
           cantidad: ((data['reglasNotificacion'] as Map?) ?? const {}).length,
         ),
         const SizedBox(height: AppSpacing.xl),
+      ],
+    );
+  }
+}
+
+// =============================================================================
+// HEADER (eyebrow + hero number = enviados hoy) + KPI STRIP
+// =============================================================================
+
+class _Header extends StatelessWidget {
+  final Map mensajes;
+  final DateTime? ultimoHb;
+  const _Header({required this.mensajes, required this.ultimoHb});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    // Sin heartbeat = el bot nunca reportó: mostramos "—" en vez de 0 para no
+    // afirmar "0 enviados" cuando en realidad no hay dato.
+    final hayDato = ultimoHb != null;
+    final hoy = (mensajes['enviadosHoy'] ?? 0) as int;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xs, AppSpacing.xs, AppSpacing.xs, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const AppEyebrow('Bot WhatsApp'),
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      hayDato ? '$hoy' : '—',
+                      style: AppType.h2.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        'enviados hoy',
+                        style: AppType.monoSm.copyWith(color: c.textMuted),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KpiStrip extends StatelessWidget {
+  final Map cola;
+  final Map mensajes;
+  final DateTime? ultimoHb;
+  const _KpiStrip({
+    required this.cola,
+    required this.mensajes,
+    required this.ultimoHb,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final hayDato = ultimoHb != null;
+    final pendientes = (cola['pendientes'] ?? 0) as int;
+    final reintentando = (cola['reintentando'] ?? 0) as int;
+    final error = (cola['error'] ?? 0) as int;
+    // Pendientes "frescos" = total pendientes - los que están en espera de
+    // retry (mismo cálculo que la card de cola, para no doble-contar).
+    final pendientesFrescos = (pendientes - reintentando).clamp(0, pendientes);
+    final hoy = (mensajes['enviadosHoy'] ?? 0) as int;
+
+    return AppKpiStrip(
+      stats: [
+        AppStat(
+          label: 'Enviados hoy',
+          value: hayDato ? '$hoy' : '—',
+          accent: hoy > 0 ? c.success : null,
+        ),
+        AppStat(
+          label: 'En cola',
+          value: hayDato ? '$pendientesFrescos' : '—',
+          accent: pendientesFrescos > 0 ? c.warning : null,
+        ),
+        AppStat(
+          label: 'Con error',
+          value: hayDato ? '$error' : '—',
+          accent: error > 0 ? c.error : null,
+        ),
+        AppStat(
+          label: 'Latido',
+          value: ultimoHb == null
+              ? '—'
+              : _hace(ultimoHb!).replaceFirst('hace ', ''),
+          valueStyle: AppType.h4,
+        ),
       ],
     );
   }
@@ -92,53 +209,25 @@ class _BannerEstado extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = switch (salud) {
-      _Salud.ok => AppColors.success,
-      _Salud.advertencia => AppColors.warning,
-      _Salud.caido => AppColors.error,
+    // Bloque de estado del servicio unificado con AppServiceCard — MISMO
+    // widget que el hub de Cachatore (REFACTOR NÚCLEO jun 2026: el cliente
+    // pidió que ambos hubs se vean iguales). El subtítulo mono resume estado
+    // del cliente WA + latido; el status pasa a ok (glow) / warning / error
+    // según la salud. El kill-switch (pausar/reanudar) va como `children`.
+    final status = switch (salud) {
+      _Salud.ok => AppServiceStatus.ok('Operativo'),
+      _Salud.advertencia => AppServiceStatus.warning('En transición'),
+      _Salud.caido => AppServiceStatus.error('No responde'),
     };
-    final tituloPrincipal = switch (salud) {
-      _Salud.ok => 'BOT OPERATIVO',
-      _Salud.advertencia => 'BOT EN TRANSICIÓN',
-      _Salud.caido => 'BOT NO RESPONDE',
-    };
-    // Compacta, mismo layout que la card de estado de Cachatore (dot +
-    // título + detalle con el latido inline) para que ambas se vean iguales
-    // de tamaño (pedido Santiago 2026-06-02).
-    return AppCard(
-      borderColor: color.withAlpha(160),
-      child: Row(
-        children: [
-          Container(
-            width: 14,
-            height: 14,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  tituloPrincipal,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.body
-                      .copyWith(color: color, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${_etiquetarEstado(estadoCliente)} · '
-                  '${ultimoHb == null ? 'sin heartbeat' : 'latió ${_hace(ultimoHb!)}'}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.label,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    final subtitle = '${_etiquetarEstado(estadoCliente)} · '
+        '${ultimoHb == null ? 'sin heartbeat' : 'latió ${_hace(ultimoHb!)}'}';
+    return AppServiceCard(
+      name: 'Bot WhatsApp',
+      subtitle: subtitle,
+      status: status,
+      icon: Icons.smart_toy_outlined,
+      glow: salud == _Salud.ok,
+      children: const [_ToggleKillSwitch()],
     );
   }
 
@@ -415,8 +504,8 @@ class _CardReglasNotificacion extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.rule_folder_outlined,
-                  color: AppColors.success, size: 18),
+              Icon(Icons.rule_folder_outlined,
+                  color: context.colors.textSecondary, size: 20),
               const SizedBox(width: AppSpacing.sm),
               Text(
                 'Reglas de notificación',
@@ -855,8 +944,8 @@ class _TileAbrirReglas extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: Row(
             children: [
-              const Icon(Icons.rule_folder_outlined,
-                  color: AppColors.info, size: 20),
+              Icon(Icons.rule_folder_outlined,
+                  color: context.colors.textSecondary, size: 20),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
@@ -882,8 +971,8 @@ class _TileAbrirReglas extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right,
-                  color: AppColors.textTertiary, size: 20),
+              Icon(Icons.chevron_right,
+                  color: context.colors.textMuted, size: 18),
             ],
           ),
         ),
@@ -945,7 +1034,7 @@ class _BloqueDatos extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icono, color: AppColors.success, size: 18),
+              Icon(icono, color: context.colors.textSecondary, size: 20),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
@@ -1017,8 +1106,7 @@ class _Fila extends StatelessWidget {
           ),
           if (onTap != null) ...[
             const SizedBox(width: 6),
-            const Icon(Icons.chevron_right,
-                size: 16, color: AppColors.textDisabled),
+            Icon(Icons.chevron_right, size: 18, color: context.colors.textMuted),
           ],
         ],
       ),
@@ -1030,38 +1118,6 @@ class _Fila extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(6),
         child: contenido,
-      ),
-    );
-  }
-}
-
-class _Mensaje extends StatelessWidget {
-  final IconData icono;
-  final Color color;
-  final String texto;
-  const _Mensaje({
-    required this.icono,
-    required this.color,
-    required this.texto,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icono, color: color, size: 48),
-            const SizedBox(height: AppSpacing.lg),
-            Text(
-              texto,
-              textAlign: TextAlign.center,
-              style: AppType.body.copyWith(color: color),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1102,18 +1158,29 @@ class _ToggleKillSwitch extends StatelessWidget {
         // y confundía a los operadores. Internamente el doc sigue siendo
         // `pausado: bool` — solo cambia la semántica visual.
         final encendido = !pausado;
-        return AppCard(
-          padding: const EdgeInsets.all(AppSpacing.lg - 2),
-          borderColor: pausado ? AppColors.warning.withAlpha(160) : null,
-          highlighted: pausado,
+        final c = context.colors;
+        // Inner control dentro de la AppServiceCard (no una card aparte) —
+        // mismo look que el interruptor maestro de Cachatore: superficie
+        // surface3 + hairline, ícono 20px.
+        return Container(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md, AppSpacing.sm, AppSpacing.sm, AppSpacing.sm),
+          decoration: BoxDecoration(
+            color: c.surface3,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(
+                color: pausado ? c.warning.withValues(alpha: 0.45) : c.border),
+          ),
           child: Row(
             children: [
               Icon(
-                encendido ? Icons.power_settings_new : Icons.pause_circle_filled,
-                color: encendido ? AppColors.success : AppColors.warning,
-                size: 28,
+                encendido
+                    ? Icons.power_settings_new
+                    : Icons.pause_circle_outline,
+                color: encendido ? c.success : c.warning,
+                size: 20,
               ),
-              const SizedBox(width: AppSpacing.lg - 2),
+              const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1123,11 +1190,8 @@ class _ToggleKillSwitch extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppType.label.copyWith(
-                        color: encendido
-                            ? AppColors.textPrimary
-                            : AppColors.warning,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                        color: encendido ? c.text : c.warning,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1139,16 +1203,14 @@ class _ToggleKillSwitch extends StatelessWidget {
                               : 'Motivo: $motivo'),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.label.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
+                      style: AppType.label.copyWith(color: c.textSecondary),
                     ),
                   ],
                 ),
               ),
               Switch(
                 value: encendido,
-                activeThumbColor: AppColors.success,
+                activeThumbColor: c.success,
                 // El usuario apaga el switch ⇒ pasamos `nuevoPausado=true`
                 // a `_confirmarYTogglear` (que sigue trabajando con la
                 // variable `pausado` original del doc Firestore).
@@ -1748,8 +1810,8 @@ class _CardSparklineEnviadosState extends State<_CardSparklineEnviados> {
         children: [
           Row(
             children: [
-              const Icon(Icons.bar_chart,
-                  color: AppColors.info, size: 18),
+              Icon(Icons.bar_chart_outlined,
+                  color: context.colors.textSecondary, size: 20),
               const SizedBox(width: AppSpacing.sm),
               const Expanded(
                 child: Text(

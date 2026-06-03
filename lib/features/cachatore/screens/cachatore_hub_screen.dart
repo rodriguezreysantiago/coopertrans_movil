@@ -16,6 +16,7 @@ import '../services/cachatore_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
+
 /// Panel de control del bot que reserva/reagenda turnos de carga YPF en
 /// iTurnos (corre 24/7 en la PC dedicada). Flujo:
 ///   1. Agregar: elegir chofer → fecha (calendario) → franja → "Vigilados".
@@ -23,6 +24,16 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 ///   3. Tocar un turno concretado → Reagendar (nueva fecha + franja).
 /// Todo va por Firestore: la app escribe la selección, el bot la lee y devuelve
 /// el estado en vivo.
+///
+/// REFACTOR NÚCLEO (jun 2026): mismo layout que el hub del Bot WhatsApp
+/// (`admin_estado_bot_screen.dart`) — header eyebrow + hero number,
+/// `AppKpiStrip` con 4 métricas reales, bloque de estado del servicio con
+/// `AppServiceCard` (el interruptor maestro vive dentro), y luego las
+/// secciones de vigilados / concretados re-skineadas a tokens. La capa de
+/// datos NO cambia: los streams (`streamEstado` / `streamConfig` /
+/// `streamObjetivos` / `streamTurnos`), los services y las acciones
+/// (agregar / editar / pausar / reagendar / cancelar / chequeo) quedan
+/// intactos — sólo cambia el árbol de widgets.
 class CachatoreHubScreen extends StatelessWidget {
   const CachatoreHubScreen({super.key});
 
@@ -30,12 +41,17 @@ class CachatoreHubScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Cachatore — Turnos YPF',
+      // El estado del bot + KPIs + interruptor viven arriba combinando los
+      // 3 streams (estado/config/objetivos/turnos) en un solo árbol, así el
+      // hero, el KpiStrip y la AppServiceCard leen data consistente. Las
+      // secciones de abajo mantienen sus propios StreamBuilder.
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.md,
+        ),
         children: const [
-          _BotStatusCard(),
-          SizedBox(height: AppSpacing.md),
-          _MasterSwitch(),
+          _CabeceraEstado(),
           SizedBox(height: AppSpacing.lg),
           _SeccionVigilados(),
           SizedBox(height: AppSpacing.xl),
@@ -60,36 +76,260 @@ String _haceCuanto(DateTime? t) {
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// Estado del bot (latido)
+// Cabecera: header (eyebrow + hero) + AppKpiStrip + AppServiceCard con el
+// interruptor maestro. Combina los streams de estado/config/objetivos/turnos
+// para que las métricas sean consistentes entre sí.
 // ───────────────────────────────────────────────────────────────────────
-class _BotStatusCard extends StatelessWidget {
-  const _BotStatusCard();
+class _CabeceraEstado extends StatelessWidget {
+  const _CabeceraEstado();
 
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<CachatoreEstadoBot>(
       stream: CachatoreService.streamEstado(),
+      builder: (ctx, snapEstado) {
+        final e = snapEstado.data ?? const CachatoreEstadoBot();
+        return StreamBuilder<List<CachatoreObjetivo>>(
+          stream: CachatoreService.streamObjetivos(),
+          builder: (ctx2, snapObj) {
+            final objetivos = snapObj.data ?? const <CachatoreObjetivo>[];
+            return StreamBuilder<List<CachatoreTurno>>(
+              stream: CachatoreService.streamTurnos(),
+              builder: (ctx3, snapTurnos) {
+                final turnos = snapTurnos.data ?? const <CachatoreTurno>[];
+                final vigilados =
+                    objetivos.where((o) => !o.tieneTurno).length;
+                // Reagendar pendiente: el chofer ya tiene turno pero está
+                // marcado para moverlo y el bot todavía no lo movió.
+                final reagendando = objetivos
+                    .where((o) =>
+                        o.reagendar && o.estado != EstadoObjetivo.reagendado)
+                    .length;
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _Header(turnos: turnos.length, estado: e),
+                    const SizedBox(height: AppSpacing.md),
+                    _KpiStrip(
+                      vigilados: vigilados,
+                      conTurno: turnos.length,
+                      reagendando: reagendando,
+                      estado: e,
+                    ),
+                    const SizedBox(height: AppSpacing.mdDense),
+                    _ServicioCard(estado: e),
+                  ],
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  final int turnos;
+  final CachatoreEstadoBot estado;
+  const _Header({required this.turnos, required this.estado});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final hayEstado = estado.ultimoTickEn != null;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.xs, AppSpacing.xs, AppSpacing.xs, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const AppEyebrow('Cachatore'),
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      hayEstado ? '$turnos' : '—',
+                      style: AppType.h2.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        'turnos concretados',
+                        style: AppType.monoSm.copyWith(color: c.textMuted),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KpiStrip extends StatelessWidget {
+  final int vigilados;
+  final int conTurno;
+  final int reagendando;
+  final CachatoreEstadoBot estado;
+
+  const _KpiStrip({
+    required this.vigilados,
+    required this.conTurno,
+    required this.reagendando,
+    required this.estado,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final hayEstado = estado.ultimoTickEn != null;
+    return AppKpiStrip(
+      stats: [
+        AppStat(
+          label: 'Vigilados',
+          value: hayEstado ? '$vigilados' : '—',
+          accent: vigilados > 0 ? c.warning : null,
+        ),
+        AppStat(
+          label: 'Con turno',
+          value: hayEstado ? '$conTurno' : '—',
+          accent: conTurno > 0 ? c.success : null,
+        ),
+        AppStat(
+          label: 'Reagendar',
+          value: hayEstado ? '$reagendando' : '—',
+          accent: reagendando > 0 ? c.warning : null,
+        ),
+        AppStat(
+          label: 'Latido',
+          value: estado.ultimoTickEn == null
+              ? '—'
+              : _haceCuanto(estado.ultimoTickEn).replaceFirst('hace ', ''),
+          valueStyle: AppType.h4,
+          accent: estado.vivo ? c.success : c.error,
+        ),
+      ],
+    );
+  }
+}
+
+/// Bloque de estado del servicio + interruptor maestro, unificado con
+/// `AppServiceCard` (mismo widget que el hub del Bot WhatsApp). El subtítulo
+/// mono resume modo / latido / con-turno; el status pasa a ok (glow) cuando
+/// el bot late y está prendido, warning cuando late pero está pausado, error
+/// cuando no late. El interruptor maestro va como `children`.
+class _ServicioCard extends StatelessWidget {
+  final CachatoreEstadoBot estado;
+  const _ServicioCard({required this.estado});
+
+  @override
+  Widget build(BuildContext context) {
+    final e = estado;
+    final vivo = e.vivo;
+    final status = !vivo
+        ? AppServiceStatus.error('Sin responder')
+        : (e.pausado
+            ? AppServiceStatus.warning('Pausado')
+            : AppServiceStatus.ok('Activo'));
+    final subtitle = !vivo
+        ? 'no late · ${_haceCuanto(e.ultimoTickEn)}'
+        : 'modo ${e.modo.isEmpty ? '—' : e.modo} · '
+            '${e.conTurno}/${e.total} con turno · '
+            '${_haceCuanto(e.ultimoTickEn)}';
+    return AppServiceCard(
+      name: 'Cachatore',
+      subtitle: subtitle,
+      status: status,
+      icon: Icons.event_repeat_outlined,
+      glow: vivo && !e.pausado,
+      children: [
+        if (!vivo) ...[
+          _NotaFalla(
+            texto: 'El bot no late hace ${_haceCuanto(e.ultimoTickEn)}. '
+                'Revisá que esté prendido en la PC dedicada.',
+          ),
+          const SizedBox(height: AppSpacing.md),
+        ],
+        const _MasterSwitch(),
+      ],
+    );
+  }
+}
+
+class _NotaFalla extends StatelessWidget {
+  final String texto;
+  const _NotaFalla({required this.texto});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: c.errorSoft,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: c.error.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_outlined, size: 20, color: c.error),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              texto,
+              style: AppType.label.copyWith(color: c.error),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// Interruptor maestro (encendido/pausado) — vive dentro de la AppServiceCard.
+// ───────────────────────────────────────────────────────────────────────
+class _MasterSwitch extends StatelessWidget {
+  const _MasterSwitch();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return StreamBuilder<CachatoreConfig>(
+      stream: CachatoreService.streamConfig(),
       builder: (ctx, snap) {
-        final e = snap.data ?? const CachatoreEstadoBot();
-        final vivo = e.vivo;
-        final color = !vivo
-            ? AppColors.error
-            : (e.pausado ? AppColors.warning : AppColors.success);
-        final titulo = !vivo
-            ? 'Bot sin responder'
-            : (e.pausado ? 'Bot pausado' : 'Bot activo');
-        final detalle = !vivo
-            ? 'No late hace ${_haceCuanto(e.ultimoTickEn)} — revisá la PC dedicada'
-            : 'Modo ${e.modo.isEmpty ? '—' : e.modo} · '
-                '${e.conTurno}/${e.total} con turno · latió ${_haceCuanto(e.ultimoTickEn)}';
-        return AppCard(
-          borderColor: color.withValues(alpha: 0.5),
+        final cfg = snap.data ?? const CachatoreConfig();
+        return Container(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md, AppSpacing.sm, AppSpacing.sm, AppSpacing.sm),
+          decoration: BoxDecoration(
+            color: c.surface3,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: c.border),
+          ),
           child: Row(
             children: [
-              Container(
-                width: 14,
-                height: 14,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              Icon(
+                cfg.activo
+                    ? Icons.power_settings_new
+                    : Icons.pause_circle_outline,
+                size: 20,
+                color: cfg.activo ? c.success : c.textMuted,
               ),
               const SizedBox(width: AppSpacing.md),
               Expanded(
@@ -97,54 +337,32 @@ class _BotStatusCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      titulo,
+                      'Bot encendido',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.body.copyWith(color: color, fontWeight: FontWeight.bold),
+                      style: AppType.label.copyWith(
+                        color: c.text,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      detalle,
+                      cfg.activo
+                          ? 'Buscando turnos para los choferes vigilados'
+                          : 'Pausado — no reserva ni reagenda nada',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.label,
+                      style: AppType.label.copyWith(color: c.textSecondary),
                     ),
                   ],
                 ),
               ),
+              Switch(
+                value: cfg.activo,
+                activeThumbColor: c.success,
+                onChanged: (v) => CachatoreService.setActivo(v),
+              ),
             ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-// ───────────────────────────────────────────────────────────────────────
-// Interruptor maestro (encendido/pausado)
-// ───────────────────────────────────────────────────────────────────────
-class _MasterSwitch extends StatelessWidget {
-  const _MasterSwitch();
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<CachatoreConfig>(
-      stream: CachatoreService.streamConfig(),
-      builder: (ctx, snap) {
-        final cfg = snap.data ?? const CachatoreConfig();
-        return AppCard(
-          child: SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            value: cfg.activo,
-            activeThumbColor: AppColors.success,
-            title: const Text('Bot encendido', style: AppType.heading),
-            subtitle: Text(
-              cfg.activo
-                  ? 'Buscando turnos para los choferes vigilados'
-                  : 'Pausado — no reserva ni reagenda nada',
-              style: AppType.label,
-            ),
-            onChanged: (v) => CachatoreService.setActivo(v),
           ),
         );
       },
@@ -160,6 +378,7 @@ class _SeccionVigilados extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return StreamBuilder<List<CachatoreObjetivo>>(
       stream: CachatoreService.streamObjetivos(),
       builder: (ctx, snap) {
@@ -174,12 +393,9 @@ class _SeccionVigilados extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    'CHOFERES VIGILADOS (${vigilados.length})',
-                    style: AppType.eyebrow,
-                  ),
+                  child: AppEyebrow('Choferes vigilados · ${vigilados.length}'),
                 ),
-                AppButton(
+                AppButton.primary(
                   label: 'Agregar',
                   icon: Icons.add,
                   size: AppButtonSize.sm,
@@ -201,29 +417,30 @@ class _SeccionVigilados extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             if (cargando)
               const Padding(
-                padding: EdgeInsets.all(AppSpacing.xl),
-                child: Center(child: CircularProgressIndicator()),
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.xxl),
+                child: AppLoadingState(),
               )
             else if (vigilados.isEmpty)
               AppCard(
+                tier: 1,
                 child: Column(
                   children: [
-                    const Icon(Icons.person_search_outlined,
-                        color: AppColors.textHint, size: 40),
+                    Icon(Icons.person_search_outlined,
+                        color: c.textMuted, size: 36),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
                       'Sin choferes vigilados',
                       style: AppType.body.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.bold,
+                        color: c.text,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: AppSpacing.xs),
-                    const Text(
+                    Text(
                       'Tocá "Agregar": elegís chofer, fecha y franja, y el bot le '
                       'busca turno.',
                       textAlign: TextAlign.center,
-                      style: AppType.label,
+                      style: AppType.label.copyWith(color: c.textSecondary),
                     ),
                   ],
                 ),
@@ -243,8 +460,10 @@ class _VigiladoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final o = objetivo;
     return AppCard(
+      tier: 1,
       child: Opacity(
         opacity: o.activo ? 1.0 : 0.55,
         child: Column(
@@ -262,21 +481,23 @@ class _VigiladoCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: AppType.body.copyWith(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.bold,
+                          color: c.text,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Row(
                         children: [
-                          const Icon(Icons.event, size: 13, color: AppColors.textTertiary),
+                          Icon(Icons.event_outlined,
+                              size: 20, color: c.textSecondary),
                           const SizedBox(width: AppSpacing.xs),
                           Expanded(
                             child: Text(
                               o.objetivoLabel,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppType.label,
+                              style: AppType.label
+                                  .copyWith(color: c.textSecondary),
                             ),
                           ),
                         ],
@@ -293,17 +514,19 @@ class _VigiladoCard extends StatelessWidget {
               children: [
                 AppButton.ghost(
                   label: 'Fecha/franja',
-                  icon: Icons.edit_calendar,
+                  icon: Icons.edit_calendar_outlined,
+                  size: AppButtonSize.sm,
                   onPressed: () => _editar(context, o),
                 ),
                 IconButton(
                   tooltip: o.activo ? 'Pausar este chofer' : 'Reanudar',
                   visualDensity: VisualDensity.compact,
+                  iconSize: 18,
                   icon: Icon(
                     o.activo
                         ? Icons.pause_circle_outline
                         : Icons.play_circle_outline,
-                    color: o.activo ? AppColors.textTertiary : AppColors.success,
+                    color: o.activo ? c.textMuted : c.success,
                   ),
                   onPressed: () =>
                       CachatoreService.setObjetivoActivo(o.dni, !o.activo),
@@ -311,8 +534,8 @@ class _VigiladoCard extends StatelessWidget {
                 IconButton(
                   tooltip: 'Quitar de la lista',
                   visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.delete_outline,
-                      color: AppColors.error),
+                  iconSize: 18,
+                  icon: Icon(Icons.delete_outline, color: c.error),
                   onPressed: () => _confirmarBorrar(context, o),
                 ),
               ],
@@ -366,6 +589,7 @@ class _SeccionConcretados extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return StreamBuilder<List<CachatoreTurno>>(
       stream: CachatoreService.streamTurnos(),
       builder: (ctx, snap) {
@@ -383,16 +607,14 @@ class _SeccionConcretados extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  'TURNOS CONCRETADOS (${turnos.length})',
-                  style: AppType.eyebrow,
-                ),
+                AppEyebrow('Turnos concretados · ${turnos.length}'),
                 const SizedBox(height: AppSpacing.sm),
                 if (turnos.isEmpty)
-                  const AppCard(
+                  AppCard(
+                    tier: 1,
                     child: Text(
                       'No hay turnos sacados.',
-                      style: AppType.label,
+                      style: AppType.label.copyWith(color: c.textSecondary),
                     ),
                   )
                 else
@@ -421,19 +643,21 @@ class _ConcretadoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final t = turno;
     final cuando = (t.cuando ?? '').isNotEmpty
         ? t.cuando!
         : 'Turno${t.hora != null ? ' ${t.hora}' : ''}';
     final reag = _reagendarPendiente;
-    final acento = reag ? AppColors.warning : AppColors.success;
+    final acento = reag ? c.warning : c.success;
     return AppCard(
+      tier: 1,
       onTap: () => _abrirMenu(context),
-      borderColor: reag ? AppColors.warning.withValues(alpha: 0.55) : null,
+      accent: acento,
       child: Row(
         children: [
-          Icon(reag ? Icons.event_repeat : Icons.event_available,
-              color: acento, size: 26),
+          Icon(reag ? Icons.event_repeat_outlined : Icons.event_available_outlined,
+              color: acento, size: 20),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
@@ -444,8 +668,8 @@ class _ConcretadoCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.body.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.bold,
+                    color: c.text,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -454,15 +678,14 @@ class _ConcretadoCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppType.label.copyWith(
-                    color: reag ? AppColors.textTertiary : AppColors.success,
+                    color: reag ? c.textSecondary : c.success,
                   ),
                 ),
                 if (reag) ...[
                   const SizedBox(height: AppSpacing.xs),
                   Row(
                     children: [
-                      const Icon(Icons.sync,
-                          size: 13, color: AppColors.warning),
+                      Icon(Icons.sync_outlined, size: 20, color: c.warning),
                       const SizedBox(width: AppSpacing.xs),
                       Expanded(
                         child: Text(
@@ -470,7 +693,7 @@ class _ConcretadoCard extends StatelessWidget {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: AppType.label.copyWith(
-                            color: AppColors.warning,
+                            color: c.warning,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -491,13 +714,7 @@ class _ConcretadoCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
-          const Column(
-            children: [
-              Icon(Icons.more_vert, color: AppColors.textTertiary, size: 20),
-              SizedBox(height: 2),
-              Text('Opciones', style: AppType.eyebrow),
-            ],
-          ),
+          Icon(Icons.more_vert, color: c.textMuted, size: 18),
         ],
       ),
     );
@@ -558,7 +775,8 @@ class _ConcretadoCard extends StatelessWidget {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.event_repeat, color: AppColors.warning),
+              leading: const Icon(Icons.event_repeat_outlined,
+                  color: AppColors.textSecondary, size: 20),
               title: const Text('Reagendar'),
               subtitle: const Text('Mover el turno a otra fecha/franja', style: AppType.label),
               onTap: () {
@@ -567,7 +785,8 @@ class _ConcretadoCard extends StatelessWidget {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline, color: AppColors.error),
+              leading: const Icon(Icons.delete_outline,
+                  color: AppColors.error, size: 20),
               title: const Text('Cancelar turno',
                   style: TextStyle(color: AppColors.error)),
               subtitle: const Text('Lo cancela también en iTurnos (libera el cupo)',
@@ -621,31 +840,23 @@ class _EstadoBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final est = objetivo.estado;
     final Color color;
     if (est.esOk) {
-      color = AppColors.success;
+      color = c.success;
     } else if (est.esError) {
-      color = AppColors.error;
+      color = c.error;
     } else if (est.esWarn) {
-      color = AppColors.warning;
+      color = c.warning;
     } else {
-      color = AppColors.textTertiary;
+      color = c.info;
     }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(AppRadius.full),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Text(
-        est.etiqueta,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style:
-            AppType.eyebrow.copyWith(color: color, fontWeight: FontWeight.bold),
-      ),
+    return AppBadge(
+      text: est.etiqueta,
+      color: color,
+      size: AppBadgeSize.sm,
+      dot: true,
     );
   }
 }
@@ -855,7 +1066,7 @@ class _WizardSheetState extends State<_WizardSheet> {
         child: Column(
           children: [
             _header(),
-            const Divider(height: 1, color: AppColors.borderSubtle),
+            const AppHairline(),
             Expanded(child: _cuerpo()),
           ],
         ),
@@ -864,6 +1075,7 @@ class _WizardSheetState extends State<_WizardSheet> {
   }
 
   Widget _header() {
+    final c = context.colors;
     final pasos = ['Chofer', 'Fecha', 'Horario'];
     return Padding(
       padding: const EdgeInsets.fromLTRB(AppSpacing.sm, AppSpacing.md, AppSpacing.sm, AppSpacing.sm),
@@ -871,7 +1083,7 @@ class _WizardSheetState extends State<_WizardSheet> {
         children: [
           if (_paso > _pasoInicial)
             IconButton(
-              icon: const Icon(Icons.arrow_back, color: AppColors.textSecondary),
+              icon: Icon(Icons.arrow_back, size: 18, color: c.textMuted),
               onPressed: () => setState(() => _paso -= 1),
             )
           else
@@ -891,7 +1103,7 @@ class _WizardSheetState extends State<_WizardSheet> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close, color: AppColors.textSecondary),
+            icon: Icon(Icons.close, size: 18, color: c.textMuted),
             onPressed: () => Navigator.pop(context),
           ),
         ],
@@ -912,6 +1124,7 @@ class _WizardSheetState extends State<_WizardSheet> {
 
   // ── Paso 0: elegir chofer ──
   Widget _pasoChofer() {
+    final c = context.colors;
     return Column(
       children: [
         Padding(
@@ -921,7 +1134,7 @@ class _WizardSheetState extends State<_WizardSheet> {
             textCapitalization: TextCapitalization.characters,
             decoration: const InputDecoration(
               hintText: 'Buscar chofer por nombre (ej. PEREZ)',
-              prefixIcon: Icon(Icons.search),
+              prefixIcon: Icon(Icons.search, size: 20),
               border: OutlineInputBorder(),
             ),
             onChanged: (v) => setState(() => _filtro = v.trim().toUpperCase()),
@@ -935,7 +1148,7 @@ class _WizardSheetState extends State<_WizardSheet> {
                 .snapshots(),
             builder: (ctx, snap) {
               if (!snap.hasData) {
-                return const Center(child: CircularProgressIndicator());
+                return const AppLoadingState();
               }
               final docs = snap.data!.docs.where((d) {
                 final data = d.data();
@@ -949,13 +1162,14 @@ class _WizardSheetState extends State<_WizardSheet> {
                     .compareTo(
                         (b.data()['NOMBRE'] ?? '').toString().toUpperCase()));
               if (docs.isEmpty) {
-                return const Center(
-                  child: Text('Sin resultados', style: AppType.label),
+                return Center(
+                  child: Text('Sin resultados',
+                      style: AppType.label.copyWith(color: c.textSecondary)),
                 );
               }
               return ListView.builder(
                 itemCount: docs.length,
-                itemBuilder: (c, i) {
+                itemBuilder: (ce, i) {
                   final data = docs[i].data();
                   final dni = (data['DNI'] ?? docs[i].id).toString();
                   final nombre = (data['NOMBRE'] ?? dni).toString();
@@ -963,13 +1177,13 @@ class _WizardSheetState extends State<_WizardSheet> {
                   final yaEsta = widget.yaAgregados.contains(dni);
                   return ListTile(
                     dense: true,
-                    leading: const Icon(Icons.person_outline,
-                        color: AppColors.textTertiary),
+                    leading: Icon(Icons.person_outline,
+                        size: 20, color: c.textSecondary),
                     title: Text(
                       nombre,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.body.copyWith(color: AppColors.textPrimary),
+                      style: AppType.body.copyWith(color: c.text),
                     ),
                     subtitle: Text(
                       'DNI $dni'
@@ -978,7 +1192,7 @@ class _WizardSheetState extends State<_WizardSheet> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppType.eyebrow.copyWith(
-                        color: yaEsta ? AppColors.warning : AppColors.textDisabled,
+                        color: yaEsta ? c.warning : c.textMuted,
                       ),
                     ),
                     // Lupa = chequear iTurnos por turno preexistente sacado
@@ -986,8 +1200,8 @@ class _WizardSheetState extends State<_WizardSheet> {
                     // el bot). Chevron = elegir y seguir el wizard normal
                     // (fecha -> franja -> vigilar).
                     trailing: yaEsta
-                        ? const Icon(Icons.chevron_right,
-                            color: AppColors.textHint)
+                        ? Icon(Icons.chevron_right,
+                            size: 18, color: c.textMuted)
                         : Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -996,13 +1210,14 @@ class _WizardSheetState extends State<_WizardSheet> {
                                     'Verificar si ya tiene turno en iTurnos',
                                 visualDensity: VisualDensity.compact,
                                 splashRadius: 18,
-                                icon: const Icon(Icons.manage_search,
-                                    color: AppColors.brand, size: 22),
+                                iconSize: 18,
+                                icon: Icon(Icons.manage_search,
+                                    color: c.brand),
                                 onPressed: () =>
                                     _verificarTurnoExistente(dni, nombre),
                               ),
-                              const Icon(Icons.chevron_right,
-                                  color: AppColors.textHint),
+                              Icon(Icons.chevron_right,
+                                  size: 18, color: c.textMuted),
                             ],
                           ),
                     onTap: () => setState(() {
@@ -1022,27 +1237,28 @@ class _WizardSheetState extends State<_WizardSheet> {
 
   // ── Paso 1: elegir fecha ──
   Widget _pasoFecha() {
+    final c = context.colors;
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
         Text(_nombre ?? _dni ?? '', style: AppType.heading),
         const SizedBox(height: AppSpacing.xs),
-        const Text(
+        Text(
           '¿Para qué fecha buscamos el turno?',
-          style: AppType.body,
+          style: AppType.body.copyWith(color: c.textSecondary),
         ),
         const SizedBox(height: AppSpacing.lg),
         ListTile(
-          leading: const Icon(Icons.all_inclusive, color: AppColors.brand),
+          leading: Icon(Icons.all_inclusive, size: 20, color: c.brand),
           title: const Text('Cualquier fecha'),
           subtitle: const Text(
             'Agarra el primero que se libere en el horario elegido',
             style: AppType.label,
           ),
-          tileColor: AppColors.borderSubtle,
+          tileColor: c.surface3,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppRadius.md),
-              side: const BorderSide(color: AppColors.borderSubtle)),
+              side: BorderSide(color: c.border)),
           onTap: () => setState(() {
             _fecha = null;
             _paso = 2;
@@ -1050,17 +1266,17 @@ class _WizardSheetState extends State<_WizardSheet> {
         ),
         const SizedBox(height: AppSpacing.md),
         ListTile(
-          leading: const Icon(Icons.calendar_month, color: AppColors.brand),
+          leading: Icon(Icons.calendar_month_outlined, size: 20, color: c.brand),
           title: Text(
             _reIso.hasMatch((_fecha ?? '').trim())
                 ? 'Fecha: $_fechaLabel'
                 : 'Elegir una fecha del calendario',
           ),
           subtitle: const Text('Solo turnos de ese día', style: AppType.label),
-          tileColor: AppColors.borderSubtle,
+          tileColor: c.surface3,
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppRadius.md),
-              side: const BorderSide(color: AppColors.borderSubtle)),
+              side: BorderSide(color: c.border)),
           onTap: _elegirDelCalendario,
         ),
       ],
@@ -1089,6 +1305,7 @@ class _WizardSheetState extends State<_WizardSheet> {
 
   // ── Paso 2: elegir franja (con los números) ──
   Widget _pasoFranja() {
+    final c = context.colors;
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.lg),
       children: [
@@ -1096,7 +1313,7 @@ class _WizardSheetState extends State<_WizardSheet> {
           '$_fechaLabel · ${_nombre ?? _dni ?? ''}',
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: AppType.body,
+          style: AppType.body.copyWith(color: c.textSecondary),
         ),
         const SizedBox(height: AppSpacing.xs),
         const Text('Elegí el horario', style: AppType.heading),
@@ -1108,15 +1325,15 @@ class _WizardSheetState extends State<_WizardSheet> {
             padding: const EdgeInsets.only(bottom: AppSpacing.md),
             child: ListTile(
               leading: esC
-                  ? const Icon(Icons.all_inclusive, color: AppColors.brand)
+                  ? Icon(Icons.all_inclusive, size: 20, color: c.brand)
                   : null,
-              tileColor: AppColors.borderSubtle,
+              tileColor: c.surface3,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppRadius.md),
                 side: BorderSide(
                     color: sel
-                        ? AppColors.brand.withValues(alpha: 0.6)
-                        : AppColors.borderSubtle),
+                        ? c.brand.withValues(alpha: 0.6)
+                        : c.border),
               ),
               // Comodin: mostramos la etiqueta arriba; las 4 franjas
               // muestran el rango horario arriba y la etiqueta abajo.
@@ -1133,7 +1350,7 @@ class _WizardSheetState extends State<_WizardSheet> {
                       width: 18,
                       height: 18,
                       child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.chevron_right, color: AppColors.textHint),
+                  : Icon(Icons.chevron_right, size: 18, color: c.textMuted),
               onTap: _guardando ? null : () => _confirmar(f),
             ),
           );
