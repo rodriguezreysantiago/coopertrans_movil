@@ -1124,12 +1124,14 @@ class _Mapa extends StatelessWidget {
     return Marker(
       point: LatLng(lat, lng),
       width: 96,
-      height: 54,
-      // El conjunto es círculo + etiqueta debajo. Con esta alineación el
-      // CENTRO del círculo (a ~18px del top, sobre un alto total de 54)
-      // queda anclado a la posición GPS real y la patente cuelga debajo
-      // (pedido Santiago 2026-06-01). -0.33 ≈ 18/54 mapeado a [-1,1].
-      alignment: const Alignment(0, -0.33),
+      height: 60,
+      // El conjunto es círculo (36) + etiqueta debajo. Con esta alineación el
+      // CENTRO del círculo (a 18px del top, sobre un alto total de 60) queda
+      // anclado a la posición GPS real y la patente cuelga debajo (pedido
+      // Santiago 2026-06-01). -0.40 = 36/60 - 1 (18px de 60 mapeado a [-1,1]).
+      // El alto es 60 (no 54) para dar aire al pill y evitar el overflow de
+      // 2px en el bottom (círculo 36 + 2 + pill ≈ 56).
+      alignment: const Alignment(0, -0.40),
       child: _MarkerVisual(
         patente: doc.id,
         color: color,
