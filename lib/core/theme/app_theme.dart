@@ -57,6 +57,20 @@ class AppTheme {
       splashFactory: InkRipple.splashFactory,
       visualDensity: VisualDensity.adaptivePlatformDensity,
 
+      // Transición de página sobria Núcleo: fade + slide vertical sutil, en vez
+      // del slide/zoom Material default (brusco en desktop). iOS conserva la
+      // transición Cupertino para no perder el swipe-back nativo por gesto.
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          // iOS NO se incluye a propósito → usa el default de Flutter
+          // (Cupertino), para conservar el swipe-back nativo por gesto.
+          TargetPlatform.android: _NucleoPageTransitionsBuilder(),
+          TargetPlatform.windows: _NucleoPageTransitionsBuilder(),
+          TargetPlatform.macOS: _NucleoPageTransitionsBuilder(),
+          TargetPlatform.linux: _NucleoPageTransitionsBuilder(),
+        },
+      ),
+
       // Texto default — Geist (embebida en assets/fonts/). Material widgets que
       // no usen AppType directamente toman esta familia.
       fontFamily: 'Geist',
@@ -175,3 +189,31 @@ class AppTheme {
 // `palette` (usaba AppColorsExt.forDark()/forLight() internamente igual). El
 // original no compilaba — pasaba `AppColors.dark` (tipo _Palette privado de
 // app_colors.dart) a un parámetro tipado AppColorsExt.
+
+/// Transición de página del Núcleo: fade + un leve desplazamiento vertical
+/// (~1.5% de la altura) con easeOutCubic. Sobria — reemplaza el zoom/slide
+/// Material default en Android y desktop. iOS usa Cupertino (swipe-back).
+class _NucleoPageTransitionsBuilder extends PageTransitionsBuilder {
+  const _NucleoPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final fade = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+    return FadeTransition(
+      opacity: fade,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.015),
+          end: Offset.zero,
+        ).animate(fade),
+        child: child,
+      ),
+    );
+  }
+}

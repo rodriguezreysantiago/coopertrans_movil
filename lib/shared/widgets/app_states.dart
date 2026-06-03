@@ -30,25 +30,27 @@ class AppEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 60, color: Colors.white.withAlpha(40)),
+            Icon(icon, size: 60, color: c.textPlaceholder),
             const SizedBox(height: AppSpacing.lg),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: AppType.heading.copyWith(color: Colors.white70, fontWeight: FontWeight.w500),
+              style: AppType.heading
+                  .copyWith(color: c.textSecondary, fontWeight: FontWeight.w500),
             ),
             if (subtitle != null) ...[
               const SizedBox(height: AppSpacing.sm),
               Text(
                 subtitle!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white38, fontSize: 13),
+                style: AppType.label.copyWith(color: c.textMuted),
               ),
             ],
             if (action != null) ...[
@@ -70,18 +72,17 @@ class AppLoadingState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(
-            color: Theme.of(context).colorScheme.primary,
-          ),
+          CircularProgressIndicator(color: c.brand),
           if (message != null) ...[
             const SizedBox(height: AppSpacing.lg),
             Text(
               message!,
-              style: const TextStyle(color: Colors.white54, fontSize: 13),
+              style: AppType.label.copyWith(color: c.textMuted),
             ),
           ],
         ],
@@ -105,25 +106,27 @@ class AppErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 60, color: AppColors.error),
+            Icon(Icons.error_outline, size: 60, color: c.error),
             const SizedBox(height: AppSpacing.lg),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: AppType.heading.copyWith(color: Colors.white70, fontWeight: FontWeight.w500),
+              style: AppType.heading
+                  .copyWith(color: c.textSecondary, fontWeight: FontWeight.w500),
             ),
             if (subtitle != null) ...[
               const SizedBox(height: AppSpacing.sm),
               Text(
                 subtitle!,
                 textAlign: TextAlign.center,
-                style: AppType.label.copyWith(color: AppColors.error),
+                style: AppType.label.copyWith(color: c.error),
               ),
             ],
             if (onRetry != null) ...[
