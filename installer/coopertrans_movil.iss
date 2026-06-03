@@ -95,9 +95,15 @@ Source: "VERSION.txt"; DestDir: "{commonappdata}\CoopertransMovil"; Flags: ignor
 ; Inno Setup escapa comillas dentro de strings con "" (dos comillas).
 ; powershell.exe necesita comillas alrededor del path al .ps1 porque
 ; el path contiene espacios ("Program Files\CoopertransMovil\...").
-Name: "{group}\{#MyAppName}"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File ""{app}\launcher.ps1"""; IconFilename: "{app}\app_icon.ico"; WorkingDir: "{app}"
+;
+; IconFilename apunta al ICONO EMBEBIDO del .exe en ProgramData (IconIndex 0),
+; NO al app_icon.ico estatico de Program Files. Asi, cuando el auto-update
+; (launcher) reemplaza el .exe con un release nuevo, el icono del shortcut se
+; actualiza SOLO — sin re-correr el instalador ni el script actualizar_icono.
+; El .exe que copia este instalador ya trae el icono nuevo embebido (Runner.rc).
+Name: "{group}\{#MyAppName}"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File ""{app}\launcher.ps1"""; IconFilename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; IconIndex: 0; WorkingDir: "{app}"
 Name: "{group}\Desinstalar {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File ""{app}\launcher.ps1"""; IconFilename: "{app}\app_icon.ico"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File ""{app}\launcher.ps1"""; IconFilename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; IconIndex: 0; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
 ; Ofrecer arrancar la app al final del install, vía el launcher (que
