@@ -18,6 +18,7 @@ import '../../../shared/widgets/app_widgets.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
+
 /// Pantalla "Mapa flota en vivo" del admin.
 ///
 /// Muestra la última posición conocida de TODA la flota (no solo Volvo)
@@ -30,16 +31,23 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// `/v2/report` de Sitrack. El doc id es la patente, así que no
 /// historizamos — es snapshot.
 ///
-/// UX:
-/// - Marker por tractor coloreado según ignición (verde si motor ON,
-///   gris si OFF) y frescura del último reporte (rojo si > 1h).
-/// - Tap en marker → bottom sheet con datos del tractor + chofer
-///   (si está identificado por iButton) + odómetro + link a Maps.
+/// UX (refactor Núcleo · jun 2026):
+/// - Desktop (≥1024px): 3 columnas — sidebar de unidades (320) │ mapa │
+///   panel de detalle de la seleccionada (340). El tap en un marker o en
+///   la lista selecciona la unidad y el panel derecho se actualiza en
+///   vivo (StreamBuilder del doc).
+/// - Tablet (720–1024px): sidebar (320) + mapa; el detalle abre como sheet.
+/// - Mobile (<720px): mapa full + botón para abrir la lista (sheet) +
+///   detalle como sheet.
+///
+/// Marker por tractor coloreado según ignición (verde si motor ON,
+/// gris si OFF), frescura del último reporte (rojo si > 1h) y drift
+/// (naranja si el chofer físico ≠ asignado).
 ///
 /// Modo `embedded`: cuando se renderiza dentro de otra pantalla (ej.
-/// el tab "Mapa" del módulo Vista Ejecutiva), pasar `embedded: true`
-/// para que se omita el AppScaffold y el título — solo se devuelve el
-/// contenido (toolbar + mapa) para que viva en el body del shell padre.
+/// el tab "Mapa" del módulo Vista Ejecutiva, o el AdminShell), pasar
+/// `embedded: true` para que se omita el AppScaffold y el título — solo
+/// se devuelve el contenido para que viva en el body del shell padre.
 class AdminMapaFlotaScreen extends StatefulWidget {
   /// Si `true`, no envuelve el contenido en `AppScaffold` (sin AppBar
   /// propio). Pensado para embeber dentro de otra pantalla que ya tiene
@@ -194,11 +202,11 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
   ) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: AppColors.surface1,
+      backgroundColor: context.colors.surface1,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
       ),
       builder: (_) => SizedBox(
         height: MediaQuery.of(context).size.height * 0.7,
@@ -223,95 +231,147 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
   }
 
   Widget _buildBody() {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection(AppCollections.sitrackPosiciones)
-          .snapshots(),
-      builder: (ctx, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: AppColors.brand),
-          );
-        }
-        if (snap.hasError) {
-          return AppErrorState(
-            title: 'No pudimos cargar el mapa',
-            subtitle: snap.error.toString(),
-          );
-        }
+    final stream = FirebaseFirestore.instance
+        .collection(AppCollections.sitrackPosiciones)
+        .snapshots();
 
-        final allDocs = snap.data?.docs ?? const [];
-        final ahora = DateTime.now();
-
-        // Unidades visibles: con posición válida y NO excluidas. Los tanques
-        // y sus choferes quedan afuera (combustibles, otra área de Vecchi),
-        // igual que en todo el resto de la app. Ordenadas por patente
-        // ascendente (de menor a mayor) para el panel lateral.
-        final visibles = allDocs.where((d) {
-          final data = d.data();
-          final lat = (data['lat'] as num?)?.toDouble();
-          final lng = (data['lng'] as num?)?.toDouble();
-          if (lat == null || lng == null) return false;
-          final driverDni = (data['driver_dni'] ?? '').toString();
-          if (ExcluidosService.esExcluido(_excluidos,
-              dni: driverDni, patente: d.id)) {
-            return false;
+    // AppOfflineBanner: si el stream tarda en emitir el primer evento,
+    // muestra "Conexión lenta" arriba sin tapar el contenido.
+    return AppOfflineBanner<QuerySnapshot<Map<String, dynamic>>>(
+      stream: stream,
+      child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: stream,
+        builder: (ctx, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            // Skeleton con la forma del sidebar mientras carga — se lee
+            // como "viene" en lugar de "trabado".
+            return LayoutBuilder(
+              builder: (lbCtx, constraints) {
+                final c = lbCtx.colors;
+                if (constraints.maxWidth < 720) {
+                  return const Padding(
+                    padding: EdgeInsets.only(top: AppSpacing.lg),
+                    child: AppSkeletonList(count: 6, conAvatar: false),
+                  );
+                }
+                return Row(
+                  children: [
+                    Container(
+                      width: 320,
+                      color: c.surface1,
+                      child: const Padding(
+                        padding: EdgeInsets.only(top: AppSpacing.lg),
+                        child: AppSkeletonList(count: 8, conAvatar: false),
+                      ),
+                    ),
+                    const AppHairline(vertical: true),
+                    Expanded(child: ColoredBox(color: c.surface1)),
+                  ],
+                );
+              },
+            );
           }
-          return true;
-        }).toList()
-          ..sort((a, b) => a.id.compareTo(b.id));
-
-        // Auto-fit al primer render con datos. Si ya hubo fit previo,
-        // respetamos el pan/zoom del usuario.
-        if (!_didInitialFit && visibles.isNotEmpty) {
-          _didInitialFit = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) _ajustarVistaATodaLaFlota(visibles);
-          });
-        }
-
-        // Layout: panel lateral con la lista de unidades + mapa. En pantallas
-        // angostas (mobile) el panel no entra fijo → se abre desde un botón
-        // sobre el mapa.
-        return LayoutBuilder(
-          builder: (lbCtx, constraints) {
-            final panelFijo = constraints.maxWidth >= 720;
-            final mapa = _Mapa(
-              controller: _mapController,
-              centroInicial: _centroInicial,
-              zoomInicial: _zoomInicial,
-              docs: visibles,
-              ahora: ahora,
-              satelital: _satelital,
-              seleccionada: _seleccionada,
-              onToggleSatelital: () =>
-                  setState(() => _satelital = !_satelital),
-              onMarkerTap: (doc) => _abrirDetalle(doc),
-              onFitFlota: () => _ajustarVistaATodaLaFlota(visibles),
-              onPosicionCambiada: _persistirPosicion,
-              onAbrirPanel:
-                  panelFijo ? null : () => _abrirPanelMobile(visibles, ahora),
+          if (snap.hasError) {
+            return AppErrorState(
+              title: 'No pudimos cargar el mapa',
+              subtitle: snap.error.toString(),
             );
-            if (!panelFijo) return mapa;
-            return Row(
-              children: [
-                SizedBox(
-                  width: 280,
-                  child: _PanelUnidades(
-                    docs: visibles,
-                    ahora: ahora,
-                    seleccionada: _seleccionada,
-                    onSeleccionar: _seleccionarUnidad,
+          }
+
+          final allDocs = snap.data?.docs ?? const [];
+          final ahora = DateTime.now();
+
+          // Unidades visibles: con posición válida y NO excluidas. Los tanques
+          // y sus choferes quedan afuera (combustibles, otra área de Vecchi),
+          // igual que en todo el resto de la app. Ordenadas por patente
+          // ascendente (de menor a mayor) para el panel lateral.
+          final visibles = allDocs.where((d) {
+            final data = d.data();
+            final lat = (data['lat'] as num?)?.toDouble();
+            final lng = (data['lng'] as num?)?.toDouble();
+            if (lat == null || lng == null) return false;
+            final driverDni = (data['driver_dni'] ?? '').toString();
+            if (ExcluidosService.esExcluido(_excluidos,
+                dni: driverDni, patente: d.id)) {
+              return false;
+            }
+            return true;
+          }).toList()
+            ..sort((a, b) => a.id.compareTo(b.id));
+
+          // Auto-fit al primer render con datos. Si ya hubo fit previo,
+          // respetamos el pan/zoom del usuario.
+          if (!_didInitialFit && visibles.isNotEmpty) {
+            _didInitialFit = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) _ajustarVistaATodaLaFlota(visibles);
+            });
+          }
+
+          // Layout responsive:
+          // - ≥1024: sidebar (320) + mapa + detalle (340). El detalle vive
+          //   inline y reacciona a la selección.
+          // - 720–1024: sidebar (320) + mapa; detalle como sheet.
+          // - <720: mapa full + botón "Unidades" (sheet) + detalle sheet.
+          return LayoutBuilder(
+            builder: (lbCtx, constraints) {
+              final w = constraints.maxWidth;
+              final panelFijo = w >= 720;
+              final detalleFijo = w >= 1024;
+
+              final mapa = _Mapa(
+                controller: _mapController,
+                centroInicial: _centroInicial,
+                zoomInicial: _zoomInicial,
+                docs: visibles,
+                ahora: ahora,
+                satelital: _satelital,
+                seleccionada: _seleccionada,
+                onToggleSatelital: () =>
+                    setState(() => _satelital = !_satelital),
+                // Con panel de detalle inline el tap selecciona (el panel
+                // derecho se actualiza). Sin panel inline, abre el sheet.
+                onMarkerTap: detalleFijo ? _seleccionarUnidad : _abrirDetalle,
+                onFitFlota: () => _ajustarVistaATodaLaFlota(visibles),
+                onPosicionCambiada: _persistirPosicion,
+                onAbrirPanel: panelFijo
+                    ? null
+                    : () => _abrirPanelMobile(visibles, ahora),
+              );
+
+              if (!panelFijo) return mapa;
+
+              final c = lbCtx.colors;
+              return Row(
+                children: [
+                  SizedBox(
+                    width: 320,
+                    child: _PanelUnidades(
+                      docs: visibles,
+                      ahora: ahora,
+                      seleccionada: _seleccionada,
+                      onSeleccionar: _seleccionarUnidad,
+                    ),
                   ),
-                ),
-                const VerticalDivider(
-                    width: 1, color: AppColors.borderSubtle),
-                Expanded(child: mapa),
-              ],
-            );
-          },
-        );
-      },
+                  AppHairline(vertical: true, color: c.border),
+                  Expanded(child: mapa),
+                  if (detalleFijo) ...[
+                    AppHairline(vertical: true, color: c.border),
+                    SizedBox(
+                      width: 340,
+                      child: _PanelDetalle(
+                        patente: _seleccionada,
+                        ahora: ahora,
+                        onAbrirMaps: _abrirMapsDesdePanel,
+                      ),
+                    ),
+                  ],
+                ],
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -323,6 +383,11 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
       builder: (_) => _DetalleSheet(patente: doc.id),
     );
   }
+
+  /// Abre Google Maps desde el panel inline de detalle. Reusa la misma
+  /// lógica de launch que el sheet (`_DetalleSheet._abrirMaps`).
+  Future<void> _abrirMapsDesdePanel(double lat, double lng) =>
+      _DetalleSheet.abrirMaps(context, lat, lng);
 }
 
 // =============================================================================
@@ -330,8 +395,9 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
 // =============================================================================
 
 /// Panel con la lista de todas las unidades visibles, ordenadas por patente.
-/// Tap en una → centra el mapa en ella. Reemplazó a la toolbar de filtros el
-/// 2026-06-01 (pedido Santiago: sacar filtros, poner lista lateral).
+/// Tap en una → centra el mapa en ella. Estilo Núcleo: eyebrow + hero
+/// "ACTIVAS · n/total", breakdown en cajitas mono, buscador, lista con
+/// AppDot semántico + AppBadge sm de estado + AppHairline entre filas.
 class _PanelUnidades extends StatefulWidget {
   final List<QueryDocumentSnapshot<Map<String, dynamic>>> docs;
   final DateTime ahora;
@@ -350,9 +416,13 @@ class _PanelUnidades extends StatefulWidget {
   State<_PanelUnidades> createState() => _PanelUnidadesState();
 }
 
+/// Filtro de estado de la lista lateral (chips Todas | Ruta | Idle).
+enum _FiltroEstado { todas, ruta, idle }
+
 class _PanelUnidadesState extends State<_PanelUnidades> {
   final _ctrl = TextEditingController();
   String _filtro = '';
+  _FiltroEstado _estado = _FiltroEstado.todas;
 
   @override
   void dispose() {
@@ -360,21 +430,40 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
     super.dispose();
   }
 
+  /// Clasifica una unidad en el estado mostrado en la lista, con la misma
+  /// regla que el conteo del hero y el color del marker (stale gana sobre
+  /// ignición). "Ruta" = motor ON y reporte fresco; "Idle" = el resto
+  /// (detenida / sin señal).
+  bool _esEnRuta(Map<String, dynamic> data) {
+    final ignition = data['ignition'] == true;
+    final reportTs = (data['report_date'] as Timestamp?)?.toDate();
+    final minStale =
+        reportTs == null ? null : widget.ahora.difference(reportTs).inMinutes;
+    if (minStale != null && minStale > 60) return false;
+    return ignition;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+
     // Filtro client-side por patente o chofer (la lista ya está en memoria).
     final f = _filtro.trim().toUpperCase();
-    final filtrados = f.isEmpty
-        ? widget.docs
-        : widget.docs.where((d) {
-            if (d.id.toUpperCase().contains(f)) return true;
-            final data = d.data();
-            final apellido =
-                (data['driver_apellido'] ?? '').toString().toUpperCase();
-            final nombre =
-                (data['driver_nombre'] ?? '').toString().toUpperCase();
-            return apellido.contains(f) || nombre.contains(f);
-          }).toList();
+    final filtrados = widget.docs.where((d) {
+      // Filtro por estado (chips).
+      if (_estado != _FiltroEstado.todas) {
+        final enRuta = _esEnRuta(d.data());
+        if (_estado == _FiltroEstado.ruta && !enRuta) return false;
+        if (_estado == _FiltroEstado.idle && enRuta) return false;
+      }
+      // Filtro por texto.
+      if (f.isEmpty) return true;
+      if (d.id.toUpperCase().contains(f)) return true;
+      final data = d.data();
+      final apellido = (data['driver_apellido'] ?? '').toString().toUpperCase();
+      final nombre = (data['driver_nombre'] ?? '').toString().toUpperCase();
+      return apellido.contains(f) || nombre.contains(f);
+    }).toList();
 
     // Conteo por estado sobre TODAS las unidades visibles (no las filtradas
     // por búsqueda) para el hero del panel — patrón del prototipo (Flota).
@@ -394,114 +483,157 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
         detenidas++;
       }
     }
+    final total = widget.docs.length;
+    final activas = enMarcha; // "activas" = motor en marcha + reporte fresco.
 
     return Container(
-      color: AppColors.surface0,
+      color: c.surface1,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Hero: total de unidades con posición + breakdown por estado.
+          // Hero: eyebrow + hero number "activas / total" + breakdown.
           Padding(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.sm),
+                AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('EN VIVO · SITRACK', style: AppType.eyebrow),
+                const AppEyebrow('Activas'),
                 const SizedBox(height: 4),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      '${widget.docs.length}',
-                      style: AppType.h3.copyWith(
+                      '$activas',
+                      style: AppType.h2.copyWith(
+                        color: c.text,
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    const Text('unidades', style: AppType.monoSm),
+                    const SizedBox(width: 8),
+                    Text('de $total', style: AppType.monoSm),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.sm),
+                const SizedBox(height: AppSpacing.mdDense),
                 Row(
                   children: [
                     _EstadoCajita(
-                        valor: enMarcha,
-                        label: 'En marcha',
-                        color: AppColors.success),
+                        valor: enMarcha, label: 'En ruta', color: c.brand),
                     const SizedBox(width: 4),
                     _EstadoCajita(
                         valor: detenidas,
                         label: 'Detenidas',
-                        color: AppColors.textSecondary),
+                        color: c.textMuted),
                     const SizedBox(width: 4),
                     _EstadoCajita(
-                        valor: sinSenal,
-                        label: 'Sin señal',
-                        color: AppColors.error),
+                        valor: sinSenal, label: 'Sin señal', color: c.warning),
                   ],
                 ),
               ],
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSubtle),
+          const AppHairline(),
           // Buscador por patente o chofer.
           Padding(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md, 0, AppSpacing.md, AppSpacing.sm),
+                AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.sm),
             child: SizedBox(
-              height: 36,
+              height: 38,
               child: TextField(
                 controller: _ctrl,
                 textCapitalization: TextCapitalization.characters,
-                style: AppType.label.copyWith(color: AppColors.textPrimary),
+                style: AppType.label.copyWith(color: c.text),
                 decoration: InputDecoration(
                   isDense: true,
-                  prefixIcon: const Icon(Icons.search,
-                      size: 18, color: AppColors.textTertiary),
+                  prefixIcon:
+                      Icon(Icons.search, size: 16, color: c.textMuted),
+                  prefixIconConstraints: const BoxConstraints(
+                      minWidth: 34, minHeight: 34),
                   suffixIcon: _filtro.isEmpty
                       ? null
                       : IconButton(
                           padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
                           constraints: const BoxConstraints(),
-                          icon: const Icon(Icons.clear,
-                              size: 16, color: AppColors.textTertiary),
+                          icon: Icon(Icons.clear, size: 15, color: c.textMuted),
                           onPressed: () {
                             _ctrl.clear();
                             setState(() => _filtro = '');
                           },
                         ),
-                  hintText: 'Buscar patente o chofer…',
-                  hintStyle:
-                      AppType.label.copyWith(color: AppColors.textTertiary),
-                  border: const OutlineInputBorder(),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.sm, vertical: 0),
+                  hintText: 'Buscar unidad…',
+                  hintStyle: AppType.label.copyWith(color: c.textMuted),
+                  filled: true,
+                  fillColor: c.surface2,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    borderSide: BorderSide(color: c.border),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    borderSide: BorderSide(color: c.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
+                    borderSide: BorderSide(color: c.borderFocus),
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
                 ),
                 onChanged: (v) => setState(() => _filtro = v),
               ),
             ),
           ),
-          const Divider(height: 1, color: AppColors.borderSubtle),
+          // Chips de filtro por estado: Todas | Ruta | Idle.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.md),
+            child: Row(
+              children: [
+                _ChipEstado(
+                  label: 'Todas',
+                  activo: _estado == _FiltroEstado.todas,
+                  onTap: () => setState(() => _estado = _FiltroEstado.todas),
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                _ChipEstado(
+                  label: 'Ruta',
+                  activo: _estado == _FiltroEstado.ruta,
+                  onTap: () => setState(() => _estado = _FiltroEstado.ruta),
+                ),
+                const SizedBox(width: AppSpacing.xs),
+                _ChipEstado(
+                  label: 'Idle',
+                  activo: _estado == _FiltroEstado.idle,
+                  onTap: () => setState(() => _estado = _FiltroEstado.idle),
+                ),
+              ],
+            ),
+          ),
+          const AppHairline(),
           Expanded(
             child: filtrados.isEmpty
-                ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.lg),
-                      child: Text(
-                        widget.docs.isEmpty
-                            ? 'Sin unidades con posición.'
-                            : 'Sin coincidencias con "$_filtro".',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: AppColors.textTertiary),
-                      ),
-                    ),
+                ? AppEmptyState(
+                    icon: Icons.local_shipping_outlined,
+                    title: widget.docs.isEmpty
+                        ? 'Sin unidades con posición'
+                        : 'Sin coincidencias',
+                    subtitle: widget.docs.isEmpty
+                        ? 'Ninguna unidad reportó posición todavía.'
+                        : _filtro.isNotEmpty
+                            ? 'No hay unidades para "$_filtro".'
+                            : 'No hay unidades en este estado.',
                   )
-                : ListView.builder(
+                : ListView.separated(
                     padding:
                         const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                     itemCount: filtrados.length,
+                    separatorBuilder: (_, __) => Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.xl),
+                      child: AppHairline(color: c.border),
+                    ),
                     itemBuilder: (ctx, i) {
                       final d = filtrados[i];
                       return _ItemUnidad(
@@ -519,8 +651,8 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
   }
 }
 
-/// Un item del panel: dot de estado (motor/frescura/drift) + patente +
-/// chofer si está identificado.
+/// Un item del panel: AppDot semántico (motor/frescura/drift) + patente
+/// (mono) + AppBadge sm de estado + chofer + velocidad a la derecha.
 class _ItemUnidad extends StatelessWidget {
   final QueryDocumentSnapshot<Map<String, dynamic>> doc;
   final DateTime ahora;
@@ -536,6 +668,7 @@ class _ItemUnidad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final data = doc.data();
     final ignition = data['ignition'] == true;
     final reportTs = (data['report_date'] as Timestamp?)?.toDate();
@@ -556,49 +689,102 @@ class _ItemUnidad extends StatelessWidget {
         .trim()
         .replaceAll(RegExp(r'\s+'), ' ');
 
+    // Velocidad para la columna derecha (gps_speed preferido, igual que
+    // el marker). Solo se muestra si el motor está ON y hay valor.
+    final speedRaw = data['gps_speed'] ?? data['speed'];
+    final speed = speedRaw is num ? speedRaw.toDouble() : null;
+    final muestraVel = ignition && speed != null && speed > 0;
+
+    // Etiqueta corta de estado (ON / IDLE / STP / TLR-style) — derivada de
+    // los mismos datos que el color, sin inventar campos.
+    final String estadoLabel;
+    if (tieneDrift) {
+      estadoLabel = 'DRIFT';
+    } else if (minStale != null && minStale > 60) {
+      estadoLabel = 'S/SEÑAL';
+    } else if (ignition) {
+      estadoLabel = muestraVel ? 'ON' : 'STP';
+    } else {
+      estadoLabel = 'IDLE';
+    }
+
     return InkWell(
       onTap: onTap,
       child: Container(
-        color: seleccionada ? AppColors.brand.withAlpha(30) : null,
+        decoration: BoxDecoration(
+          color: seleccionada ? c.surface2 : null,
+          border: Border(
+            left: BorderSide(
+              color: seleccionada ? c.brand : Colors.transparent,
+              width: 2,
+            ),
+          ),
+        ),
         padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 10,
-              height: 10,
-              decoration:
-                  BoxDecoration(color: color, shape: BoxShape.circle),
+            Padding(
+              padding: const EdgeInsets.only(top: 3),
+              child: AppDot(color, size: 8, glow: seleccionada),
             ),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    doc.id,
-                    style: AppType.body.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          doc.id,
+                          style: AppType.mono.copyWith(
+                            color: c.text,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      AppBadge(
+                        text: estadoLabel,
+                        color: color,
+                        size: AppBadgeSize.sm,
+                      ),
+                    ],
                   ),
-                  if (chofer.isNotEmpty)
+                  if (chofer.isNotEmpty) ...[
+                    const SizedBox(height: 2),
                     Text(
                       chofer,
-                      style: AppType.label
-                          .copyWith(color: AppColors.textTertiary),
+                      style: AppType.bodySm.copyWith(color: c.textSecondary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                  ],
                 ],
               ),
             ),
-            if (tieneDrift)
-              const Icon(Icons.warning_amber,
-                  size: 16, color: AppColors.warning),
+            const SizedBox(width: AppSpacing.sm),
+            // Velocidad a la derecha (mono, tabular). "—" si no aplica.
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  muestraVel ? speed.toStringAsFixed(0) : '—',
+                  style: AppType.mono.copyWith(
+                    color: muestraVel ? c.text : c.textMuted,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (muestraVel)
+                  Text('km/h',
+                      style: AppType.monoSm.copyWith(fontSize: 9)),
+              ],
+            ),
           ],
         ),
       ),
@@ -607,7 +793,8 @@ class _ItemUnidad extends StatelessWidget {
 }
 
 /// Cajita del breakdown por estado en el hero del panel de flota (prototipo
-/// Núcleo · Flota): número en color de estado + label corto, en una celda.
+/// Núcleo · Flota): número mono en color de estado + label corto, en una
+/// celda surface2 con border hairline.
 class _EstadoCajita extends StatelessWidget {
   final int valor;
   final String label;
@@ -620,13 +807,14 @@ class _EstadoCajita extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 6),
         decoration: BoxDecoration(
-          color: AppColors.surface2,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: AppColors.borderSubtle),
+          color: c.surface2,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(color: c.border),
         ),
         child: Column(
           children: [
@@ -651,36 +839,39 @@ class _EstadoCajita extends StatelessWidget {
   }
 }
 
-/// Botón flotante tipo "pill" sobre el mapa (toggle satélite / abrir panel).
-class _BotonMapa extends StatelessWidget {
-  final IconData icono;
+/// Chip de filtro de estado de la lista (pill estilo Núcleo: activo =
+/// relleno con `text` sobre `bg`; inactivo = borde hairline).
+class _ChipEstado extends StatelessWidget {
   final String label;
+  final bool activo;
   final VoidCallback onTap;
-  const _BotonMapa(
-      {required this.icono, required this.label, required this.onTap});
+  const _ChipEstado({
+    required this.label,
+    required this.activo,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.surface1,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      elevation: 3,
-      child: InkWell(
+    final c = context.colors;
+    return Expanded(
+      child: GestureDetector(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icono, size: 16, color: AppColors.textPrimary),
-              const SizedBox(width: AppSpacing.xs),
-              Text(label,
-                  style: AppType.label.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600)),
-            ],
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: activo ? c.text : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.full),
+            border: activo ? null : Border.all(color: c.border),
+          ),
+          child: Text(
+            label,
+            style: AppType.label.copyWith(
+              color: activo ? c.bg : c.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       ),
@@ -726,11 +917,20 @@ class _Mapa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     // Satélite Mapbox si hay token configurado; si no, cae a callejero
     // (Carto Voyager).
     final usarSatelite = satelital && MapConstants.tieneMapbox;
     return Stack(
       children: [
+        // Ambient glow firma Núcleo detrás de los tiles (sutil, brand).
+        if (!usarSatelite)
+          AppAmbient(
+            alignment: Alignment.center,
+            sizeFactor: 0.9,
+            intensity: 0.3,
+            color: c.brand,
+          ),
         FlutterMap(
           mapController: controller,
           options: MapOptions(
@@ -772,19 +972,31 @@ class _Mapa extends StatelessWidget {
                 alignment: Alignment.center,
                 padding: const EdgeInsets.all(50),
                 markers: docs.map((d) => _markerDeDoc(d)).toList(),
-                builder: (ctx, markers) => Container(
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.brand,
-                  ),
-                  child: Center(
-                    child: Text(
-                      AppFormatters.formatearMiles(markers.length),
-                      style: AppType.heading
-                          .copyWith(color: AppColors.textPrimary),
+                builder: (ctx, markers) {
+                  final cc = ctx.colors;
+                  return Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: cc.brand,
+                      border: Border.all(color: cc.text, width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: cc.brand.withValues(alpha: 0.6),
+                          blurRadius: 10,
+                        ),
+                      ],
                     ),
-                  ),
-                ),
+                    child: Center(
+                      child: Text(
+                        AppFormatters.formatearMiles(markers.length),
+                        style: AppType.mono.copyWith(
+                          color: cc.brandFg,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
             RichAttributionWidget(
@@ -820,6 +1032,20 @@ class _Mapa extends StatelessWidget {
           ),
         ),
 
+        // Leyenda de colores (abajo-izquierda) — qué significa cada dot.
+        const Positioned(
+          left: AppSpacing.md,
+          bottom: AppSpacing.md,
+          child: AppMapLegend(
+            items: [
+              (label: 'En ruta', status: AppMarkerStatus.live),
+              (label: 'Detenida', status: AppMarkerStatus.idle),
+              (label: 'Drift', status: AppMarkerStatus.warning),
+              (label: 'Sin señal', status: AppMarkerStatus.error),
+            ],
+          ),
+        ),
+
         // FAB "centrar en toda la flota". Solo si hay markers visibles.
         if (docs.isNotEmpty)
           Positioned(
@@ -827,8 +1053,8 @@ class _Mapa extends StatelessWidget {
             bottom: AppSpacing.md,
             child: FloatingActionButton.small(
               heroTag: 'mapa_flota_fit',
-              backgroundColor: AppColors.brand,
-              foregroundColor: AppColors.textPrimary,
+              backgroundColor: c.brand,
+              foregroundColor: c.brandFg,
               tooltip: 'Ver toda la flota',
               onPressed: onFitFlota,
               child: const Icon(Icons.crop_free),
@@ -904,67 +1130,14 @@ class _Mapa extends StatelessWidget {
       // queda anclado a la posición GPS real y la patente cuelga debajo
       // (pedido Santiago 2026-06-01). -0.33 ≈ 18/54 mapeado a [-1,1].
       alignment: const Alignment(0, -0.33),
-      child: GestureDetector(
+      child: _MarkerVisual(
+        patente: doc.id,
+        color: color,
+        icono: iconoMarker,
+        rotacion: rotacionMarker,
+        seleccionada: esSeleccionada,
+        tieneDrift: tieneDrift,
         onTap: () => onMarkerTap(doc),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                // Borde brand grueso si está seleccionada desde el panel;
-                // si no, más grueso/contrastado cuando hay drift.
-                border: Border.all(
-                  color: esSeleccionada
-                      ? AppColors.brand
-                      : AppColors.textPrimary,
-                  width: esSeleccionada ? 4 : (tieneDrift ? 3 : 2),
-                ),
-                boxShadow: const [
-                  BoxShadow(
-                    color: AppColors.surface0,
-                    blurRadius: 4,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Transform.rotate(
-                angle: rotacionMarker,
-                child: Icon(
-                  iconoMarker,
-                  color: AppColors.textPrimary,
-                  size: tieneDrift ? 20 : 22,
-                ),
-              ),
-            ),
-            const SizedBox(height: 2),
-            // Etiqueta con la patente debajo del marker — para identificar
-            // cada unidad sin tener que tocarla.
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.78),
-                borderRadius: BorderRadius.circular(4),
-                border: esSeleccionada
-                    ? Border.all(color: AppColors.brand, width: 1.5)
-                    : null,
-              ),
-              child: Text(
-                doc.id,
-                maxLines: 1,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.3,
-                ),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -984,8 +1157,195 @@ class _Mapa extends StatelessWidget {
   }
 }
 
+/// El visual de un marker individual: círculo de estado con ícono +
+/// etiqueta de patente debajo. Estilo Núcleo: halo glow del brand cuando
+/// está seleccionado, pill de patente con border hairline.
+class _MarkerVisual extends StatelessWidget {
+  final String patente;
+  final Color color;
+  final IconData icono;
+  final double rotacion;
+  final bool seleccionada;
+  final bool tieneDrift;
+  final VoidCallback onTap;
+
+  const _MarkerVisual({
+    required this.patente,
+    required this.color,
+    required this.icono,
+    required this.rotacion,
+    required this.seleccionada,
+    required this.tieneDrift,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color,
+              shape: BoxShape.circle,
+              // Borde brand grueso si está seleccionada desde el panel;
+              // si no, más grueso/contrastado cuando hay drift.
+              border: Border.all(
+                color: seleccionada ? c.brand : c.text,
+                width: seleccionada ? 4 : (tieneDrift ? 3 : 2),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: seleccionada
+                      ? c.brand.withValues(alpha: 0.6)
+                      : color.withValues(alpha: 0.5),
+                  blurRadius: seleccionada ? 12 : 5,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Transform.rotate(
+              angle: rotacion,
+              child: Icon(
+                icono,
+                color: c.brandFg,
+                size: tieneDrift ? 20 : 22,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          // Etiqueta con la patente debajo del marker — para identificar
+          // cada unidad sin tener que tocarla. Pill cristal Núcleo.
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+            decoration: BoxDecoration(
+              color: c.bg.withValues(alpha: 0.85),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              border: Border.all(
+                color: seleccionada ? c.brand : c.border,
+                width: seleccionada ? 1.5 : 1,
+              ),
+            ),
+            child: Text(
+              patente,
+              maxLines: 1,
+              style: AppType.monoSm.copyWith(
+                color: c.text,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Botón flotante tipo "pill" sobre el mapa (toggle satélite / abrir panel).
+/// Cristal escarchado Núcleo (mismo lenguaje que AppMapInfoPill).
+class _BotonMapa extends StatelessWidget {
+  final IconData icono;
+  final String label;
+  final VoidCallback onTap;
+  const _BotonMapa(
+      {required this.icono, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: AppMapInfoPill(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icono, size: 16, color: c.text),
+              const SizedBox(width: AppSpacing.xs),
+              Text(label,
+                  style: AppType.monoSm.copyWith(
+                      color: c.text, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // =============================================================================
-// SHEET DE DETALLE
+// PANEL DE DETALLE INLINE (desktop ≥1024) — columna derecha
+// =============================================================================
+
+/// Panel derecho fijo (desktop) que muestra el detalle de la unidad
+/// seleccionada. Si no hay ninguna seleccionada, muestra un empty state
+/// invitando a elegir una. Cuando hay selección, escucha el doc en vivo
+/// con el mismo stream que `_DetalleSheet`.
+class _PanelDetalle extends StatelessWidget {
+  final String? patente;
+  final DateTime ahora;
+  final Future<void> Function(double lat, double lng) onAbrirMaps;
+
+  const _PanelDetalle({
+    required this.patente,
+    required this.ahora,
+    required this.onAbrirMaps,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final p = patente;
+    if (p == null) {
+      return Container(
+        color: c.surface1,
+        child: const AppEmptyState(
+          icon: Icons.touch_app_outlined,
+          title: 'Sin unidad seleccionada',
+          subtitle: 'Tocá un marker o una unidad de la lista para ver su '
+              'detalle en vivo.',
+        ),
+      );
+    }
+    return Container(
+      color: c.surface1,
+      child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection(AppCollections.sitrackPosiciones)
+            .doc(p)
+            .snapshots(),
+        builder: (ctx, snap) {
+          final data = snap.data?.data();
+          if (data == null) {
+            return const Padding(
+              padding: EdgeInsets.only(top: AppSpacing.lg),
+              child: AppSkeletonList(count: 4, conAvatar: false),
+            );
+          }
+          return _DetalleContenido(
+            patente: p,
+            data: data,
+            ahora: ahora,
+            embedded: true,
+            onAbrirMaps: onAbrirMaps,
+          );
+        },
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// SHEET DE DETALLE (mobile / tablet)
 // =============================================================================
 
 class _DetalleSheet extends StatelessWidget {
@@ -995,6 +1355,7 @@ class _DetalleSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     // Stream del doc — antes pasábamos `data` como snapshot estático y
     // si la unidad cambiaba mientras el sheet estaba abierto el admin
     // veía info vieja (velocidad cero, ubicación obsoleta). Con stream
@@ -1011,20 +1372,96 @@ class _DetalleSheet extends StatelessWidget {
           // animación de apertura no flickeree.
           return Container(
             height: 200,
-            decoration: const BoxDecoration(
-              color: AppColors.surface2,
-              borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(AppRadius.lg)),
+            decoration: BoxDecoration(
+              color: c.surface2,
+              borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(AppRadius.xxl)),
+              border: Border.all(color: c.border),
             ),
-            child: const Center(child: CircularProgressIndicator()),
+            child: Center(
+                child: CircularProgressIndicator(color: c.brand)),
           );
         }
-        return _buildContenido(context, data);
+        return _DetalleContenido(
+          patente: patente,
+          data: data,
+          ahora: DateTime.now(),
+          embedded: false,
+          onAbrirMaps: (lat, lng) => abrirMaps(context, lat, lng),
+        );
       },
     );
   }
 
-  Widget _buildContenido(BuildContext context, Map<String, dynamic> data) {
+  /// Abre Google Maps en una ventana externa. Si el launch falla (raro
+  /// pero pasa con browser desconfigurado o Android sin queries en
+  /// manifest), notificamos al admin con SnackBar — antes fallaba
+  /// silencioso y el botón parecía roto.
+  ///
+  /// Static + público para que tanto el sheet como el panel inline usen
+  /// la misma implementación.
+  static Future<void> abrirMaps(
+      BuildContext context, double lat, double lng) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final uri = Uri.parse('https://www.google.com/maps?q=$lat,$lng');
+    try {
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!ok) {
+        messenger.showSnackBar(const SnackBar(
+          content:
+              Text('No se pudo abrir Google Maps en este dispositivo.'),
+        ));
+      }
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(
+        content: Text('Error abriendo Maps: $e'),
+      ));
+    }
+  }
+}
+
+/// Convierte heading en grados (0=N, 90=E, 180=S, 270=O) a sentido
+/// cardinal de 8 direcciones (N, NE, E, SE, S, SO, O, NO).
+String _rumboCardinal(double heading) {
+  const cardinales = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
+  // Normalizar a [0, 360) por si vienen valores fuera de rango.
+  final h = ((heading % 360) + 360) % 360;
+  // Cada cardinal cubre 45° centrado en su ángulo. +22.5 desplaza
+  // los bordes para que 0..22.5 sea N, 22.5..67.5 sea NE, etc.
+  final idx = ((h + 22.5) / 45).floor() % 8;
+  return cardinales[idx];
+}
+
+/// Contenido del detalle de una unidad — compartido entre el sheet
+/// (mobile/tablet) y el panel inline (desktop).
+///
+/// Estilo Núcleo: eyebrow "SELECCIONADA" + patente (h3) + chofer/modelo
+/// (mono) + grilla de AppStat (velocidad / odómetro / combustible / ...) +
+/// eyebrow "ÚLTIMOS EVENTOS" + timeline mono. Los datos que no existen en
+/// SITRACK_POSICIONES / Volvo Connect se muestran como "—" (no se inventan).
+class _DetalleContenido extends StatelessWidget {
+  final String patente;
+  final Map<String, dynamic> data;
+  final DateTime ahora;
+
+  /// `true` cuando se renderiza como panel inline (sin handle de sheet,
+  /// sin radius superior, scrolleable a alto completo). `false` = sheet.
+  final bool embedded;
+
+  final Future<void> Function(double lat, double lng) onAbrirMaps;
+
+  const _DetalleContenido({
+    required this.patente,
+    required this.data,
+    required this.ahora,
+    required this.embedded,
+    required this.onAbrirMaps,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+
     final ignition = data['ignition'] == true;
     final speed = (data['speed'] as num?)?.toDouble();
     final gpsSpeed = (data['gps_speed'] as num?)?.toDouble();
@@ -1051,6 +1488,14 @@ class _DetalleSheet extends StatelessWidget {
         speedEfectiva > 5 &&
         headingRaw != null;
 
+    final minStale =
+        reportTs == null ? null : ahora.difference(reportTs).inMinutes;
+    final estadoColor = _Mapa._colorMarker(
+      ignition: ignition,
+      minStale: minStale,
+      tieneDrift: driftTipo.isNotEmpty,
+    );
+
     final choferTexto = driverDni.isEmpty
         ? '— (sin identificar)'
         : [driverApellido, driverNombre]
@@ -1060,228 +1505,305 @@ class _DetalleSheet extends StatelessWidget {
             .replaceAll(RegExp(r'\s+'), ' ')
             .ifEmpty('DNI $driverDni');
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface2,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
-        border: Border.all(
-          color: ignition
-              ? AppColors.success.withAlpha(60)
-              : AppColors.textHint,
-        ),
-      ),
-      padding: const EdgeInsets.fromLTRB(AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.xl),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.textHint,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Row(
+    // KPIs en grilla 2×2 (estilo prototipo Flota). Solo campos REALES de
+    // SITRACK_POSICIONES; los ausentes van como "—".
+    final velStat = AppStat(
+      label: 'Velocidad',
+      value: speed == null ? '—' : speed.toStringAsFixed(0),
+      unit: speed == null ? null : 'km/h',
+      valueStyle: AppType.h4,
+    );
+    final odoStat = AppStat(
+      label: 'Odómetro',
+      value: odometer == null
+          ? '—'
+          : AppFormatters.formatearMiles(odometer.round()),
+      unit: odometer == null ? null : 'km',
+      valueStyle: AppType.h4,
+    );
+    final horStat = AppStat(
+      label: 'Horómetro',
+      value: hourmeter == null ? '—' : hourmeter.toStringAsFixed(1),
+      unit: hourmeter == null ? null : 'h',
+      valueStyle: AppType.h4,
+    );
+    final rumboStat = AppStat(
+      label: 'Rumbo',
+      value: enMovimiento ? _rumboCardinal(headingRaw) : '—',
+      unit: enMovimiento ? '${headingRaw.toStringAsFixed(0)}°' : null,
+      valueStyle: AppType.h4,
+      accent: enMovimiento ? c.brand : null,
+    );
+
+    final timeline = _eventosTimeline(
+      reportTs: reportTs,
+      ignitionTs: ignitionTs,
+      ignition: ignition,
+      eventName: eventName,
+      location: location,
+    );
+
+    final cuerpo = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Encabezado: eyebrow + patente + chofer/modelo + badge de estado.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Text(
-                  patente,
-                  style: AppType.title,
-                ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Expanded(child: AppEyebrow('Seleccionada')),
+                  _BadgeIgnicion(on: ignition),
+                ],
               ),
-              _BadgeIgnicion(on: ignition),
+              const SizedBox(height: 6),
+              Text(
+                patente,
+                style: AppType.h3.copyWith(color: c.text),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                choferTexto,
+                style: AppType.mono.copyWith(color: c.textSecondary),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
-          if (driftTipo.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.md),
-            _DriftBanner(
+        ),
+
+        if (driftTipo.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.lg),
+            child: _DriftBanner(
               tipo: driftTipo,
               sitrackDni: driverDni,
               sitrackApellido: driverApellido,
               asignacionDni: asignacionDni,
               asignacionNombre: asignacionNombre,
             ),
-          ],
-          const SizedBox(height: AppSpacing.lg),
-          _Fila(
-            label: 'Chofer',
-            valor: choferTexto,
-            icono: Icons.person_outline,
-            colorIcono: driverDni.isEmpty ? AppColors.textDisabled : AppColors.success,
           ),
-          if (driverDni.isNotEmpty)
-            _Fila(label: 'DNI', valor: driverDni),
-          _Fila(
-            label: 'Velocidad',
-            valor: speed == null ? '—' : '${speed.toStringAsFixed(0)} km/h',
-            icono: Icons.speed,
-          ),
-          // Rumbo: solo si está en movimiento. Texto formato "NE (45°)"
-          // — cardinal + grados exactos. Helper en `_rumboCardinal`.
-          if (enMovimiento)
-            _Fila(
-              label: 'Rumbo',
-              valor:
-                  '${_rumboCardinal(headingRaw)} (${headingRaw.toStringAsFixed(0)}°)',
-              icono: Icons.navigation,
-              colorIcono: AppColors.success,
-            ),
-          _Fila(
-            label: 'Odómetro',
-            valor: odometer == null
-                ? '—'
-                : '${AppFormatters.formatearMiles(odometer.round())} km',
-            icono: Icons.straighten,
-          ),
-          if (hourmeter != null)
-            _Fila(
-              label: 'Horómetro',
-              valor: '${hourmeter.toStringAsFixed(1)} h',
-              icono: Icons.access_time,
-            ),
-          // Telemetría Volvo Connect (combustible, AdBlue, autonomía).
-          // Vive en el doc VEHICULOS — no en SITRACK_POSICIONES — porque
-          // la pobla `vehiculo_manager.actualizarTelemetria` cuando el
-          // admin entra a la pantalla de unidades. Solo aparece si hay
-          // dato (las unidades sin Volvo Connect quedan sin estos campos).
-          _TelemetriaVolvoFila(patente: patente),
-          _Fila(
-            label: 'Último reporte',
-            valor: AppFormatters.formatearFechaHoraCorta(reportTs),
-            icono: Icons.update,
-          ),
-          if (ignitionTs != null)
-            _Fila(
-              label: 'Ignición desde',
-              valor: AppFormatters.formatearFechaHoraCorta(ignitionTs),
-            ),
-          if (eventName.isNotEmpty)
-            _Fila(
-              label: 'Evento',
-              valor: eventName,
-              icono: Icons.bolt,
-            ),
-          if (location.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sm),
-            _Fila(
-              label: 'Dirección',
-              valor: location,
-              icono: Icons.place_outlined,
-              esLargo: true,
-            ),
-          ],
-          const SizedBox(height: AppSpacing.lg),
-          Row(
+
+        AppHairline(color: c.border),
+
+        // Grilla 2×2 de KPIs reales.
+        IntrinsicHeight(
+          child: Row(
             children: [
+              Expanded(child: _StatCell(stat: velStat, borderRight: true)),
+              Expanded(child: _StatCell(stat: odoStat)),
+            ],
+          ),
+        ),
+        AppHairline(color: c.border),
+        IntrinsicHeight(
+          child: Row(
+            children: [
+              Expanded(child: _StatCell(stat: horStat, borderRight: true)),
+              Expanded(child: _StatCell(stat: rumboStat)),
+            ],
+          ),
+        ),
+        AppHairline(color: c.border),
+
+        // Telemetría Volvo Connect (combustible, AdBlue, autonomía).
+        // Vive en el doc VEHICULOS — no en SITRACK_POSICIONES — porque
+        // la pobla `vehiculo_manager.actualizarTelemetria` cuando el
+        // admin entra a la pantalla de unidades. Solo aparece si hay
+        // dato (las unidades sin Volvo Connect quedan sin estos campos).
+        _TelemetriaVolvoFila(patente: patente),
+
+        // Estado / frescura (mono).
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.md),
+          child: Row(
+            children: [
+              AppDot(estadoColor, size: 7),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
-                child: AppButton.ghost(
-                  label: 'Cerrar',
-                  expand: true,
-                  onPressed: () => Navigator.of(context).pop(),
+                child: Text(
+                  'Último reporte · '
+                  '${AppFormatters.formatearFechaHoraCorta(reportTs)}',
+                  style: AppType.monoSm.copyWith(color: c.textSecondary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+            ],
+          ),
+        ),
+
+        AppHairline(color: c.border),
+
+        // Timeline de últimos eventos (mono).
+        const Padding(
+          padding: EdgeInsets.fromLTRB(
+              AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.sm),
+          child: AppEyebrow('Últimos eventos'),
+        ),
+        if (timeline.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.md),
+            child: Text('— Sin eventos recientes.',
+                style: AppType.monoSm.copyWith(color: c.textMuted)),
+          )
+        else
+          for (final ev in timeline)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl, 6, AppSpacing.xl, 6),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 92,
+                    child: Text(
+                      ev.tiempo,
+                      style: AppType.monoSm.copyWith(color: c.textMuted),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      ev.texto,
+                      style: AppType.bodySm.copyWith(color: c.text),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+        const SizedBox(height: AppSpacing.lg),
+        // Acciones.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xl),
+          child: Row(
+            children: [
+              if (!embedded)
+                Expanded(
+                  child: AppButton.ghost(
+                    label: 'Cerrar',
+                    expand: true,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ),
               if (lat != null && lng != null) ...[
-                const SizedBox(width: AppSpacing.md),
+                if (!embedded) const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: AppButton(
                     label: 'Ver en Maps',
                     icon: Icons.open_in_new,
                     expand: true,
-                    onPressed: () => _abrirMaps(context, lat, lng),
+                    onPressed: () => onAbrirMaps(lat, lng),
                   ),
                 ),
               ],
             ],
           ),
+        ),
+      ],
+    );
+
+    if (embedded) {
+      // Panel inline (columna derecha desktop): scrolleable a alto completo.
+      return SingleChildScrollView(child: cuerpo);
+    }
+
+    // Sheet mobile/tablet: cristal con handle + radius superior + border
+    // de color según ignición.
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface2,
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+        border: Border.all(
+          color: ignition ? c.success.withValues(alpha: 0.4) : c.border,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(height: AppSpacing.sm),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: c.border,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+          ),
+          Flexible(child: SingleChildScrollView(child: cuerpo)),
         ],
       ),
     );
   }
 
-  /// Abre Google Maps en una ventana externa. Si el launch falla (raro
-  /// pero pasa con browser desconfigurado o Android sin queries en
-  /// manifest), notificamos al admin con SnackBar — antes fallaba
-  /// silencioso y el botón parecía roto.
-  Future<void> _abrirMaps(
-      BuildContext context, double lat, double lng) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final uri = Uri.parse('https://www.google.com/maps?q=$lat,$lng');
-    try {
-      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!ok) {
-        messenger.showSnackBar(const SnackBar(
-          content:
-              Text('No se pudo abrir Google Maps en este dispositivo.'),
-        ));
-      }
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(
-        content: Text('Error abriendo Maps: $e'),
+  /// Construye el timeline de eventos a partir de los timestamps REALES del
+  /// doc (SITRACK_POSICIONES no historiza, así que son los hitos del
+  /// snapshot actual — no se inventa historial).
+  List<({String tiempo, String texto})> _eventosTimeline({
+    required DateTime? reportTs,
+    required DateTime? ignitionTs,
+    required bool ignition,
+    required String eventName,
+    required String location,
+  }) {
+    final eventos = <({String tiempo, String texto})>[];
+    if (eventName.isNotEmpty) {
+      eventos.add((
+        tiempo: AppFormatters.formatearFechaHoraCorta(reportTs),
+        texto: eventName,
       ));
     }
-  }
-
-  /// Convierte heading en grados (0=N, 90=E, 180=S, 270=O) a sentido
-  /// cardinal de 8 direcciones (N, NE, E, SE, S, SO, O, NO).
-  static String _rumboCardinal(double heading) {
-    const cardinales = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
-    // Normalizar a [0, 360) por si vienen valores fuera de rango.
-    final h = ((heading % 360) + 360) % 360;
-    // Cada cardinal cubre 45° centrado en su ángulo. +22.5 desplaza
-    // los bordes para que 0..22.5 sea N, 22.5..67.5 sea NE, etc.
-    final idx = ((h + 22.5) / 45).floor() % 8;
-    return cardinales[idx];
+    if (ignitionTs != null) {
+      eventos.add((
+        tiempo: AppFormatters.formatearFechaHoraCorta(ignitionTs),
+        texto: ignition ? 'Motor encendido' : 'Motor apagado',
+      ));
+    }
+    if (location.isNotEmpty) {
+      eventos.add((
+        tiempo: AppFormatters.formatearFechaHoraCorta(reportTs),
+        texto: location,
+      ));
+    }
+    return eventos;
   }
 }
 
-class _Fila extends StatelessWidget {
-  final String label;
-  final String valor;
-  final IconData? icono;
-  final Color? colorIcono;
-  final bool esLargo;
-
-  const _Fila({
-    required this.label,
-    required this.valor,
-    this.icono,
-    this.colorIcono,
-    this.esLargo = false,
-  });
+/// Celda de un AppStat dentro de la grilla 2×2 del detalle, con un border
+/// hairline a la derecha opcional (separa columnas).
+class _StatCell extends StatelessWidget {
+  final AppStat stat;
+  final bool borderRight;
+  const _StatCell({required this.stat, this.borderRight = false});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-      child: Row(
-        crossAxisAlignment:
-            esLargo ? CrossAxisAlignment.start : CrossAxisAlignment.center,
-        children: [
-          if (icono != null) ...[
-            Icon(icono, size: 14, color: colorIcono ?? AppColors.textDisabled),
-            const SizedBox(width: AppSpacing.xs),
-          ] else ...[
-            const SizedBox(width: AppSpacing.xl),
-          ],
-          SizedBox(
-            width: 90,
-            child: Text(label, style: AppType.label),
-          ),
-          Expanded(
-            child: Text(
-              valor,
-              style: AppType.body.copyWith(color: AppColors.textPrimary),
-              maxLines: esLargo ? 3 : 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+      decoration: BoxDecoration(
+        border: borderRight
+            ? Border(right: BorderSide(color: c.border))
+            : null,
       ),
+      child: stat,
     );
   }
 }
@@ -1293,18 +1815,12 @@ class _BadgeIgnicion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = on ? AppColors.success : AppColors.textTertiary;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-      decoration: BoxDecoration(
-        color: color.withAlpha(30),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: color.withAlpha(120)),
-      ),
-      child: Text(
-        on ? 'EN MARCHA' : 'APAGADO',
-        style: AppType.eyebrow.copyWith(color: color),
-      ),
+    final c = context.colors;
+    return AppBadge(
+      text: on ? 'EN MARCHA' : 'APAGADO',
+      color: on ? c.success : c.textMuted,
+      dot: true,
+      size: AppBadgeSize.sm,
     );
   }
 }
@@ -1346,6 +1862,7 @@ class _TelemetriaVolvoFilaState extends State<_TelemetriaVolvoFila> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       future: _futuro,
       builder: (ctx, snap) {
@@ -1363,27 +1880,36 @@ class _TelemetriaVolvoFilaState extends State<_TelemetriaVolvoFila> {
         }
 
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(
+                  AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.sm),
+              child: AppEyebrow('Telemetría Volvo'),
+            ),
             if (combustible != null)
-              _Fila(
+              _FilaTelemetria(
                 label: 'Combustible',
                 valor: '${combustible.clamp(0, 100).toStringAsFixed(0)} %',
                 icono: Icons.local_gas_station,
-                colorIcono: _colorPorcentaje(combustible),
+                color: _colorPorcentaje(combustible),
               ),
             if (adblue != null)
-              _Fila(
+              _FilaTelemetria(
                 label: 'AdBlue',
                 valor: '${adblue.clamp(0, 100).toStringAsFixed(0)} %',
                 icono: Icons.water_drop_outlined,
-                colorIcono: _colorPorcentaje(adblue),
+                color: _colorPorcentaje(adblue),
               ),
             if (autonomia != null)
-              _Fila(
+              _FilaTelemetria(
                 label: 'Autonomía',
                 valor: '${autonomia.toStringAsFixed(0)} km',
                 icono: Icons.timeline,
+                color: c.textSecondary,
               ),
+            const SizedBox(height: AppSpacing.sm),
+            AppHairline(color: c.border),
           ],
         );
       },
@@ -1399,7 +1925,44 @@ class _TelemetriaVolvoFilaState extends State<_TelemetriaVolvoFila> {
   }
 }
 
-/// Banner naranja en el sheet del tractor cuando el chofer físico
+/// Fila compacta de telemetría Volvo: ícono + label + valor mono a la
+/// derecha. Estilo Núcleo.
+class _FilaTelemetria extends StatelessWidget {
+  final String label;
+  final String valor;
+  final IconData icono;
+  final Color color;
+  const _FilaTelemetria({
+    required this.label,
+    required this.valor,
+    required this.icono,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xl, vertical: 4),
+      child: Row(
+        children: [
+          Icon(icono, size: 16, color: color),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(label, style: AppType.label),
+          ),
+          Text(
+            valor,
+            style: AppType.mono.copyWith(color: c.text),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Banner naranja en el detalle del tractor cuando el chofer físico
 /// (Sitrack, vía iButton) no coincide con la asignación activa del
 /// sistema. El cron `sitrackPosicionPoller` setea `drift_tipo` con
 /// uno de tres valores que determinan el copy mostrado.
@@ -1420,6 +1983,7 @@ class _DriftBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     String titulo;
     String detalle;
     switch (tipo) {
@@ -1455,17 +2019,16 @@ class _DriftBanner extends StatelessWidget {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
-        color: AppColors.warning.withAlpha(30),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.warning.withAlpha(120)),
+        color: c.warningSoft,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: c.warning.withValues(alpha: 0.45)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.warning_amber,
-              color: AppColors.warning, size: 18),
+          Icon(Icons.warning_amber, color: c.warning, size: 18),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
@@ -1473,12 +2036,13 @@ class _DriftBanner extends StatelessWidget {
               children: [
                 Text(
                   titulo,
-                  style: AppType.label.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold),
+                  style: AppType.label.copyWith(
+                      color: c.warning, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
                   detalle,
-                  style: AppType.label.copyWith(color: AppColors.textPrimary),
+                  style: AppType.bodySm.copyWith(color: c.text),
                 ),
               ],
             ),
