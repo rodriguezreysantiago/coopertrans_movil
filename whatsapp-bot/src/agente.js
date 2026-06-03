@@ -27,6 +27,9 @@ const MODELO_ANTHROPIC = process.env.AGENTE_MODELO || 'claude-3-5-haiku-latest';
 const GEMINI_API_BASE =
   'https://generativelanguage.googleapis.com/v1beta/models';
 const MODELO_GEMINI = process.env.AGENTE_MODELO_GEMINI || 'gemini-2.5-flash';
+// Groq — fallback GRATIS con tool-calling (Llama). API formato OpenAI.
+const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const MODELO_GROQ = process.env.AGENTE_MODELO_GROQ || 'llama-3.3-70b-versatile';
 
 const MAX_TOKENS = 1024;
 const TIMEOUT_MS = parseInt(process.env.AGENTE_TIMEOUT_MS || '30000', 10);
@@ -72,7 +75,7 @@ const _FLAG_TTL_MS = 30000;
 
 function _provider() {
   const p = String(process.env.AGENTE_PROVIDER || '').toLowerCase().trim();
-  if (p === 'anthropic' || p === 'gemini') return p;
+  if (p === 'anthropic' || p === 'gemini' || p === 'groq') return p;
   if (process.env.GEMINI_API_KEY) return 'gemini';
   if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
   return null;
@@ -81,6 +84,7 @@ function _provider() {
 function _keyDe(provider) {
   if (provider === 'gemini') return process.env.GEMINI_API_KEY || null;
   if (provider === 'anthropic') return process.env.ANTHROPIC_API_KEY || null;
+  if (provider === 'groq') return process.env.GROQ_API_KEY || null;
   return null;
 }
 
@@ -578,6 +582,18 @@ function _toolsGemini(rol) {
       }),
     },
   ];
+}
+
+// Groq usa el formato OpenAI: tools como [{type:'function', function:{...}}].
+function _toolsGroq(rol) {
+  return _toolsDelRol(rol).map((t) => ({
+    type: 'function',
+    function: {
+      name: t.name,
+      description: t.description,
+      parameters: { type: 'object', properties: t.params || {} },
+    },
+  }));
 }
 
 // ── ejecutores ──
@@ -1701,6 +1717,80 @@ async function _conversarGemini(db, system, historial, userText, persona) {
   return { texto: null, toolsUsadas, error: 'max_tool_iters' };
 }
 
+// ───────────────────────── loop Groq (OpenAI-compat) ─────────────────────────
+async function _conversarGroq(db, system, historial, userText, persona) {
+  const headers = {
+    authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+    'content-type': 'application/json',
+  };
+  const messages = [
+    { role: 'system', content: system },
+    ...historial.map((t) => ({
+      role: t.rol === 'assistant' ? 'assistant' : 'user',
+      content: String(t.texto || '').slice(0, HIST_MAX_CHARS),
+    })),
+    { role: 'user', content: userText },
+  ];
+  const tools = _toolsGroq(persona.rol);
+  const toolsUsadas = [];
+
+  for (let iter = 0; iter < MAX_TOOL_ITERS; iter++) {
+    // Última iteración sin tools: el modelo redacta con lo que ya juntó en vez
+    // de pedir otra herramienta y dejarnos sin texto (igual que B11 en los otros).
+    const ultimaIter = iter === MAX_TOOL_ITERS - 1;
+    const reqBody = { model: MODELO_GROQ, max_tokens: MAX_TOKENS, messages };
+    if (tools.length > 0 && !ultimaIter) {
+      reqBody.tools = tools;
+      reqBody.tool_choice = 'auto';
+    }
+    const resp = await _fetchJson(GROQ_API_URL, headers, reqBody);
+    const msg = resp && resp.choices && resp.choices[0] && resp.choices[0].message;
+    if (!msg) return { texto: null, toolsUsadas, error: 'groq:sin_choice' };
+
+    const toolCalls =
+      !ultimaIter && Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+    if (toolCalls.length > 0) {
+      messages.push(msg); // assistant con los tool_calls
+      let ejecutadas = 0;
+      for (const tc of toolCalls) {
+        const nombre = tc.function && tc.function.name;
+        toolsUsadas.push(nombre);
+        let resultado;
+        if (ejecutadas >= MAX_TOOLS_POR_ITER) {
+          resultado = { error: 'Demasiadas consultas en un solo paso; pedímelas de a una.' };
+        } else {
+          ejecutadas++;
+          let args = {};
+          try {
+            args = JSON.parse((tc.function && tc.function.arguments) || '{}');
+          } catch (_) {
+            args = {};
+          }
+          try {
+            resultado = await _ejecutarTool(db, nombre, persona, args);
+          } catch (e) {
+            resultado = { error: e.message };
+          }
+        }
+        messages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: JSON.stringify(resultado),
+        });
+      }
+      continue;
+    }
+
+    const texto = String(msg.content || '').trim();
+    return {
+      texto: texto || null,
+      toolsUsadas,
+      error: texto ? undefined : 'groq:sin_texto',
+    };
+  }
+  return { texto: null, toolsUsadas, error: 'max_tool_iters' };
+}
+
 // ───────────────────── robustez ante 429 ─────────────────────
 // Causa #1 de fallos observada el 2026-06-03: una ráfaga de consultas agota
 // el rate limit de Gemini (free tier) → el agente deja de responder. Mitigación
@@ -1721,11 +1811,16 @@ function _esCuota(e) {
  *  reintento igual cubre los 429 transitorios; el resto sube al catch que
  *  responde "probá en un rato". */
 async function _conversarRobusto(provider, db, system, historial, userText, persona) {
+  const args = [db, system, historial, userText, persona];
+  // Provider forzado por env (AGENTE_PROVIDER): groq/anthropic directo, sin la
+  // cadena de fallback (que solo aplica cuando el primario es Gemini). Sirve
+  // para PROBAR Groq aislado sin esperar a un 429 real.
+  if (provider === 'groq') return _conversarGroq(...args);
   if (provider !== 'gemini') {
-    return _conversarAnthropic(db, system, historial, userText, persona);
+    return _conversarAnthropic(...args);
   }
   try {
-    return await _conversarGemini(db, system, historial, userText, persona);
+    return await _conversarGemini(...args);
   } catch (e) {
     if (!_esCuota(e)) throw e;
     log.warn(
@@ -1734,12 +1829,27 @@ async function _conversarRobusto(provider, db, system, historial, userText, pers
     );
     await _sleep(RETRY_429_MS);
     try {
-      return await _conversarGemini(db, system, historial, userText, persona);
+      return await _conversarGemini(...args);
     } catch (e2) {
       if (!_esCuota(e2)) throw e2;
+      // Cadena de fallback: primero el GRATIS (Groq/Llama), después Claude
+      // (pago) si hay key. Cada eslabón solo si su API key está configurada.
+      if (process.env.GROQ_API_KEY) {
+        log.warn('[agente] Gemini sin cuota → fallback a Groq (Llama, gratis)');
+        try {
+          return await _conversarGroq(...args);
+        } catch (e3) {
+          log.warn(`[agente] Groq también falló (${String(e3.message).slice(0, 80)})`);
+          if (process.env.ANTHROPIC_API_KEY) {
+            log.warn('[agente] → fallback final a Anthropic (Claude)');
+            return _conversarAnthropic(...args);
+          }
+          throw e3;
+        }
+      }
       if (process.env.ANTHROPIC_API_KEY) {
-        log.warn('[agente] Gemini sigue sin cuota → fallback a Anthropic (Claude)');
-        return _conversarAnthropic(db, system, historial, userText, persona);
+        log.warn('[agente] Gemini sin cuota → fallback a Anthropic (Claude)');
+        return _conversarAnthropic(...args);
       }
       throw e2;
     }
@@ -1759,7 +1869,12 @@ async function _loggear(db, { provider, persona, telefono, pregunta, respuesta, 
       respuesta: String(respuesta || '').slice(0, 4000),
       tools_usadas: toolsUsadas || [],
       proveedor: provider || null,
-      modelo: provider === 'anthropic' ? MODELO_ANTHROPIC : MODELO_GEMINI,
+      modelo:
+        provider === 'anthropic'
+          ? MODELO_ANTHROPIC
+          : provider === 'groq'
+            ? MODELO_GROQ
+            : MODELO_GEMINI,
       error: error || null,
       creado_en: admin.firestore.FieldValue.serverTimestamp(),
       expira_en: admin.firestore.Timestamp.fromMillis(
@@ -1899,6 +2014,7 @@ module.exports = {
   _ejecutarTool,
   _textoDeRespuesta,
   _toolsAnthropic,
+  _toolsGroq,
   _toolsGemini,
   TOOLS_CHOFER,
   TOOLS_GESTION_VENC,
