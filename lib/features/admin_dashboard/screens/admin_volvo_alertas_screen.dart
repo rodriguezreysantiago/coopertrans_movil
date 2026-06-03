@@ -14,7 +14,8 @@ import '../../eco_driving/utils/etiquetas_alerta_volvo.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
-/// Pantalla "Alertas Volvo" del admin/supervisor.
+
+/// Pantalla "Alertas Volvo" del admin/supervisor — REFACTOR NÚCLEO (jun 2026).
 ///
 /// Lista los eventos del Vehicle Alerts API que el `volvoAlertasPoller`
 /// (scheduled cada 5 min) guarda en `VOLVO_ALERTAS`.
@@ -23,6 +24,12 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// alertas del día actual con paginación de 30 ítems por página.
 /// Filtros: severidad (HIGH/MEDIUM/LOW/Todas) + atendida (Pendientes/Todas).
 /// Búsqueda por texto sobre patente/tipo/VIN.
+///
+/// **Reescritura Núcleo**: el árbol de widgets pasa al sistema (eyebrow +
+/// hero number + `AppKpiStrip` + chips de filtro `AppFilterChip` + lista densa
+/// `AppCard(tier:1)` con `AppBadge` por severidad). La CAPA DE DATOS no cambia:
+/// mismo stream `VOLVO_ALERTAS`, mismo `_filtrar`, misma paginación, mismo
+/// `_marcarAtendida` (update + AuditLog) y misma navegación al mapa.
 ///
 /// Por qué NO usamos `AppListPage`: ese widget solo invoca el callback
 /// `filter` cuando hay query de búsqueda (cortocircuito si query vacío).
@@ -137,6 +144,14 @@ class _AdminVolvoAlertasScreenState extends State<AdminVolvoAlertasScreen> {
     }
   }
 
+  void _irAHoy() {
+    final hoy = _truncarDia(DateTime.now());
+    setState(() {
+      _rango = DateTimeRange(start: hoy, end: hoy);
+      _pagina = 0;
+    });
+  }
+
   /// Aplica los filtros (severidad, pendientes, búsqueda) a la lista
   /// completa del día. Se llama en cada rebuild del StreamBuilder.
   List<QueryDocumentSnapshot> _filtrar(List<QueryDocumentSnapshot> docs) {
@@ -162,68 +177,75 @@ class _AdminVolvoAlertasScreenState extends State<AdminVolvoAlertasScreen> {
     }).toList();
   }
 
+  /// Conteo por severidad sobre TODA la ventana del día (antes de aplicar
+  /// el filtro de severidad/pendientes/búsqueda), para que el KpiStrip
+  /// muestre el panorama completo. Solo respeta `_soloPendientes` para que
+  /// los números reflejen lo que importa por defecto (lo no atendido).
+  ({int high, int medium, int low, int pendientes}) _resumen(
+      List<QueryDocumentSnapshot> docs) {
+    var high = 0, medium = 0, low = 0, pendientes = 0;
+    for (final doc in docs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final atendida = data['atendida'] == true;
+      if (!atendida) pendientes++;
+      final sev = (data['severidad'] ?? '').toString().toUpperCase();
+      switch (sev) {
+        case 'HIGH':
+          high++;
+          break;
+        case 'MEDIUM':
+          medium++;
+          break;
+        case 'LOW':
+          low++;
+          break;
+      }
+    }
+    return (high: high, medium: medium, low: low, pendientes: pendientes);
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Alertas Volvo',
-      body: Column(
-        children: [
-          // Buscador + acceso al mapa de eventos. El "Ver en mapa"
-          // antes era un tab independiente del shell. Lo movimos acá
-          // (2026-05-07) porque conceptualmente es la misma data — el
-          // mapa muestra los mismos eventos que el tablero, solo geo-
-          // localizados — y tener dos accesos paralelos confundía.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.md, AppSpacing.md, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchCtl,
-                    decoration: InputDecoration(
-                      hintText: 'Buscar por patente, tipo o VIN...',
-                      prefixIcon: const Icon(Icons.search, size: 20),
-                      suffixIcon: _query.isEmpty
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.clear, size: 18),
-                              tooltip: 'Limpiar búsqueda',
-                              onPressed: () => _searchCtl.clear(),
-                            ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.sm),
-                      ),
-                      isDense: true,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                IconButton.filledTonal(
-                  icon: const Icon(Icons.map_outlined),
-                  tooltip: 'Ver en mapa',
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => const AdminMapaVolvoScreen(),
-                    ),
-                  ),
-                ),
-              ],
+      body: StreamBuilder<QuerySnapshot>(
+        stream: _alertasStream,
+        builder: (ctx, snap) {
+          if (snap.hasError) {
+            return AppErrorState(subtitle: snap.error.toString());
+          }
+          if (!snap.hasData) {
+            return const AppLoadingState();
+          }
+          final docsTodos = snap.data!.docs;
+          final resumen = _resumen(docsTodos);
+          final docsFiltrados = _filtrar(docsTodos);
+
+          // Header + KpiStrip + filtros van SIEMPRE arriba (aunque la lista
+          // filtrada quede vacía) para que el admin pueda ajustar filtros.
+          final header = _Header(
+            totalVisible: docsFiltrados.length,
+            resumen: resumen,
+            hayDatos: docsTodos.isNotEmpty,
+          );
+          final buscador = _Buscador(
+            controller: _searchCtl,
+            query: _query,
+            onClear: () => _searchCtl.clear(),
+            onMapa: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminMapaVolvoScreen(),
+              ),
             ),
-          ),
-          // Filtros visuales.
-          _BarraFiltros(
+          );
+          final filtros = _BarraFiltros(
             fechaEtiqueta: _etiquetaFecha,
             esHoy: _esHoy,
             soloPendientes: _soloPendientes,
             severidadFiltro: _severidadFiltro,
+            resumen: resumen,
             onElegirFecha: _elegirFecha,
-            onIrAHoy: () {
-              final hoy = _truncarDia(DateTime.now());
-              setState(() {
-                _rango = DateTimeRange(start: hoy, end: hoy);
-                _pagina = 0;
-              });
-            },
+            onIrAHoy: _irAHoy,
             onTogglePendientes: (v) => setState(() {
               _soloPendientes = v;
               _pagina = 0;
@@ -232,68 +254,81 @@ class _AdminVolvoAlertasScreenState extends State<AdminVolvoAlertasScreen> {
               _severidadFiltro = s;
               _pagina = 0;
             }),
-          ),
-          // Lista paginada.
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: _alertasStream,
-              builder: (ctx, snap) {
-                if (snap.hasError) {
-                  return AppErrorState(subtitle: snap.error.toString());
-                }
-                if (!snap.hasData) {
-                  return const AppLoadingState();
-                }
-                final docsTodos = snap.data!.docs;
-                final docsFiltrados = _filtrar(docsTodos);
-                if (docsFiltrados.isEmpty) {
-                  return AppEmptyState(
+          );
+
+          if (docsFiltrados.isEmpty) {
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      header,
+                      const SizedBox(height: AppSpacing.md),
+                      buscador,
+                    ],
+                  ),
+                ),
+                filtros,
+                Expanded(
+                  child: AppEmptyState(
                     icon: Icons.notifications_off_outlined,
                     title: _emptyTitle(),
                     subtitle: _emptySubtitle(),
-                  );
-                }
-                final totalPaginas =
-                    (docsFiltrados.length / _itemsPorPagina).ceil();
-                if (_pagina >= totalPaginas) {
-                  // Si la página actual queda fuera de rango (porque
-                  // se filtró más fuerte), volvemos a la primera.
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) setState(() => _pagina = 0);
-                  });
-                }
-                final inicio = _pagina * _itemsPorPagina;
-                final fin =
-                    (inicio + _itemsPorPagina).clamp(0, docsFiltrados.length);
-                final pagina = docsFiltrados.sublist(inicio, fin);
-                return Column(
+                  ),
+                ),
+              ],
+            );
+          }
+
+          final totalPaginas =
+              (docsFiltrados.length / _itemsPorPagina).ceil();
+          if (_pagina >= totalPaginas) {
+            // Si la página actual queda fuera de rango (porque se filtró
+            // más fuerte), volvemos a la primera.
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) setState(() => _pagina = 0);
+            });
+          }
+          final inicio = _pagina * _itemsPorPagina;
+          final fin =
+              (inicio + _itemsPorPagina).clamp(0, docsFiltrados.length);
+          final pagina = docsFiltrados.sublist(inicio, fin);
+
+          return Column(
+            children: [
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.lg),
                   children: [
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        itemCount: pagina.length,
-                        itemBuilder: (_, i) => _AlertaCard(doc: pagina[i]),
-                      ),
-                    ),
-                    if (totalPaginas > 1)
-                      _Paginador(
-                        pagina: _pagina,
-                        totalPaginas: totalPaginas,
-                        totalItems: docsFiltrados.length,
-                        itemsPorPagina: _itemsPorPagina,
-                        onPrev: _pagina > 0
-                            ? () => setState(() => _pagina--)
-                            : null,
-                        onNext: _pagina < totalPaginas - 1
-                            ? () => setState(() => _pagina++)
-                            : null,
-                      ),
+                    header,
+                    const SizedBox(height: AppSpacing.md),
+                    buscador,
+                    const SizedBox(height: AppSpacing.sm),
+                    filtros,
+                    const SizedBox(height: AppSpacing.sm),
+                    for (final doc in pagina) _AlertaCard(doc: doc),
                   ],
-                );
-              },
-            ),
-          ),
-        ],
+                ),
+              ),
+              if (totalPaginas > 1)
+                _Paginador(
+                  pagina: _pagina,
+                  totalPaginas: totalPaginas,
+                  totalItems: docsFiltrados.length,
+                  itemsPorPagina: _itemsPorPagina,
+                  onPrev:
+                      _pagina > 0 ? () => setState(() => _pagina--) : null,
+                  onNext: _pagina < totalPaginas - 1
+                      ? () => setState(() => _pagina++)
+                      : null,
+                ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -321,7 +356,138 @@ class _AdminVolvoAlertasScreenState extends State<AdminVolvoAlertasScreen> {
 }
 
 // =============================================================================
-// BARRA DE FILTROS — fecha + atendidas + severidad
+// HEADER — eyebrow + hero number (alertas visibles) + KpiStrip por severidad
+// =============================================================================
+
+class _Header extends StatelessWidget {
+  /// Cantidad de alertas que pasan los filtros actuales (lo que se ve).
+  final int totalVisible;
+  final ({int high, int medium, int low, int pendientes}) resumen;
+  final bool hayDatos;
+
+  const _Header({
+    required this.totalVisible,
+    required this.resumen,
+    required this.hayDatos,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const AppEyebrow('Alertas Volvo'),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              hayDatos ? '$totalVisible' : '—',
+              style: AppType.h2.copyWith(
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(
+                totalVisible == 1 ? 'alerta en vista' : 'alertas en vista',
+                style: AppType.monoSm.copyWith(color: c.textMuted),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.md),
+        // KPIs at-a-glance por severidad + pendientes. Derivados del MISMO
+        // stream, sobre toda la ventana del día (sin el filtro de severidad).
+        AppKpiStrip(
+          stats: [
+            AppStat(
+              label: 'HIGH',
+              value: hayDatos ? '${resumen.high}' : '—',
+              accent: resumen.high > 0 ? c.error : null,
+            ),
+            AppStat(
+              label: 'MEDIUM',
+              value: hayDatos ? '${resumen.medium}' : '—',
+              accent: resumen.medium > 0 ? c.warning : null,
+            ),
+            AppStat(
+              label: 'LOW',
+              value: hayDatos ? '${resumen.low}' : '—',
+              accent: resumen.low > 0 ? c.info : null,
+            ),
+            AppStat(
+              label: 'Pendientes',
+              value: hayDatos ? '${resumen.pendientes}' : '—',
+              accent: resumen.pendientes > 0 ? c.brand : null,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// =============================================================================
+// BUSCADOR + acceso al mapa de eventos
+// =============================================================================
+
+class _Buscador extends StatelessWidget {
+  final TextEditingController controller;
+  final String query;
+  final VoidCallback onClear;
+  final VoidCallback onMapa;
+
+  const _Buscador({
+    required this.controller,
+    required this.query,
+    required this.onClear,
+    required this.onMapa,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    // El "Ver en mapa" antes era un tab independiente del shell. Lo movimos
+    // acá (2026-05-07) porque conceptualmente es la misma data — el mapa
+    // muestra los mismos eventos que el tablero, solo geolocalizados.
+    return Row(
+      children: [
+        Expanded(
+          child: AppInput(
+            controller: controller,
+            hint: 'Buscar por patente, tipo o VIN…',
+            icon: Icons.search,
+            trailingAction: query.isEmpty ? null : 'Limpiar',
+            onTrailingTap: query.isEmpty ? null : onClear,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        // Acceso al mapa con look Núcleo (pill cuadrado surface3 + hairline).
+        InkWell(
+          onTap: onMapa,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          child: Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: c.surface3,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: c.borderStrong),
+            ),
+            child: Icon(Icons.map_outlined, size: 20, color: c.brand),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// =============================================================================
+// BARRA DE FILTROS — fecha + atendidas + severidad (chips Núcleo)
 // =============================================================================
 
 class _BarraFiltros extends StatelessWidget {
@@ -329,6 +495,7 @@ class _BarraFiltros extends StatelessWidget {
   final bool esHoy;
   final bool soloPendientes;
   final String? severidadFiltro;
+  final ({int high, int medium, int low, int pendientes}) resumen;
   final VoidCallback onElegirFecha;
   final VoidCallback onIrAHoy;
   final ValueChanged<bool> onTogglePendientes;
@@ -339,6 +506,7 @@ class _BarraFiltros extends StatelessWidget {
     required this.esHoy,
     required this.soloPendientes,
     required this.severidadFiltro,
+    required this.resumen,
     required this.onElegirFecha,
     required this.onIrAHoy,
     required this.onTogglePendientes,
@@ -347,60 +515,76 @@ class _BarraFiltros extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+    final total = resumen.high + resumen.medium + resumen.low;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, 0),
-      child: Wrap(
-        spacing: AppSpacing.sm,
-        runSpacing: AppSpacing.sm,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, 0, AppSpacing.lg, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AppButton.secondary(
-            label: fechaEtiqueta,
-            icon: Icons.calendar_month_outlined,
-            onPressed: onElegirFecha,
+          // Fila 1 — rango de fecha (pill) + "Ir a hoy" + toggle pendientes.
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _PillFiltro(
+                label: fechaEtiqueta,
+                icon: Icons.calendar_month_outlined,
+                onTap: onElegirFecha,
+              ),
+              if (!esHoy)
+                _PillFiltro(
+                  label: 'Ir a hoy',
+                  icon: Icons.today_outlined,
+                  onTap: onIrAHoy,
+                ),
+              _PillToggle(
+                label: soloPendientes ? 'Solo pendientes' : 'Mostrar atendidas',
+                icon: soloPendientes
+                    ? Icons.filter_alt
+                    : Icons.filter_alt_off_outlined,
+                activo: soloPendientes,
+                color: c.warning,
+                onTap: () => onTogglePendientes(!soloPendientes),
+              ),
+            ],
           ),
-          if (!esHoy)
-            AppButton.ghost(
-              label: 'Ir a hoy',
-              icon: Icons.today_outlined,
-              onPressed: onIrAHoy,
-            ),
-          FilterChip(
-            label: Text(
-              soloPendientes ? 'Solo pendientes' : 'Mostrar atendidas',
-            ),
-            selected: soloPendientes,
-            onSelected: onTogglePendientes,
-            avatar: Icon(
-              soloPendientes
-                  ? Icons.filter_alt
-                  : Icons.filter_alt_off_outlined,
-              size: 18,
-            ),
-          ),
-          // Filtro por severidad — null = todas.
-          ChoiceChip(
-            label: const Text('Todas'),
-            selected: severidadFiltro == null,
-            onSelected: (_) => onSeveridadChange(null),
-          ),
-          _ChipSeveridad(
-            label: 'HIGH',
-            color: const Color(0xFFD32F2F),
-            seleccionado: severidadFiltro == 'HIGH',
-            onTap: () => onSeveridadChange('HIGH'),
-          ),
-          _ChipSeveridad(
-            label: 'MEDIUM',
-            color: const Color(0xFFEF6C00),
-            seleccionado: severidadFiltro == 'MEDIUM',
-            onTap: () => onSeveridadChange('MEDIUM'),
-          ),
-          _ChipSeveridad(
-            label: 'LOW',
-            color: const Color(0xFFFBC02D),
-            seleccionado: severidadFiltro == 'LOW',
-            onTap: () => onSeveridadChange('LOW'),
+          const SizedBox(height: AppSpacing.sm),
+          // Fila 2 — severidad como chips de filtro (Núcleo).
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              AppFilterChip(
+                label: 'Todas',
+                count: total,
+                activo: severidadFiltro == null,
+                onTap: () => onSeveridadChange(null),
+              ),
+              _ChipSeveridad(
+                label: 'HIGH',
+                count: resumen.high,
+                color: c.error,
+                seleccionado: severidadFiltro == 'HIGH',
+                onTap: () => onSeveridadChange('HIGH'),
+              ),
+              _ChipSeveridad(
+                label: 'MEDIUM',
+                count: resumen.medium,
+                color: c.warning,
+                seleccionado: severidadFiltro == 'MEDIUM',
+                onTap: () => onSeveridadChange('MEDIUM'),
+              ),
+              _ChipSeveridad(
+                label: 'LOW',
+                count: resumen.low,
+                color: c.info,
+                seleccionado: severidadFiltro == 'LOW',
+                onTap: () => onSeveridadChange('LOW'),
+              ),
+            ],
           ),
         ],
       ),
@@ -408,14 +592,106 @@ class _BarraFiltros extends StatelessWidget {
   }
 }
 
+/// Pill de acción (fecha / ir a hoy). Look Núcleo: surface3 + hairline.
+class _PillFiltro extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  const _PillFiltro(
+      {required this.label, required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: c.surface3,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: c.borderStrong),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: c.textSecondary),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: AppType.label.copyWith(
+                color: c.text,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pill toggle on/off (pendientes/atendidas). Activo = tinte del color.
+class _PillToggle extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool activo;
+  final Color color;
+  final VoidCallback onTap;
+  const _PillToggle({
+    required this.label,
+    required this.icon,
+    required this.activo,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final fg = activo ? color : c.textMuted;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: activo ? color.withValues(alpha: 0.16) : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: activo ? fg : c.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: fg),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: AppType.label.copyWith(
+                color: activo ? fg : c.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Chip de severidad con contador. Seleccionado = relleno sólido del color;
+/// inactivo = tinte + borde del color (mantiene la lectura semántica).
 class _ChipSeveridad extends StatelessWidget {
   final String label;
+  final int count;
   final Color color;
   final bool seleccionado;
   final VoidCallback onTap;
 
   const _ChipSeveridad({
     required this.label,
+    required this.count,
     required this.color,
     required this.seleccionado,
     required this.onTap,
@@ -423,17 +699,41 @@ class _ChipSeveridad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: seleccionado,
-      onSelected: (_) => onTap(),
-      labelStyle: AppType.eyebrow.copyWith(
-        color: seleccionado ? AppColors.textPrimary : color,
-        fontWeight: FontWeight.bold,
+    final fg = seleccionado ? AppColors.surface0 : color;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: seleccionado ? color : color.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: seleccionado ? color : color.withValues(alpha: 0.5),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: AppType.label.copyWith(
+                color: fg,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              '$count',
+              style: AppType.monoSm.copyWith(
+                color: seleccionado
+                    ? AppColors.surface0.withValues(alpha: 0.6)
+                    : color.withValues(alpha: 0.8),
+              ),
+            ),
+          ],
+        ),
       ),
-      backgroundColor: color.withAlpha(25),
-      selectedColor: color,
-      side: BorderSide(color: color, width: 1),
     );
   }
 }
@@ -461,35 +761,37 @@ class _Paginador extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final desde = pagina * itemsPorPagina + 1;
     final hasta = ((pagina + 1) * itemsPorPagina).clamp(0, totalItems);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-      decoration: const BoxDecoration(
-        color: AppColors.surface1,
-        border: Border(top: BorderSide(color: AppColors.borderSubtle)),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.xs),
+      decoration: BoxDecoration(
+        color: c.surface1,
+        border: Border(top: BorderSide(color: c.border)),
       ),
       child: Row(
         children: [
           Text(
             'Mostrando $desde-$hasta de $totalItems',
-            style: AppType.eyebrow,
+            style: AppType.monoSm.copyWith(color: c.textMuted),
           ),
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.chevron_left),
             onPressed: onPrev,
-            color: onPrev == null ? AppColors.textHint : AppColors.textPrimary,
+            color: onPrev == null ? c.textPlaceholder : c.text,
             tooltip: 'Anterior',
           ),
           Text(
             'Pág. ${pagina + 1} / $totalPaginas',
-            style: AppType.label.copyWith(color: AppColors.textPrimary),
+            style: AppType.mono.copyWith(color: c.text),
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
             onPressed: onNext,
-            color: onNext == null ? AppColors.textHint : AppColors.textPrimary,
+            color: onNext == null ? c.textPlaceholder : c.text,
             tooltip: 'Siguiente',
           ),
         ],
@@ -499,7 +801,7 @@ class _Paginador extends StatelessWidget {
 }
 
 // =============================================================================
-// CARD DE LA ALERTA
+// CARD DE LA ALERTA (Núcleo) — AppCard(tier:1) con AppBadge por severidad.
 // =============================================================================
 
 class _AlertaCard extends StatelessWidget {
@@ -508,6 +810,7 @@ class _AlertaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final data = doc.data() as Map<String, dynamic>;
     final severidad = (data['severidad'] ?? 'LOW').toString();
     final patente = (data['patente'] ?? '—').toString();
@@ -515,86 +818,98 @@ class _AlertaCard extends StatelessWidget {
     final creadoEn = data['creado_en'] as Timestamp?;
     final atendidaPor = (data['atendida_por'] ?? '').toString();
     final atendidaEn = data['atendida_en'] as Timestamp?;
-    // Etiqueta usa el doc completo para resolver subtipo cuando el
-    // tipo principal es GENERIC (SEATBELT, TELL_TALE, etc.). Sin esto
-    // todos los GENERIC se mostraban como "Evento genérico" sin info.
+    // Etiqueta usa el doc completo para resolver subtipo cuando el tipo
+    // principal es GENERIC (SEATBELT, TELL_TALE, etc.). Sin esto todos los
+    // GENERIC se mostraban como "Evento genérico" sin info.
     final etiqueta = etiquetaAlertaVolvoFromDoc(data);
+    final sevColor = _colorSeveridad(severidad, c);
 
     return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                _SeveridadChip(severidad: severidad),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: Text(
-                    etiqueta,
-                    style: AppType.body.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                if (atendida)
-                  Chip(
-                    label: const Text('Atendida'),
-                    avatar: const Icon(Icons.check_circle, size: 16),
-                    backgroundColor: AppColors.success,
-                    labelStyle: AppType.eyebrow.copyWith(color: AppColors.textPrimary),
-                  ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            Row(
-              children: [
-                const Icon(Icons.local_shipping_outlined,
-                    size: 16, color: AppColors.textSecondary),
-                const SizedBox(width: AppSpacing.xs),
-                Flexible(
-                  child: Text(
-                    patente,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppType.body.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.lg),
-                const Icon(Icons.access_time,
-                    size: 14, color: AppColors.textTertiary),
-                const SizedBox(width: AppSpacing.xs),
-                Flexible(
-                  child: Text(
-                    _formatTimestamp(creadoEn),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppType.label.copyWith(color: AppColors.textSecondary),
-                  ),
-                ),
-              ],
-            ),
-            if (atendida) ...[
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Atendida por $atendidaPor — ${_formatTimestamp(atendidaEn)}',
-                style: AppType.eyebrow,
+      tier: 1,
+      // Borde izquierdo de color = lectura de severidad de un vistazo.
+      accent: sevColor,
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              AppBadge(
+                text: severidad.toUpperCase(),
+                color: sevColor,
+                solid: true,
+                size: AppBadgeSize.sm,
               ),
-            ] else ...[
-              const SizedBox(height: AppSpacing.sm),
-              Align(
-                alignment: Alignment.centerRight,
-                child: AppButton.secondary(
-                  label: 'Marcar atendida',
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  etiqueta,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.body.copyWith(
+                    color: c.text,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              if (atendida) ...[
+                const SizedBox(width: AppSpacing.sm),
+                AppBadge(
+                  text: 'Atendida',
+                  color: c.success,
                   icon: Icons.check,
-                  onPressed: () => _marcarAtendida(context),
+                  size: AppBadgeSize.sm,
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          // Patente + timestamp en mono (datos técnicos).
+          Row(
+            children: [
+              Icon(Icons.local_shipping_outlined, size: 15, color: c.textMuted),
+              const SizedBox(width: AppSpacing.xs),
+              Flexible(
+                child: Text(
+                  patente,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.mono.copyWith(color: c.textSecondary),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.lg),
+              Icon(Icons.access_time, size: 13, color: c.textMuted),
+              const SizedBox(width: AppSpacing.xs),
+              Flexible(
+                child: Text(
+                  _formatTimestamp(creadoEn),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.monoSm.copyWith(color: c.textMuted),
                 ),
               ),
             ],
+          ),
+          if (atendida) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Atendida por ${atendidaPor.isEmpty ? '—' : atendidaPor} · '
+              '${_formatTimestamp(atendidaEn)}',
+              style: AppType.monoSm.copyWith(color: c.textMuted),
+            ),
+          ] else ...[
+            const SizedBox(height: AppSpacing.md),
+            Align(
+              alignment: Alignment.centerRight,
+              child: AppButton.secondary(
+                label: 'Marcar atendida',
+                icon: Icons.check,
+                size: AppButtonSize.sm,
+                onPressed: () => _marcarAtendida(context),
+              ),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -635,36 +950,24 @@ class _AlertaCard extends StatelessWidget {
   }
 }
 
+/// Color semántico por severidad — tinta del sistema, sin hex.
+/// HIGH=error, MEDIUM=warning, LOW=info, desconocida=textMuted.
+Color _colorSeveridad(String severidad, AppColorsExt c) {
+  switch (severidad.toUpperCase()) {
+    case 'HIGH':
+      return c.error;
+    case 'MEDIUM':
+      return c.warning;
+    case 'LOW':
+      return c.info;
+  }
+  return c.textMuted;
+}
+
 String _formatTimestamp(Timestamp? ts) {
   if (ts == null) return '—';
   final dt = ts.toDate().toLocal();
   String two(int n) => n.toString().padLeft(2, '0');
   return '${two(dt.day)}-${two(dt.month)}-${dt.year} '
       '${two(dt.hour)}:${two(dt.minute)}';
-}
-
-class _SeveridadChip extends StatelessWidget {
-  final String severidad;
-  const _SeveridadChip({required this.severidad});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = switch (severidad.toUpperCase()) {
-      'HIGH' => const Color(0xFFD32F2F),
-      'MEDIUM' => const Color(0xFFEF6C00),
-      'LOW' => const Color(0xFFFBC02D),
-      _ => Colors.grey,
-    };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-      ),
-      child: Text(
-        severidad.toUpperCase(),
-        style: AppType.eyebrow.copyWith(color: AppColors.textPrimary),
-      ),
-    );
-  }
 }

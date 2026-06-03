@@ -9,9 +9,10 @@ import '../../../shared/widgets/app_widgets.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
+
 /// Pantalla "Destinatarios de notificación" — admin edita a quién le
 /// llega cada uno de los 9 resúmenes/avisos sin tocar código (M5,
-/// 2026-05-24).
+/// 2026-05-24). REFACTOR NÚCLEO (jun 2026).
 ///
 /// Lee y escribe `META/destinatarios_notificacion`. Los valores conviven
 /// con los hardcoded de `functions/src/comun.ts` y `.env` del bot: si la
@@ -20,6 +21,12 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// el doc esté vacío → se usa el hardcoded de siempre.
 ///
 /// Cambios efectivos en ≤ 5 min (cache TTL del helper en CF y en bot).
+///
+/// **Reescritura Núcleo**: solo el árbol de widgets cambia (eyebrow + hero
+/// number con la cantidad de overrides activos + secciones por grupo + filas
+/// `AppCard(tier:1)` con `AppBadge` de destinatario). La capa de datos es
+/// idéntica: mismo `_cargar` (FutureBuilder), mismo `_guardar` (set/merge +
+/// FieldValue.delete), mismo catálogo `_reglas`, mismo bottom sheet de picker.
 class AdminDestinatariosNotificacionScreen extends StatefulWidget {
   const AdminDestinatariosNotificacionScreen({super.key});
 
@@ -92,8 +99,23 @@ class _AdminDestinatariosNotificacionScreenState
     }
   }
 
+  /// Cuántas reglas del catálogo tienen un override activo en Firestore.
+  /// Solo cuenta keys conocidas (las del catálogo `_reglas`), ignorando
+  /// metadata como `actualizado_en`.
+  int _contarOverrides(Map<String, dynamic> overrides) {
+    var n = 0;
+    for (final grupo in _reglas) {
+      for (final regla in grupo.reglas) {
+        final v = overrides[regla.key];
+        if (v is String && v.isNotEmpty) n++;
+      }
+    }
+    return n;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppScaffold(
       title: 'Destinatarios de notificación',
       body: FutureBuilder<_DatosPantalla>(
@@ -106,24 +128,67 @@ class _AdminDestinatariosNotificacionScreenState
             return AppErrorState(subtitle: snap.error.toString());
           }
           final data = snap.data!;
+          final totalReglas = _reglas.fold<int>(
+              0, (acc, g) => acc + g.reglas.length);
+          final overrides = _contarOverrides(data.overrides);
+
           return ListView(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.xl),
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.sm, AppSpacing.xs, AppSpacing.sm, AppSpacing.md),
-                child: Text(
-                  'Cambiar el destinatario de un resumen / aviso. Los valores '
-                  'override viven en META/destinatarios_notificacion y se '
-                  'sobreponen a los hardcoded. Si dejás "Por defecto", '
-                  'vuelve al original. Cambios efectivos en ≤ 5 min '
-                  '(cache de las Cloud Functions y del bot).',
-                  style: AppType.label.copyWith(color: AppColors.textSecondary),
+              // Header: eyebrow + hero number (overrides activos).
+              const AppEyebrow('Destinatarios'),
+              const SizedBox(height: 6),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    '$overrides',
+                    style: AppType.h2.copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      overrides == 1
+                          ? 'override · de $totalReglas reglas'
+                          : 'overrides · de $totalReglas reglas',
+                      style: AppType.monoSm.copyWith(color: c.textMuted),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // Card de contexto — explica el mecanismo override vs hardcoded.
+              AppCard(
+                tier: 1,
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.info_outline, size: 18, color: c.textMuted),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        'Cambiá el destinatario de un resumen / aviso. Los '
+                        'valores override viven en '
+                        'META/destinatarios_notificacion y se sobreponen a los '
+                        'hardcoded. Si dejás "Por defecto", vuelve al original. '
+                        'Cambios efectivos en ≤ 5 min (cache de las Cloud '
+                        'Functions y del bot).',
+                        style:
+                            AppType.bodySm.copyWith(color: c.textSecondary),
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              const SizedBox(height: AppSpacing.lg),
               for (final grupo in _reglas) ...[
-                _SeccionLabel(grupo.label, color: grupo.color),
+                _SeccionLabel(grupo.label, color: _colorGrupo(grupo.tono, c)),
                 const SizedBox(height: AppSpacing.sm),
                 for (final regla in grupo.reglas)
                   _FilaEditable(
@@ -133,7 +198,7 @@ class _AdminDestinatariosNotificacionScreenState
                     empleados: data.empleados,
                     onChange: (dni) => _guardar(regla.key, dni),
                   ),
-                const SizedBox(height: AppSpacing.md),
+                const SizedBox(height: AppSpacing.lg),
               ],
             ],
           );
@@ -157,6 +222,24 @@ class _Empleado {
       {required this.dni, required this.nombre, required this.activo});
 }
 
+/// Tono semántico de cada grupo, resuelto a `context.colors` en build (no hex).
+enum _GrupoTono { success, brandSoft, error, brand, warning }
+
+Color _colorGrupo(_GrupoTono tono, AppColorsExt c) {
+  switch (tono) {
+    case _GrupoTono.success:
+      return c.success;
+    case _GrupoTono.brandSoft:
+      return c.brandSoft;
+    case _GrupoTono.error:
+      return c.error;
+    case _GrupoTono.brand:
+      return c.brand;
+    case _GrupoTono.warning:
+      return c.warning;
+  }
+}
+
 /// Definición de las reglas editables. Mantener en sync con
 /// `health.js _construirReglasNotificacion` (mismas keys + textos).
 class _Regla {
@@ -174,16 +257,16 @@ class _Regla {
 
 class _GrupoReglas {
   final String label;
-  final Color color;
+  final _GrupoTono tono;
   final List<_Regla> reglas;
   const _GrupoReglas(
-      {required this.label, required this.color, required this.reglas});
+      {required this.label, required this.tono, required this.reglas});
 }
 
 const _reglas = <_GrupoReglas>[
   _GrupoReglas(
     label: 'RESÚMENES DIARIOS 08:00 ART (CLOUD FUNCTIONS)',
-    color: AppColors.success,
+    tono: _GrupoTono.success,
     reglas: [
       _Regla(
         key: 'mantenimientoBot',
@@ -219,7 +302,7 @@ const _reglas = <_GrupoReglas>[
   ),
   _GrupoReglas(
     label: 'CRONS DEL BOT (CADA 60 MIN)',
-    color: AppColors.brandSoft,
+    tono: _GrupoTono.brandSoft,
     reglas: [
       _Regla(
         key: 'serviceDiario',
@@ -237,7 +320,7 @@ const _reglas = <_GrupoReglas>[
   ),
   _GrupoReglas(
     label: 'BYPASS SEGURIDAD VOLVO (V5)',
-    color: AppColors.error,
+    tono: _GrupoTono.error,
     reglas: [
       _Regla(
         key: 'bypassSeguridad',
@@ -250,7 +333,7 @@ const _reglas = <_GrupoReglas>[
   ),
   _GrupoReglas(
     label: 'CACHATORE — TURNOS YPF',
-    color: AppColors.brand,
+    tono: _GrupoTono.brand,
     reglas: [
       _Regla(
         key: 'cachatoreEncargado',
@@ -262,7 +345,7 @@ const _reglas = <_GrupoReglas>[
   ),
   _GrupoReglas(
     label: 'SISTEMA / ADMIN',
-    color: AppColors.warning,
+    tono: _GrupoTono.warning,
     reglas: [
       _Regla(
         key: 'colaCreciente',
@@ -289,23 +372,28 @@ class _FilaEditable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final tieneOverride = overrideDni.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.sm),
       child: AppCard(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        tier: 1,
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               regla.label,
-              style: AppType.heading.copyWith(fontSize: 13),
+              style: AppType.body.copyWith(
+                color: c.text,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             Padding(
               padding: const EdgeInsets.only(top: 2, bottom: AppSpacing.sm),
               child: Text(
                 regla.descripcion,
-                style: AppType.eyebrow.copyWith(color: AppColors.textSecondary),
+                style: AppType.monoSm.copyWith(color: c.textMuted),
               ),
             ),
             Row(
@@ -313,20 +401,19 @@ class _FilaEditable extends StatelessWidget {
                 Expanded(
                   child: InkWell(
                     onTap: () => _elegir(context),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    borderRadius: BorderRadius.circular(AppRadius.lg),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
+                          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                       decoration: BoxDecoration(
-                        color: (tieneOverride
-                                ? AppColors.info
-                                : Colors.white)
-                            .withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(AppRadius.sm),
+                        color: tieneOverride
+                            ? c.brand.withValues(alpha: 0.10)
+                            : c.surface3,
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
                         border: Border.all(
                           color: tieneOverride
-                              ? AppColors.info.withValues(alpha: 0.4)
-                              : AppColors.borderStrong,
+                              ? c.brand.withValues(alpha: 0.45)
+                              : c.border,
                         ),
                       ),
                       child: Row(
@@ -335,9 +422,7 @@ class _FilaEditable extends StatelessWidget {
                             tieneOverride
                                 ? Icons.swap_horiz
                                 : Icons.settings_outlined,
-                            color: tieneOverride
-                                ? AppColors.info
-                                : AppColors.textTertiary,
+                            color: tieneOverride ? c.brand : c.textMuted,
                             size: 16,
                           ),
                           const SizedBox(width: AppSpacing.sm),
@@ -348,14 +433,15 @@ class _FilaEditable extends StatelessWidget {
                                   : 'Por defecto: ${regla.fallbackHardcoded}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: AppType.label.copyWith(
-                                  color: tieneOverride
-                                      ? AppColors.textPrimary
-                                      : AppColors.textTertiary),
+                              style: tieneOverride
+                                  ? AppType.label.copyWith(
+                                      color: c.text,
+                                      fontWeight: FontWeight.w600)
+                                  : AppType.monoSm.copyWith(color: c.textMuted),
                             ),
                           ),
-                          const Icon(Icons.unfold_more,
-                              color: AppColors.textHint, size: 16),
+                          Icon(Icons.unfold_more,
+                              color: c.textMuted, size: 16),
                         ],
                       ),
                     ),
@@ -364,8 +450,8 @@ class _FilaEditable extends StatelessWidget {
                 if (tieneOverride) ...[
                   const SizedBox(width: AppSpacing.sm),
                   IconButton(
-                    icon: const Icon(Icons.restore,
-                        color: AppColors.textSecondary, size: 18),
+                    icon: Icon(Icons.restore,
+                        color: c.textSecondary, size: 18),
                     tooltip: 'Volver al por defecto',
                     onPressed: () => onChange(null),
                   ),
@@ -388,20 +474,21 @@ class _FilaEditable extends StatelessWidget {
   }
 
   Future<void> _elegir(BuildContext context) async {
+    final c = context.colors;
     final ctrl = TextEditingController();
     final elegido = await showModalBottomSheet<_Empleado>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.surface,
+      backgroundColor: c.surface2,
       shape: const RoundedRectangleBorder(
         borderRadius:
-            BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
       ),
       builder: (ctx) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.md),
+                AppSpacing.xl, AppSpacing.xl, AppSpacing.xl, AppSpacing.md),
             child: StatefulBuilder(builder: (ctx, setStateSheet) {
               final q = ctrl.text.trim().toUpperCase();
               final filtrados = q.isEmpty
@@ -416,19 +503,18 @@ class _FilaEditable extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text('Elegir destinatario para "${regla.label}"',
-                        style: AppType.heading.copyWith(fontSize: 15)),
-                    const SizedBox(height: AppSpacing.sm),
-                    TextField(
+                    const AppEyebrow('Elegir destinatario'),
+                    const SizedBox(height: 6),
+                    Text(
+                      regla.label,
+                      style: AppType.h5.copyWith(color: c.text),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    AppInput(
                       controller: ctrl,
                       autofocus: true,
-                      textCapitalization: TextCapitalization.characters,
-                      style: const TextStyle(color: AppColors.textPrimary),
-                      decoration: const InputDecoration(
-                        prefixIcon: Icon(Icons.search),
-                        labelText: 'Buscar por nombre o DNI',
-                        border: OutlineInputBorder(),
-                      ),
+                      hint: 'Buscar por nombre o DNI',
+                      icon: Icons.search,
                       onChanged: (_) => setStateSheet(() {}),
                     ),
                     const SizedBox(height: AppSpacing.sm),
@@ -438,13 +524,15 @@ class _FilaEditable extends StatelessWidget {
                         itemBuilder: (ctx, i) {
                           final e = filtrados[i];
                           return ListTile(
+                            contentPadding: EdgeInsets.zero,
                             title: Text(e.nombre,
-                                style: const TextStyle(
-                                    color: AppColors.textPrimary)),
+                                style: AppType.body.copyWith(color: c.text)),
                             subtitle: Text(
                                 'DNI ${AppFormatters.formatearDNI(e.dni)}',
-                                style: AppType.label.copyWith(
-                                    color: AppColors.textSecondary)),
+                                style: AppType.monoSm
+                                    .copyWith(color: c.textMuted)),
+                            trailing: Icon(Icons.chevron_right,
+                                size: 18, color: c.textMuted),
                             onTap: () => Navigator.pop(ctx, e),
                           );
                         },
@@ -471,11 +559,8 @@ class _SeccionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: 6, top: AppSpacing.xs),
-      child: Text(
-        texto,
-        style: AppType.eyebrow.copyWith(color: color, fontSize: 10),
-      ),
+      padding: const EdgeInsets.only(left: 2, top: AppSpacing.xs),
+      child: AppEyebrow(texto, color: color),
     );
   }
 }
