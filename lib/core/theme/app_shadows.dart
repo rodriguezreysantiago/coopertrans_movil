@@ -1,5 +1,3 @@
-// handoff/lib/core/theme/app_shadows.dart
-//
 // REFACTOR NÚCLEO · jun 2026
 //
 // El sistema Núcleo evita sombras decorativas. Las tres únicas sombras

@@ -1,5 +1,3 @@
-// handoff/lib/shared/widgets/app_input.dart
-//
 // REFACTOR NÚCLEO · jun 2026
 //
 // AppInput — campo de entrada con label uppercase/mono a la izquierda

@@ -1,5 +1,3 @@
-// handoff/lib/shared/widgets/app_scaffold.dart
-//
 // REFACTOR NÚCLEO · jun 2026 — fix del fondo violeta gigante.
 //
 // EL BUG:

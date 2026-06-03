@@ -1,5 +1,3 @@
-// handoff/lib/core/theme/app_colors.dart
-//
 // REFACTOR NÚCLEO · jun 2026
 //
 // CAMBIOS vs. la versión 2026-05-24:

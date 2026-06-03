@@ -1,5 +1,3 @@
-// handoff/lib/shared/widgets/app_stat.dart
-//
 // REFACTOR NÚCLEO · jun 2026
 //
 // AppStat + AppKpiStrip + AppSparkline — los gestos data-first del sistema.

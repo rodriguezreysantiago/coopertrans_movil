@@ -1,5 +1,3 @@
-// handoff/lib/core/theme/platform_chrome.dart
-//
 // REFACTOR NÚCLEO · jun 2026
 //
 // Configuración multiplataforma del "chrome" del SO — status bar (iOS,

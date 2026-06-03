@@ -1,5 +1,3 @@
-// handoff/lib/core/theme/app_radius.dart
-//
 // REFACTOR NÚCLEO · jun 2026
 //
 // El sistema anterior usaba un default de 16 (cards). Núcleo baja los

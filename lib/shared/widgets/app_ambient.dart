@@ -1,5 +1,3 @@
-// handoff/lib/shared/widgets/app_ambient.dart
-//
 // REFACTOR NÚCLEO · jun 2026
 //
 // AppAmbient — el radial gradient firma del sistema. Va detrás del contenido

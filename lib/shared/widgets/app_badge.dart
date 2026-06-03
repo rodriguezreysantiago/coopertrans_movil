@@ -1,5 +1,3 @@
-// handoff/lib/shared/widgets/app_badge.dart
-//
 // REFACTOR NÚCLEO · jun 2026
 //
 // AppBadge — pill semántica. Reemplaza al AppStatusBadge 2026-05-24 con

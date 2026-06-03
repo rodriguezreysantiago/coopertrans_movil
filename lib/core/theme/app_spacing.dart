@@ -1,5 +1,3 @@
-// handoff/lib/core/theme/app_spacing.dart
-//
 // REFACTOR NÚCLEO · jun 2026
 //
 // La escala 4pt del refactor anterior se mantiene. Núcleo no cambió

@@ -1,5 +1,3 @@
-// handoff/lib/core/theme/app_theme.dart
-//
 // REFACTOR NÚCLEO · jun 2026
 //
 // Configuración de ThemeData oscuro y claro. Usa AppColorsExt como extension

@@ -1,5 +1,3 @@
-// handoff/lib/shared/widgets/app_eyebrow.dart
-//
 // REFACTOR NÚCLEO · jun 2026
 //
 // AppEyebrow — etiqueta uppercase/mono que precede a una sección o card.
