@@ -116,7 +116,8 @@ service cloud.firestore {
       // subcoleccion `EMPLEADOS/{dni}/credenciales/main` con
       // `read: if false`. Por ahora, la validacion de password fuerza
       // minimo 6 chars al alta + comentario aqui para no olvidar.
-      allow read: if isAdminOrSupervisor() || isSegHigiene() || isSelf(dni);
+      allow read: if isAdminOrSupervisor() || isSegHigiene()
+        || isGomeria() || isSelf(dni);
       // Crear: admin/supervisor. Borrar (delete real): solo ADMIN — la baja
       // operativa es soft (ACTIVO=false vía update), no delete.
       allow create: if isAdminOrSupervisor();
