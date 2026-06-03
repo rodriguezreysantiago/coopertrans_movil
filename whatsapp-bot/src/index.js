@@ -1122,7 +1122,32 @@ async function main() {
   // No intentamos restore en respuesta a `qr` para evitar loops si el
   // restore tambien falla. Solo restore preventivo al arranque.
   const carpetaAuthLocal = path.resolve(process.cwd(), '.wwebjs_auth');
-  if (!fsNode.existsSync(carpetaAuthLocal)) {
+  // WWEBJS_FORZAR_QR=true: re-vincular FORZADO (ej. cambio de numero del bot).
+  // Borra la sesion local Y saltea el restore del backup, para que el bot pida
+  // un QR nuevo en vez de reconectar con la sesion vieja (el restore del bucket
+  // es incondicional al arrancar sin .wwebjs_auth, asi que borrar a mano NO
+  // alcanza). IMPORTANTE: sacar el flag despues de escanear, sino cada reinicio
+  // vuelve a pedir QR y se pierde la sesion recien vinculada.
+  const forzarQR =
+    String(process.env.WWEBJS_FORZAR_QR || 'false').toLowerCase() === 'true';
+  if (forzarQR) {
+    log.warn(
+      '[RE-VINCULAR] WWEBJS_FORZAR_QR=true: borro la sesion local y NO ' +
+      'restauro del backup. El bot va a pedir QR. Saca el flag tras vincular.'
+    );
+    if (fsNode.existsSync(carpetaAuthLocal)) {
+      const previo = `${carpetaAuthLocal}.previo.${Date.now()}`;
+      try {
+        fsNode.renameSync(carpetaAuthLocal, previo);
+        log.info(`Sesion vieja movida a ${path.basename(previo)}.`);
+      } catch (e) {
+        log.warn(`No pude mover .wwebjs_auth previa (${e.message}); intento borrar.`);
+        try {
+          fsNode.rmSync(carpetaAuthLocal, { recursive: true, force: true });
+        } catch (_) { /* ignore */ }
+      }
+    }
+  } else if (!fsNode.existsSync(carpetaAuthLocal)) {
     log.warn(
       '.wwebjs_auth/ no existe en cwd. Intentando restore desde bucket...'
     );
