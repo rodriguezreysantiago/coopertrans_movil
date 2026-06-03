@@ -12,7 +12,7 @@ process.env.TZ = 'America/Argentina/Buenos_Aires';
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
-const { _buscarEmpleadoEn } = require('../src/message_handler');
+const { _buscarEmpleadoEn, _buscarPorPushname } = require('../src/message_handler');
 
 const emp = (dni, telefono, nombre) => ({
   dni,
@@ -50,5 +50,55 @@ describe('_buscarEmpleadoEn — matching de teléfono', () => {
     assert.strictEqual(_buscarEmpleadoEn('', [emp('1', '5492915115568', 'X')]), null);
     assert.strictEqual(_buscarEmpleadoEn('5492915115568', []), null);
     assert.strictEqual(_buscarEmpleadoEn(null, null), null);
+  });
+});
+
+// ─── Fallback por PUSHNAME (chats @lid sin teléfono real) ───
+// Casi todos los choferes mandan desde @lid: WhatsApp ya no entrega su teléfono
+// real, así que el match por teléfono falla y el resolver cae a identificar por
+// el nombre de WhatsApp. Confirmado 2026-06-03: el agente solo respondía a
+// admins porque ningún chofer/supervisor @lid resolvía por teléfono.
+const empPN = (dni, nombre, apodo, activo = true) => ({
+  dni,
+  data: { NOMBRE: nombre, APODO: apodo, ACTIVO: activo },
+});
+
+describe('_buscarPorPushname — fallback por nombre de WhatsApp (@lid)', () => {
+  const roster = [
+    empPN('1', 'BASTIAS HORACIO RENE', ''),
+    empPN('2', 'PEREZ JUAN CARLOS', 'PIPI'),
+    empPN('3', 'GOMEZ MARIA', ''),
+  ];
+
+  test('NOMBRE contiene todos los tokens del pushname → matchea', () => {
+    const r = _buscarPorPushname('Bastias Horacio', roster);
+    assert.ok(r);
+    assert.strictEqual(r.dni, '1');
+  });
+
+  test('APODO exacto (case-insensitive) → matchea', () => {
+    const r = _buscarPorPushname('pipi', roster);
+    assert.ok(r);
+    assert.strictEqual(r.dni, '2');
+  });
+
+  test('un solo token (sin apodo) → null (evita falsos positivos)', () => {
+    assert.strictEqual(_buscarPorPushname('Horacio', roster), null);
+  });
+
+  test('pushname que matchea 2 empleados → null (ambiguo)', () => {
+    const dup = [empPN('1', 'PEREZ JUAN', ''), empPN('2', 'PEREZ JUANA', '')];
+    assert.strictEqual(_buscarPorPushname('Perez Juan', dup), null);
+  });
+
+  test('empleado ACTIVO=false no matchea', () => {
+    const inactivo = [empPN('1', 'BASTIAS HORACIO RENE', '', false)];
+    assert.strictEqual(_buscarPorPushname('Bastias Horacio', inactivo), null);
+  });
+
+  test('pushname vacío / muy corto / lista nula → null', () => {
+    assert.strictEqual(_buscarPorPushname('', roster), null);
+    assert.strictEqual(_buscarPorPushname('ab', roster), null);
+    assert.strictEqual(_buscarPorPushname('Bastias Horacio', null), null);
   });
 });

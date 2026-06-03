@@ -107,9 +107,9 @@ async function asegurarCacheEmpleados(db) {
   }
 }
 
-async function _resolverChofer(db, fromNumber) {
+async function _resolverChofer(db, fromNumber, pushname = '') {
   const fromDigits = String(fromNumber).replace(/\D+/g, '');
-  if (!fromDigits) return null;
+  if (!fromDigits && !String(pushname).trim()) return null;
 
   // Refresh cache si nunca se cargo o si expiro el TTL.
   await asegurarCacheEmpleados(db);
@@ -166,6 +166,19 @@ async function _resolverChofer(db, fromNumber) {
     if (telefonoCanonicalAr(fromDigits) === telefonoCanonicalAr(tel)) {
       return { dni, data };
     }
+  }
+
+  // Pasada 3: fallback por PUSHNAME (nombre de WhatsApp). Casi todos los
+  // choferes mandan desde @lid (números no agendados) y WhatsApp ya no expone
+  // su teléfono real, así que las pasadas por teléfono no matchean. Sin esto el
+  // agente quedaba mudo con TODOS los choferes (confirmado 2026-06-03). Mismo
+  // criterio conservador que commands._resolverChoferPorTelefono.
+  const m = _buscarPorPushname(pushname, _cacheEmpleados);
+  if (m) {
+    log.info(
+      `Chofer resuelto por pushname "${String(pushname).trim()}" → DNI ${m.dni} (@lid, sin match por teléfono)`
+    );
+    return m;
   }
   return null;
 }
@@ -422,19 +435,27 @@ function crearHandler(fs, wa) {
       // Fase 3 descartaban a TODOS esos choferes (solo los /comandos los
       // resolvían, porque commands.js ya hace este getContact).
       let fromNumber = msg.from.replace(/@(c\.us|lid)$/, '');
+      // Pushname (nombre que el remitente puso en su perfil de WhatsApp). Es el
+      // ÚNICO identificador confiable cuando el chat es @lid: WhatsApp ya no
+      // expone el teléfono real de números no agendados (getContact().number
+      // viene vacío), así que el match por teléfono falla y el resolver cae a
+      // esto. Confirmado 2026-06-03: 21d de AGENTE_CONVERSACIONES eran 100%
+      // ADMIN porque ningún chofer/supervisor @lid resolvía.
+      let pushname = (msg._data && msg._data.notifyName) || '';
       if (tipoChat === 'lid') {
         try {
           const contacto = await msg.getContact();
           if (contacto) {
             fromNumber =
                 contacto.number || (contacto.id && contacto.id.user) || fromNumber;
+            pushname = pushname || contacto.pushname || contacto.name || '';
           }
         } catch (_) {
           // si falla, seguimos con el linked-id (peor caso: no resuelve)
         }
       }
-      const chofer = await _resolverChofer(db, fromNumber);
-      const persona = await _resolverPersonaAgente(db, fromNumber, chofer);
+      const chofer = await _resolverChofer(db, fromNumber, pushname);
+      const persona = await _resolverPersonaAgente(db, fromNumber, chofer, pushname);
       if (!persona) {
         log.debug(`Mensaje de número no registrado ${fromNumber}, ignoro.`);
         return;
@@ -649,6 +670,40 @@ function _normalizarRol(rol) {
   return _ROLES_VALIDOS.has(r) ? r : 'CHOFER';
 }
 
+/**
+ * Match conservador de un empleado por su PUSHNAME (nombre de WhatsApp).
+ * Fallback para chats @lid donde WhatsApp no entrega el teléfono real. Match
+ * único, sin arriesgar falsos positivos:
+ *   - APODO exacto (case-insensitive), o
+ *   - NOMBRE conteniendo TODOS los tokens (>=3 chars) del pushname (>=2 tokens).
+ * Si 0 o >1 empleados matchean, devuelve null (ambiguo → no resuelve).
+ */
+function _buscarPorPushname(pushname, lista) {
+  const pn = String(pushname || '').trim();
+  if (pn.length < 3 || !lista) return null;
+  const pushUp = pn.toUpperCase();
+  const pushTokens = pushUp.split(/\s+/).filter((t) => t.length >= 3);
+  const matches = [];
+  for (const item of lista) {
+    const data = item.data || {};
+    if (data.ACTIVO === false) continue;
+    const nombre = String(data.NOMBRE || '').toUpperCase();
+    const apodo = String(data.APODO || '').toUpperCase();
+    if (apodo && apodo === pushUp) {
+      matches.push(item);
+      continue;
+    }
+    if (
+      nombre &&
+      pushTokens.length >= 2 &&
+      pushTokens.every((t) => nombre.includes(t))
+    ) {
+      matches.push(item);
+    }
+  }
+  return matches.length === 1 ? matches[0] : null;
+}
+
 /** Busca el {dni, data} de un empleado por teléfono (E.164) en `lista`. */
 function _buscarEmpleadoEn(telefono, lista) {
   if (!lista || !telefono) return null;
@@ -685,7 +740,18 @@ function _buscarEmpleadoEn(telefono, lista) {
  *   - ADMIN si su teléfono está en ADMIN_PHONES (gana sobre lo anterior).
  * Devuelve null si el número no pertenece a ningún empleado ni admin.
  */
-async function _resolverPersonaAgente(db, fromNumber, chofer) {
+async function _resolverPersonaAgente(db, fromNumber, chofer, pushname = '') {
+  // Admin gana SIEMPRE (su teléfono/lid está en ADMIN_PHONES). Va PRIMERO para
+  // que un eventual match de pushname con un chofer homónimo no lo degrade a
+  // CHOFER (vos sos el usuario crítico: no podés perder tus tools de gestión).
+  if (commands._esAdmin(fromNumber)) {
+    return {
+      rol: 'ADMIN',
+      dni: chofer ? chofer.dni : null,
+      nombre: chofer ? chofer.data.NOMBRE : nombrePorTelefonoTodos(fromNumber),
+      data: chofer ? chofer.data : {},
+    };
+  }
   if (chofer) {
     return {
       rol: 'CHOFER',
@@ -698,6 +764,21 @@ async function _resolverPersonaAgente(db, fromNumber, chofer) {
   const emp = _buscarEmpleadoEn(fromNumber, _rosterConId || []);
   let rol = emp ? _normalizarRol(emp.data.ROL) : null;
   if (commands._esAdmin(fromNumber)) rol = 'ADMIN';
+  // Fallback por pushname para roles de GESTIÓN (supervisores como Molina) que
+  // mandan desde @lid y no resolvieron por teléfono ni están en ADMIN_PHONES.
+  // Devuelve el ROL REAL del empleado (no asume CHOFER). Los choferes ya los
+  // cubre _resolverChofer (que también cae a pushname).
+  if (!emp && rol !== 'ADMIN') {
+    const m = _buscarPorPushname(pushname, _rosterConId || []);
+    if (m) {
+      return {
+        rol: _normalizarRol(m.data.ROL),
+        dni: m.dni,
+        nombre: m.data.NOMBRE,
+        data: m.data,
+      };
+    }
+  }
   if (!rol) return null;
   return {
     rol,
@@ -717,4 +798,5 @@ module.exports = {
   _resolverChofer,
   _asociarConAviso,
   _buscarEmpleadoEn,
+  _buscarPorPushname,
 };
