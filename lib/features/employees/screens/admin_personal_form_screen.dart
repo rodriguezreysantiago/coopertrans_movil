@@ -182,116 +182,156 @@ class _AdminPersonalFormScreenState
           child: Focus(
             autofocus: true,
             child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _FormInput(
-                  label: 'DNI (Será el usuario)',
-                  controller: _dniCtrl,
-                  icon: Icons.badge,
-                  isNumeric: true,
-                  maxLength: 8,
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ─── DATOS PERSONALES ──────────────────────────────
+                    const _SeccionEyebrow('Datos personales'),
+                    AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _FormInput(
+                            label: 'DNI (Será el usuario)',
+                            controller: _dniCtrl,
+                            icon: Icons.badge,
+                            isNumeric: true,
+                            maxLength: 8,
+                          ),
+                          _FormInput(
+                            label: 'Apellido(s) y nombre(s)',
+                            controller: _nombreCtrl,
+                            icon: Icons.person,
+                            // ORDEN OBLIGATORIO: APELLIDO primero, después
+                            // nombre. Así está toda la base existente y así
+                            // espera el algoritmo que extrae el primer
+                            // nombre del saludo. Ej: "PEREZ JUAN",
+                            // "GONZALEZ RODRIGUEZ JUAN CARLOS". Si el chofer
+                            // tiene 2 apellidos o 2 nombres y el algoritmo
+                            // se confunde, cargar el campo APODO. Va en
+                            // MAYÚSCULAS para uniformar la base.
+                          ),
+                          _FormInput(
+                            label: 'Apodo (opcional, cómo le decís)',
+                            controller: _apodoCtrl,
+                            icon: Icons.tag_faces,
+                            // El apodo respeta como lo tipea el admin (no
+                            // mayúsculas) — al saludar conviene "Carlos"
+                            // antes que "CARLOS".
+                            toUpperCase: false,
+                            isOptional: true,
+                          ),
+                          _FormInput(
+                            label: 'CUIL (sin guiones)',
+                            controller: _cuilCtrl,
+                            icon: Icons.assignment_ind,
+                            isNumeric: true,
+                            maxLength: 11,
+                            isCuil: true,
+                            isLast: true,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // ─── CONTACTO Y ACCESO ─────────────────────────────
+                    const _SeccionEyebrow('Contacto y acceso'),
+                    AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _FormInput(
+                            label: 'Mail (opcional)',
+                            controller: _mailCtrl,
+                            icon: Icons.alternate_email,
+                            // El mail va tal cual lo tipea el admin (sin
+                            // mayúsculas).
+                            toUpperCase: false,
+                            isMail: true,
+                          ),
+                          _FormInput(
+                            label: 'iButton Sitrack (opcional)',
+                            controller: _iButtonCtrl,
+                            icon: Icons.fingerprint,
+                            // Código de la tarjeta/iButton que identifica al
+                            // chofer en Sitrack. Lo encontrás en el portal
+                            // Sitrack → ficha del chofer → "Identificación".
+                            // Ej. "53A6B11D000000F4" (16 chars hex). Si
+                            // todavía no se lo asignaron al chofer, dejá
+                            // vacío y lo cargás después.
+                            isOptional: true,
+                          ),
+                          _FormInput(
+                            label: 'Contraseña inicial',
+                            controller: _passCtrl,
+                            icon: Icons.lock_outline,
+                            textInputAction: TextInputAction.done,
+                            isPassword: true,
+                            isLast: true,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+
+                    // ─── ASIGNACIÓN ────────────────────────────────────
+                    const _SeccionEyebrow('Asignación'),
+                    AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const _CampoLabel('Empresa asignada'),
+                          _DropdownEmpresa(
+                            value: _empresa,
+                            empresas: _empresas,
+                            enabled: !_guardando,
+                            onChanged: (val) =>
+                                setState(() => _empresa = val ?? _empresa),
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                          const AppHairline(),
+                          const SizedBox(height: AppSpacing.lg),
+                          const _CampoLabel('Rol en el sistema'),
+                          const SizedBox(height: AppSpacing.sm),
+                          _RoleSelector(
+                            rol: _rol,
+                            enabled: !_guardando,
+                            // Al cambiar el rol, sugerimos el área default
+                            // coherente (CHOFER → MANEJO, ADMIN →
+                            // ADMINISTRACION, etc). El admin puede
+                            // sobreescribir con el dropdown de área de abajo
+                            // si quiere.
+                            onChanged: (val) => setState(() {
+                              _rol = val;
+                              _area = AppAreas.defaultParaRol(val);
+                            }),
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                          const _CampoLabel('Área en la empresa'),
+                          const SizedBox(height: AppSpacing.sm),
+                          _DropdownArea(
+                            value: _area,
+                            enabled: !_guardando,
+                            onChanged: (val) =>
+                                setState(() => _area = val ?? _area),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xxl),
+                    _BotonGuardar(
+                      guardando: _guardando,
+                      onPressed: _guardar,
+                    ),
+                  ],
                 ),
-                _FormInput(
-                  label: 'Apellido(s) y nombre(s)',
-                  controller: _nombreCtrl,
-                  icon: Icons.person,
-                  // ORDEN OBLIGATORIO: APELLIDO primero, después nombre.
-                  // Así está toda la base existente y así espera el
-                  // algoritmo que extrae el primer nombre del saludo.
-                  // Ej: "PEREZ JUAN", "GONZALEZ RODRIGUEZ JUAN CARLOS".
-                  // Si el chofer tiene 2 apellidos o 2 nombres y el
-                  // algoritmo se confunde, cargar el campo APODO.
-                  // Va en MAYÚSCULAS para uniformar la base.
-                ),
-                _FormInput(
-                  label: 'Apodo (opcional, cómo le decís)',
-                  controller: _apodoCtrl,
-                  icon: Icons.tag_faces,
-                  // El apodo respeta como lo tipea el admin (no
-                  // mayúsculas) — al saludar conviene "Carlos" antes
-                  // que "CARLOS".
-                  toUpperCase: false,
-                  isOptional: true,
-                ),
-                _FormInput(
-                  label: 'CUIL (sin guiones)',
-                  controller: _cuilCtrl,
-                  icon: Icons.assignment_ind,
-                  isNumeric: true,
-                  maxLength: 11,
-                  isCuil: true,
-                ),
-                _FormInput(
-                  label: 'Mail (opcional)',
-                  controller: _mailCtrl,
-                  icon: Icons.alternate_email,
-                  // El mail va tal cual lo tipea el admin (sin mayúsculas).
-                  toUpperCase: false,
-                  isMail: true,
-                ),
-                _FormInput(
-                  label: 'iButton Sitrack (opcional)',
-                  controller: _iButtonCtrl,
-                  icon: Icons.fingerprint,
-                  // Código de la tarjeta/iButton que identifica al chofer
-                  // en Sitrack. Lo encontrás en el portal Sitrack →
-                  // ficha del chofer → "Identificación". Ej.
-                  // "53A6B11D000000F4" (16 chars hex). Si todavía no se
-                  // lo asignaron al chofer, dejá vacío y lo cargás después.
-                  isOptional: true,
-                ),
-                _FormInput(
-                  label: 'Contraseña inicial',
-                  controller: _passCtrl,
-                  icon: Icons.lock_outline,
-                  textInputAction: TextInputAction.done,
-                  isPassword: true,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                const _CampoLabel('Empresa asignada'),
-                _DropdownEmpresa(
-                  value: _empresa,
-                  empresas: _empresas,
-                  enabled: !_guardando,
-                  onChanged: (val) =>
-                      setState(() => _empresa = val ?? _empresa),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                const _CampoLabel('Rol en el sistema'),
-                const SizedBox(height: AppSpacing.md),
-                _RoleSelector(
-                  rol: _rol,
-                  enabled: !_guardando,
-                  // Al cambiar el rol, sugerimos el área default
-                  // coherente (CHOFER → MANEJO, ADMIN → ADMINISTRACION,
-                  // etc). El admin puede sobreescribir con el dropdown
-                  // de área de abajo si quiere.
-                  onChanged: (val) => setState(() {
-                    _rol = val;
-                    _area = AppAreas.defaultParaRol(val);
-                  }),
-                ),
-                const SizedBox(height: AppSpacing.xl),
-                const _CampoLabel('Área en la empresa'),
-                _DropdownArea(
-                  value: _area,
-                  enabled: !_guardando,
-                  onChanged: (val) =>
-                      setState(() => _area = val ?? _area),
-                ),
-                const SizedBox(height: AppSpacing.xxxl),
-                _BotonGuardar(
-                  guardando: _guardando,
-                  onPressed: _guardar,
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
           ),
         ),
       ),
@@ -303,18 +343,32 @@ class _AdminPersonalFormScreenState
 // COMPONENTES
 // =============================================================================
 
+/// Eyebrow de sección (DATOS PERSONALES / CONTACTO / ASIGNACIÓN) — precede
+/// a cada AppCard del bento. Mismo gesto que el resto del módulo Núcleo.
+class _SeccionEyebrow extends StatelessWidget {
+  final String texto;
+  const _SeccionEyebrow(this.texto);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: AppSpacing.xs, bottom: AppSpacing.sm),
+      child: AppEyebrow(texto),
+    );
+  }
+}
+
+/// Label de un campo dentro de una card (Empresa / Rol / Área). Usa el
+/// eyebrow uppercase/mono del sistema para alinear con AppInput.
 class _CampoLabel extends StatelessWidget {
   final String label;
   const _CampoLabel(this.label);
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      label,
-      style: AppType.label.copyWith(
-        color: AppColors.textSecondary,
-        fontWeight: FontWeight.bold,
-      ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+      child: AppEyebrow(label),
     );
   }
 }
@@ -342,6 +396,11 @@ class _FormInput extends StatelessWidget {
   final bool isPassword;
   final TextInputAction textInputAction;
 
+  /// Si es true, este campo es el ÚLTIMO de su card → sin padding inferior
+  /// (la card ya aporta su inset de 20). Solo presentación; no afecta la
+  /// lógica de entrada/validación.
+  final bool isLast;
+
   const _FormInput({
     required this.label,
     required this.controller,
@@ -354,6 +413,7 @@ class _FormInput extends StatelessWidget {
     this.isOptional = false,
     this.isPassword = false,
     this.textInputAction = TextInputAction.next,
+    this.isLast = false,
   });
 
   // Regex muy laxo, solo para evitar typos groseros (espacios, falta de @, etc.).
@@ -361,8 +421,9 @@ class _FormInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+      padding: EdgeInsets.only(bottom: isLast ? 0 : AppSpacing.lg),
       child: TextFormField(
         controller: controller,
         maxLength: maxLength,
@@ -392,13 +453,13 @@ class _FormInput extends StatelessWidget {
           if (!isNumeric && !isPassword && toUpperCase)
             UpperCaseInputFormatter(),
         ],
-        style: AppType.body.copyWith(color: AppColors.textPrimary),
+        style: AppType.body.copyWith(color: c.text),
         decoration: InputDecoration(
           counterText: '',
           labelText: label,
           prefixIcon: Icon(
             icon,
-            color: Theme.of(context).colorScheme.primary,
+            color: c.brand,
             size: 20,
           ),
         ),
@@ -445,20 +506,20 @@ class _DropdownEmpresa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
-      margin: const EdgeInsets.only(top: AppSpacing.md),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
       decoration: BoxDecoration(
-        color: AppColors.surface2,
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.borderSubtle),
+        color: c.surface3,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: c.border),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           value: value,
           isExpanded: true,
-          dropdownColor: AppColors.surface2,
-          style: AppType.label.copyWith(color: AppColors.textPrimary),
+          dropdownColor: c.surface3,
+          style: AppType.body.copyWith(color: c.text),
           items: empresas
               .map(
                 (e) => DropdownMenuItem(
@@ -524,6 +585,7 @@ class _RoleSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final roles = AppRoles.todos.where((r) {
       if (r == AppRoles.admin &&
           !Capabilities.can(
@@ -552,14 +614,14 @@ class _RoleSelector extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(_icono(r), size: 18, color: AppColors.brand),
+              Icon(_icono(r), size: 18, color: c.brand),
               const SizedBox(width: AppSpacing.md),
               Flexible(
                 child: Text(
                   AppRoles.etiquetas[r] ?? r,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.body.copyWith(color: AppColors.textPrimary),
+                  style: AppType.body.copyWith(color: c.text),
                 ),
               ),
             ],
@@ -571,7 +633,7 @@ class _RoleSelector extends StatelessWidget {
           value: r,
           child: Row(
             children: [
-              Icon(_icono(r), size: 18, color: AppColors.brand),
+              Icon(_icono(r), size: 18, color: c.brand),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
@@ -582,7 +644,7 @@ class _RoleSelector extends StatelessWidget {
                       AppRoles.etiquetas[r] ?? r,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.body.copyWith(color: AppColors.textPrimary),
+                      style: AppType.body.copyWith(color: c.text),
                     ),
                     Text(
                       _descripcion(r),
@@ -617,6 +679,7 @@ class _DropdownArea extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return DropdownButtonFormField<String>(
       initialValue: value,
       decoration: const InputDecoration(
@@ -627,7 +690,7 @@ class _DropdownArea extends StatelessWidget {
           value: a,
           child: Text(
             AppAreas.etiquetas[a] ?? a,
-            style: AppType.body.copyWith(color: AppColors.textPrimary),
+            style: AppType.body.copyWith(color: c.text),
           ),
         );
       }).toList(),
