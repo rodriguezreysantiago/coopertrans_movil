@@ -1,7 +1,31 @@
+// lib/features/logistica/screens/logistica_tarifas_screen.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — lista de tarifas en lenguaje bento.
+//
+// SOLO PRESENTACIÓN. Se preserva intacto:
+//   - los dos streams (`LogisticaService.streamUbicaciones` para resolver
+//     coords + `LogisticaService.streamTarifas(soloActivas:)`),
+//   - el filtro token-based (`_aplicarFiltro`), el toggle `_soloActivas`,
+//   - la distancia geodésica/OSRM por card (`_DistanciaTexto`),
+//   - la eliminación con su diálogo + `LogisticaService.eliminarTarifa`
+//     (que chequea viajes en curso y devuelve StateError accionable),
+//   - la navegación al form (alta / edición por `tarifaId`),
+//   - los atajos de teclado (`KeyboardShortcutsScope`).
+//
+// Layout Núcleo: hero (eyebrow TARIFAS + conteo) + [Nueva tarifa], buscador
+// Núcleo (AppInput), chip "Activas", y cards re-skineadas a tokens: tipo +
+// flete (badges), ruta origen → destino, y los 3 montos (real / chofer /
+// bruto) en mono dentro de un strip con hairlines. Plata en c.text + mono;
+// color semántico solo en dots/badges.
+//
+// Reglas duras: tokens (context.colors), faltante → "—", sin overflow.
+
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
@@ -12,10 +36,8 @@ import '../models/ubicacion_logistica.dart';
 import '../services/logistica_geo_utils.dart';
 import '../services/logistica_service.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Lista de tarifas con buscador. Cada tarifa = una "ruta con precio"
-/// que el módulo de viajes (futuro) va a poder seleccionar como base.
+/// que el módulo de viajes selecciona como base.
 class LogisticaTarifasScreen extends StatefulWidget {
   const LogisticaTarifasScreen({super.key});
 
@@ -28,9 +50,17 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
   String _filtro = '';
   bool _soloActivas = true;
   final FocusNode _buscarFocus = FocusNode();
+  late final TextEditingController _buscarCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _buscarCtrl = TextEditingController();
+  }
 
   @override
   void dispose() {
+    _buscarCtrl.dispose();
     _buscarFocus.dispose();
     super.dispose();
   }
@@ -44,7 +74,8 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
     return AppScaffold(
       title: 'Tarifas',
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.success,
+        backgroundColor: AppColors.brand,
+        foregroundColor: AppColors.surface0,
         onPressed: _abrirNueva,
         icon: const Icon(Icons.add),
         label: const Text('NUEVA TARIFA'),
@@ -52,81 +83,65 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
       body: KeyboardShortcutsScope(
         onNuevo: _abrirNueva,
         buscarFocusNode: _buscarFocus,
-        child: Column(
-        children: [
-          _BarraFiltros(
-            filtroInicial: _filtro,
-            soloActivas: _soloActivas,
-            buscarFocus: _buscarFocus,
-            onCambioFiltro: (v) => setState(() => _filtro = v),
-            onCambioActivas: (v) => setState(() => _soloActivas = v),
-          ),
-          Expanded(
-            // Stream externo: catálogo de ubicaciones. El interno
-            // (tarifas) lo combina por id para mostrar distancia
-            // geodésica en el card cuando ambas ubicaciones tienen
-            // coords. Ubicaciones cambian poco (chico, no causa
-            // jitter visual).
-            child: StreamBuilder<List<UbicacionLogistica>>(
-              stream: LogisticaService.streamUbicaciones(),
-              builder: (ctx, ubicSnap) {
-                final ubicacionesPorId = {
-                  for (final u in (ubicSnap.data ?? const <UbicacionLogistica>[]))
-                    u.id: u,
-                };
-                return StreamBuilder<List<TarifaLogistica>>(
-                  stream: LogisticaService.streamTarifas(
-                    soloActivas: _soloActivas,
-                  ),
-                  builder: (ctx, snap) {
-                    if (snap.connectionState == ConnectionState.waiting) {
-                      return const AppSkeletonList(count: 6, conAvatar: false);
-                    }
-                    if (snap.hasError) {
-                      return AppEmptyState(
-                        icon: Icons.error_outline,
-                        title: 'Error cargando la lista',
-                        subtitle: snap.error.toString(),
-                      );
-                    }
-                    final all = snap.data ?? const [];
-                    final filtradas = _aplicarFiltro(all, _filtro);
-                    if (filtradas.isEmpty) {
-                      return AppEmptyState(
-                        icon: Icons.price_change_outlined,
-                        title: all.isEmpty
-                            ? 'Sin tarifas cargadas'
-                            : 'Sin coincidencias',
-                        subtitle: all.isEmpty
-                            ? 'Tocá + para armar la primera tarifa.'
-                            : 'Probá con otro texto o limpiá el filtro.',
-                      );
-                    }
-                    return ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 90),
-                      itemCount: filtradas.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-                      itemBuilder: (_, i) => _CardTarifa(
-                        tarifa: filtradas[i],
+        // Stream externo: catálogo de ubicaciones. El interno (tarifas) lo
+        // combina por id para mostrar distancia geodésica en la card cuando
+        // ambas ubicaciones tienen coords. Ubicaciones cambian poco.
+        child: StreamBuilder<List<UbicacionLogistica>>(
+          stream: LogisticaService.streamUbicaciones(),
+          builder: (ctx, ubicSnap) {
+            final ubicacionesPorId = {
+              for (final u
+                  in (ubicSnap.data ?? const <UbicacionLogistica>[]))
+                u.id: u,
+            };
+            return StreamBuilder<List<TarifaLogistica>>(
+              stream: LogisticaService.streamTarifas(
+                soloActivas: _soloActivas,
+              ),
+              builder: (ctx, snap) {
+                final cargando =
+                    snap.connectionState == ConnectionState.waiting;
+                final all = snap.data ?? const <TarifaLogistica>[];
+                final filtradas = _aplicarFiltro(all, _filtro);
+                return Column(
+                  children: [
+                    _Header(total: all.length, onNueva: _abrirNueva),
+                    _BarraFiltros(
+                      controller: _buscarCtrl,
+                      buscarFocus: _buscarFocus,
+                      tieneTexto: _filtro.isNotEmpty,
+                      soloActivas: _soloActivas,
+                      onCambioFiltro: (v) =>
+                          setState(() => _filtro = v.trim()),
+                      onLimpiar: () {
+                        _buscarCtrl.clear();
+                        setState(() => _filtro = '');
+                      },
+                      onCambioActivas: (v) =>
+                          setState(() => _soloActivas = v),
+                    ),
+                    Expanded(
+                      child: _Cuerpo(
+                        cargando: cargando,
+                        error: snap.hasError ? snap.error : null,
+                        haDatos: all.isNotEmpty,
+                        filtradas: filtradas,
                         ubicacionesPorId: ubicacionesPorId,
                       ),
-                    );
-                  },
+                    ),
+                  ],
                 );
               },
-            ),
-          ),
-        ],
-      ),
+            );
+          },
+        ),
       ),
     );
   }
 
-  /// Filtro token-based: exige que TODOS los tokens estén presentes
-  /// en algún campo de la tarifa. Permite buscar "profertil olavarria"
-  /// y matchear una tarifa con origen Profertil y destino Olavarría.
-  /// Mismo patrón que `LogisticaUbicacionesScreen` y
-  /// `LogisticaEmpresasScreen`.
+  /// Filtro token-based: exige que TODOS los tokens estén presentes en
+  /// algún campo de la tarifa. Permite buscar "profertil olavarria" y
+  /// matchear una tarifa con origen Profertil y destino Olavarría.
   List<TarifaLogistica> _aplicarFiltro(
     List<TarifaLogistica> tarifas,
     String filtro,
@@ -151,51 +166,227 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
   }
 }
 
-class _BarraFiltros extends StatelessWidget {
-  final String filtroInicial;
-  final bool soloActivas;
-  final FocusNode? buscarFocus;
-  final ValueChanged<String> onCambioFiltro;
-  final ValueChanged<bool> onCambioActivas;
+// =============================================================================
+// HEADER — eyebrow + hero (conteo) + botón Nueva tarifa
+// =============================================================================
 
-  const _BarraFiltros({
-    required this.filtroInicial,
-    required this.soloActivas,
-    required this.onCambioFiltro,
-    required this.onCambioActivas,
-    this.buscarFocus,
-  });
+class _Header extends StatelessWidget {
+  final int total;
+  final VoidCallback onNueva;
+  const _Header({required this.total, required this.onNueva});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
-            child: TextField(
-              focusNode: buscarFocus,
-              onChanged: onCambioFiltro,
-              decoration: const InputDecoration(
-                hintText: 'Buscar por empresa, ubicación, dador o producto…',
-                prefixIcon: Icon(Icons.search, color: Colors.white54),
-                isDense: true,
-              ),
-              style: const TextStyle(color: Colors.white),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const AppEyebrow('Tarifas'),
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      total == 0 ? '—' : '$total',
+                      style: AppType.h2.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        total == 1 ? 'ruta' : 'rutas',
+                        style:
+                            AppType.monoSm.copyWith(color: c.textMuted),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
-          FilterChip(
-            label: const Text('Activas'),
-            selected: soloActivas,
-            onSelected: onCambioActivas,
-            selectedColor: AppColors.success.withValues(alpha: 0.4),
+          const SizedBox(width: AppSpacing.md),
+          Padding(
+            padding: const EdgeInsets.only(bottom: 2),
+            child: AppButton.primary(
+              label: 'Nueva tarifa',
+              icon: Icons.add,
+              size: AppButtonSize.sm,
+              onPressed: onNueva,
+            ),
           ),
         ],
       ),
     );
   }
 }
+
+// =============================================================================
+// BARRA DE FILTROS — buscador Núcleo + chip "Activas"
+// =============================================================================
+
+class _BarraFiltros extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode buscarFocus;
+  final bool tieneTexto;
+  final bool soloActivas;
+  final ValueChanged<String> onCambioFiltro;
+  final VoidCallback onLimpiar;
+  final ValueChanged<bool> onCambioActivas;
+
+  const _BarraFiltros({
+    required this.controller,
+    required this.buscarFocus,
+    required this.tieneTexto,
+    required this.soloActivas,
+    required this.onCambioFiltro,
+    required this.onLimpiar,
+    required this.onCambioActivas,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.md),
+      child: Column(
+        children: [
+          AppInput(
+            controller: controller,
+            focusNode: buscarFocus,
+            hint: 'Buscar por empresa, ubicación, dador o producto…',
+            icon: Icons.search,
+            onChanged: onCambioFiltro,
+            trailingAction: tieneTexto ? 'Limpiar' : null,
+            onTrailingTap: tieneTexto ? onLimpiar : null,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              _ChipActivas(
+                soloActivas: soloActivas,
+                onTap: () => onCambioActivas(!soloActivas),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Pill toggle "Activas" estilo Núcleo. Activo: tinte success + borde.
+class _ChipActivas extends StatelessWidget {
+  final bool soloActivas;
+  final VoidCallback onTap;
+  const _ChipActivas({required this.soloActivas, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final fg = soloActivas ? c.success : c.textSecondary;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.full),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: soloActivas
+              ? c.success.withValues(alpha: 0.16)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: Border.all(
+            color: soloActivas
+                ? c.success.withValues(alpha: 0.5)
+                : c.borderStrong,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              soloActivas ? Icons.check_circle_outline : Icons.circle_outlined,
+              size: 14,
+              color: fg,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Activas',
+              style: AppType.label.copyWith(
+                color: fg,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// CUERPO — loading / error / vacío / lista de cards
+// =============================================================================
+
+class _Cuerpo extends StatelessWidget {
+  final bool cargando;
+  final Object? error;
+  final bool haDatos;
+  final List<TarifaLogistica> filtradas;
+  final Map<String, UbicacionLogistica> ubicacionesPorId;
+
+  const _Cuerpo({
+    required this.cargando,
+    required this.error,
+    required this.haDatos,
+    required this.filtradas,
+    required this.ubicacionesPorId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (cargando) {
+      return const AppSkeletonList(count: 6, conAvatar: false);
+    }
+    if (error != null) {
+      return AppErrorState(
+        title: 'Error cargando la lista',
+        subtitle: '$error',
+      );
+    }
+    if (filtradas.isEmpty) {
+      return AppEmptyState(
+        icon: Icons.price_change_outlined,
+        title: haDatos ? 'Sin coincidencias' : 'Sin tarifas cargadas',
+        subtitle: haDatos
+            ? 'Probá con otro texto o limpiá el filtro.'
+            : 'Tocá NUEVA TARIFA para armar la primera.',
+      );
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, 90),
+      itemCount: filtradas.length,
+      itemBuilder: (_, i) => _CardTarifa(
+        tarifa: filtradas[i],
+        ubicacionesPorId: ubicacionesPorId,
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// CARD DE TARIFA
+// =============================================================================
 
 class _CardTarifa extends StatelessWidget {
   final TarifaLogistica tarifa;
@@ -205,8 +396,8 @@ class _CardTarifa extends StatelessWidget {
     this.ubicacionesPorId = const {},
   });
 
-  /// Par de coords origen-destino si las dos ubicaciones tienen
-  /// lat/lng cargadas; null si falta alguna.
+  /// Par de coords origen-destino si las dos ubicaciones tienen lat/lng
+  /// cargadas; null si falta alguna.
   ({LatLng origen, LatLng destino})? get _ods {
     final o = ubicacionesPorId[tarifa.ubicacionOrigenId];
     final d = ubicacionesPorId[tarifa.ubicacionDestinoId];
@@ -220,52 +411,60 @@ class _CardTarifa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        tarifa.activa ? AppColors.success : Colors.white24;
+    final c = context.colors;
+    final esTerceros = tarifa.tipoCarga == TipoCargaLogistica.terceros;
+    final accent = tarifa.activa
+        ? (esTerceros ? c.warning : c.brand)
+        : c.textMuted;
+
     return AppCard(
+      tier: 1,
+      accent: accent,
       onTap: () => Navigator.pushNamed(
         context,
         AppRoutes.adminLogisticaTarifaForm,
         arguments: {'tarifaId': tarifa.id},
       ),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Línea 1: tipo + flete + activa + botón eliminar
+          // Línea 1: tipo + flete + (inactiva) + eliminar.
           Row(
             children: [
               Icon(
-                tarifa.tipoCarga == TipoCargaLogistica.terceros
+                esTerceros
                     ? Icons.handshake_outlined
                     : Icons.local_shipping_outlined,
-                color: color,
-                size: 22,
+                color: accent,
+                size: 18,
               ),
               const SizedBox(width: AppSpacing.sm),
-              _ChipTipo(tarifa: tarifa),
+              AppBadge(
+                text: tarifa.tipoCarga.etiqueta,
+                color: esTerceros ? c.warning : c.brand,
+                size: AppBadgeSize.sm,
+              ),
               const SizedBox(width: 6),
-              _ChipFlete(flete: tarifa.flete),
+              AppBadge(
+                text: tarifa.flete.etiqueta,
+                color: c.textSecondary,
+                size: AppBadgeSize.sm,
+              ),
               const Spacer(),
-              if (!tarifa.activa)
-                const Padding(
-                  padding: EdgeInsets.only(right: 4),
-                  child: Text(
-                    'INACTIVA',
-                    style: TextStyle(
-                      color: Colors.white38,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.3,
-                    ),
-                  ),
+              if (!tarifa.activa) ...[
+                AppBadge(
+                  text: 'Inactiva',
+                  color: c.textMuted,
+                  size: AppBadgeSize.sm,
                 ),
-              // Botón eliminar. El service chequea viajes en curso
-              // (PLANEADO / EN_CURSO) que usan la tarifa antes de
-              // borrar. Si hay alguno, muestra mensaje accionable.
+                const SizedBox(width: 4),
+              ],
+              // Eliminar. El service chequea viajes en curso (PLANEADO /
+              // EN_CURSO) que usan la tarifa antes de borrar; si hay alguno,
+              // muestra mensaje accionable.
               IconButton(
-                icon: const Icon(Icons.delete_outline,
-                    color: AppColors.error),
+                icon: Icon(Icons.delete_outline, color: c.error, size: 18),
                 tooltip: 'Eliminar tarifa',
                 onPressed: () => _confirmarEliminar(context),
                 visualDensity: VisualDensity.compact,
@@ -278,40 +477,44 @@ class _CardTarifa extends StatelessWidget {
             ],
           ),
           if (tarifa.producto != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
-                const Icon(Icons.inventory_2_outlined,
-                    color: AppColors.warning, size: 14),
+                Icon(Icons.inventory_2_outlined,
+                    color: c.warning, size: 14),
                 const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
                     tarifa.producto!,
-                    style: AppType.label.copyWith(color: AppColors.warning, fontWeight: FontWeight.bold),
+                    style: AppType.bodySm.copyWith(
+                      color: c.warning,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
           ],
-          const SizedBox(height: 10),
-          // Línea 2: origen → destino
+          const SizedBox(height: AppSpacing.md),
+          // Línea 2: origen → destino.
           _RutaOrigenDestino(tarifa: tarifa, ods: _ods),
-          const SizedBox(height: 10),
-          // Línea 3: tarifas
+          const SizedBox(height: AppSpacing.md),
+          // Línea 3: montos (real / chofer / bruto) en mono.
           _TarifasMontos(tarifa: tarifa),
           if (tarifa.dadorNombre != null) ...[
             const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
-                const Icon(Icons.business_outlined,
-                    color: Colors.white54, size: 14),
+                Icon(Icons.business_outlined, color: c.textMuted, size: 14),
                 const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
                     'Dador: ${tarifa.dadorNombre}'
                     '${tarifa.montoFijoDador != null ? " · \$ ${AppFormatters.formatearMonto(tarifa.montoFijoDador!)}/viaje" : tarifa.porcentajeComisionDador != null ? " · ${tarifa.porcentajeComisionDador!.toStringAsFixed(1)}%" : ""}',
-                    style: AppType.eyebrow.copyWith(color: Colors.white60),
+                    style: AppType.monoSm.copyWith(color: c.textSecondary),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -324,31 +527,30 @@ class _CardTarifa extends StatelessWidget {
   }
 
   Future<void> _confirmarEliminar(BuildContext context) async {
+    final c = context.colors;
     final messenger = ScaffoldMessenger.of(context);
     final ruta =
         '${tarifa.empresaOrigenNombre} → ${tarifa.empresaDestinoNombre}';
     final confirma = await showDialog<bool>(
       context: context,
       builder: (dCtx) => AlertDialog(
-        backgroundColor: Theme.of(dCtx).colorScheme.surface,
+        backgroundColor: dCtx.colors.surface2,
         title: const Text('¿Eliminar tarifa?'),
         content: Text(
           '$ruta\n\n'
           'Esta acción no se puede deshacer. Si la tarifa está usada '
           'por algún viaje en curso (PLANEADO o EN CURSO), no se va '
           'a poder borrar. Los viajes históricos no se rompen.',
+          style: AppType.body.copyWith(color: c.textSecondary),
         ),
         actions: [
-          TextButton(
+          AppButton.ghost(
+            label: 'Cancelar',
             onPressed: () => Navigator.of(dCtx).pop(false),
-            child: const Text('CANCELAR'),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.error,
-            ),
+          AppButton.danger(
+            label: 'Eliminar',
             onPressed: () => Navigator.of(dCtx).pop(true),
-            child: const Text('ELIMINAR'),
           ),
         ],
       ),
@@ -370,6 +572,10 @@ class _CardTarifa extends StatelessWidget {
   }
 }
 
+// =============================================================================
+// RUTA ORIGEN → DESTINO
+// =============================================================================
+
 class _RutaOrigenDestino extends StatelessWidget {
   final TarifaLogistica tarifa;
   final ({LatLng origen, LatLng destino})? ods;
@@ -377,6 +583,7 @@ class _RutaOrigenDestino extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -384,20 +591,18 @@ class _RutaOrigenDestino extends StatelessWidget {
           child: _Punto(
             etiqueta: 'ORIGEN',
             empresa: tarifa.empresaOrigenNombre,
-            // Versión limpia (sin "(localidad)" final) — pedido
-            // 2026-05-28: la localidad anexa es redundante con el
-            // nombre que ya viene en la etiqueta cruda.
+            // Versión limpia (sin "(localidad)" final) — la localidad anexa
+            // es redundante con el nombre que ya viene en la etiqueta cruda.
             ubicacion: tarifa.ubicacionOrigenLimpia,
-            color: AppColors.info,
+            color: c.info,
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.arrow_forward,
-                  color: Colors.white38, size: 18),
+              Icon(Icons.arrow_forward, color: c.textMuted, size: 16),
               if (ods != null) ...[
                 const SizedBox(height: 2),
                 _DistanciaTexto(origen: ods!.origen, destino: ods!.destino),
@@ -410,7 +615,7 @@ class _RutaOrigenDestino extends StatelessWidget {
             etiqueta: 'DESTINO',
             empresa: tarifa.empresaDestinoNombre,
             ubicacion: tarifa.ubicacionDestinoLimpia,
-            color: AppColors.brandSoft,
+            color: c.brandSoft,
           ),
         ),
       ],
@@ -432,43 +637,40 @@ class _Punto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Orden Santiago 2026-05-14: la UBICACIÓN va arriba en bold (es
-    // lo más importante operativamente — define dónde físicamente
-    // se carga/descarga). La empresa abajo, atenuada, como contexto.
+    final c = context.colors;
+    // La UBICACIÓN va arriba en bold (lo más importante operativamente —
+    // define dónde se carga/descarga). La empresa abajo, atenuada.
+    final ubic = ubicacion.trim();
+    final emp = empresa.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        AppEyebrow(etiqueta, color: color),
+        const SizedBox(height: 2),
         Text(
-          etiqueta,
-          style: TextStyle(
-            color: color,
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.2,
+          ubic.isEmpty ? '—' : ubic,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.bodySm.copyWith(
+            color: ubic.isEmpty ? c.textMuted : c.text,
+            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 2),
         Text(
-          ubicacion,
+          emp.isEmpty ? '—' : emp,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          empresa,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: AppType.eyebrow.copyWith(color: Colors.white60),
+          style: AppType.monoSm.copyWith(color: c.textMuted),
         ),
       ],
     );
   }
 }
+
+// =============================================================================
+// MONTOS (real / chofer / bruto) — strip mono con hairlines verticales
+// =============================================================================
 
 class _TarifasMontos extends StatelessWidget {
   final TarifaLogistica tarifa;
@@ -476,49 +678,46 @@ class _TarifasMontos extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(6),
+        color: c.surface2,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: c.border),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _MontoBloque(
-              etiqueta: 'TARIFA REAL',
-              monto: tarifa.tarifaReal,
-              sufijo: tarifa.unidadTarifa.sufijoMonto,
-              color: AppColors.success,
+      child: IntrinsicHeight(
+        child: Row(
+          children: [
+            Expanded(
+              child: _MontoBloque(
+                etiqueta: 'TARIFA REAL',
+                monto: tarifa.tarifaReal,
+                sufijo: tarifa.unidadTarifa.sufijoMonto,
+                color: c.success,
+              ),
             ),
-          ),
-          Container(
-            width: 1,
-            height: 28,
-            color: Colors.white12,
-          ),
-          Expanded(
-            child: _MontoBloque(
-              etiqueta: 'CHOFER',
-              monto: tarifa.tarifaChofer,
-              sufijo: tarifa.unidadTarifa.sufijoMonto,
-              color: AppColors.info,
+            AppHairline(vertical: true, color: c.border),
+            Expanded(
+              child: _MontoBloque(
+                etiqueta: 'CHOFER',
+                monto: tarifa.tarifaChofer,
+                sufijo: tarifa.unidadTarifa.sufijoMonto,
+                color: c.info,
+              ),
             ),
-          ),
-          Container(
-            width: 1,
-            height: 28,
-            color: Colors.white12,
-          ),
-          Expanded(
-            child: _MontoBloque(
-              etiqueta: 'BRUTO',
-              monto: tarifa.diferenciaBruta,
-              sufijo: tarifa.unidadTarifa.sufijoMonto,
-              color: AppColors.warning,
+            AppHairline(vertical: true, color: c.border),
+            Expanded(
+              child: _MontoBloque(
+                etiqueta: 'BRUTO',
+                monto: tarifa.diferenciaBruta,
+                sufijo: tarifa.unidadTarifa.sufijoMonto,
+                color: c.brand,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -538,108 +737,51 @@ class _MontoBloque extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          etiqueta,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: color,
-            fontSize: 9,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.2,
-          ),
-        ),
-        const SizedBox(height: 2),
-        // FittedBox: en mobile 3 columnas Expanded daban ~110 dp por
-        // bloque. "$ 1.234.567,89" en fontSize 13 bold no entraba.
-        // Con scaleDown se achica a la fuerza máxima que entre.
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            '\$ ${AppFormatters.formatearMonto(monto)}',
-            maxLines: 1,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
+    final c = context.colors;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Dot semántico de color + etiqueta neutra.
+          AppEyebrow(etiqueta, color: color),
+          const SizedBox(height: 4),
+          // FittedBox: en mobile 3 columnas Expanded daban ~110 dp por
+          // bloque. "$ 1.234.567,89" no entra a tamaño fijo — scaleDown.
+          // Plata en c.text + mono (regla: hero numbers en text, no color).
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '\$ ${AppFormatters.formatearMonto(monto)}',
+              maxLines: 1,
+              style: AppType.mono.copyWith(
+                color: c.text,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
-        ),
-        Text(
-          sufijo,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.white54,
-            fontSize: 10,
+          const SizedBox(height: 1),
+          Text(
+            sufijo,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.monoSm.copyWith(fontSize: 9),
           ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ChipTipo extends StatelessWidget {
-  final TarifaLogistica tarifa;
-  const _ChipTipo({required this.tarifa});
-
-  @override
-  Widget build(BuildContext context) {
-    final esTerceros = tarifa.tipoCarga == TipoCargaLogistica.terceros;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: (esTerceros ? AppColors.warning : AppColors.info)
-            .withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Text(
-        tarifa.tipoCarga.etiqueta.toUpperCase(),
-        style: TextStyle(
-          color:
-              esTerceros ? AppColors.warning : AppColors.info,
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.0,
-        ),
+        ],
       ),
     );
   }
 }
 
-class _ChipFlete extends StatelessWidget {
-  final FleteLogistica flete;
-  const _ChipFlete({required this.flete});
+// =============================================================================
+// DISTANCIA — geodésica inmediata, refresca a ruta real OSRM cuando llega
+// =============================================================================
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(3),
-      ),
-      child: Text(
-        flete.etiqueta.toUpperCase(),
-        style: const TextStyle(
-          color: Colors.white70,
-          fontSize: 9,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.0,
-        ),
-      ),
-    );
-  }
-}
-
-/// Texto de distancia entre dos puntos. Mientras espera la ruta real
-/// de OSRM, muestra la distancia geodésica como fallback inmediato.
-/// Cuando vuelve la ruta, refresca con km reales + tiempo estimado.
-/// Si OSRM falla (sin red, par fuera del grafo), se queda con la
-/// geodésica (mejor que nada).
+/// Texto de distancia entre dos puntos. Mientras espera la ruta real de
+/// OSRM, muestra la distancia geodésica como fallback inmediato. Cuando
+/// vuelve la ruta, refresca con km reales + tiempo estimado. Si OSRM falla
+/// (sin red, par fuera del grafo), se queda con la geodésica.
 class _DistanciaTexto extends StatelessWidget {
   final LatLng origen;
   final LatLng destino;
@@ -647,6 +789,7 @@ class _DistanciaTexto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final geodesicaKm = LogisticaGeoUtils.distanciaKm(origen, destino);
     return FutureBuilder<GeoRuta?>(
       future: LogisticaGeoUtils.obtenerRuta(origen, destino),
@@ -657,28 +800,23 @@ class _DistanciaTexto extends StatelessWidget {
             children: [
               Text(
                 '${ruta.distanciaKm.toStringAsFixed(0)} km',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
+                style: AppType.monoSm.copyWith(
+                  color: c.textSecondary,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
               Text(
                 ruta.duracionFormateada,
-                style: const TextStyle(
-                  color: Colors.white38,
-                  fontSize: 9,
-                ),
+                style: AppType.monoSm.copyWith(color: c.textMuted, fontSize: 9),
               ),
             ],
           );
         }
         return Text(
           '${geodesicaKm.toStringAsFixed(0)} km',
-          style: const TextStyle(
-            color: Colors.white38,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
+          style: AppType.monoSm.copyWith(
+            color: c.textMuted,
+            fontWeight: FontWeight.w600,
           ),
         );
       },

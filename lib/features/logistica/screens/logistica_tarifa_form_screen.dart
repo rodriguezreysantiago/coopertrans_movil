@@ -1,6 +1,33 @@
+// lib/features/logistica/screens/logistica_tarifa_form_screen.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — alta/edición de tarifa en lenguaje bento.
+//
+// SOLO PRESENTACIÓN. Se preserva intacto TODO el form:
+//   - el State (`_tipoCarga`, `_dador`, `_empOrigen`, `_ubicOrigen`,
+//     `_empDestino`, `_ubicDestino`, `_flete`, `_unidad`, `_producto`,
+//     toggles `_modoMontoFijoDador` / `_modoMontoFijoChofer`),
+//   - TODOS los controllers (`_comisionCtrl`, `_montoFijoDadorCtrl`,
+//     `_tarifaRealCtrl`, `_tarifaChoferCtrl`, `_montoFijoChoferCtrl`,
+//     `_notasCtrl`) con sus inputFormatters (`AppFormatters.inputMilesDecimal`,
+//     el filtro `[0-9.,]` de comisión, etc.),
+//   - la carga en edición (`_cargarSiEdicion`) y las validaciones +
+//     guardado (`_guardar` → `LogisticaService.crearTarifa` /
+//     `actualizarTarifa`) sin tocar ni una regla,
+//   - la navegación.
+//
+// Reskin Núcleo: secciones como AppCard tier 2 con eyebrow + número en
+// dot brand; ChoiceChip → pills `_PillSelector`; TextField conserva su
+// lógica pero adopta el InputDecoration Núcleo (`_inputDecoration`);
+// selectores empresa/ubicación/producto → cards tappeables con bottom
+// sheets re-skineados a tokens.
+//
+// Reglas duras: tokens (context.colors), faltante → "—", sin overflow.
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
@@ -9,10 +36,8 @@ import '../models/tarifa_logistica.dart';
 import '../models/ubicacion_logistica.dart';
 import '../services/logistica_service.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
-/// Form full-screen para alta y edición de tarifas. Diseñado como un
-/// flujo lineal arriba-abajo:
+/// Form full-screen para alta y edición de tarifas. Flujo lineal
+/// arriba-abajo:
 ///
 /// 1) Tipo de carga (PROPIA / TERCEROS) → si es TERCEROS aparece el
 ///    bloque "Dador + comisión".
@@ -22,13 +47,11 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// 5) Tarifas (real + chofer).
 /// 6) Notas (opcional).
 ///
-/// Si recibe `arguments={'tarifaId': '...'}` carga la tarifa para
-/// editar; si no, es alta.
+/// Si recibe `arguments={'tarifaId': '...'}` carga la tarifa para editar;
+/// si no, es alta.
 class LogisticaTarifaFormScreen extends StatefulWidget {
-  /// Si es null, el form arranca en modo "alta". Si trae un id, se
-  /// carga la tarifa de Firestore y se permite "modificar precio"
-  /// (que internamente desactiva la vieja y crea una nueva — para
-  /// preservar histórico).
+  /// Si es null, el form arranca en modo "alta". Si trae un id, se carga
+  /// la tarifa de Firestore y se permite "modificar precio".
   final String? tarifaId;
 
   const LogisticaTarifaFormScreen({super.key, this.tarifaId});
@@ -59,19 +82,18 @@ class _LogisticaTarifaFormScreenState
   final _tarifaRealCtrl = TextEditingController();
   final _tarifaChoferCtrl = TextEditingController();
   /// Monto fijo del chofer por viaje, alternativa al cálculo del 18%
-  /// sobre `tarifaChofer × TN`. Pedido Santiago 2026-05-19: para
-  /// viajes cortos donde acuerda un monto a mano con el chofer. Si el
-  /// toggle [_modoMontoFijoChofer] está OFF, este controller no se
-  /// usa al guardar (queda null en Firestore → cálculo legacy).
+  /// sobre `tarifaChofer × TN`. Si el toggle [_modoMontoFijoChofer] está
+  /// OFF, este controller no se usa al guardar (queda null en Firestore →
+  /// cálculo legacy).
   final _montoFijoChoferCtrl = TextEditingController();
-  /// `true` → la tarifa del chofer se acuerda como monto fijo por
-  /// viaje (sin TN ni 18%). `false` → comportamiento histórico (18%
-  /// sobre `tarifaChofer × TN`).
+  /// `true` → la tarifa del chofer se acuerda como monto fijo por viaje
+  /// (sin TN ni 18%). `false` → comportamiento histórico (18% sobre
+  /// `tarifaChofer × TN`).
   bool _modoMontoFijoChofer = false;
   final _notasCtrl = TextEditingController();
-  /// Producto que se transporta. Opcional — null = tarifa "general"
-  /// para esa ruta. Lista de opciones viene del catálogo de productos
-  /// de la empresa origen seleccionada.
+  /// Producto que se transporta. Opcional — null = tarifa "general" para
+  /// esa ruta. Lista de opciones viene del catálogo de productos de la
+  /// empresa origen seleccionada.
   String? _producto;
 
   // ─── Estado de carga ───
@@ -127,8 +149,8 @@ class _LogisticaTarifaFormScreenState
       _producto = t.producto;
 
       // Resolver referencias a empresas/ubicaciones por id (para mostrar
-      // los dropdowns con la opción seleccionada). Si el doc fue
-      // borrado, lo dejamos null y el operador tendrá que re-elegir.
+      // los dropdowns con la opción seleccionada). Si el doc fue borrado,
+      // lo dejamos null y el operador tendrá que re-elegir.
       final futures = await Future.wait([
         LogisticaService.empresasCol.doc(t.empresaOrigenId).get(),
         LogisticaService.ubicacionesCol.doc(t.ubicacionOrigenId).get(),
@@ -180,315 +202,295 @@ class _LogisticaTarifaFormScreenState
     return AppScaffold(
       title: _esEdicion ? 'Editar tarifa' : 'Nueva tarifa',
       body: _cargando
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppSkeletonList(count: 5, conAvatar: false)
           : _buildForm(),
     );
   }
 
   Widget _buildForm() {
+    final c = context.colors;
+    final mismaEmpresa = _empOrigen != null &&
+        _empDestino != null &&
+        _empOrigen!.id == _empDestino!.id;
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxxl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ─── 1. TIPO DE CARGA ───────────────────────────────────────
-          const _SeccionTitulo(numero: 1, texto: 'Tipo de carga'),
-          AppCard(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: Row(
-              children: [
-                for (final t in TipoCargaLogistica.values) ...[
-                  Expanded(
-                    child: ChoiceChip(
-                      label: Text(t.etiqueta),
-                      selected: _tipoCarga == t,
-                      onSelected: (sel) {
-                        if (sel) {
-                          setState(() {
-                            _tipoCarga = t;
-                            if (t == TipoCargaLogistica.propia) {
-                              _dador = null;
-                              _comisionCtrl.clear();
-                              _montoFijoDadorCtrl.clear();
-                              _modoMontoFijoDador = false;
-                            }
-                          });
-                        }
-                      },
-                      selectedColor:
-                          AppColors.brand.withValues(alpha: 0.4),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sm),
-                ],
-              ],
-            ),
-          ),
-          // ─── 1.b DADOR + COMISIÓN (solo si TERCEROS) ────────────────
-          if (_tipoCarga == TipoCargaLogistica.terceros) ...[
-            const SizedBox(height: AppSpacing.md),
-            const _SeccionTitulo(numero: null, texto: 'Dador de transporte'),
-            _SelectorEmpresa(
-              etiqueta: 'Dador de transporte',
-              valor: _dador,
-              soloTipo: TipoEmpresaLogistica.dadorTransporte,
-              onChange: (e) => setState(() => _dador = e),
-            ),
-            const SizedBox(height: AppSpacing.sm),
-            AppCard(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+          _Seccion(
+            numero: 1,
+            titulo: 'Tipo de carga',
+            children: [
+              Row(
                 children: [
-                  const Text('COMISIÓN DEL DADOR', style: AppType.eyebrow),
-                  const SizedBox(height: AppSpacing.xs),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      ChoiceChip(
-                        label: const Text('Porcentaje (%)'),
-                        selected: !_modoMontoFijoDador,
-                        onSelected: (sel) {
-                          if (sel) {
-                            setState(() => _modoMontoFijoDador = false);
+                  for (final t in TipoCargaLogistica.values) ...[
+                    Expanded(
+                      child: _PillSelector(
+                        label: t.etiqueta,
+                        seleccionado: _tipoCarga == t,
+                        onTap: () => setState(() {
+                          _tipoCarga = t;
+                          if (t == TipoCargaLogistica.propia) {
+                            _dador = null;
+                            _comisionCtrl.clear();
+                            _montoFijoDadorCtrl.clear();
+                            _modoMontoFijoDador = false;
                           }
-                        },
-                        selectedColor:
-                            AppColors.info.withValues(alpha: 0.4),
-                      ),
-                      ChoiceChip(
-                        label: const Text('Monto fijo por viaje'),
-                        selected: _modoMontoFijoDador,
-                        onSelected: (sel) {
-                          if (sel) {
-                            setState(() => _modoMontoFijoDador = true);
-                          }
-                        },
-                        selectedColor:
-                            AppColors.warning.withValues(alpha: 0.4),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                  if (_modoMontoFijoDador)
-                    TextField(
-                      controller: _montoFijoDadorCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [AppFormatters.inputMilesDecimal],
-                      decoration: const InputDecoration(
-                        labelText: 'Monto fijo del dador (por viaje)',
-                        prefixText: '\$ ',
-                        suffixText: '/viaje',
-                      ),
-                      style: AppType.heading,
-                    )
-                  else
-                    TextField(
-                      controller: _comisionCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                      ],
-                      decoration: const InputDecoration(
-                        labelText: 'Comisión del dador (%)',
-                        hintText: 'Ej. 12.5',
-                        suffixText: '%',
+                        }),
                       ),
                     ),
+                    const SizedBox(width: AppSpacing.sm),
+                  ],
                 ],
               ),
-            ),
-          ],
-
-          // ─── 2. ORIGEN ──────────────────────────────────────────────
-          const SizedBox(height: AppSpacing.lg),
-          const _SeccionTitulo(numero: 2, texto: 'Origen'),
-          _SelectorEmpresa(
-            etiqueta: 'Origen',
-            valor: _empOrigen,
-            soloTipo: TipoEmpresaLogistica.cliente,
-            onChange: (e) => setState(() => _empOrigen = e),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _SelectorUbicacion(
-            etiqueta: 'Ubicación origen',
-            valor: _ubicOrigen,
-            filtroEmpresaId: _empOrigen?.id,
-            onChange: (u) => setState(() => _ubicOrigen = u),
+            ],
           ),
 
-          // ─── 3. DESTINO ─────────────────────────────────────────────
-          const SizedBox(height: AppSpacing.lg),
-          const _SeccionTitulo(numero: 3, texto: 'Destino'),
-          _SelectorEmpresa(
-            etiqueta: 'Destino',
-            valor: _empDestino,
-            soloTipo: TipoEmpresaLogistica.cliente,
-            onChange: (e) => setState(() => _empDestino = e),
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          _SelectorUbicacion(
-            etiqueta: 'Ubicación destino',
-            valor: _ubicDestino,
-            filtroEmpresaId: _empDestino?.id,
-            onChange: (u) => setState(() => _ubicDestino = u),
-          ),
-
-          // ─── PRODUCTO (opcional) ─────────────────────────────────
-          // La misma ruta puede tener tarifas distintas según el
-          // producto que se transporta. Las opciones vienen del
-          // catálogo de productos de la empresa origen.
-          if (_empOrigen != null && _empOrigen!.productos.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.md),
-            _SelectorProducto(
-              productos: _empOrigen!.productos,
-              valor: _producto,
-              onChange: (p) => setState(() => _producto = p),
-            ),
-          ],
-
-          // ─── 4. MODALIDAD ───────────────────────────────────────────
-          const SizedBox(height: AppSpacing.lg),
-          const _SeccionTitulo(numero: 4, texto: 'Modalidad'),
-          AppCard(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: Column(
+          // ─── 1.b DADOR + COMISIÓN (solo si TERCEROS) ────────────────
+          if (_tipoCarga == TipoCargaLogistica.terceros) ...[
+            const SizedBox(height: AppSpacing.mdDense),
+            _Seccion(
+              titulo: 'Dador de transporte',
+              accentDot: c.warning,
               children: [
-                // Si origen y destino son la MISMA empresa (ej. de un
-                // depósito de Profertil a otro depósito de Profertil),
-                // no tiene sentido elegir si paga el origen o el destino
-                // — siempre lo paga esa empresa. Mostramos un info chip
-                // en lugar del selector. (Santiago 2026-05-14.)
-                if (_empOrigen != null &&
-                    _empDestino != null &&
-                    _empOrigen!.id == _empDestino!.id)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      color: AppColors.info.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(AppRadius.sm),
-                      border: Border.all(
-                          color: AppColors.info.withValues(alpha: 0.4)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.info_outline,
-                            size: 18, color: AppColors.info),
-                        const SizedBox(width: AppSpacing.sm),
-                        Expanded(
-                          child: Text(
-                            'Flete a cargo de ${_empOrigen!.nombre} '
-                            '(origen y destino son la misma empresa).',
-                            style: AppType.label.copyWith(color: AppColors.info),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                else
-                  _filaSelector<FleteLogistica>(
-                    etiqueta: 'Flete pagadero',
-                    opciones: FleteLogistica.values,
-                    valor: _flete,
-                    etiquetaFn: (f) => f.etiqueta,
-                    onChange: (f) => setState(() => _flete = f),
-                  ),
+                _SelectorEmpresa(
+                  etiqueta: 'Dador de transporte',
+                  valor: _dador,
+                  soloTipo: TipoEmpresaLogistica.dadorTransporte,
+                  onChange: (e) => setState(() => _dador = e),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                const AppEyebrow('Comisión del dador'),
                 const SizedBox(height: AppSpacing.sm),
-                _filaSelector<UnidadTarifa>(
-                  etiqueta: 'Unidad de tarifa',
-                  opciones: UnidadTarifa.values,
-                  valor: _unidad,
-                  etiquetaFn: (u) => u.etiqueta,
-                  onChange: (u) => setState(() => _unidad = u),
-                ),
-              ],
-            ),
-          ),
-
-          // ─── 5. TARIFAS ─────────────────────────────────────────────
-          const SizedBox(height: AppSpacing.lg),
-          const _SeccionTitulo(numero: 5, texto: 'Tarifas'),
-          AppCard(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _campoTarifa(
-                  controller: _tarifaRealCtrl,
-                  etiqueta: 'Tarifa real (lo que cobra Vecchi)',
-                  color: AppColors.success,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                // Toggle pago al chofer: 18% sobre la tarifa chofer
-                // (default histórico) o monto fijo por viaje (pedido
-                // Santiago 2026-05-19 para viajes cortos donde el 18%
-                // no cuadra y se acuerda un monto a mano).
-                const Text('PAGO AL CHOFER', style: AppType.eyebrow),
-                const SizedBox(height: AppSpacing.xs),
                 Wrap(
-                  spacing: 8,
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
                   children: [
-                    ChoiceChip(
-                      label: const Text('18% sobre tarifa chofer'),
-                      selected: !_modoMontoFijoChofer,
-                      onSelected: (sel) {
-                        if (sel) {
-                          setState(() => _modoMontoFijoChofer = false);
-                        }
-                      },
-                      selectedColor:
-                          AppColors.info.withValues(alpha: 0.4),
+                    _PillSelector(
+                      label: 'Porcentaje (%)',
+                      seleccionado: !_modoMontoFijoDador,
+                      onTap: () =>
+                          setState(() => _modoMontoFijoDador = false),
                     ),
-                    ChoiceChip(
-                      label: const Text('Monto fijo por viaje'),
-                      selected: _modoMontoFijoChofer,
-                      onSelected: (sel) {
-                        if (sel) {
-                          setState(() => _modoMontoFijoChofer = true);
-                        }
-                      },
-                      selectedColor:
-                          AppColors.warning.withValues(alpha: 0.4),
+                    _PillSelector(
+                      label: 'Monto fijo por viaje',
+                      seleccionado: _modoMontoFijoDador,
+                      onTap: () =>
+                          setState(() => _modoMontoFijoDador = true),
                     ),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.md),
-                if (_modoMontoFijoChofer) ...[
-                  _campoMontoFijoChofer(),
-                  // En modo monto fijo NO se muestra la tarifa chofer (%): el
-                  // chofer cobra el monto fijo y la tarifa_chofer queda en 0
-                  // (pedido Santiago 2026-05-21 — antes confundía y bloqueaba
-                  // el guardado al quedar en 0).
-                ] else ...[
-                  _campoTarifa(
-                    controller: _tarifaChoferCtrl,
-                    etiqueta: 'Tarifa chofer (lo que se le paga)',
-                    color: AppColors.info,
+                if (_modoMontoFijoDador)
+                  TextField(
+                    controller: _montoFijoDadorCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [AppFormatters.inputMilesDecimal],
+                    style: AppType.mono.copyWith(color: c.text),
+                    decoration: _inputDecoration(
+                      context,
+                      labelText: 'Monto fijo del dador (por viaje)',
+                      prefixText: '\$ ',
+                      suffixText: '/viaje',
+                    ),
+                  )
+                else
+                  TextField(
+                    controller: _comisionCtrl,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                    ],
+                    style: AppType.mono.copyWith(color: c.text),
+                    decoration: _inputDecoration(
+                      context,
+                      labelText: 'Comisión del dador (%)',
+                      hintText: 'Ej. 12.5',
+                      suffixText: '%',
+                    ),
                   ),
-                ],
               ],
             ),
+          ],
+
+          // ─── 2. ORIGEN ──────────────────────────────────────────────
+          const SizedBox(height: AppSpacing.mdDense),
+          _Seccion(
+            numero: 2,
+            titulo: 'Origen',
+            children: [
+              _SelectorEmpresa(
+                etiqueta: 'Origen',
+                valor: _empOrigen,
+                soloTipo: TipoEmpresaLogistica.cliente,
+                onChange: (e) => setState(() => _empOrigen = e),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _SelectorUbicacion(
+                etiqueta: 'Ubicación origen',
+                valor: _ubicOrigen,
+                filtroEmpresaId: _empOrigen?.id,
+                onChange: (u) => setState(() => _ubicOrigen = u),
+              ),
+            ],
+          ),
+
+          // ─── 3. DESTINO ─────────────────────────────────────────────
+          const SizedBox(height: AppSpacing.mdDense),
+          _Seccion(
+            numero: 3,
+            titulo: 'Destino',
+            children: [
+              _SelectorEmpresa(
+                etiqueta: 'Destino',
+                valor: _empDestino,
+                soloTipo: TipoEmpresaLogistica.cliente,
+                onChange: (e) => setState(() => _empDestino = e),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              _SelectorUbicacion(
+                etiqueta: 'Ubicación destino',
+                valor: _ubicDestino,
+                filtroEmpresaId: _empDestino?.id,
+                onChange: (u) => setState(() => _ubicDestino = u),
+              ),
+              // PRODUCTO (opcional). La misma ruta puede tener tarifas
+              // distintas según el producto. Opciones del catálogo de la
+              // empresa origen.
+              if (_empOrigen != null && _empOrigen!.productos.isNotEmpty) ...[
+                const SizedBox(height: AppSpacing.md),
+                _SelectorProducto(
+                  productos: _empOrigen!.productos,
+                  valor: _producto,
+                  onChange: (p) => setState(() => _producto = p),
+                ),
+              ],
+            ],
+          ),
+
+          // ─── 4. MODALIDAD ───────────────────────────────────────────
+          const SizedBox(height: AppSpacing.mdDense),
+          _Seccion(
+            numero: 4,
+            titulo: 'Modalidad',
+            children: [
+              // Si origen y destino son la MISMA empresa, no tiene sentido
+              // elegir quién paga el flete — siempre lo paga esa empresa.
+              if (mismaEmpresa)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  decoration: BoxDecoration(
+                    color: c.infoSoft,
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    border: Border.all(
+                        color: c.info.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, size: 18, color: c.info),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          'Flete a cargo de ${_empOrigen!.nombre} '
+                          '(origen y destino son la misma empresa).',
+                          style: AppType.bodySm.copyWith(color: c.info),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else
+                _FilaSelector<FleteLogistica>(
+                  etiqueta: 'Flete pagadero',
+                  opciones: FleteLogistica.values,
+                  valor: _flete,
+                  etiquetaFn: (f) => f.etiqueta,
+                  onChange: (f) => setState(() => _flete = f),
+                ),
+              const SizedBox(height: AppSpacing.md),
+              _FilaSelector<UnidadTarifa>(
+                etiqueta: 'Unidad de tarifa',
+                opciones: UnidadTarifa.values,
+                valor: _unidad,
+                etiquetaFn: (u) => u.etiqueta,
+                onChange: (u) => setState(() => _unidad = u),
+              ),
+            ],
+          ),
+
+          // ─── 5. TARIFAS ─────────────────────────────────────────────
+          const SizedBox(height: AppSpacing.mdDense),
+          _Seccion(
+            numero: 5,
+            titulo: 'Tarifas',
+            accentDot: c.success,
+            children: [
+              _campoTarifa(
+                controller: _tarifaRealCtrl,
+                etiqueta: 'Tarifa real (lo que cobra Vecchi)',
+                color: c.success,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              // Toggle pago al chofer: 18% sobre la tarifa chofer (default
+              // histórico) o monto fijo por viaje (viajes cortos).
+              const AppEyebrow('Pago al chofer'),
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  _PillSelector(
+                    label: '18% sobre tarifa chofer',
+                    seleccionado: !_modoMontoFijoChofer,
+                    onTap: () =>
+                        setState(() => _modoMontoFijoChofer = false),
+                  ),
+                  _PillSelector(
+                    label: 'Monto fijo por viaje',
+                    seleccionado: _modoMontoFijoChofer,
+                    onTap: () =>
+                        setState(() => _modoMontoFijoChofer = true),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              if (_modoMontoFijoChofer)
+                // En modo monto fijo NO se muestra la tarifa chofer (%): el
+                // chofer cobra el monto fijo y tarifa_chofer queda en 0.
+                _campoMontoFijoChofer()
+              else
+                _campoTarifa(
+                  controller: _tarifaChoferCtrl,
+                  etiqueta: 'Tarifa chofer (lo que se le paga)',
+                  color: c.info,
+                ),
+            ],
           ),
 
           // ─── 6. NOTAS ───────────────────────────────────────────────
-          const SizedBox(height: AppSpacing.lg),
-          const _SeccionTitulo(numero: 6, texto: 'Notas (opcional)'),
-          AppCard(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            child: TextField(
-              controller: _notasCtrl,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText:
-                    'Ej. Cliente exige descarga antes de las 14 hs.',
-                border: InputBorder.none,
+          const SizedBox(height: AppSpacing.mdDense),
+          _Seccion(
+            numero: 6,
+            titulo: 'Notas (opcional)',
+            children: [
+              TextField(
+                controller: _notasCtrl,
+                maxLines: 3,
+                style: AppType.body.copyWith(color: c.text),
+                decoration: _inputDecoration(
+                  context,
+                  hintText: 'Ej. Cliente exige descarga antes de las 14 hs.',
+                ),
               ),
-            ),
+            ],
           ),
 
           // ─── ERROR ──────────────────────────────────────────────────
@@ -497,15 +499,21 @@ class _LogisticaTarifaFormScreenState
             Container(
               padding: const EdgeInsets.all(AppSpacing.md),
               decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                border: Border.all(
-                  color: AppColors.error.withValues(alpha: 0.4),
-                ),
+                color: c.errorSoft,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                border: Border.all(color: c.error.withValues(alpha: 0.4)),
               ),
-              child: Text(
-                _error!,
-                style: AppType.body.copyWith(color: AppColors.error),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, size: 18, color: c.error),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      _error!,
+                      style: AppType.bodySm.copyWith(color: c.error),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -525,7 +533,7 @@ class _LogisticaTarifaFormScreenState
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 flex: 2,
-                child: AppButton(
+                child: AppButton.primary(
                   label: _esEdicion ? 'Guardar cambios' : 'Guardar tarifa',
                   icon: Icons.save_outlined,
                   expand: true,
@@ -549,64 +557,38 @@ class _LogisticaTarifaFormScreenState
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [AppFormatters.inputMilesDecimal],
-      decoration: InputDecoration(
+      style: AppType.mono.copyWith(
+          color: context.colors.text, fontWeight: FontWeight.w600),
+      decoration: _inputDecoration(
+        context,
         labelText: etiqueta,
         prefixText: '\$ ',
         prefixStyle: TextStyle(color: color, fontWeight: FontWeight.bold),
         suffixText: _unidad.sufijoMonto,
       ),
-      style: AppType.heading,
     );
   }
 
-  /// Campo dedicado al monto fijo del chofer — flat por viaje, no
-  /// arrastra el sufijo de unidad (`/TN` o `/viaje`) porque su unidad
-  /// es siempre "por viaje" independientemente de [_unidad].
+  /// Campo dedicado al monto fijo del chofer — flat por viaje, no arrastra
+  /// el sufijo de unidad (`/TN` o `/viaje`) porque su unidad es siempre
+  /// "por viaje" independientemente de [_unidad].
   Widget _campoMontoFijoChofer() {
+    final c = context.colors;
     return TextField(
       controller: _montoFijoChoferCtrl,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [AppFormatters.inputMilesDecimal],
-      decoration: const InputDecoration(
+      style: AppType.mono.copyWith(color: c.text, fontWeight: FontWeight.w600),
+      decoration: _inputDecoration(
+        context,
         labelText: 'Monto fijo al chofer (por viaje)',
         prefixText: '\$ ',
         prefixStyle: TextStyle(
-          color: AppColors.warning,
+          color: c.warning,
           fontWeight: FontWeight.bold,
         ),
         suffixText: '/viaje',
       ),
-      style: AppType.heading,
-    );
-  }
-
-  Widget _filaSelector<T>({
-    required String etiqueta,
-    required List<T> opciones,
-    required T valor,
-    required String Function(T) etiquetaFn,
-    required ValueChanged<T> onChange,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(etiqueta.toUpperCase(), style: AppType.eyebrow),
-        const SizedBox(height: AppSpacing.xs),
-        Wrap(
-          spacing: AppSpacing.sm,
-          children: [
-            for (final op in opciones)
-              ChoiceChip(
-                label: Text(etiquetaFn(op)),
-                selected: op == valor,
-                onSelected: (sel) {
-                  if (sel) onChange(op);
-                },
-                selectedColor: AppColors.brand.withValues(alpha: 0.4),
-              ),
-          ],
-        ),
-      ],
     );
   }
 
@@ -629,19 +611,13 @@ class _LogisticaTarifaFormScreenState
       setState(() => _error = 'Si la carga es de terceros, elegí el dador.');
       return;
     }
-    // Tarifas con monto = 0 ahora son válidas (Santiago 2026-05-14):
-    // muchas veces no se sabe el monto hasta que el viaje termina, y
-    // necesitamos poder armar el viaje con la tarifa "preliminar".
-    // Cuando se actualice la tarifa con el monto real, basta con
-    // editar el viaje y guardar — el snapshot se refresca solo
-    // (ver `TarifaSnapshot.fromTarifa` en el form de viaje).
-    //
-    // El parser devuelve null si está vacío o no parsea — lo
-    // tratamos como 0 (tarifa por definir).
+    // Tarifas con monto = 0 son válidas: muchas veces no se sabe el monto
+    // hasta que el viaje termina. El parser devuelve null si está vacío o
+    // no parsea — lo tratamos como 0 (tarifa por definir).
     final tarifaReal = AppFormatters.parsearMonto(_tarifaRealCtrl.text) ?? 0;
     // En modo "monto fijo por viaje" la tarifa_chofer (%) no se usa → 0: el
     // chofer cobra el monto fijo. Así no bloquea el guardado ni deja un %
-    // viejo confuso (pedido Santiago 2026-05-21).
+    // viejo confuso.
     final tarifaChofer = _modoMontoFijoChofer
         ? 0.0
         : (AppFormatters.parsearMonto(_tarifaChoferCtrl.text) ?? 0);
@@ -649,17 +625,17 @@ class _LogisticaTarifaFormScreenState
       setState(() => _error = 'Las tarifas no pueden ser negativas.');
       return;
     }
-    // La validación "chofer no puede superar real" sigue valiendo —
-    // pero solo cuando AMBOS están definidos (ambos > 0). Si alguno
-    // es 0 (por definir), no hay nada que comparar.
+    // La validación "chofer no puede superar real" solo cuando AMBOS están
+    // definidos (ambos > 0). Si alguno es 0 (por definir), no hay nada que
+    // comparar.
     if (tarifaReal > 0 && tarifaChofer > 0 && tarifaChofer > tarifaReal) {
       setState(() => _error =
           'La tarifa del chofer no puede superar la tarifa real.');
       return;
     }
-    // Si el operador eligió "monto fijo por viaje", parseamos y
-    // validamos. Si está vacío o = 0, error — sino la tarifa quedaría
-    // ambigua entre "modo monto fijo" y "no se cargó nada".
+    // Si el operador eligió "monto fijo por viaje", parseamos y validamos.
+    // Si está vacío o = 0, error — sino la tarifa quedaría ambigua entre
+    // "modo monto fijo" y "no se cargó nada".
     double? montoFijoChofer;
     if (_modoMontoFijoChofer) {
       montoFijoChofer =
@@ -671,9 +647,8 @@ class _LogisticaTarifaFormScreenState
       }
     }
 
-    // Si origen y destino son la misma empresa, el campo `_flete` no
-    // se le pide al operador. Normalizamos a `origen` para tener data
-    // consistente — semánticamente da igual (mismo empresa paga).
+    // Si origen y destino son la misma empresa, el campo `_flete` no se le
+    // pide al operador. Normalizamos a `origen` para tener data consistente.
     if (_empOrigen != null &&
         _empDestino != null &&
         _empOrigen!.id == _empDestino!.id) {
@@ -707,12 +682,8 @@ class _LogisticaTarifaFormScreenState
     setState(() => _guardando = true);
     try {
       if (_esEdicion) {
-        // Modo edición: si cambió alguna tarifa, conviene crear una
-        // nueva para preservar histórico (la práctica recomendada). Si
-        // solo cambió notas / tipo / etc, hacemos update directo.
-        // Para simplificar la primera versión: hacemos update directo
-        // siempre, y dejamos la creación de "nueva versión" como flujo
-        // explícito (botón "Modificar precio") en una iteración futura.
+        // Modo edición: update directo (la creación de "nueva versión" para
+        // preservar histórico queda como flujo explícito futuro).
         await LogisticaService.actualizarTarifa(
           id: widget.tarifaId!,
           cambios: {
@@ -735,12 +706,10 @@ class _LogisticaTarifaFormScreenState
             'unidad_tarifa': _unidad.codigo,
             'tarifa_real': tarifaReal,
             'tarifa_chofer': tarifaChofer,
-            // Si el operador cambió a modo "monto fijo": guarda el
-            // valor. Si lo deshabilitó: setea explícito a null para
-            // que la tarifa vuelva al cálculo 18%.
+            // Si cambió a modo "monto fijo": guarda el valor. Si lo
+            // deshabilitó: null para que vuelva al cálculo 18%.
             'monto_fijo_chofer': montoFijoChofer,
-            // BUGFIX 2026-05-21: el producto no se incluía en la edición →
-            // al reabrir aparecía desasignado. null = lo limpia (correcto).
+            // El producto se incluye en la edición (null = lo limpia).
             'producto': _producto,
             'notas': _notasCtrl.text.trim().isEmpty
                 ? null
@@ -784,7 +753,210 @@ class _LogisticaTarifaFormScreenState
 }
 
 // =============================================================================
-// SELECTORES — bottom sheets que muestran la lista de catálogo activa
+// INPUT DECORATION NÚCLEO — superficie surface2, border hairline, focus brand
+// =============================================================================
+
+/// InputDecoration común para los TextField del form, alineada al sistema
+/// Núcleo (relleno surface2, border hairline, borde de foco brand). Conserva
+/// `prefixText`/`suffixText`/`labelText`/`hintText` y `prefixStyle` del
+/// código original.
+InputDecoration _inputDecoration(
+  BuildContext context, {
+  String? labelText,
+  String? hintText,
+  String? prefixText,
+  String? suffixText,
+  TextStyle? prefixStyle,
+}) {
+  final c = context.colors;
+  OutlineInputBorder border(Color col) => OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        borderSide: BorderSide(color: col),
+      );
+  return InputDecoration(
+    labelText: labelText,
+    labelStyle: AppType.bodySm.copyWith(color: c.textMuted),
+    floatingLabelStyle: AppType.bodySm.copyWith(color: c.brand),
+    hintText: hintText,
+    hintStyle: AppType.body.copyWith(color: c.textPlaceholder),
+    prefixText: prefixText,
+    prefixStyle: prefixStyle ?? AppType.mono.copyWith(color: c.textSecondary),
+    suffixText: suffixText,
+    suffixStyle: AppType.monoSm.copyWith(color: c.textMuted),
+    isDense: true,
+    filled: true,
+    fillColor: c.surface2,
+    contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md, vertical: AppSpacing.md),
+    border: border(c.border),
+    enabledBorder: border(c.border),
+    focusedBorder: border(c.borderFocus),
+  );
+}
+
+// =============================================================================
+// SECCIÓN — AppCard tier 2 con eyebrow (+ número en dot) y contenido
+// =============================================================================
+
+class _Seccion extends StatelessWidget {
+  final int? numero;
+  final String titulo;
+  final Color? accentDot;
+  final List<Widget> children;
+
+  const _Seccion({
+    this.numero,
+    required this.titulo,
+    this.accentDot,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return AppCard(
+      tier: 2,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              if (numero != null) ...[
+                Container(
+                  width: 22,
+                  height: 22,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: c.brand.withValues(alpha: 0.16),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                        color: c.brand.withValues(alpha: 0.4)),
+                  ),
+                  child: Text(
+                    '$numero',
+                    style: AppType.monoSm.copyWith(
+                      color: c.brand,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+              ] else if (accentDot != null) ...[
+                AppDot(accentDot!, size: 7),
+                const SizedBox(width: AppSpacing.sm),
+              ],
+              Expanded(
+                child: AppEyebrow(
+                  titulo,
+                  color: numero == null ? accentDot : null,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// PILL SELECTOR — reemplaza ChoiceChip; activo = tinte brand + borde
+// =============================================================================
+
+class _PillSelector extends StatelessWidget {
+  final String label;
+  final bool seleccionado;
+  final VoidCallback onTap;
+
+  const _PillSelector({
+    required this.label,
+    required this.seleccionado,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final fg = seleccionado ? c.brand : c.textSecondary;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.full),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: seleccionado
+              ? c.brand.withValues(alpha: 0.16)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: Border.all(
+            color: seleccionado
+                ? c.brand.withValues(alpha: 0.5)
+                : c.borderStrong,
+          ),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.label.copyWith(
+            color: fg,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// FILA SELECTOR — eyebrow + pills (flete / unidad)
+// =============================================================================
+
+class _FilaSelector<T> extends StatelessWidget {
+  final String etiqueta;
+  final List<T> opciones;
+  final T valor;
+  final String Function(T) etiquetaFn;
+  final ValueChanged<T> onChange;
+
+  const _FilaSelector({
+    required this.etiqueta,
+    required this.opciones,
+    required this.valor,
+    required this.etiquetaFn,
+    required this.onChange,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppEyebrow(etiqueta),
+        const SizedBox(height: AppSpacing.sm),
+        Wrap(
+          spacing: AppSpacing.sm,
+          runSpacing: AppSpacing.sm,
+          children: [
+            for (final op in opciones)
+              _PillSelector(
+                label: etiquetaFn(op),
+                seleccionado: op == valor,
+                onTap: () => onChange(op),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// =============================================================================
+// SELECTORES — cards tappeables con bottom sheets (Núcleo)
 // =============================================================================
 
 class _SelectorEmpresa extends StatelessWidget {
@@ -802,39 +974,45 @@ class _SelectorEmpresa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppCard(
+      tier: 1,
       onTap: () => _abrirSelector(context),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       child: Row(
         children: [
-          const Icon(Icons.business_outlined,
-              color: AppColors.textTertiary, size: 22),
+          Icon(Icons.business_outlined, color: c.textMuted, size: 20),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(etiqueta.toUpperCase(), style: AppType.eyebrow),
+                AppEyebrow(etiqueta),
                 const SizedBox(height: 2),
                 Text(
-                  valor?.etiquetaPrincipal ?? 'Seleccionar...',
+                  valor?.etiquetaPrincipal ?? 'Seleccionar…',
                   style: AppType.body.copyWith(
-                    color: valor == null ? AppColors.textDisabled : AppColors.textPrimary,
-                    fontWeight: FontWeight.bold,
+                    color: valor == null ? c.textMuted : c.text,
+                    fontWeight: FontWeight.w600,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 if (valor?.etiquetaSecundaria != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       valor!.etiquetaSecundaria!,
-                      style: AppType.eyebrow,
+                      style: AppType.monoSm.copyWith(color: c.textMuted),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
               ],
             ),
           ),
-          const Icon(Icons.chevron_right, color: AppColors.textDisabled),
+          Icon(Icons.chevron_right, color: c.textMuted, size: 18),
         ],
       ),
     );
@@ -843,8 +1021,12 @@ class _SelectorEmpresa extends StatelessWidget {
   Future<void> _abrirSelector(BuildContext context) async {
     final res = await showModalBottomSheet<EmpresaLogistica>(
       context: context,
-      backgroundColor: AppColors.surface0,
+      backgroundColor: context.colors.surface1,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+      ),
       builder: (_) => _ListaSelectorEmpresa(soloTipo: soloTipo),
     );
     if (res != null) onChange(res);
@@ -859,23 +1041,62 @@ class _BuscadorField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+    OutlineInputBorder border(Color col) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          borderSide: BorderSide(color: col),
+        );
     return TextField(
       onChanged: onChanged,
-      style: AppType.body.copyWith(color: AppColors.textPrimary),
+      style: AppType.body.copyWith(color: c.text),
       decoration: InputDecoration(
         hintText: hint,
-        prefixIcon:
-            const Icon(Icons.search, color: AppColors.textTertiary, size: 20),
+        hintStyle: AppType.body.copyWith(color: c.textPlaceholder),
+        prefixIcon: Icon(Icons.search, color: c.textMuted, size: 18),
         isDense: true,
         filled: true,
-        fillColor: AppColors.surface2,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.md),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          borderSide: BorderSide.none,
-        ),
+        fillColor: c.surface2,
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.md),
+        border: border(c.border),
+        enabledBorder: border(c.border),
+        focusedBorder: border(c.borderFocus),
       ),
+    );
+  }
+}
+
+/// Handle + título de un bottom sheet de selección.
+class _SheetHeader extends StatelessWidget {
+  final String titulo;
+  final Widget? trailing;
+  const _SheetHeader({required this.titulo, this.trailing});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Column(
+      children: [
+        const SizedBox(height: AppSpacing.sm),
+        Container(
+          width: 40,
+          height: 4,
+          decoration: BoxDecoration(
+            color: c.border,
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+          child: Row(
+            children: [
+              Expanded(child: AppEyebrow(titulo)),
+              if (trailing != null) trailing!,
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -903,6 +1124,7 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final soloTipo = widget.soloTipo;
     return DraggableScrollableSheet(
       expand: false,
@@ -911,28 +1133,16 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
       minChildSize: 0.4,
       builder: (ctx, controller) => Column(
         children: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.textHint,
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-            ),
+          _SheetHeader(
+            titulo: soloTipo == TipoEmpresaLogistica.dadorTransporte
+                ? 'Seleccionar dador'
+                : 'Seleccionar empresa',
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
-            child: Text(
-              soloTipo == TipoEmpresaLogistica.dadorTransporte
-                  ? 'SELECCIONAR DADOR'
-                  : 'SELECCIONAR EMPRESA',
-              style: AppType.heading,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.sm),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
             child: _BuscadorField(
-              hint: 'Buscar empresa...',
+              hint: 'Buscar empresa…',
               onChanged: (v) => setState(() => _q = v),
             ),
           ),
@@ -944,7 +1154,7 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
               ),
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const AppSkeletonList(count: 5, conAvatar: false);
                 }
                 final items = _filtrar(snap.data ?? const []);
                 if (items.isEmpty) {
@@ -962,19 +1172,21 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
                 }
                 return ListView.separated(
                   controller: controller,
-                  padding: const EdgeInsets.fromLTRB(AppSpacing.sm, AppSpacing.xs, AppSpacing.sm, AppSpacing.xl),
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.xl),
                   itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.xs),
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: AppSpacing.xs),
                   itemBuilder: (_, i) {
                     final e = items[i];
                     return AppCard(
+                      tier: 1,
                       onTap: () => Navigator.pop(ctx, e),
                       padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.lg, vertical: AppSpacing.md),
                       child: Row(
                         children: [
-                          const Icon(Icons.business,
-                              color: AppColors.info),
+                          Icon(Icons.business, color: c.info, size: 18),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: Column(
@@ -983,23 +1195,28 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
                                 Text(
                                   e.etiquetaPrincipal,
                                   style: AppType.body.copyWith(
-                                    color: AppColors.textPrimary,
-                                    fontWeight: FontWeight.bold,
+                                    color: c.text,
+                                    fontWeight: FontWeight.w600,
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 if (e.etiquetaSecundaria != null)
                                   Padding(
                                     padding: const EdgeInsets.only(top: 2),
                                     child: Text(
                                       e.etiquetaSecundaria!,
-                                      style: AppType.eyebrow,
+                                      style: AppType.monoSm
+                                          .copyWith(color: c.textMuted),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                               ],
                             ),
                           ),
-                          const Icon(Icons.chevron_right,
-                              color: AppColors.textDisabled),
+                          Icon(Icons.chevron_right,
+                              color: c.textMuted, size: 18),
                         ],
                       ),
                     );
@@ -1018,10 +1235,8 @@ class _SelectorUbicacion extends StatelessWidget {
   final String etiqueta;
   final UbicacionLogistica? valor;
   final ValueChanged<UbicacionLogistica> onChange;
-  /// Si está seteado, el sheet de selección filtra a las ubicaciones
-  /// asociadas a esa empresa (más rápido encontrar para el operador).
-  /// El sheet además ofrece un toggle "Mostrar todas" por si la
-  /// ubicación todavía no fue asociada.
+  /// Si está seteado, el sheet filtra a las ubicaciones de esa empresa. El
+  /// sheet ofrece un toggle "Mostrar todas" por si aún no fue asociada.
   final String? filtroEmpresaId;
 
   const _SelectorUbicacion({
@@ -1033,38 +1248,44 @@ class _SelectorUbicacion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppCard(
+      tier: 1,
       onTap: () => _abrir(context),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       child: Row(
         children: [
-          const Icon(Icons.place_outlined,
-              color: AppColors.textTertiary, size: 22),
+          Icon(Icons.place_outlined, color: c.textMuted, size: 20),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(etiqueta.toUpperCase(), style: AppType.eyebrow),
+                AppEyebrow(etiqueta),
                 const SizedBox(height: 2),
                 Text(
-                  valor?.nombre ?? 'Seleccionar...',
+                  valor?.nombre ?? 'Seleccionar…',
                   style: AppType.body.copyWith(
-                    color: valor == null ? AppColors.textDisabled : AppColors.textPrimary,
-                    fontWeight: FontWeight.bold,
+                    color: valor == null ? c.textMuted : c.text,
+                    fontWeight: FontWeight.w600,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 if (valor != null) ...[
                   const SizedBox(height: 2),
                   Text(
                     valor!.etiquetaCompleta,
-                    style: AppType.eyebrow,
+                    style: AppType.monoSm.copyWith(color: c.textMuted),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ],
             ),
           ),
-          const Icon(Icons.chevron_right, color: AppColors.textDisabled),
+          Icon(Icons.chevron_right, color: c.textMuted, size: 18),
         ],
       ),
     );
@@ -1073,8 +1294,12 @@ class _SelectorUbicacion extends StatelessWidget {
   Future<void> _abrir(BuildContext context) async {
     final res = await showModalBottomSheet<UbicacionLogistica>(
       context: context,
-      backgroundColor: AppColors.surface0,
+      backgroundColor: context.colors.surface1,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+      ),
       builder: (_) => _ListaSelectorUbicacion(
         filtroEmpresaId: filtroEmpresaId,
       ),
@@ -1093,14 +1318,14 @@ class _ListaSelectorUbicacion extends StatefulWidget {
 }
 
 class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
-  /// Si el operador toggleó "Mostrar todas", desactivamos el filtro
-  /// por empresa. Útil cuando la ubicación deseada aún no fue
-  /// asociada a la empresa.
+  /// Si el operador toggleó "Mostrar todas", desactivamos el filtro por
+  /// empresa. Útil cuando la ubicación deseada aún no fue asociada.
   bool _mostrarTodas = false;
   String _q = '';
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.7,
@@ -1108,40 +1333,24 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
       minChildSize: 0.4,
       builder: (ctx, controller) => Column(
         children: [
-          Container(
-            margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: AppColors.textHint,
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-            ),
+          _SheetHeader(
+            titulo: 'Seleccionar ubicación',
+            trailing: widget.filtroEmpresaId != null
+                ? _PillSelector(
+                    label: _mostrarTodas
+                        ? 'Solo de la empresa'
+                        : 'Mostrar todas',
+                    seleccionado: _mostrarTodas,
+                    onTap: () =>
+                        setState(() => _mostrarTodas = !_mostrarTodas),
+                  )
+                : null,
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
-            child: Row(
-              children: [
-                const Text('SELECCIONAR UBICACIÓN', style: AppType.heading),
-                const Spacer(),
-                if (widget.filtroEmpresaId != null)
-                  FilterChip(
-                    label: Text(
-                      _mostrarTodas ? 'Mostrar solo de la empresa' : 'Mostrar todas',
-                      style: AppType.eyebrow,
-                    ),
-                    selected: _mostrarTodas,
-                    onSelected: (v) =>
-                        setState(() => _mostrarTodas = v),
-                    selectedColor:
-                        AppColors.info.withValues(alpha: 0.4),
-                  ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.sm),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
             child: _BuscadorField(
-              hint: 'Buscar ubicación...',
+              hint: 'Buscar ubicación…',
               onChanged: (v) => setState(() => _q = v),
             ),
           ),
@@ -1151,21 +1360,20 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                   LogisticaService.streamUbicaciones(soloActivas: true),
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const AppSkeletonList(count: 5, conAvatar: false);
                 }
                 final all = snap.data ?? const [];
-                // Filtrar por empresa si el caller pasó filtroEmpresaId
-                // y el usuario NO toggleó "Mostrar todas".
-                // M:N: una ubicación puede pertenecer a varias
-                // empresas. Filtrar por array-contains client-side
-                // (el catálogo es chico, no vale la pena un índice
-                // Firestore para esto).
-                final base = (widget.filtroEmpresaId != null && !_mostrarTodas)
-                    ? all
-                        .where((u) =>
-                            u.empresaIds.contains(widget.filtroEmpresaId))
-                        .toList()
-                    : all;
+                // Filtrar por empresa si el caller pasó filtroEmpresaId y el
+                // usuario NO toggleó "Mostrar todas". M:N: una ubicación
+                // puede pertenecer a varias empresas — filtro array-contains
+                // client-side (catálogo chico).
+                final base =
+                    (widget.filtroEmpresaId != null && !_mostrarTodas)
+                        ? all
+                            .where((u) => u.empresaIds
+                                .contains(widget.filtroEmpresaId))
+                            .toList()
+                        : all;
                 // + filtro por texto del buscador (nombre o etiqueta).
                 final q = _q.trim().toLowerCase();
                 final items = q.isEmpty
@@ -1182,31 +1390,33 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                       title: 'Sin ubicaciones de esta empresa',
                       subtitle:
                           'Tocá "Mostrar todas" arriba para ver todas las '
-                          'ubicaciones, o asociá ubicaciones a esta '
-                          'empresa desde el catálogo Ubicaciones.',
+                          'ubicaciones, o asociá ubicaciones a esta empresa '
+                          'desde el catálogo Ubicaciones.',
                     );
                   }
                   return const AppEmptyState(
                     icon: Icons.place_outlined,
                     title: 'Sin ubicaciones activas',
-                    subtitle:
-                        'Cargá una desde el catálogo Ubicaciones.',
+                    subtitle: 'Cargá una desde el catálogo Ubicaciones.',
                   );
                 }
                 return ListView.separated(
                   controller: controller,
-                  padding: const EdgeInsets.fromLTRB(AppSpacing.sm, AppSpacing.xs, AppSpacing.sm, AppSpacing.xl),
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.xl),
                   itemCount: items.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.xs),
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: AppSpacing.xs),
                   itemBuilder: (_, i) {
                     final u = items[i];
                     return AppCard(
+                      tier: 1,
                       onTap: () => Navigator.pop(ctx, u),
                       padding: const EdgeInsets.symmetric(
                           horizontal: AppSpacing.lg, vertical: AppSpacing.md),
                       child: Row(
                         children: [
-                          const Icon(Icons.place, color: AppColors.brandSoft),
+                          Icon(Icons.place, color: c.brandSoft, size: 18),
                           const SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: Column(
@@ -1215,16 +1425,24 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                                 Text(
                                   u.nombre,
                                   style: AppType.body.copyWith(
-                                    color: AppColors.textPrimary,
-                                    fontWeight: FontWeight.bold,
+                                    color: c.text,
+                                    fontWeight: FontWeight.w600,
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                Text(u.etiquetaCompleta, style: AppType.eyebrow),
+                                Text(
+                                  u.etiquetaCompleta,
+                                  style: AppType.monoSm
+                                      .copyWith(color: c.textMuted),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ],
                             ),
                           ),
-                          const Icon(Icons.chevron_right,
-                              color: AppColors.textDisabled),
+                          Icon(Icons.chevron_right,
+                              color: c.textMuted, size: 18),
                         ],
                       ),
                     );
@@ -1240,47 +1458,8 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
 }
 
 // =============================================================================
-// SECCIÓN TÍTULO
-// =============================================================================
-
-class _SeccionTitulo extends StatelessWidget {
-  final int? numero;
-  final String texto;
-  const _SeccionTitulo({required this.numero, required this.texto});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.xs, 0, AppSpacing.xs, AppSpacing.xs),
-      child: Row(
-        children: [
-          if (numero != null) ...[
-            Container(
-              width: 22,
-              height: 22,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                color: AppColors.surface3,
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                '$numero',
-                style: AppType.eyebrow.copyWith(color: AppColors.brand),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-          ],
-          Text(texto.toUpperCase(), style: AppType.eyebrow),
-        ],
-      ),
-    );
-  }
-}
-
-// =============================================================================
-// SELECTOR DE PRODUCTO — dropdown de los productos de la empresa
-// origen (opcional). Si no se elige ninguno, la tarifa es "general"
-// para esa ruta sin distinguir producto.
+// SELECTOR DE PRODUCTO — pills de los productos de la empresa origen
+// (opcional). Si no se elige ninguno, la tarifa es "general" para esa ruta.
 // =============================================================================
 
 class _SelectorProducto extends StatelessWidget {
@@ -1296,50 +1475,49 @@ class _SelectorProducto extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+    final c = context.colors;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: c.surface1,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border.all(color: c.border),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.inventory_2_outlined,
-                  color: AppColors.warning, size: 16),
-              SizedBox(width: AppSpacing.xs),
-              Text('PRODUCTO (OPCIONAL)', style: AppType.eyebrow),
+              Icon(Icons.inventory_2_outlined, color: c.warning, size: 16),
+              const SizedBox(width: AppSpacing.xs),
+              const AppEyebrow('Producto (opcional)'),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),
           Wrap(
-            spacing: AppSpacing.xs,
-            runSpacing: AppSpacing.xs,
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
             children: [
-              ChoiceChip(
-                label: const Text('Sin especificar'),
-                selected: valor == null,
-                onSelected: (v) {
-                  if (v) onChange(null);
-                },
-                selectedColor: AppColors.warning.withValues(alpha: 0.4),
+              _PillSelector(
+                label: 'Sin especificar',
+                seleccionado: valor == null,
+                onTap: () => onChange(null),
               ),
               ...productos.map(
-                (p) => ChoiceChip(
-                  label: Text(p),
-                  selected: valor == p,
-                  onSelected: (v) {
-                    if (v) onChange(p);
-                  },
-                  selectedColor: AppColors.warning.withValues(alpha: 0.4),
+                (p) => _PillSelector(
+                  label: p,
+                  seleccionado: valor == p,
+                  onTap: () => onChange(p),
                 ),
               ),
             ],
           ),
           if (valor == null)
-            const Padding(
-              padding: EdgeInsets.only(top: AppSpacing.xs),
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
               child: Text(
                 'Tarifa general para esta ruta (cualquier producto).',
-                style: AppType.eyebrow,
+                style: AppType.monoSm.copyWith(color: c.textMuted),
               ),
             ),
         ],

@@ -1,10 +1,28 @@
-// Mapa con todas las tarifas activas dibujadas sobre OpenStreetMap.
-// Cada tarifa = una línea entre origen y destino. Cada extremo es un
-// pin.
+// lib/features/logistica/screens/logistica_mapa_tarifas_screen.dart
 //
-// Filtra automáticamente las tarifas que no tienen coords cargadas en
-// las dos puntas (origen Y destino con lat/lng). El operador puede
-// ver de un vistazo qué porción del catálogo todavía falta georreferenciar.
+// REFACTOR NÚCLEO · jun 2026 — mapa de tarifas en lenguaje Núcleo.
+//
+// Mapa con todas las tarifas activas dibujadas sobre OpenStreetMap. Cada
+// tarifa = una línea entre origen y destino; cada extremo es un pin
+// (AppMapMarker). Filtra automáticamente las tarifas sin coords en las dos
+// puntas; el operador ve qué porción del catálogo falta georreferenciar.
+//
+// SOLO PRESENTACIÓN. Se preserva intacto:
+//   - los dos streams (`streamUbicaciones` + `streamTarifas(soloActivas:)`),
+//   - el cache de rutas OSRM (`_rutasPorTarifa`, `_yaSolicitadas`,
+//     `_precargarRutas`),
+//   - el resaltado (`_tarifaResaltadaId`) y el zoom a bounds,
+//   - el toggle satélite (`_modoSatelite`) y el panel lateral (`_panelAbierto`),
+//   - el diagnóstico granular (`_diagnosticar`, `_DiagnosticoMapa`,
+//     `_TarifaFiltrada`) y su sheet,
+//   - la dedup de pins (`_buildMarkers`, `_addUnico`),
+//   - los botones IR AL ORIGEN/DESTINO (solo mobile) y la guía textual
+//     (desktop), `AccionesNavegacionSheet`.
+//
+// Núcleo: markers via AppMapMarker, pills flotantes via AppMapInfoPill,
+// leyenda via AppMapLegend, panel lateral + sheets re-skineados a tokens.
+//
+// Reglas duras: tokens (context.colors), plata en mono, sin overflow.
 
 import 'dart:io' show Platform;
 
@@ -14,6 +32,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/constants/map_constants.dart';
 import '../../../shared/utils/formatters.dart';
@@ -24,8 +44,6 @@ import '../services/logistica_geo_utils.dart';
 import '../services/logistica_service.dart';
 import '../widgets/acciones_navegacion_sheet.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
 class LogisticaMapaTarifasScreen extends StatefulWidget {
   const LogisticaMapaTarifasScreen({super.key});
 
@@ -40,27 +58,20 @@ class _LogisticaMapaTarifasScreenState
   bool _modoSatelite = false;
 
   /// Cache local de rutas OSRM por id de tarifa. Se va llenando
-  /// progresivamente en background. La UI usa la ruta real si está,
-  /// sino dibuja línea recta como fallback inmediato.
+  /// progresivamente en background. La UI usa la ruta real si está, sino
+  /// dibuja línea recta como fallback inmediato.
   final Map<String, GeoRuta> _rutasPorTarifa = {};
 
-  /// Set de tarifas cuyo fetch ya disparé (para no relanzar). Distinto
-  /// del cache global de `LogisticaGeoUtils` para tener visibilidad
-  /// local del estado de carga sin hits en el cache externo.
+  /// Set de tarifas cuyo fetch ya disparé (para no relanzar).
   final Set<String> _yaSolicitadas = {};
 
-  /// Id de la tarifa actualmente resaltada en el mapa (tap en su tile
-  /// del panel lateral). Su polyline se dibuja más gruesa + color
-  /// distinto, y el mapa hace zoom a sus bounds. null = sin resaltar
-  /// (vista panorámica de todo el catálogo).
+  /// Id de la tarifa actualmente resaltada en el mapa (tap en su tile del
+  /// panel lateral). Su polyline se dibuja más gruesa + color brand, y el
+  /// mapa hace zoom a sus bounds. null = sin resaltar (vista panorámica).
   String? _tarifaResaltadaId;
 
-  /// Panel lateral derecho con buscador + lista de tarifas. Abierto
-  /// por default (operador típico está en desktop oficina, tiene
-  /// espacio). Toggle desde el botón del AppBar. Pedido Santiago
-  /// 2026-05-14: con 39+ tarifas la barra horizontal inferior era
-  /// incómoda — wheel del mouse mueve vertical y la lista no estaba
-  /// accesible. El panel lateral con buscador resuelve volumen.
+  /// Panel lateral derecho con buscador + lista de tarifas. Abierto por
+  /// default (operador típico está en desktop oficina, tiene espacio).
   bool _panelAbierto = true;
 
   @override
@@ -69,9 +80,8 @@ class _LogisticaMapaTarifasScreenState
     super.dispose();
   }
 
-  /// Lanza fetch en background para cada tarifa que aún no tenga
-  /// ruta local. Llamado cada vez que se reconstruye la lista de
-  /// tarifas con coords (por updates del stream).
+  /// Lanza fetch en background para cada tarifa que aún no tenga ruta local.
+  /// Llamado cada vez que se reconstruye la lista de tarifas con coords.
   void _precargarRutas(List<_TarifaConRuta> tarifas) {
     for (final t in tarifas) {
       if (_yaSolicitadas.contains(t.tarifa.id)) continue;
@@ -93,8 +103,7 @@ class _LogisticaMapaTarifasScreenState
               ? Icons.view_sidebar_outlined
               : Icons.view_sidebar),
           tooltip: _panelAbierto ? 'Ocultar panel' : 'Mostrar panel',
-          onPressed: () =>
-              setState(() => _panelAbierto = !_panelAbierto),
+          onPressed: () => setState(() => _panelAbierto = !_panelAbierto),
         ),
       ],
       body: StreamBuilder<List<UbicacionLogistica>>(
@@ -108,35 +117,27 @@ class _LogisticaMapaTarifasScreenState
           return StreamBuilder<List<TarifaLogistica>>(
             stream: LogisticaService.streamTarifas(soloActivas: true),
             builder: (ctx, tarSnap) {
-              // Errores primero — un stream caído ahora muestra mensaje
-              // explícito en vez de loading infinito.
+              // Errores primero — un stream caído muestra mensaje explícito.
               if (tarSnap.hasError) {
-                return AppEmptyState(
-                  icon: Icons.error_outline,
+                return AppErrorState(
                   title: 'Error cargando tarifas',
                   subtitle: tarSnap.error.toString(),
                 );
               }
               if (ubicSnap.hasError) {
-                return AppEmptyState(
-                  icon: Icons.error_outline,
+                return AppErrorState(
                   title: 'Error cargando ubicaciones',
                   subtitle: ubicSnap.error.toString(),
                 );
               }
               // Spinner SOLO si NINGUNO de los dos emitió todavía.
-              // Antes: si UNO estaba en waiting, bloqueaba aunque el
-              // otro ya hubiera emitido — quedaba en spinner sin
-              // razón cuando los streams llegaban en momentos
-              // distintos (caso frecuente con Firestore live queries).
               if (!tarSnap.hasData && !ubicSnap.hasData) {
-                return const Center(child: CircularProgressIndicator());
+                return const AppSkeletonList(count: 6, conAvatar: false);
               }
               final tarifas = tarSnap.data ?? const [];
               final diag = _diagnosticar(tarifas, ubicacionesPorId);
               final tarifasConCoords = diag.conCoords;
-              // Disparar precarga de rutas OSRM para todas las
-              // tarifas con coords. Best-effort; las que fallan
+              // Disparar precarga de rutas OSRM. Best-effort; las que fallan
               // quedan con línea recta.
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 _precargarRutas(tarifasConCoords);
@@ -155,9 +156,8 @@ class _LogisticaMapaTarifasScreenState
     );
   }
 
-  /// Devuelve el diagnóstico completo (tarifas OK + tarifas filtradas
-  /// con su motivo). Lo usa el botón "Diagnóstico" del banner para
-  /// listar al operador exactamente qué tarifa falla y por qué.
+  /// Diagnóstico completo (tarifas OK + filtradas con su motivo). Lo usa el
+  /// botón "Diagnóstico" para listar al operador qué tarifa falla y por qué.
   _DiagnosticoMapa _diagnosticar(
     List<TarifaLogistica> tarifas,
     Map<String, UbicacionLogistica> ubicaciones,
@@ -204,18 +204,24 @@ class _LogisticaMapaTarifasScreenState
     return _DiagnosticoMapa(conCoords: ok, filtradas: filtradas);
   }
 
-  /// Sheet con la lista de tarifas filtradas y el motivo. Útil para
-  /// que el operador entienda QUÉ corregir cuando dice "tengo la
-  /// tarifa cargada pero no aparece".
+  /// Sheet con la lista de tarifas filtradas y el motivo. Útil para que el
+  /// operador entienda QUÉ corregir cuando dice "tengo la tarifa cargada
+  /// pero no aparece".
   void _mostrarDiagnostico(
     BuildContext context,
     List<_TarifaFiltrada> filtradas,
   ) {
+    final c = context.colors;
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.background,
+      backgroundColor: c.surface1,
       isScrollControlled: true,
-      builder: (_) {
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+      ),
+      builder: (sheetCtx) {
+        final cc = sheetCtx.colors;
         return DraggableScrollableSheet(
           expand: false,
           initialChildSize: 0.6,
@@ -224,30 +230,26 @@ class _LogisticaMapaTarifasScreenState
           builder: (ctx, controller) {
             return Column(
               children: [
+                const SizedBox(height: AppSpacing.sm),
                 Container(
-                  margin: const EdgeInsets.symmetric(vertical: 8),
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2),
+                    color: cc.border,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
                   ),
                 ),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 4, 16, 12),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.md),
                   child: Row(
                     children: [
-                      Icon(Icons.warning_amber_outlined,
-                          color: AppColors.warning),
-                      SizedBox(width: 10),
+                      Icon(Icons.warning_amber_outlined, color: cc.warning),
+                      const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Text(
                           'Tarifas que no se muestran en el mapa',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: AppType.h5.copyWith(color: cc.text),
                         ),
                       ),
                     ],
@@ -256,11 +258,13 @@ class _LogisticaMapaTarifasScreenState
                 Expanded(
                   child: ListView.separated(
                     controller: controller,
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xxl),
                     itemCount: filtradas.length,
-                    separatorBuilder: (_, __) => const Divider(
-                      color: Colors.white12,
-                      height: 16,
+                    separatorBuilder: (_, __) => Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: AppSpacing.md),
+                      child: AppHairline(color: cc.border),
                     ),
                     itemBuilder: (_, i) {
                       final f = filtradas[i];
@@ -270,16 +274,16 @@ class _LogisticaMapaTarifasScreenState
                           Text(
                             '${f.tarifa.ubicacionOrigenLimpia} → '
                             '${f.tarifa.ubicacionDestinoLimpia}',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                            style: AppType.body.copyWith(
+                              color: cc.text,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                           const SizedBox(height: AppSpacing.xs),
                           Text(
                             f.motivo,
-                            style: AppType.label.copyWith(color: AppColors.warning),
+                            style:
+                                AppType.bodySm.copyWith(color: cc.warning),
                           ),
                         ],
                       );
@@ -301,6 +305,7 @@ class _LogisticaMapaTarifasScreenState
     required int tarifasTotales,
     required Map<String, UbicacionLogistica> ubicacionesPorId,
   }) {
+    final c = context.colors;
     if (tarifasConCoords.isEmpty) {
       return AppEmptyState(
         icon: Icons.map_outlined,
@@ -312,21 +317,16 @@ class _LogisticaMapaTarifasScreenState
                 'Tocá "Diagnóstico" para ver qué le falta a cada una.',
         action: tarifasFiltradas.isEmpty
             ? null
-            : OutlinedButton.icon(
+            : AppButton.secondary(
+                label: 'Ver diagnóstico',
+                icon: Icons.warning_amber_outlined,
                 onPressed: () =>
                     _mostrarDiagnostico(context, tarifasFiltradas),
-                icon: const Icon(Icons.warning_amber_outlined),
-                label: const Text('VER DIAGNÓSTICO'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.warning,
-                  side: const BorderSide(color: AppColors.warning),
-                ),
               ),
       );
     }
 
-    // Calcular bbox para encuadre inicial. Si hay un solo punto la
-    // bbox queda chica — flutter_map lo maneja con padding.
+    // Calcular bbox para encuadre inicial.
     final puntos = <LatLng>[];
     for (final t in tarifasConCoords) {
       puntos.add(t.origen);
@@ -338,35 +338,32 @@ class _LogisticaMapaTarifasScreenState
       children: [
         if (tarifasConCoords.length < tarifasTotales)
           Container(
-            color: Colors.white10,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: c.warningSoft,
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
             child: Row(
               children: [
-                const Icon(Icons.info_outline,
-                    color: AppColors.warning, size: 16),
+                Icon(Icons.info_outline, color: c.warning, size: 16),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     'Mostrando ${tarifasConCoords.length} de '
                     '$tarifasTotales tarifas. El resto no tiene coords '
                     'cargadas en origen y destino.',
-                    style: AppType.label.copyWith(color: Colors.white70),
+                    style: AppType.bodySm.copyWith(color: c.textSecondary),
                   ),
                 ),
                 TextButton.icon(
                   onPressed: () =>
                       _mostrarDiagnostico(context, tarifasFiltradas),
-                  icon: const Icon(Icons.warning_amber_outlined, size: 14),
-                  label: const Text(
-                    'DIAGNÓSTICO',
-                    style: AppType.eyebrow,
-                  ),
+                  icon: Icon(Icons.warning_amber_outlined,
+                      size: 14, color: c.warning),
+                  label: Text('DIAGNÓSTICO',
+                      style: AppType.eyebrow.copyWith(color: c.warning)),
                   style: TextButton.styleFrom(
-                    foregroundColor: AppColors.warning,
+                    foregroundColor: c.warning,
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 0,
-                    ),
+                        horizontal: AppSpacing.sm, vertical: 0),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
@@ -380,172 +377,118 @@ class _LogisticaMapaTarifasScreenState
               Expanded(
                 child: Stack(
                   children: [
-              FlutterMap(
-            mapController: _mapCtl,
-            options: MapOptions(
-              initialCameraFit: CameraFit.bounds(
-                bounds: bbox,
-                padding: const EdgeInsets.all(40),
-              ),
-              minZoom: 4,
-              maxZoom: 18,
-            ),
-            children: [
-              if (_modoSatelite && MapConstants.tieneMapbox)
-                TileLayer(
-                  urlTemplate: MapConstants.tileSatelliteUrl,
-                  userAgentPackageName: MapConstants.userAgent,
-                  maxZoom: 22,
-                )
-              else
-                TileLayer(
-                  urlTemplate: MapConstants.tileUrl,
-                  subdomains: MapConstants.tileSubdomains,
-                  userAgentPackageName: MapConstants.userAgent,
-                  maxZoom: 19,
-                ),
-              // Líneas de tarifas (debajo de los pins). Si ya tenemos
-              // la ruta OSRM (siguen las carreteras) la usamos; sino
-              // fallback a línea recta entre origen y destino.
-              //
-              // La tarifa resaltada (la que el operador eligió tocando
-              // su tile en la franja inferior) se dibuja **encima**
-              // del resto y con stroke más grueso + color naranja para
-              // destacarla. Las demás quedan en verde tenue como
-              // contexto.
-              PolylineLayer(
-                polylines: () {
-                  final polylines = <Polyline>[];
-                  Polyline? resaltada;
-                  for (final t in tarifasConCoords) {
-                    final inactiva = !t.tarifa.activa;
-                    final rutaReal = _rutasPorTarifa[t.tarifa.id];
-                    final puntos = rutaReal?.puntos ?? [t.origen, t.destino];
-                    final esResaltada =
-                        _tarifaResaltadaId == t.tarifa.id;
-                    final color = esResaltada
-                        ? AppColors.warning
-                        : (inactiva
-                            ? Colors.white24
-                            : AppColors.success.withValues(
-                                alpha: _tarifaResaltadaId == null
-                                    ? 0.7
-                                    : 0.25,
-                              ));
-                    final polyline = Polyline(
-                      points: puntos,
-                      strokeWidth: esResaltada ? 6 : 3,
-                      color: color,
-                    );
-                    if (esResaltada) {
-                      resaltada = polyline;
-                    } else {
-                      polylines.add(polyline);
-                    }
-                  }
-                  // La resaltada al final → se dibuja arriba del resto.
-                  if (resaltada != null) polylines.add(resaltada);
-                  return polylines;
-                }(),
-              ),
-              // Pins en cada extremo (deduplicados por coord +
-              // agrupados con cluster cuando se solapan a bajo
-              // zoom). El cluster muestra "5" o "12" según cantidad
-              // y al hacer tap se zoomea.
-              MarkerClusterLayerWidget(
-                options: MarkerClusterLayerOptions(
-                  maxClusterRadius: 60,
-                  size: const Size(40, 40),
-                  alignment: Alignment.center,
-                  padding: const EdgeInsets.all(50),
-                  markers: _buildMarkers(tarifasConCoords),
-                  builder: (ctx, markers) => Container(
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.info,
+                    FlutterMap(
+                      mapController: _mapCtl,
+                      options: MapOptions(
+                        initialCameraFit: CameraFit.bounds(
+                          bounds: bbox,
+                          padding: const EdgeInsets.all(40),
+                        ),
+                        minZoom: 4,
+                        maxZoom: 18,
+                      ),
+                      children: [
+                        if (_modoSatelite && MapConstants.tieneMapbox)
+                          TileLayer(
+                            urlTemplate: MapConstants.tileSatelliteUrl,
+                            userAgentPackageName: MapConstants.userAgent,
+                            maxZoom: 22,
+                          )
+                        else
+                          TileLayer(
+                            urlTemplate: MapConstants.tileUrl,
+                            subdomains: MapConstants.tileSubdomains,
+                            userAgentPackageName: MapConstants.userAgent,
+                            maxZoom: 19,
+                          ),
+                        // Líneas de tarifas (debajo de los pins). Ruta OSRM
+                        // si la tenemos; sino fallback a línea recta. La
+                        // resaltada se dibuja ENCIMA con stroke grueso brand;
+                        // las demás en brand tenue como contexto.
+                        PolylineLayer(
+                          polylines: _polylines(c, tarifasConCoords),
+                        ),
+                        // Pins en cada extremo (dedup por coord + cluster).
+                        MarkerClusterLayerWidget(
+                          options: MarkerClusterLayerOptions(
+                            maxClusterRadius: 60,
+                            size: const Size(40, 40),
+                            alignment: Alignment.center,
+                            padding: const EdgeInsets.all(50),
+                            markers: _buildMarkers(tarifasConCoords),
+                            builder: (ctx, markers) {
+                              final cc = ctx.colors;
+                              return Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: cc.brand,
+                                  border:
+                                      Border.all(color: cc.text, width: 1.5),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color:
+                                          cc.brand.withValues(alpha: 0.6),
+                                      blurRadius: 10,
+                                    ),
+                                  ],
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    AppFormatters.formatearMiles(
+                                        markers.length),
+                                    style: AppType.mono.copyWith(
+                                      color: cc.brandFg,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                    child: Center(
-                      child: Text(
-                        markers.length.toString(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                    // Toggle satelital flotante (solo si Mapbox configurado).
+                    if (MapConstants.tieneMapbox)
+                      Positioned(
+                        top: AppSpacing.md,
+                        right: AppSpacing.md,
+                        child: _BotonMapa(
+                          icono: _modoSatelite
+                              ? Icons.map_outlined
+                              : Icons.satellite_alt_outlined,
+                          label: _modoSatelite ? 'Mapa' : 'Satélite',
+                          onTap: () => setState(
+                              () => _modoSatelite = !_modoSatelite),
                         ),
                       ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-              // Toggle satelital flotante. Solo si Mapbox está configurado.
-              if (MapConstants.tieneMapbox)
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: Material(
-                    color: Colors.black.withValues(alpha: 0.7),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(AppRadius.sm),
-                      onTap: () => setState(
-                          () => _modoSatelite = !_modoSatelite),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              _modoSatelite
-                                  ? Icons.map_outlined
-                                  : Icons.satellite_alt_outlined,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              _modoSatelite ? 'MAPA' : 'SATÉLITE',
-                              style: AppType.eyebrow.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                            ),
-                          ],
+                    // Botón "VER TODAS" — visible solo con una tarifa
+                    // resaltada. Limpia el resaltado y vuelve al bbox total.
+                    if (_tarifaResaltadaId != null)
+                      Positioned(
+                        top: AppSpacing.md,
+                        left: AppSpacing.md,
+                        child: _BotonMapa(
+                          icono: Icons.zoom_out_map,
+                          label: 'Ver todas',
+                          onTap: () =>
+                              _verPanoramica(tarifasConCoords, bbox),
                         ),
                       ),
-                    ),
-                  ),
-                ),
-              // Botón "VER TODAS" — visible solo si hay una tarifa
-              // resaltada. Limpia el resaltado y vuelve al bounding
-              // box del catálogo completo.
-              if (_tarifaResaltadaId != null)
-                Positioned(
-                  top: 12,
-                  left: 12,
-                  child: Material(
-                    color: AppColors.warning.withValues(alpha: 0.92),
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(AppRadius.sm),
-                      onTap: () => _verPanoramica(tarifasConCoords, bbox),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 8),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.zoom_out_map,
-                                color: Colors.white, size: 18),
-                            const SizedBox(width: 6),
-                            Text(
-                              'VER TODAS',
-                              style: AppType.eyebrow.copyWith(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.1),
-                            ),
-                          ],
-                        ),
+                    // Leyenda de colores (abajo-izquierda).
+                    const Positioned(
+                      left: AppSpacing.md,
+                      bottom: AppSpacing.md,
+                      child: AppMapLegend(
+                        items: [
+                          (label: 'Ruta', status: AppMarkerStatus.info),
+                          (
+                            label: 'Resaltada',
+                            status: AppMarkerStatus.live
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ),
                   ],
                 ),
               ),
@@ -553,10 +496,8 @@ class _LogisticaMapaTarifasScreenState
                 _PanelLateralTarifas(
                   tarifasConCoords: tarifasConCoords,
                   tarifaResaltadaId: _tarifaResaltadaId,
-                  onTapTarifa: (t) =>
-                      _mostrarDetalleTarifa(context, t),
-                  onCerrar: () =>
-                      setState(() => _panelAbierto = false),
+                  onTapTarifa: (t) => _mostrarDetalleTarifa(context, t),
+                  onCerrar: () => setState(() => _panelAbierto = false),
                 ),
             ],
           ),
@@ -565,26 +506,61 @@ class _LogisticaMapaTarifasScreenState
     );
   }
 
+  /// Construye las polylines: la resaltada al final (se dibuja arriba) con
+  /// stroke grueso + color brand; las demás en brand/muted como contexto.
+  List<Polyline> _polylines(
+    AppColorsExt c,
+    List<_TarifaConRuta> tarifasConCoords,
+  ) {
+    final polylines = <Polyline>[];
+    Polyline? resaltada;
+    for (final t in tarifasConCoords) {
+      final inactiva = !t.tarifa.activa;
+      final rutaReal = _rutasPorTarifa[t.tarifa.id];
+      final puntos = rutaReal?.puntos ?? [t.origen, t.destino];
+      final esResaltada = _tarifaResaltadaId == t.tarifa.id;
+      final color = esResaltada
+          ? c.brand
+          : (inactiva
+              ? c.textMuted
+              : c.info.withValues(
+                  alpha: _tarifaResaltadaId == null ? 0.7 : 0.25,
+                ));
+      final polyline = Polyline(
+        points: puntos,
+        strokeWidth: esResaltada ? 6 : 3,
+        color: color,
+      );
+      if (esResaltada) {
+        resaltada = polyline;
+      } else {
+        polylines.add(polyline);
+      }
+    }
+    if (resaltada != null) polylines.add(resaltada);
+    return polylines;
+  }
+
   List<Marker> _buildMarkers(List<_TarifaConRuta> tarifas) {
-    // Dedup por punto (con tolerancia). Si dos puntos están a
-    // <100m, los consideramos el mismo (evita pins encimados).
+    // Dedup por punto (con tolerancia). Si dos puntos están a <100m, los
+    // consideramos el mismo (evita pins encimados).
     final unicos = <LatLng, String>{};
     for (final t in tarifas) {
       _addUnico(unicos, t.origen, t.nombreOrigen);
       _addUnico(unicos, t.destino, t.nombreDestino);
     }
     return unicos.entries.map((e) {
+      // La etiqueta puede traer varios nombres separados por "\n" (puntos
+      // combinados). Para el pill del marker usamos la primera línea.
+      final primeraLinea = e.value.split('\n').first;
       return Marker(
         point: e.key,
-        width: 30,
-        height: 30,
-        child: Tooltip(
-          message: e.value,
-          child: const Icon(
-            Icons.location_on,
-            color: AppColors.info,
-            size: 30,
-          ),
+        width: 120,
+        height: 56,
+        alignment: const Alignment(0, -0.4),
+        child: AppMapMarker(
+          label: primeraLinea,
+          status: AppMarkerStatus.info,
         ),
       );
     }).toList();
@@ -597,7 +573,7 @@ class _LogisticaMapaTarifasScreenState
   ) {
     for (final existente in mapa.keys) {
       if (LogisticaGeoUtils.distanciaKm(existente, punto) < 0.1) {
-        // Mismo punto → no agregamos otro pin pero combinamos nombre
+        // Mismo punto → no agregamos otro pin pero combinamos nombre.
         final actual = mapa[existente]!;
         if (!actual.contains(nombre)) {
           mapa[existente] = '$actual\n$nombre';
@@ -608,22 +584,15 @@ class _LogisticaMapaTarifasScreenState
     mapa[punto] = nombre;
   }
 
-  /// Tap en una tile de tarifa: (1) resaltar visualmente la ruta en
-  /// el mapa, (2) zoomear/centrar el mapa a los bounds de origen +
-  /// destino con padding, y (3) abrir el sheet de detalle (que NO
-  /// muestra los botones IR AL ORIGEN/DESTINO en Windows desktop —
-  /// el operador está en oficina, no manejando).
-  ///
-  /// Para volver a la vista panorámica de todo el catálogo, el
-  /// operador cierra el sheet y toca cualquier zona vacía / o toca
-  /// otra tile.
+  /// Tap en una tile de tarifa: (1) resaltar la ruta en el mapa, (2)
+  /// zoomear/centrar a los bounds de origen + destino con padding, y (3)
+  /// abrir el sheet de detalle (que NO muestra IR AL ORIGEN/DESTINO en
+  /// desktop — el operador está en oficina, no manejando).
   void _mostrarDetalleTarifa(BuildContext context, _TarifaConRuta t) {
-    // Resaltar la tarifa en el mapa.
     setState(() => _tarifaResaltadaId = t.tarifa.id);
 
-    // Centrar el mapa en el bounding box de la tarifa. Si tenemos
-    // ruta real, usamos sus puntos (más preciso); sino origen+destino.
-    final puntos = _rutasPorTarifa[t.tarifa.id]?.puntos ?? [t.origen, t.destino];
+    final puntos =
+        _rutasPorTarifa[t.tarifa.id]?.puntos ?? [t.origen, t.destino];
     if (puntos.isNotEmpty) {
       final bbox = LatLngBounds.fromPoints(puntos);
       _mapCtl.fitCamera(
@@ -636,20 +605,24 @@ class _LogisticaMapaTarifasScreenState
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.surface1,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+      ),
       builder: (_) => _DetalleTarifaSheet(
         tarifaConRuta: t,
         rutaReal: _rutasPorTarifa[t.tarifa.id],
       ),
     ).whenComplete(() {
-      // Al cerrar el sheet, dejamos la tarifa todavía resaltada — el
-      // operador ya está mirando la ruta. Para volver a la vista
-      // panorámica puede tocar el botón "Ver todas" (arriba).
+      // Al cerrar el sheet, dejamos la tarifa resaltada — el operador ya
+      // está mirando la ruta. Para la vista panorámica usa "Ver todas".
     });
   }
 
   /// Vuelve a la vista panorámica con todas las tarifas y limpia el
-  /// resaltado. Llamado por el botón "VER TODAS" arriba del mapa.
+  /// resaltado. Llamado por el botón "VER TODAS".
   void _verPanoramica(List<_TarifaConRuta> tarifas, LatLngBounds? bbox) {
     setState(() => _tarifaResaltadaId = null);
     if (bbox != null) {
@@ -681,40 +654,66 @@ class _TarifaConRuta {
   double get distanciaKm => LogisticaGeoUtils.distanciaKm(origen, destino);
 }
 
-/// Tarifa que NO se puede mostrar en el mapa + el motivo concreto.
-/// Lo usa el sheet de diagnóstico para que el operador vea
-/// exactamente qué corregir (ej. "la ubicación origen no tiene
-/// coords cargadas" en lugar del genérico "sin georreferenciar").
+/// Tarifa que NO se puede mostrar en el mapa + el motivo concreto. Lo usa
+/// el sheet de diagnóstico para que el operador vea exactamente qué corregir.
 class _TarifaFiltrada {
   final TarifaLogistica tarifa;
   final String motivo;
   const _TarifaFiltrada({required this.tarifa, required this.motivo});
 }
 
-/// Resultado del análisis de tarifas para el mapa: las que se pueden
-/// dibujar + las filtradas con su motivo.
+/// Resultado del análisis de tarifas para el mapa: las dibujables + las
+/// filtradas con su motivo.
 class _DiagnosticoMapa {
   final List<_TarifaConRuta> conCoords;
   final List<_TarifaFiltrada> filtradas;
   const _DiagnosticoMapa({required this.conCoords, required this.filtradas});
 }
 
-/// Panel lateral derecho con buscador token-based + lista vertical
-/// de tarifas. Reemplazó la barra inferior horizontal el 2026-05-14
-/// (Santiago: con 39+ tarifas la barra horizontal era incómoda —
-/// scroll horizontal en desktop con wheel del mouse no funciona).
-///
-/// El operador puede:
-///   - Buscar por empresa/ubicación/dador/producto (token-based,
-///     match en TODOS los tokens). Misma UX que el selector de
-///     tarifa en el form de viaje.
-///   - Tap en una tile → resalta la ruta en el mapa + abre detalle.
-///   - Cerrar el panel para ver el mapa full (botón X arriba o
-///     toggle desde el AppBar).
-///
-/// Width fijo 320px. En screens muy angostas (mobile chico) ocupa
-/// más proporción del width pero se mantiene usable. Si Vecchi
-/// arranca a operar el mapa desde celulares, evaluar Drawer modal.
+// =============================================================================
+// BOTÓN FLOTANTE (toggle satélite / ver todas) — cristal Núcleo
+// =============================================================================
+
+class _BotonMapa extends StatelessWidget {
+  final IconData icono;
+  final String label;
+  final VoidCallback onTap;
+  const _BotonMapa(
+      {required this.icono, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: AppMapInfoPill(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icono, size: 16, color: c.text),
+              const SizedBox(width: AppSpacing.xs),
+              Text(label,
+                  style: AppType.monoSm.copyWith(
+                      color: c.text, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// PANEL LATERAL — buscador token-based + lista vertical de tarifas
+// =============================================================================
+
+/// Panel lateral derecho con buscador token-based + lista vertical de
+/// tarifas. El operador puede buscar por empresa/ubicación/dador/producto,
+/// tocar una tile (resalta + abre detalle), o cerrar el panel. Width fijo
+/// 320px. Estilo Núcleo: surface1 + hairline divisorio.
 class _PanelLateralTarifas extends StatefulWidget {
   final List<_TarifaConRuta> tarifasConCoords;
   final String? tarifaResaltadaId;
@@ -742,10 +741,8 @@ class _PanelLateralTarifasState extends State<_PanelLateralTarifas> {
     super.dispose();
   }
 
-  /// Filtro token-based: exige que TODOS los tokens estén presentes
-  /// en algún campo de la tarifa. Permite buscar "profertil olavarria"
-  /// y matchear empresa Profertil + destino Olavarría. Mismo patrón
-  /// que `LogisticaTarifasScreen._aplicarFiltro`.
+  /// Filtro token-based: exige que TODOS los tokens estén presentes en algún
+  /// campo de la tarifa. Mismo patrón que `LogisticaTarifasScreen`.
   List<_TarifaConRuta> _aplicar(List<_TarifaConRuta> items) {
     final q = _filtro.trim().toLowerCase();
     if (q.isEmpty) return items;
@@ -768,33 +765,32 @@ class _PanelLateralTarifasState extends State<_PanelLateralTarifas> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final filtradas = _aplicar(widget.tarifasConCoords);
     return Container(
       width: 320,
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.6),
-        border: Border(
-          left: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
-        ),
+        color: c.surface1,
+        border: Border(left: BorderSide(color: c.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header con conteo + botón cerrar.
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 4, 4),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.xs, AppSpacing.xs),
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
+                  child: AppEyebrow(
                     _filtro.isEmpty
-                        ? '${widget.tarifasConCoords.length} TARIFA(S)'
+                        ? '${widget.tarifasConCoords.length} tarifa(s)'
                         : '${filtradas.length} de ${widget.tarifasConCoords.length}',
-                    style: AppType.eyebrow.copyWith(color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 1.2),
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white54, size: 18),
+                  icon: Icon(Icons.close, color: c.textMuted, size: 18),
                   tooltip: 'Cerrar panel',
                   visualDensity: VisualDensity.compact,
                   onPressed: widget.onCerrar,
@@ -804,33 +800,19 @@ class _PanelLateralTarifasState extends State<_PanelLateralTarifas> {
           ),
           // Buscador.
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-            child: TextField(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.md, AppSpacing.xs, AppSpacing.md, AppSpacing.sm),
+            child: _BuscadorPanel(
               controller: _filtroCtrl,
-              decoration: InputDecoration(
-                prefixIcon: const Icon(Icons.search, size: 18),
-                hintText: 'Buscar empresa, ubicación, dador…',
-                border: const OutlineInputBorder(),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 8, vertical: 10),
-                suffixIcon: _filtro.isEmpty
-                    ? null
-                    : IconButton(
-                        icon: const Icon(Icons.clear, size: 16),
-                        visualDensity: VisualDensity.compact,
-                        tooltip: 'Limpiar búsqueda',
-                        onPressed: () {
-                          _filtroCtrl.clear();
-                          setState(() => _filtro = '');
-                        },
-                      ),
-              ),
-              style: const TextStyle(fontSize: 13),
+              tieneTexto: _filtro.isNotEmpty,
               onChanged: (v) => setState(() => _filtro = v),
+              onLimpiar: () {
+                _filtroCtrl.clear();
+                setState(() => _filtro = '');
+              },
             ),
           ),
-          const Divider(color: Colors.white12, height: 1),
+          AppHairline(color: c.border),
           // Lista vertical.
           Expanded(
             child: filtradas.isEmpty
@@ -839,16 +821,17 @@ class _PanelLateralTarifasState extends State<_PanelLateralTarifas> {
                       padding: const EdgeInsets.all(AppSpacing.xl),
                       child: Text(
                         'Sin tarifas que coincidan con la búsqueda.',
-                        style: AppType.label.copyWith(color: Colors.white54),
+                        style: AppType.bodySm.copyWith(color: c.textMuted),
                         textAlign: TextAlign.center,
                       ),
                     ),
                   )
                 : ListView.separated(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 8),
+                        horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
                     itemCount: filtradas.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 6),
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: 6),
                     itemBuilder: (_, i) => _TarifaTile(
                       tarifaConRuta: filtradas[i],
                       resaltada: filtradas[i].tarifa.id ==
@@ -863,9 +846,60 @@ class _PanelLateralTarifasState extends State<_PanelLateralTarifas> {
   }
 }
 
-/// Tile de tarifa en el panel lateral. Más alto que ancho, con info
-/// completa en 4 líneas: tipo, ubicaciones (origen → destino),
-/// empresas, distancia + tarifa.
+/// Buscador compacto del panel lateral (estilo Núcleo, denso para 320px).
+class _BuscadorPanel extends StatelessWidget {
+  final TextEditingController controller;
+  final bool tieneTexto;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onLimpiar;
+  const _BuscadorPanel({
+    required this.controller,
+    required this.tieneTexto,
+    required this.onChanged,
+    required this.onLimpiar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    OutlineInputBorder border(Color col) => OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          borderSide: BorderSide(color: col),
+        );
+    return TextField(
+      controller: controller,
+      onChanged: onChanged,
+      style: AppType.bodySm.copyWith(color: c.text),
+      decoration: InputDecoration(
+        prefixIcon: Icon(Icons.search, size: 16, color: c.textMuted),
+        prefixIconConstraints:
+            const BoxConstraints(minWidth: 34, minHeight: 34),
+        hintText: 'Buscar empresa, ubicación, dador…',
+        hintStyle: AppType.bodySm.copyWith(color: c.textPlaceholder),
+        isDense: true,
+        filled: true,
+        fillColor: c.surface2,
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.sm, vertical: 10),
+        suffixIcon: !tieneTexto
+            ? null
+            : IconButton(
+                icon: Icon(Icons.clear, size: 15, color: c.textMuted),
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Limpiar búsqueda',
+                onPressed: onLimpiar,
+              ),
+        border: border(c.border),
+        enabledBorder: border(c.border),
+        focusedBorder: border(c.borderFocus),
+      ),
+    );
+  }
+}
+
+/// Tile de tarifa en el panel lateral. Info en 4 líneas: ubicaciones
+/// (origen ↓ destino), empresas, distancia + tarifa (mono). Resaltada =
+/// tinte brand + borde brand.
 class _TarifaTile extends StatelessWidget {
   final _TarifaConRuta tarifaConRuta;
   final bool resaltada;
@@ -879,21 +913,18 @@ class _TarifaTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final t = tarifaConRuta.tarifa;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(AppRadius.md),
       child: Container(
-        padding: const EdgeInsets.all(10),
+        padding: const EdgeInsets.all(AppSpacing.sm),
         decoration: BoxDecoration(
-          color: resaltada
-              ? AppColors.success.withValues(alpha: 0.18)
-              : Colors.white10,
-          borderRadius: BorderRadius.circular(6),
+          color: resaltada ? c.brand.withValues(alpha: 0.16) : c.surface2,
+          borderRadius: BorderRadius.circular(AppRadius.md),
           border: Border.all(
-            color: resaltada
-                ? AppColors.success
-                : AppColors.success.withValues(alpha: 0.3),
+            color: resaltada ? c.brand : c.border,
             width: resaltada ? 1.5 : 1,
           ),
         ),
@@ -902,19 +933,20 @@ class _TarifaTile extends StatelessWidget {
           children: [
             Text(
               t.ubicacionOrigenLimpia,
-              style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+              style: AppType.bodySm.copyWith(
+                  color: c.text, fontWeight: FontWeight.w600),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             Row(
               children: [
-                const Icon(Icons.arrow_downward,
-                    size: 11, color: Colors.white38),
+                Icon(Icons.arrow_downward, size: 11, color: c.textMuted),
                 const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
                     t.ubicacionDestinoLimpia,
-                    style: AppType.label.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                    style: AppType.bodySm.copyWith(
+                        color: c.text, fontWeight: FontWeight.w600),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -924,16 +956,17 @@ class _TarifaTile extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             Text(
               '${t.empresaOrigenNombre} → ${t.empresaDestinoNombre}',
-              style: const TextStyle(color: Colors.white54, fontSize: 10),
+              style: AppType.monoSm.copyWith(color: c.textMuted),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
               '${tarifaConRuta.distanciaKm.toStringAsFixed(0)} km · '
-              '\$${AppFormatters.formatearMonto(t.tarifaReal)}'
-              '/${t.unidadTarifa.codigo}',
-              style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold),
+              '\$ ${AppFormatters.formatearMonto(t.tarifaReal)}'
+              '${t.unidadTarifa.sufijoMonto}',
+              style: AppType.monoSm.copyWith(
+                  color: c.textSecondary, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -941,6 +974,10 @@ class _TarifaTile extends StatelessWidget {
     );
   }
 }
+
+// =============================================================================
+// SHEET DE DETALLE DE TARIFA
+// =============================================================================
 
 class _DetalleTarifaSheet extends StatelessWidget {
   final _TarifaConRuta tarifaConRuta;
@@ -950,10 +987,9 @@ class _DetalleTarifaSheet extends StatelessWidget {
     this.rutaReal,
   });
 
-  /// `true` solo en Android / iOS. En Windows desktop, web, macOS y
-  /// Linux los botones "IR AL ORIGEN/DESTINO" no tienen sentido (el
-  /// operador está en la oficina, no manejando) — se reemplazan por
-  /// una guía textual.
+  /// `true` solo en Android / iOS. En Windows desktop, web, macOS y Linux
+  /// los botones "IR AL ORIGEN/DESTINO" no tienen sentido (el operador está
+  /// en la oficina, no manejando) — se reemplazan por una guía textual.
   bool get _esMobile {
     if (kIsWeb) return false;
     return Platform.isAndroid || Platform.isIOS;
@@ -961,149 +997,173 @@ class _DetalleTarifaSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final t = tarifaConRuta.tarifa;
     final distGeodesica = tarifaConRuta.distanciaKm;
     final margenBruto = t.tarifaReal - t.tarifaChofer;
-    return Padding(
-      padding: const EdgeInsets.all(20),
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface1,
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+        border: Border.all(color: c.border),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.price_change_outlined,
-                  color: AppColors.success),
-              const SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: Text(
-                  '${t.ubicacionOrigenLimpia} → ${t.ubicacionDestinoLimpia}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.heading.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-                ),
+          const SizedBox(height: AppSpacing.sm),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: c.border,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+          ),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.price_change_outlined, color: c.brand),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          '${t.ubicacionOrigenLimpia} → ${t.ubicacionDestinoLimpia}',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppType.h5.copyWith(color: c.text),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    '${tarifaConRuta.nombreOrigen}  →  ${tarifaConRuta.nombreDestino}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.bodySm.copyWith(color: c.textSecondary),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  const AppHairline(),
+                  const SizedBox(height: AppSpacing.md),
+                  if (rutaReal != null) ...[
+                    _InfoFila(
+                      icono: Icons.route_outlined,
+                      etiqueta: 'Distancia por ruta',
+                      valor: '${rutaReal!.distanciaKm.toStringAsFixed(0)} km',
+                      mono: true,
+                    ),
+                    _InfoFila(
+                      icono: Icons.schedule,
+                      etiqueta: 'Tiempo estimado de manejo',
+                      valor: rutaReal!.duracionFormateada,
+                      mono: true,
+                    ),
+                  ] else
+                    _InfoFila(
+                      icono: Icons.straighten,
+                      etiqueta: 'Distancia (línea recta)',
+                      valor: '${distGeodesica.toStringAsFixed(0)} km',
+                      mono: true,
+                    ),
+                  _InfoFila(
+                    icono: Icons.local_shipping_outlined,
+                    etiqueta: 'Tipo',
+                    valor: t.tipoCarga.etiqueta,
+                  ),
+                  _InfoFila(
+                    icono: Icons.attach_money,
+                    etiqueta: 'Tarifa real / ${t.unidadTarifa.codigo}',
+                    valor: '\$ ${AppFormatters.formatearMonto(t.tarifaReal)}',
+                    mono: true,
+                  ),
+                  _InfoFila(
+                    icono: Icons.payments_outlined,
+                    etiqueta: 'Tarifa chofer / ${t.unidadTarifa.codigo}',
+                    valor:
+                        '\$ ${AppFormatters.formatearMonto(t.tarifaChofer)}',
+                    mono: true,
+                  ),
+                  _InfoFila(
+                    icono: Icons.savings_outlined,
+                    etiqueta: 'Bruto antes de gastos',
+                    valor: '\$ ${AppFormatters.formatearMonto(margenBruto)}',
+                    mono: true,
+                  ),
+                  if (t.dadorNombre != null)
+                    _InfoFila(
+                      icono: Icons.handshake_outlined,
+                      etiqueta: 'Dador',
+                      valor: '${t.dadorNombre}'
+                          '${t.montoFijoDador != null ? " (\$ ${AppFormatters.formatearMonto(t.montoFijoDador!)}/viaje)" : t.porcentajeComisionDador != null ? " (${t.porcentajeComisionDador!.toStringAsFixed(1)}%)" : ""}',
+                    ),
+                  const SizedBox(height: AppSpacing.md),
+                  const AppHairline(),
+                  const SizedBox(height: AppSpacing.md),
+                  // En mobile (chofer/supervisor manejando) IR AL
+                  // ORIGEN/DESTINO abren Google Maps/Waze. En desktop
+                  // (operador en oficina) no sirven — guía textual.
+                  if (_esMobile)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: AppButton.secondary(
+                            label: 'Ir al origen',
+                            icon: Icons.navigation_outlined,
+                            size: AppButtonSize.sm,
+                            expand: true,
+                            onPressed: () => AccionesNavegacionSheet.abrir(
+                              context,
+                              lat: tarifaConRuta.origen.latitude,
+                              lng: tarifaConRuta.origen.longitude,
+                              label: tarifaConRuta.nombreOrigen,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: AppButton.secondary(
+                            label: 'Ir al destino',
+                            icon: Icons.navigation_outlined,
+                            size: AppButtonSize.sm,
+                            expand: true,
+                            onPressed: () => AccionesNavegacionSheet.abrir(
+                              context,
+                              lat: tarifaConRuta.destino.latitude,
+                              lng: tarifaConRuta.destino.longitude,
+                              label: tarifaConRuta.nombreDestino,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    Row(
+                      children: [
+                        Icon(Icons.alt_route, color: c.brand, size: 18),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'Recorrido marcado en el mapa.',
+                            style: AppType.bodySm
+                                .copyWith(color: c.textSecondary),
+                          ),
+                        ),
+                        AppButton.ghost(
+                          label: 'Cerrar',
+                          size: AppButtonSize.sm,
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            '${tarifaConRuta.nombreOrigen}  →  ${tarifaConRuta.nombreDestino}',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: AppType.label.copyWith(color: Colors.white60),
-          ),
-          const Divider(color: Colors.white12, height: 24),
-          if (rutaReal != null) ...[
-            _InfoFila(
-              icono: Icons.route_outlined,
-              etiqueta: 'Distancia por ruta',
-              valor: '${rutaReal!.distanciaKm.toStringAsFixed(0)} km',
             ),
-            _InfoFila(
-              icono: Icons.schedule,
-              etiqueta: 'Tiempo estimado de manejo',
-              valor: rutaReal!.duracionFormateada,
-            ),
-          ] else
-            _InfoFila(
-              icono: Icons.straighten,
-              etiqueta: 'Distancia (línea recta)',
-              valor: '${distGeodesica.toStringAsFixed(0)} km',
-            ),
-          _InfoFila(
-            icono: Icons.local_shipping_outlined,
-            etiqueta: 'Tipo',
-            valor: t.tipoCarga.etiqueta,
           ),
-          _InfoFila(
-            icono: Icons.attach_money,
-            etiqueta: 'Tarifa real / ${t.unidadTarifa.codigo}',
-            valor: AppFormatters.formatearMonto(t.tarifaReal),
-          ),
-          _InfoFila(
-            icono: Icons.payments_outlined,
-            etiqueta: 'Tarifa chofer / ${t.unidadTarifa.codigo}',
-            valor: AppFormatters.formatearMonto(t.tarifaChofer),
-          ),
-          _InfoFila(
-            icono: Icons.savings_outlined,
-            etiqueta: 'Bruto antes de gastos',
-            valor: AppFormatters.formatearMonto(margenBruto),
-          ),
-          if (t.dadorNombre != null)
-            _InfoFila(
-              icono: Icons.handshake_outlined,
-              etiqueta: 'Dador',
-              valor: '${t.dadorNombre}'
-                  '${t.montoFijoDador != null ? " (\$ ${AppFormatters.formatearMonto(t.montoFijoDador!)}/viaje)" : t.porcentajeComisionDador != null ? " (${t.porcentajeComisionDador!.toStringAsFixed(1)}%)" : ""}',
-            ),
-          const Divider(color: Colors.white12, height: 24),
-          // En **mobile** (chofer/supervisor manejando) los botones
-          // "IR AL ORIGEN/DESTINO" tienen sentido: abren Google Maps
-          // o Waze con el destino fijado para llegar manejando.
-          //
-          // En **Windows desktop** el operador está en la oficina
-          // mirando el catálogo de tarifas — esos botones no sirven
-          // para nada. En su lugar mostramos un texto guía
-          // explicando que la ruta ya quedó resaltada en el mapa.
-          if (_esMobile)
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => AccionesNavegacionSheet.abrir(
-                      context,
-                      lat: tarifaConRuta.origen.latitude,
-                      lng: tarifaConRuta.origen.longitude,
-                      label: tarifaConRuta.nombreOrigen,
-                    ),
-                    icon: const Icon(Icons.navigation_outlined, size: 16),
-                    label: const Text('IR AL ORIGEN'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.info,
-                      side: const BorderSide(color: AppColors.info),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sm),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () => AccionesNavegacionSheet.abrir(
-                      context,
-                      lat: tarifaConRuta.destino.latitude,
-                      lng: tarifaConRuta.destino.longitude,
-                      label: tarifaConRuta.nombreDestino,
-                    ),
-                    icon: const Icon(Icons.navigation_outlined, size: 16),
-                    label: const Text('IR AL DESTINO'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.brandSoft,
-                      side: const BorderSide(color: AppColors.brandSoft),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                    ),
-                  ),
-                ),
-              ],
-            )
-          else
-            Row(
-              children: [
-                const Icon(Icons.alt_route,
-                    color: AppColors.warning, size: 18),
-                const SizedBox(width: AppSpacing.sm),
-                const Expanded(
-                  child: Text(
-                    'Recorrido marcado en el mapa.',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('CERRAR'),
-                ),
-              ],
-            ),
         ],
       ),
     );
@@ -1114,33 +1174,38 @@ class _InfoFila extends StatelessWidget {
   final IconData icono;
   final String etiqueta;
   final String valor;
+  final bool mono;
   const _InfoFila({
     required this.icono,
     required this.etiqueta,
     required this.valor,
+    this.mono = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icono, color: Colors.white54, size: 16),
+          Icon(icono, color: c.textMuted, size: 16),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               etiqueta,
-              style: const TextStyle(color: Colors.white60, fontSize: 13),
+              style: AppType.bodySm.copyWith(color: c.textSecondary),
             ),
           ),
+          const SizedBox(width: AppSpacing.sm),
           Text(
             valor,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
+            style: (mono ? AppType.mono : AppType.body).copyWith(
+              color: c.text,
+              fontWeight: FontWeight.w600,
             ),
+            textAlign: TextAlign.right,
           ),
         ],
       ),
