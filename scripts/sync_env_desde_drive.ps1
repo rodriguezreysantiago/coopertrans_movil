@@ -25,7 +25,6 @@
 # El .env se LEE y ESCRIBE como UTF-8 sin BOM (lo que espera dotenv) via .NET,
 # preservando acentos de los comentarios.
 
-[CmdletBinding()]
 param(
     [switch]$Reiniciar,
     [switch]$DryRun
@@ -46,7 +45,7 @@ if (-not (Test-Path -LiteralPath $Master)) {
     Write-Host "       Esta Google Drive sincronizado en G: en esta PC?" -ForegroundColor Yellow
     exit 1
 }
-$destDir = Split-Path -LiteralPath $Destino -Parent
+$destDir = [System.IO.Path]::GetDirectoryName($Destino)
 if (-not (Test-Path -LiteralPath $destDir)) {
     Write-Host "ERROR: no existe $destDir (esta el bot clonado en C:\coopertrans_movil?)." -ForegroundColor Red
     exit 1
