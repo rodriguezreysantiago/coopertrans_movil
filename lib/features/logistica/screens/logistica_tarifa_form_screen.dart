@@ -2,7 +2,7 @@
 //
 // REFACTOR NÚCLEO · jun 2026 — alta/edición de tarifa en lenguaje bento.
 //
-// SOLO PRESENTACIÓN. Se preserva intacto TODO el form:
+// SOLO PRESENTACIÓN. Se preserva intacto todo el form:
 //   - el State (`_tipoCarga`, `_dador`, `_empOrigen`, `_ubicOrigen`,
 //     `_empDestino`, `_ubicDestino`, `_flete`, `_unidad`, `_producto`,
 //     toggles `_modoMontoFijoDador` / `_modoMontoFijoChofer`),

@@ -4,7 +4,7 @@
 //
 // SOLO PRESENTACIÓN. Se preserva intacto:
 //   - el service (`VolvoApiService.diagnosticarStatus`) + `_ejecutar`,
-//   - TODO el análisis de campos crudos (`_analizar` → `_CampoCheck`),
+//   - todo el análisis de campos crudos (`_analizar` → `_CampoCheck`),
 //   - el copy-to-clipboard del JSON,
 //   - el botón Reintentar.
 //
