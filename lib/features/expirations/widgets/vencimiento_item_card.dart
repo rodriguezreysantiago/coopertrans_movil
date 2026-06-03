@@ -27,6 +27,7 @@ class VencimientoItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final dias = item.dias;
     // Inválida (dias == null) la tratamos como peor que vencida:
     // borde rojo + highlight, así se ve a la primera que algo está mal
@@ -38,9 +39,9 @@ class VencimientoItemCard extends StatelessWidget {
       onTap: onTap,
       highlighted: esInvalida || esCritica,
       borderColor: esInvalida || esVencida
-          ? AppColors.error.withAlpha(120)
+          ? c.error.withValues(alpha: 0.47)
           : esCritica
-              ? AppColors.warning.withAlpha(120)
+              ? c.warning.withValues(alpha: 0.47)
               : null,
       child: Row(
         children: [
@@ -55,14 +56,29 @@ class VencimientoItemCard extends StatelessWidget {
               children: [
                 Text(
                   item.titulo,
-                  style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
+                  style: AppType.bodyLg
+                      .copyWith(color: c.text, fontWeight: FontWeight.w600),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                Text(
-                  '${item.tipoDoc} · ${AppFormatters.formatearFecha(item.fecha)}',
-                  style: AppType.label.copyWith(color: Colors.white54),
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        item.tipoDoc,
+                        style: AppType.bodySm.copyWith(color: c.textMuted),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text('  ·  ',
+                        style: AppType.bodySm.copyWith(color: c.textMuted)),
+                    Text(
+                      AppFormatters.formatearFecha(item.fecha),
+                      style: AppType.monoSm.copyWith(color: c.textMuted),
+                    ),
+                  ],
                 ),
               ],
             ),
