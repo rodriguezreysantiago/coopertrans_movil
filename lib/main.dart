@@ -16,6 +16,7 @@ import 'routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/platform_chrome.dart';
 import 'core/window/desktop_window.dart';
+import 'shared/widgets/app_platform_chrome.dart';
 import 'core/constants/app_constants.dart';
 
 // 🔹 DEPENDENCIAS
@@ -442,7 +443,7 @@ class _LogisticaAppState extends State<LogisticaApp> {
       // Desktop: title bar custom Núcleo (near-black, botones propios) por
       // encima de TODAS las rutas. En móvil/web devuelve el child sin tocar.
       builder: (context, child) =>
-          wrapDesktopChrome(child ?? const SizedBox.shrink()),
+          AppPlatformChrome(child: child ?? const SizedBox.shrink()),
 
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
