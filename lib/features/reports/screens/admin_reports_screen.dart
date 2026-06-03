@@ -3,8 +3,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../../shared/constants/app_colors.dart';
-import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../../../shared/utils/app_feedback.dart';
 import '../../vehicles/services/volvo_api_service.dart';
 import '../services/report_checklist.dart';
 import '../services/report_consumo.dart';
@@ -14,11 +14,29 @@ import '../services/report_icm.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
-/// Centro de Reportes (admin).
+
+/// Centro de Reportes (admin) — REFACTOR NÚCLEO (jun 2026).
 ///
 /// Lista los informes que el admin puede generar y exportar a Excel/PDF.
-/// El reporte de Flota dispara una sincronización con Volvo Connect antes
-/// de generar el archivo.
+/// El reporte de Flota (y el de Consumo) disparan una sincronización con
+/// Volvo Connect antes de abrir el diálogo de exportación.
+///
+/// REFACTOR NÚCLEO: re-estilizado SIN tocar la capa de datos/lógica.
+/// El State (`_generando`), los 5 disparadores `_ejecutarReporte*`, la
+/// bajada del cache de Volvo (`traerDatosFlota` / `traerEstadosFlota`),
+/// los servicios `Report*.mostrarOpcionesYGenerar` y el snack quedan
+/// intactos — sólo se reescribió el árbol de widgets:
+///   • header `AppEyebrow` + título h3 + bajada en mono;
+///   • los disparadores ahora son tiles bento (`_ReportTile`): icon chip
+///     indigo (única tinta de chrome), eyebrow con el formato de salida,
+///     título h5 y subtítulo mono, en grid responsivo;
+///   • el overlay de carga de Volvo re-tokenizado a superficies Núcleo
+///     (scrim near-black + card surface2 + spinner brand).
+///
+/// NOTA de altitud: esta pantalla NO tiene fuente de KPIs propia (no hay
+/// stream/read que la alimente). Por eso NO se inventan KpiGrandeCard ni
+/// charts sin datos — sería violar "faltantes → —, no inventar". El valor
+/// de la pantalla es el hub de generadores, presentado en bento.
 class AdminReportsScreen extends StatefulWidget {
   const AdminReportsScreen({super.key});
 
@@ -30,7 +48,7 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
   bool _generando = false;
 
   // ---------------------------------------------------------------------------
-  // ACCIONES
+  // ACCIONES  (lógica intacta — sólo el árbol de widgets cambió)
   // ---------------------------------------------------------------------------
 
   Future<void> _ejecutarReporteChecklist() async {
@@ -159,72 +177,87 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+
+    // Catálogo de reportes. `requiereVolvo` solo cambia el copy ("sincroniza
+    // con Volvo") y el badge — NO la lógica: el gating por `_generando` se
+    // aplica igual a todos los tiles.
+    final reportes = <_ReporteDef>[
+      _ReporteDef(
+        titulo: 'Checklists mensuales',
+        descripcion:
+            'Novedades y roturas cargadas por choferes en el período.',
+        icono: Icons.fact_check_outlined,
+        formato: 'Excel',
+        onTap: _ejecutarReporteChecklist,
+      ),
+      _ReporteDef(
+        titulo: 'Estado de flota',
+        descripcion:
+            'Sincroniza consumo, KMs y posición con Volvo Connect.',
+        icono: Icons.cloud_sync_outlined,
+        formato: 'Excel',
+        requiereVolvo: true,
+        onTap: _ejecutarReporteFlota,
+      ),
+      _ReporteDef(
+        titulo: 'Consumo de combustible',
+        descripcion:
+            'Litros, KM y L/100km por unidad, con ranking de top consumidores.',
+        icono: Icons.local_gas_station_outlined,
+        formato: 'Excel',
+        requiereVolvo: true,
+        onTap: _ejecutarReporteConsumo,
+      ),
+      _ReporteDef(
+        titulo: 'Gomería',
+        descripcion:
+            'Estado de flota, histórico de recapados y costo por km por modelo.',
+        icono: Icons.tire_repair_outlined,
+        formato: 'Excel',
+        onTap: _ejecutarReporteGomeria,
+      ),
+      _ReporteDef(
+        titulo: 'ICM semanal',
+        descripcion:
+            'Flota + detalle por chofer + top 5 mejores y peores. Mismos '
+            'eventos Sitrack que YPF audita.',
+        icono: Icons.leaderboard_outlined,
+        formato: 'Excel',
+        onTap: _ejecutarReporteIcm,
+      ),
+    ];
+
     return Stack(
       children: [
         AppScaffold(
           title: 'Centro de Reportes',
           body: ListView(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xxl),
             children: [
-              Padding(
-                padding: const EdgeInsets.only(left: 5, bottom: 14),
-                child: Text(
-                  'INFORMES ESTRATÉGICOS',
-                  style: AppType.eyebrow.copyWith(color: AppColors.success, fontWeight: FontWeight.bold, letterSpacing: 2),
-                ),
+              // ─── Header bento: eyebrow + título + bajada ───
+              const AppEyebrow('Informes estratégicos'),
+              const SizedBox(height: AppSpacing.sm),
+              Text(
+                'Centro de reportes',
+                style: AppType.h3.copyWith(color: c.text),
               ),
-              _ReportCard(
-                titulo: 'Checklists Mensuales',
-                descripcion:
-                    'Reporte de novedades y roturas cargadas por choferes.',
-                icono: Icons.fact_check_rounded,
-                color: AppColors.success,
-                onTap: _generando ? null : _ejecutarReporteChecklist,
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Generá y exportá los informes de la operación. '
+                'Cada reporte abre sus opciones de período al tocarlo.',
+                style: AppType.bodySm.copyWith(color: c.textSecondary, height: 1.4),
               ),
-              const SizedBox(height: AppSpacing.md),
-              _ReportCard(
-                titulo: 'Estado de Flota (Volvo)',
-                descripcion:
-                    'Sincroniza consumo, KMs y posición con Volvo Connect.',
-                icono: Icons.cloud_sync_rounded,
-                color: AppColors.info,
-                onTap: _generando ? null : _ejecutarReporteFlota,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _ReportCard(
-                titulo: 'Consumo de Combustible',
-                descripcion:
-                    'Litros, KM y promedio L/100km por unidad, con ranking visual de top consumidores.',
-                icono: Icons.local_gas_station_rounded,
-                color: AppColors.warning,
-                onTap: _generando ? null : _ejecutarReporteConsumo,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _ReportCard(
-                titulo: 'Gomería',
-                descripcion:
-                    'Estado actual de la flota, histórico de recapados y '
-                    'costo por km por modelo (cohort 2 cuando haya datos).',
-                icono: Icons.tire_repair_rounded,
-                color: AppColors.brandSoft,
-                onTap: _generando ? null : _ejecutarReporteGomeria,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              _ReportCard(
-                titulo: 'ICM Semanal (Conducta de Manejo)',
-                descripcion:
-                    'Resumen flota + detalle por chofer + top 5 mejores y '
-                    'peores. Basado en los mismos eventos Sitrack que YPF '
-                    'audita en su Tablero ICM.',
-                icono: Icons.leaderboard_rounded,
-                color: AppColors.error,
-                onTap: _generando ? null : _ejecutarReporteIcm,
-              ),
+              const SizedBox(height: AppSpacing.xl),
+
+              // ─── Grid bento de generadores ───
+              _GridReportes(reportes: reportes, deshabilitado: _generando),
             ],
           ),
         ),
 
-        // Overlay de carga durante la sincronización con Volvo
+        // Overlay de carga durante la sincronización con Volvo.
         if (_generando) const _CargandoOverlay(),
       ],
     );
@@ -232,76 +265,162 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
 }
 
 // =============================================================================
-// CARD DE UN REPORTE
+// DEFINICIÓN DE UN REPORTE (data del tile — no toca lógica)
 // =============================================================================
 
-class _ReportCard extends StatelessWidget {
+class _ReporteDef {
   final String titulo;
   final String descripcion;
   final IconData icono;
-  final Color color;
-  final VoidCallback? onTap;
 
-  const _ReportCard({
+  /// Formato de salida del archivo (metadata real del servicio, no inventada).
+  final String formato;
+
+  /// Si el reporte baja telemetría de Volvo antes de abrir el diálogo (solo
+  /// afecta el copy/badge — el gating por `_generando` es igual para todos).
+  final bool requiereVolvo;
+
+  final VoidCallback onTap;
+
+  const _ReporteDef({
     required this.titulo,
     required this.descripcion,
     required this.icono,
-    required this.color,
+    required this.formato,
     required this.onTap,
+    this.requiereVolvo = false,
   });
+}
+
+// =============================================================================
+// GRID RESPONSIVO DE TILES
+// =============================================================================
+
+class _GridReportes extends StatelessWidget {
+  final List<_ReporteDef> reportes;
+  final bool deshabilitado;
+
+  const _GridReportes({required this.reportes, required this.deshabilitado});
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      onTap: onTap,
-      margin: EdgeInsets.zero,
-      borderColor: color.withAlpha(50),
-      padding: const EdgeInsets.all(20),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(
-              color: color.withAlpha(30),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icono, color: color, size: 28),
-          ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final w = constraints.maxWidth;
+        // Desktop 3 col, tablet 2 col, mobile 1 col (apilado).
+        final cols = w >= 900 ? 3 : (w >= 560 ? 2 : 1);
+        // ratio < 1.2 (regla anti-overflow). En 1 col el tile es ancho y bajo.
+        final ratio = cols == 1 ? 3.0 : 1.15;
+        return GridView.count(
+          crossAxisCount: cols,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: AppSpacing.mdDense,
+          mainAxisSpacing: AppSpacing.mdDense,
+          childAspectRatio: ratio,
+          children: [
+            for (final r in reportes)
+              _ReportTile(def: r, deshabilitado: deshabilitado),
+          ],
+        );
+      },
+    );
+  }
+}
+
+// =============================================================================
+// TILE DE UN REPORTE (bento Núcleo)
+// =============================================================================
+
+/// Tile de acción bento: icon chip indigo (única tinta de chrome) + eyebrow
+/// con el formato de salida + título h5 + subtítulo mono. Replica el patrón
+/// de tile de hub del sistema (ICM hub), pero al tocarlo dispara el servicio
+/// de reporte en lugar de navegar. Cuando `deshabilitado` (sync de Volvo en
+/// curso) se atenúa y deja de responder.
+class _ReportTile extends StatelessWidget {
+  final _ReporteDef def;
+  final bool deshabilitado;
+
+  const _ReportTile({required this.def, required this.deshabilitado});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+
+    return Opacity(
+      opacity: deshabilitado ? 0.45 : 1,
+      child: AppCard(
+        tier: 1,
+        onTap: deshabilitado ? null : def.onTap,
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
               children: [
-                Text(
-                  titulo,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.body.copyWith(fontWeight: FontWeight.w600),
+                // Icon chip surface3 + brand 16px.
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: c.surface3,
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                  child: Icon(def.icono, size: 16, color: c.brand),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  descripcion,
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.label
-                      .copyWith(color: AppColors.textSecondary, height: 1.3),
-                ),
+                const Spacer(),
+                // Eyebrow del formato de salida (metadata real).
+                AppEyebrow(def.formato),
               ],
             ),
-          ),
-          const Icon(
-            Icons.chevron_right_rounded,
-            color: AppColors.textHint,
-            size: 24,
-          ),
-        ],
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              def.titulo,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.h5.copyWith(color: c.text),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            // Flexible para que el subtítulo no desborde en tiles bajos.
+            Flexible(
+              child: Text(
+                def.descripcion,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.monoSm.copyWith(color: c.textMuted, height: 1.45),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            // Pie: hint de Volvo (si aplica) + affordance de acción.
+            Row(
+              children: [
+                if (def.requiereVolvo) ...[
+                  Icon(Icons.bolt_outlined, size: 13, color: c.textMuted),
+                  const SizedBox(width: 4),
+                  Flexible(
+                    child: Text(
+                      'Sincroniza Volvo',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.monoSm.copyWith(color: c.textMuted),
+                    ),
+                  ),
+                ] else
+                  const Spacer(),
+                const SizedBox(width: AppSpacing.sm),
+                Icon(Icons.arrow_outward, size: 14, color: c.textMuted),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 // =============================================================================
-// OVERLAY DE CARGA (cristal esmerilado durante sync con Volvo)
+// OVERLAY DE CARGA (cristal esmerilado durante sync con Volvo) — tokens Núcleo
 // =============================================================================
 
 class _CargandoOverlay extends StatelessWidget {
@@ -309,35 +428,27 @@ class _CargandoOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Positioned.fill(
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-        child: Container(
-          color: Colors.black.withAlpha(150),
+        child: ColoredBox(
+          color: c.bg.withValues(alpha: 0.6),
           child: Center(
-            child: Container(
-              padding: const EdgeInsets.all(30),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppColors.info.withAlpha(50)),
-              ),
+            child: AppCard(
+              tier: 3,
+              glow: true,
+              padding: const EdgeInsets.all(AppSpacing.xxxl),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const CircularProgressIndicator(color: AppColors.info),
-                  const SizedBox(height: 25),
+                  CircularProgressIndicator(color: c.brand),
+                  const SizedBox(height: AppSpacing.xl),
+                  const AppEyebrow('Conectando con Volvo'),
+                  const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'CONECTANDO CON VOLVO',
-                    style: AppType.eyebrow.copyWith(
-                      color: AppColors.info,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Descargando telemetría de flota...',
-                    style: AppType.label.copyWith(color: AppColors.textSecondary),
+                    'Descargando telemetría de flota…',
+                    style: AppType.bodySm.copyWith(color: c.textSecondary),
                   ),
                 ],
               ),
