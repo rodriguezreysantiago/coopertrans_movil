@@ -1,7 +1,7 @@
-import 'package:coopertrans_movil/shared/constants/app_colors.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/icm_oficial_service.dart';
@@ -23,6 +23,16 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 ///
 /// Se llega desde el ranking / reporte / card de inicio con el DNI como
 /// argumento de ruta.
+///
+/// REFACTOR NÚCLEO (jun 2026): re-estilizado SIN tocar la capa de datos.
+/// El State (`_future`, `_dni`, `_cargar`, `_buscar`, `_DetalleData`), los
+/// reads de `ICM_OFICIAL` + `EMPLEADOS`, `IcmOficialService` y la navegación
+/// quedan intactos — sólo se reescribió el árbol de widgets al sistema bento:
+/// header con hero number (ICM en `c.text`, severidad → `AppDot`/`AppBadge`),
+/// secciones con `AppEyebrow` + grilla de `AppStat`, comparativa y detalle de
+/// infracciones en `AppCard(tier:1)` con mono tabular, chips de filtro pill y
+/// estados empty/loading/error con los widgets del sistema. La clasificación
+/// de severidad NO cambia — sólo se mapea a tokens del tema.
 class IcmDetalleChoferScreen extends StatefulWidget {
   const IcmDetalleChoferScreen({super.key});
 
@@ -79,16 +89,11 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
     if (_dni.isEmpty) {
       return const AppScaffold(
         title: 'Detalle ICM',
-        body: Center(
-          child: Padding(
-            padding: EdgeInsets.all(AppSpacing.xl),
-            child: Text(
-              'Vení desde el ranking — el detalle requiere un chofer '
+        body: AppEmptyState(
+          icon: Icons.badge_outlined,
+          title: 'Sin chofer seleccionado',
+          subtitle: 'Vení desde el ranking — el detalle requiere un chofer '
               'seleccionado.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54),
-            ),
-          ),
         ),
       );
     }
@@ -101,29 +106,20 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
             return const AppSkeletonList(count: 5);
           }
           if (snap.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.xl),
-                child: Text('Error: ${snap.error}',
-                    style: const TextStyle(color: AppColors.error)),
-              ),
+            return AppErrorState(
+              title: 'No se pudo cargar el detalle',
+              subtitle: '${snap.error}',
             );
           }
           final data = snap.data!;
           final c = data.actual ?? data.anterior;
           if (c == null) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: Text(
-                  'No hay datos del ICM oficial para este chofer '
-                  '(${AppFormatters.formatearDNI(_dni)}).\n\n'
-                  'Puede que no haya tenido actividad registrada o que el '
-                  'mes recién arranque.',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white54, height: 1.4),
-                ),
-              ),
+            return AppEmptyState(
+              icon: Icons.person_off_outlined,
+              title: 'Sin datos del ICM oficial para este chofer',
+              subtitle: 'DNI ${AppFormatters.formatearDNI(_dni)}. Puede que no '
+                  'haya tenido actividad registrada o que el mes recién '
+                  'arranque. Se sincroniza una vez al día desde Sitrack.',
             );
           }
           final nombre = data.nombreEmpleado.isNotEmpty
@@ -143,7 +139,7 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
                       esActual ? data.idActual : data.idAnterior),
                   esMesActual: esActual,
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.md),
                 _ComparativaMeses(
                   actual: data.actual,
                   anterior: data.anterior,
@@ -152,63 +148,66 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
                   labelAnterior:
                       IcmOficialService.labelPeriodo(data.idAnterior),
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                const _SeccionTitulo('ICM por tipo de vía'),
+                const SizedBox(height: AppSpacing.xl),
+                const AppEyebrow('ICM por tipo de vía'),
                 const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    _StatCard(
+                _StatGrid(
+                  cells: [
+                    _StatCell(
                       label: 'Urbano',
-                      valor: c.icmUrbano.toStringAsFixed(1),
+                      value: c.sinActividad
+                          ? '—'
+                          : c.icmUrbano.toStringAsFixed(1),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    _StatCard(
+                    _StatCell(
                       label: 'No urbano (ruta)',
-                      valor: c.icmNoUrbano.toStringAsFixed(1),
+                      value: c.sinActividad
+                          ? '—'
+                          : c.icmNoUrbano.toStringAsFixed(1),
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                const _SeccionTitulo('Recorrido del período'),
+                const SizedBox(height: AppSpacing.xl),
+                const AppEyebrow('Recorrido del período'),
                 const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    _StatCard(
+                _StatGrid(
+                  cells: [
+                    _StatCell(
                       label: 'Distancia',
-                      valor: '${AppFormatters.formatearMiles(c.distanciaKm)} km',
+                      value: AppFormatters.formatearMiles(c.distanciaKm),
+                      unit: 'km',
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    _StatCard(
+                    _StatCell(
                       label: 'Tiempo de manejo',
-                      valor: '${c.tiempoH.toStringAsFixed(0)} h',
+                      value: c.tiempoH.toStringAsFixed(0),
+                      unit: 'h',
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
-                const _SeccionTitulo('Infracciones'),
+                const SizedBox(height: AppSpacing.xl),
+                const AppEyebrow('Infracciones'),
                 const SizedBox(height: AppSpacing.sm),
                 _Infracciones(chofer: c),
-                const SizedBox(height: AppSpacing.lg),
-                const _SeccionTitulo('Otros indicadores'),
+                const SizedBox(height: AppSpacing.xl),
+                const AppEyebrow('Otros indicadores'),
                 const SizedBox(height: AppSpacing.sm),
-                Row(
-                  children: [
-                    _StatCard(
+                _StatGrid(
+                  cells: [
+                    _StatCell(
                       label: 'Excesos de velocidad',
-                      valor: '${c.excesosVelocidad}',
+                      value: '${c.excesosVelocidad}',
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    _StatCard(
+                    _StatCell(
                       label: 'Conducción agresiva',
-                      valor: '${c.conduccionAgresiva}',
+                      value: '${c.conduccionAgresiva}',
                     ),
                   ],
                 ),
-                const SizedBox(height: 18),
-                const _SeccionTitulo('Detalle de infracciones'),
+                const SizedBox(height: AppSpacing.xl),
+                const AppEyebrow('Detalle de infracciones'),
                 const SizedBox(height: AppSpacing.sm),
                 _ListaInfracciones(infracciones: c.infracciones),
-                const SizedBox(height: 20),
+                const SizedBox(height: AppSpacing.lg),
                 const _NotaFuente(),
               ],
             ),
@@ -235,6 +234,29 @@ class _DetalleData {
   });
 }
 
+/// Color semántico de la severidad oficial Sitrack mapeado a tokens del tema
+/// (success/warning/error/textMuted). Reemplaza al `colorSeveridadIcm` de hex
+/// Material para respetar la paleta Núcleo. La clasificación NO cambia: usamos
+/// el enum de severidad ya calculado por Sitrack, sin inventar umbrales.
+Color _colorSeveridad(BuildContext context, String severidadRaw) {
+  final c = context.colors;
+  switch (severidadIcmDesde(severidadRaw)) {
+    case SeveridadIcm.sinInfracciones:
+    case SeveridadIcm.bajo:
+      return c.success;
+    case SeveridadIcm.medio:
+      return c.warning;
+    case SeveridadIcm.alto:
+      return c.error;
+    case SeveridadIcm.sinActividad:
+    case SeveridadIcm.desconocida:
+      return c.textMuted;
+  }
+}
+
+/// Header del detalle: hero number del ICM (en `c.text`, nunca semántico) +
+/// nombre + DNI + badge de severidad. El acento de color vive en el `AppDot`
+/// del badge, no en el número.
 class _Header extends StatelessWidget {
   final String nombre;
   final String dni;
@@ -252,69 +274,95 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = colorSeveridadIcm(chofer.severidad);
+    final c = context.colors;
+    final color = _colorSeveridad(context, chofer.severidad);
+    final icmStr =
+        chofer.sinActividad ? '—' : chofer.icm.toStringAsFixed(1);
     return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
+      tier: 2,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Expanded(child: AppEyebrow('ICM oficial · Sitrack')),
+              Flexible(
+                child: Text(
+                  '$periodoLabel${esMesActual ? '' : ' · último con datos'}',
+                  textAlign: TextAlign.end,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.monoSm.copyWith(color: c.textSecondary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          // Hero number + nombre/DNI a la derecha.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                icmStr,
+                style: AppType.h1.copyWith(
+                  color: c.text,
+                  fontSize: 56,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        nombre,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.h5.copyWith(color: c.text),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'DNI ${AppFormatters.formatearDNI(dni)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.monoSm.copyWith(color: c.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              AppBadge(
+                text: chofer.severidadLabel,
                 color: color,
-                borderRadius: BorderRadius.circular(AppRadius.sm),
+                dot: true,
+                size: AppBadgeSize.sm,
               ),
-              child: Column(
-                children: [
-                  Text(
-                    chofer.sinActividad
-                        ? '—'
-                        : chofer.icm.toStringAsFixed(1),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                    ),
+              Padding(
+                padding: const EdgeInsets.only(left: 2),
+                child: Text(
+                  'más bajo = mejor',
+                  style: AppType.monoSm.copyWith(
+                    color: c.textMuted,
+                    fontStyle: FontStyle.italic,
                   ),
-                  const Text(
-                    'ICM oficial',
-                    style: TextStyle(color: Colors.white70, fontSize: 9),
-                  ),
-                ],
+                ),
               ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    nombre,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    'DNI ${AppFormatters.formatearDNI(dni)}',
-                    style: AppType.label.copyWith(color: Colors.white54),
-                  ),
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    '${chofer.severidadLabel} · $periodoLabel'
-                    '${esMesActual ? '' : ' (último con datos)'}',
-                    style: AppType.eyebrow.copyWith(color: color),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -337,6 +385,7 @@ class _ComparativaMeses extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (actual == null || anterior == null) {
       return const SizedBox.shrink();
     }
@@ -346,22 +395,20 @@ class _ComparativaMeses extends StatelessWidget {
     // que no manejó figuraría como "mejoró a 0" — plata mal asignada).
     if (actual!.sinActividad || anterior!.sinActividad) {
       return AppCard(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Row(
-            children: [
-              const Icon(Icons.info_outline, color: Colors.white38, size: 20),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  actual!.sinActividad
-                      ? 'Sin actividad este mes — no comparable con $labelAnterior.'
-                      : 'Sin actividad en $labelAnterior — no hay base de comparación.',
-                  style: AppType.label.copyWith(color: Colors.white54),
-                ),
+        tier: 1,
+        child: Row(
+          children: [
+            Icon(Icons.info_outline, color: c.textMuted, size: 18),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Text(
+                actual!.sinActividad
+                    ? 'Sin actividad este mes — no comparable con $labelAnterior.'
+                    : 'Sin actividad en $labelAnterior — no hay base de comparación.',
+                style: AppType.body.copyWith(color: c.textSecondary),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       );
     }
@@ -370,9 +417,7 @@ class _ComparativaMeses extends StatelessWidget {
     final delta = a - b; // negativo = mejoró
     final mejoro = delta < 0;
     final igual = delta.abs() < 0.05;
-    final color = igual
-        ? Colors.white54
-        : (mejoro ? AppColors.success : AppColors.error);
+    final color = igual ? c.textMuted : (mejoro ? c.success : c.error);
     final icono = igual
         ? Icons.remove
         : (mejoro ? Icons.arrow_downward : Icons.arrow_upward);
@@ -382,107 +427,135 @@ class _ComparativaMeses extends StatelessWidget {
             '${delta.abs().toStringAsFixed(1)} pts vs $labelAnterior '
             '(${b.toStringAsFixed(1)})';
     return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            Icon(icono, color: color, size: 22),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                txt,
-                style: TextStyle(
-                    color: color, fontSize: 13, fontWeight: FontWeight.w600),
-              ),
+      tier: 1,
+      child: Row(
+        children: [
+          Icon(icono, color: color, size: 20),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Text(
+              txt,
+              style: AppType.body.copyWith(
+                  color: color, fontWeight: FontWeight.w600),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
+/// Desglose de infracciones por gravedad — grilla de 3 celdas con número en
+/// color semántico (rojo/ámbar/verde). Clasificación sin cambios.
 class _Infracciones extends StatelessWidget {
   final IcmOficialChofer chofer;
   const _Infracciones({required this.chofer});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        _StatCard(
+    final c = context.colors;
+    return _StatGrid(
+      cells: [
+        _StatCell(
           label: 'Altas',
-          valor: '${chofer.infAltas}',
-          color: Colors.red.shade600,
+          value: '${chofer.infAltas}',
+          valueColor: c.error,
         ),
-        const SizedBox(width: AppSpacing.sm),
-        _StatCard(
+        _StatCell(
           label: 'Medias',
-          valor: '${chofer.infMedias}',
-          color: Colors.amber.shade700,
+          value: '${chofer.infMedias}',
+          valueColor: c.warning,
         ),
-        const SizedBox(width: AppSpacing.sm),
-        _StatCard(
+        _StatCell(
           label: 'Leves',
-          valor: '${chofer.infLeves}',
-          color: Colors.green.shade600,
+          value: '${chofer.infLeves}',
+          valueColor: c.success,
         ),
       ],
     );
   }
 }
 
-class _StatCard extends StatelessWidget {
-  final String label;
-  final String valor;
-  final Color? color;
-
-  const _StatCard({required this.label, required this.valor, this.color});
+/// Grilla de N celdas de stat en bento (cada una `Expanded` → ancho acotado).
+class _StatGrid extends StatelessWidget {
+  final List<_StatCell> cells;
+  const _StatGrid({required this.cells});
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: AppCard(
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label,
-                  style:
-                      const TextStyle(color: Colors.white54, fontSize: 10),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-              const SizedBox(height: AppSpacing.xs),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  valor,
-                  style: TextStyle(
-                    color: color ?? Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < cells.length; i++) ...[
+          if (i > 0) const SizedBox(width: AppSpacing.sm),
+          Expanded(child: cells[i]),
+        ],
+      ],
     );
   }
 }
 
-class _SeccionTitulo extends StatelessWidget {
-  final String texto;
-  const _SeccionTitulo(this.texto);
+/// Celda de stat bento: eyebrow + número héroe (sans, tabular) con unidad mono.
+/// El número va en `FittedBox(scaleDown)` para que valores largos (km con
+/// miles) no desborden en pantallas chicas (regla anti-overflow Núcleo).
+class _StatCell extends StatelessWidget {
+  final String label;
+  final String value;
+  final String? unit;
+
+  /// Color del número. `null` → `c.text` (hero number neutro). Semántico sólo
+  /// en stats que lo justifican (conteo de infracciones por gravedad).
+  final Color? valueColor;
+
+  const _StatCell({
+    required this.label,
+    required this.value,
+    this.unit,
+    this.valueColor,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      texto,
-      style: AppType.body.copyWith(color: Colors.white, fontWeight: FontWeight.w600, letterSpacing: 0.3),
+    final c = context.colors;
+    return AppCard(
+      tier: 1,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.eyebrow.copyWith(color: c.textMuted),
+          ),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  value,
+                  style: AppType.h4.copyWith(
+                    color: valueColor ?? c.text,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                if (unit != null) ...[
+                  const SizedBox(width: 4),
+                  Text(unit!,
+                      style: AppType.monoSm.copyWith(color: c.textMuted)),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -509,17 +582,23 @@ class _ListaInfraccionesState extends State<_ListaInfracciones> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final lista = widget.infracciones;
     if (lista.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: Center(
-          child: Text(
-            'Sin infracciones individuales para este período.\n'
-            'El detalle se sincroniza desde Sitrack una vez al día.',
-            textAlign: TextAlign.center,
-            style: AppType.label.copyWith(color: Colors.white.withValues(alpha: 0.45), height: 1.4),
-          ),
+      return AppCard(
+        tier: 1,
+        child: Row(
+          children: [
+            Icon(Icons.inbox_outlined, size: 18, color: c.textMuted),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Text(
+                'Sin infracciones individuales para este período. El detalle '
+                'se sincroniza desde Sitrack una vez al día.',
+                style: AppType.body.copyWith(color: c.textSecondary),
+              ),
+            ),
+          ],
         ),
       );
     }
@@ -544,12 +623,12 @@ class _ListaInfraccionesState extends State<_ListaInfracciones> {
       children: [
         Text(
           '${lista.length} infracción${lista.length == 1 ? "" : "es"} · '
-          'Suma de puntaje: ${sumaPuntaje.toStringAsFixed(2)}',
-          style: AppType.eyebrow.copyWith(color: Colors.white60),
+          'suma de puntaje ${sumaPuntaje.toStringAsFixed(2)}',
+          style: AppType.monoSm.copyWith(color: c.textSecondary),
         ),
         const SizedBox(height: AppSpacing.sm),
         SizedBox(
-          height: 36,
+          height: 32,
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
@@ -576,7 +655,7 @@ class _ListaInfraccionesState extends State<_ListaInfracciones> {
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: AppSpacing.sm),
         ...visibles.map((i) => _InfraccionCard(infraccion: i)),
         if (hayMas) ...[
           const SizedBox(height: AppSpacing.sm),
@@ -594,6 +673,8 @@ class _ListaInfraccionesState extends State<_ListaInfracciones> {
   }
 }
 
+/// Pill de filtro por tipo de infracción (mismo look que el chip de período
+/// del ranking: activo = relleno `text` sobre `bg`; inactivo = borde hairline).
 class _ChipFiltro extends StatelessWidget {
   final String label;
   final bool selected;
@@ -606,161 +687,168 @@ class _ChipFiltro extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChoiceChip(
-      label: Text(
-        label,
-        style: AppType.eyebrow.copyWith(color: selected ? Colors.black : Colors.white70),
+    final c = context.colors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.full),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? c.text : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: selected ? null : Border.all(color: c.borderStrong),
+        ),
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: AppType.label.copyWith(
+            color: selected ? c.bg : c.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      visualDensity: VisualDensity.compact,
     );
   }
 }
 
 /// Card de una infracción individual. Mismas columnas que la tabla del
 /// modal de Sitrack: tipo + fecha + ubicación + vel.permitida + pico de
-/// velocidad + tiempo (si aplica) + puntaje. Color rojo si es exceso real.
+/// velocidad + tiempo (si aplica) + puntaje. El puntaje se clasifica con los
+/// MISMOS umbrales (>=10 grave, >=5 media, resto leve) → dot/badge semántico.
 class _InfraccionCard extends StatelessWidget {
   final InfraccionIndividual infraccion;
   const _InfraccionCard({required this.infraccion});
 
-  Color _colorPuntaje() {
-    if (infraccion.puntaje >= 10) return Colors.red.shade600;
-    if (infraccion.puntaje >= 5) return Colors.amber.shade700;
-    return Colors.green.shade600;
+  /// Color del puntaje (umbrales sin cambios) mapeado a tokens del tema.
+  Color _colorPuntaje(BuildContext context) {
+    final c = context.colors;
+    if (infraccion.puntaje >= 10) return c.error;
+    if (infraccion.puntaje >= 5) return c.warning;
+    return c.success;
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final i = infraccion;
-    final color = _colorPuntaje();
-    return Card(
-      elevation: 0,
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      color: Colors.white.withValues(alpha: 0.04),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(6),
-        side: BorderSide(
-          color: color.withValues(alpha: 0.3),
-          width: 1,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Fila 1: tipo + puntaje
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    i.infraccion,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                  ),
+    final color = _colorPuntaje(context);
+    return AppCard(
+      tier: 1,
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Fila 1: tipo + puntaje
+          Row(
+            children: [
+              AppDot(color, size: 7),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  i.infraccion,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.body.copyWith(
+                      color: c.text, fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(width: AppSpacing.sm),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: color.withValues(alpha: 0.5)),
-                  ),
-                  child: Text(
-                    i.puntaje.toStringAsFixed(2),
-                    style: AppType.label.copyWith(color: color, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            // Fila 2: fecha + patente
-            Row(
-              children: [
-                const Icon(Icons.access_time,
-                    size: 12, color: Colors.white38),
-                const SizedBox(width: AppSpacing.xs),
-                Text(
-                  i.fecha,
-                  style: AppType.eyebrow.copyWith(color: Colors.white60),
-                ),
-                if (i.patente.isNotEmpty) ...[
-                  const SizedBox(width: 14),
-                  const Icon(Icons.local_shipping,
-                      size: 12, color: Colors.white38),
-                  const SizedBox(width: AppSpacing.xs),
-                  Text(
-                    i.patente,
-                    style: AppType.eyebrow.copyWith(color: Colors.white60, fontWeight: FontWeight.w500),
-                  ),
-                ],
-                if (i.tiempo != null) ...[
-                  const SizedBox(width: 14),
-                  const Icon(Icons.timer,
-                      size: 12, color: Colors.white38),
-                  const SizedBox(width: AppSpacing.xs),
-                  Text(
-                    i.tiempo!,
-                    style: AppType.eyebrow.copyWith(color: Colors.white60),
-                  ),
-                ],
-              ],
-            ),
-            // Fila 3: ubicación
-            if (i.ubicacion.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.xs),
-              Row(
-                children: [
-                  const Icon(Icons.place,
-                      size: 12, color: Colors.white38),
-                  const SizedBox(width: AppSpacing.xs),
-                  Expanded(
-                    child: Text(
-                      i.ubicacion,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppType.eyebrow.copyWith(color: Colors.white54),
-                    ),
-                  ),
-                ],
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              AppBadge(
+                text: i.puntaje.toStringAsFixed(2),
+                color: color,
+                size: AppBadgeSize.sm,
               ),
             ],
-            // Fila 4: velocidades (sólo si están)
-            if (i.velMaxima != null || i.velLimite != null) ...[
-              const SizedBox(height: AppSpacing.xs),
-              Row(
-                children: [
-                  const Icon(Icons.speed,
-                      size: 12, color: Colors.white38),
-                  const SizedBox(width: AppSpacing.xs),
-                  Text(
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          // Fila 2: fecha + patente + tiempo (mono).
+          Wrap(
+            spacing: AppSpacing.md,
+            runSpacing: 4,
+            children: [
+              _MetaItem(icon: Icons.access_time, texto: i.fecha),
+              if (i.patente.isNotEmpty)
+                _MetaItem(icon: Icons.local_shipping, texto: i.patente),
+              if (i.tiempo != null)
+                _MetaItem(icon: Icons.timer, texto: i.tiempo!),
+            ],
+          ),
+          // Fila 3: ubicación
+          if (i.ubicacion.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.place, size: 12, color: c.textMuted),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
+                    i.ubicacion,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.monoSm.copyWith(color: c.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          // Fila 4: velocidades (sólo si están). Rojo si es exceso real.
+          if (i.velMaxima != null || i.velLimite != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.speed,
+                    size: 12,
+                    color: i.esExcesoVelocidad ? c.error : c.textMuted),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
                     i.velLimite != null && i.velMaxima != null
                         ? 'Pico ${i.velMaxima!.toStringAsFixed(0)} km/h '
                             '· límite ${i.velLimite!.toStringAsFixed(0)} km/h'
                         : i.velMaxima != null
                             ? 'Pico ${i.velMaxima!.toStringAsFixed(0)} km/h'
                             : 'Límite ${i.velLimite!.toStringAsFixed(0)} km/h',
-                    style: AppType.eyebrow.copyWith(color: i.esExcesoVelocidad
-                          ? AppColors.error
-                          : Colors.white60, fontWeight: i.esExcesoVelocidad
-                          ? FontWeight.w600
-                          : null),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.monoSm.copyWith(
+                      color: i.esExcesoVelocidad ? c.error : c.textSecondary,
+                      fontWeight:
+                          i.esExcesoVelocidad ? FontWeight.w600 : null,
+                    ),
                   ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ],
-        ),
+        ],
       ),
+    );
+  }
+}
+
+/// Ítem de metadato (icono + texto mono) de una infracción. Mismo lenguaje en
+/// fecha / patente / tiempo.
+class _MetaItem extends StatelessWidget {
+  final IconData icon;
+  final String texto;
+  const _MetaItem({required this.icon, required this.texto});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: c.textMuted),
+        const SizedBox(width: AppSpacing.xs),
+        Text(
+          texto,
+          style: AppType.monoSm.copyWith(color: c.textSecondary),
+        ),
+      ],
     );
   }
 }
@@ -770,12 +858,17 @@ class _NotaFuente extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Text(
       'Fuente: tablero ICM oficial de Sitrack (lo que audita YPF). '
       'Escala más baja = mejor. Se actualiza una vez al día. '
       'El detalle de eventos viene del stream /files/reports de Sitrack '
       '(actualizado cada 5 min).',
-      style: AppType.eyebrow.copyWith(color: Colors.white.withValues(alpha: 0.35), fontStyle: FontStyle.italic, height: 1.3),
+      style: AppType.monoSm.copyWith(
+        color: c.textMuted,
+        fontStyle: FontStyle.italic,
+        height: 1.5,
+      ),
     );
   }
 }
