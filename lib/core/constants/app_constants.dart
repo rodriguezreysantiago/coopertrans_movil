@@ -78,13 +78,7 @@ class AppRoutes {
   static const String adminDestinatariosNotificacion =
       '/admin_destinatarios_notificacion';
 
-  // Gomería
-  static const String adminGomeriaHub = '/admin_gomeria';
-  static const String adminGomeriaUnidades = '/admin_gomeria_unidades';
-  static const String adminGomeriaUnidad = '/admin_gomeria_unidad';
-  static const String adminGomeriaStock = '/admin_gomeria_stock';
-  static const String adminGomeriaRecapados = '/admin_gomeria_recapados';
-  static const String adminGomeriaCubierta = '/admin_gomeria_cubierta';
+  // Gomería (V2 montaje por posición; el sistema viejo CUB-XXXX se dio de baja).
   static const String adminGomeriaMarcasModelos = '/admin_gomeria_marcas_modelos';
 
   // Logística — preparación del módulo de planeamiento de viajes.

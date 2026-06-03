@@ -19,14 +19,7 @@ import '../features/admin_dashboard/screens/admin_panel_screen.dart';
 import '../features/admin_dashboard/screens/admin_destinatarios_notificacion_screen.dart';
 import '../features/admin_dashboard/screens/admin_estado_bot_screen.dart';
 import '../features/admin_dashboard/screens/admin_volvo_alertas_screen.dart';
-import '../features/gomeria/constants/posiciones.dart';
 import '../features/gomeria/screens/admin_gomeria_marcas_modelos_screen.dart';
-import '../features/gomeria/screens/gomeria_cubierta_detalle_screen.dart';
-import '../features/gomeria/screens/gomeria_hub_screen.dart';
-import '../features/gomeria/screens/gomeria_recapados_screen.dart';
-import '../features/gomeria/screens/gomeria_stock_screen.dart';
-import '../features/gomeria/screens/gomeria_unidad_detalle_screen.dart';
-import '../features/gomeria/screens/gomeria_unidades_lista_screen.dart';
 import '../features/logistica/screens/logistica_empresas_screen.dart';
 import '../features/logistica/screens/logistica_hub_screen.dart';
 import '../features/logistica/screens/logistica_adelantos_screen.dart';
@@ -402,57 +395,9 @@ class AppRouter {
         );
 
       // ================= GOMERÍA =================
-      // Hub + sub-pantallas del módulo Gomería. Tablet pegada en pared
-      // del taller; ADMIN o SUPERVISOR (típicamente con AREA=GOMERIA).
-      // Capability: verGomeria. Las reglas Firestore restringen además
-      // qué colecciones puede tocar cada rol (CUBIERTAS_MARCAS solo
-      // ADMIN, CUBIERTAS y CUBIERTAS_INSTALADAS supervisor también, etc).
-      case AppRoutes.adminGomeriaHub:
-        return _buildRoute(
-          _protegerAdmin(const GomeriaHubScreen(), Capability.verGomeria),
-          settings,
-        );
-      case AppRoutes.adminGomeriaUnidades:
-        return _buildRoute(
-          _protegerAdmin(const GomeriaUnidadesListaScreen(),
-              Capability.verGomeria),
-          settings,
-        );
-      case AppRoutes.adminGomeriaUnidad:
-        final args = settings.arguments as Map<String, dynamic>?;
-        final unidadId = (args?['unidadId'] ?? '').toString();
-        final unidadTipo = args?['unidadTipo'] as TipoUnidadCubierta? ??
-            TipoUnidadCubierta.tractor;
-        final tipoVehiculo = (args?['tipoVehiculo'] ?? '').toString();
-        final modelo = (args?['modelo'] ?? '').toString();
-        return _buildRoute(
-          _protegerAdmin(GomeriaUnidadDetalleScreen(
-            unidadId: unidadId,
-            unidadTipo: unidadTipo,
-            tipoVehiculo: tipoVehiculo,
-            modelo: modelo,
-          ), Capability.verGomeria),
-          settings,
-        );
-      case AppRoutes.adminGomeriaStock:
-        return _buildRoute(
-          _protegerAdmin(const GomeriaStockScreen(), Capability.verGomeria),
-          settings,
-        );
-      case AppRoutes.adminGomeriaRecapados:
-        return _buildRoute(
-          _protegerAdmin(const GomeriaRecapadosScreen(),
-              Capability.verGomeria),
-          settings,
-        );
-      case AppRoutes.adminGomeriaCubierta:
-        final args = settings.arguments as Map<String, dynamic>?;
-        final cubiertaId = (args?['cubiertaId'] ?? '').toString();
-        return _buildRoute(
-          _protegerAdmin(GomeriaCubiertaDetalleScreen(cubiertaId: cubiertaId),
-              Capability.verGomeria),
-          settings,
-        );
+      // Gomería: el sistema viejo (CUB-XXXX serializado) se dio de baja 2026-06.
+      // La gomería activa es la V2 (montaje por posición), montada directo en el
+      // shell (GomeriaV2HubScreen). Acá solo queda el catálogo de marcas/modelos.
       case AppRoutes.adminGomeriaMarcasModelos:
         return _buildRoute(
           _protegerSoloAdmin(const AdminGomeriaMarcasModelosScreen()),
