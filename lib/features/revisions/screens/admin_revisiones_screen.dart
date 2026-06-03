@@ -1,3 +1,24 @@
+// lib/features/revisions/screens/admin_revisiones_screen.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — bandeja de revisiones en lenguaje bento.
+//
+// SOLO PRESENTACIÓN. Se preserva intacto:
+//   - el stream (`REVISIONES` con `estado == PENDIENTE`, orderBy
+//     fecha_vencimiento),
+//   - `AppListPage` (buscador + filtro por chofer/patente/documento),
+//   - el flujo de detalle (`_DetalleRevision.abrir`, `abrirDetalleRevision`
+//     usado por el CommandPalette),
+//   - TODAS las acciones (aprobar/rechazar, `RevisionService.finalizarRevision`,
+//     `_aprobarDocumento`, `_aprobarCambioEquipo`, `_elegirUnidadLibre`,
+//     confirmaciones destructivas y auditoría fire-and-forget),
+//   - la navegación y el `PreviewScreen`.
+//
+// Layout Núcleo: header (eyebrow REVISIONES + número pendientes) + AppKpiStrip
+// (pendientes · documentos · cambios de unidad) derivado del MISMO stream
+// visible (cero números inventados — al aprobar/rechazar el doc se borra, no
+// hay histórico de aprobadas/rechazadas que mostrar) + filas AppCard(tier:1)
+// con AppBadge de tipo + thumbnail (AppFileThumbnail). Embedded: sin fondo.
+
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -5,21 +26,21 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/audit_log_service.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/revision_service.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla de Revisiones Pendientes (Admin).
 ///
 /// Lista todas las solicitudes que los choferes envían:
 /// - Cambio de unidad (tractor o enganche)
 /// - Renovación de papel/documento (fecha + archivo)
 ///
-/// Migrada al sistema de diseño unificado.
+/// Migrada al sistema de diseño Núcleo.
 class AdminRevisionesScreen extends StatefulWidget {
   const AdminRevisionesScreen({super.key});
 
@@ -58,6 +79,15 @@ class _AdminRevisionesScreenState extends State<AdminRevisionesScreen> {
         emptyTitle: 'Sin trámites pendientes',
         emptySubtitle: 'Todas las solicitudes están al día.',
         emptyIcon: Icons.fact_check_outlined,
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, 96),
+        // Header con el resumen at-a-glance. Sale del MISMO stream que la
+        // lista (otro StreamBuilder sobre el stream cacheado), así nunca
+        // diverge de lo que se ve.
+        header: StreamBuilder<QuerySnapshot>(
+          stream: _revisionesStream,
+          builder: (ctx, snap) => _HeaderResumen(docs: snap.data?.docs),
+        ),
         filter: (doc, q) {
           final data = doc.data() as Map<String, dynamic>;
           final hay = '${data['nombre_usuario'] ?? ''} '
@@ -74,7 +104,89 @@ class _AdminRevisionesScreenState extends State<AdminRevisionesScreen> {
 }
 
 // =============================================================================
-// CARD DE LA LISTA
+// HEADER · eyebrow REVISIONES + número pendientes + AppKpiStrip
+// =============================================================================
+
+class _HeaderResumen extends StatelessWidget {
+  final List<QueryDocumentSnapshot>? docs;
+  const _HeaderResumen({required this.docs});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final lista = docs;
+    // Breakdown real sobre lo PENDIENTE: documentos vs cambios de unidad.
+    // No mostramos "aprobadas/rechazadas" porque esos docs se borran al
+    // decidir — no hay dato que contar (regla: nunca inventar).
+    var documentos = 0;
+    var cambios = 0;
+    if (lista != null) {
+      for (final d in lista) {
+        final data = d.data() as Map<String, dynamic>;
+        if (data['tipo_solicitud'] == 'CAMBIO_EQUIPO') {
+          cambios++;
+        } else {
+          documentos++;
+        }
+      }
+    }
+    final total = lista?.length ?? 0;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppEyebrow('Revisiones pendientes'),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                lista == null ? '—' : '$total',
+                style: AppType.h2.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  total == 1 ? 'trámite' : 'trámites',
+                  style: AppType.monoSm,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppKpiStrip(
+            stats: [
+              AppStat(
+                label: 'Pendientes',
+                value: lista == null ? '—' : '$total',
+                accent: total > 0 ? c.brand : c.textMuted,
+              ),
+              AppStat(
+                label: 'Documentos',
+                value: lista == null ? '—' : '$documentos',
+              ),
+              AppStat(
+                label: 'Cambios de unidad',
+                value: lista == null ? '—' : '$cambios',
+                accent: cambios > 0 ? c.warning : null,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// CARD DE LA LISTA (Núcleo) — AppCard(tier:1) por fila.
 // =============================================================================
 
 class _RevisionCard extends StatelessWidget {
@@ -83,74 +195,100 @@ class _RevisionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final data = doc.data() as Map<String, dynamic>;
     final esCambioEquipo = data['tipo_solicitud'] == 'CAMBIO_EQUIPO';
     final esVehiculo = data['coleccion_destino'] == 'VEHICULOS';
     final idAfectado =
-        (data['dni'] ?? data['patente'] ?? 'N/A').toString().toUpperCase();
+        (data['dni'] ?? data['patente'] ?? '—').toString().toUpperCase();
     final nombreUsuario =
         (data['nombre_usuario'] ?? 'Usuario').toString();
     final etiqueta = (data['etiqueta'] ?? 'Documento').toString();
     final url = (data['url_archivo'] ?? '').toString();
 
-    // Color del icono y borde según tipo de solicitud
+    // Color/icono/label semánticos según tipo de solicitud.
     final tipoColor = esCambioEquipo
-        ? AppColors.warning
-        : (esVehiculo ? AppColors.info : AppColors.success);
+        ? c.warning
+        : (esVehiculo ? c.info : c.success);
     final tipoIcon = esCambioEquipo
         ? Icons.swap_horiz
         : (esVehiculo ? Icons.local_shipping : Icons.person);
+    final tipoLabel = esCambioEquipo
+        ? 'Cambio de unidad'
+        : (esVehiculo ? 'Doc. unidad' : 'Documento');
+
+    final subtitulo = esCambioEquipo
+        ? ((data['patente'] ?? '').toString().trim().isEmpty
+            ? 'Reporta que ${data['unidad_actual'] ?? 'su unidad'} no es la suya'
+            : 'Solicita: ${data['patente']}')
+        : '$etiqueta · vence ${AppFormatters.formatearFecha(data['fecha_vencimiento'])}';
 
     return AppCard(
+      tier: 1,
       onTap: () => _DetalleRevision.abrir(context, doc.id, data),
-      // Cambios de equipo destacados con borde naranja para que llamen la atención
-      highlighted: esCambioEquipo,
-      borderColor: esCambioEquipo
-          ? AppColors.warning.withAlpha(150)
-          : null,
+      // Cambios de equipo destacados con un acento ámbar para que llamen
+      // la atención (antes era un borde naranja completo).
+      accent: esCambioEquipo ? c.warning : null,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.md),
       child: Row(
         children: [
-          // Avatar circular con icono según tipo
-          CircleAvatar(
-            radius: 22,
-            backgroundColor: tipoColor.withAlpha(30),
-            child: Icon(tipoIcon, color: tipoColor, size: 22),
+          // Icono del tipo en una caja con tinte semántico suave.
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: tipoColor.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: Icon(tipoIcon, color: tipoColor, size: 20),
           ),
           const SizedBox(width: AppSpacing.md),
-          // Info del item
+          // Info del item.
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '$nombreUsuario → $idAfectado',
-                  style: AppType.body.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+                  '$nombreUsuario  →  $idAfectado',
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
+                  style: AppType.body.copyWith(fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  esCambioEquipo
-                      ? ((data['patente'] ?? '').toString().trim().isEmpty
-                          ? 'Reporta que ${data['unidad_actual'] ?? 'su unidad'} no es la suya'
-                          : 'Solicita: ${data['patente']}')
-                      : '$etiqueta · vence ${AppFormatters.formatearFecha(data['fecha_vencimiento'])}',
-                  style: AppType.label.copyWith(color: Colors.white54),
-                  overflow: TextOverflow.ellipsis,
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    AppBadge(
+                      text: tipoLabel,
+                      color: tipoColor,
+                      size: AppBadgeSize.sm,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        subtitulo,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.monoSm.copyWith(color: c.textMuted),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          // Thumbnail del archivo si hay
+          // Thumbnail del archivo si hay (solo documentos).
           if (!esCambioEquipo && url.isNotEmpty) ...[
             const SizedBox(width: AppSpacing.sm),
             AppFileThumbnail(
               url: url,
               tituloVisor: '$etiqueta - $idAfectado',
-              size: 32,
+              size: 36,
             ),
           ],
           const SizedBox(width: AppSpacing.xs),
-          const Icon(Icons.chevron_right, color: Colors.white24, size: 18),
+          Icon(Icons.chevron_right, color: c.textMuted, size: 18),
         ],
       ),
     );
@@ -207,26 +345,27 @@ class _DetalleRevision extends StatelessWidget {
     final url = (data['url_archivo'] ?? '').toString();
     final etiqueta = (data['etiqueta'] ?? 'Documento').toString();
     final idAfectado =
-        (data['dni'] ?? data['patente'] ?? 'N/A').toString().toUpperCase();
+        (data['dni'] ?? data['patente'] ?? '—').toString().toUpperCase();
     final nombreUsuario =
-        (data['nombre_usuario'] ?? 'N/A').toString();
+        (data['nombre_usuario'] ?? '—').toString();
 
     return Column(
       children: [
         Expanded(
           child: ListView(
             controller: scrollController,
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.lg),
             children: [
-              // Header del solicitante
+              // Header del solicitante.
               _InfoCard(
                 label: 'SOLICITANTE',
                 valor: nombreUsuario,
                 icon: Icons.person_outline,
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: AppSpacing.sm),
 
-              if (esCambioEquipo) ..._buildContenidoCambioEquipo()
+              if (esCambioEquipo) ..._buildContenidoCambioEquipo(context)
               else ..._buildContenidoDocumento(
                 context,
                 url: url,
@@ -237,7 +376,7 @@ class _DetalleRevision extends StatelessWidget {
           ),
         ),
 
-        // Footer con botones (siempre visibles)
+        // Footer con botones (siempre visibles).
         _BotonesAccion(
           onAprobar: () => _procesarDecision(context, true),
           // Rechazar es destructivo: borra el comprobante del chofer del
@@ -267,36 +406,38 @@ class _DetalleRevision extends StatelessWidget {
   // CONTENIDO: CAMBIO DE EQUIPO
   // ---------------------------------------------------------------------------
 
-  List<Widget> _buildContenidoCambioEquipo() {
+  List<Widget> _buildContenidoCambioEquipo(BuildContext context) {
+    final c = context.colors;
     return [
-      const SizedBox(height: 10),
-      const Center(
-        child: Icon(Icons.swap_vert_circle,
-            size: 70, color: AppColors.warning),
+      const SizedBox(height: AppSpacing.sm),
+      Center(
+        child: Icon(Icons.swap_vert_circle, size: 64, color: c.warning),
       ),
-      const SizedBox(height: 20),
+      const SizedBox(height: AppSpacing.lg),
       _InfoCard(
         label: 'SUELTA',
         valor: (data['unidad_actual'] ?? 'NINGUNA').toString(),
-        valorColor: AppColors.error,
+        valorColor: c.error,
         icon: Icons.link_off,
+        mono: true,
       ),
-      const SizedBox(height: 10),
+      const SizedBox(height: AppSpacing.sm),
       if ((data['patente'] ?? '').toString().trim().isEmpty)
         // Flujo "no es mi unidad" (2026-05-21): el chofer no eligió. El admin
         // elige la unidad al tocar APROBAR.
-        const _InfoCard(
+        _InfoCard(
           label: 'EL CHOFER REPORTA QUE NO ES SU UNIDAD',
           valor: 'Elegí la unidad correcta al aprobar',
-          valorColor: AppColors.warning,
+          valorColor: c.warning,
           icon: Icons.report_problem_outlined,
         )
       else
         _InfoCard(
           label: 'SOLICITA',
-          valor: (data['patente'] ?? 'S/D').toString(),
-          valorColor: AppColors.success,
+          valor: (data['patente'] ?? '—').toString(),
+          valorColor: c.success,
           icon: Icons.add_link,
+          mono: true,
         ),
     ];
   }
@@ -311,23 +452,25 @@ class _DetalleRevision extends StatelessWidget {
     required String etiqueta,
     required String idAfectado,
   }) {
+    final c = context.colors;
     final esPdf = url.split('?').first.toLowerCase().endsWith('.pdf');
 
     return [
-      // Preview grande del archivo
+      // Preview grande del archivo.
       if (url.isNotEmpty)
         _PreviewArchivo(
           url: url,
           titulo: '$etiqueta - $idAfectado',
           esPdf: esPdf,
         ),
-      const SizedBox(height: 20),
+      const SizedBox(height: AppSpacing.lg),
       _InfoCard(
         label: 'NUEVO VENCIMIENTO PROPUESTO',
         valor: AppFormatters.formatearFecha(data['fecha_vencimiento']),
-        valorColor: AppColors.success,
+        valorColor: c.success,
         valorSize: 22,
         icon: Icons.event_note,
+        mono: true,
       ),
     ];
   }
@@ -459,6 +602,7 @@ class _DetalleRevision extends StatelessWidget {
     BuildContext context, {
     required bool esTractor,
   }) {
+    final c = context.colors;
     final patenteActual = (data['unidad_actual'] ?? '').toString().trim();
     final stream = esTractor
         ? FirebaseFirestore.instance
@@ -474,28 +618,39 @@ class _DetalleRevision extends StatelessWidget {
 
     return showModalBottomSheet<String>(
       context: context,
-      backgroundColor: AppColors.background,
+      backgroundColor: c.bg,
       isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+      ),
       builder: (ctx) => DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.7,
         maxChildSize: 0.95,
         minChildSize: 0.4,
-        builder: (c, scrollCtl) => Column(
+        builder: (cc, scrollCtl) => Column(
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              child: Text(
-                'ASIGNAR ${esTractor ? "TRACTOR" : "ENGANCHE"} LIBRE',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                ),
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(
+                  top: AppSpacing.sm, bottom: AppSpacing.xs),
+              decoration: BoxDecoration(
+                color: c.borderStrong,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-            const Divider(color: Colors.white10, height: 1),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: AppEyebrow(
+                    'Asignar ${esTractor ? "tractor" : "enganche"} libre'),
+              ),
+            ),
+            const AppHairline(),
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: stream,
@@ -512,28 +667,33 @@ class _DetalleRevision extends StatelessWidget {
                           'No hay unidades de este tipo en estado LIBRE.',
                     );
                   }
-                  return ListView.builder(
+                  return ListView.separated(
                     controller: scrollCtl,
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.sm, 0, AppSpacing.sm, AppSpacing.lg),
                     itemCount: unidades.length,
+                    separatorBuilder: (_, __) => const AppHairline(),
                     itemBuilder: (c3, i) {
                       final u = unidades[i];
                       final d = u.data() as Map<String, dynamic>;
+                      final modelo =
+                          '${d['MARCA'] ?? '—'} ${d['MODELO'] ?? ''}'.trim();
                       return ListTile(
-                        leading: const Icon(Icons.local_shipping_outlined,
-                            color: Colors.white38),
+                        leading: Icon(Icons.local_shipping_outlined,
+                            color: c.textMuted),
                         title: Text(
                           u.id,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                          style: AppType.body.copyWith(
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
                           ),
                         ),
                         subtitle: Text(
-                          '${d['MARCA'] ?? 'S/D'} ${d['MODELO'] ?? ''}',
-                          style: AppType.label.copyWith(color: Colors.white54),
+                          modelo.isEmpty ? '—' : modelo,
+                          style: AppType.monoSm.copyWith(color: c.textMuted),
                         ),
-                        trailing: const Icon(Icons.check_circle,
-                            color: AppColors.success),
+                        trailing:
+                            Icon(Icons.check_circle, color: c.success),
                         onTap: () => Navigator.pop(ctx, u.id),
                       );
                     },
@@ -589,53 +749,50 @@ class _DetalleRevision extends StatelessWidget {
 class _InfoCard extends StatelessWidget {
   final String label;
   final String valor;
-  final Color valorColor;
-  final double valorSize;
+  final Color? valorColor;
+  final double? valorSize;
   final IconData icon;
+  final bool mono;
 
   const _InfoCard({
     required this.label,
     required this.valor,
     required this.icon,
-    this.valorColor = Colors.white,
-    this.valorSize = 16,
+    this.valorColor,
+    this.valorSize,
+    this.mono = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(8),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: Colors.white.withAlpha(15)),
-      ),
+    final c = context.colors;
+    final valBase = mono ? AppType.mono : AppType.body;
+    return AppCard(
+      tier: 1,
+      margin: EdgeInsets.zero,
+      padding: const EdgeInsets.all(AppSpacing.md),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white38, size: 20),
+          Icon(icon, color: c.textMuted, size: 20),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  label,
-                  style: const TextStyle(
-                    color: Colors.white38,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
-                  ),
+                  label.toUpperCase(),
+                  style: AppType.eyebrow.copyWith(color: c.textMuted),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 3),
                 Text(
                   valor,
-                  style: TextStyle(
-                    color: valorColor,
-                    fontSize: valorSize,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
+                  style: valBase.copyWith(
+                    color: valorColor ?? c.text,
+                    fontWeight: FontWeight.w600,
+                    fontSize: valorSize,
+                  ),
                 ),
               ],
             ),
@@ -669,6 +826,7 @@ class _PreviewArchivo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -678,21 +836,19 @@ class _PreviewArchivo extends StatelessWidget {
             ? Container(
                 height: 180,
                 decoration: BoxDecoration(
-                  color: AppColors.error.withAlpha(15),
+                  color: c.errorSoft,
                   borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(
-                      color: AppColors.error.withAlpha(80)),
+                  border: Border.all(color: c.error.withValues(alpha: 0.5)),
                 ),
                 child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.picture_as_pdf,
-                          size: 60, color: AppColors.error),
-                      const SizedBox(height: 10),
+                      Icon(Icons.picture_as_pdf, size: 56, color: c.error),
+                      const SizedBox(height: AppSpacing.sm),
                       Text(
                         'Tocar para ver PDF',
-                        style: AppType.label.copyWith(color: AppColors.error, fontWeight: FontWeight.bold, letterSpacing: 0.8),
+                        style: AppType.eyebrow.copyWith(color: c.error),
                       ),
                     ],
                   ),
@@ -707,28 +863,31 @@ class _PreviewArchivo extends StatelessWidget {
                   fit: BoxFit.cover,
                   loadingBuilder: (ctx, child, progress) {
                     if (progress == null) return child;
-                    return const SizedBox(
+                    return SizedBox(
                       height: 220,
                       child: Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.success,
-                        ),
+                        child: CircularProgressIndicator(color: c.brand),
                       ),
                     );
                   },
                   errorBuilder: (_, __, ___) => Container(
                     height: 150,
-                    color: Colors.black12,
-                    child: const Center(
+                    decoration: BoxDecoration(
+                      color: c.surface1,
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      border: Border.all(color: c.border),
+                    ),
+                    child: Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.broken_image,
-                              color: Colors.white24, size: 50),
-                          SizedBox(height: 10),
+                              color: c.textMuted, size: 48),
+                          const SizedBox(height: AppSpacing.sm),
                           Text(
                             'Error al cargar imagen',
-                            style: TextStyle(color: Colors.white54),
+                            style: AppType.bodySm
+                                .copyWith(color: c.textSecondary),
                           ),
                         ],
                       ),
@@ -753,13 +912,13 @@ class _BotonesAccion extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.lg),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        border: Border(
-          top: BorderSide(color: Colors.white.withAlpha(15)),
-        ),
+        color: c.surface2,
+        border: Border(top: BorderSide(color: c.border)),
       ),
       child: SafeArea(
         top: false,
@@ -770,7 +929,7 @@ class _BotonesAccion extends StatelessWidget {
                 label: 'Rechazar',
                 icon: Icons.close,
                 onPressed: onRechazar,
-                expand: true,
+                full: true,
               ),
             ),
             const SizedBox(width: AppSpacing.md),
@@ -779,7 +938,7 @@ class _BotonesAccion extends StatelessWidget {
                 label: 'Aprobar',
                 icon: Icons.check,
                 onPressed: onAprobar,
-                expand: true,
+                full: true,
               ),
             ),
           ],
