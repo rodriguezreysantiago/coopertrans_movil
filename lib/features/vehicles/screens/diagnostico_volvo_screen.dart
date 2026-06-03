@@ -1,15 +1,29 @@
+// lib/features/vehicles/screens/diagnostico_volvo_screen.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — diagnóstico Volvo en lenguaje bento.
+//
+// SOLO PRESENTACIÓN. Se preserva intacto:
+//   - el service (`VolvoApiService.diagnosticarStatus`) + `_ejecutar`,
+//   - TODO el análisis de campos crudos (`_analizar` → `_CampoCheck`),
+//   - el copy-to-clipboard del JSON,
+//   - el botón Reintentar.
+//
+// Herramienta de dev/soporte: investiga por qué un vehículo no devuelve
+// ciertos campos (combustible, autonomía, etc.). Muestra status del request,
+// chequeo de campos críticos y el JSON crudo copiable.
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../services/volvo_api_service.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla de diagnóstico de la API de Volvo.
 ///
 /// Pega al endpoint `/vehiclestatuses?vin=...&additionalContent=VOLVOGROUPSNAPSHOT`
@@ -63,23 +77,73 @@ class _DiagnosticoVolvoScreenState extends State<DiagnosticoVolvoScreen> {
     return AppScaffold(
       title: 'Diagnóstico Volvo',
       body: _cargando
-          ? const AppLoadingState()
+          ? const AppLoadingState(message: 'Consultando la API de Volvo…')
           : _resultado == null
               ? const AppErrorState(title: 'Sin datos')
               : ListView(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
+                      AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
                   children: [
                     _Header(patente: widget.patente, vin: widget.vin),
-                    const SizedBox(height: AppSpacing.lg),
+                    const SizedBox(height: AppSpacing.mdDense),
                     _ResumenRequest(diag: _resultado!),
-                    const SizedBox(height: AppSpacing.lg),
+                    const SizedBox(height: AppSpacing.mdDense),
                     _AnalisisCampos(diag: _resultado!),
-                    const SizedBox(height: AppSpacing.lg),
+                    const SizedBox(height: AppSpacing.mdDense),
                     _JsonViewer(diag: _resultado!),
                     const SizedBox(height: AppSpacing.lg),
-                    _BotonReintentar(onPressed: _ejecutar),
+                    AppButton.secondary(
+                      label: 'Reintentar',
+                      icon: Icons.refresh,
+                      full: true,
+                      onPressed: _ejecutar,
+                    ),
                   ],
                 ),
+    );
+  }
+}
+
+// =============================================================================
+// PRIMITIVAS NÚCLEO — sección bento + fila label/valor
+// =============================================================================
+
+/// Tarjeta de sección Núcleo: eyebrow (+ dot opcional) + contenido.
+class _Seccion extends StatelessWidget {
+  final String titulo;
+  final Color? accentDot;
+  final Widget? trailing;
+  final List<Widget> children;
+
+  const _Seccion({
+    required this.titulo,
+    this.accentDot,
+    this.trailing,
+    required this.children,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      tier: 2,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (accentDot != null) ...[
+                AppDot(accentDot!, size: 7),
+                const SizedBox(width: AppSpacing.sm),
+              ],
+              Expanded(child: AppEyebrow(titulo, color: accentDot)),
+              if (trailing != null) trailing!,
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          ...children,
+        ],
+      ),
     );
   }
 }
@@ -95,33 +159,29 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppCard(
-      margin: EdgeInsets.zero,
-      padding: const EdgeInsets.all(14),
-      child: Row(
+      tier: 2,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.bug_report, color: AppColors.warning, size: 28),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  patente.toUpperCase(),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    letterSpacing: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'VIN $vin',
-                  style: AppType.eyebrow.copyWith(color: Colors.white60, fontFamily: 'monospace'),
-                ),
-              ],
+          const AppEyebrow('DIAGNÓSTICO VOLVO'),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            patente.toUpperCase(),
+            style: AppType.h3.copyWith(
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'VIN $vin',
+            style: AppType.monoSm.copyWith(color: c.textMuted),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -137,67 +197,55 @@ class _ResumenRequest extends StatelessWidget {
   final VolvoDiagnostico diag;
   const _ResumenRequest({required this.diag});
 
-  Color get _statusColor {
-    if (diag.errorMessage != null) return AppColors.error;
+  Color _statusColor(BuildContext context) {
+    final c = context.colors;
+    if (diag.errorMessage != null) return c.error;
     final s = diag.statusCode ?? 0;
-    if (s >= 200 && s < 300) return AppColors.success;
-    if (s >= 400) return AppColors.warning;
-    return Colors.white54;
+    if (s >= 200 && s < 300) return c.success;
+    if (s >= 400) return c.warning;
+    return c.textMuted;
   }
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      margin: EdgeInsets.zero,
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'REQUEST',
-            style: TextStyle(
-              color: AppColors.success,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
-            ),
-          ),
-          const SizedBox(height: 10),
-          _Linea(
-            etiqueta: 'Status',
-            valor: diag.errorMessage != null
-                ? 'EXCEPCIÓN'
-                : '${diag.statusCode ?? "—"} ${diag.statusMessage ?? ""}',
-            valorColor: _statusColor,
-            negrita: true,
-          ),
-          _Linea(
-            etiqueta: 'Tiempo',
-            valor: '${diag.duracion.inMilliseconds} ms',
-          ),
-          _Linea(
-            etiqueta: 'URL',
-            valor: diag.urlConsultada,
-            monoespaciado: true,
-            multiline: true,
-          ),
-          if (diag.errorMessage != null) ...[
-            const SizedBox(height: AppSpacing.sm),
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.error.withAlpha(20),
-                borderRadius: BorderRadius.circular(AppRadius.sm),
-                border: Border.all(color: AppColors.error.withAlpha(60)),
-              ),
-              child: Text(
-                diag.errorMessage!,
-                style: AppType.label.copyWith(color: AppColors.error, fontFamily: 'monospace'),
-              ),
-            ),
-          ],
-        ],
+    final c = context.colors;
+    final statusColor = _statusColor(context);
+    final tieneError = diag.errorMessage != null;
+
+    return _Seccion(
+      titulo: 'REQUEST',
+      accentDot: statusColor,
+      trailing: AppBadge(
+        text: tieneError
+            ? 'EXCEPCIÓN'
+            : '${diag.statusCode ?? "—"}',
+        color: statusColor,
+        size: AppBadgeSize.sm,
       ),
+      children: [
+        _Linea(
+          'Status',
+          tieneError
+              ? 'EXCEPCIÓN'
+              : '${diag.statusCode ?? "—"} ${diag.statusMessage ?? ""}'.trim(),
+          valorColor: statusColor,
+          mono: true,
+        ),
+        _Linea('Tiempo', '${diag.duracion.inMilliseconds} ms', mono: true),
+        _Linea('URL', diag.urlConsultada, mono: true, multiline: true),
+        if (tieneError) ...[
+          const SizedBox(height: AppSpacing.sm),
+          AppCard(
+            tier: 1,
+            accent: c.error,
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Text(
+              diag.errorMessage!,
+              style: AppType.mono.copyWith(color: c.error),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
@@ -305,8 +353,8 @@ class _AnalisisCampos extends StatelessWidget {
         ('snapshotData.volvoGroupSnapshot', volvoSnap),
       if (snap is Map) ('snapshotData', snap),
       ('(root)', s),
-      for (final c in subContainers)
-        if (s[c] is Map) (c, s[c]),
+      for (final cont in subContainers)
+        if (s[cont] is Map) (cont, s[cont]),
     ];
 
     String? autonPath;
@@ -391,26 +439,25 @@ class _AnalisisCampos extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final checks = _analizar();
-    return AppCard(
-      margin: EdgeInsets.zero,
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'CAMPOS CRÍTICOS',
-            style: TextStyle(
-              color: AppColors.success,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
-            ),
-          ),
-          const SizedBox(height: 10),
-          ...checks.map((c) => _CheckTile(check: c)),
-        ],
+    final encontrados = checks.where((x) => x.encontrado).length;
+    return _Seccion(
+      titulo: 'CAMPOS CRÍTICOS',
+      trailing: Text(
+        '$encontrados/${checks.length}',
+        style: AppType.monoSm.copyWith(color: c.textMuted),
       ),
+      children: [
+        for (var i = 0; i < checks.length; i++) ...[
+          if (i > 0) ...[
+            const SizedBox(height: AppSpacing.sm),
+            const AppHairline(),
+            const SizedBox(height: AppSpacing.sm),
+          ],
+          _CheckTile(check: checks[i]),
+        ],
+      ],
     );
   }
 }
@@ -435,56 +482,44 @@ class _CheckTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        check.encontrado ? AppColors.success : AppColors.warning;
-    final icon =
-        check.encontrado ? Icons.check_circle : Icons.cancel_outlined;
+    final c = context.colors;
+    final color = check.encontrado ? c.success : c.warning;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(
-                      check.label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Text(
-                      check.path,
-                      style: const TextStyle(
-                        color: Colors.white38,
-                        fontSize: 10,
-                        fontFamily: 'monospace',
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: AppDot(color, size: 7),
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                check.label,
+                style: AppType.body
+                    .copyWith(color: c.text, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                check.path,
+                style: AppType.monoSm.copyWith(color: c.textMuted),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (check.valor != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  check.valor!,
+                  style: AppType.bodySm.copyWith(color: color),
                 ),
-                if (check.valor != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    check.valor!,
-                    style: AppType.label.copyWith(color: color),
-                  ),
-                ],
               ],
-            ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -527,82 +562,45 @@ class _JsonViewerState extends State<_JsonViewer> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final json = _jsonFormateado;
-    return AppCard(
-      margin: EdgeInsets.zero,
-      padding: const EdgeInsets.all(14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Text(
-                'JSON CRUDO',
-                style: TextStyle(
-                  color: AppColors.success,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.5,
-                ),
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.copy,
-                    color: AppColors.success, size: 18),
-                tooltip: 'Copiar al portapapeles',
-                onPressed: () async {
-                  await Clipboard.setData(ClipboardData(text: json));
-                  if (context.mounted) {
-                    AppFeedback.success(context, 'JSON copiado al portapapeles');
-                  }
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          // El JSON puede ser largo: contenedor con altura limitada y
-          // scroll independiente para que no rompa la pantalla.
-          Container(
-            constraints: const BoxConstraints(maxHeight: 380),
-            decoration: BoxDecoration(
-              color: Colors.black.withAlpha(150),
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: Scrollbar(
-              controller: _ctrl,
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                controller: _ctrl,
-                padding: const EdgeInsets.all(AppSpacing.md),
-                child: SelectableText(
-                  json,
-                  style: AppType.eyebrow.copyWith(color: Colors.white70, fontFamily: 'monospace', height: 1.4),
-                ),
-              ),
-            ),
-          ),
-        ],
+    return _Seccion(
+      titulo: 'JSON CRUDO',
+      trailing: IconButton(
+        icon: Icon(Icons.copy, color: c.brand, size: 18),
+        tooltip: 'Copiar al portapapeles',
+        visualDensity: VisualDensity.compact,
+        onPressed: () async {
+          await Clipboard.setData(ClipboardData(text: json));
+          if (context.mounted) {
+            AppFeedback.success(context, 'JSON copiado al portapapeles');
+          }
+        },
       ),
-    );
-  }
-}
-
-// =============================================================================
-// BOTÓN REINTENTAR
-// =============================================================================
-
-class _BotonReintentar extends StatelessWidget {
-  final VoidCallback onPressed;
-  const _BotonReintentar({required this.onPressed});
-
-  @override
-  Widget build(BuildContext context) {
-    return AppButton.secondary(
-      label: 'Reintentar',
-      icon: Icons.refresh,
-      expand: true,
-      onPressed: onPressed,
+      children: [
+        // El JSON puede ser largo: contenedor con altura limitada y
+        // scroll independiente para que no rompa la pantalla.
+        Container(
+          constraints: const BoxConstraints(maxHeight: 380),
+          decoration: BoxDecoration(
+            color: c.surface1,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: c.border),
+          ),
+          child: Scrollbar(
+            controller: _ctrl,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _ctrl,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              child: SelectableText(
+                json,
+                style: AppType.monoSm.copyWith(color: c.textSecondary, height: 1.5),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -611,45 +609,52 @@ class _BotonReintentar extends StatelessWidget {
 // HELPERS
 // =============================================================================
 
+/// Fila label (izq) / valor (der) — Núcleo. `multiline` permite que la URL
+/// del request se muestre completa.
 class _Linea extends StatelessWidget {
-  final String etiqueta;
+  final String label;
   final String valor;
   final Color? valorColor;
-  final bool monoespaciado;
+  final bool mono;
   final bool multiline;
-  final bool negrita;
 
-  const _Linea({
-    required this.etiqueta,
-    required this.valor,
+  const _Linea(
+    this.label,
+    this.valor, {
     this.valorColor,
-    this.monoespaciado = false,
+    this.mono = false,
     this.multiline = false,
-    this.negrita = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
+    final valBase = mono ? AppType.mono : AppType.body;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 60,
+          Expanded(
+            flex: 3,
             child: Text(
-              etiqueta,
-              style: AppType.eyebrow.copyWith(color: Colors.white54, fontWeight: FontWeight.bold),
+              label,
+              style: AppType.bodySm.copyWith(color: c.textSecondary),
             ),
           ),
+          const SizedBox(width: AppSpacing.md),
           Expanded(
+            flex: 7,
             child: Text(
               valor,
-              style: AppType.label.copyWith(color: valorColor ?? Colors.white, fontFamily: monoespaciado ? 'monospace' : null, fontWeight: negrita ? FontWeight.bold : FontWeight.normal, letterSpacing: monoespaciado ? 0.3 : 0),
-              maxLines: multiline ? 5 : 1,
-              overflow: multiline
-                  ? TextOverflow.visible
-                  : TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: valBase.copyWith(
+                color: valorColor ?? c.text,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: multiline ? 6 : 1,
+              overflow:
+                  multiline ? TextOverflow.visible : TextOverflow.ellipsis,
             ),
           ),
         ],

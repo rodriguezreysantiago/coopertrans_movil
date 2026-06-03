@@ -1,6 +1,15 @@
 // =============================================================================
 // COMPONENTES Y MODELOS de la pantalla de mantenimiento — extraídos para
 // mantener navegable el screen principal. Comparten privacidad via `part of`.
+//
+// REFACTOR NÚCLEO · jun 2026 — el tablero pasa a lenguaje bento:
+//   ┌─ Header: eyebrow MANTENIMIENTO · hero (flota total) · KpiStrip por ─┐
+//   │           urgencia · chips de filtro por estado · buscador          │
+//   └─ Lista bento: AppCard por tractor (AppDot estado + patente + km) ────┘
+//
+// SOLO PRESENTACIÓN. Se preserva intacto el resolver de serviceDistance
+// (API > MANUAL > NINGUNO), el modelo `_Resumen`, la clasificación de estado
+// (`AppMantenimiento.clasificar`) y la navegación al detalle.
 // =============================================================================
 
 part of 'admin_mantenimiento_screen.dart';
@@ -54,7 +63,198 @@ _ResolucionServiceDistance _resolverServiceDistance(
 }
 
 // =============================================================================
-// CARD DE TRACTOR
+// HEADER NÚCLEO · eyebrow + hero + KpiStrip + chips de filtro + buscador
+// =============================================================================
+
+/// Encabezado del tablero, estilo Personal/Flota: `AppEyebrow`
+/// ("MANTENIMIENTO") + número hero (total de la flota) + `AppKpiStrip`
+/// con el desglose por urgencia (vencidos · urgentes · programar · OK) +
+/// fila de `AppFilterChip` para filtrar por estado + buscador `AppInput`.
+///
+/// Los contadores son GLOBALES (sobre toda la flota visible), no sobre el
+/// resultado filtrado — así el admin ve cuántos hay en cada estado aunque
+/// tenga un filtro activo. La lógica de toggle vive en el State del screen.
+class _HeaderMantenimiento extends StatelessWidget {
+  final int total;
+  final _Resumen resumen;
+  final MantenimientoEstado? filtroActivo;
+  final ValueChanged<MantenimientoEstado> onSeleccionar;
+  final TextEditingController searchCtl;
+  final bool tieneTexto;
+  final VoidCallback onLimpiar;
+
+  const _HeaderMantenimiento({
+    required this.total,
+    required this.resumen,
+    required this.filtroActivo,
+    required this.onSeleccionar,
+    required this.searchCtl,
+    required this.tieneTexto,
+    required this.onLimpiar,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final atencion = resumen.programar + resumen.atencion;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const AppEyebrow('MANTENIMIENTO'),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                '$total',
+                style: AppType.h2.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Text('tractores', style: AppType.monoSm),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // KPIs por urgencia. "Vencidos" y "Urgentes" se tintan cuando hay
+          // alguno (la señal crítica del tablero). "A programar" agrupa
+          // programar + falta-poco. "OK" en verde si todos al día.
+          AppKpiStrip(
+            stats: [
+              AppStat(
+                label: 'Vencidos',
+                value: '${resumen.vencidos}',
+                accent: resumen.vencidos > 0 ? c.error : null,
+              ),
+              AppStat(
+                label: 'Urgentes',
+                value: '${resumen.urgentes}',
+                accent: resumen.urgentes > 0 ? c.warning : null,
+              ),
+              AppStat(
+                label: 'A programar',
+                value: '$atencion',
+              ),
+              AppStat(
+                label: 'Al día',
+                value: '${resumen.ok}',
+                accent: resumen.ok > 0 ? c.success : null,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          // Chips de filtro por estado. El contador de cada chip es el
+          // conteo global de ese estado. Tap toggle (mismo estado limpia).
+          // Scroll horizontal: con 6 estados no entran en mobile.
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _ChipEstado(
+                  label: 'Vencidos',
+                  count: resumen.vencidos,
+                  estado: MantenimientoEstado.vencido,
+                  activo: filtroActivo == MantenimientoEstado.vencido,
+                  onTap: onSeleccionar,
+                ),
+                const SizedBox(width: 6),
+                _ChipEstado(
+                  label: 'Urgentes',
+                  count: resumen.urgentes,
+                  estado: MantenimientoEstado.urgente,
+                  activo: filtroActivo == MantenimientoEstado.urgente,
+                  onTap: onSeleccionar,
+                ),
+                const SizedBox(width: 6),
+                _ChipEstado(
+                  label: 'Programar',
+                  count: resumen.programar,
+                  estado: MantenimientoEstado.programar,
+                  activo: filtroActivo == MantenimientoEstado.programar,
+                  onTap: onSeleccionar,
+                ),
+                const SizedBox(width: 6),
+                _ChipEstado(
+                  label: 'Falta poco',
+                  count: resumen.atencion,
+                  estado: MantenimientoEstado.atencion,
+                  activo: filtroActivo == MantenimientoEstado.atencion,
+                  onTap: onSeleccionar,
+                ),
+                const SizedBox(width: 6),
+                _ChipEstado(
+                  label: 'Al día',
+                  count: resumen.ok,
+                  estado: MantenimientoEstado.ok,
+                  activo: filtroActivo == MantenimientoEstado.ok,
+                  onTap: onSeleccionar,
+                ),
+                if (resumen.sinDato > 0) ...[
+                  const SizedBox(width: 6),
+                  _ChipEstado(
+                    label: 'Sin datos',
+                    count: resumen.sinDato,
+                    estado: MantenimientoEstado.sinDato,
+                    activo: filtroActivo == MantenimientoEstado.sinDato,
+                    onTap: onSeleccionar,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppInput(
+            controller: searchCtl,
+            hint: 'Buscar patente, marca o modelo…',
+            icon: Icons.search,
+            trailingAction: tieneTexto ? 'Limpiar' : null,
+            onTrailingTap: tieneTexto ? onLimpiar : null,
+          ),
+          const SizedBox(height: AppSpacing.md),
+        ],
+      ),
+    );
+  }
+}
+
+/// Chip de filtro por estado de mantenimiento. Envuelve `AppFilterChip`
+/// (look Núcleo) y traduce su `onTap` al estado de este chip.
+class _ChipEstado extends StatelessWidget {
+  final String label;
+  final int count;
+  final MantenimientoEstado estado;
+  final bool activo;
+  final ValueChanged<MantenimientoEstado> onTap;
+
+  const _ChipEstado({
+    required this.label,
+    required this.count,
+    required this.estado,
+    required this.activo,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppFilterChip(
+      label: label,
+      count: count,
+      activo: activo,
+      onTap: () => onTap(estado),
+    );
+  }
+}
+
+// =============================================================================
+// CARD DE TRACTOR (bento)
 // =============================================================================
 
 class _TractorCard extends StatelessWidget {
@@ -63,6 +263,7 @@ class _TractorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final data = doc.data() as Map<String, dynamic>;
     final patente = doc.id;
     final marca = (data['MARCA'] ?? '').toString();
@@ -114,7 +315,22 @@ class _TractorCard extends StatelessWidget {
     final faltaCargaInicial =
         servicio.fuente == _FuenteServiceDistance.ninguno;
 
+    // Color semántico del estado (extension MantenimientoEstadoX). El
+    // estado `atencion` usa lima/limón fuera de paleta — para "Falta poco"
+    // lo dejamos en warning para no romper la regla de tinta única.
+    final estadoColor = switch (estado) {
+      MantenimientoEstado.vencido => c.error,
+      MantenimientoEstado.urgente => c.warning,
+      MantenimientoEstado.programar => c.warning,
+      MantenimientoEstado.atencion => c.warning,
+      MantenimientoEstado.ok => c.success,
+      MantenimientoEstado.sinDato => c.textMuted,
+    };
+
+    final marcaModelo = '$marca $modelo'.trim();
+
     return AppCard(
+      tier: 1,
       onTap: () {
         // Abre el detalle de mantenimiento UNIFICADO de la unidad: service +
         // advertencias del tablero + telemetría + historial de taller completo.
@@ -128,42 +344,47 @@ class _TractorCard extends StatelessWidget {
       },
       child: Row(
         children: [
-          // Avatar con icono según estado.
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: estado.color.withAlpha(25),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              _iconoSegunEstado(estado),
-              color: estado.color,
-              size: 22,
-            ),
+          // Punto de estado semántico Núcleo (reemplaza el avatar circular).
+          Padding(
+            padding: const EdgeInsets.only(top: 5),
+            child: AppDot(estadoColor, size: 8),
           ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  patente,
-                  style: AppType.heading.copyWith(fontSize: 15),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        patente,
+                        style: AppType.mono.copyWith(
+                          color: c.text,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    MantenimientoBadge(serviceDistanceKm: serviceDistanceKm),
+                  ],
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$marca $modelo'.trim().isEmpty
-                      ? 'Sin marca/modelo'
-                      : '$marca $modelo',
-                  style:
-                      AppType.label.copyWith(color: AppColors.textTertiary),
+                  marcaModelo.isEmpty ? 'Sin marca/modelo' : marcaModelo,
+                  style: AppType.bodySm.copyWith(color: c.textSecondary),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  estado.etiqueta,
-                  style: AppType.eyebrow.copyWith(
-                      color: estado.color, letterSpacing: 0.6),
+                  estado.etiqueta.toUpperCase(),
+                  style: AppType.eyebrow.copyWith(color: estadoColor),
                 ),
                 if (faltaCargaInicial) ...[
                   const SizedBox(height: AppSpacing.xs),
@@ -171,11 +392,7 @@ class _TractorCard extends StatelessWidget {
                     'Cargá el último service desde la ficha para ver KM al próximo',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.eyebrow.copyWith(
-                      color: AppColors.warning,
-                      fontSize: 10,
-                      fontStyle: FontStyle.italic,
-                    ),
+                    style: AppType.bodySm.copyWith(color: c.textMuted),
                   ),
                 ] else if (ultimoServiceKm != null ||
                     ultimoServiceFecha != null ||
@@ -190,25 +407,14 @@ class _TractorCard extends StatelessWidget {
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: AppType.eyebrow.copyWith(
-                      color: AppColors.textHint,
-                      fontSize: 10,
-                      fontStyle: FontStyle.italic,
-                    ),
+                    style: AppType.monoSm.copyWith(color: c.textMuted),
                   ),
                 ],
               ],
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              MantenimientoBadge(serviceDistanceKm: serviceDistanceKm),
-              const SizedBox(height: 6),
-              const Icon(Icons.chevron_right,
-                  color: AppColors.textHint, size: 20),
-            ],
-          ),
+          const SizedBox(width: AppSpacing.sm),
+          Icon(Icons.chevron_right, color: c.textMuted, size: 18),
         ],
       ),
     );
@@ -229,10 +435,10 @@ class _TractorCard extends StatelessWidget {
     final partes = <String>[];
     if (km != null) {
       final prefijo = fuenteManual ? '' : '~';
-      partes.add('$prefijo${km.round()} km');
+      partes.add('$prefijo${AppFormatters.formatearMiles(km)} km');
     }
     if (kmRecorridos != null) {
-      partes.add('${kmRecorridos.round()} km recorridos');
+      partes.add('${AppFormatters.formatearMiles(kmRecorridos)} km recorridos');
     }
     if (fecha != null) {
       partes.add(_tiempoRelativo(fecha));
@@ -255,27 +461,10 @@ class _TractorCard extends StatelessWidget {
     final anios = (dias / 365).round();
     return anios == 1 ? 'hace 1 año' : 'hace $anios años';
   }
-
-  IconData _iconoSegunEstado(MantenimientoEstado estado) {
-    switch (estado) {
-      case MantenimientoEstado.vencido:
-        return Icons.warning_amber_rounded;
-      case MantenimientoEstado.urgente:
-        return Icons.priority_high;
-      case MantenimientoEstado.programar:
-        return Icons.event_note;
-      case MantenimientoEstado.atencion:
-        return Icons.schedule;
-      case MantenimientoEstado.ok:
-        return Icons.check_circle;
-      case MantenimientoEstado.sinDato:
-        return Icons.help_outline;
-    }
-  }
 }
 
 // =============================================================================
-// RESUMEN AGREGADO (chips arriba de la lista)
+// RESUMEN AGREGADO (alimenta el KpiStrip y los chips del header)
 // =============================================================================
 
 class _Resumen {
@@ -331,156 +520,6 @@ class _Resumen {
       atencion: atencion,
       ok: ok,
       sinDato: sinDato,
-    );
-  }
-}
-
-class _BarraResumen extends StatelessWidget {
-  final _Resumen resumen;
-  final MantenimientoEstado? filtroActivo;
-  final ValueChanged<MantenimientoEstado> onSeleccionar;
-  const _BarraResumen({
-    required this.resumen,
-    required this.filtroActivo,
-    required this.onSeleccionar,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(
-          AppSpacing.md, AppSpacing.md, AppSpacing.md, AppSpacing.xs),
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-      decoration: BoxDecoration(
-        color: AppColors.borderSubtle,
-        borderRadius: BorderRadius.circular(AppSpacing.sm + 2),
-        border: Border.all(color: AppColors.borderSubtle),
-      ),
-      child: Wrap(
-        spacing: AppSpacing.md,
-        runSpacing: 6,
-        children: [
-          _Chip(
-            label: 'Vencidos',
-            count: resumen.vencidos,
-            color: AppColors.error,
-            estado: MantenimientoEstado.vencido,
-            activo: filtroActivo == MantenimientoEstado.vencido,
-            onTap: onSeleccionar,
-          ),
-          _Chip(
-            label: 'Urgentes',
-            count: resumen.urgentes,
-            color: AppColors.warning,
-            estado: MantenimientoEstado.urgente,
-            activo: filtroActivo == MantenimientoEstado.urgente,
-            onTap: onSeleccionar,
-          ),
-          _Chip(
-            label: 'Programar',
-            count: resumen.programar,
-            color: AppColors.warning,
-            estado: MantenimientoEstado.programar,
-            activo: filtroActivo == MantenimientoEstado.programar,
-            onTap: onSeleccionar,
-          ),
-          _Chip(
-            label: 'Falta poco',
-            count: resumen.atencion,
-            color: const Color(0xFFC6FF00),
-            estado: MantenimientoEstado.atencion,
-            activo: filtroActivo == MantenimientoEstado.atencion,
-            onTap: onSeleccionar,
-          ),
-          _Chip(
-            label: 'OK',
-            count: resumen.ok,
-            color: AppColors.success,
-            estado: MantenimientoEstado.ok,
-            activo: filtroActivo == MantenimientoEstado.ok,
-            onTap: onSeleccionar,
-          ),
-          if (resumen.sinDato > 0)
-            _Chip(
-              label: 'Sin datos',
-              count: resumen.sinDato,
-              color: AppColors.textHint,
-              estado: MantenimientoEstado.sinDato,
-              activo: filtroActivo == MantenimientoEstado.sinDato,
-              onTap: onSeleccionar,
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  final String label;
-  final int count;
-  final Color color;
-  final MantenimientoEstado estado;
-  final bool activo;
-  final ValueChanged<MantenimientoEstado> onTap;
-
-  const _Chip({
-    required this.label,
-    required this.count,
-    required this.color,
-    required this.estado,
-    required this.activo,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    // Cuando el chip esta activo: fondo mas opaco + borde mas grueso
-    // y label en blanco/bold para que se note el filtro vigente.
-    final fondoAlpha = activo ? 60 : 20;
-    final bordeAlpha = activo ? 200 : 60;
-    final bordeWidth = activo ? 1.5 : 1.0;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppSpacing.xl),
-        onTap: () => onTap(estado),
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
-          decoration: BoxDecoration(
-            color: color.withAlpha(fondoAlpha),
-            borderRadius: BorderRadius.circular(AppSpacing.xl),
-            border: Border.all(
-              color: color.withAlpha(bordeAlpha),
-              width: bordeWidth,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                '$count',
-                style: AppType.body.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: AppType.eyebrow.copyWith(
-                    color: activo
-                        ? AppColors.textPrimary
-                        : AppColors.textSecondary,
-                    fontWeight:
-                        activo ? FontWeight.w600 : FontWeight.normal),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

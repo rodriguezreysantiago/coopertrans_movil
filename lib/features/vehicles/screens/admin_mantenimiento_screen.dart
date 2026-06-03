@@ -81,7 +81,7 @@ class _AdminMantenimientoScreenState extends State<AdminMantenimientoScreen> {
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting &&
               !snap.hasData) {
-            return const AppLoadingState();
+            return const AppSkeletonList(count: 6);
           }
           if (snap.hasError) {
             return AppErrorState(
@@ -106,10 +106,10 @@ class _AdminMantenimientoScreenState extends State<AdminMantenimientoScreen> {
 
           // Filtros encadenados: primero por search (patente/marca/modelo),
           // despues por estado seleccionado en los chips. _filtroEstado
-          // null = no filtra. Los chips de _BarraResumen siguen mostrando
-          // los conteos GLOBALES (calculados sobre `sorted`) para que el
-          // admin sepa cuantos hay en cada estado aunque tenga otro filtro
-          // activo y pueda saltar de uno a otro.
+          // null = no filtra. El header sigue mostrando los conteos
+          // GLOBALES (calculados sobre `sorted`) para que el admin sepa
+          // cuantos hay en cada estado aunque tenga otro filtro activo y
+          // pueda saltar de uno a otro.
           final filtrados = sorted.where((doc) {
             if (_query.isEmpty) return true;
             final data = doc.data() as Map<String, dynamic>;
@@ -138,47 +138,47 @@ class _AdminMantenimientoScreenState extends State<AdminMantenimientoScreen> {
             );
           }
 
-          return Column(
-            children: [
-              _BarraResumen(
-                resumen: resumen,
-                filtroActivo: _filtroEstado,
-                onSeleccionar: (estado) {
-                  setState(() {
-                    // Tap mismo estado = limpiar; tap distinto = cambia.
-                    _filtroEstado =
-                        (_filtroEstado == estado) ? null : estado;
-                  });
-                },
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.xs),
-                child: TextField(
-                  controller: _searchCtl,
-                  decoration: const InputDecoration(
-                    hintText: 'Buscar patente, marca o modelo...',
-                    prefixIcon:
-                        Icon(Icons.search, color: AppColors.textHint),
-                    isDense: true,
-                  ),
+          return CustomScrollView(
+            slivers: [
+              // Header Núcleo: eyebrow + hero (flota total) + KpiStrip por
+              // urgencia + chips de filtro por estado + buscador. Todo se
+              // deriva del MISMO snapshot que la lista (cero lecturas extra).
+              SliverToBoxAdapter(
+                child: _HeaderMantenimiento(
+                  total: sorted.length,
+                  resumen: resumen,
+                  filtroActivo: _filtroEstado,
+                  onSeleccionar: (estado) {
+                    setState(() {
+                      // Tap mismo estado = limpiar; tap distinto = cambia.
+                      _filtroEstado =
+                          (_filtroEstado == estado) ? null : estado;
+                    });
+                  },
+                  searchCtl: _searchCtl,
+                  tieneTexto: _query.isNotEmpty,
+                  onLimpiar: () => _searchCtl.clear(),
                 ),
               ),
-              Expanded(
-                child: filtrados.isEmpty
-                    ? const AppEmptyState(
-                        title: 'No se encontraron coincidencias',
-                        subtitle: 'Probá con otro término.',
-                        icon: Icons.search_off,
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(
-                            AppSpacing.sm, AppSpacing.xs, AppSpacing.sm, 80),
-                        itemCount: filtrados.length,
-                        itemBuilder: (ctx, idx) =>
-                            _TractorCard(doc: filtrados[idx]),
-                      ),
-              ),
+              if (filtrados.isEmpty)
+                const SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: AppEmptyState(
+                    title: 'No se encontraron coincidencias',
+                    subtitle: 'Probá con otro término.',
+                    icon: Icons.search_off,
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xxl),
+                  sliver: SliverList.builder(
+                    itemCount: filtrados.length,
+                    itemBuilder: (ctx, idx) =>
+                        _TractorCard(doc: filtrados[idx]),
+                  ),
+                ),
             ],
           );
         },
