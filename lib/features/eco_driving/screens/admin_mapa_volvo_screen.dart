@@ -1,7 +1,35 @@
+// lib/features/eco_driving/screens/admin_mapa_volvo_screen.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — mapa Volvo en vivo con markers del sistema.
+//
+// SOLO PRESENTACIÓN. Se preserva intacto:
+//   - el stream de `VOLVO_ALERTAS` (rango temporal + orderBy creado_en),
+//   - `_tieneGpsValido`, `_construirRuta`, `_construirHeatmap` y los modelos
+//     livianos `_PuntoRuta` / `_CeldaHeatmap`,
+//   - la lógica de filtros (tipo / patente / heatmap), la ruta del chofer,
+//     el heatmap OVERSPEED, el toggle satélite, los markers y el bottom
+//     sheet de detalle (`EventoVolvoDetalleSheet`),
+//   - el helper exportado `formatearFechaHoraEvento`.
+//
+// Layout Núcleo:
+//   - Markers → `AppMapMarker` (dot semántico + label mono + glow firma),
+//     status mapeado desde severidad/atendida.
+//   - Toolbar → superficie surface1 + hairline; contador en mono; pills
+//     Núcleo para los filtros de tipo/patente; toggle HEATMAP como pill.
+//   - Toggle satélite → `AppMapInfoPill` (cristal escarchado) + leyenda de
+//     colores `AppMapLegend` al pie.
+//   - Loading → spinner brand; error → `AppErrorState`.
+//
+// Reglas duras: tokens (context.colors), embedded (sin fondo full-screen
+// propio), faltante → "—", mapa acotado, sin overflow.
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+
+import 'package:coopertrans_movil/core/theme/app_spacing.dart';
+import 'package:coopertrans_movil/core/theme/app_typography.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
@@ -11,8 +39,6 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../utils/etiquetas_alerta_volvo.dart';
 import '../widgets/evento_volvo_detalle_sheet.dart';
 
-import 'package:coopertrans_movil/core/theme/app_spacing.dart';
-import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Pantalla "Mapa Volvo" — visualización geográfica de eventos del
 /// Vehicle Alerts API sobre OpenStreetMap.
 ///
@@ -65,6 +91,7 @@ class _AdminMapaVolvoScreenState extends State<AdminMapaVolvoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppScaffold(
       title: 'Mapa Volvo',
       actions: [
@@ -91,8 +118,8 @@ class _AdminMapaVolvoScreenState extends State<AdminMapaVolvoScreen> {
             .snapshots(),
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppColors.brand),
+            return Center(
+              child: CircularProgressIndicator(color: c.brand),
             );
           }
           if (snap.hasError) {
@@ -320,12 +347,14 @@ class _Toolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final sinGps = totalEventos - conGps;
     return Container(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.md, AppSpacing.sm, AppSpacing.md, AppSpacing.sm),
-      decoration: const BoxDecoration(
-        color: AppColors.surface0,
-        border: Border(bottom: BorderSide(color: AppColors.borderSubtle)),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.surface1,
+        border: Border(bottom: BorderSide(color: c.border)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -339,21 +368,22 @@ class _Toolbar extends StatelessWidget {
                   '${rutaActiva ? " · ruta activa" : ""}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.eyebrow,
+                  style: AppType.monoSm.copyWith(color: c.textSecondary),
                 ),
               ),
+              const SizedBox(width: AppSpacing.sm),
               // Toggle heatmap OVERSPEED. Visible siempre — independiente
               // de filtros (el heatmap muestra agregado de la flota).
               _ToggleChip(
                 label: 'HEATMAP',
                 icono: Icons.local_fire_department,
                 activo: heatmapActivo,
-                colorActivo: AppColors.error,
+                colorActivo: c.error,
                 onChange: onHeatmapToggle,
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.xs),
+          const SizedBox(height: AppSpacing.sm),
           // Filtros de tipo (chip horizontal scrolleable).
           SizedBox(
             height: 30,
@@ -361,7 +391,7 @@ class _Toolbar extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               children: [
                 _Chip(
-                  label: 'TODOS',
+                  label: 'Todos',
                   selected: filtroTipo == null,
                   onTap: () => onTipoChange(null),
                 ),
@@ -392,7 +422,7 @@ class _Toolbar extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               children: [
                 _Chip(
-                  label: 'TODAS',
+                  label: 'Todas',
                   selected: filtroPatente == null,
                   onTap: () => onPatenteChange(null),
                 ),
@@ -402,6 +432,7 @@ class _Toolbar extends StatelessWidget {
                     padding: const EdgeInsets.only(right: AppSpacing.xs),
                     child: _Chip(
                       label: p,
+                      mono: true,
                       selected: filtroPatente == p,
                       onTap: () => onPatenteChange(p),
                     ),
@@ -415,42 +446,53 @@ class _Toolbar extends StatelessWidget {
   }
 }
 
+/// Pill de filtro Núcleo (activo = relleno `text` sobre `bg`; inactivo =
+/// borde hairline). `mono` para las patentes (dato técnico).
 class _Chip extends StatelessWidget {
   final String label;
   final bool selected;
+  final bool mono;
   final VoidCallback onTap;
 
   const _Chip({
     required this.label,
     required this.selected,
     required this.onTap,
+    this.mono = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.brand : AppColors.textDisabled;
+    final c = context.colors;
+    final base = mono ? AppType.monoSm : AppType.label;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
+      borderRadius: BorderRadius.circular(AppRadius.full),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.brand.withAlpha(25)
-              : AppColors.borderSubtle,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: color.withAlpha(80)),
-        ),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.xs),
         alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? c.text : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: selected ? null : Border.all(color: c.border),
+        ),
         child: Text(
           label,
-          style: AppType.eyebrow.copyWith(color: color),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: base.copyWith(
+            color: selected ? c.bg : c.textSecondary,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );
   }
 }
 
+/// Toggle pill con ícono (HEATMAP). Activo: relleno suave del color +
+/// borde + texto del color. Inactivo: borde hairline + texto muted.
 class _ToggleChip extends StatelessWidget {
   final String label;
   final IconData icono;
@@ -468,16 +510,21 @@ class _ToggleChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = activo ? colorActivo : AppColors.textTertiary;
+    final c = context.colors;
+    final color = activo ? colorActivo : c.textSecondary;
     return InkWell(
       onTap: () => onChange(!activo),
-      borderRadius: BorderRadius.circular(AppRadius.lg),
+      borderRadius: BorderRadius.circular(AppRadius.full),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.xs),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.xs),
         decoration: BoxDecoration(
-          color: activo ? colorActivo.withAlpha(35) : AppColors.borderSubtle,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(color: color.withAlpha(120)),
+          color: activo
+              ? colorActivo.withValues(alpha: 0.16)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: Border.all(
+              color: activo ? colorActivo.withValues(alpha: 0.45) : c.border),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -486,7 +533,8 @@ class _ToggleChip extends StatelessWidget {
             const SizedBox(width: AppSpacing.xs),
             Text(
               label,
-              style: AppType.eyebrow.copyWith(color: color),
+              style: AppType.monoSm.copyWith(
+                  color: color, fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -548,10 +596,10 @@ class _Mapa extends StatelessWidget {
                 userAgentPackageName: MapConstants.userAgent,
               ),
             // Capa heatmap (debajo de la ruta y los markers para no taparlos).
-            if (celdasHeatmap.isNotEmpty) _capaHeatmap(),
+            if (celdasHeatmap.isNotEmpty) _capaHeatmap(context),
             // Capa ruta (línea coloreada por velocidad). Va debajo de los
             // markers para que los pins queden tappables.
-            if (puntosRuta.length >= 2) _capaRuta(),
+            if (puntosRuta.length >= 2) _capaRuta(context),
             MarkerLayer(
               markers: docs
                   .map((d) => _markerDeDoc(context, d))
@@ -569,30 +617,34 @@ class _Mapa extends StatelessWidget {
             ),
           ],
         ),
+
+        // Toggle satélite / mapa (arriba-derecha) — cristal Núcleo.
         if (hayMapbox)
           Positioned(
             top: AppSpacing.md,
             right: AppSpacing.md,
-            child: Material(
-              color: AppColors.surface0.withAlpha(170),
-              shape: const CircleBorder(),
-              elevation: 4,
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: onToggleSatelite,
-                child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  child: Icon(
-                    modoSatelite
-                        ? Icons.map_outlined
-                        : Icons.satellite_alt_outlined,
-                    color: AppColors.textPrimary,
-                    size: 22,
-                  ),
-                ),
-              ),
+            child: _BotonMapa(
+              icono: modoSatelite
+                  ? Icons.map_outlined
+                  : Icons.satellite_alt_outlined,
+              label: modoSatelite ? 'Mapa' : 'Satélite',
+              onTap: onToggleSatelite,
             ),
           ),
+
+        // Leyenda de colores de los markers (abajo-izquierda).
+        const Positioned(
+          left: AppSpacing.md,
+          bottom: AppSpacing.md,
+          child: AppMapLegend(
+            items: [
+              (label: 'Grave', status: AppMarkerStatus.error),
+              (label: 'Media', status: AppMarkerStatus.warning),
+              (label: 'Leve', status: AppMarkerStatus.info),
+              (label: 'Atendida', status: AppMarkerStatus.idle),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -600,25 +652,26 @@ class _Mapa extends StatelessWidget {
   /// Heatmap como `CircleLayer` — cada celda es un círculo cuya alpha
   /// crece con la cantidad de OVERSPEED en esa celda. Mapeamos
   /// `cuenta → alpha` con un cap a 5+ eventos = full opaco.
-  Widget _capaHeatmap() {
-    final maxCuenta = celdasHeatmap.map((c) => c.cuenta).reduce(
+  Widget _capaHeatmap(BuildContext context) {
+    final c = context.colors;
+    final maxCuenta = celdasHeatmap.map((cd) => cd.cuenta).reduce(
           (a, b) => a > b ? a : b,
         );
     return CircleLayer(
-      circles: celdasHeatmap.map((c) {
+      circles: celdasHeatmap.map((cd) {
         // Normalizamos 1..max a 0.2..0.8 — siempre algo de transparencia
         // para que se vea el mapa abajo.
-        final intensidad = (c.cuenta / (maxCuenta == 0 ? 1 : maxCuenta))
+        final intensidad = (cd.cuenta / (maxCuenta == 0 ? 1 : maxCuenta))
             .clamp(0.0, 1.0);
-        final alpha = (50 + intensidad * 150).round().clamp(50, 200);
+        final alpha = (0.2 + intensidad * 0.6).clamp(0.2, 0.8);
         return CircleMarker(
-          point: c.centro,
+          point: cd.centro,
           // Radio físico en metros — escala con el zoom solo (no
           // depende de pixels). 250m ≈ tamaño del bucket /2 — los
           // círculos vecinos se solapan formando una mancha.
           radius: 250,
           useRadiusInMeter: true,
-          color: AppColors.error.withAlpha(alpha),
+          color: c.error.withValues(alpha: alpha),
           borderStrokeWidth: 0,
         );
       }).toList(),
@@ -629,7 +682,8 @@ class _Mapa extends StatelessWidget {
   /// velocidad. Cada par consecutivo es un Polyline propio con su
   /// color — más simple que un gradiente real y suficiente para
   /// visualizar tramos peligrosos en rojo.
-  Widget _capaRuta() {
+  Widget _capaRuta(BuildContext context) {
+    final c = context.colors;
     final segmentos = <Polyline>[];
     for (var i = 0; i < puntosRuta.length - 1; i++) {
       final a = puntosRuta[i];
@@ -637,7 +691,7 @@ class _Mapa extends StatelessWidget {
       // Color del segmento según velocidad del PUNTO DE ORIGEN.
       // Si no hay velocidad reportada (caso común para tipos no-OVERSPEED),
       // gris neutro — la línea sigue sirviendo para ver la traza.
-      final color = _colorVelocidad(a.velocidad);
+      final color = _colorVelocidad(c, a.velocidad);
       segmentos.add(Polyline(
         points: [a.punto, b.punto],
         color: color,
@@ -647,11 +701,11 @@ class _Mapa extends StatelessWidget {
     return PolylineLayer(polylines: segmentos);
   }
 
-  static Color _colorVelocidad(double? vel) {
-    if (vel == null) return AppColors.textDisabled;
-    if (vel > 100) return AppColors.error;
-    if (vel > 80) return AppColors.warning;
-    return AppColors.success;
+  static Color _colorVelocidad(AppColorsExt c, double? vel) {
+    if (vel == null) return c.textMuted;
+    if (vel > 100) return c.error;
+    if (vel > 80) return c.warning;
+    return c.success;
   }
 
   Marker? _markerDeDoc(
@@ -667,40 +721,29 @@ class _Mapa extends StatelessWidget {
 
     final severidad = (data['severidad'] ?? '').toString().toUpperCase();
     final atendida = data['atendida'] == true;
-    final color = atendida
-        ? AppColors.textDisabled
+    // Status semántico para el AppMapMarker: atendida → neutra (idle);
+    // si no, por severidad (HIGH grave, MEDIUM media, resto leve).
+    final status = atendida
+        ? AppMarkerStatus.idle
         : severidad == 'HIGH'
-            ? AppColors.error
+            ? AppMarkerStatus.error
             : severidad == 'MEDIUM'
-                ? AppColors.warning
-                : AppColors.success;
+                ? AppMarkerStatus.warning
+                : AppMarkerStatus.info;
+
+    final patente = (data['patente'] ?? '').toString();
+    final tipo = (data['tipo'] ?? '').toString();
 
     return Marker(
       point: LatLng(lat, lng),
-      width: 28,
-      height: 28,
+      width: 120,
+      height: 48,
       alignment: Alignment.center,
-      child: GestureDetector(
+      child: AppMapMarker(
+        label: patente.isEmpty ? '—' : patente,
+        value: tipo.isEmpty ? null : etiquetaAlertaVolvo(tipo),
+        status: status,
         onTap: () => _mostrarDetalle(context, doc),
-        child: Container(
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color.withAlpha(220),
-            border: Border.all(color: AppColors.surface0.withAlpha(120), width: 2),
-            boxShadow: const [
-              BoxShadow(
-                color: AppColors.surface0,
-                blurRadius: 4,
-                offset: Offset(0, 2),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.warning_amber_rounded,
-            color: AppColors.surface0,
-            size: 14,
-          ),
-        ),
       ),
     );
   }
@@ -716,6 +759,40 @@ class _Mapa extends StatelessWidget {
       builder: (_) => EventoVolvoDetalleSheet(
         alertId: doc.id,
         data: doc.data(),
+      ),
+    );
+  }
+}
+
+/// Botón flotante tipo "pill" sobre el mapa (toggle satélite). Cristal
+/// escarchado Núcleo (AppMapInfoPill).
+class _BotonMapa extends StatelessWidget {
+  final IconData icono;
+  final String label;
+  final VoidCallback onTap;
+  const _BotonMapa(
+      {required this.icono, required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: AppMapInfoPill(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icono, size: 16, color: c.text),
+              const SizedBox(width: AppSpacing.xs),
+              Text(label,
+                  style: AppType.monoSm.copyWith(
+                      color: c.text, fontWeight: FontWeight.w600)),
+            ],
+          ),
+        ),
       ),
     );
   }

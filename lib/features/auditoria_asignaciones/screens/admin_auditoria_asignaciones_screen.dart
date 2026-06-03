@@ -1,3 +1,38 @@
+// lib/features/auditoria_asignaciones/screens/admin_auditoria_asignaciones_screen.dart
+//
+// REFACTOR NÚCLEO · jun 2026 — auditoría de asignaciones en lenguaje bento.
+//
+// SOLO PRESENTACIÓN. Se preserva intacto:
+//   - los streams/reads (`ASIGNACIONES_VEHICULO` / `ASIGNACIONES_ENGANCHE` vía
+//     `AsignacionVehiculoService` / `AsignacionEngancheService`; VEHICULOS /
+//     EMPLEADOS para los selectores con buscador),
+//   - los modelos `AsignacionVehiculo` / `AsignacionEnganche` /
+//     `EngancheLlevado`,
+//   - la lógica `_enRango`, `_duracion`, `diasDuracion`,
+//     `enganchesLlevadosPorChofer`,
+//   - el State (`_tab` ahora ES el TabController; `_patente`/`_esEnganche`/
+//     `_rango`/`_choferDni`) + keep-alive de cada vista,
+//   - la navegación (read-only) y los pickers con buscador.
+//
+// Layout Núcleo:
+//   - Las 2 vistas (Por unidad / Por chofer) viven en pills `AppFilterChip`
+//     en lugar del TabBar Material, pero se mantiene el `TabController` y el
+//     keep-alive de cada subvista (los chips solo cambian `_tab.index`).
+//   - Banners → caja surface con eyebrow + texto.
+//   - Selector de rango → pill Núcleo (cristal + dot brand).
+//   - Campos selector + sheets de picker → reskin a tokens + buscador estilo
+//     Núcleo (TextField sobre surface2). Empty del picker = AppEmptyState.
+//   - Resúmenes → AppKpiStrip / AppStat (hero numbers en c.text, NUNCA color
+//     semántico en el número).
+//   - Cards de período → AppCard(tier 1/2) con patente/fechas en mono, badge
+//     "Actual" = AppBadge, filas label/valor = `_Linea` (value mono cuando es
+//     fecha/dato técnico), Divider → AppHairline.
+//   - Placeholders → AppEmptyState; loading → AppSkeletonList; error →
+//     AppErrorState.
+//
+// Reglas duras: tokens (context.colors), números/fechas técnicas en mono,
+// embedded (sin fondo full-screen propio), faltante → "—", sin overflow.
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
@@ -13,7 +48,7 @@ import '../../asignaciones/models/asignacion_vehiculo.dart';
 import '../../asignaciones/services/asignacion_enganche_service.dart';
 import '../../asignaciones/services/asignacion_vehiculo_service.dart';
 
-/// Auditoría de asignaciones — 2 vistas en TabBar.
+/// Auditoría de asignaciones — 2 vistas en pills Núcleo.
 ///
 /// 1. **Por unidad + fecha** (original 2026-05-27): "¿quién manejaba esta
 ///    unidad este día?". Para multas tardías / reconciliación puntual.
@@ -45,6 +80,11 @@ class _AdminAuditoriaAsignacionesScreenState
   void initState() {
     super.initState();
     _tab = TabController(length: 2, vsync: this);
+    // Los pills setean `_tab.index` directamente; escuchamos para reflejar
+    // el chip activo cuando cambia (incluido swipe del TabBarView).
+    _tab.addListener(() {
+      if (!_tab.indexIsChanging) setState(() {});
+    });
   }
 
   @override
@@ -59,27 +99,29 @@ class _AdminAuditoriaAsignacionesScreenState
       title: 'Auditoría de asignaciones',
       body: Column(
         children: [
-          Material(
-            color: AppColors.surface1,
-            child: TabBar(
-              controller: _tab,
-              indicatorColor: AppColors.brand,
-              labelColor: AppColors.brand,
-              unselectedLabelColor: Colors.white60,
-              labelStyle:
-                  AppType.body.copyWith(fontWeight: FontWeight.w600),
-              tabs: const [
-                Tab(
-                  icon: Icon(Icons.local_shipping_outlined),
-                  text: 'Por unidad',
+          // Pills Núcleo en lugar del TabBar Material — mismo TabController.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+            child: Row(
+              children: [
+                _VistaPill(
+                  label: 'Por unidad',
+                  icon: Icons.local_shipping_outlined,
+                  activo: _tab.index == 0,
+                  onTap: () => _tab.animateTo(0),
                 ),
-                Tab(
-                  icon: Icon(Icons.person_search_outlined),
-                  text: 'Por chofer',
+                const SizedBox(width: AppSpacing.sm),
+                _VistaPill(
+                  label: 'Por chofer',
+                  icon: Icons.person_search_outlined,
+                  activo: _tab.index == 1,
+                  onTap: () => _tab.animateTo(1),
                 ),
               ],
             ),
           ),
+          const AppHairline(),
           Expanded(
             child: TabBarView(
               controller: _tab,
@@ -90,6 +132,62 @@ class _AdminAuditoriaAsignacionesScreenState
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Pill de selección de vista (estilo Núcleo: activo = relleno `text` sobre
+/// `bg`; inactivo = borde hairline). Replica el lenguaje del `_ChipEstado`
+/// del mapa de flota, con ícono.
+class _VistaPill extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool activo;
+  final VoidCallback onTap;
+  const _VistaPill({
+    required this.label,
+    required this.icon,
+    required this.activo,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: activo ? c.text : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppRadius.full),
+            border: activo ? null : Border.all(color: c.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon,
+                  size: 16, color: activo ? c.bg : c.textSecondary),
+              const SizedBox(width: AppSpacing.sm),
+              Flexible(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.label.copyWith(
+                    color: activo ? c.bg : c.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -142,7 +240,8 @@ class _TabPorUnidadState extends State<_TabPorUnidad>
   Widget build(BuildContext context) {
     super.build(context);
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
       children: [
         const _BannerInfo(
           texto: 'Elegí una unidad y te mostramos TODOS los choferes que la '
@@ -203,7 +302,8 @@ class _TabPorChoferState extends State<_TabPorChofer>
   Widget build(BuildContext context) {
     super.build(context);
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
       children: [
         const _BannerInfo(
           texto: 'Historial completo de unidades manejadas por el chofer '
@@ -229,27 +329,36 @@ class _TabPorChoferState extends State<_TabPorChofer>
 // SELECTORES
 // ============================================================================
 
+/// Caja informativa Núcleo (surface2 + border + eyebrow + texto). Reemplaza
+/// al banner azul Material que precedía cada vista.
 class _BannerInfo extends StatelessWidget {
   final String texto;
   const _BannerInfo({required this.texto});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
-        color: AppColors.info.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: AppColors.info.withValues(alpha: 0.30)),
+        color: c.surface2,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+        border: Border(
+          top: BorderSide(color: c.border),
+          right: BorderSide(color: c.border),
+          bottom: BorderSide(color: c.border),
+          left: BorderSide(color: c.info, width: 3),
+        ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline, color: AppColors.info, size: 20),
-          const SizedBox(width: 10),
+          Icon(Icons.info_outline, color: c.info, size: 18),
+          const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(
               texto,
-              style: AppType.label.copyWith(color: Colors.white70),
+              style: AppType.bodySm.copyWith(color: c.textSecondary),
             ),
           ),
         ],
@@ -260,7 +369,8 @@ class _BannerInfo extends StatelessWidget {
 
 /// Selector de rango de fechas OPCIONAL. Por defecto "Todo el historial";
 /// al tocar abre un date range picker. Con rango activo muestra una X para
-/// limpiarlo (volver a todo).
+/// limpiarlo (volver a todo). Pill Núcleo: cristal surface2 + dot brand +
+/// fechas mono.
 class _SelectorRango extends StatelessWidget {
   final DateTimeRange? rango;
   final VoidCallback onElegir;
@@ -274,48 +384,52 @@ class _SelectorRango extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final hayRango = rango != null;
     final texto = hayRango
         ? '${_fmt(rango!.start)}  →  ${_fmt(rango!.end)}'
         : 'Todo el historial';
     return InkWell(
       onTap: onElegir,
-      borderRadius: BorderRadius.circular(AppRadius.sm),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         decoration: BoxDecoration(
-          color: AppColors.brand.withValues(alpha: 0.10),
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          border: Border.all(color: AppColors.brand.withValues(alpha: 0.40)),
+          color: c.surface2,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: c.border),
         ),
         child: Row(
           children: [
-            const Icon(Icons.date_range, color: AppColors.brand, size: 20),
-            const SizedBox(width: 10),
+            AppDot(c.brand, size: 7),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('PERÍODO',
-                      style: AppType.eyebrow.copyWith(color: AppColors.brand)),
+                  const AppEyebrow('Período'),
                   const SizedBox(height: 2),
-                  Text(texto,
-                      style: AppType.body.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15)),
+                  Text(
+                    texto,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.mono.copyWith(
+                        color: hayRango ? c.text : c.textSecondary,
+                        fontWeight: FontWeight.w600),
+                  ),
                 ],
               ),
             ),
             if (onLimpiar != null)
               IconButton(
-                icon: const Icon(Icons.close, color: Colors.white54, size: 18),
+                icon: Icon(Icons.close, color: c.textMuted, size: 18),
                 tooltip: 'Ver todo el historial',
                 onPressed: onLimpiar,
                 visualDensity: VisualDensity.compact,
               )
             else
-              const Icon(Icons.edit, color: Colors.white54, size: 16),
+              Icon(Icons.edit_outlined, color: c.textMuted, size: 16),
           ],
         ),
       ),
@@ -332,6 +446,9 @@ class _SelectorRango extends StatelessWidget {
 // selector de tarifas de Logística). El campo visible imita un dropdown.
 
 /// Campo tappable que imita un dropdown pero abre un selector con buscador.
+/// Reskin Núcleo: surface2 + border + label eyebrow + ícono search a la
+/// derecha; el valor seleccionado va en mono (es un dato técnico: patente /
+/// nombre).
 class _CampoSelector extends StatelessWidget {
   final String label;
   final IconData icon;
@@ -348,28 +465,44 @@ class _CampoSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final tiene = (textoSel ?? '').isNotEmpty;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-          isDense: true,
-          prefixIcon: Icon(icon, color: Colors.white54),
-          suffixIcon: const Icon(Icons.search, color: Colors.white54),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+        decoration: BoxDecoration(
+          color: c.surface2,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: c.border),
         ),
-        child: Text(
-          tiene ? textoSel! : hint,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: tiene ? Colors.white : Colors.white54,
-            fontSize: 14,
-            fontWeight: tiene ? FontWeight.w600 : FontWeight.normal,
-            letterSpacing: tiene ? 0.5 : 0,
-          ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: c.textMuted),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AppEyebrow(label),
+                  const SizedBox(height: 2),
+                  Text(
+                    tiene ? textoSel! : hint,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: (tiene ? AppType.mono : AppType.body).copyWith(
+                      color: tiene ? c.text : c.textPlaceholder,
+                      fontWeight: tiene ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Icon(Icons.search, color: c.textMuted, size: 18),
+          ],
         ),
       ),
     );
@@ -396,6 +529,7 @@ class _PickerSheetScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final media = MediaQuery.of(context);
     return Padding(
       padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
@@ -410,8 +544,8 @@ class _PickerSheetScaffold extends StatelessWidget {
               margin: const EdgeInsets.only(
                   top: AppSpacing.sm, bottom: AppSpacing.xs),
               decoration: BoxDecoration(
-                color: AppColors.borderStrong,
-                borderRadius: BorderRadius.circular(2),
+                color: c.borderStrong,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
               ),
             ),
             Padding(
@@ -419,63 +553,60 @@ class _PickerSheetScaffold extends StatelessWidget {
                   AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.xs),
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: Text(titulo,
-                    style: AppType.eyebrow.copyWith(
-                        color: AppColors.textPrimary,
-                        fontSize: 13,
-                        letterSpacing: 1.4)),
+                child: AppEyebrow(titulo),
               ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(
                   AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.sm),
-              child: TextField(
-                controller: ctrl,
-                autofocus: true,
-                decoration: InputDecoration(
-                  prefixIcon: const Icon(Icons.search, size: 20),
-                  hintText: hintBuscar,
-                  border: const OutlineInputBorder(),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md, vertical: AppSpacing.md),
-                  suffixIcon: filtro.isEmpty
-                      ? null
-                      : IconButton(
-                          icon: const Icon(Icons.close, size: 18),
-                          tooltip: 'Limpiar búsqueda',
-                          onPressed: () {
-                            ctrl.clear();
-                            onFiltro('');
-                          },
-                        ),
+              child: SizedBox(
+                height: 44,
+                child: TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  style: AppType.body.copyWith(color: c.text),
+                  decoration: InputDecoration(
+                    prefixIcon: Icon(Icons.search, size: 18, color: c.textMuted),
+                    hintText: hintBuscar,
+                    hintStyle: AppType.body.copyWith(color: c.textMuted),
+                    filled: true,
+                    fillColor: c.surface2,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md, vertical: AppSpacing.md),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      borderSide: BorderSide(color: c.border),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      borderSide: BorderSide(color: c.border),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      borderSide: BorderSide(color: c.borderFocus),
+                    ),
+                    suffixIcon: filtro.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: Icon(Icons.close, size: 18, color: c.textMuted),
+                            tooltip: 'Limpiar búsqueda',
+                            onPressed: () {
+                              ctrl.clear();
+                              onFiltro('');
+                            },
+                          ),
+                  ),
+                  onChanged: onFiltro,
                 ),
-                onChanged: onFiltro,
               ),
             ),
-            Expanded(child: lista),
+            Flexible(child: lista),
           ],
         ),
       ),
     );
   }
-}
-
-/// Estado vacío del picker (lista sin coincidencias con el filtro).
-Widget _sinCoincidencias(String filtro) {
-  return Center(
-    child: Padding(
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      child: Text(
-        filtro.trim().isEmpty
-            ? 'No hay opciones cargadas.'
-            : 'Sin coincidencias con "$filtro".',
-        textAlign: TextAlign.center,
-        style:
-            AppType.body.copyWith(color: AppColors.textSecondary, fontSize: 13),
-      ),
-    ),
-  );
 }
 
 class _PatenteOpcion {
@@ -497,6 +628,7 @@ class _DropdownPatente extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection(AppCollections.vehiculos)
@@ -527,10 +659,10 @@ class _DropdownPatente extends StatelessWidget {
             final elegida = await showModalBottomSheet<String>(
               context: context,
               isScrollControlled: true,
-              backgroundColor: AppColors.background,
+              backgroundColor: c.surface1,
               shape: const RoundedRectangleBorder(
                 borderRadius:
-                    BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+                    BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
               ),
               builder: (_) =>
                   _PatentePickerSheet(items: items, seleccionada: value),
@@ -570,6 +702,7 @@ class _PatentePickerSheetState extends State<_PatentePickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final f = _filtro.trim().toUpperCase();
     final filtrados = f.isEmpty
         ? widget.items
@@ -579,19 +712,18 @@ class _PatentePickerSheetState extends State<_PatentePickerSheet> {
                 it.tipo.toUpperCase().contains(f))
             .toList();
     return _PickerSheetScaffold(
-      titulo: 'ELEGIR UNIDAD',
+      titulo: 'Elegir unidad',
       hintBuscar: 'Buscar por patente o tipo…',
       ctrl: _ctrl,
       filtro: _filtro,
       onFiltro: (v) => setState(() => _filtro = v),
       lista: filtrados.isEmpty
-          ? _sinCoincidencias(_filtro)
+          ? _SinCoincidencias(filtro: _filtro)
           : ListView.separated(
               padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.sm, 0, AppSpacing.sm, AppSpacing.lg),
+                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
               itemCount: filtrados.length,
-              separatorBuilder: (_, __) =>
-                  const Divider(height: 1, color: AppColors.borderSubtle),
+              separatorBuilder: (_, __) => AppHairline(color: c.border),
               itemBuilder: (_, i) {
                 final it = filtrados[i];
                 final esActual = it.patente == widget.seleccionada;
@@ -599,7 +731,7 @@ class _PatentePickerSheetState extends State<_PatentePickerSheet> {
                   onTap: () => Navigator.of(context).pop(it.patente),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm, vertical: AppSpacing.md),
+                        vertical: AppSpacing.md),
                     child: Row(
                       children: [
                         Icon(
@@ -607,27 +739,23 @@ class _PatentePickerSheetState extends State<_PatentePickerSheet> {
                               ? Icons.rv_hookup
                               : Icons.local_shipping_outlined,
                           size: 18,
-                          color: Colors.white38,
+                          color: c.textMuted,
                         ),
                         const SizedBox(width: AppSpacing.md),
                         Text(it.patente,
-                            style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.5)),
+                            style: AppType.mono.copyWith(
+                                color: c.text,
+                                fontWeight: FontWeight.w600)),
                         const SizedBox(width: AppSpacing.sm),
                         Expanded(
                           child: Text(
                             it.esEnganche ? it.tipo.toLowerCase() : 'tractor',
-                            style: AppType.label
-                                .copyWith(color: Colors.white38, fontSize: 12),
+                            style: AppType.bodySm.copyWith(color: c.textMuted),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         if (esActual)
-                          const Icon(Icons.check_circle,
-                              color: AppColors.success, size: 20),
+                          Icon(Icons.check_circle, color: c.success, size: 18),
                       ],
                     ),
                   ),
@@ -648,6 +776,7 @@ class _DropdownChofer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection(AppCollections.empleados)
@@ -689,10 +818,10 @@ class _DropdownChofer extends StatelessWidget {
             final elegido = await showModalBottomSheet<String>(
               context: context,
               isScrollControlled: true,
-              backgroundColor: AppColors.background,
+              backgroundColor: c.surface1,
               shape: const RoundedRectangleBorder(
                 borderRadius:
-                    BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+                    BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
               ),
               builder: (_) =>
                   _ChoferPickerSheet(choferes: choferes, seleccionado: value),
@@ -729,35 +858,35 @@ class _ChoferPickerSheetState extends State<_ChoferPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final f = _filtro.trim().toUpperCase();
     final filtrados = f.isEmpty
         ? widget.choferes
         : widget.choferes
-            .where((c) =>
-                c.nombre.toUpperCase().contains(f) || c.dni.contains(f))
+            .where((ch) =>
+                ch.nombre.toUpperCase().contains(f) || ch.dni.contains(f))
             .toList();
     return _PickerSheetScaffold(
-      titulo: 'ELEGIR CHOFER',
+      titulo: 'Elegir chofer',
       hintBuscar: 'Buscar por nombre o DNI…',
       ctrl: _ctrl,
       filtro: _filtro,
       onFiltro: (v) => setState(() => _filtro = v),
       lista: filtrados.isEmpty
-          ? _sinCoincidencias(_filtro)
+          ? _SinCoincidencias(filtro: _filtro)
           : ListView.separated(
               padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.sm, 0, AppSpacing.sm, AppSpacing.lg),
+                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
               itemCount: filtrados.length,
-              separatorBuilder: (_, __) =>
-                  const Divider(height: 1, color: AppColors.borderSubtle),
+              separatorBuilder: (_, __) => AppHairline(color: c.border),
               itemBuilder: (_, i) {
-                final c = filtrados[i];
-                final esActual = c.dni == widget.seleccionado;
+                final ch = filtrados[i];
+                final esActual = ch.dni == widget.seleccionado;
                 return InkWell(
-                  onTap: () => Navigator.of(context).pop(c.dni),
+                  onTap: () => Navigator.of(context).pop(ch.dni),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.sm, vertical: AppSpacing.md),
+                        vertical: AppSpacing.md),
                     child: Row(
                       children: [
                         Expanded(
@@ -765,35 +894,36 @@ class _ChoferPickerSheetState extends State<_ChoferPickerSheet> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                c.nombre,
+                                ch.nombre,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color:
-                                      c.activo ? Colors.white : Colors.white54,
-                                  fontSize: 15,
+                                style: AppType.body.copyWith(
+                                  color: ch.activo ? c.text : c.textMuted,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              Text('DNI ${c.dni}',
-                                  style: AppType.label.copyWith(
-                                      color: Colors.white38, fontSize: 11)),
+                              const SizedBox(height: 2),
+                              Text('DNI ${ch.dni}',
+                                  style: AppType.monoSm
+                                      .copyWith(color: c.textMuted)),
                             ],
                           ),
                         ),
-                        if (!c.activo)
+                        if (!ch.activo)
                           Padding(
                             padding:
                                 const EdgeInsets.only(left: AppSpacing.sm),
-                            child: Text('(inactivo)',
-                                style: AppType.label.copyWith(
-                                    color: AppColors.warning, fontSize: 11)),
+                            child: AppBadge(
+                              text: 'INACTIVO',
+                              color: c.warning,
+                              size: AppBadgeSize.sm,
+                            ),
                           ),
                         if (esActual)
-                          const Padding(
-                            padding: EdgeInsets.only(left: AppSpacing.sm),
+                          Padding(
+                            padding: const EdgeInsets.only(left: AppSpacing.sm),
                             child: Icon(Icons.check_circle,
-                                color: AppColors.success, size: 20),
+                                color: c.success, size: 18),
                           ),
                       ],
                     ),
@@ -816,34 +946,21 @@ class _ChoferOpcion {
   });
 }
 
-class _Placeholder extends StatelessWidget {
-  final IconData icono;
-  final String titulo;
-  final String subtitulo;
-  const _Placeholder({
-    required this.icono,
-    required this.titulo,
-    required this.subtitulo,
-  });
+/// Estado vacío del picker (lista sin coincidencias con el filtro).
+class _SinCoincidencias extends StatelessWidget {
+  final String filtro;
+  const _SinCoincidencias({required this.filtro});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 40),
-      child: Column(
-        children: [
-          Icon(icono, color: Colors.white24, size: 64),
-          const SizedBox(height: AppSpacing.md),
-          Text(titulo, style: AppType.heading.copyWith(color: Colors.white70)),
-          const SizedBox(height: AppSpacing.xs),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(subtitulo,
-                textAlign: TextAlign.center,
-                style: AppType.label.copyWith(color: Colors.white38)),
-          ),
-        ],
-      ),
+    return AppEmptyState(
+      icon: Icons.search_off_outlined,
+      title: filtro.trim().isEmpty
+          ? 'Sin opciones cargadas'
+          : 'Sin coincidencias',
+      subtitle: filtro.trim().isEmpty
+          ? null
+          : 'No hay resultados para "$filtro".',
     );
   }
 }
@@ -880,10 +997,10 @@ class _HistorialPorUnidad extends StatelessWidget {
 
   Widget _vacio() {
     final conFiltro = rango != null;
-    return _Placeholder(
-      icono: Icons.history_toggle_off_outlined,
-      titulo: conFiltro ? 'Sin registros en ese rango' : 'Sin historial',
-      subtitulo: conFiltro
+    return AppEmptyState(
+      icon: Icons.history_toggle_off_outlined,
+      title: conFiltro ? 'Sin registros en ese rango' : 'Sin historial',
+      subtitle: conFiltro
           ? 'No hay asignaciones de esta unidad en el rango elegido. Probá '
               'ampliar las fechas o tocá la X para ver todo el historial.'
           : 'Esta unidad no tiene asignaciones registradas en el sistema. Si '
@@ -916,10 +1033,12 @@ class _HistorialPorUnidad extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _ResumenUnidad(
-              asignaciones: filtradas.length,
-              etiquetaSecundaria: 'Choferes distintos',
-              valorSecundario: '$choferesUnicos',
+            AppKpiStrip(
+              stats: [
+                AppStat(
+                    label: 'Asignaciones', value: '${filtradas.length}'),
+                AppStat(label: 'Choferes', value: '$choferesUnicos'),
+              ],
             ),
             const SizedBox(height: AppSpacing.md),
             ...filtradas.map((a) => _AsignacionCardPorUnidad(asignacion: a)),
@@ -949,54 +1068,24 @@ class _HistorialPorUnidad extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _ResumenUnidad(
-              asignaciones: filtradas.length,
-              etiquetaSecundaria: 'Tractores distintos',
-              valorSecundario: '$tractoresUnicos',
+            AppKpiStrip(
+              stats: [
+                AppStat(
+                    label: 'Asignaciones', value: '${filtradas.length}'),
+                AppStat(label: 'Tractores', value: '$tractoresUnicos'),
+              ],
             ),
             const SizedBox(height: AppSpacing.sm),
             const _BannerInfo(
               texto: 'Es un enganche: mostramos los tractores que lo llevaron. '
                   'Para ver el chofer de cada período, elegí ese tractor en '
-                  'esta misma pestaña.',
+                  'esta misma vista.',
             ),
             const SizedBox(height: AppSpacing.md),
             ...filtradas.map((a) => _EngancheHistorialCard(asignacion: a)),
           ],
         );
       },
-    );
-  }
-}
-
-/// Resumen de 2 KPIs arriba del historial de una unidad.
-class _ResumenUnidad extends StatelessWidget {
-  final int asignaciones;
-  final String etiquetaSecundaria;
-  final String valorSecundario;
-  const _ResumenUnidad({
-    required this.asignaciones,
-    required this.etiquetaSecundaria,
-    required this.valorSecundario,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            Expanded(
-                child:
-                    _Kpi(label: 'Asignaciones', valor: '$asignaciones')),
-            Container(width: 1, height: 36, color: Colors.white12),
-            Expanded(
-                child: _Kpi(
-                    label: etiquetaSecundaria, valor: valorSecundario)),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -1009,80 +1098,76 @@ class _AsignacionCardPorUnidad extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final nombre = (asignacion.choferNombre ?? '').trim().isNotEmpty
         ? asignacion.choferNombre!.trim()
         : 'DNI ${asignacion.choferDni}';
     final esActual = asignacion.hasta == null;
+    final color = esActual ? c.success : c.textMuted;
     return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: const BoxDecoration(
-                    color: AppColors.brand,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.person,
-                      color: Colors.white, size: 24),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(nombre,
-                          style: AppType.heading
-                              .copyWith(color: Colors.white, fontSize: 17)),
-                      Text('DNI ${asignacion.choferDni}',
-                          style: AppType.label
-                              .copyWith(color: Colors.white54)),
-                    ],
-                  ),
-                ),
-                if (esActual) const _BadgeActual(),
-              ],
-            ),
-            const Divider(color: Colors.white12, height: 24),
-            _Fila(
-              label: 'Asignado desde',
-              valor: AppFormatters.formatearFecha(asignacion.desde),
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            _Fila(
-              label: esActual ? 'Hasta' : 'Asignado hasta',
-              valor: esActual
-                  ? 'En uso (sin fecha de fin)'
-                  : AppFormatters.formatearFecha(asignacion.hasta!),
-              colorValor: esActual ? AppColors.success : Colors.white,
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            _Fila(
-              label: 'Duración',
-              valor: _duracion(asignacion),
-              colorValor: Colors.white70,
-            ),
-            if ((asignacion.motivo ?? '').trim().isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.xs),
-              _Fila(label: 'Motivo', valor: asignacion.motivo!.trim()),
-            ],
-            if ((asignacion.asignadoPorNombre ?? '').trim().isNotEmpty ||
-                asignacion.asignadoPorDni.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.xs),
-              _Fila(
-                label: 'Asignado por',
-                valor: (asignacion.asignadoPorNombre ?? '').isNotEmpty
-                    ? asignacion.asignadoPorNombre!
-                    : 'DNI ${asignacion.asignadoPorDni}',
-                colorValor: Colors.white54,
+      tier: 1,
+      accent: esActual ? c.success : null,
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: AppDot(color, size: 7, glow: esActual),
               ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(nombre,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.h5),
+                    const SizedBox(height: 2),
+                    Text('DNI ${asignacion.choferDni}',
+                        style: AppType.monoSm.copyWith(color: c.textMuted)),
+                  ],
+                ),
+              ),
+              if (esActual) ...[
+                const SizedBox(width: AppSpacing.sm),
+                const _BadgeActual(),
+              ],
             ],
-          ],
-        ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          const AppHairline(),
+          const SizedBox(height: AppSpacing.md),
+          _Linea(
+            label: 'Asignado desde',
+            valor: AppFormatters.formatearFecha(asignacion.desde),
+            mono: true,
+          ),
+          _Linea(
+            label: esActual ? 'Hasta' : 'Asignado hasta',
+            valor: esActual
+                ? 'En uso (sin fecha de fin)'
+                : AppFormatters.formatearFecha(asignacion.hasta!),
+            mono: !esActual,
+            colorValor: esActual ? c.success : null,
+          ),
+          _Linea(label: 'Duración', valor: _duracion(asignacion)),
+          if ((asignacion.motivo ?? '').trim().isNotEmpty)
+            _Linea(label: 'Motivo', valor: asignacion.motivo!.trim()),
+          if ((asignacion.asignadoPorNombre ?? '').trim().isNotEmpty ||
+              asignacion.asignadoPorDni.isNotEmpty)
+            _Linea(
+              label: 'Asignado por',
+              valor: (asignacion.asignadoPorNombre ?? '').isNotEmpty
+                  ? asignacion.asignadoPorNombre!
+                  : 'DNI ${asignacion.asignadoPorDni}',
+            ),
+        ],
       ),
     );
   }
@@ -1094,74 +1179,79 @@ class _AsignacionCardPorUnidad extends StatelessWidget {
 
 /// Card de un período del historial de un enganche: qué tractor lo llevó y
 /// desde/hasta cuándo. El destaque es el tractor — de ahí se deriva el chofer
-/// (eligiendo ese tractor en la misma pestaña).
+/// (eligiendo ese tractor en la misma vista).
 class _EngancheHistorialCard extends StatelessWidget {
   final AsignacionEnganche asignacion;
   const _EngancheHistorialCard({required this.asignacion});
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final esActual = asignacion.hasta == null;
+    final color = esActual ? c.success : c.textMuted;
     final tractor = asignacion.tractorId;
     final modelo = (asignacion.tractorModelo ?? '').trim();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: AppCard(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Column(
+    return AppCard(
+      tier: 1,
+      accent: esActual ? c.success : null,
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: esActual
-                          ? AppColors.success
-                          : AppColors.brand.withValues(alpha: 0.60),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.local_shipping,
-                        color: Colors.white, size: 22),
-                  ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(tractor,
-                            style: AppType.heading.copyWith(
-                                color: Colors.white,
-                                fontSize: 18,
-                                letterSpacing: 1,
-                                fontWeight: FontWeight.w700)),
-                        if (modelo.isNotEmpty)
-                          Text(modelo,
-                              style: AppType.label
-                                  .copyWith(color: Colors.white54)),
-                      ],
-                    ),
-                  ),
-                  if (esActual) const _BadgeActual(),
-                ],
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: AppDot(color, size: 7, glow: esActual),
               ),
-              const Divider(color: Colors.white12, height: 24),
-              _Fila(
-                label: 'Enganchado desde',
-                valor: AppFormatters.formatearFecha(asignacion.desde),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(tractor,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.mono.copyWith(
+                            color: c.text,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700)),
+                    if (modelo.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(modelo,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              AppType.bodySm.copyWith(color: c.textMuted)),
+                    ],
+                  ],
+                ),
               ),
-              const SizedBox(height: AppSpacing.xs),
-              _Fila(
-                label: 'Hasta',
-                valor: esActual
-                    ? 'Sigue enganchado'
-                    : AppFormatters.formatearFecha(asignacion.hasta!),
-                colorValor: esActual ? AppColors.success : Colors.white,
-              ),
+              if (esActual) ...[
+                const SizedBox(width: AppSpacing.sm),
+                const _BadgeActual(),
+              ],
             ],
           ),
-        ),
+          const SizedBox(height: AppSpacing.md),
+          const AppHairline(),
+          const SizedBox(height: AppSpacing.md),
+          _Linea(
+            label: 'Enganchado desde',
+            valor: AppFormatters.formatearFecha(asignacion.desde),
+            mono: true,
+          ),
+          _Linea(
+            label: 'Hasta',
+            valor: esActual
+                ? 'Sigue enganchado'
+                : AppFormatters.formatearFecha(asignacion.hasta!),
+            mono: !esActual,
+            colorValor: esActual ? c.success : null,
+          ),
+        ],
       ),
     );
   }
@@ -1196,10 +1286,10 @@ class _HistorialPorChofer extends StatelessWidget {
         }
         final asignaciones = snap.data ?? const <AsignacionVehiculo>[];
         if (asignaciones.isEmpty) {
-          return const _Placeholder(
-            icono: Icons.history_toggle_off_outlined,
-            titulo: 'Sin historial',
-            subtitulo:
+          return const AppEmptyState(
+            icon: Icons.history_toggle_off_outlined,
+            title: 'Sin historial',
+            subtitle:
                 'Este chofer no tiene asignaciones registradas en el sistema. '
                 'Si nunca se le asignó una unidad oficialmente, no va a aparecer '
                 'nada acá aunque maneje en la realidad.',
@@ -1217,10 +1307,16 @@ class _HistorialPorChofer extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _ResumenChofer(
-              asignaciones: asignaciones.length,
-              unidades: unidadesUnicas,
-              totalDias: totalDias,
+            AppKpiStrip(
+              stats: [
+                AppStat(
+                    label: 'Asignaciones',
+                    value: asignaciones.length.toString()),
+                AppStat(
+                    label: 'Unidades', value: unidadesUnicas.toString()),
+                AppStat(
+                    label: 'Tiempo total', value: _formatDias(totalDias)),
+              ],
             ),
             const SizedBox(height: AppSpacing.md),
             ...asignaciones
@@ -1242,6 +1338,7 @@ class _EnganchesDelChofer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return FutureBuilder<List<EngancheLlevado>>(
       future: AsignacionEngancheService()
           .enganchesLlevadosPorChofer(asignacionesTractor),
@@ -1260,8 +1357,13 @@ class _EnganchesDelChofer extends StatelessWidget {
             const SizedBox(height: AppSpacing.lg),
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.sm, left: 4),
-              child: Text('ENGANCHES QUE LLEVÓ',
-                  style: AppType.eyebrow.copyWith(color: Colors.white54)),
+              child: Row(
+                children: [
+                  AppDot(c.brand, size: 6),
+                  const SizedBox(width: AppSpacing.sm),
+                  const AppEyebrow('Enganches que llevó'),
+                ],
+              ),
             ),
             ...enganches.map((e) => _EngancheLlevadoCard(item: e)),
           ],
@@ -1277,108 +1379,47 @@ class _EngancheLlevadoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final activo = item.hasta == null;
+    final color = activo ? c.success : c.textMuted;
     return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            const Icon(Icons.rv_hookup, color: Colors.white54, size: 22),
-            const SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(item.enganche,
-                      style: AppType.body.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5)),
-                  Text('vía tractor ${item.tractor}',
-                      style: AppType.label.copyWith(color: Colors.white54)),
-                  const SizedBox(height: 2),
-                  Text(
-                    activo
-                        ? 'Desde ${AppFormatters.formatearFecha(item.desde)} · sigue'
-                        : '${AppFormatters.formatearFecha(item.desde)} → '
-                            '${AppFormatters.formatearFecha(item.hasta!)}',
-                    style: AppType.label.copyWith(
-                        color: activo ? AppColors.success : Colors.white70),
-                  ),
-                ],
-              ),
+      tier: 1,
+      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Row(
+        children: [
+          AppDot(color, size: 7, glow: activo),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(item.enganche,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.mono.copyWith(
+                        color: c.text, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
+                Text('vía tractor ${item.tractor}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.bodySm.copyWith(color: c.textMuted)),
+                const SizedBox(height: 2),
+                Text(
+                  activo
+                      ? 'Desde ${AppFormatters.formatearFecha(item.desde)} · sigue'
+                      : '${AppFormatters.formatearFecha(item.desde)} → '
+                          '${AppFormatters.formatearFecha(item.hasta!)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.monoSm.copyWith(
+                      color: activo ? c.success : c.textSecondary),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
-    );
-  }
-}
-
-/// Card chiquita arriba del historial: 3 KPIs.
-class _ResumenChofer extends StatelessWidget {
-  final int asignaciones;
-  final int unidades;
-  final int totalDias;
-  const _ResumenChofer({
-    required this.asignaciones,
-    required this.unidades,
-    required this.totalDias,
-  });
-
-  String _formatDias() {
-    if (totalDias == 0) return '< 1 día';
-    if (totalDias == 1) return '1 día';
-    if (totalDias < 30) return '$totalDias días';
-    final meses = (totalDias / 30).floor();
-    if (meses < 12) return '~$meses meses';
-    final anios = (totalDias / 365).floor();
-    return anios == 1 ? '~1 año' : '~$anios años';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        child: Row(
-          children: [
-            Expanded(
-                child: _Kpi(
-                    label: 'Asignaciones',
-                    valor: asignaciones.toString())),
-            Container(width: 1, height: 36, color: Colors.white12),
-            Expanded(
-                child: _Kpi(
-                    label: 'Unidades distintas',
-                    valor: unidades.toString())),
-            Container(width: 1, height: 36, color: Colors.white12),
-            Expanded(
-                child: _Kpi(label: 'Tiempo total', valor: _formatDias())),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Kpi extends StatelessWidget {
-  final String label;
-  final String valor;
-  const _Kpi({required this.label, required this.valor});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(valor,
-            style: AppType.heading
-                .copyWith(color: AppColors.brand, fontSize: 20)),
-        const SizedBox(height: 2),
-        Text(label,
-            textAlign: TextAlign.center,
-            style: AppType.eyebrow.copyWith(color: Colors.white54)),
-      ],
     );
   }
 }
@@ -1391,69 +1432,63 @@ class _AsignacionCardPorChofer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final esActual = asignacion.hasta == null;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-      child: AppCard(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
-          child: Column(
+    final color = esActual ? c.success : c.textMuted;
+    return AppCard(
+      tier: 1,
+      accent: esActual ? c.success : null,
+      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: esActual
-                          ? AppColors.success
-                          : AppColors.brand.withValues(alpha: 0.60),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.local_shipping,
-                        color: Colors.white, size: 22),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: AppDot(color, size: 7, glow: esActual),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(
+                  asignacion.vehiculoId,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.mono.copyWith(
+                    color: c.text,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
                   ),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: Text(
-                      asignacion.vehiculoId,
-                      style: AppType.heading.copyWith(
-                        color: Colors.white,
-                        fontSize: 22,
-                        letterSpacing: 1,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  if (esActual) const _BadgeActual(),
-                ],
+                ),
               ),
-              const Divider(color: Colors.white12, height: 24),
-              _Fila(
-                label: 'Desde',
-                valor: AppFormatters.formatearFecha(asignacion.desde),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              _Fila(
-                label: 'Hasta',
-                valor: esActual
-                    ? 'Sigue manejándola'
-                    : AppFormatters.formatearFecha(asignacion.hasta!),
-                colorValor: esActual ? AppColors.success : Colors.white,
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              _Fila(
-                label: 'Duración',
-                valor: _duracion(asignacion),
-                colorValor: Colors.white70,
-              ),
-              if ((asignacion.motivo ?? '').trim().isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.xs),
-                _Fila(label: 'Motivo', valor: asignacion.motivo!.trim()),
+              if (esActual) ...[
+                const SizedBox(width: AppSpacing.sm),
+                const _BadgeActual(),
               ],
             ],
           ),
-        ),
+          const SizedBox(height: AppSpacing.md),
+          const AppHairline(),
+          const SizedBox(height: AppSpacing.md),
+          _Linea(
+            label: 'Desde',
+            valor: AppFormatters.formatearFecha(asignacion.desde),
+            mono: true,
+          ),
+          _Linea(
+            label: 'Hasta',
+            valor: esActual
+                ? 'Sigue manejándola'
+                : AppFormatters.formatearFecha(asignacion.hasta!),
+            mono: !esActual,
+            colorValor: esActual ? c.success : null,
+          ),
+          _Linea(label: 'Duración', valor: _duracion(asignacion)),
+          if ((asignacion.motivo ?? '').trim().isNotEmpty)
+            _Linea(label: 'Motivo', valor: asignacion.motivo!.trim()),
+        ],
       ),
     );
   }
@@ -1468,42 +1503,60 @@ class _BadgeActual extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppColors.success.withValues(alpha: 0.20),
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: AppColors.success.withValues(alpha: 0.50)),
-      ),
-      child: Text('ACTUAL',
-          style: AppType.eyebrow.copyWith(color: AppColors.success)),
+    final c = context.colors;
+    return AppBadge(
+      text: 'ACTUAL',
+      color: c.success,
+      dot: true,
+      size: AppBadgeSize.sm,
     );
   }
 }
 
-class _Fila extends StatelessWidget {
+/// Primitiva de fila label (izq) / valor (der) — Núcleo. `mono` para los
+/// valores técnicos (fechas/patentes); `colorValor` para resaltar el estado
+/// "en uso" en verde.
+class _Linea extends StatelessWidget {
   final String label;
   final String valor;
+  final bool mono;
   final Color? colorValor;
-  const _Fila({required this.label, required this.valor, this.colorValor});
+  const _Linea({
+    required this.label,
+    required this.valor,
+    this.mono = false,
+    this.colorValor,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 110,
-          child: Text(label,
-              style: AppType.label.copyWith(color: Colors.white54)),
-        ),
-        Expanded(
-          child: Text(valor,
-              style: AppType.body.copyWith(
-                  color: colorValor ?? Colors.white,
-                  fontWeight: FontWeight.w500)),
-        ),
-      ],
+    final c = context.colors;
+    final valBase = mono ? AppType.mono : AppType.body;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 4,
+            child: Text(
+              label,
+              style: AppType.bodySm.copyWith(color: c.textSecondary),
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            flex: 6,
+            child: Text(
+              valor,
+              textAlign: TextAlign.right,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: valBase.copyWith(color: colorValor ?? c.text),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1521,4 +1574,15 @@ String _duracion(AsignacionVehiculo a) {
   return anios == 1
       ? '~1 año ($dias días)'
       : '~$anios años ($dias días)';
+}
+
+/// Formato humano de una cantidad de días para el KPI "Tiempo total".
+String _formatDias(int totalDias) {
+  if (totalDias == 0) return '< 1 día';
+  if (totalDias == 1) return '1 día';
+  if (totalDias < 30) return '$totalDias días';
+  final meses = (totalDias / 30).floor();
+  if (meses < 12) return '~$meses meses';
+  final anios = (totalDias / 365).floor();
+  return anios == 1 ? '~1 año' : '~$anios años';
 }
