@@ -442,6 +442,20 @@ const TOOLS_GESTION_FLOTA = [
     params: {},
   },
   {
+    name: 'descargas_historico',
+    description:
+      'Histórico de descargas en zonas YPF de una FECHA dada (quién ' +
+      'descargó, en qué zona, hora de entrada/salida y cuánto estuvo). ' +
+      'Usala para días pasados o puntuales: "quién descargó ayer", "quién ' +
+      'descargó el 02 de junio". Para lo de AHORA usá quien_esta_descargando.',
+    params: {
+      fecha: {
+        type: 'string',
+        description: 'Fecha en formato AAAA-MM-DD (ej. 2026-06-02).',
+      },
+    },
+  },
+  {
     name: 'alertas_unidad',
     description:
       'Alertas Volvo de las últimas 24h de una unidad (por patente) o del ' +
@@ -475,7 +489,7 @@ const TOOLS_POR_CAPABILITY = {
   verListaPersonal: ['info_chofer'],
   verIcm: ['jornada_de'], // la jornada vive dentro del módulo ICM en la app
   verAlertasVolvo: ['donde_esta', 'estado_flota', 'alertas_unidad'],
-  verDescargas: ['quien_esta_descargando'],
+  verDescargas: ['quien_esta_descargando', 'descargas_historico'],
   verLogistica: ['viajes_resumen'],
   verMantenimiento: ['service_unidad'],
   verCachatore: ['cachatore_estado', 'turnos_ypf_detalle', 'poner_a_buscar_turno'],
@@ -1211,6 +1225,73 @@ async function _toolQuienDescargando(db) {
   return { cantidad: unidades.length, unidades };
 }
 
+// Histórico de descargas (ZONA_DESCARGA_HISTORICO) de un día puntual. El cron
+// `zonaDescargaPoller` archiva ahí cada descarga al salir de la zona; este es
+// el complemento "pasado" de `quien_esta_descargando` (que es el AHORA).
+async function _toolDescargasHistorico(db, args) {
+  const fechaStr = String((args && args.fecha) || '').trim();
+  let y;
+  let mes;
+  let d;
+  let m = fechaStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) {
+    y = +m[1];
+    mes = +m[2];
+    d = +m[3];
+  } else {
+    m = fechaStr.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+    if (m) {
+      d = +m[1];
+      mes = +m[2];
+      y = +m[3];
+    }
+  }
+  if (!y || !mes || !d) {
+    return { error: 'Indicá la fecha en formato AAAA-MM-DD (ej. 2026-06-02).' };
+  }
+  // Día completo en hora Argentina (UTC-3): 00:00 ART = 03:00 UTC.
+  const inicioMs = Date.UTC(y, mes - 1, d, 3, 0, 0);
+  const finMs = inicioMs + 24 * 60 * 60 * 1000;
+  let docs;
+  try {
+    docs = (
+      await db
+        .collection('ZONA_DESCARGA_HISTORICO')
+        .where('entrada_ts', '>=', admin.firestore.Timestamp.fromMillis(inicioMs))
+        .where('entrada_ts', '<', admin.firestore.Timestamp.fromMillis(finMs))
+        .get()
+    ).docs;
+  } catch (e) {
+    return { error: `No pude leer el histórico de descargas: ${e.message}` };
+  }
+  const horaArt = (ts) => {
+    if (!ts || !ts.toMillis) return null;
+    const dt = new Date(ts.toMillis() - 3 * 3600 * 1000);
+    return (
+      `${String(dt.getUTCHours()).padStart(2, '0')}:` +
+      `${String(dt.getUTCMinutes()).padStart(2, '0')}`
+    );
+  };
+  const descargas = docs
+    .map((doc) => {
+      const o = doc.data();
+      return {
+        patente: o.patente || null,
+        chofer: o.chofer_nombre || null,
+        zona: o.nombre_zona || o.slug_zona || null,
+        entrada: horaArt(o.entrada_ts),
+        salida: horaArt(o.salida_ts),
+        duracion_min: o.duracion_min ?? null,
+      };
+    })
+    .sort((a, b) => String(a.entrada).localeCompare(String(b.entrada)));
+  return {
+    fecha: `${String(d).padStart(2, '0')}-${String(mes).padStart(2, '0')}-${y}`,
+    cantidad: descargas.length,
+    descargas,
+  };
+}
+
 async function _toolAlertasUnidad(db, args) {
   const q = String((args && args.query) || '').trim();
   if (!q) return { error: 'Indicá una patente o un chofer.' };
@@ -1303,6 +1384,8 @@ async function _ejecutarTool(db, nombre, persona, args) {
       return await _toolViajesResumen(db, args);
     case 'quien_esta_descargando':
       return await _toolQuienDescargando(db);
+    case 'descargas_historico':
+      return await _toolDescargasHistorico(db, args);
     case 'alertas_unidad':
       return await _toolAlertasUnidad(db, args);
     case 'service_unidad':
@@ -1618,6 +1701,51 @@ async function _conversarGemini(db, system, historial, userText, persona) {
   return { texto: null, toolsUsadas, error: 'max_tool_iters' };
 }
 
+// ───────────────────── robustez ante 429 ─────────────────────
+// Causa #1 de fallos observada el 2026-06-03: una ráfaga de consultas agota
+// el rate limit de Gemini (free tier) → el agente deja de responder. Mitigación
+// en capas: reintento corto (los límites por minuto se liberan rápido) y, si
+// persiste, fallback a Anthropic/Claude cuando hay ANTHROPIC_API_KEY.
+const RETRY_429_MS = parseInt(process.env.AGENTE_RETRY_429_MS || '3500', 10);
+const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** `true` si el error es de cuota / límite de tasa del LLM. */
+function _esCuota(e) {
+  return /HTTP 429|RESOURCE_EXHAUSTED|quota|rate.?limit/i.test(
+    String((e && e.message) || e || '')
+  );
+}
+
+/** Conversa con el provider primario; ante cuota agotada de Gemini reintenta
+ *  una vez y, si sigue, cae a Anthropic (si hay key). Sin Anthropic, el
+ *  reintento igual cubre los 429 transitorios; el resto sube al catch que
+ *  responde "probá en un rato". */
+async function _conversarRobusto(provider, db, system, historial, userText, persona) {
+  if (provider !== 'gemini') {
+    return _conversarAnthropic(db, system, historial, userText, persona);
+  }
+  try {
+    return await _conversarGemini(db, system, historial, userText, persona);
+  } catch (e) {
+    if (!_esCuota(e)) throw e;
+    log.warn(
+      `[agente] Gemini sin cuota (${String(e.message).slice(0, 80)}); ` +
+        `reintento en ${RETRY_429_MS}ms`
+    );
+    await _sleep(RETRY_429_MS);
+    try {
+      return await _conversarGemini(db, system, historial, userText, persona);
+    } catch (e2) {
+      if (!_esCuota(e2)) throw e2;
+      if (process.env.ANTHROPIC_API_KEY) {
+        log.warn('[agente] Gemini sigue sin cuota → fallback a Anthropic (Claude)');
+        return _conversarAnthropic(db, system, historial, userText, persona);
+      }
+      throw e2;
+    }
+  }
+}
+
 // ───────────────────────── logging ─────────────────────────
 
 async function _loggear(db, { provider, persona, telefono, pregunta, respuesta, toolsUsadas, error }) {
@@ -1720,10 +1848,8 @@ async function responder({ texto, persona, telefono, audio }, fs) {
   const historial = _recuperarHistorial(rlKey);
 
   try {
-    const r =
-      provider === 'gemini'
-        ? await _conversarGemini(db, system, historial, userText, persona)
-        : await _conversarAnthropic(db, system, historial, userText, persona);
+    const r = await _conversarRobusto(
+      provider, db, system, historial, userText, persona);
 
     if (!r.texto) {
       log.warn(`[agente] sin respuesta (${r.error || 'vacío'}) rol=${persona.rol}`);
