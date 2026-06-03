@@ -154,20 +154,21 @@ class _UserMisVencimientosScreenState
   }) {
     final fechaCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    final c = context.colors;
 
     // Dispose del controller cuando el dialog se cierra (cualquier
     // motivo: tap CANCELAR, CONTINUAR, back de Android, scrim).
     showDialog(
       context: context,
       builder: (dCtx) => AlertDialog(
-        backgroundColor: AppColors.surface2,
+        backgroundColor: c.surface2,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.lg),
-          side: const BorderSide(color: AppColors.borderSubtle),
+          side: BorderSide(color: c.border),
         ),
         title: Text(
           'Actualizar $etiqueta',
-          style: AppType.title,
+          style: AppType.h5.copyWith(color: c.text),
         ),
         content: Form(
           key: formKey,
@@ -176,7 +177,7 @@ class _UserMisVencimientosScreenState
             children: [
               Text(
                 'Ingresá la fecha que figura en el nuevo carnet o certificado:',
-                style: AppType.body.copyWith(color: AppColors.textSecondary),
+                style: AppType.body.copyWith(color: c.textSecondary),
               ),
               const SizedBox(height: AppSpacing.xl),
               TextFormField(
@@ -184,20 +185,20 @@ class _UserMisVencimientosScreenState
                 keyboardType: TextInputType.number,
                 autofocus: true,
                 textAlign: TextAlign.center,
-                style: AppType.heading.copyWith(
+                style: AppType.mono.copyWith(
                   fontSize: 24,
-                  color: AppColors.brand,
+                  color: c.brand,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 2,
                 ),
                 decoration: InputDecoration(
                   hintText: 'DD/MM/AAAA',
                   hintStyle: AppType.body.copyWith(
-                    color: AppColors.textHint,
+                    color: c.textPlaceholder,
                     letterSpacing: 2,
                   ),
                   filled: true,
-                  fillColor: AppColors.surface0,
+                  fillColor: c.bg,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AppRadius.md),
                     borderSide: BorderSide.none,
@@ -296,14 +297,16 @@ class _UserMisVencimientosScreenState
     required String coleccion,
     required String nombreUsuario,
   }) {
+    final c = context.colors;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (sCtx) => Container(
-        decoration: const BoxDecoration(
-          color: AppColors.surface2,
+        decoration: BoxDecoration(
+          color: c.surface2,
           borderRadius:
-              BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+              const BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+          border: Border.all(color: c.border),
           // Sin border-top decorativo verde: la elevación del modal ya
           // separa visualmente del contenido detrás (mismo criterio que
           // aplicamos en user_mi_perfil_screen).
@@ -312,17 +315,13 @@ class _UserMisVencimientosScreenState
           child: Wrap(children: [
             const Padding(
               padding: EdgeInsets.all(AppSpacing.xl),
-              child: Text(
-                'FOTO DEL COMPROBANTE',
-                style: AppType.eyebrow,
-              ),
+              child: AppEyebrow('Foto del comprobante'),
             ),
             ListTile(
-              leading: const Icon(Icons.camera_alt, color: AppColors.brand),
+              leading: Icon(Icons.camera_alt, color: c.brand),
               title: Text('Tomar con la cámara',
                   style: AppType.body.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w500)),
+                      color: c.text, fontWeight: FontWeight.w500)),
               onTap: () async {
                 final img = await ImagePicker()
                     .pickImage(source: ImageSource.camera, imageQuality: 50);
@@ -345,11 +344,10 @@ class _UserMisVencimientosScreenState
               },
             ),
             ListTile(
-              leading: const Icon(Icons.upload_file, color: AppColors.brand),
+              leading: Icon(Icons.upload_file, color: c.brand),
               title: Text('Cargar foto o PDF de la galería',
                   style: AppType.body.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w500)),
+                      color: c.text, fontWeight: FontWeight.w500)),
               onTap: () async {
                 // withData: true asegura que `bytes` venga poblado en todas
                 // las plataformas (en Web `path` no existe).
@@ -459,22 +457,30 @@ class _UserMisVencimientosScreenState
           final nombreChofer = (data['NOMBRE'] ?? 'Chofer').toString();
           final pVehiculo = (data['VEHICULO'] ?? '').toString().trim();
           final pEnganche = (data['ENGANCHE'] ?? '').toString().trim();
+          final cuitEmpresa = AppEmpresasEmpleadoras.cuitDeStringEmpresa(
+              (data['EMPRESA'] ?? '').toString());
 
           return ListView(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg,
-              vertical: AppSpacing.md,
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.md,
+              AppSpacing.lg,
+              AppSpacing.xxl,
             ),
             children: [
-              // Banner "Próximo a vencer" — calcula el papel más urgente
-              // del chofer + de su equipo y avisa arriba si hay alguno
-              // a < 30 días o vencido. Sin ruido si todo está OK.
-              _BannerProximoAVencer(
+              // Hero "Estado general" — calcula los conteos
+              // (vencido/próximo/al día) de los papeles del chofer + de su
+              // equipo y muestra el papel más urgente. Sin ruido si todo
+              // está OK (más allá del hero, que siempre informa).
+              _HeroEstadoGeneral(
                 empleadoData: data,
                 patenteVehiculo: pVehiculo,
                 patenteEnganche: pEnganche,
               ),
-              const _SectionHeader('LICENCIAS Y CARNETS'),
+              const SizedBox(height: AppSpacing.xl),
+
+              const AppEyebrow('Licencias y carnets'),
+              const SizedBox(height: AppSpacing.sm),
               _CardVencimientoUser(
                 titulo: 'Licencia de Conducir',
                 fecha: data['VENCIMIENTO_LICENCIA_DE_CONDUCIR'],
@@ -519,7 +525,8 @@ class _UserMisVencimientosScreenState
               ),
               const SizedBox(height: AppSpacing.xl),
 
-              const _SectionHeader('COBERTURAS LABORALES'),
+              const AppEyebrow('Coberturas laborales'),
+              const SizedBox(height: AppSpacing.sm),
               // Estos 4 docs son a NIVEL EMPRESA — el mismo PDF lo
               // comparten todos los empleados de Vecchi Ariel o de
               // Sucesión Vecchi Carlos. El admin los carga una sola
@@ -528,35 +535,32 @@ class _UserMisVencimientosScreenState
               // "Seguro de Vida" porque es como lo conocen los choferes.
               _CardVencimientoEmpresa(
                 titulo: AppDocsEmpresa.etiquetaPolizaArt,
-                cuitEmpresa: AppEmpresasEmpleadoras.cuitDeStringEmpresa(
-                    (data['EMPRESA'] ?? '').toString()),
+                cuitEmpresa: cuitEmpresa,
                 campoFecha: AppDocsEmpresa.campoFechaPolizaArt,
                 campoUrl: AppDocsEmpresa.campoArchivoPolizaArt,
               ),
               _CardVencimientoEmpresa(
                 titulo: AppDocsEmpresa.etiquetaForm931,
-                cuitEmpresa: AppEmpresasEmpleadoras.cuitDeStringEmpresa(
-                    (data['EMPRESA'] ?? '').toString()),
+                cuitEmpresa: cuitEmpresa,
                 campoFecha: AppDocsEmpresa.campoFechaForm931,
                 campoUrl: AppDocsEmpresa.campoArchivoForm931,
               ),
               _CardVencimientoEmpresa(
                 titulo: AppDocsEmpresa.etiquetaScvoChofer,
-                cuitEmpresa: AppEmpresasEmpleadoras.cuitDeStringEmpresa(
-                    (data['EMPRESA'] ?? '').toString()),
+                cuitEmpresa: cuitEmpresa,
                 campoFecha: AppDocsEmpresa.campoFechaScvo,
                 campoUrl: AppDocsEmpresa.campoArchivoScvo,
               ),
               _CardVencimientoEmpresa(
                 titulo: AppDocsEmpresa.etiquetaLibreDeudaSindical,
-                cuitEmpresa: AppEmpresasEmpleadoras.cuitDeStringEmpresa(
-                    (data['EMPRESA'] ?? '').toString()),
+                cuitEmpresa: cuitEmpresa,
                 campoFecha: AppDocsEmpresa.campoFechaLibreDeudaSindical,
                 campoUrl: AppDocsEmpresa.campoArchivoLibreDeudaSindical,
               ),
               const SizedBox(height: AppSpacing.xl),
 
-              const _SectionHeader('PAPELES Y CONTROLES DEL EQUIPO'),
+              const AppEyebrow('Papeles y controles del equipo'),
+              const SizedBox(height: AppSpacing.sm),
               if (pVehiculo.isNotEmpty && pVehiculo != '-')
                 _DetalleEquipo(
                   patente: pVehiculo,
@@ -565,8 +569,7 @@ class _UserMisVencimientosScreenState
                   onTramiteVehiculo: _iniciarTramite,
                 )
               else
-                const _CardInformativa(
-                    'No tenés un camión asignado'),
+                const _CardInformativa('No tenés un camión asignado'),
               const SizedBox(height: AppSpacing.md),
               if (pEnganche.isNotEmpty && pEnganche != '-')
                 _DetalleEquipo(
@@ -576,9 +579,7 @@ class _UserMisVencimientosScreenState
                   onTramiteVehiculo: _iniciarTramite,
                 )
               else
-                const _CardInformativa(
-                    'No tenés batea/tolva asignada'),
-              const SizedBox(height: AppSpacing.xxl),
+                const _CardInformativa('No tenés batea/tolva asignada'),
             ],
           );
         },

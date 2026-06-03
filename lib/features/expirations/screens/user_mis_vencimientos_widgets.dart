@@ -1,6 +1,10 @@
 // =============================================================================
 // COMPONENTES VISUALES de "mis vencimientos" — extraídos para mantener
 // navegable el screen principal. Comparten privacidad via `part of`.
+//
+// REFACTOR NÚCLEO · jun 2026 — solo el árbol de widgets. Datos, streams,
+// services, cálculo de urgencia/días, navegación y acciones (subir/ver
+// archivo) quedaron INTACTOS.
 // =============================================================================
 
 part of 'user_mis_vencimientos_screen.dart';
@@ -8,23 +12,6 @@ part of 'user_mis_vencimientos_screen.dart';
 // =============================================================================
 // COMPONENTES INTERNOS
 // =============================================================================
-
-class _SectionHeader extends StatelessWidget {
-  final String label;
-  const _SectionHeader(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm, left: 5),
-      child: Text(
-        label,
-        style: AppType.eyebrow
-            .copyWith(color: AppColors.success, letterSpacing: 2),
-      ),
-    );
-  }
-}
 
 /// Card de vencimiento del chofer.
 /// Muestra el estado (ok/crítico/vencido/en revisión) y permite iniciar
@@ -48,6 +35,7 @@ class _CardVencimientoUser extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection(AppCollections.revisiones)
@@ -70,11 +58,11 @@ class _CardVencimientoUser extends StatelessWidget {
         final enRevision = pendientes.isNotEmpty;
 
         return AppCard(
+          tier: 1,
           margin: const EdgeInsets.symmetric(vertical: 4),
           padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-          highlighted: enRevision,
-          borderColor: enRevision ? AppColors.warning.withAlpha(150) : null,
+              horizontal: AppSpacing.lg, vertical: AppSpacing.md),
+          accent: enRevision ? c.warning : null,
           child: Row(
             children: [
               AppFileThumbnail(
@@ -90,34 +78,45 @@ class _CardVencimientoUser extends StatelessWidget {
                       titulo,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.heading.copyWith(fontSize: 13),
+                      style: AppType.bodyLg
+                          .copyWith(color: c.text, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      enRevision
-                          ? 'Validación pendiente...'
-                          : 'Vence: ${AppFormatters.formatearFecha(fecha)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppType.eyebrow.copyWith(
-                          color: enRevision
-                              ? AppColors.warning
-                              : AppColors.textSecondary,
-                          fontWeight: enRevision
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          letterSpacing: enRevision ? 1 : 0),
-                    ),
+                    if (enRevision)
+                      Text(
+                        'Validación pendiente…',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.monoSm.copyWith(
+                            color: c.warning, fontWeight: FontWeight.w600),
+                      )
+                    else
+                      Row(
+                        children: [
+                          Text('Vence  ',
+                              style:
+                                  AppType.bodySm.copyWith(color: c.textMuted)),
+                          Flexible(
+                            child: Text(
+                              AppFormatters.formatearFecha(fecha),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  AppType.monoSm.copyWith(color: c.textMuted),
+                            ),
+                          ),
+                        ],
+                      ),
                   ],
                 ),
               ),
+              const SizedBox(width: AppSpacing.sm),
               if (!enRevision) ...[
                 VencimientoBadge(fecha: fecha),
                 const SizedBox(width: AppSpacing.sm),
                 _BotonUpload(onTap: onUpload),
               ] else
-                const Icon(Icons.hourglass_top,
-                    color: AppColors.warning, size: 20),
+                Icon(Icons.hourglass_top, color: c.warning, size: 20),
             ],
           ),
         );
@@ -132,6 +131,7 @@ class _BotonUpload extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -140,11 +140,10 @@ class _BotonUpload extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.sm),
           decoration: BoxDecoration(
-            border: Border.all(color: AppColors.borderStrong),
+            border: Border.all(color: c.borderStrong),
             shape: BoxShape.circle,
           ),
-          child: const Icon(Icons.upload_file,
-              color: AppColors.textSecondary, size: 18),
+          child: Icon(Icons.upload_file, color: c.textSecondary, size: 18),
         ),
       ),
     );
@@ -175,8 +174,10 @@ class _CardVencimientoEmpresa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     if (cuitEmpresa == null || cuitEmpresa!.isEmpty) {
-      return _placeholder('No tenés empresa cargada — consultá a la oficina.');
+      return _placeholder(
+          context, 'No tenés empresa cargada — consultá a la oficina.');
     }
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
@@ -192,18 +193,19 @@ class _CardVencimientoEmpresa extends StatelessWidget {
           // El chofer SÍ tiene empresa (cuitEmpresa no es null), pero la rule
           // de EMPRESAS_EMPLEADORAS no lo deja leer el doc (tiene datos
           // sensibles como el F.931). No es "sin empresa" — lo aclaramos.
-          return _placeholder('Documentación a cargo de la oficina.');
+          return _placeholder(context, 'Documentación a cargo de la oficina.');
         }
         final data = snap.data?.data() ?? const <String, dynamic>{};
         final fecha = data[campoFecha];
         final url = data[campoUrl]?.toString();
-        final tieneArchivo =
-            url != null && url.isNotEmpty && url != '-';
+        final tieneArchivo = url != null && url.isNotEmpty && url != '-';
+        final tieneDato = tieneArchivo || fecha != null;
 
         return AppCard(
+          tier: 1,
           margin: const EdgeInsets.symmetric(vertical: 4),
           padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+              horizontal: AppSpacing.lg, vertical: AppSpacing.md),
           child: Row(
             children: [
               AppFileThumbnail(
@@ -219,29 +221,44 @@ class _CardVencimientoEmpresa extends StatelessWidget {
                       titulo,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppType.heading.copyWith(fontSize: 13),
+                      style: AppType.bodyLg
+                          .copyWith(color: c.text, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      tieneArchivo || fecha != null
-                          ? 'Vence: ${AppFormatters.formatearFecha(fecha)}'
-                          : 'Pendiente — consultar a la oficina',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppType.eyebrow.copyWith(
-                          color: tieneArchivo || fecha != null
-                              ? AppColors.textSecondary
-                              : AppColors.textHint),
-                    ),
+                    if (tieneDato)
+                      Row(
+                        children: [
+                          Text('Vence  ',
+                              style:
+                                  AppType.bodySm.copyWith(color: c.textMuted)),
+                          Flexible(
+                            child: Text(
+                              AppFormatters.formatearFecha(fecha),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style:
+                                  AppType.monoSm.copyWith(color: c.textMuted),
+                            ),
+                          ),
+                        ],
+                      )
+                    else
+                      Text(
+                        'Pendiente — consultar a la oficina',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            AppType.bodySm.copyWith(color: c.textPlaceholder),
+                      ),
                   ],
                 ),
               ),
+              const SizedBox(width: AppSpacing.sm),
               VencimientoBadge(fecha: fecha),
               const SizedBox(width: AppSpacing.sm),
               // Sin botón upload — el chofer no edita estos docs.
               // Lock icon visible para que se entienda que es view-only.
-              const Icon(Icons.lock_outline,
-                  color: AppColors.textHint, size: 18),
+              Icon(Icons.lock_outline, color: c.textMuted, size: 18),
             ],
           ),
         );
@@ -249,15 +266,16 @@ class _CardVencimientoEmpresa extends StatelessWidget {
     );
   }
 
-  Widget _placeholder(String subtitulo) {
+  Widget _placeholder(BuildContext context, String subtitulo) {
+    final c = context.colors;
     return AppCard(
+      tier: 1,
       margin: const EdgeInsets.symmetric(vertical: 4),
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+          horizontal: AppSpacing.lg, vertical: AppSpacing.md),
       child: Row(
         children: [
-          const Icon(Icons.warning_amber_rounded,
-              color: AppColors.textHint, size: 22),
+          Icon(Icons.warning_amber_rounded, color: c.textMuted, size: 22),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
@@ -265,14 +283,17 @@ class _CardVencimientoEmpresa extends StatelessWidget {
               children: [
                 Text(
                   titulo,
-                  style: AppType.heading.copyWith(
-                      color: AppColors.textSecondary, fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.bodyLg.copyWith(
+                      color: c.textSecondary, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   subtitulo,
-                  style:
-                      AppType.eyebrow.copyWith(color: AppColors.textHint),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.bodySm.copyWith(color: c.textPlaceholder),
                 ),
               ],
             ),
@@ -289,13 +310,24 @@ class _CardInformativa extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return AppCard(
+      tier: 1,
       padding: const EdgeInsets.all(AppSpacing.lg),
       margin: EdgeInsets.zero,
-      child: Text(
-        mensaje,
-        style: AppType.label.copyWith(
-            color: AppColors.textTertiary, fontStyle: FontStyle.italic),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, color: c.textMuted, size: 18),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              mensaje,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.bodySm.copyWith(color: c.textMuted),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -324,6 +356,7 @@ class _DetalleEquipo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
           .collection(AppCollections.vehiculos)
@@ -346,18 +379,29 @@ class _DetalleEquipo extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding:
-                    const EdgeInsets.only(bottom: AppSpacing.sm, left: 5),
-                child: Text(
-                  '$tipo: $patente',
-                  style: AppType.eyebrow.copyWith(
-                    color: AppColors.success,
-                    fontSize: 13,
-                    letterSpacing: 1.5,
+              // Encabezado de la unidad: eyebrow con el tipo + patente
+              // grande en mono (dato técnico). Patrón Núcleo (Unidad).
+              Row(
+                children: [
+                  AppEyebrow(tipo),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      patente,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppType.mono.copyWith(
+                        color: c.brand,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1,
+                      ),
+                    ),
                   ),
-                ),
+                ],
               ),
+              const SizedBox(height: AppSpacing.sm),
+              const AppHairline(),
+              const SizedBox(height: AppSpacing.xs),
               // Vencimientos del vehículo: tractor (4) o enganche (2),
               // según AppVencimientos. La etiqueta para iniciar trámite
               // es la parte del campo después de VENCIMIENTO_ (ej.
@@ -398,6 +442,7 @@ class _AccesoChecklist extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     final now = DateTime.now();
     final tipoChecklist = tipoLabel == 'CAMIÓN' ? 'TRACTOR' : 'BATEA';
 
@@ -442,7 +487,7 @@ class _AccesoChecklist extends StatelessWidget {
         // estados decían "Control" o solo "Pendiente" y el chofer no
         // sabía a qué refería.
         if (completado) {
-          color = AppColors.success;
+          color = c.success;
           // .toLocal() defensivo: Timestamp.toDate() en Dart suele
           // devolver local pero no esta garantizado en todos los runtimes.
           // Sin esto, format en zonas UTC podria mostrar dia anterior.
@@ -458,24 +503,24 @@ class _AccesoChecklist extends StatelessWidget {
               : 'Checklist realizado';
           icono = Icons.check_circle;
         } else if (dia > 15) {
-          color = AppColors.error;
+          color = c.error;
           mensaje = 'Checklist VENCIDO: realizar YA';
           icono = Icons.warning_amber_rounded;
         } else if (dia > 10) {
-          color = AppColors.warning;
+          color = c.warning;
           mensaje = 'Checklist pendiente (vence el día 15)';
           icono = Icons.fact_check_outlined;
         } else {
-          color = AppColors.textSecondary;
+          color = c.textSecondary;
           mensaje = 'Checklist pendiente';
           icono = Icons.fact_check_outlined;
         }
 
         return Container(
           decoration: BoxDecoration(
-            color: color.withAlpha(20),
+            color: color.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(AppRadius.md),
-            border: Border.all(color: color.withAlpha(60)),
+            border: Border.all(color: color.withValues(alpha: 0.24)),
           ),
           child: Material(
             color: Colors.transparent,
@@ -495,10 +540,12 @@ class _AccesoChecklist extends StatelessWidget {
                 leading: Icon(icono, color: color, size: 22),
                 title: Text(
                   mensaje,
-                  style: AppType.label.copyWith(color: color, fontWeight: FontWeight.bold),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.label
+                      .copyWith(color: color, fontWeight: FontWeight.w600),
                 ),
-                trailing:
-                    Icon(Icons.arrow_forward_ios, color: color, size: 14),
+                trailing: Icon(Icons.arrow_forward_ios, color: color, size: 14),
               ),
             ),
           ),
@@ -585,39 +632,37 @@ class _BotonDetectarFechaState extends State<_BotonDetectarFecha> {
 }
 
 // ============================================================================
-// _BannerProximoAVencer — resumen al tope de la pantalla
+// _HeroEstadoGeneral — hero al tope de la pantalla (estilo Núcleo · VencList)
 // ============================================================================
 
-/// Banner en la cabecera de MIS VENCIMIENTOS que avisa cuál es el
-/// vencimiento más urgente del chofer (de sus papeles personales y
-/// los de su equipo). Sin ruido si todos los papeles están OK.
+/// Hero en la cabecera de MIS VENCIMIENTOS: muestra el estado general del
+/// chofer (conteos vencido/próximo/al día sobre sus papeles personales +
+/// los de su equipo) y destaca el papel más urgente debajo.
 ///
-/// Pedido Santiago 2026-05-14: el chofer hoy escanea las cards una
-/// por una. Un banner arriba con el papel más urgente cambia la
+/// Pedido Santiago 2026-05-14: el chofer hoy escanea las cards una por
+/// una. Un hero arriba con el resumen + el papel más urgente cambia la
 /// utilidad de la pantalla.
-class _BannerProximoAVencer extends StatefulWidget {
+class _HeroEstadoGeneral extends StatefulWidget {
   final Map<String, dynamic> empleadoData;
   final String patenteVehiculo;
   final String patenteEnganche;
 
-  const _BannerProximoAVencer({
+  const _HeroEstadoGeneral({
     required this.empleadoData,
     required this.patenteVehiculo,
     required this.patenteEnganche,
   });
 
   @override
-  State<_BannerProximoAVencer> createState() => _BannerProximoAVencerState();
+  State<_HeroEstadoGeneral> createState() => _HeroEstadoGeneralState();
 }
 
-class _BannerProximoAVencerState extends State<_BannerProximoAVencer> {
+class _HeroEstadoGeneralState extends State<_HeroEstadoGeneral> {
   Stream<List<Map<String, dynamic>>> _equiposStream() async* {
     final patentes = [
-      if (widget.patenteVehiculo.isNotEmpty &&
-          widget.patenteVehiculo != '-')
+      if (widget.patenteVehiculo.isNotEmpty && widget.patenteVehiculo != '-')
         widget.patenteVehiculo,
-      if (widget.patenteEnganche.isNotEmpty &&
-          widget.patenteEnganche != '-')
+      if (widget.patenteEnganche.isNotEmpty && widget.patenteEnganche != '-')
         widget.patenteEnganche,
     ];
     if (patentes.isEmpty) {
@@ -642,6 +687,7 @@ class _BannerProximoAVencerState extends State<_BannerProximoAVencer> {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _equiposStream(),
       initialData: const [],
@@ -654,8 +700,8 @@ class _BannerProximoAVencerState extends State<_BannerProximoAVencer> {
         // VencList). Usamos if/else (no switch) para no depender de la
         // exhaustividad del enum si más adelante se agrega un estado.
         var vencidos = 0, proximos = 0, alDia = 0, sinFecha = 0;
-        for (final c in candidatos) {
-          final e = c.estado;
+        for (final cand in candidatos) {
+          final e = cand.estado;
           if (e == VencimientoEstado.vencido ||
               e == VencimientoEstado.invalida) {
             vencidos++;
@@ -689,76 +735,96 @@ class _BannerProximoAVencerState extends State<_BannerProximoAVencer> {
           _ => top.titulo,
         };
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.md),
-          child: AppCard(
-            highlighted: vencidos > 0,
-            borderColor: vencidos > 0
-                ? AppColors.error.withAlpha(120)
-                : (proximos > 0 ? AppColors.warning.withAlpha(90) : null),
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text('ESTADO GENERAL', style: AppType.eyebrow),
-                const SizedBox(height: AppSpacing.md),
-                Row(
+        // Glow ambient solo cuando todo está OK (gesto firma); si hay algo
+        // por vencer, el acento de color ya carga la atención.
+        final glow = vencidos == 0 && proximos == 0;
+
+        return AppCard(
+          glow: glow,
+          accent: vencidos > 0
+              ? c.error
+              : (proximos > 0 ? c.warning : null),
+          padding: const EdgeInsets.all(AppSpacing.xl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const AppEyebrow('Estado general'),
+              const SizedBox(height: AppSpacing.lg),
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: _EstadoStat(
                         valor: vencidos,
                         label: vencidos == 1 ? 'vencido' : 'vencidos',
-                        color: AppColors.error,
+                        color: c.error,
                       ),
                     ),
+                    Container(width: 1, color: c.border),
                     Expanded(
-                      child: _EstadoStat(
-                        valor: proximos,
-                        label: proximos == 1 ? 'próximo' : 'próximos',
-                        color: AppColors.warning,
+                      child: Padding(
+                        padding:
+                            const EdgeInsets.only(left: AppSpacing.lg),
+                        child: _EstadoStat(
+                          valor: proximos,
+                          label: proximos == 1 ? 'próximo' : 'próximos',
+                          color: c.warning,
+                        ),
                       ),
                     ),
+                    Container(width: 1, color: c.border),
                     Expanded(
-                      child: _EstadoStat(
-                        valor: alDia,
-                        label: 'al día',
-                        color: AppColors.success,
+                      child: Padding(
+                        padding:
+                            const EdgeInsets.only(left: AppSpacing.lg),
+                        child: _EstadoStat(
+                          valor: alDia,
+                          label: 'al día',
+                          color: c.success,
+                        ),
                       ),
                     ),
                   ],
                 ),
-                if (sinFecha > 0) ...[
-                  const SizedBox(height: AppSpacing.sm),
-                  Text('$sinFecha sin fecha cargada todavía',
-                      style: AppType.monoSm),
-                ],
-                if (hayUrgente) ...[
-                  const Divider(height: AppSpacing.xl),
-                  Row(
-                    children: [
-                      Icon(
-                        top.estado == VencimientoEstado.vencido ||
-                                top.estado == VencimientoEstado.invalida
-                            ? Icons.error_outline
-                            : Icons.warning_amber_outlined,
-                        color: top.estado.color,
-                        size: 20,
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Text(
-                          mensaje,
-                          style: AppType.body.copyWith(
-                            color: top.estado.color,
-                            fontWeight: FontWeight.w600,
-                          ),
+              ),
+              if (sinFecha > 0) ...[
+                const SizedBox(height: AppSpacing.md),
+                Text('$sinFecha sin fecha cargada todavía',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.monoSm.copyWith(color: c.textMuted)),
+              ],
+              if (hayUrgente) ...[
+                const SizedBox(height: AppSpacing.lg),
+                const AppHairline(),
+                const SizedBox(height: AppSpacing.lg),
+                Row(
+                  children: [
+                    Icon(
+                      top.estado == VencimientoEstado.vencido ||
+                              top.estado == VencimientoEstado.invalida
+                          ? Icons.error_outline
+                          : Icons.warning_amber_outlined,
+                      color: top.estado.color,
+                      size: 20,
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: Text(
+                        mensaje,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppType.body.copyWith(
+                          color: top.estado.color,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ],
-            ),
+            ],
           ),
         );
       },
@@ -813,8 +879,9 @@ class _CandidatoVencimiento {
   });
 }
 
-/// Contador grande del hero "Estado general" (número en color de estado +
-/// label uppercase). Patrón del prototipo Núcleo (VencList).
+/// Contador del hero "Estado general" — número grande en blanco (regla
+/// Núcleo: el hero number es neutro, nunca semántico) + un punto de color
+/// y label uppercase que cargan la semántica del estado.
 class _EstadoStat extends StatelessWidget {
   final int valor;
   final String label;
@@ -827,18 +894,32 @@ class _EstadoStat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           '$valor',
-          style: AppType.h2.copyWith(
-            color: color,
+          style: AppType.h3.copyWith(
+            color: valor > 0 ? c.text : c.textMuted,
             fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
-        const SizedBox(height: 4),
-        Text(label.toUpperCase(), style: AppType.eyebrow),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            AppDot(color, size: 6),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                label.toUpperCase(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppType.eyebrow.copyWith(color: c.textMuted),
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -854,6 +935,7 @@ class _VencimientoOfflineFallback extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = context.colors;
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
@@ -861,13 +943,14 @@ class _VencimientoOfflineFallback extends StatelessWidget {
         children: [
           Icon(
             Icons.cloud_off_outlined,
-            color: AppColors.warning.withValues(alpha: 0.7),
+            color: c.warning.withValues(alpha: 0.7),
             size: 64,
           ),
           const SizedBox(height: AppSpacing.lg),
           Text(
             motivo == null ? 'Conexión lenta' : 'Sin datos',
-            style: AppType.heading.copyWith(fontSize: 18),
+            textAlign: TextAlign.center,
+            style: AppType.h5.copyWith(color: c.text),
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
@@ -875,8 +958,7 @@ class _VencimientoOfflineFallback extends StatelessWidget {
                 'Estamos teniendo problemas para traer tus vencimientos. '
                     'Probá de nuevo en unos segundos o conectate a una mejor red.',
             textAlign: TextAlign.center,
-            style: AppType.body
-                .copyWith(color: AppColors.textSecondary, fontSize: 13),
+            style: AppType.bodySm.copyWith(color: c.textSecondary),
           ),
         ],
       ),
