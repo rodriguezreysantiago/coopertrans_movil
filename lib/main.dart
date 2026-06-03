@@ -439,6 +439,11 @@ class _LogisticaAppState extends State<LogisticaApp> {
       title: AppTexts.appName,
       debugShowCheckedModeBanner: false,
 
+      // Desktop: title bar custom Núcleo (near-black, botones propios) por
+      // encima de TODAS las rutas. En móvil/web devuelve el child sin tocar.
+      builder: (context, child) =>
+          wrapDesktopChrome(child ?? const SizedBox.shrink()),
+
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
