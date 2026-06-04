@@ -763,6 +763,10 @@ class AppAreas {
         return administracion;
       case AppRoles.planta:
         return planta;
+      case AppRoles.gomeria:
+        return gomeria;
+      case AppRoles.segHigiene:
+        return administracion;
     }
     return manejo;
   }

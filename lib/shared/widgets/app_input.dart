@@ -60,6 +60,7 @@ class AppInput extends StatefulWidget {
 
 class _AppInputState extends State<AppInput> {
   late final FocusNode _node;
+  late final VoidCallback _focusListener;
   bool _focused = false;
   bool _obscured = true;
 
@@ -67,12 +68,20 @@ class _AppInputState extends State<AppInput> {
   void initState() {
     super.initState();
     _node = widget.focusNode ?? FocusNode();
-    _node.addListener(() => setState(() => _focused = _node.hasFocus));
+    // Guardamos la ref del listener para removerlo SIEMPRE en dispose. Si el
+    // FocusNode es externo (lo pasa el caller) y solo se disposeaba cuando era
+    // propio, el listener quedaba colgado del nodo externo y podía disparar
+    // setState() sobre un State ya desmontado (auditoría 2026-06).
+    _focusListener = () {
+      if (mounted) setState(() => _focused = _node.hasFocus);
+    };
+    _node.addListener(_focusListener);
     _obscured = widget.obscure;
   }
 
   @override
   void dispose() {
+    _node.removeListener(_focusListener);
     if (widget.focusNode == null) _node.dispose();
     super.dispose();
   }

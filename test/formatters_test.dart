@@ -203,6 +203,19 @@ void main() {
     test('null devuelve placeholder', () {
       expect(AppFormatters.formatearMonto(null), '—');
     });
+
+    test('acarreo del redondeo: el decimal que redondea arriba arrastra el entero', () {
+      // Regresión auditoría 2026-06: antes la parte entera salía de truncate()
+      // y los decimales de toStringAsFixed → 999.995 daba "999,00".
+      expect(AppFormatters.formatearMonto(999.995), '1.000,00');
+      expect(AppFormatters.formatearMonto(45000.999), '45.001,00');
+      expect(AppFormatters.formatearMonto(1.999), '2,00');
+      expect(AppFormatters.formatearMonto(0.999), '1,00');
+    });
+
+    test('monto negativo que redondea a cero no muestra "-0,00"', () {
+      expect(AppFormatters.formatearMonto(-0.001), '0,00');
+    });
   });
 
   group('AppFormatters.parsearMiles', () {

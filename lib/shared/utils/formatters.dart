@@ -46,18 +46,30 @@ class AppFormatters {
     if (valor == null) return '—';
     final negativo = valor < 0;
     final abs = valor.abs();
-    final entero = abs.truncate();
-    final s = entero.toString();
-    final parteEntera = s.replaceAllMapped(_milesRegex, (m) => '${m[1]}.');
     String resultado;
+    bool esCero;
     if (decimales > 0) {
-      // toStringAsFixed redondea correctamente y siempre rellena con 0.
-      final decStr = abs.toStringAsFixed(decimales).split('.').last;
-      resultado = '$parteEntera,$decStr';
+      // Plata/decimales: derivamos la parte entera Y la decimal del MISMO
+      // string ya redondeado por toStringAsFixed. Antes la entera salía de
+      // `truncate()` (NO redondea) y la decimal de `toStringAsFixed` (SÍ):
+      // cuando el decimal redondeaba con acarreo el entero no acompañaba —
+      // `formatearMonto(999.995)` daba "999,00" en vez de "1.000,00"
+      // (auditoría 2026-06). El acarreo ahora queda incluido en `fixed`.
+      final fixed = abs.toStringAsFixed(decimales); // "1000.00"
+      esCero = double.parse(fixed) == 0; // tras redondear → evita "-0,00"
+      final partes = fixed.split('.');
+      final parteEntera =
+          partes[0].replaceAllMapped(_milesRegex, (m) => '${m[1]}.');
+      resultado = '$parteEntera,${partes[1]}';
     } else {
-      resultado = parteEntera;
+      // Enteros (km, contadores): se TRUNCAN (comportamiento histórico —
+      // 1234,99 km se muestra "1.234", no se redondea hacia arriba).
+      final entero = abs.truncate();
+      esCero = entero == 0;
+      resultado =
+          entero.toString().replaceAllMapped(_milesRegex, (m) => '${m[1]}.');
     }
-    return negativo ? '-$resultado' : resultado;
+    return (negativo && !esCero) ? '-$resultado' : resultado;
   }
 
   /// Formato AR para montos en pesos: siempre 2 decimales con `,` y
