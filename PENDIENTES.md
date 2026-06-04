@@ -7,6 +7,58 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-06-04 — Sesión grande: agente IA + cachatore + tarifas + mantenimiento + Volvo
+
+~17 commits (todo en main + pusheado). **Bot y Cloud Functions YA en producción**
+(auto-update PC dedicada + `firebase deploy`). La **app Flutter espera el release**
+que larga Santiago.
+
+### ✅ YA en producción (NO requieren release)
+**Bot WhatsApp** (auto-update ≤5 min c/u):
+- Groq eliminado → **Gemini de PAGO** único proveedor (key en `.env` de la dedicada).
+- Agente: jornada reporta manejo **NETO**; nueva tool **`crear_adelanto`** (2 pasos
+  con confirmación, escribe `ADELANTOS_CHOFER`); **buscador de nombres tolerante a
+  tildes + orden invertido** (unificado con cachatore); log del fallback
+  (`es_fallback`); no fuerza tools en charla social; **alerta WhatsApp al admin si
+  Gemini se queda sin saldo** (throttle 6h, `AGENTE_SIN_SALDO_ALERT_DNI` →
+  fallback `COLA_CRECIENTE_ALERT_DNI`).
+- **Anti-auto-respuesta DEFINITIVO** — 3 capas: firma `Bot-On` + `BOT_PHONE` +
+  **descarte por ID del saliente** (`wa.esMensajePropio`). El de ID cierra el
+  "hablan entre ellos" del vigilador (el reflejo del saliente llega corrupto en
+  sesión recién vinculada → solo el id es infalible).
+- Cachatore: reprocesa re-pedidos de reagendar (reset `reagendar_hecho` por
+  franja/fecha) + polling 30→8 s; logs en **DD-MM sin año** + reagendado muestra
+  **fecha + hora** (sin franja).
+**Cloud Functions** (deployado southamerica-east1): **vigilador de jornada cierra
+por GAP de reportes** (fix "dormí 8 h → me decía 12 h" — equipo apagado de noche).
+**Firestore**: limpiado el fantasma `alertasVolvoDiario` de `BOT_HEALTH/main`.
+
+### 📦 EN EL RELEASE que largás (app Flutter)
+- **Cachatore**: card muestra "buscando reagendar" EN VIVO (KPI + badge por flag
+  `reagendar`, ya no condicionado por estado).
+- **Tarifas**: "CHOFER FIJO $X" cuando el chofer cobra monto fijo (antes mostraba
+  "$0" engañoso).
+- **Mantenimiento**: **editar el service a mano** (km último service, fecha, km
+  actual) desde el detalle — override mientras Volvo no reporta.
+- (+ lo acumulado desde el bump 1.0.88+91 si no se había subido: versionado de
+  tarifas por vigencia, filtro de Flota por tipo, tooltip de jornada, etc.)
+
+### 🔧 Pendientes / a verificar (Santiago)
+- **Alerta de presupuesto de Gemini** en Cloud Billing (preventiva; el aviso del
+  bot es reactivo). Ver "cómo vigilar el saldo".
+- **Corregir 2 tarifas** mal cargadas: Sea White (B.Bca) → La Martineta (Gral
+  Lamadrid) sin tarifa de chofer; Río Colorado → Monte Hermoso (Devic) chofer **$2**.
+- **¿Franja de reagendar de AVIT?** Quedó "noche"; si pediste "tarde", hay bug del
+  selector de reagendar → confirmar.
+- **Monitorear primer día**: vigilador de jornada (avisos coherentes) +
+  anti-auto-respuesta (log `[handler] reflejo de saliente propio descartado por id`).
+
+### 🟡 Para retomar (en pausa)
+Monitor de frescura Volvo · fallbacks de mantenimiento a Sitrack · suscripciones
+Volvo de las 16 unidades (ver entrada "Auditoría Volvo" abajo).
+
+---
+
 ## 📅 2026-06-04 — Auditoría Volvo: 16 unidades con suscripción VENCIDA (decisión: dejar en Sitrack por ahora)
 
 **Confirmado por Santiago**: 16 tractores Volvo tienen la suscripción de Volvo Connect **vencida** — cortaron transmisión casi simultáneamente **~29-may**. El poller los sigue "viendo" (consultado_en <1h) pero la API devuelve el último estado **congelado** de hace ~6 días. Auditoría completa esta sesión (datos en vivo en Firestore + mapeo de código con agentes).
