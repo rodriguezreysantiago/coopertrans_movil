@@ -40,7 +40,12 @@ function nuevaJornadaTest(overrides = {}) {
     bloque_actual_manejo_seg: 0,
     bloque_actual_pausa_seg: 0,
     total_manejo_seg: 0,
-    ultima_actualizacion_ts: T0,
+    // Último reporte = el "ahora" típico de los ticks (MEDIODIA_MS). Antes era
+    // T0 (epoch 1970), un placeholder irreal: con el cierre por gap de reportes
+    // (2026-06-04) un ultima_actualizacion de 1970 + ahora de 2026 daría un gap
+    // de 56 años y cerraría toda jornada. En prod ultima_actualizacion siempre
+    // es reciente; los tests que ejercitan otros `ahoraMs` overridean este campo.
+    ultima_actualizacion_ts: Timestamp.fromMillis(MEDIODIA_MS),
     ultima_patente: 'AAA111',
     ultima_lat: null,
     ultima_lng: null,
@@ -668,5 +673,41 @@ describe('evaluarTickJornada — pausa por eventos (fix AB493CP)', () => {
     const j = nuevaJornadaTest({ bloque_actual_manejo_seg: 10000 });
     tickParado(j, 900); // sin opts → paroEnMs null → fallback
     assert.strictEqual(j.bloques_completos, 1); // 900s = 15min acumulados
+  });
+});
+
+// ── Cierre por GAP de reportes (equipo apagado de noche) ────────────
+// Caso real 2026-06-04: chofer durmió con el equipo apagado → el camión no
+// reportó en toda la noche → ninguna rama cerraba la jornada → a la mañana
+// arrastraba el manejo de ayer ("manejaste 12h"). Ahora un gap ≥ 8h sin
+// reportes cierra la jornada en su último reporte.
+describe('evaluarTickJornada — cierre por GAP de reportes (equipo apagado)', () => {
+  test('sin reportes ≥ 8h → cierra la jornada vieja en el último reporte', () => {
+    const ahoraMs = MEDIODIA_MS;
+    const ultimaMs = ahoraMs - 10 * 3600 * 1000; // último reporte hace 10h
+    const j = nuevaJornadaTest({
+      total_manejo_seg: 9 * 3600, // arrastra 9h de AYER
+      bloque_actual_manejo_seg: 1800,
+      ultima_actualizacion_ts: Timestamp.fromMillis(ultimaMs),
+      jornada_inicio_ts: Timestamp.fromMillis(ultimaMs - 11 * 3600 * 1000),
+    });
+    const r = tickManejando(j, 600, { ahoraMs });
+    assert.strictEqual(r.cerrada, true);
+    assert.strictEqual(j.estado, 'descanso_jornada');
+    // Cierra en el ÚLTIMO reporte (cuando se apagó el equipo), no "ahora".
+    assert.strictEqual(j.jornada_fin_ts.toMillis(), ultimaMs);
+    // No sumó el manejo de hoy sobre el de ayer (cerró antes de acumular).
+    assert.strictEqual(j.total_manejo_seg, 9 * 3600);
+  });
+
+  test('gap corto (< 8h) NO cierra por esta vía', () => {
+    const ahoraMs = MEDIODIA_MS;
+    const ultimaMs = ahoraMs - 5 * 60 * 1000; // hace 5 min
+    const j = nuevaJornadaTest({
+      ultima_actualizacion_ts: Timestamp.fromMillis(ultimaMs),
+    });
+    const r = tickManejando(j, 300, { ahoraMs });
+    assert.strictEqual(r.cerrada, false);
+    assert.strictEqual(j.jornada_fin_ts, null);
   });
 });

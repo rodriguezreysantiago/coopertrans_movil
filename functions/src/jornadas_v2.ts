@@ -951,6 +951,24 @@ export function evaluarTickJornada(
 
   if (manejando) {
     // === Está manejando ===
+    // Descanso por GAP DE REPORTES (equipo apagado de noche): si el chofer
+    // ARRANCA tras ≥ 8h sin un solo reporte, ese gap fue un descanso de jornada
+    // aunque el tracking nunca lo haya "visto" parado (equipo apagado = sin
+    // ticks → `descanso_inicio_ts` quedaba null y NINGUNA rama cerraba → la
+    // jornada de AYER seguía abierta y arrastraba el manejo). Caso real
+    // 2026-06-04: choferes que durmieron con el equipo apagado veían "manejaste
+    // 12h". Va DENTRO de `manejando` a propósito: si reaparece PARADO en otra
+    // posición es que siguió en ruta (no descansó) y de eso se ocupa la rama
+    // "parado" por distancia. Cerramos la jornada vieja en su ÚLTIMO reporte;
+    // el próximo tick abre una nueva limpia.
+    const gapSinReportesSeg =
+      (ahoraMs - j.ultima_actualizacion_ts.toMillis()) / 1000;
+    if (gapSinReportesSeg >= DESCANSO_MIN_SEGUNDOS) {
+      j.descanso_segundos = gapSinReportesSeg;
+      j.estado = "descanso_jornada";
+      j.jornada_fin_ts = j.ultima_actualizacion_ts;
+      return { avisos, cerrada: true };
+    }
     // Robustez ante camión APAGADO de noche (caso Balbiano 2026-06-01): si
     // venía parado en la misma posición desde hace ≥ 8h, el descanso de
     // jornada está CUMPLIDO aunque el tracking incremental no lo haya podido
