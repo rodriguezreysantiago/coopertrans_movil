@@ -299,9 +299,11 @@ export const resumenBotDiario = onSchedule(
 // drifts, agrupamos por tipo y solo listamos el detalle de los primeros
 // 10 — para no saturar el WhatsApp del admin con un texto interminable.
 //
-// Idempotencia: cron schedule corre 1x/día, no hay flag de "ya enviado"
-// — si el cron se dispara dos veces el mismo día por algún glitch de
-// GCP (raro), llegan dos mensajes idénticos. Aceptable.
+// Idempotencia: hay gate atómico (`adquirirIdempotenciaDiaria` sobre un
+// doc determinístico `drifts_<fecha>_<dni>` en AVISOS_AUTOMATICOS_HISTORICO).
+// Si GCP re-dispara el cron el mismo día (retry / double trigger en la
+// sliding window de las 8AM), el segundo tick salta en lugar de mandar el
+// resumen 2 veces. El lock se libera si la encolada falla.
 
 const ETIQUETAS_DRIFT: Record<string, string> = {
   CHOFER_DISTINTO: "Chofer distinto al asignado",

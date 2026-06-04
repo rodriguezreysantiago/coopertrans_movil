@@ -1355,128 +1355,143 @@ export const volvoScoresPoller = onSchedule(
     memory: "256MiB",
   },
   async () => {
-    // Calculamos "ayer" en ART. La API espera fechas YYYY-MM-DD en TZ
-    // de la flota. Ejemplo: corre el 2026-05-03 04:00 ART → pedimos
-    // los scores del día 2026-05-02 (cerrado).
-    const fechaYmd = ayerYmdArg();
+    // Lock tick (auditoría 2026-06-04): cron diario con timeout 120s, pero
+    // un cold start + paginado de hasta 10 páginas del API Volvo puede
+    // excederse. GCP at-least-once puede disparar 2 invocaciones que pisan
+    // los mismos docs VOLVO_SCORES_DIARIOS con escrituras redundantes. Lock
+    // 4 min evita el solapado (consistencia con los otros pollers Volvo).
+    const liberar = await adquirirLockTick(
+      "volvo_scores_poller",
+      4 * 60 * 1000,
+    );
+    if (!liberar) return;
+    try {
+      // Calculamos "ayer" en ART. La API espera fechas YYYY-MM-DD en TZ
+      // de la flota. Ejemplo: corre el 2026-05-03 04:00 ART → pedimos
+      // los scores del día 2026-05-02 (cerrado).
+      const fechaYmd = ayerYmdArg();
 
-    logger.info("[volvoScoresPoller] iniciando ciclo", { fecha: fechaYmd });
+      logger.info("[volvoScoresPoller] iniciando ciclo", { fecha: fechaYmd });
 
-    // Cross-ref VIN → patente. Mismo patrón que volvoAlertasPoller.
-    // .limit(5000) defensivo — ver comentario en telemetriaSnapshotScheduled.
-    const vehiculosSnap = await db.collection("VEHICULOS").limit(5000).get();
-    const vinToPatente = new Map<string, string>();
-    for (const doc of vehiculosSnap.docs) {
-      const data = doc.data();
-      const vin = (data.VIN ?? "").toString().trim().toUpperCase();
-      if (vin && vin !== "-") {
-        vinToPatente.set(vin, doc.id);
-      }
-    }
-
-    const authHeader = "Basic " + Buffer.from(
-      `${volvoUsername.value()}:${volvoPassword.value()}`
-    ).toString("base64");
-
-    const qsInicial = new URLSearchParams({
-      starttime: fechaYmd,
-      stoptime: fechaYmd,
-      contentFilter: "FLEET,VEHICLES",
-    });
-    let url = `${VOLVO_BASE}/score/scores?${qsInicial.toString()}`;
-
-    const fechaTs = Timestamp.fromDate(inicioDelDiaArg(fechaYmd));
-    let totalEscritos = 0;
-    let pages = 0;
-    let fleetEscrita = false;
-
-    while (pages < SCORES_MAX_PAGES_PER_RUN) {
-      pages++;
-
-      let res: Response;
-      try {
-        res = await fetchWithTimeout(url, {
-          method: "GET",
-          headers: { Authorization: authHeader, Accept: ACCEPT_SCORES },
-        });
-      } catch (e) {
-        const transient = esErrorTransient(e);
-        const log = transient ? logger.warn : logger.error;
-        log("[volvoScoresPoller] fetch falló", {
-          page: pages,
-          error: (e as Error).message,
-          transient,
-        });
-        return;
-      }
-
-      if (!res.ok) {
-        logger.warn("[volvoScoresPoller] Volvo HTTP error", {
-          statusCode: res.status,
-          page: pages,
-        });
-        return;
-      }
-
-      const body = (await res.json()) as ScoresApiResponse;
-      const response = body.vuScoreResponse ?? {};
-
-      // Persistir el score de la FLOTA (solo en la primera página, no
-      // se repite en páginas siguientes según el spec).
-      if (!fleetEscrita && response.fleet) {
-        await db
-          .collection("VOLVO_SCORES_DIARIOS")
-          .doc(`_FLEET_${fechaYmd}`)
-          .set(
-            {
-              ...buildScoreFleetDoc(response.fleet, fechaYmd, fechaTs),
-              polled_en: FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
-        fleetEscrita = true;
-        totalEscritos++;
-      }
-
-      // Persistir scores por vehículo en batch.
-      const vehicles = Array.isArray(response.vehicles) ? response.vehicles : [];
-      if (vehicles.length > 0) {
-        const batch = db.batch();
-        let escritosEstePage = 0;
-        for (const v of vehicles) {
-          const vin = (v.vin ?? "").toString().trim().toUpperCase();
-          if (!vin) continue;
-          const patente = vinToPatente.get(vin) || vin;
-          const docId = `${patente}_${fechaYmd}`;
-          const ref = db.collection("VOLVO_SCORES_DIARIOS").doc(docId);
-          batch.set(
-            ref,
-            {
-              ...buildScoreVehicleDoc(v, patente, fechaYmd, fechaTs),
-              polled_en: FieldValue.serverTimestamp(),
-            },
-            { merge: true }
-          );
-          escritosEstePage++;
-        }
-        if (escritosEstePage > 0) {
-          await batch.commit();
-          totalEscritos += escritosEstePage;
+      // Cross-ref VIN → patente. Mismo patrón que volvoAlertasPoller.
+      // .limit(5000) defensivo — ver comentario en telemetriaSnapshotScheduled.
+      const vehiculosSnap = await db.collection("VEHICULOS").limit(5000).get();
+      const vinToPatente = new Map<string, string>();
+      for (const doc of vehiculosSnap.docs) {
+        const data = doc.data();
+        const vin = (data.VIN ?? "").toString().trim().toUpperCase();
+        if (vin && vin !== "-") {
+          vinToPatente.set(vin, doc.id);
         }
       }
 
-      const moreData = response.moreDataAvailable === true;
-      const moreLink = response.moreDataAvailableLink;
-      if (!moreData || !moreLink) break;
-      url = `${VOLVO_BASE}${moreLink}`;
-    }
+      const authHeader = "Basic " + Buffer.from(
+        `${volvoUsername.value()}:${volvoPassword.value()}`
+      ).toString("base64");
 
-    logger.info("[volvoScoresPoller] OK", {
-      fecha: fechaYmd,
-      paginas: pages,
-      escritos: totalEscritos,
-      fleetEscrita,
-    });
+      const qsInicial = new URLSearchParams({
+        starttime: fechaYmd,
+        stoptime: fechaYmd,
+        contentFilter: "FLEET,VEHICLES",
+      });
+      let url = `${VOLVO_BASE}/score/scores?${qsInicial.toString()}`;
+
+      const fechaTs = Timestamp.fromDate(inicioDelDiaArg(fechaYmd));
+      let totalEscritos = 0;
+      let pages = 0;
+      let fleetEscrita = false;
+
+      while (pages < SCORES_MAX_PAGES_PER_RUN) {
+        pages++;
+
+        let res: Response;
+        try {
+          res = await fetchWithTimeout(url, {
+            method: "GET",
+            headers: { Authorization: authHeader, Accept: ACCEPT_SCORES },
+          });
+        } catch (e) {
+          const transient = esErrorTransient(e);
+          const log = transient ? logger.warn : logger.error;
+          log("[volvoScoresPoller] fetch falló", {
+            page: pages,
+            error: (e as Error).message,
+            transient,
+          });
+          return;
+        }
+
+        if (!res.ok) {
+          logger.warn("[volvoScoresPoller] Volvo HTTP error", {
+            statusCode: res.status,
+            page: pages,
+          });
+          return;
+        }
+
+        const body = (await res.json()) as ScoresApiResponse;
+        const response = body.vuScoreResponse ?? {};
+
+        // Persistir el score de la FLOTA (solo en la primera página, no
+        // se repite en páginas siguientes según el spec).
+        if (!fleetEscrita && response.fleet) {
+          await db
+            .collection("VOLVO_SCORES_DIARIOS")
+            .doc(`_FLEET_${fechaYmd}`)
+            .set(
+              {
+                ...buildScoreFleetDoc(response.fleet, fechaYmd, fechaTs),
+                polled_en: FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+          fleetEscrita = true;
+          totalEscritos++;
+        }
+
+        // Persistir scores por vehículo en batch.
+        const vehicles = Array.isArray(response.vehicles) ?
+          response.vehicles : [];
+        if (vehicles.length > 0) {
+          const batch = db.batch();
+          let escritosEstePage = 0;
+          for (const v of vehicles) {
+            const vin = (v.vin ?? "").toString().trim().toUpperCase();
+            if (!vin) continue;
+            const patente = vinToPatente.get(vin) || vin;
+            const docId = `${patente}_${fechaYmd}`;
+            const ref = db.collection("VOLVO_SCORES_DIARIOS").doc(docId);
+            batch.set(
+              ref,
+              {
+                ...buildScoreVehicleDoc(v, patente, fechaYmd, fechaTs),
+                polled_en: FieldValue.serverTimestamp(),
+              },
+              { merge: true }
+            );
+            escritosEstePage++;
+          }
+          if (escritosEstePage > 0) {
+            await batch.commit();
+            totalEscritos += escritosEstePage;
+          }
+        }
+
+        const moreData = response.moreDataAvailable === true;
+        const moreLink = response.moreDataAvailableLink;
+        if (!moreData || !moreLink) break;
+        url = `${VOLVO_BASE}${moreLink}`;
+      }
+
+      logger.info("[volvoScoresPoller] OK", {
+        fecha: fechaYmd,
+        paginas: pages,
+        escritos: totalEscritos,
+        fleetEscrita,
+      });
+    } finally {
+      await liberar();
+    }
   }
 );
 
@@ -1736,10 +1751,13 @@ async function _notificarBypassSeguridad(
   }
 
   // Marcar throttle: 6h hasta el próximo aviso de esta (patente, tipo).
+  // `expira_en` para que el TTL de Firestore limpie el doc solo (sin cron
+  // de purga) — mismo window que el throttle (BYPASS_SEGURIDAD_THROTTLE_HS).
   await throttleRef.set({
     last_sent_at: FieldValue.serverTimestamp(),
     last_patente: patente,
     last_tipo: tipoEfectivo,
     last_alert_id: alertId,
+    expira_en: expiraEnMin(BYPASS_SEGURIDAD_THROTTLE_HS * 60),
   });
 }
