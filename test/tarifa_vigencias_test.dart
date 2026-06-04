@@ -2,9 +2,10 @@
 //
 // Foco: la resolución del precio por FECHA DE CARGA (`vigenteEn`), la
 // migración perezosa de tarifas legacy (sin `vigencias`), y la composición
-// EXACTA que usa el recálculo masivo de viajes (`copyWithImportes` sobre el
-// snapshot del tramo con los importes de la vigencia que regía en la fecha
-// de carga). Esto maneja PLATA — un bug acá liquida de más o de menos.
+// EXACTA que usa el recálculo masivo de viajes (`conTarifaReal` sobre el
+// snapshot del tramo: SOLO la tarifa real de la vigencia que regía en la
+// fecha de carga; la chofer no se toca). Maneja PLATA — un bug acá liquida
+// de más o de menos.
 //
 // El recálculo end-to-end (filtro `liquidado`, WriteBatch) usa
 // FirebaseFirestore.instance y se valida en smoke manual; acá testeamos la
@@ -198,8 +199,9 @@ void main() {
     });
   });
 
-  group('TarifaSnapshot.copyWithImportes', () {
-    test('cambia importes y PRESERVA no-versionados + montoFijoChofer', () {
+  group('TarifaSnapshot.conTarifaReal', () {
+    test('cambia SOLO la tarifa real; preserva chofer/dador/no-versionados',
+        () {
       const original = TarifaSnapshot(
         origenEtiqueta: 'Bahía Blanca',
         destinoEtiqueta: 'Olavarría',
@@ -209,97 +211,63 @@ void main() {
         tarifaReal: 100,
         tarifaChofer: 40,
         montoFijoChofer: 999000, // override acordado a mano
+        porcentajeComisionDador: 12.5,
         producto: 'ARENA',
         dadorNombre: 'DADOR SRL',
       );
-      final nuevo = original.copyWithImportes(
-        tarifaReal: 120,
-        tarifaChofer: 48,
-      );
-      // Importes actualizados.
+      final nuevo = original.conTarifaReal(120);
+      // Solo la real cambió.
       expect(nuevo.tarifaReal, 120);
-      expect(nuevo.tarifaChofer, 48);
-      // No-versionados + override preservados (clave del recálculo).
+      // Chofer + comisión dador + no-versionados intactos.
+      expect(nuevo.tarifaChofer, 40);
       expect(nuevo.montoFijoChofer, 999000);
+      expect(nuevo.porcentajeComisionDador, 12.5);
       expect(nuevo.producto, 'ARENA');
       expect(nuevo.origenEtiqueta, 'Bahía Blanca');
       expect(nuevo.dadorNombre, 'DADOR SRL');
     });
   });
 
-  group('Composición del recálculo masivo (pura)', () {
-    // Reproduce lo que hace ViajesService.recalcularViajesNoLiquidadosConTarifa
-    // para UN tramo: vig = tarifa.vigenteEn(fechaCarga);
-    // nuevoSnap = snap.copyWithImportes(...vig...).
-    test('un tramo cargado en la 1ª quincena conserva el precio viejo', () {
-      final t = _tarifa(vigencias: [
-        _vig(DateTime(2026, 1, 1), real: 100, chofer: 40),
-        _vig(DateTime(2026, 1, 15), real: 120, chofer: 48),
-      ]);
-      const snapViejo = TarifaSnapshot(
-        origenEtiqueta: 'o',
-        destinoEtiqueta: 'd',
-        empresaOrigenNombre: 'O',
-        empresaDestinoNombre: 'D',
-        unidadTarifa: UnidadTarifa.porTonelada,
-        tarifaReal: 100,
-        tarifaChofer: 40,
-        montoFijoChofer: 555000, // override
-      );
-      final fechaCarga = DateTime(2026, 1, 10); // 1ª quincena → precio viejo
-      final vig = t.vigenteEn(fechaCarga);
-      final nuevo = snapViejo.copyWithImportes(
-        tarifaReal: vig.tarifaReal,
-        tarifaChofer: vig.tarifaChofer,
-        porcentajeComisionDador: vig.porcentajeComisionDador,
-        montoFijoDador: vig.montoFijoDador,
-      );
-      expect(nuevo.tarifaReal, 100); // no cambió (carga del día 10)
+  group('Composición del recálculo masivo (pura) — SOLO tarifa real', () {
+    // Reproduce ViajesService.recalcularViajesNoLiquidadosConTarifa para UN
+    // tramo: vig = tarifa.vigenteEn(fechaCarga); snap.conTarifaReal(vig.tarifaReal).
+    // La tarifa del chofer del viaje NUNCA se toca (decisión Santiago).
+    final t = _tarifa(vigencias: [
+      _vig(DateTime(2026, 1, 1), real: 100, chofer: 40),
+      _vig(DateTime(2026, 1, 15), real: 120, chofer: 48),
+    ]);
+    const snap = TarifaSnapshot(
+      origenEtiqueta: 'o',
+      destinoEtiqueta: 'd',
+      empresaOrigenNombre: 'O',
+      empresaDestinoNombre: 'D',
+      unidadTarifa: UnidadTarifa.porTonelada,
+      tarifaReal: 100,
+      tarifaChofer: 40,
+      montoFijoChofer: 555000, // override
+    );
+
+    test('tramo cargado en la 1ª quincena conserva la real vieja', () {
+      final vig = t.vigenteEn(DateTime(2026, 1, 10)); // real 100
+      final nuevo = snap.conTarifaReal(vig.tarifaReal);
+      expect(nuevo.tarifaReal, 100);
+      expect(nuevo.tarifaChofer, 40); // chofer intacta
       expect(nuevo.montoFijoChofer, 555000); // override intacto
     });
 
-    test('un tramo cargado en la 2ª quincena toma el precio nuevo', () {
-      final t = _tarifa(vigencias: [
-        _vig(DateTime(2026, 1, 1), real: 100, chofer: 40),
-        _vig(DateTime(2026, 1, 15), real: 120, chofer: 48),
-      ]);
-      const snap = TarifaSnapshot(
-        origenEtiqueta: 'o',
-        destinoEtiqueta: 'd',
-        empresaOrigenNombre: 'O',
-        empresaDestinoNombre: 'D',
-        unidadTarifa: UnidadTarifa.porTonelada,
-        tarifaReal: 100,
-        tarifaChofer: 40,
-      );
-      final vig = t.vigenteEn(DateTime(2026, 1, 20));
-      final nuevo = snap.copyWithImportes(
-        tarifaReal: vig.tarifaReal,
-        tarifaChofer: vig.tarifaChofer,
-      );
-      expect(nuevo.tarifaReal, 120);
-      expect(nuevo.tarifaChofer, 48);
+    test('tramo en 2ª quincena: sube la real, la CHOFER NO cambia', () {
+      final vig = t.vigenteEn(DateTime(2026, 1, 20)); // real 120, chofer 48
+      final nuevo = snap.conTarifaReal(vig.tarifaReal);
+      expect(nuevo.tarifaReal, 120); // la real subió
+      // La chofer sigue 40 (la del snapshot), NO 48 (la de la vigencia).
+      expect(nuevo.tarifaChofer, 40);
+      expect(nuevo.montoFijoChofer, 555000);
     });
 
     test('idempotente: aplicar dos veces da el mismo resultado', () {
-      final t = _tarifa(vigencias: [
-        _vig(DateTime(2026, 1, 1), real: 100, chofer: 40),
-        _vig(DateTime(2026, 1, 15), real: 120, chofer: 48),
-      ]);
-      const snap = TarifaSnapshot(
-        origenEtiqueta: 'o',
-        destinoEtiqueta: 'd',
-        empresaOrigenNombre: 'O',
-        empresaDestinoNombre: 'D',
-        unidadTarifa: UnidadTarifa.porTonelada,
-        tarifaReal: 100,
-        tarifaChofer: 40,
-      );
       final vig = t.vigenteEn(DateTime(2026, 1, 20));
-      final r1 = snap.copyWithImportes(
-          tarifaReal: vig.tarifaReal, tarifaChofer: vig.tarifaChofer);
-      final r2 = r1.copyWithImportes(
-          tarifaReal: vig.tarifaReal, tarifaChofer: vig.tarifaChofer);
+      final r1 = snap.conTarifaReal(vig.tarifaReal);
+      final r2 = r1.conTarifaReal(vig.tarifaReal);
       expect(r2.tarifaReal, r1.tarifaReal);
       expect(r2.tarifaChofer, r1.tarifaChofer);
     });

@@ -162,19 +162,18 @@ class TarifaSnapshot {
     );
   }
 
-  /// Copia el snapshot cambiando SOLO los importes versionados
-  /// (tarifaReal, tarifaChofer, comisión/monto fijo del dador). Preserva
-  /// ruta, dador, empresas, producto, unidad Y el `montoFijoChofer` — este
-  /// último puede ser un override acordado a mano por el operador en el
-  /// tramo, así que el recálculo por vigencia NO debe pisarlo. Usado por el
-  /// recálculo masivo y por el form de tramo al re-resolver por fecha de
-  /// carga (el override del operador se aplica aparte, encima de esto).
-  TarifaSnapshot copyWithImportes({
-    required double tarifaReal,
-    required double tarifaChofer,
-    double? porcentajeComisionDador,
-    double? montoFijoDador,
-  }) {
+  /// Copia el snapshot cambiando SOLO la `tarifaReal` (lo que cobra Vecchi).
+  /// Preserva TODO lo demás: tarifa y monto fijo del chofer, comisión y monto
+  /// fijo del dador, ruta, empresas, producto, unidad.
+  ///
+  /// Decisión Santiago 2026-06-04: el recálculo retroactivo por cambio de
+  /// vigencia aplica SOLO sobre la tarifa real. El pago al chofer (y la
+  /// comisión del dador) de un viaje ya cargado NO se tocan — muchas veces
+  /// sube la real pero la del chofer se mantiene, y lo acordado con el chofer
+  /// por un viaje viejo no cambia. El historial de vigencias SÍ registra los
+  /// cambios de la chofer (para auditar cuándo se le aumentó), pero no se
+  /// aplican retroactivamente a viajes ya cargados.
+  TarifaSnapshot conTarifaReal(double tarifaReal) {
     return TarifaSnapshot(
       origenEtiqueta: origenEtiqueta,
       destinoEtiqueta: destinoEtiqueta,

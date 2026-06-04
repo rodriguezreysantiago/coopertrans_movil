@@ -389,13 +389,16 @@ class ViajesService {
     };
   }
 
-  /// Recalcula los viajes ACTIVOS y NO liquidados que usan [tarifa] en
-  /// algún tramo, re-resolviendo el snapshot de esos tramos por la FECHA
-  /// DE CARGA del tramo (la versión de la tarifa que regía esa fecha).
-  /// Preserva los campos NO versionados del snapshot (ruta/dador/etc.) y el
-  /// `montoFijoChofer` (posible override manual del operador). Los viajes
-  /// liquidados NUNCA se tocan. Idempotente: re-correrlo da el mismo
-  /// resultado. Devuelve cuántos viajes se actualizaron.
+  /// Recalcula la TARIFA REAL de los viajes ACTIVOS y NO liquidados que usan
+  /// [tarifa] en algún tramo, re-resolviéndola por la FECHA DE CARGA del
+  /// tramo (la versión que regía esa fecha). **SOLO toca la tarifa real**: la
+  /// tarifa/monto fijo del chofer y la comisión del dador del viaje se
+  /// preservan (decisión Santiago 2026-06-04 — el pago al chofer de un viaje
+  /// ya cargado no cambia ante un aumento posterior; el historial de
+  /// vigencias igual registra los cambios de la chofer). Los viajes
+  /// liquidados NUNCA se tocan, y los tramos cuya real no cambió se saltean
+  /// (la cuenta refleja solo cambios reales, sin writes de gusto).
+  /// Idempotente. Devuelve cuántos viajes se actualizaron.
   ///
   /// Lo dispara `LogisticaService.registrarNuevoPrecio` tras registrar una
   /// vigencia. Client-side + WriteBatch (NO runTransaction — bug Windows),
@@ -416,21 +419,21 @@ class ViajesService {
       if (data['liquidado'] == true) continue;
       final v = Viaje.fromMap(doc.id, data);
       if (!v.tramos.any((t) => t.tarifaId == tarifa.id)) continue;
-      // Re-resolver SOLO los tramos de esta tarifa, por su fecha de carga.
-      // Los demás tramos quedan intactos. `copyWithImportes` preserva
-      // ruta/dador/etc. y el montoFijoChofer (override del operador).
+      // Re-resolver SOLO la tarifa real de los tramos de esta tarifa, por su
+      // fecha de carga. Chofer + monto fijo chofer + comisión del dador se
+      // preservan (`conTarifaReal`). Si la real de un tramo no cambió, lo
+      // dejamos igual; si NINGÚN tramo cambió, salteamos el viaje.
+      var cambio = false;
       final nuevosTramos = v.tramos.map((t) {
         if (t.tarifaId != tarifa.id) return t;
         final vig = tarifa.vigenteEn(t.fechaCarga ?? ahora);
+        if (vig.tarifaReal == t.tarifaSnapshot.tarifaReal) return t;
+        cambio = true;
         return t.copyWith(
-          tarifaSnapshot: t.tarifaSnapshot.copyWithImportes(
-            tarifaReal: vig.tarifaReal,
-            tarifaChofer: vig.tarifaChofer,
-            porcentajeComisionDador: vig.porcentajeComisionDador,
-            montoFijoDador: vig.montoFijoDador,
-          ),
+          tarifaSnapshot: t.tarifaSnapshot.conTarifaReal(vig.tarifaReal),
         );
       }).toList();
+      if (!cambio) continue;
       updates[doc.id] = _construirDataActualizacion(
         tramos: nuevosTramos,
         choferDni: v.choferDni,

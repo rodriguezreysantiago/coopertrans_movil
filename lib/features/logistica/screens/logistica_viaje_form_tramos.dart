@@ -165,20 +165,20 @@ class _TramoEditState {
     // precio de hoy. Así un viaje cargado tarde (carga el día 10, lo entran
     // el 16 tras un aumento) toma el precio que regía el día 10.
     final vig = tarifa!.vigenteEn(fechaCarga ?? DateTime.now());
-    // Campos NO versionados (ruta/dador/etiquetas/producto): si EDITAMOS un
-    // viaje y el operador NO cambió la tarifa (mismo tarifaId), conservamos
-    // los del snapshot original del tramo (la ruta con la que se cargó). En
-    // alta, o si eligió OTRA tarifa, tomamos el catálogo actual.
-    final baseNoVersionada =
-        (_snapshotOriginal != null && tarifa!.id == _tarifaIdOriginal)
-            ? _snapshotOriginal!
-            : TarifaSnapshot.fromTarifa(tarifa!);
-    final base = baseNoVersionada.copyWithImportes(
-      tarifaReal: vig.tarifaReal,
-      tarifaChofer: vig.tarifaChofer,
-      porcentajeComisionDador: vig.porcentajeComisionDador,
-      montoFijoDador: vig.montoFijoDador,
-    );
+    final TarifaSnapshot base;
+    if (_snapshotOriginal != null && tarifa!.id == _tarifaIdOriginal) {
+      // EDITANDO un viaje sin cambiar la tarifa: preservamos del snapshot
+      // original la tarifa/monto fijo del chofer, la comisión del dador y la
+      // ruta — solo re-resolvemos la TARIFA REAL por la fecha de carga
+      // (Santiago 2026-06-04: el pago al chofer de un viaje ya cargado no
+      // cambia ante un aumento posterior).
+      base = _snapshotOriginal!.conTarifaReal(vig.tarifaReal);
+    } else {
+      // Alta, o el operador eligió OTRA tarifa: el snapshot toma TODOS los
+      // importes (real + chofer + dador) de la versión vigente en la fecha de
+      // carga del tramo.
+      base = TarifaSnapshot.fromTarifaEnFecha(tarifa!, fechaCarga);
+    }
     if (!montoFijoChoferActivo) {
       // Explícitamente null para limpiar el override que la tarifa
       // pueda traer — el operador eligió volver al 18%.

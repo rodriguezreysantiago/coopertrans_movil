@@ -1862,8 +1862,10 @@ class _SheetNuevoPrecioState extends State<_SheetNuevoPrecio> {
             const AppEyebrow('Registrar nuevo precio'),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'No borra el precio anterior — queda en el historial. Los viajes '
-              'no liquidados se recalculan según la fecha de carga de cada uno.',
+              'No borra el precio anterior — queda en el historial. Al subir '
+              'la tarifa real, los viajes no liquidados se recalculan según su '
+              'fecha de carga. El pago al chofer de viajes ya cargados NO '
+              'cambia (el cambio igual queda registrado en el historial).',
               style: AppType.bodySm.copyWith(color: c.textMuted),
             ),
             const SizedBox(height: AppSpacing.lg),
