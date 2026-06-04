@@ -696,12 +696,22 @@ class _TarifasMontos extends StatelessWidget {
             ),
             AppHairline(vertical: true, color: c.border),
             Expanded(
-              child: _MontoBloque(
-                etiqueta: 'CHOFER',
-                monto: v.tarifaChofer,
-                sufijo: tarifa.unidadTarifa.sufijoMonto,
-                color: c.info,
-              ),
+              // Si el chofer cobra un MONTO FIJO (no por unidad), mostrarlo como
+              // "CHOFER FIJO $X" en vez de "CHOFER $0 /TN" — que confunde porque
+              // parece que el chofer no cobra (reportado 2026-06-04).
+              child: (v.montoFijoChofer ?? 0) > 0
+                  ? _MontoBloque(
+                      etiqueta: 'CHOFER FIJO',
+                      monto: v.montoFijoChofer ?? 0,
+                      sufijo: '',
+                      color: c.info,
+                    )
+                  : _MontoBloque(
+                      etiqueta: 'CHOFER',
+                      monto: v.tarifaChofer,
+                      sufijo: tarifa.unidadTarifa.sufijoMonto,
+                      color: c.info,
+                    ),
             ),
             AppHairline(vertical: true, color: c.border),
             Expanded(
