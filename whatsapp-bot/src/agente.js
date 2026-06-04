@@ -2077,6 +2077,59 @@ function _mensajeFallback(error) {
 }
 
 /**
+ * Alerta al admin por WhatsApp cuando el agente se queda SIN SALDO/CUOTA de
+ * Gemini (429). Throttle persistente 6h (doc `META/agente_sin_saldo`, sobrevive
+ * reinicios del bot → no spamea). Destinatario: `AGENTE_SIN_SALDO_ALERT_DNI` o,
+ * si no está, `COLA_CRECIENTE_ALERT_DNI` (el admin que ya recibe las alertas de
+ * sistema). Pedido Santiago 2026-06-04: enterarse al toque, sin mirar el
+ * dashboard de billing de Gemini.
+ */
+async function _alertarSinSaldo(db, fs) {
+  const dni = process.env.AGENTE_SIN_SALDO_ALERT_DNI ||
+    process.env.COLA_CRECIENTE_ALERT_DNI || null;
+  if (!dni) return; // sin destinatario configurado → no-op
+  try {
+    const ref = db.collection('META').doc('agente_sin_saldo');
+    const snap = await ref.get();
+    const ult = snap.exists && snap.data().avisado_en;
+    const ms = ult && ult.toMillis ? ult.toMillis() : 0;
+    if (Date.now() - ms < 6 * 60 * 60 * 1000) return; // ya avisé hace < 6h
+    const emp = await db.collection('EMPLEADOS').doc(String(dni)).get();
+    const tel = emp.exists ? String((emp.data() || {}).TELEFONO || '').trim() : '';
+    if (!tel) {
+      log.warn(`[agente] alerta sin-saldo: DNI ${dni} sin TELEFONO.`);
+      return;
+    }
+    await db.collection(fs.COLECCION).add({
+      telefono: tel,
+      mensaje:
+        '⚠️ *El asistente de WhatsApp se quedó sin saldo/cuota de Gemini.*\n\n' +
+        'Las consultas de los empleados al bot NO se están respondiendo (les ' +
+        'sale un "probá más tarde"). Recargá el saldo o revisá la facturación ' +
+        'de Gemini para reactivar el asistente.\n\n_Bot-On — Coopertrans Móvil_',
+      estado: fs.ESTADO.pendiente,
+      encolado_en: admin.firestore.FieldValue.serverTimestamp(),
+      expira_en: admin.firestore.Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000),
+      enviado_en: null,
+      error: null,
+      intentos: 0,
+      origen: 'agente_sin_saldo',
+      destinatario_coleccion: 'EMPLEADOS',
+      destinatario_id: String(dni),
+      campo_base: 'AGENTE_SIN_SALDO',
+      admin_dni: 'BOT',
+      admin_nombre: 'Bot agente',
+    });
+    await ref.set(
+      { avisado_en: admin.firestore.FieldValue.serverTimestamp() },
+      { merge: true });
+    log.warn('[agente] Gemini sin saldo/cuota → alerta encolada al admin.');
+  } catch (e) {
+    log.warn(`[agente] no pude encolar alerta sin-saldo: ${e.message}`);
+  }
+}
+
+/**
  * Intenta responder una pregunta de texto libre con el agente.
  *
  * @param {{ texto: string, persona: {rol:'CHOFER'|'ADMIN', dni?:string, nombre?:string, data?:object}, telefono?: string, audio?: {data:string, mimetype:string} }} args
@@ -2169,6 +2222,8 @@ async function responder({ texto, persona, telefono, audio }, fs) {
     return r.texto;
   } catch (e) {
     log.error(`[agente] error (${provider}) rol=${persona.rol}: ${e.message}`);
+    // Si fue por cuota/saldo de Gemini, avisar al admin por WhatsApp (throttle 6h).
+    if (_esCuota(e)) await _alertarSinSaldo(db, fs);
     const fallback = 'Disculpá, no pude procesar eso ahora. Probá de nuevo en un rato.';
     await _loggear(db, {
       provider, persona, telefono, pregunta: preguntaLog, respuesta: fallback,
