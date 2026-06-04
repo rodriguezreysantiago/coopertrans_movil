@@ -727,3 +727,129 @@ describe('agente — herramientas de flota / operación', () => {
     }
   });
 });
+
+describe('agente._ejecutarTool — crear_adelanto (acción de plata)', () => {
+  // Mock con doc() SIN id (auto-id, como AdelantosService) + captura de escrituras.
+  function dbMockAdel({ empleados = [] } = {}) {
+    const escrituras = [];
+    let seq = 0;
+    return {
+      _escrituras: escrituras,
+      collection(name) {
+        return {
+          doc(id) {
+            const docId = id || `auto_${++seq}`;
+            return {
+              id: docId,
+              async set(data) { escrituras.push({ col: name, id: docId, data }); },
+              async get() { return { exists: false, data: () => undefined }; },
+            };
+          },
+          async get() {
+            if (name === 'EMPLEADOS') {
+              return { docs: empleados.map((e) => ({ id: e.id, data: () => e.data })) };
+            }
+            return { docs: [] };
+          },
+        };
+      },
+    };
+  }
+
+  const ADMIN = { rol: 'ADMIN', dni: '25999888', data: { NOMBRE: 'ERRAZU' } };
+  const EMPS = [
+    { id: '30111222', data: { NOMBRE: 'DIETRICH JUAN', ROL: 'CHOFER', ACTIVO: true } },
+  ];
+
+  test('paso 1 (sin confirmar) devuelve resumen y NO escribe', async () => {
+    const db = dbMockAdel({ empleados: EMPS });
+    const r = await agente._ejecutarTool(
+      db, 'crear_adelanto', ADMIN, { empleado: 'dietrich', monto: 150000 });
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.requiere_confirmacion, true);
+    assert.strictEqual(r.resumen.empleado, 'DIETRICH JUAN');
+    assert.match(r.resumen.monto, /^\$150/);
+    assert.strictEqual(r.resumen.medio_pago, 'efectivo');
+    assert.strictEqual(db._escrituras.length, 0);
+  });
+
+  test('paso 2 (confirmado) escribe el doc con el contrato de la app', async () => {
+    const db = dbMockAdel({ empleados: EMPS });
+    const r = await agente._ejecutarTool(db, 'crear_adelanto', ADMIN, {
+      empleado: 'dietrich', monto: 150000, confirmado: true, observacion: 'sueldo junio',
+    });
+    assert.strictEqual(r.ok, true);
+    assert.ok(r.adelanto_id);
+    assert.strictEqual(db._escrituras.length, 1);
+    const esc = db._escrituras[0];
+    assert.strictEqual(esc.col, 'ADELANTOS_CHOFER');
+    assert.strictEqual(esc.data.chofer_dni, '30111222');
+    assert.strictEqual(esc.data.chofer_nombre, 'DIETRICH JUAN');
+    assert.strictEqual(esc.data.monto, 150000);
+    assert.strictEqual(esc.data.medio_pago, 'EFECTIVO');
+    assert.strictEqual(esc.data.pagado, false);
+    assert.strictEqual(esc.data.creado_por_dni, '25999888');
+    assert.strictEqual(esc.data.creado_por_nombre, 'ERRAZU');
+    assert.strictEqual(esc.data.observacion, 'sueldo junio');
+    assert.ok(esc.data.fecha, 'lleva fecha (Timestamp)');
+  });
+
+  test('nombre ambiguo (2 coincidencias) NO escribe y pide aclarar', async () => {
+    const db = dbMockAdel({ empleados: [
+      { id: '1', data: { NOMBRE: 'DIETRICH JUAN', ROL: 'CHOFER', ACTIVO: true } },
+      { id: '2', data: { NOMBRE: 'DIETRICH PEDRO', ROL: 'PLANTA', ACTIVO: true } },
+    ] });
+    const r = await agente._ejecutarTool(
+      db, 'crear_adelanto', ADMIN, { empleado: 'dietrich', monto: 1000, confirmado: true });
+    assert.strictEqual(r.ok, false);
+    assert.ok(r.ambiguo);
+    assert.strictEqual(db._escrituras.length, 0);
+  });
+
+  test('monto inválido (0) → error, no escribe', async () => {
+    const db = dbMockAdel({ empleados: EMPS });
+    const r = await agente._ejecutarTool(
+      db, 'crear_adelanto', ADMIN, { empleado: 'dietrich', monto: 0, confirmado: true });
+    assert.strictEqual(r.ok, false);
+    assert.match(r.error, /mayor a 0/);
+    assert.strictEqual(db._escrituras.length, 0);
+  });
+
+  test('empleado inactivo (dado de baja) → no registra', async () => {
+    const db = dbMockAdel({ empleados: [
+      { id: '9', data: { NOMBRE: 'BAJA CARLOS', ROL: 'CHOFER', ACTIVO: false } },
+    ] });
+    const r = await agente._ejecutarTool(
+      db, 'crear_adelanto', ADMIN, { empleado: 'baja', monto: 5000, confirmado: true });
+    assert.strictEqual(r.ok, false);
+    assert.match(r.error, /inactivo/i);
+    assert.strictEqual(db._escrituras.length, 0);
+  });
+
+  test('medio transferencia + monto string "150.000" se interpretan bien', async () => {
+    const db = dbMockAdel({ empleados: EMPS });
+    const r = await agente._ejecutarTool(db, 'crear_adelanto', ADMIN, {
+      empleado: 'dietrich', monto: '150.000', medio_pago: 'transferencia', confirmado: true,
+    });
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(db._escrituras[0].data.monto, 150000);
+    assert.strictEqual(db._escrituras[0].data.medio_pago, 'TRANSFERENCIA');
+  });
+
+  test('empleado vacío → error, no escribe', async () => {
+    const db = dbMockAdel({ empleados: EMPS });
+    const r = await agente._ejecutarTool(
+      db, 'crear_adelanto', ADMIN, { monto: 1000, confirmado: true });
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(db._escrituras.length, 0);
+  });
+
+  test('fecha inválida → error claro, no escribe', async () => {
+    const db = dbMockAdel({ empleados: EMPS });
+    const r = await agente._ejecutarTool(db, 'crear_adelanto', ADMIN, {
+      empleado: 'dietrich', monto: 1000, fecha: '2026-13-99', confirmado: true,
+    });
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(db._escrituras.length, 0);
+  });
+});

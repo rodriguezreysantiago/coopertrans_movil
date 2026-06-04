@@ -478,6 +478,51 @@ const TOOLS_GESTION_FLOTA = [
   },
 ];
 
+// Logística — acción de plata. Solo roles con verLogistica (ADMIN/SUPERVISOR).
+const TOOLS_GESTION_LOGISTICA = [
+  {
+    name: 'crear_adelanto',
+    description:
+      'Registra un ADELANTO de dinero a un empleado (adelanto de sueldo o a ' +
+      'cuenta). ESCRIBE en el sistema y toca PLATA, así que va SIEMPRE en DOS ' +
+      'PASOS: (1) llamala SIN `confirmado` → devuelve un resumen (a quién, ' +
+      'cuánto, qué fecha, qué medio de pago). Mostrá ese resumen al usuario tal ' +
+      'cual y preguntá si confirma. (2) SOLO si el usuario dice que sí, volvé a ' +
+      'llamarla con los MISMOS datos y `confirmado: true` para registrarlo. ' +
+      'NUNCA mandes confirmado=true sin que el usuario haya visto el resumen y ' +
+      'aceptado. Si el nombre coincide con varias personas, NO sigas: pedí que ' +
+      'aclaren con nombre y apellido. El adelanto queda PENDIENTE de descontar.',
+    params: {
+      empleado: {
+        type: 'string',
+        description: 'Nombre o apellido del empleado que recibe el adelanto.',
+      },
+      monto: {
+        type: 'number',
+        description: 'Monto en pesos, mayor a 0 (ej. 150000 = $150.000).',
+      },
+      medio_pago: {
+        type: 'string',
+        description: 'efectivo | transferencia. Si no lo aclaran, efectivo.',
+      },
+      observacion: {
+        type: 'string',
+        description: 'Concepto opcional (ej. "adelanto sueldo junio", "viáticos").',
+      },
+      fecha: {
+        type: 'string',
+        description: 'Fecha del adelanto AAAA-MM-DD. Vacío = hoy.',
+      },
+      confirmado: {
+        type: 'boolean',
+        description:
+          'true SOLO en la segunda llamada, tras la confirmación del usuario. ' +
+          'En la primera llamada va vacío/false.',
+      },
+    },
+  },
+];
+
 // ─── RBAC del agente = capabilities de la app ───
 // El agente expone, por rol, las MISMAS áreas que el rol puede usar en la app.
 // Fuente de verdad: lib/core/services/capabilities.dart. NO hay código
@@ -490,7 +535,7 @@ const TOOLS_POR_CAPABILITY = {
   verIcm: ['jornada_de'], // la jornada vive dentro del módulo ICM en la app
   verAlertasVolvo: ['donde_esta', 'estado_flota', 'alertas_unidad'],
   verDescargas: ['quien_esta_descargando', 'descargas_historico'],
-  verLogistica: ['viajes_resumen'],
+  verLogistica: ['viajes_resumen', 'crear_adelanto'],
   verMantenimiento: ['service_unidad'],
   verCachatore: ['cachatore_estado', 'turnos_ypf_detalle', 'poner_a_buscar_turno'],
 };
@@ -511,7 +556,12 @@ const FRASE_POR_CAPABILITY = {
     'el resumen de la flota, y las alertas Volvo de las últimas 24h (cómo viene manejando).',
   verDescargas:
     'Ver qué unidades están ahora dentro de una zona de carga/descarga YPF.',
-  verLogistica: 'Ver el resumen de viajes de los últimos días.',
+  verLogistica:
+    'Ver el resumen de viajes de los últimos días, y REGISTRAR un adelanto de ' +
+    'dinero a un empleado. Registrar el adelanto es una ACCIÓN que toca plata: ' +
+    'primero mostrá un resumen (a quién, cuánto, fecha, medio de pago) y pedí ' +
+    'confirmación; recién con el "sí" del usuario lo registrás. Si el nombre ' +
+    'coincide con varias personas, NO registres y pedí que aclaren.',
   verMantenimiento: 'Ver el estado de service de una unidad (horas de motor).',
   verCachatore:
     'Ver el estado de Cachatore / turnos YPF, y poner a un chofer a buscar ' +
@@ -545,6 +595,7 @@ const CAPS_POR_ROL = {
 // orden de declaración (VENC → FLOTA → CACHATORE).
 const _TOOLS_GESTION = [
   ...TOOLS_GESTION_VENC, ...TOOLS_GESTION_FLOTA, ...TOOLS_CACHATORE,
+  ...TOOLS_GESTION_LOGISTICA,
 ];
 
 // Tools de ACCIÓN/ESCRITURA: modifican datos (write a Firestore), no son
@@ -552,7 +603,7 @@ const _TOOLS_GESTION = [
 // ejecutó en la conversación y el modelo igual devolvió sin texto, NO se
 // dispara el fallback "por vacío" (re-conversar repetiría el efecto: doble
 // objetivo / doble confirmación). Las de SOLO LECTURA sí se pueden reintentar.
-const TOOLS_DE_ACCION = new Set(['poner_a_buscar_turno']);
+const TOOLS_DE_ACCION = new Set(['poner_a_buscar_turno', 'crear_adelanto']);
 
 function _toolsDelRol(rol) {
   if (rol === 'CHOFER') return TOOLS_CHOFER;
@@ -827,6 +878,148 @@ async function _toolPonerABuscar(db, persona, args) {
     fecha: fecha || 'cualquier fecha',
     franja,
   };
+}
+
+/** Normaliza el medio de pago al código que entiende la app (enum Dart). */
+function _normalizarMedioPago(raw) {
+  return String(raw || '').trim().toUpperCase().startsWith('TRANS')
+    ? 'TRANSFERENCIA'
+    : 'EFECTIVO';
+}
+
+/**
+ * Parsea un monto que puede venir como número (lo normal con type:number) o
+ * como string en formato AR ("150.000", "$150.000", "150000"). Devuelve un
+ * número finito o null si no se pudo interpretar.
+ */
+function _parsearMonto(raw) {
+  if (typeof raw === 'number') return isFinite(raw) ? raw : null;
+  let s = String(raw == null ? '' : raw).trim().replace(/[$\s]/g, '');
+  if (!s) return null;
+  // Formato AR: coma = decimal, punto = miles. Sin coma, los puntos son miles.
+  s = s.includes(',')
+    ? s.replace(/\./g, '').replace(',', '.')
+    : s.replace(/\./g, '');
+  const n = parseFloat(s);
+  return isFinite(n) ? n : null;
+}
+
+function _fmtFechaAr(date) {
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  return `${dd}-${mm}-${date.getFullYear()}`;
+}
+
+/** Resuelve la fecha del adelanto: hoy por default; AAAA-MM-DD si la indican. */
+function _fechaAdelanto(raw) {
+  const s = String(raw || '').trim();
+  if (!s) {
+    const now = new Date();
+    return { date: now, label: _fmtFechaAr(now) };
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return { error: 'La fecha tiene que ser AAAA-MM-DD (ej. 2026-06-04).' };
+  const y = +m[1];
+  const mo = +m[2];
+  const d = +m[3];
+  // Mediodía local (la dedicada corre en hora AR) → evita cruces de día por TZ.
+  const date = new Date(y, mo - 1, d, 12, 0, 0);
+  if (isNaN(date.getTime()) || date.getMonth() !== mo - 1 || date.getDate() !== d) {
+    return { error: `Esa fecha no existe: ${s}.` };
+  }
+  return { date, label: _fmtFechaAr(date) };
+}
+
+/**
+ * Registra un adelanto de dinero a un empleado. Tool de ACCIÓN (escribe en
+ * ADELANTOS_CHOFER) en DOS PASOS: la 1ra llamada (sin `confirmado`) resuelve el
+ * empleado y devuelve un resumen para que el usuario confirme; la 2da (con
+ * `confirmado:true`) escribe. El doc es idéntico al que crea la app
+ * (AdelantosService.crearAdelanto) para que la pantalla de Adelantos lo lea.
+ */
+async function _toolCrearAdelanto(db, persona, args) {
+  const nombreQuery = String((args && args.empleado) || '').trim();
+  if (!nombreQuery) return { ok: false, error: 'Indicá a qué empleado.' };
+
+  const monto = _parsearMonto(args && args.monto);
+  if (monto == null || monto <= 0) {
+    return { ok: false, error: 'El monto tiene que ser un número mayor a 0.' };
+  }
+
+  const medioPago = _normalizarMedioPago(args && args.medio_pago);
+  const fechaInfo = _fechaAdelanto(args && args.fecha);
+  if (fechaInfo.error) return { ok: false, error: fechaInfo.error };
+  const observacion = String((args && args.observacion) || '').trim();
+
+  // Resolver el EMPLEADO por nombre (soloChofer=false → cualquier personal,
+  // porque los adelantos son para todo el personal, no solo choferes).
+  const r = await _resolverChoferPorNombre(db, nombreQuery, false);
+  if (!r.ok) return r; // propaga {ambiguo, opciones} o {no encontrado}
+
+  // Guard: no registrar adelantos a personal dado de baja (casi siempre un
+  // error de identificación). Si el nombre matcheó a un inactivo, frenar.
+  if (r.data && r.data.ACTIVO === false) {
+    return {
+      ok: false,
+      error: `${r.data.NOMBRE || nombreQuery} figura inactivo (dado de baja); ` +
+        'no registro adelantos a inactivos. Si es un error, revisá su ficha.',
+    };
+  }
+
+  const empleadoNombre = r.data.NOMBRE || r.dni;
+  const montoFmt = `$${monto.toLocaleString('es-AR')}`;
+  const medioLabel = medioPago === 'TRANSFERENCIA' ? 'transferencia' : 'efectivo';
+
+  // PASO 1 — sin confirmar: devolver resumen, NO escribir.
+  if (args.confirmado !== true) {
+    return {
+      ok: false,
+      requiere_confirmacion: true,
+      resumen: {
+        empleado: empleadoNombre,
+        monto: montoFmt,
+        fecha: fechaInfo.label,
+        medio_pago: medioLabel,
+        observacion: observacion || null,
+      },
+      instruccion:
+        'Mostrá este resumen al usuario y preguntá si confirma. NO registres ' +
+        'nada hasta que diga que sí; ahí volvé a llamar con confirmado=true.',
+    };
+  }
+
+  // PASO 2 — confirmado: escribir el adelanto (mismo contrato que la app).
+  try {
+    const ref = db.collection('ADELANTOS_CHOFER').doc();
+    const data = {
+      chofer_dni: r.dni,
+      chofer_nombre: empleadoNombre,
+      fecha: admin.firestore.Timestamp.fromDate(fechaInfo.date),
+      monto,
+      medio_pago: medioPago,
+      pagado: false,
+      creado_en: admin.firestore.FieldValue.serverTimestamp(),
+      creado_por_dni: persona.dni || 'bot_agente',
+      actualizado_en: admin.firestore.FieldValue.serverTimestamp(),
+      actualizado_por_dni: persona.dni || 'bot_agente',
+    };
+    if (observacion) data.observacion = observacion;
+    if (persona.data && persona.data.NOMBRE) {
+      data.creado_por_nombre = persona.data.NOMBRE;
+    }
+    await ref.set(data);
+    return {
+      ok: true,
+      adelanto_id: ref.id,
+      empleado: empleadoNombre,
+      monto: montoFmt,
+      fecha: fechaInfo.label,
+      medio_pago: medioLabel,
+      nota: 'Adelanto registrado como PENDIENTE de descontar.',
+    };
+  } catch (e) {
+    return { ok: false, error: `No pude registrar el adelanto: ${e.message}` };
+  }
 }
 
 function _fmtHHMM(seg) {
@@ -1422,6 +1615,8 @@ async function _ejecutarTool(db, nombre, persona, args) {
       return await _toolAlertasUnidad(db, args);
     case 'service_unidad':
       return await _toolServiceUnidad(db, args);
+    case 'crear_adelanto':
+      return await _toolCrearAdelanto(db, persona, args);
     default:
       return { error: `Herramienta desconocida: ${nombre}` };
   }
@@ -1695,8 +1890,14 @@ async function _conversarGemini(db, system, historial, userText, persona) {
           ejecutadas++;
           try {
             resultado = await _ejecutarTool(db, fc.name, persona, fc.args || {});
-            // Marca solo cuando la tool de acción REALMENTE corrió (write hecho).
-            if (TOOLS_DE_ACCION.has(fc.name)) huboToolDeAccion = true;
+            // Marca solo cuando la tool de acción REALMENTE escribió (ok:true).
+            // Los paths sin write (ambiguo, error, o el paso de confirmación de
+            // crear_adelanto con requiere_confirmacion) devuelven ok:false → NO
+            // marcan, así el fallback "por vacío" puede re-conversar sin duplicar
+            // nada (esos paths son idempotentes: solo leen).
+            if (TOOLS_DE_ACCION.has(fc.name) && resultado && resultado.ok === true) {
+              huboToolDeAccion = true;
+            }
           } catch (e) {
             resultado = { error: e.message };
           }
