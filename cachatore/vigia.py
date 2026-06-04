@@ -346,7 +346,10 @@ def _despublicar_turno(dni):
 
 def _avisar_turno(t, evento: str, cuando):
     """Encola los avisos WhatsApp (chofer + encargado de logística) al conseguir
-    (`reservado`) o reprogramar (`reagendado`) el turno. No-op en dry/--archivo."""
+    (`reservado`), reprogramar (`reagendado`) o CANCELAR (`cancelado`) el turno.
+    No-op en dry/--archivo. Loguea 'aviso WhatsApp encolado (<evento>)' en vivo
+    para que el operador VEA que el aviso salió (los 3 eventos por el mismo
+    camino → mismo log)."""
     if not _ESCRIBIR_ESTADO:
         return
     try:
@@ -1011,17 +1014,13 @@ def main():
                         if ok:
                             log("EXITO", t.nombre,
                                 "turno CANCELADO en iTurnos (pedido de la app)")
-                            # Avisar por WhatsApp al chofer + encargado de
-                            # logística que el turno quedó cancelado (mismo
-                            # canal que reservar/reagendar). Solo en cancelación
-                            # REAL (no dry, no "sin turno"). 2026-05-22.
-                            if _ESCRIBIR_ESTADO:
-                                try:
-                                    nube.avisar_turno(t.dni, t.nombre,
-                                                      cuando_cancelado, "cancelado")
-                                except Exception as e:
-                                    log("LOG", t.nombre,
-                                        f"no pude avisar la cancelación: {e}")
+                            # Avisar al chofer + encargado que el turno quedó
+                            # cancelado. Usamos el MISMO helper que reservar/
+                            # reagendar (encola + loguea "aviso WhatsApp encolado
+                            # (cancelado)" en vivo). Antes llamaba nube.avisar_turno
+                            # directo → NO logueaba el encolado y el operador no
+                            # veía que el aviso salía (fix 2026-06).
+                            _avisar_turno(t, "cancelado", cuando_cancelado)
                         else:
                             log("LOG", t.nombre, "cancelación no confirmada "
                                 f"({r.get('motivo') or r.get('status')}); reintento luego")
