@@ -40,26 +40,43 @@ import '../widgets/mantenimiento_badge.dart';
 /// del tablero, telemetría e historial de taller completo. Lee 3 fuentes por
 /// patente: VEHICULOS (service), VOLVO_ESTADO (tell-tales + telemetría) y
 /// VEHICULOS_TALLER (historial, que escribe volvo_sync).
-class AdminMantenimientoDetalleScreen extends StatelessWidget {
+class AdminMantenimientoDetalleScreen extends StatefulWidget {
   final String patente;
   const AdminMantenimientoDetalleScreen({super.key, required this.patente});
+
+  @override
+  State<AdminMantenimientoDetalleScreen> createState() =>
+      _AdminMantenimientoDetalleScreenState();
+}
+
+class _AdminMantenimientoDetalleScreenState
+    extends State<AdminMantenimientoDetalleScreen> {
+  late Future<List<Map<String, dynamic>>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _cargar();
+  }
 
   Future<List<Map<String, dynamic>>> _cargar() async {
     final db = FirebaseFirestore.instance;
     final res = await Future.wait([
-      db.collection(AppCollections.vehiculos).doc(patente).get(),
-      db.collection('VOLVO_ESTADO').doc(patente).get(),
-      db.collection('VEHICULOS_TALLER').doc(patente).get(),
+      db.collection(AppCollections.vehiculos).doc(widget.patente).get(),
+      db.collection('VOLVO_ESTADO').doc(widget.patente).get(),
+      db.collection('VEHICULOS_TALLER').doc(widget.patente).get(),
     ]);
     return res.map((d) => (d.data() ?? <String, dynamic>{})).toList();
   }
 
+  void _recargar() => setState(() => _future = _cargar());
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      title: 'Mantenimiento — $patente',
+      title: 'Mantenimiento — ${widget.patente}',
       body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: _cargar(),
+        future: _future,
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
             return const AppSkeletonList(count: 5, conAvatar: false);
@@ -77,15 +94,19 @@ class AdminMantenimientoDetalleScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
             children: [
-              _Hero(patente: patente, vehiculo: vehiculo),
+              _Hero(patente: widget.patente, vehiculo: vehiculo),
               const SizedBox(height: AppSpacing.mdDense),
-              _SeccionService(vehiculo: vehiculo),
+              _SeccionService(
+                patente: widget.patente,
+                vehiculo: vehiculo,
+                onEditado: _recargar,
+              ),
               const SizedBox(height: AppSpacing.mdDense),
               _SeccionAdvertencias(volvo: volvo),
               const SizedBox(height: AppSpacing.mdDense),
               _SeccionTelemetria(vehiculo: vehiculo, volvo: volvo),
               const SizedBox(height: AppSpacing.mdDense),
-              _SeccionKmRecorridos(patente: patente),
+              _SeccionKmRecorridos(patente: widget.patente),
               const SizedBox(height: AppSpacing.mdDense),
               _SeccionHistorial(taller: taller),
             ],
@@ -319,8 +340,14 @@ class _Linea extends StatelessWidget {
 
 // ─── Service ──────────────────────────────────────────────────────────────
 class _SeccionService extends StatelessWidget {
+  final String patente;
   final Map<String, dynamic> vehiculo;
-  const _SeccionService({required this.vehiculo});
+  final VoidCallback onEditado;
+  const _SeccionService({
+    required this.patente,
+    required this.vehiculo,
+    required this.onEditado,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -365,8 +392,198 @@ class _SeccionService extends StatelessWidget {
               mono: true),
         const SizedBox(height: AppSpacing.sm),
         Text(
-          'Intervalo 50.000 km · dato automático desde Volvo Connect',
+          'Intervalo 50.000 km. Normalmente viene automático de Volvo; '
+          'mientras la unidad no reporte, corregilo a mano acá.',
           style: AppType.bodySm.copyWith(color: c.textMuted),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => _abrirEditor(context),
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            label: const Text('Editar service a mano'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _abrirEditor(BuildContext context) async {
+    final guardado = await showDialog<bool>(
+      context: context,
+      builder: (_) => _EditarServiceDialog(
+        patente: patente,
+        ultimoServiceKm: (vehiculo['ULTIMO_SERVICE_KM'] as num?)?.toInt(),
+        kmActual: (vehiculo['KM_ACTUAL'] as num?)?.toInt(),
+        fechaIso: vehiculo['ULTIMO_SERVICE_FECHA']?.toString(),
+      ),
+    );
+    if (guardado == true) onEditado();
+  }
+}
+
+/// Editor MANUAL del service (mientras Volvo no reporta). Corrige a mano el km
+/// del último service, su fecha y el km actual; escribe a VEHICULOS/{patente}.
+/// OJO: si la unidad vuelve a transmitir, los pollers de Volvo pueden volver a
+/// actualizar KM_ACTUAL (y el scraper de taller, el último service) — es un
+/// override temporal. (2026-06-04: 16 unidades sin telemetría por suscripción.)
+class _EditarServiceDialog extends StatefulWidget {
+  final String patente;
+  final int? ultimoServiceKm;
+  final int? kmActual;
+  final String? fechaIso;
+  const _EditarServiceDialog({
+    required this.patente,
+    this.ultimoServiceKm,
+    this.kmActual,
+    this.fechaIso,
+  });
+
+  @override
+  State<_EditarServiceDialog> createState() => _EditarServiceDialogState();
+}
+
+class _EditarServiceDialogState extends State<_EditarServiceDialog> {
+  late final TextEditingController _ultimoKmCtrl;
+  late final TextEditingController _kmActualCtrl;
+  String? _fechaIso;
+  bool _guardando = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ultimoKmCtrl = TextEditingController(
+      text: widget.ultimoServiceKm != null
+          ? AppFormatters.formatearMiles(widget.ultimoServiceKm)
+          : '',
+    );
+    _kmActualCtrl = TextEditingController(
+      text: widget.kmActual != null
+          ? AppFormatters.formatearMiles(widget.kmActual)
+          : '',
+    );
+    final f = widget.fechaIso;
+    _fechaIso = (f != null && f.isNotEmpty && f != '-') ? f : null;
+  }
+
+  @override
+  void dispose() {
+    _ultimoKmCtrl.dispose();
+    _kmActualCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickFecha() async {
+    final inicial =
+        _fechaIso != null ? AppFormatters.tryParseFecha(_fechaIso!) : null;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: inicial ?? DateTime.now(),
+      firstDate: DateTime(2015),
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+    if (picked != null) {
+      setState(() => _fechaIso = AppFormatters.aIsoFechaLocal(picked));
+    }
+  }
+
+  Future<void> _guardar() async {
+    setState(() => _guardando = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final nav = Navigator.of(context);
+    try {
+      final ultimoKm = AppFormatters.parsearMiles(_ultimoKmCtrl.text);
+      final kmActual = AppFormatters.parsearMiles(_kmActualCtrl.text);
+      final updates = <String, dynamic>{
+        'ULTIMO_SERVICE_KM': ultimoKm,
+        'ULTIMO_SERVICE_FECHA': _fechaIso,
+        if (kmActual != null) 'KM_ACTUAL': kmActual,
+        'fecha_ultima_actualizacion': FieldValue.serverTimestamp(),
+      };
+      await FirebaseFirestore.instance
+          .collection(AppCollections.vehiculos)
+          .doc(widget.patente)
+          .update(updates);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Service actualizado a mano.')),
+      );
+      nav.pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _guardando = false);
+      messenger.showSnackBar(
+        SnackBar(content: Text('No se pudo guardar: $e')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return AlertDialog(
+      title: Text('Corregir service — ${widget.patente}'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _ultimoKmCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: [AppFormatters.inputMiles],
+              decoration: const InputDecoration(
+                labelText: 'KM al último service',
+                hintText: 'Ej. 200.000',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _kmActualCtrl,
+              keyboardType: TextInputType.number,
+              inputFormatters: [AppFormatters.inputMiles],
+              decoration: const InputDecoration(
+                labelText: 'KM actual de la unidad',
+                hintText: 'Ej. 245.000',
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text('Fecha del último service',
+                  style: AppType.label.copyWith(color: c.textSecondary)),
+              subtitle: Text(
+                _fechaIso != null
+                    ? AppFormatters.formatearFecha(_fechaIso!)
+                    : 'Sin fecha',
+                style: AppType.body,
+              ),
+              trailing: const Icon(Icons.event_outlined),
+              onTap: _pickFecha,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Override manual mientras Volvo no reporta. Si la unidad vuelve a '
+              'transmitir, el dato automático puede actualizarse de nuevo.',
+              style: AppType.bodySm.copyWith(color: c.textMuted),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _guardando ? null : () => Navigator.pop(context, false),
+          child: const Text('CANCELAR'),
+        ),
+        ElevatedButton(
+          onPressed: _guardando ? null : _guardar,
+          child: _guardando
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('GUARDAR'),
         ),
       ],
     );
