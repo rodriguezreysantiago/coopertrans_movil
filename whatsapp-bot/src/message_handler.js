@@ -395,6 +395,14 @@ function crearHandler(fs, wa) {
         log.warn(`[handler] reflejo de saliente propio descartado por id (${idSer.slice(0, 48)})`);
         return;
       }
+      // Cerrojo por CONTENIDO (cubre el race del id, que se genera dentro de
+      // sendMessage): si el body coincide con un saliente nuestro reciente, es
+      // el reflejo de message_create — descartar. Cierra el auto-diálogo del
+      // vigilador que el id solo no atrapaba (2026-06-04).
+      if (wa.esTextoPropio && wa.esTextoPropio(msg.body)) {
+        log.warn('[handler] reflejo de saliente propio descartado por contenido');
+        return;
+      }
       // Red de seguridad (2026-06-04): TODOS los avisos del bot llevan la firma
       // "Bot-On — Coopertrans Móvil". Si un mensaje "entrante" la trae, es SÍ o
       // SÍ un saliente propio que `message_create` nos devolvió — aunque la

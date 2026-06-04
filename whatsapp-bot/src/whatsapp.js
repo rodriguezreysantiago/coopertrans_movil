@@ -591,6 +591,9 @@ async function enviarMensaje(wid, texto) {
     return `dryrun_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
   }
   if (!client || !listo) throw new Error('Cliente no inicializado');
+  // Marcar el texto ANTES de enviar — cierra el race del id (el reflejo
+  // message_create puede llegar antes de que registremos el id del saliente).
+  _marcarTextoPropio(texto);
   let sent;
   try {
     sent = await client.sendMessage(wid, texto);
@@ -662,6 +665,37 @@ function esMensajePropio(idSer) {
   return typeof idSer === 'string' && idSer.length > 0 && _idsPropios.has(idSer);
 }
 
+// Cerrojo por CONTENIDO — cierra el RACE del id: el `id` de un saliente se genera
+// DENTRO de sendMessage (durante el await), y el reflejo `message_create` puede
+// llegar ANTES de que `_marcarPropio` lo registre → race (el bot seguía
+// auto-respondiéndose, 2026-06-04 17:17). El TEXTO lo conocemos ANTES de enviar,
+// así que lo marcamos sincrónicamente antes del envío: cuando el reflejo llega
+// (mismo body), ya está marcado y se descarta. Solo textos >= 12 chars para no
+// chocar con "ok"/"hola" de un chofer. Map texto→ts, TTL 90s.
+const _textosPropios = new Map();
+const _TEXTO_PROPIO_TTL_MS = 90 * 1000;
+function _normTextoPropio(t) {
+  return String(t || '').trim().replace(/\s+/g, ' ').slice(0, 600);
+}
+function _marcarTextoPropio(texto) {
+  const k = _normTextoPropio(texto);
+  if (k.length < 12) return; // textos cortos NO son avisos del bot → evita falsos +
+  const ahora = Date.now();
+  _textosPropios.set(k, ahora);
+  if (_textosPropios.size > 300) {
+    for (const [kk, ts] of _textosPropios) {
+      if (ahora - ts > _TEXTO_PROPIO_TTL_MS) _textosPropios.delete(kk);
+    }
+  }
+}
+/** ¿El body coincide con un saliente nuestro de los últimos ~90s? */
+function esTextoPropio(texto) {
+  const k = _normTextoPropio(texto);
+  if (k.length < 12) return false;
+  const ts = _textosPropios.get(k);
+  return ts != null && (Date.now() - ts) < _TEXTO_PROPIO_TTL_MS;
+}
+
 function onMensajeEntrante(handler) {
   if (!client) throw new Error('Cliente no inicializado');
   // Si ya había un handler registrado, lo sacamos antes de registrar
@@ -684,6 +718,7 @@ function onMensajeEntrante(handler) {
 
 async function responder(msg, texto) {
   if (!client || !listo) throw new Error('Cliente no inicializado');
+  _marcarTextoPropio(texto); // anti-race del reflejo (ver enviarMensaje)
   try {
     const sent = await msg.reply(texto);
     if (sent && sent.id && sent.id._serialized) {
@@ -737,6 +772,7 @@ module.exports = {
   onMensajeEntrante,
   responder,
   esMensajePropio,
+  esTextoPropio,
   obtenerTelefonoDeLid,
   destroy,
 };
