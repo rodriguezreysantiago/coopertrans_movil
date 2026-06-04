@@ -329,11 +329,12 @@ async function _enviarAcuseSiCorresponde(db, wa, msg, chofer) {
   ];
   const texto = variantes[Math.floor(Math.random() * variantes.length)];
 
+  const nombreChofer = (chofer.data && chofer.data.NOMBRE) || chofer.dni;
   try {
     await wa.responder(msg, texto);
-    log.info(`Acuse automático enviado a ${chofer.dni}`);
+    log.info(`Acuse automático enviado a ${nombreChofer}`);
   } catch (e) {
-    log.warn(`No se pudo enviar acuse a ${chofer.dni}: ${e.message}`);
+    log.warn(`No se pudo enviar acuse a ${nombreChofer}: ${e.message}`);
   }
 }
 
@@ -505,8 +506,9 @@ function crearHandler(fs, wa) {
                   Number(media.filesize) > (MAX_AUDIO_B64 * 3) / 4);
               if (muyLargo) {
                 log.info(
-                  `Audio de ${persona.rol} ${persona.dni || fromNumber} ` +
-                    `descartado por tamaño (b64=${media.data.length})`
+                  'Audio de ' +
+                    etiquetaAgente(fromNumber, persona.rol, persona.dni) +
+                    ` descartado por tamaño (b64=${media.data.length})`
                 );
                 await wa.responder(
                   msg,
@@ -525,7 +527,8 @@ function crearHandler(fs, wa) {
             if (respuestaAgente) {
               await wa.responder(msg, respuestaAgente);
               log.info(
-                `Agente respondió a ${persona.rol} ${persona.dni || fromNumber}` +
+                'Agente respondió a ' +
+                  etiquetaAgente(fromNumber, persona.rol, persona.dni) +
                   (esAudio ? ' (audio)' : '')
               );
               return;
@@ -683,6 +686,20 @@ function nombrePorTelefono(telefono) {
  */
 function nombrePorTelefonoTodos(telefono) {
   return _buscarNombreEn(telefono, _rosterTodos);
+}
+
+/**
+ * Etiqueta del destinatario para los logs del AGENTE: el NOMBRE (misma
+ * resolución que `_quien` / los envíos del bot: roster completo → choferes)
+ * con el rol entre paréntesis. Si el nombre no está en el roster, cae al
+ * `ROL dni` de siempre. Pedido Santiago 2026-06-04 — logs legibles, igual
+ * que los mensajes que envía el bot ("Enviado a ULLMANN MAURICIO GERMAN").
+ */
+function etiquetaAgente(telefono, rol, dni) {
+  const nombre =
+    nombrePorTelefonoTodos(telefono) || nombrePorTelefono(telefono);
+  const r = rol || '?';
+  return nombre ? `${nombre} (${r})` : `${r} ${dni || telefono || '?'}`;
 }
 
 // ─── Resolución de rol para el agente ───
