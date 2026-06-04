@@ -68,14 +68,12 @@ class AppCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: _surface(c),
         borderRadius: br,
-        border: Border(
-          top: BorderSide(color: baseBorder),
-          right: BorderSide(color: baseBorder),
-          bottom: BorderSide(color: baseBorder),
-          left: accent != null
-              ? BorderSide(color: accent!, width: 3)
-              : BorderSide(color: baseBorder),
-        ),
+        // Border UNIFORME (mismo color los 4 lados). El acento NO va como un
+        // BorderSide de color distinto: un Border con lados de distinto color
+        // + borderRadius dispara "A borderRadius can only be given on borders
+        // with uniform colors" (Sentry FLUTTER-2E/2H). La barra de acento se
+        // dibuja abajo como overlay (la recorta el ClipRRect, respeta el radio).
+        border: Border.all(color: baseBorder),
       ),
       // Material(transparency) entre el fondo (este DecoratedBox con color) y
       // el child: sin él, cualquier ListTile/InkWell dentro de un AppCard
@@ -85,6 +83,23 @@ class AppCard extends StatelessWidget {
       // layout — solo provee el canvas de ink correcto.
       child: Material(type: MaterialType.transparency, child: child),
     );
+
+    // Barra de acento (3px) sobre el borde izquierdo, como overlay (no como
+    // BorderSide — ver nota del border arriba). El ClipRRect de abajo la
+    // recorta a las esquinas redondeadas, así respeta el radio del card.
+    if (accent != null) {
+      inner = Stack(
+        children: [
+          inner,
+          Positioned(
+            top: 0,
+            bottom: 0,
+            left: 0,
+            child: IgnorePointer(child: Container(width: 3, color: accent)),
+          ),
+        ],
+      );
+    }
 
     if (glow) {
       inner = Stack(
