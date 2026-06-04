@@ -76,7 +76,7 @@ class _Header extends StatelessWidget {
     // Sin heartbeat = el bot nunca reportó: mostramos "—" en vez de 0 para no
     // afirmar "0 enviados" cuando en realidad no hay dato.
     final hayDato = ultimoHb != null;
-    final hoy = (mensajes['enviadosHoy'] ?? 0) as int;
+    final hoy = (mensajes['enviadosHoy'] as num?)?.toInt() ?? 0;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.xs, AppSpacing.xs, AppSpacing.xs, 0),
@@ -132,13 +132,13 @@ class _KpiStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final hayDato = ultimoHb != null;
-    final pendientes = (cola['pendientes'] ?? 0) as int;
-    final reintentando = (cola['reintentando'] ?? 0) as int;
-    final error = (cola['error'] ?? 0) as int;
+    final pendientes = (cola['pendientes'] as num?)?.toInt() ?? 0;
+    final reintentando = (cola['reintentando'] as num?)?.toInt() ?? 0;
+    final error = (cola['error'] as num?)?.toInt() ?? 0;
     // Pendientes "frescos" = total pendientes - los que están en espera de
     // retry (mismo cálculo que la card de cola, para no doble-contar).
     final pendientesFrescos = (pendientes - reintentando).clamp(0, pendientes);
-    final hoy = (mensajes['enviadosHoy'] ?? 0) as int;
+    final hoy = (mensajes['enviadosHoy'] as num?)?.toInt() ?? 0;
 
     return AppKpiStrip(
       stats: [
@@ -260,10 +260,10 @@ class _CardCola extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pendientes = (cola['pendientes'] ?? 0) as int;
-    final procesando = (cola['procesando'] ?? 0) as int;
-    final error = (cola['error'] ?? 0) as int;
-    final reintentando = (cola['reintentando'] ?? 0) as int;
+    final pendientes = (cola['pendientes'] as num?)?.toInt() ?? 0;
+    final procesando = (cola['procesando'] as num?)?.toInt() ?? 0;
+    final error = (cola['error'] as num?)?.toInt() ?? 0;
+    final reintentando = (cola['reintentando'] as num?)?.toInt() ?? 0;
     // Pendientes "frescos" = total pendientes - los que están en
     // espera de retry. Para que la UI no haga doble conteo.
     final pendientesFrescos =
@@ -319,7 +319,7 @@ class _CardMensajes extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hoy = (mensajes['enviadosHoy'] ?? 0) as int;
+    final hoy = (mensajes['enviadosHoy'] as num?)?.toInt() ?? 0;
     final ultimo = _toDate(mensajes['ultimoEnviado']);
     // Breakdown publicado por el bot desde 2026-05-24 (M1). Si el bot
     // está en una versión vieja sin breakdown el map viene vacío y solo
@@ -344,7 +344,7 @@ class _CardMensajes extends StatelessWidget {
     ];
     final breakdown = <_Fila>[];
     for (final t in orden) {
-      final n = (porCat[t.$1] ?? 0) as int;
+      final n = (porCat[t.$1] as num?)?.toInt() ?? 0;
       if (n > 0) {
         breakdown.add(_Fila('  · ${t.$2}', '$n',
             color: t.$1 == 'OTROS'
@@ -371,7 +371,7 @@ class _CardCron extends StatelessWidget {
     final ultimo = _toDate(cron['ultimoCiclo']);
     final proximo = _toDate(cron['proximoCicloAprox']);
     final stats = (cron['ultimoCicloStats'] as Map?) ?? const {};
-    final intervalo = (cron['intervaloMinutos'] ?? 60) as int;
+    final intervalo = (cron['intervaloMinutos'] as num?)?.toInt() ?? 60;
 
     final filas = <_Fila>[
       _Fila('Intervalo', '$intervalo min'),
@@ -382,7 +382,7 @@ class _CardCron extends StatelessWidget {
     if (stats.isNotEmpty) {
       filas.add(_Fila('Encolados', '${stats['encolados'] ?? 0}'));
       filas.add(_Fila('Salteados (idempotencia)', '${stats['salteados'] ?? 0}'));
-      final err = (stats['errores'] ?? 0) as int;
+      final err = (stats['errores'] as num?)?.toInt() ?? 0;
       filas.add(_Fila('Errores', '$err',
           color: err > 0 ? AppColors.error : AppColors.textSecondary));
     }

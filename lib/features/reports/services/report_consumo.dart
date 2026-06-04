@@ -698,15 +698,19 @@ class _FilaConsumo {
             .toDouble();
         final kmPeriodo =
             (fin.km - inicio.km).clamp(0.0, double.infinity).toDouble();
-        // Aceptamos el período aunque la diferencia sea 0: "vehículo
-        // parado" en el rango (sábado/domingo/feriado/taller) es info
-        // válida y debe reportarse como 0 km / 0 L. Antes caíamos al
-        // fallback acumulado que mostraba el total histórico del
-        // vehículo desde su fabricación — info misleading para un
-        // reporte de período.
-        litros = litrosPeriodo;
-        km = kmPeriodo;
-        esPeriodo = true;
+        // El ÚNICO caso que NO marcamos como período es km=0 CON litros>0
+        // (el odómetro retrocedió, p.ej. corrección Volvo): el promedio
+        // L/100km = (litros/km)*100 mostraría "0 km / X L / promedio 0", que
+        // no reconcilia con sus propias columnas (es un reporte de auditoría)
+        // → cae al fallback "(acum.)". El vehículo genuinamente parado
+        // (sábado/feriado/taller) tiene km=0 Y litros=0: ESO sí es un período
+        // válido 0/0 (reportarlo como acumulado histórico sería misleading,
+        // decisión previa que se conserva).
+        if (kmPeriodo > 0 || litrosPeriodo <= 0) {
+          litros = litrosPeriodo;
+          km = kmPeriodo;
+          esPeriodo = true;
+        }
       }
     }
 

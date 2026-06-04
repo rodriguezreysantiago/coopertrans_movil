@@ -457,17 +457,26 @@ class _KpisZonaState extends State<_KpisZona> {
         final docs = snap.data?.docs ?? const [];
         final count = docs.length;
         var sum = 0;
+        // Solo las descargas CERRADAS (duracion_min > 0) entran en el
+        // promedio. Las que tienen 0 o el campo ausente son descargas en
+        // curso (todavía sin salida) — sumarlas con 0 baja artificialmente
+        // el promedio. El conteo de "Descargas" sí las incluye (count =
+        // docs.length), solo el promedio las excluye.
+        var conDuracion = 0;
         int maxDur = 0;
         String maxPat = '';
         for (final d in docs) {
           final dur = ((d.data()['duracion_min'] ?? 0) as num).toInt();
-          sum += dur;
+          if (dur > 0) {
+            sum += dur;
+            conDuracion++;
+          }
           if (dur > maxDur) {
             maxDur = dur;
             maxPat = (d.data()['patente'] ?? '').toString();
           }
         }
-        final promedio = count > 0 ? (sum / count).round() : 0;
+        final promedio = conDuracion > 0 ? (sum / conDuracion).round() : 0;
         return AppKpiStrip(
           stats: [
             AppStat(
@@ -477,12 +486,12 @@ class _KpisZonaState extends State<_KpisZona> {
             ),
             AppStat(
               label: 'Promedio',
-              value: cargando ? '—' : (count > 0 ? '$promedio' : '—'),
-              unit: count > 0 ? 'min' : null,
+              value: cargando ? '—' : (conDuracion > 0 ? '$promedio' : '—'),
+              unit: conDuracion > 0 ? 'min' : null,
               valueStyle: AppType.h3,
             ),
             AppStat(
-              label: maxPat.isEmpty ? 'Más lenta' : 'Más lenta',
+              label: 'Más lenta',
               value: cargando ? '—' : (maxDur > 0 ? '$maxDur' : '—'),
               unit: maxDur > 0 ? 'min' : null,
               valueStyle: AppType.h3,

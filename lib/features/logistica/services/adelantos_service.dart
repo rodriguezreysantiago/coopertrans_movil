@@ -227,6 +227,16 @@ class AdelantosService {
     }
 
     final montos = repartirEnCuotas(montoTotal: montoTotal, cuotas: cuotas);
+    // Guard de monto-mínimo: `repartirEnCuotas` redondea cada cuota a un
+    // múltiplo de 5 hacia abajo, así que con un total chico (montoTotal <
+    // 5*cuotas) alguna cuota queda en $0 (ej. $2 en 2 cuotas → [2, 0]).
+    // `crearAdelanto` (la versión de cuota única) rechaza monto <= 0; acá
+    // hay que replicar ese guard ANTES de escribir el batch para no
+    // persistir un adelanto de $0 que no representa deuda real.
+    if (montos.any((m) => m <= 0)) {
+      throw ArgumentError(
+          'El monto total es muy chico para dividir en $cuotas cuotas.');
+    }
     final fechas = List<DateTime>.generate(
       cuotas,
       (i) => sumarMesesPreservandoDia(fechaPrimera, i),

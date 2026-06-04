@@ -339,7 +339,10 @@ class _ResumenViajes extends StatelessWidget {
         case EstadoViaje.planeado:
           planeados++;
       }
-      pagado += v.montoChoferRedondeado;
+      // "Pagado choferes" = solo lo efectivamente liquidado. Sumar los
+      // viajes no liquidados infla el número con plata que todavía no se
+      // pagó (el KPI dice "pagado", no "a pagar").
+      if (v.liquidado) pagado += v.montoChoferRedondeado;
     }
 
     return AppKpiStrip(
