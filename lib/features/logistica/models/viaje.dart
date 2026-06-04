@@ -163,7 +163,7 @@ class TarifaSnapshot {
   }
 
   /// Copia el snapshot cambiando SOLO la `tarifaReal` (lo que cobra Vecchi).
-  /// Preserva TODO lo demás: tarifa y monto fijo del chofer, comisión y monto
+  /// Preserva todo lo demás: tarifa y monto fijo del chofer, comisión y monto
   /// fijo del dador, ruta, empresas, producto, unidad.
   ///
   /// Decisión Santiago 2026-06-04: el recálculo retroactivo por cambio de
