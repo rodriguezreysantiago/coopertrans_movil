@@ -331,6 +331,10 @@ export interface EventoDetencionLite {
   speed: number | null;
   gpsSpeed: number | null;
   eventId: number | null;
+  /** Patente (asset_id del evento, normalizada trim+upper). null si el doc no
+   * la trae (dato viejo). Se usa para no mezclar eventos de 2 unidades cuando
+   * un DNI sufre drift CHOFER_DISTINTO. */
+  patente: string | null;
 }
 
 export interface DeteccionDetencion {
@@ -361,9 +365,19 @@ function esEventoMovimiento(ev: EventoDetencionLite): boolean {
  */
 export function analizarEventosDetencion(
   eventos: EventoDetencionLite[],
-  ahoraMs: number
+  ahoraMs: number,
+  patenteEsperada?: string
 ): DeteccionDetencion {
-  const evs = eventos
+  // Drift CHOFER_DISTINTO: un mismo DNI puede tener eventos de DOS patentes (su
+  // iButton en una unidad + otra reportando su nombre legacy). Si se pasa la
+  // patente que se está evaluando, descartamos los eventos de OTRA patente —
+  // sin esto el estado parado/manejando podía salir de la unidad equivocada
+  // (auditoría 2026-06). Los eventos sin patente (dato viejo) se conservan para
+  // no perder señal en el caso normal (y no mandar a todos al fallback).
+  const enPatente = (patenteEsperada != null && patenteEsperada !== "")
+    ? eventos.filter((e) => e.patente == null || e.patente === patenteEsperada)
+    : eventos;
+  const evs = enPatente
     .filter((e) => e.ms <= ahoraMs)
     .sort((a, b) => a.ms - b.ms);
   if (evs.length === 0) {
@@ -1205,6 +1219,10 @@ export async function tickVigiladorJornada(): Promise<void> {
         speed: typeof x.speed === "number" ? x.speed : null,
         gpsSpeed: typeof x.gps_speed === "number" ? x.gps_speed : null,
         eventId: typeof x.event_id === "number" ? x.event_id : null,
+        // asset_id viene CRUDO en SITRACK_EVENTOS (a diferencia del doc id de
+        // SITRACK_POSICIONES, ya trim+upper) → normalizamos para poder
+        // compararlo con la patente del chofer y no cruzar unidades.
+        patente: ((x.asset_id ?? "").toString().trim().toUpperCase()) || null,
       });
     }
   } catch (e) {
@@ -1293,7 +1311,8 @@ export async function tickVigiladorJornada(): Promise<void> {
     // fallback a la decisión por speed del snapshot.
     const det = analizarEventosDetencion(
       eventosPorDni.get(dni) ?? [],
-      Date.now()
+      Date.now(),
+      patente.toUpperCase(),
     );
     const manejando =
       det.fuente === "eventos" ? !det.parado : decision.manejando;

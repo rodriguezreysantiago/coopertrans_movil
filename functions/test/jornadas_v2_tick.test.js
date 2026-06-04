@@ -565,6 +565,42 @@ describe('analizarEventosDetencion', () => {
     assert.ok(r.pausaPreviaSeg >= PAUSA_BLOQUE_SEGUNDOS); // ≥ 15 min → cierra
     assert.strictEqual(Math.round(r.pausaPreviaSeg / 60), 17); // 17 min
   });
+
+  // ── filtro por patente (drift CHOFER_DISTINTO) — auditoría 2026-06 ──
+  const evP = (min, speed, patente, eventId = null) => ({
+    ms: Date.UTC(2026, 4, 28, 20, min, 0), speed, gpsSpeed: speed, eventId, patente,
+  });
+
+  test('drift: con patenteEsperada ignora los eventos de OTRA patente', () => {
+    // En AAA111 el chofer está PARADO; en BBB222 (otra unidad reportando su
+    // nombre legacy) figura manejando. Evaluando AAA111 debe dar PARADO.
+    const eventos = [
+      evP(10, 0, 'AAA111'),
+      evP(15, 80, 'BBB222'),
+      evP(20, 80, 'BBB222'),
+    ];
+    const r = analizarEventosDetencion(
+      eventos, Date.UTC(2026, 4, 28, 20, 25, 0), 'AAA111');
+    assert.strictEqual(r.fuente, 'eventos');
+    assert.strictEqual(r.parado, true); // solo miró AAA111
+  });
+
+  test('drift total: si TODOS los eventos son de otra patente → sin_eventos', () => {
+    const eventos = [evP(10, 80, 'BBB222'), evP(20, 80, 'BBB222')];
+    const r = analizarEventosDetencion(
+      eventos, Date.UTC(2026, 4, 28, 20, 25, 0), 'AAA111');
+    // 0 eventos de AAA111 → el caller cae al fallback por snapshot (no usa
+    // el estado de la OTRA unidad).
+    assert.strictEqual(r.fuente, 'sin_eventos');
+  });
+
+  test('eventos SIN patente (dato viejo) se conservan con patenteEsperada', () => {
+    const eventos = [ev(10, 0), ev(20, 0)]; // patente undefined
+    const r = analizarEventosDetencion(
+      eventos, Date.UTC(2026, 4, 28, 20, 25, 0), 'AAA111');
+    assert.strictEqual(r.fuente, 'eventos'); // NO van al fallback
+    assert.strictEqual(r.parado, true);
+  });
 });
 
 // ── evaluarTickJornada con detección por eventos (fix AB493CP) ───────
