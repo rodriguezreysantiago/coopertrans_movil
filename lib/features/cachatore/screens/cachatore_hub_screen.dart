@@ -99,12 +99,13 @@ class _CabeceraEstado extends StatelessWidget {
                 final turnos = snapTurnos.data ?? const <CachatoreTurno>[];
                 final vigilados =
                     objetivos.where((o) => !o.tieneTurno).length;
-                // Reagendar pendiente: el chofer ya tiene turno pero está
-                // marcado para moverlo y el bot todavía no lo movió.
-                final reagendando = objetivos
-                    .where((o) =>
-                        o.reagendar && o.estado != EstadoObjetivo.reagendado)
-                    .length;
+                // Reagendar pendiente = el flag `reagendar` del objetivo (la app
+                // lo prende, el bot lo apaga al mover el turno). NO condicionar
+                // por estado: un pedido NUEVO de reagendar sobre un chofer cuyo
+                // estado quedó "reagendado" de un movimiento anterior debe
+                // contarse igual (si no, el KPI lo oculta — bug AVIT 2026-06-04).
+                final reagendando =
+                    objetivos.where((o) => o.reagendar).length;
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -634,12 +635,12 @@ class _ConcretadoCard extends StatelessWidget {
   final CachatoreObjetivo? objetivo;
   const _ConcretadoCard({required this.turno, this.objetivo});
 
-  /// `true` si el chofer está marcado para reagendar y el bot todavía no movió
-  /// el turno (estado != reagendado). En ese caso la card se pinta distinta.
+  /// `true` si el chofer está marcado para reagendar (flag `reagendar` del
+  /// objetivo, que el bot apaga al mover el turno). NO se condiciona por estado:
+  /// un pedido nuevo sobre un chofer cuyo estado quedó "reagendado" de un
+  /// movimiento anterior debe verse igual (bug AVIT 2026-06-04).
   bool get _reagendarPendiente =>
-      objetivo != null &&
-      objetivo!.reagendar &&
-      objetivo!.estado != EstadoObjetivo.reagendado;
+      objetivo != null && objetivo!.reagendar;
 
   @override
   Widget build(BuildContext context) {

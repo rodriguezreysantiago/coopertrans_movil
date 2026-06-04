@@ -60,7 +60,7 @@ POLL_LATENTE_SEG = 5.0       # barre la worklist cada ~5 s (único ritmo del bot
 JITTER_LATENTE_SEG = 1.0     # + ruido chico (para no pegar siempre al mismo seg)
 
 LOGIN_REINTENTOS = 3
-REFRESH_CONFIG_SEG = 30      # cada cuánto releer la worklist (Firestore/archivo)
+REFRESH_CONFIG_SEG = 8       # cada cuánto releer la worklist (Firestore/archivo)
 REFRESH_TURNOS_SEG = 600     # cada cuánto re-chequear mis_turnos de cada chofer
 REFRESH_DATOS_SEG = 600      # cada cuánto re-traer unidad/mail de Firestore
 HEARTBEAT_SEG = 5            # sleep base del loop en idle/pausado
@@ -635,14 +635,23 @@ def sincronizar_targets(cfg: dict, targets: dict):
         if not t:
             continue
         nf = spec.get("franja")
-        if iturnos.franja_valida(nf) and nf != t.franja:
+        franja_cambio = iturnos.franja_valida(nf) and nf != t.franja
+        if franja_cambio:
             log("LOG", "sistema", f"{t.nombre}: franja {t.franja} → {nf}")
             t.franja = nf
-        if spec.get("fecha") != t.fecha:
+        fecha_cambio = spec.get("fecha") != t.fecha
+        if fecha_cambio:
             t.fecha = spec.get("fecha")
         nr = bool(spec.get("reagendar"))
         if nr != t.reagendar:
             t.reagendar = nr
+            t.reagendar_hecho = False
+        elif nr and (franja_cambio or fecha_cambio):
+            # Re-pedido de reagendar (el flag ya estaba en true) pero con una
+            # franja/fecha DISTINTA = objetivo nuevo: hay que reprocesarlo aunque
+            # reagendar_hecho fuera true de un movimiento anterior. Sin esto el
+            # ciclo de reagendar lo saltea (L866) y el turno nunca se mueve.
+            log("LOG", "sistema", f"{t.nombre}: re-pedido de reagendar → reproceso")
             t.reagendar_hecho = False
 
     nuevos = [dni for dni in deseados if dni not in targets]
