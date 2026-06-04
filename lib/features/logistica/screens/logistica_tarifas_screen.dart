@@ -42,8 +42,7 @@ class LogisticaTarifasScreen extends StatefulWidget {
   const LogisticaTarifasScreen({super.key});
 
   @override
-  State<LogisticaTarifasScreen> createState() =>
-      _LogisticaTarifasScreenState();
+  State<LogisticaTarifasScreen> createState() => _LogisticaTarifasScreenState();
 }
 
 class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
@@ -90,8 +89,7 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
           stream: LogisticaService.streamUbicaciones(),
           builder: (ctx, ubicSnap) {
             final ubicacionesPorId = {
-              for (final u
-                  in (ubicSnap.data ?? const <UbicacionLogistica>[]))
+              for (final u in (ubicSnap.data ?? const <UbicacionLogistica>[]))
                 u.id: u,
             };
             return StreamBuilder<List<TarifaLogistica>>(
@@ -111,14 +109,12 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
                       buscarFocus: _buscarFocus,
                       tieneTexto: _filtro.isNotEmpty,
                       soloActivas: _soloActivas,
-                      onCambioFiltro: (v) =>
-                          setState(() => _filtro = v.trim()),
+                      onCambioFiltro: (v) => setState(() => _filtro = v.trim()),
                       onLimpiar: () {
                         _buscarCtrl.clear();
                         setState(() => _filtro = '');
                       },
-                      onCambioActivas: (v) =>
-                          setState(() => _soloActivas = v),
+                      onCambioActivas: (v) => setState(() => _soloActivas = v),
                     ),
                     Expanded(
                       child: _Cuerpo(
@@ -205,8 +201,7 @@ class _Header extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 4),
                       child: Text(
                         total == 1 ? 'ruta' : 'rutas',
-                        style:
-                            AppType.monoSm.copyWith(color: c.textMuted),
+                        style: AppType.monoSm.copyWith(color: c.textMuted),
                       ),
                     ),
                   ],
@@ -305,9 +300,8 @@ class _ChipActivas extends StatelessWidget {
               : Colors.transparent,
           borderRadius: BorderRadius.circular(AppRadius.full),
           border: Border.all(
-            color: soloActivas
-                ? c.success.withValues(alpha: 0.5)
-                : c.borderStrong,
+            color:
+                soloActivas ? c.success.withValues(alpha: 0.5) : c.borderStrong,
           ),
         ),
         child: Row(
@@ -413,9 +407,8 @@ class _CardTarifa extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final esTerceros = tarifa.tipoCarga == TipoCargaLogistica.terceros;
-    final accent = tarifa.activa
-        ? (esTerceros ? c.warning : c.brand)
-        : c.textMuted;
+    final accent =
+        tarifa.activa ? (esTerceros ? c.warning : c.brand) : c.textMuted;
 
     return AppCard(
       tier: 1,
@@ -480,8 +473,7 @@ class _CardTarifa extends StatelessWidget {
             const SizedBox(height: AppSpacing.sm),
             Row(
               children: [
-                Icon(Icons.inventory_2_outlined,
-                    color: c.warning, size: 14),
+                Icon(Icons.inventory_2_outlined, color: c.warning, size: 14),
                 const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
@@ -679,6 +671,10 @@ class _TarifasMontos extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    // Precio VIGENTE HOY (no el campo plano): con una vigencia futura ya
+    // entrada en vigor, el plano puede quedar desfasado hasta el próximo
+    // write. `vigenteEn(now)` siempre muestra el precio correcto.
+    final v = tarifa.vigenteEn(DateTime.now());
     return Container(
       padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md, vertical: AppSpacing.sm),
@@ -693,7 +689,7 @@ class _TarifasMontos extends StatelessWidget {
             Expanded(
               child: _MontoBloque(
                 etiqueta: 'TARIFA REAL',
-                monto: tarifa.tarifaReal,
+                monto: v.tarifaReal,
                 sufijo: tarifa.unidadTarifa.sufijoMonto,
                 color: c.success,
               ),
@@ -702,7 +698,7 @@ class _TarifasMontos extends StatelessWidget {
             Expanded(
               child: _MontoBloque(
                 etiqueta: 'CHOFER',
-                monto: tarifa.tarifaChofer,
+                monto: v.tarifaChofer,
                 sufijo: tarifa.unidadTarifa.sufijoMonto,
                 color: c.info,
               ),
@@ -711,7 +707,7 @@ class _TarifasMontos extends StatelessWidget {
             Expanded(
               child: _MontoBloque(
                 etiqueta: 'BRUTO',
-                monto: tarifa.diferenciaBruta,
+                monto: v.tarifaReal - v.tarifaChofer,
                 sufijo: tarifa.unidadTarifa.sufijoMonto,
                 color: c.brand,
               ),

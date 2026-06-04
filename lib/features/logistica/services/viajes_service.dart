@@ -6,6 +6,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/app_logger.dart';
+import '../models/tarifa_logistica.dart';
 import '../models/viaje.dart';
 import '../utils/calculos_viaje.dart';
 
@@ -120,8 +121,7 @@ class ViajesService {
     for (final d in snap.docs) {
       final v = Viaje.fromMap(d.id, d.data());
       // Comparte tarifa con alguno de los nuevos tramos.
-      final compartido =
-          v.tramos.any((t) => tarifaIdsSet.contains(t.tarifaId));
+      final compartido = v.tramos.any((t) => tarifaIdsSet.contains(t.tarifaId));
       if (compartido) candidatos.add(v);
       if (candidatos.length >= 5) break;
     }
@@ -213,8 +213,7 @@ class ViajesService {
       // ─── Denormalización del último tramo (compat queries) ───
       if (ultimo.fechaDescarga != null)
         'fecha_descarga': Timestamp.fromDate(ultimo.fechaDescarga!),
-      if (ultimo.kgDescargados != null)
-        'kg_descargados': ultimo.kgDescargados,
+      if (ultimo.kgDescargados != null) 'kg_descargados': ultimo.kgDescargados,
       if (ultimo.remitoNumero != null) 'remito_numero': ultimo.remitoNumero,
       if (ultimo.remitoUrl != null) 'remito_url': ultimo.remitoUrl,
       if (ultimo.remitoPathStorage != null)
@@ -286,6 +285,45 @@ class ViajesService {
     if (tramos.isEmpty) {
       throw ArgumentError('El viaje debe tener al menos 1 tramo.');
     }
+    final data = _construirDataActualizacion(
+      tramos: tramos,
+      choferDni: choferDni,
+      choferNombre: choferNombre,
+      vehiculoId: vehiculoId,
+      engancheId: engancheId,
+      adelantoMonto: adelantoMonto,
+      adelantoFecha: adelantoFecha,
+      adelantoObservacion: adelantoObservacion,
+      estado: estado,
+      motivoCancelacion: motivoCancelacion,
+      fechaPostergadoA: fechaPostergadoA,
+      comisionPct: comisionPct,
+      actualizadoPorDni: actualizadoPorDni,
+    );
+    await _col.doc(viajeId).update(data);
+    AppLogger.log('Viaje actualizado: $viajeId tramos=${tramos.length}');
+  }
+
+  /// Arma el data-map de ACTUALIZACIÓN de un viaje (recomputa montos via
+  /// `CalculosViaje`). Extraído de [actualizarViaje] para que el recálculo
+  /// masivo por cambio de tarifa ([recalcularViajesNoLiquidadosConTarifa])
+  /// reuse EXACTAMENTE la misma denormalización + montos, sin divergir ni
+  /// pisar datos operativos del tramo.
+  static Map<String, dynamic> _construirDataActualizacion({
+    required List<TramoViaje> tramos,
+    required String choferDni,
+    String? choferNombre,
+    String? vehiculoId,
+    String? engancheId,
+    double? adelantoMonto,
+    DateTime? adelantoFecha,
+    String? adelantoObservacion,
+    EstadoViaje estado = EstadoViaje.planeado,
+    String? motivoCancelacion,
+    DateTime? fechaPostergadoA,
+    double? comisionPct,
+    required String actualizadoPorDni,
+  }) {
     // Gastos viven adentro de cada tramo (refactor 2026-05-13).
     final montos = CalculosViaje.calcularTodoMultiTramo(
       tramos: tramos,
@@ -295,7 +333,7 @@ class ViajesService {
     final primero = tramos.first;
     final ultimo = tramos.last;
 
-    final data = <String, dynamic>{
+    return <String, dynamic>{
       'tramos': tramos.map((t) => t.toMap()).toList(),
 
       // Denormalización (sobreescribir aún si null para que queries
@@ -306,8 +344,7 @@ class ViajesService {
           ? null
           : Timestamp.fromDate(primero.fechaCarga!),
       'kg_cargados': primero.kgCargados,
-      'carga_transportada':
-          primero.descripcionCarga ?? primero.producto,
+      'carga_transportada': primero.descripcionCarga ?? primero.producto,
       'fecha_descarga': ultimo.fechaDescarga == null
           ? null
           : Timestamp.fromDate(ultimo.fechaDescarga!),
@@ -350,9 +387,83 @@ class ViajesService {
       'actualizado_en': FieldValue.serverTimestamp(),
       'actualizado_por_dni': actualizadoPorDni,
     };
+  }
 
-    await _col.doc(viajeId).update(data);
-    AppLogger.log('Viaje actualizado: $viajeId tramos=${tramos.length}');
+  /// Recalcula los viajes ACTIVOS y NO liquidados que usan [tarifa] en
+  /// algún tramo, re-resolviendo el snapshot de esos tramos por la FECHA
+  /// DE CARGA del tramo (la versión de la tarifa que regía esa fecha).
+  /// Preserva los campos NO versionados del snapshot (ruta/dador/etc.) y el
+  /// `montoFijoChofer` (posible override manual del operador). Los viajes
+  /// liquidados NUNCA se tocan. Idempotente: re-correrlo da el mismo
+  /// resultado. Devuelve cuántos viajes se actualizaron.
+  ///
+  /// Lo dispara `LogisticaService.registrarNuevoPrecio` tras registrar una
+  /// vigencia. Client-side + WriteBatch (NO runTransaction — bug Windows),
+  /// en lotes de 500 (límite de Firestore).
+  static Future<int> recalcularViajesNoLiquidadosConTarifa(
+    TarifaLogistica tarifa, {
+    required String porDni,
+  }) async {
+    if (tarifa.id.isEmpty) return 0;
+    final snap = await _col.where('activo', isEqualTo: true).get();
+    final ahora = DateTime.now();
+    final updates = <String, Map<String, dynamic>>{};
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      // Los viajes ya liquidados NO se tocan (ya se le pagó al chofer).
+      // Filtramos por `liquidado`, NO por estado: un CONCLUIDO todavía
+      // no liquidado SÍ se recalcula.
+      if (data['liquidado'] == true) continue;
+      final v = Viaje.fromMap(doc.id, data);
+      if (!v.tramos.any((t) => t.tarifaId == tarifa.id)) continue;
+      // Re-resolver SOLO los tramos de esta tarifa, por su fecha de carga.
+      // Los demás tramos quedan intactos. `copyWithImportes` preserva
+      // ruta/dador/etc. y el montoFijoChofer (override del operador).
+      final nuevosTramos = v.tramos.map((t) {
+        if (t.tarifaId != tarifa.id) return t;
+        final vig = tarifa.vigenteEn(t.fechaCarga ?? ahora);
+        return t.copyWith(
+          tarifaSnapshot: t.tarifaSnapshot.copyWithImportes(
+            tarifaReal: vig.tarifaReal,
+            tarifaChofer: vig.tarifaChofer,
+            porcentajeComisionDador: vig.porcentajeComisionDador,
+            montoFijoDador: vig.montoFijoDador,
+          ),
+        );
+      }).toList();
+      updates[doc.id] = _construirDataActualizacion(
+        tramos: nuevosTramos,
+        choferDni: v.choferDni,
+        choferNombre: v.choferNombre,
+        vehiculoId: v.vehiculoId,
+        engancheId: v.engancheId,
+        adelantoMonto: v.adelantoMonto,
+        adelantoFecha: v.adelantoFecha,
+        adelantoObservacion: v.adelantoObservacion,
+        estado: v.estado,
+        motivoCancelacion: v.motivoCancelacion,
+        fechaPostergadoA: v.fechaPostergadoA,
+        comisionPct: v.comisionChoferPct,
+        actualizadoPorDni: porDni,
+      );
+    }
+    if (updates.isEmpty) return 0;
+    // WriteBatch en lotes de 500 (límite Firestore). Si un lote falla, la
+    // vigencia ya quedó registrada en la tarifa → re-correr este método es
+    // idempotente y completa lo que faltó.
+    final entries = updates.entries.toList();
+    for (var i = 0; i < entries.length; i += 500) {
+      final batch = _db.batch();
+      for (final e in entries.skip(i).take(500)) {
+        batch.update(_col.doc(e.key), e.value);
+      }
+      await batch.commit();
+    }
+    AppLogger.log(
+      'Recalculados ${updates.length} viaje(s) por nuevo precio de '
+      'tarifa ${tarifa.id}',
+    );
+    return updates.length;
   }
 
   /// Marca el viaje como liquidado. Sin tocar montos — la liquidación

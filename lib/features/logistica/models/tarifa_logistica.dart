@@ -56,6 +56,73 @@ enum UnidadTarifa {
   String get sufijoMonto => codigo == 'TN' ? '/TN' : '/viaje';
 }
 
+/// Una versión de los IMPORTES de una tarifa, vigente a partir de [desde].
+///
+/// Versionado de tarifas (2026-06, pedido Santiago): cubre SOLO los
+/// importes. La ruta, el dador, las empresas, el producto y la unidad son
+/// identidad de la tarifa — si cambian, es otra tarifa, no una versión.
+/// Cada cambio de precio registra una vigencia nueva con la fecha desde la
+/// que rige; la anterior queda en el historial. El precio que se le aplica
+/// a un viaje se resuelve por la FECHA DE CARGA del tramo (ver
+/// [TarifaLogistica.vigenteEn]).
+class TarifaVigencia {
+  /// Fecha desde la que rige esta versión. SIEMPRE normalizada a día
+  /// (medianoche local, sin hora) para comparar de forma estable contra
+  /// la fecha de carga del tramo sin que la zona horaria corra el límite
+  /// un día (la carga la pone el operador en hora local AR).
+  final DateTime desde;
+  final double tarifaReal;
+  final double tarifaChofer;
+  final double? montoFijoChofer;
+  final double? porcentajeComisionDador;
+  final double? montoFijoDador;
+
+  /// Auditoría — cuándo y quién registró esta vigencia. Es client-time:
+  /// `serverTimestamp()` no se permite dentro de elementos de un array.
+  final DateTime? registradoEn;
+  final String? registradoPorDni;
+
+  TarifaVigencia({
+    required DateTime desde,
+    required this.tarifaReal,
+    required this.tarifaChofer,
+    this.montoFijoChofer,
+    this.porcentajeComisionDador,
+    this.montoFijoDador,
+    this.registradoEn,
+    this.registradoPorDni,
+  }) : desde = DateTime(desde.year, desde.month, desde.day);
+
+  factory TarifaVigencia.fromMap(Map<String, dynamic> d) {
+    return TarifaVigencia(
+      desde: (d['desde'] as Timestamp?)?.toDate() ?? DateTime(2000),
+      tarifaReal: (d['tarifa_real'] as num?)?.toDouble() ?? 0,
+      tarifaChofer: (d['tarifa_chofer'] as num?)?.toDouble() ?? 0,
+      montoFijoChofer: (d['monto_fijo_chofer'] as num?)?.toDouble(),
+      porcentajeComisionDador:
+          (d['porcentaje_comision_dador'] as num?)?.toDouble(),
+      montoFijoDador: (d['monto_fijo_dador'] as num?)?.toDouble(),
+      registradoEn: (d['registrado_en'] as Timestamp?)?.toDate(),
+      registradoPorDni: d['registrado_por_dni']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'desde': Timestamp.fromDate(desde),
+      'tarifa_real': tarifaReal,
+      'tarifa_chofer': tarifaChofer,
+      if (montoFijoChofer != null) 'monto_fijo_chofer': montoFijoChofer,
+      if (porcentajeComisionDador != null)
+        'porcentaje_comision_dador': porcentajeComisionDador,
+      if (montoFijoDador != null) 'monto_fijo_dador': montoFijoDador,
+      if (registradoEn != null)
+        'registrado_en': Timestamp.fromDate(registradoEn!),
+      if (registradoPorDni != null) 'registrado_por_dni': registradoPorDni,
+    };
+  }
+}
+
 /// Tarifa de viaje — el corazón del módulo Logística. Cada doc es una
 /// "ruta con precio" para un caso operativo concreto.
 ///
@@ -63,10 +130,13 @@ enum UnidadTarifa {
 ///   - `tarifaReal`: lo que cobra Vecchi al cliente final.
 ///   - `tarifaChofer`: lo que se le paga al chofer que conduce.
 ///
-/// Versionado: cuando cambia un precio, la práctica recomendada es
-/// dejar la vieja con `activa=false` y crear una nueva con
-/// `vigenteDesde=now`. Así los reportes históricos siguen mostrando
-/// el precio que aplicaba en cada momento.
+/// **Versionado por vigencia** (2026-06): el historial de precios vive en
+/// [vigencias] (lista ordenada por `desde`). Los campos planos
+/// (`tarifaReal`, `tarifaChofer`, etc.) son un cache del precio vigente HOY
+/// al último write — la UI usa [vigenteEn] (no los planos) para mostrar el
+/// precio correcto, y los viajes snapshotean la versión que regía en su
+/// fecha de carga. Tarifas creadas antes del versionado sintetizan 1
+/// vigencia desde los campos planos (migración perezosa en [fromMap]).
 class TarifaLogistica {
   final String id;
   final TipoCargaLogistica tipoCarga;
@@ -110,8 +180,7 @@ class TarifaLogistica {
   /// BLANCA)") — info útil para distinguir ubicaciones homónimas en
   /// el ABM, pero ruidosa en las vistas de tarifa donde Santiago ya
   /// sabe qué planta es. Pedido 2026-05-28.
-  String get ubicacionOrigenLimpia =>
-      _stripParentesis(ubicacionOrigenEtiqueta);
+  String get ubicacionOrigenLimpia => _stripParentesis(ubicacionOrigenEtiqueta);
   String get ubicacionDestinoLimpia =>
       _stripParentesis(ubicacionDestinoEtiqueta);
 
@@ -129,8 +198,8 @@ class TarifaLogistica {
       _displayUbicacionConEmpresa(ubicacionOrigenLimpia, empresaOrigenNombre);
 
   /// Versión "display" de destino, misma lógica que [origenDisplay].
-  String get destinoDisplay => _displayUbicacionConEmpresa(
-      ubicacionDestinoLimpia, empresaDestinoNombre);
+  String get destinoDisplay =>
+      _displayUbicacionConEmpresa(ubicacionDestinoLimpia, empresaDestinoNombre);
 
   static String _displayUbicacionConEmpresa(
     String ubicacion,
@@ -147,15 +216,16 @@ class TarifaLogistica {
   /// (típico: "BAHIA BLANCA - PROFERTIL (BAHIA BLANCA)" → "BAHIA
   /// BLANCA - PROFERTIL"). Conserva el resto del texto y trimea
   /// dobles espacios que pudieron quedar.
-  static String _stripParentesis(String s) =>
-      s.replaceAll(RegExp(r'\s*\([^)]*\)\s*'), ' ')
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim();
+  static String _stripParentesis(String s) => s
+      .replaceAll(RegExp(r'\s*\([^)]*\)\s*'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 
   final FleteLogistica flete;
   final UnidadTarifa unidadTarifa;
   final double tarifaReal;
   final double tarifaChofer;
+
   /// Monto fijo POR VIAJE para el chofer, alternativa al cálculo
   /// `tarifaChofer × TN × 18%`. Si no es null, ese monto se paga al
   /// chofer FLAT, sin importar cuántas TN cargue y sin aplicar la
@@ -170,6 +240,7 @@ class TarifaLogistica {
   /// En el form del viaje también se puede overridear puntualmente
   /// vía `TarifaSnapshot.montoFijoChofer` sin tocar la tarifa origen.
   final double? montoFijoChofer;
+
   /// Producto que se transporta (snapshot del nombre del catálogo de
   /// productos de la empresa origen). Opcional — si dos productos
   /// distintos cobran lo mismo, una sola tarifa cubre ambos sin
@@ -181,6 +252,12 @@ class TarifaLogistica {
   final String? notas;
   final DateTime? creadoEn;
   final String? creadoPor;
+
+  /// Historial de precios, ordenado ascendente por `desde`. Invariante:
+  /// `fromMap` garantiza ≥1 (sintetiza desde los campos planos si el doc
+  /// no la trae). Construcción directa puede dejarla vacía — [vigenteEn]
+  /// es defensivo ante ese caso.
+  final List<TarifaVigencia> vigencias;
 
   const TarifaLogistica({
     required this.id,
@@ -208,12 +285,47 @@ class TarifaLogistica {
     this.notas,
     this.creadoEn,
     this.creadoPor,
+    this.vigencias = const [],
   });
 
   /// Diferencia bruta entre tarifa real y tarifa chofer (aproximación
   /// del margen ANTES de gastos como combustible, peajes, comisión del
   /// dador). El margen real se calcula en el módulo de viajes.
   double get diferenciaBruta => tarifaReal - tarifaChofer;
+
+  /// Importes vigentes en [fecha] (típicamente la fecha de carga del
+  /// tramo). Devuelve la vigencia con `desde` más reciente que sea
+  /// <= [fecha]. Si [fecha] es anterior a la primera vigencia, devuelve la
+  /// primera (un viaje cargado antes del primer precio conocido usa el más
+  /// viejo). Defensivo: nunca null; si no hubiera vigencias, cae a una
+  /// sintetizada de los campos planos. Robusto a desorden de la lista.
+  TarifaVigencia vigenteEn(DateTime fecha) {
+    final f = DateTime(fecha.year, fecha.month, fecha.day);
+    if (vigencias.isEmpty) {
+      return TarifaVigencia(
+        desde: DateTime(2000),
+        tarifaReal: tarifaReal,
+        tarifaChofer: tarifaChofer,
+        montoFijoChofer: montoFijoChofer,
+        porcentajeComisionDador: porcentajeComisionDador,
+        montoFijoDador: montoFijoDador,
+      );
+    }
+    TarifaVigencia? elegida;
+    for (final v in vigencias) {
+      if (!v.desde.isAfter(f) &&
+          (elegida == null || v.desde.isAfter(elegida.desde))) {
+        elegida = v;
+      }
+    }
+    if (elegida != null) return elegida;
+    // fecha anterior a todas las vigencias → la más temprana.
+    var primera = vigencias.first;
+    for (final v in vigencias) {
+      if (v.desde.isBefore(primera.desde)) primera = v;
+    }
+    return primera;
+  }
 
   factory TarifaLogistica.fromMap(String id, Map<String, dynamic> d) {
     return TarifaLogistica(
@@ -249,7 +361,36 @@ class TarifaLogistica {
           : (d['notas'] as String).trim(),
       creadoEn: (d['creado_en'] as Timestamp?)?.toDate(),
       creadoPor: d['creado_por']?.toString(),
+      vigencias: _parsearVigencias(d),
     );
+  }
+
+  /// Parsea [vigencias] del doc ordenadas asc por `desde`. Si el doc no las
+  /// trae (tarifa anterior al versionado 2026-06), sintetiza UNA desde los
+  /// campos planos — migración perezosa, sin script.
+  static List<TarifaVigencia> _parsearVigencias(Map<String, dynamic> d) {
+    final raw = d['vigencias'] as List?;
+    if (raw != null && raw.isNotEmpty) {
+      return raw
+          .map((v) =>
+              TarifaVigencia.fromMap(Map<String, dynamic>.from(v as Map)))
+          .toList()
+        ..sort((a, b) => a.desde.compareTo(b.desde));
+    }
+    final desde = (d['vigente_desde'] as Timestamp?)?.toDate() ??
+        (d['creado_en'] as Timestamp?)?.toDate() ??
+        DateTime(2000);
+    return [
+      TarifaVigencia(
+        desde: desde,
+        tarifaReal: (d['tarifa_real'] as num?)?.toDouble() ?? 0,
+        tarifaChofer: (d['tarifa_chofer'] as num?)?.toDouble() ?? 0,
+        montoFijoChofer: (d['monto_fijo_chofer'] as num?)?.toDouble(),
+        porcentajeComisionDador:
+            (d['porcentaje_comision_dador'] as num?)?.toDouble(),
+        montoFijoDador: (d['monto_fijo_dador'] as num?)?.toDouble(),
+      ),
+    ];
   }
 
   factory TarifaLogistica.fromDoc(
@@ -282,6 +423,8 @@ class TarifaLogistica {
       'activa': activa,
       if (notas != null) 'notas': notas,
       if (creadoPor != null) 'creado_por': creadoPor,
+      if (vigencias.isNotEmpty)
+        'vigencias': vigencias.map((v) => v.toMap()).toList(),
     };
   }
 }

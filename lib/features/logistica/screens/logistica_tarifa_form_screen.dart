@@ -61,12 +61,12 @@ class LogisticaTarifaFormScreen extends StatefulWidget {
       _LogisticaTarifaFormScreenState();
 }
 
-class _LogisticaTarifaFormScreenState
-    extends State<LogisticaTarifaFormScreen> {
+class _LogisticaTarifaFormScreenState extends State<LogisticaTarifaFormScreen> {
   // ─── Estado del form ───
   TipoCargaLogistica _tipoCarga = TipoCargaLogistica.propia;
   EmpresaLogistica? _dador;
   final _comisionCtrl = TextEditingController();
+
   /// `true` → el dador cobra un MONTO FIJO por viaje (caso GASPERINI), en
   /// [_montoFijoDadorCtrl]. `false` → comisión por porcentaje del flete.
   bool _modoMontoFijoDador = false;
@@ -81,16 +81,19 @@ class _LogisticaTarifaFormScreenState
   UnidadTarifa _unidad = UnidadTarifa.porTonelada;
   final _tarifaRealCtrl = TextEditingController();
   final _tarifaChoferCtrl = TextEditingController();
+
   /// Monto fijo del chofer por viaje, alternativa al cálculo del 18%
   /// sobre `tarifaChofer × TN`. Si el toggle [_modoMontoFijoChofer] está
   /// OFF, este controller no se usa al guardar (queda null en Firestore →
   /// cálculo legacy).
   final _montoFijoChoferCtrl = TextEditingController();
+
   /// `true` → la tarifa del chofer se acuerda como monto fijo por viaje
   /// (sin TN ni 18%). `false` → comportamiento histórico (18% sobre
   /// `tarifaChofer × TN`).
   bool _modoMontoFijoChofer = false;
   final _notasCtrl = TextEditingController();
+
   /// Producto que se transporta. Opcional — null = tarifa "general" para
   /// esa ruta. Lista de opciones viene del catálogo de productos de la
   /// empresa origen seleccionada.
@@ -100,6 +103,10 @@ class _LogisticaTarifaFormScreenState
   bool _cargando = true;
   bool _guardando = false;
   String? _error;
+
+  /// Tarifa cargada en modo edición — fuente de las vigencias para la
+  /// sección "Precio y vigencia". Se refresca tras registrar un precio.
+  TarifaLogistica? _tarifaCargada;
 
   bool get _esEdicion => widget.tarifaId != null;
 
@@ -115,9 +122,8 @@ class _LogisticaTarifaFormScreenState
       return;
     }
     try {
-      final snap = await LogisticaService.tarifasCol
-          .doc(widget.tarifaId!)
-          .get();
+      final snap =
+          await LogisticaService.tarifasCol.doc(widget.tarifaId!).get();
       if (!snap.exists) {
         setState(() {
           _cargando = false;
@@ -126,6 +132,7 @@ class _LogisticaTarifaFormScreenState
         return;
       }
       final t = TarifaLogistica.fromMap(snap.id, snap.data()!);
+      _tarifaCargada = t;
       _tipoCarga = t.tipoCarga;
       _flete = t.flete;
       _unidad = t.unidadTarifa;
@@ -137,8 +144,7 @@ class _LogisticaTarifaFormScreenState
             AppFormatters.formatearMonto(t.montoFijoChofer!);
       }
       if (t.porcentajeComisionDador != null) {
-        _comisionCtrl.text =
-            t.porcentajeComisionDador!.toStringAsFixed(1);
+        _comisionCtrl.text = t.porcentajeComisionDador!.toStringAsFixed(1);
       }
       if (t.montoFijoDador != null) {
         _modoMontoFijoDador = true;
@@ -173,8 +179,7 @@ class _LogisticaTarifaFormScreenState
           ? UbicacionLogistica.fromMap(futures[3].id, futures[3].data()!)
           : null;
       if (futures.length == 5 && futures[4].exists) {
-        _dador =
-            EmpresaLogistica.fromMap(futures[4].id, futures[4].data()!);
+        _dador = EmpresaLogistica.fromMap(futures[4].id, futures[4].data()!);
       }
       setState(() => _cargando = false);
     } catch (e) {
@@ -184,6 +189,17 @@ class _LogisticaTarifaFormScreenState
         _error = 'No se pudo cargar la tarifa. Probá de nuevo.';
       });
     }
+  }
+
+  /// Recarga la tarifa de Firestore — tras registrar un nuevo precio, para
+  /// refrescar el precio vigente y el historial sin salir del form.
+  Future<void> _recargarTarifa() async {
+    if (!_esEdicion) return;
+    final snap = await LogisticaService.tarifasCol.doc(widget.tarifaId!).get();
+    if (!snap.exists || !mounted) return;
+    setState(() {
+      _tarifaCargada = TarifaLogistica.fromMap(snap.id, snap.data()!);
+    });
   }
 
   @override
@@ -262,60 +278,64 @@ class _LogisticaTarifaFormScreenState
                   soloTipo: TipoEmpresaLogistica.dadorTransporte,
                   onChange: (e) => setState(() => _dador = e),
                 ),
-                const SizedBox(height: AppSpacing.md),
-                const AppEyebrow('Comisión del dador'),
-                const SizedBox(height: AppSpacing.sm),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: [
-                    _PillSelector(
-                      label: 'Porcentaje (%)',
-                      seleccionado: !_modoMontoFijoDador,
-                      onTap: () =>
-                          setState(() => _modoMontoFijoDador = false),
-                    ),
-                    _PillSelector(
-                      label: 'Monto fijo por viaje',
-                      seleccionado: _modoMontoFijoDador,
-                      onTap: () =>
-                          setState(() => _modoMontoFijoDador = true),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-                if (_modoMontoFijoDador)
-                  TextField(
-                    controller: _montoFijoDadorCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    inputFormatters: [AppFormatters.inputMilesDecimal],
-                    style: AppType.mono.copyWith(color: c.text),
-                    decoration: _inputDecoration(
-                      context,
-                      labelText: 'Monto fijo del dador (por viaje)',
-                      prefixText: '\$ ',
-                      suffixText: '/viaje',
-                    ),
-                  )
-                else
-                  TextField(
-                    controller: _comisionCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                // El importe de la comisión del dador es VERSIONADO: al
+                // editar se gestiona en "Precio y vigencia". En alta sí se
+                // pide acá para crear la primera vigencia.
+                if (!_esEdicion) ...[
+                  const SizedBox(height: AppSpacing.md),
+                  const AppEyebrow('Comisión del dador'),
+                  const SizedBox(height: AppSpacing.sm),
+                  Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: AppSpacing.sm,
+                    children: [
+                      _PillSelector(
+                        label: 'Porcentaje (%)',
+                        seleccionado: !_modoMontoFijoDador,
+                        onTap: () =>
+                            setState(() => _modoMontoFijoDador = false),
+                      ),
+                      _PillSelector(
+                        label: 'Monto fijo por viaje',
+                        seleccionado: _modoMontoFijoDador,
+                        onTap: () => setState(() => _modoMontoFijoDador = true),
+                      ),
                     ],
-                    style: AppType.mono.copyWith(color: c.text),
-                    decoration: _inputDecoration(
-                      context,
-                      labelText: 'Comisión del dador (%)',
-                      hintText: 'Ej. 12.5',
-                      suffixText: '%',
-                    ),
                   ),
+                  const SizedBox(height: AppSpacing.md),
+                  if (_modoMontoFijoDador)
+                    TextField(
+                      controller: _montoFijoDadorCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [AppFormatters.inputMilesDecimal],
+                      style: AppType.mono.copyWith(color: c.text),
+                      decoration: _inputDecoration(
+                        context,
+                        labelText: 'Monto fijo del dador (por viaje)',
+                        prefixText: '\$ ',
+                        suffixText: '/viaje',
+                      ),
+                    )
+                  else
+                    TextField(
+                      controller: _comisionCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                      ],
+                      style: AppType.mono.copyWith(color: c.text),
+                      decoration: _inputDecoration(
+                        context,
+                        labelText: 'Comisión del dador (%)',
+                        hintText: 'Ej. 12.5',
+                        suffixText: '%',
+                      ),
+                    ),
+                ],
               ],
             ),
           ],
@@ -390,8 +410,7 @@ class _LogisticaTarifaFormScreenState
                   decoration: BoxDecoration(
                     color: c.infoSoft,
                     borderRadius: BorderRadius.circular(AppRadius.md),
-                    border: Border.all(
-                        color: c.info.withValues(alpha: 0.4)),
+                    border: Border.all(color: c.info.withValues(alpha: 0.4)),
                   ),
                   child: Row(
                     children: [
@@ -426,54 +445,73 @@ class _LogisticaTarifaFormScreenState
             ],
           ),
 
-          // ─── 5. TARIFAS ─────────────────────────────────────────────
+          // ─── 5. TARIFAS (alta) · PRECIO Y VIGENCIA (edición) ─────────
+          // En alta se pide el precio inicial (crea la 1ª vigencia). En
+          // edición el precio NO se edita acá: se gestiona por vigencias
+          // ("Registrar nuevo precio"), así queda el historial de cambios.
           const SizedBox(height: AppSpacing.mdDense),
-          _Seccion(
-            numero: 5,
-            titulo: 'Tarifas',
-            accentDot: c.success,
-            children: [
-              _campoTarifa(
-                controller: _tarifaRealCtrl,
-                etiqueta: 'Tarifa real (lo que cobra Vecchi)',
-                color: c.success,
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              // Toggle pago al chofer: 18% sobre la tarifa chofer (default
-              // histórico) o monto fijo por viaje (viajes cortos).
-              const AppEyebrow('Pago al chofer'),
-              const SizedBox(height: AppSpacing.sm),
-              Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
-                children: [
-                  _PillSelector(
-                    label: '18% sobre tarifa chofer',
-                    seleccionado: !_modoMontoFijoChofer,
-                    onTap: () =>
-                        setState(() => _modoMontoFijoChofer = false),
-                  ),
-                  _PillSelector(
-                    label: 'Monto fijo por viaje',
-                    seleccionado: _modoMontoFijoChofer,
-                    onTap: () =>
-                        setState(() => _modoMontoFijoChofer = true),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.md),
-              if (_modoMontoFijoChofer)
-                // En modo monto fijo NO se muestra la tarifa chofer (%): el
-                // chofer cobra el monto fijo y tarifa_chofer queda en 0.
-                _campoMontoFijoChofer()
-              else
+          if (!_esEdicion)
+            _Seccion(
+              numero: 5,
+              titulo: 'Tarifas',
+              accentDot: c.success,
+              children: [
                 _campoTarifa(
-                  controller: _tarifaChoferCtrl,
-                  etiqueta: 'Tarifa chofer (lo que se le paga)',
-                  color: c.info,
+                  controller: _tarifaRealCtrl,
+                  etiqueta: 'Tarifa real (lo que cobra Vecchi)',
+                  color: c.success,
                 ),
-            ],
-          ),
+                const SizedBox(height: AppSpacing.lg),
+                // Toggle pago al chofer: 18% sobre la tarifa chofer (default
+                // histórico) o monto fijo por viaje (viajes cortos).
+                const AppEyebrow('Pago al chofer'),
+                const SizedBox(height: AppSpacing.sm),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: [
+                    _PillSelector(
+                      label: '18% sobre tarifa chofer',
+                      seleccionado: !_modoMontoFijoChofer,
+                      onTap: () => setState(() => _modoMontoFijoChofer = false),
+                    ),
+                    _PillSelector(
+                      label: 'Monto fijo por viaje',
+                      seleccionado: _modoMontoFijoChofer,
+                      onTap: () => setState(() => _modoMontoFijoChofer = true),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                if (_modoMontoFijoChofer)
+                  // En modo monto fijo NO se muestra la tarifa chofer (%): el
+                  // chofer cobra el monto fijo y tarifa_chofer queda en 0.
+                  _campoMontoFijoChofer()
+                else
+                  _campoTarifa(
+                    controller: _tarifaChoferCtrl,
+                    etiqueta: 'Tarifa chofer (lo que se le paga)',
+                    color: c.info,
+                  ),
+              ],
+            )
+          else if (_tarifaCargada != null)
+            _SeccionPrecioVigencia(
+              tarifa: _tarifaCargada!,
+              tipoCarga: _tipoCarga,
+              onRegistrado: (n) async {
+                await _recargarTarifa();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(n == 0
+                        ? 'Nuevo precio registrado.'
+                        : 'Nuevo precio registrado · $n viaje(s) '
+                            'recalculado(s).'),
+                  ),
+                );
+              },
+            ),
 
           // ─── 6. NOTAS ───────────────────────────────────────────────
           const SizedBox(height: AppSpacing.mdDense),
@@ -526,8 +564,7 @@ class _LogisticaTarifaFormScreenState
                 child: AppButton.secondary(
                   label: 'Cancelar',
                   expand: true,
-                  onPressed:
-                      _guardando ? null : () => Navigator.pop(context),
+                  onPressed: _guardando ? null : () => Navigator.pop(context),
                 ),
               ),
               const SizedBox(width: AppSpacing.md),
@@ -557,8 +594,8 @@ class _LogisticaTarifaFormScreenState
       controller: controller,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [AppFormatters.inputMilesDecimal],
-      style: AppType.mono.copyWith(
-          color: context.colors.text, fontWeight: FontWeight.w600),
+      style: AppType.mono
+          .copyWith(color: context.colors.text, fontWeight: FontWeight.w600),
       decoration: _inputDecoration(
         context,
         labelText: etiqueta,
@@ -629,8 +666,8 @@ class _LogisticaTarifaFormScreenState
     // definidos (ambos > 0). Si alguno es 0 (por definir), no hay nada que
     // comparar.
     if (tarifaReal > 0 && tarifaChofer > 0 && tarifaChofer > tarifaReal) {
-      setState(() => _error =
-          'La tarifa del chofer no puede superar la tarifa real.');
+      setState(() =>
+          _error = 'La tarifa del chofer no puede superar la tarifa real.');
       return;
     }
     // Si el operador eligió "monto fijo por viaje", parseamos y validamos.
@@ -638,11 +675,10 @@ class _LogisticaTarifaFormScreenState
     // "modo monto fijo" y "no se cargó nada".
     double? montoFijoChofer;
     if (_modoMontoFijoChofer) {
-      montoFijoChofer =
-          AppFormatters.parsearMonto(_montoFijoChoferCtrl.text);
+      montoFijoChofer = AppFormatters.parsearMonto(_montoFijoChoferCtrl.text);
       if (montoFijoChofer == null || montoFijoChofer <= 0) {
-        setState(() => _error =
-            'Cargá el monto fijo del chofer (debe ser mayor a 0).');
+        setState(() =>
+            _error = 'Cargá el monto fijo del chofer (debe ser mayor a 0).');
         return;
       }
     }
@@ -660,11 +696,10 @@ class _LogisticaTarifaFormScreenState
     double? montoFijoDador;
     if (_tipoCarga == TipoCargaLogistica.terceros) {
       if (_modoMontoFijoDador) {
-        montoFijoDador =
-            AppFormatters.parsearMonto(_montoFijoDadorCtrl.text);
+        montoFijoDador = AppFormatters.parsearMonto(_montoFijoDadorCtrl.text);
         if (montoFijoDador == null || montoFijoDador <= 0) {
-          setState(() => _error =
-              'Cargá el monto fijo del dador (debe ser mayor a 0).');
+          setState(() =>
+              _error = 'Cargá el monto fijo del dador (debe ser mayor a 0).');
           return;
         }
       } else if (_comisionCtrl.text.trim().isNotEmpty) {
@@ -672,8 +707,7 @@ class _LogisticaTarifaFormScreenState
         final raw = _comisionCtrl.text.trim().replaceAll(',', '.');
         comision = double.tryParse(raw);
         if (comision == null || comision < 0 || comision > 100) {
-          setState(() =>
-              _error = 'El % de comisión debe estar entre 0 y 100.');
+          setState(() => _error = 'El % de comisión debe estar entre 0 y 100.');
           return;
         }
       }
@@ -690,8 +724,11 @@ class _LogisticaTarifaFormScreenState
             'tipo_carga': _tipoCarga.codigo,
             'dador_id': _dador?.id,
             'dador_nombre': _dador?.nombre,
-            'porcentaje_comision_dador': comision,
-            'monto_fijo_dador': montoFijoDador,
+            // Los importes (tarifa real/chofer, monto fijo chofer, comisión
+            // y monto fijo del dador) NO se tocan acá: son VERSIONADOS y se
+            // cambian con "Registrar nuevo precio" (sección Precio y
+            // vigencia), para que quede el historial. Editar datos solo
+            // cambia ruta/dador/modalidad/producto/notas.
             'empresa_origen_id': _empOrigen!.id,
             'empresa_origen_nombre': _empOrigen!.nombre,
             'ubicacion_origen_id': _ubicOrigen!.id,
@@ -704,16 +741,10 @@ class _LogisticaTarifaFormScreenState
                 '${_ubicDestino!.nombre} (${_ubicDestino!.localidad})',
             'flete': _flete.codigo,
             'unidad_tarifa': _unidad.codigo,
-            'tarifa_real': tarifaReal,
-            'tarifa_chofer': tarifaChofer,
-            // Si cambió a modo "monto fijo": guarda el valor. Si lo
-            // deshabilitó: null para que vuelva al cálculo 18%.
-            'monto_fijo_chofer': montoFijoChofer,
             // El producto se incluye en la edición (null = lo limpia).
             'producto': _producto,
-            'notas': _notasCtrl.text.trim().isEmpty
-                ? null
-                : _notasCtrl.text.trim(),
+            'notas':
+                _notasCtrl.text.trim().isEmpty ? null : _notasCtrl.text.trim(),
           },
         );
       } else {
@@ -830,8 +861,7 @@ class _Seccion extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: c.brand.withValues(alpha: 0.16),
                     shape: BoxShape.circle,
-                    border: Border.all(
-                        color: c.brand.withValues(alpha: 0.4)),
+                    border: Border.all(color: c.brand.withValues(alpha: 0.4)),
                   ),
                   child: Text(
                     '$numero',
@@ -893,9 +923,8 @@ class _PillSelector extends StatelessWidget {
               : Colors.transparent,
           borderRadius: BorderRadius.circular(AppRadius.full),
           border: Border.all(
-            color: seleccionado
-                ? c.brand.withValues(alpha: 0.5)
-                : c.borderStrong,
+            color:
+                seleccionado ? c.brand.withValues(alpha: 0.5) : c.borderStrong,
           ),
         ),
         child: Text(
@@ -1172,8 +1201,8 @@ class _ListaSelectorEmpresaState extends State<_ListaSelectorEmpresa> {
                 }
                 return ListView.separated(
                   controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.xl),
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
+                      AppSpacing.xs, AppSpacing.lg, AppSpacing.xl),
                   itemCount: items.length,
                   separatorBuilder: (_, __) =>
                       const SizedBox(height: AppSpacing.xs),
@@ -1235,6 +1264,7 @@ class _SelectorUbicacion extends StatelessWidget {
   final String etiqueta;
   final UbicacionLogistica? valor;
   final ValueChanged<UbicacionLogistica> onChange;
+
   /// Si está seteado, el sheet filtra a las ubicaciones de esa empresa. El
   /// sheet ofrece un toggle "Mostrar todas" por si aún no fue asociada.
   final String? filtroEmpresaId;
@@ -1337,12 +1367,10 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
             titulo: 'Seleccionar ubicación',
             trailing: widget.filtroEmpresaId != null
                 ? _PillSelector(
-                    label: _mostrarTodas
-                        ? 'Solo de la empresa'
-                        : 'Mostrar todas',
+                    label:
+                        _mostrarTodas ? 'Solo de la empresa' : 'Mostrar todas',
                     seleccionado: _mostrarTodas,
-                    onTap: () =>
-                        setState(() => _mostrarTodas = !_mostrarTodas),
+                    onTap: () => setState(() => _mostrarTodas = !_mostrarTodas),
                   )
                 : null,
           ),
@@ -1356,8 +1384,7 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
           ),
           Expanded(
             child: StreamBuilder<List<UbicacionLogistica>>(
-              stream:
-                  LogisticaService.streamUbicaciones(soloActivas: true),
+              stream: LogisticaService.streamUbicaciones(soloActivas: true),
               builder: (ctx, snap) {
                 if (snap.connectionState == ConnectionState.waiting) {
                   return const AppSkeletonList(count: 5, conAvatar: false);
@@ -1367,13 +1394,12 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                 // usuario NO toggleó "Mostrar todas". M:N: una ubicación
                 // puede pertenecer a varias empresas — filtro array-contains
                 // client-side (catálogo chico).
-                final base =
-                    (widget.filtroEmpresaId != null && !_mostrarTodas)
-                        ? all
-                            .where((u) => u.empresaIds
-                                .contains(widget.filtroEmpresaId))
-                            .toList()
-                        : all;
+                final base = (widget.filtroEmpresaId != null && !_mostrarTodas)
+                    ? all
+                        .where((u) =>
+                            u.empresaIds.contains(widget.filtroEmpresaId))
+                        .toList()
+                    : all;
                 // + filtro por texto del buscador (nombre o etiqueta).
                 final q = _q.trim().toLowerCase();
                 final items = q.isEmpty
@@ -1402,8 +1428,8 @@ class _ListaSelectorUbicacionState extends State<_ListaSelectorUbicacion> {
                 }
                 return ListView.separated(
                   controller: controller,
-                  padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, AppSpacing.xl),
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
+                      AppSpacing.xs, AppSpacing.lg, AppSpacing.xl),
                   itemCount: items.length,
                   separatorBuilder: (_, __) =>
                       const SizedBox(height: AppSpacing.xs),
@@ -1521,6 +1547,483 @@ class _SelectorProducto extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// =============================================================================
+// PRECIO Y VIGENCIA (solo edición) — precio vigente hoy + "Registrar nuevo
+// precio" (con fecha) + historial de cambios. Reemplaza a la sección "Tarifas"
+// editable: el precio se versiona, no se pisa (pedido Santiago 2026-06).
+// =============================================================================
+
+String _fmtFechaDDMMAAAA(DateTime d) => '${d.day.toString().padLeft(2, '0')}-'
+    '${d.month.toString().padLeft(2, '0')}-${d.year}';
+
+class _SeccionPrecioVigencia extends StatelessWidget {
+  final TarifaLogistica tarifa;
+  final TipoCargaLogistica tipoCarga;
+
+  /// Llamado tras registrar un precio con la cantidad de viajes recalculados
+  /// (para que el padre refresque la tarifa y muestre el SnackBar).
+  final void Function(int recalculados) onRegistrado;
+
+  const _SeccionPrecioVigencia({
+    required this.tarifa,
+    required this.tipoCarga,
+    required this.onRegistrado,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final hoy = tarifa.vigenteEn(DateTime.now());
+    final sufijo = tarifa.unidadTarifa.sufijoMonto;
+    final historial = tarifa.vigencias.reversed.toList(); // más reciente arriba
+    return _Seccion(
+      numero: 5,
+      titulo: 'Precio y vigencia',
+      accentDot: c.success,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpacing.md),
+          decoration: BoxDecoration(
+            color: c.surface1,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: c.border),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const AppEyebrow('Precio vigente hoy'),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Vecchi: \$${AppFormatters.formatearMonto(hoy.tarifaReal)}$sufijo',
+                style: AppType.mono
+                    .copyWith(color: c.success, fontWeight: FontWeight.w600),
+              ),
+              Text(
+                hoy.montoFijoChofer != null
+                    ? 'Chofer: \$${AppFormatters.formatearMonto(hoy.montoFijoChofer!)}/viaje (fijo)'
+                    : 'Chofer: \$${AppFormatters.formatearMonto(hoy.tarifaChofer)}$sufijo',
+                style: AppType.mono
+                    .copyWith(color: c.info, fontWeight: FontWeight.w600),
+              ),
+              if (tipoCarga == TipoCargaLogistica.terceros) ...[
+                const SizedBox(height: 2),
+                Text(
+                  hoy.montoFijoDador != null
+                      ? 'Dador: \$${AppFormatters.formatearMonto(hoy.montoFijoDador!)}/viaje'
+                      : hoy.porcentajeComisionDador != null
+                          ? 'Dador: ${hoy.porcentajeComisionDador!.toStringAsFixed(1)}%'
+                          : 'Dador: —',
+                  style: AppType.monoSm.copyWith(color: c.textMuted),
+                ),
+              ],
+              const SizedBox(height: 2),
+              Text(
+                'Desde el ${_fmtFechaDDMMAAAA(hoy.desde)}',
+                style: AppType.monoSm.copyWith(color: c.textMuted),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        AppButton.primary(
+          label: 'Registrar nuevo precio',
+          icon: Icons.add,
+          expand: true,
+          onPressed: () async {
+            final n = await showModalBottomSheet<int>(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: c.surface1,
+              shape: const RoundedRectangleBorder(
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+              ),
+              builder: (_) => _SheetNuevoPrecio(
+                tarifaId: tarifa.id,
+                tipoCarga: tipoCarga,
+                vigenteActual: hoy,
+              ),
+            );
+            if (n != null) onRegistrado(n);
+          },
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        const AppEyebrow('Historial de precios'),
+        const SizedBox(height: AppSpacing.sm),
+        ...historial.map((v) {
+          final esVigente = identical(v, hoy);
+          return Container(
+            margin: const EdgeInsets.only(bottom: AppSpacing.xs),
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: c.surface2,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(
+                color: esVigente ? c.success.withValues(alpha: 0.5) : c.border,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Desde ${_fmtFechaDDMMAAAA(v.desde)}',
+                        style: AppType.bodySm.copyWith(
+                            color: c.text, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    if (esVigente)
+                      Text('VIGENTE',
+                          style: AppType.monoSm.copyWith(
+                              color: c.success, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Vecchi \$${AppFormatters.formatearMonto(v.tarifaReal)}$sufijo  ·  '
+                  '${v.montoFijoChofer != null ? "Chofer \$${AppFormatters.formatearMonto(v.montoFijoChofer!)}/viaje" : "Chofer \$${AppFormatters.formatearMonto(v.tarifaChofer)}$sufijo"}',
+                  style: AppType.monoSm.copyWith(color: c.textSecondary),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+}
+
+/// Bottom sheet para registrar un nuevo precio (vigencia) de una tarifa.
+/// Precarga los campos con el precio vigente. Al confirmar llama a
+/// `LogisticaService.registrarNuevoPrecio` y devuelve (pop) la cantidad de
+/// viajes recalculados.
+class _SheetNuevoPrecio extends StatefulWidget {
+  final String tarifaId;
+  final TipoCargaLogistica tipoCarga;
+  final TarifaVigencia vigenteActual;
+  const _SheetNuevoPrecio({
+    required this.tarifaId,
+    required this.tipoCarga,
+    required this.vigenteActual,
+  });
+
+  @override
+  State<_SheetNuevoPrecio> createState() => _SheetNuevoPrecioState();
+}
+
+class _SheetNuevoPrecioState extends State<_SheetNuevoPrecio> {
+  late final TextEditingController _realCtrl;
+  late final TextEditingController _choferCtrl;
+  late final TextEditingController _montoFijoChoferCtrl;
+  late final TextEditingController _comisionCtrl;
+  late final TextEditingController _montoFijoDadorCtrl;
+  late bool _modoMontoFijoChofer;
+  late bool _modoMontoFijoDador;
+  DateTime _fecha = DateTime.now();
+  bool _guardando = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final v = widget.vigenteActual;
+    _realCtrl = TextEditingController(
+        text:
+            v.tarifaReal > 0 ? AppFormatters.formatearMonto(v.tarifaReal) : '');
+    _choferCtrl = TextEditingController(
+        text: v.tarifaChofer > 0
+            ? AppFormatters.formatearMonto(v.tarifaChofer)
+            : '');
+    _modoMontoFijoChofer = v.montoFijoChofer != null;
+    _montoFijoChoferCtrl = TextEditingController(
+        text: v.montoFijoChofer != null
+            ? AppFormatters.formatearMonto(v.montoFijoChofer!)
+            : '');
+    _modoMontoFijoDador = v.montoFijoDador != null;
+    _comisionCtrl = TextEditingController(
+        text: v.porcentajeComisionDador != null
+            ? v.porcentajeComisionDador!.toStringAsFixed(1)
+            : '');
+    _montoFijoDadorCtrl = TextEditingController(
+        text: v.montoFijoDador != null
+            ? AppFormatters.formatearMonto(v.montoFijoDador!)
+            : '');
+  }
+
+  @override
+  void dispose() {
+    _realCtrl.dispose();
+    _choferCtrl.dispose();
+    _montoFijoChoferCtrl.dispose();
+    _comisionCtrl.dispose();
+    _montoFijoDadorCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickFecha() async {
+    final hoy = DateTime.now();
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _fecha,
+      firstDate: DateTime(hoy.year - 2),
+      lastDate: DateTime(hoy.year + 2),
+      helpText: 'Vigente desde',
+    );
+    if (d != null) setState(() => _fecha = d);
+  }
+
+  Future<void> _guardar() async {
+    setState(() => _error = null);
+    final real = AppFormatters.parsearMonto(_realCtrl.text) ?? 0;
+    final chofer = _modoMontoFijoChofer
+        ? 0.0
+        : (AppFormatters.parsearMonto(_choferCtrl.text) ?? 0);
+    double? montoFijoChofer;
+    if (_modoMontoFijoChofer) {
+      montoFijoChofer = AppFormatters.parsearMonto(_montoFijoChoferCtrl.text);
+      if (montoFijoChofer == null || montoFijoChofer <= 0) {
+        setState(() => _error = 'Cargá el monto fijo del chofer (mayor a 0).');
+        return;
+      }
+    }
+    double? comision;
+    double? montoFijoDador;
+    if (widget.tipoCarga == TipoCargaLogistica.terceros) {
+      if (_modoMontoFijoDador) {
+        montoFijoDador = AppFormatters.parsearMonto(_montoFijoDadorCtrl.text);
+        if (montoFijoDador == null || montoFijoDador <= 0) {
+          setState(() => _error = 'Cargá el monto fijo del dador (mayor a 0).');
+          return;
+        }
+      } else if (_comisionCtrl.text.trim().isNotEmpty) {
+        comision =
+            double.tryParse(_comisionCtrl.text.trim().replaceAll(',', '.'));
+        if (comision == null || comision < 0 || comision > 100) {
+          setState(() => _error = 'La comisión debe estar entre 0 y 100.');
+          return;
+        }
+      }
+    }
+    setState(() => _guardando = true);
+    try {
+      final n = await LogisticaService.registrarNuevoPrecio(
+        id: widget.tarifaId,
+        desde: _fecha,
+        tarifaReal: real,
+        tarifaChofer: chofer,
+        montoFijoChofer: montoFijoChofer,
+        porcentajeComisionDador: comision,
+        montoFijoDador: montoFijoDador,
+      );
+      if (mounted) Navigator.pop(context, n);
+    } catch (e) {
+      setState(() {
+        _guardando = false;
+        _error = e.toString().replaceFirst(RegExp(r'^[A-Z][a-z]+: '), '');
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final media = MediaQuery.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: c.border,
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+              ),
+            ),
+            const AppEyebrow('Registrar nuevo precio'),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'No borra el precio anterior — queda en el historial. Los viajes '
+              'no liquidados se recalculan según la fecha de carga de cada uno.',
+              style: AppType.bodySm.copyWith(color: c.textMuted),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            InkWell(
+              onTap: _pickFecha,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md, vertical: AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: c.surface2,
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  border: Border.all(color: c.border),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.event, size: 18, color: c.textMuted),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const AppEyebrow('Vigente desde'),
+                          const SizedBox(height: 2),
+                          Text(
+                            _fmtFechaDDMMAAAA(_fecha),
+                            style: AppType.body.copyWith(
+                                color: c.text, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.edit_outlined, size: 16, color: c.textMuted),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller: _realCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [AppFormatters.inputMilesDecimal],
+              style: AppType.mono
+                  .copyWith(color: c.text, fontWeight: FontWeight.w600),
+              decoration: _inputDecoration(context,
+                  labelText: 'Tarifa real (lo que cobra Vecchi)',
+                  prefixText: '\$ '),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            const AppEyebrow('Pago al chofer'),
+            const SizedBox(height: AppSpacing.sm),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                _PillSelector(
+                  label: '18% sobre tarifa chofer',
+                  seleccionado: !_modoMontoFijoChofer,
+                  onTap: () => setState(() => _modoMontoFijoChofer = false),
+                ),
+                _PillSelector(
+                  label: 'Monto fijo por viaje',
+                  seleccionado: _modoMontoFijoChofer,
+                  onTap: () => setState(() => _modoMontoFijoChofer = true),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller:
+                  _modoMontoFijoChofer ? _montoFijoChoferCtrl : _choferCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [AppFormatters.inputMilesDecimal],
+              style: AppType.mono
+                  .copyWith(color: c.text, fontWeight: FontWeight.w600),
+              decoration: _inputDecoration(context,
+                  labelText: _modoMontoFijoChofer
+                      ? 'Monto fijo al chofer (por viaje)'
+                      : 'Tarifa chofer (lo que se le paga)',
+                  prefixText: '\$ '),
+            ),
+            if (widget.tipoCarga == TipoCargaLogistica.terceros) ...[
+              const SizedBox(height: AppSpacing.md),
+              const AppEyebrow('Comisión del dador'),
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                children: [
+                  _PillSelector(
+                    label: 'Porcentaje (%)',
+                    seleccionado: !_modoMontoFijoDador,
+                    onTap: () => setState(() => _modoMontoFijoDador = false),
+                  ),
+                  _PillSelector(
+                    label: 'Monto fijo por viaje',
+                    seleccionado: _modoMontoFijoDador,
+                    onTap: () => setState(() => _modoMontoFijoDador = true),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md),
+              if (_modoMontoFijoDador)
+                TextField(
+                  controller: _montoFijoDadorCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [AppFormatters.inputMilesDecimal],
+                  style: AppType.mono.copyWith(color: c.text),
+                  decoration: _inputDecoration(context,
+                      labelText: 'Monto fijo del dador (por viaje)',
+                      prefixText: '\$ ',
+                      suffixText: '/viaje'),
+                )
+              else
+                TextField(
+                  controller: _comisionCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                  ],
+                  style: AppType.mono.copyWith(color: c.text),
+                  decoration: _inputDecoration(context,
+                      labelText: 'Comisión del dador (%)',
+                      hintText: 'Ej. 12.5',
+                      suffixText: '%'),
+                ),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              Text(_error!, style: AppType.bodySm.copyWith(color: c.error)),
+            ],
+            const SizedBox(height: AppSpacing.lg),
+            Row(
+              children: [
+                Expanded(
+                  child: AppButton.secondary(
+                    label: 'Cancelar',
+                    expand: true,
+                    onPressed: _guardando ? null : () => Navigator.pop(context),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  flex: 2,
+                  child: AppButton.primary(
+                    label: 'Registrar precio',
+                    icon: Icons.check,
+                    expand: true,
+                    isLoading: _guardando,
+                    onPressed: _guardando ? null : _guardar,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

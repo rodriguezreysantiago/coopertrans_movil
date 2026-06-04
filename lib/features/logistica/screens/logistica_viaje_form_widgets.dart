@@ -165,12 +165,18 @@ class _BotonFecha extends StatelessWidget {
 /// puede crear igual (los cálculos dan 0 hasta que se edite la tarifa).
 class _ResumenTarifa extends StatelessWidget {
   final TarifaLogistica t;
-  const _ResumenTarifa({required this.t});
+
+  /// Fecha de carga del tramo: el resumen muestra los importes de la
+  /// versión de la tarifa vigente en esa fecha (versionado 2026-06). Si es
+  /// null (todavía sin fecha), muestra el precio de hoy.
+  final DateTime? fechaCarga;
+  const _ResumenTarifa({required this.t, this.fechaCarga});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final sinMonto = t.tarifaReal == 0 || t.tarifaChofer == 0;
+    final vig = t.vigenteEn(fechaCarga ?? DateTime.now());
+    final sinMonto = vig.tarifaReal == 0 || vig.tarifaChofer == 0;
     final acento = sinMonto ? c.warning : c.success;
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -190,9 +196,9 @@ class _ResumenTarifa extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Vecchi: \$${AppFormatters.formatearMonto(t.tarifaReal)}'
+            'Vecchi: \$${AppFormatters.formatearMonto(vig.tarifaReal)}'
             '${t.unidadTarifa.sufijoMonto}  ·  '
-            'Chofer: \$${AppFormatters.formatearMonto(t.tarifaChofer)}'
+            'Chofer: \$${AppFormatters.formatearMonto(vig.tarifaChofer)}'
             '${t.unidadTarifa.sufijoMonto}',
             style: AppType.mono.copyWith(
               color: acento,
@@ -357,7 +363,8 @@ class _PillSelector extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: seleccionado ? col.withValues(alpha: 0.16) : Colors.transparent,
+          color:
+              seleccionado ? col.withValues(alpha: 0.16) : Colors.transparent,
           borderRadius: BorderRadius.circular(AppRadius.full),
           border: Border.all(
             color: seleccionado ? col.withValues(alpha: 0.5) : c.borderStrong,

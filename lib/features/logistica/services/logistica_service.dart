@@ -5,6 +5,7 @@ import '../../../core/services/prefs_service.dart';
 import '../models/empresa_logistica.dart';
 import '../models/tarifa_logistica.dart';
 import '../models/ubicacion_logistica.dart';
+import 'viajes_service.dart';
 
 /// CRUD del módulo Logística. Centraliza lógica de creación + auditoría
 /// (creado_en/creado_por) + validaciones simples antes del write.
@@ -101,10 +102,7 @@ class LogisticaService {
   static Future<int> contarTarifasQueUsanEmpresa(String empresaId) async {
     if (empresaId.isEmpty) return 0;
     final results = await Future.wait([
-      tarifasCol
-          .where('empresa_origen_id', isEqualTo: empresaId)
-          .count()
-          .get(),
+      tarifasCol.where('empresa_origen_id', isEqualTo: empresaId).count().get(),
       tarifasCol
           .where('empresa_destino_id', isEqualTo: empresaId)
           .count()
@@ -115,8 +113,7 @@ class LogisticaService {
 
   /// Cuenta cuántas ubicaciones tienen esta empresa asociada en su
   /// `empresa_ids`.
-  static Future<int> contarUbicacionesQueUsanEmpresa(
-      String empresaId) async {
+  static Future<int> contarUbicacionesQueUsanEmpresa(String empresaId) async {
     if (empresaId.isEmpty) return 0;
     final res = await ubicacionesCol
         .where('empresa_ids', arrayContains: empresaId)
@@ -426,7 +423,8 @@ class LogisticaService {
     // Validaciones de negocio:
     if (tipoCarga == TipoCargaLogistica.terceros) {
       if (dadorId == null || dadorId.isEmpty) {
-        throw ArgumentError('Si la carga es de TERCEROS, el dador es obligatorio.');
+        throw ArgumentError(
+            'Si la carga es de TERCEROS, el dador es obligatorio.');
       }
     }
     // 0 es válido = "tarifa por definir" (alineado con el form desde
@@ -441,7 +439,8 @@ class LogisticaService {
     }
     if (porcentajeComisionDador != null) {
       if (porcentajeComisionDador < 0 || porcentajeComisionDador > 100) {
-        throw ArgumentError('El porcentaje de comisión debe estar entre 0 y 100.');
+        throw ArgumentError(
+            'El porcentaje de comisión debe estar entre 0 y 100.');
       }
     }
     if (montoFijoDador != null && montoFijoDador <= 0) {
@@ -452,6 +451,20 @@ class LogisticaService {
           'El monto fijo del chofer debe ser mayor a 0 (dejá vacío para usar el 18%).');
     }
 
+    // Primera vigencia del historial de precios — los importes del alta,
+    // vigentes desde hoy. (`serverTimestamp()` no se permite dentro de un
+    // array, así que `desde`/`registradoEn` van con client-time.)
+    final ahora = DateTime.now();
+    final vigenciaInicial = TarifaVigencia(
+      desde: ahora,
+      tarifaReal: tarifaReal,
+      tarifaChofer: tarifaChofer,
+      montoFijoChofer: montoFijoChofer,
+      porcentajeComisionDador: porcentajeComisionDador,
+      montoFijoDador: montoFijoDador,
+      registradoEn: ahora,
+      registradoPorDni: PrefsService.dni,
+    );
     return tarifasCol.add({
       'tipo_carga': tipoCarga.codigo,
       if (dadorId != null) 'dador_id': dadorId,
@@ -477,6 +490,7 @@ class LogisticaService {
       'activa': true,
       if (notas != null && notas.trim().isNotEmpty) 'notas': notas.trim(),
       'vigente_desde': FieldValue.serverTimestamp(),
+      'vigencias': [vigenciaInicial.toMap()],
       'creado_en': FieldValue.serverTimestamp(),
       'creado_por': PrefsService.dni,
     });
@@ -488,6 +502,101 @@ class LogisticaService {
   }) async {
     await tarifasCol.doc(id).update(cambios);
   }
+
+  /// Registra un NUEVO PRECIO (vigencia) para una tarifa existente, vigente
+  /// desde [desde]. No borra las versiones anteriores — quedan en el
+  /// historial. Si ya hay una vigencia el MISMO día, la reemplaza (corrige
+  /// un precio cargado mal). Recomputa los campos planos = precio vigente
+  /// HOY (cache para listas + app vieja). Luego dispara el recálculo
+  /// automático de los viajes NO liquidados que usan la tarifa (cada tramo
+  /// por su fecha de carga) y devuelve cuántos viajes se recalcularon.
+  ///
+  /// Solo versiona IMPORTES; la ruta/dador/etc. se editan con
+  /// [actualizarTarifa]. La vigencia se escribe ANTES del recálculo: si el
+  /// recálculo se interrumpe, re-llamar a este método (o a
+  /// `ViajesService.recalcularViajesNoLiquidadosConTarifa`) lo completa —
+  /// es idempotente.
+  static Future<int> registrarNuevoPrecio({
+    required String id,
+    required DateTime desde,
+    required double tarifaReal,
+    required double tarifaChofer,
+    double? montoFijoChofer,
+    double? porcentajeComisionDador,
+    double? montoFijoDador,
+  }) async {
+    if (id.isEmpty) throw ArgumentError('id de tarifa vacío.');
+    // Validaciones (espejo de crearTarifa).
+    if (tarifaReal < 0 || tarifaChofer < 0) {
+      throw ArgumentError('Las tarifas no pueden ser negativas.');
+    }
+    if (tarifaReal > 0 && tarifaChofer > 0 && tarifaChofer > tarifaReal) {
+      throw ArgumentError(
+          'La tarifa del chofer no puede superar la tarifa real.');
+    }
+    if (porcentajeComisionDador != null &&
+        (porcentajeComisionDador < 0 || porcentajeComisionDador > 100)) {
+      throw ArgumentError(
+          'El porcentaje de comisión debe estar entre 0 y 100.');
+    }
+    if (montoFijoDador != null && montoFijoDador <= 0) {
+      throw ArgumentError('El monto fijo del dador debe ser mayor a 0.');
+    }
+    if (montoFijoChofer != null && montoFijoChofer <= 0) {
+      throw ArgumentError('El monto fijo del chofer debe ser mayor a 0.');
+    }
+
+    final snap = await tarifasCol.doc(id).get();
+    if (!snap.exists) throw StateError('La tarifa no existe.');
+    final previa = TarifaLogistica.fromMap(snap.id, snap.data()!);
+
+    final ahora = DateTime.now();
+    final nueva = TarifaVigencia(
+      desde: desde, // el constructor normaliza a día
+      tarifaReal: tarifaReal,
+      tarifaChofer: tarifaChofer,
+      montoFijoChofer: montoFijoChofer,
+      porcentajeComisionDador: porcentajeComisionDador,
+      montoFijoDador: montoFijoDador,
+      registradoEn: ahora,
+      registradoPorDni: PrefsService.dni,
+    );
+    // Reemplazar la vigencia del mismo día (corrige typo) + agregar la
+    // nueva, ordenadas asc.
+    final lista = [
+      ...previa.vigencias.where((v) => !_mismoDia(v.desde, nueva.desde)),
+      nueva,
+    ]..sort((a, b) => a.desde.compareTo(b.desde));
+    final vigenciasMap = lista.map((v) => v.toMap()).toList();
+
+    // Tarifa con las vigencias nuevas (reusa vigenteEn para los planos).
+    final actualizada = TarifaLogistica.fromMap(id, {
+      ...snap.data()!,
+      'vigencias': vigenciasMap,
+    });
+    final hoy = actualizada.vigenteEn(ahora);
+
+    await tarifasCol.doc(id).update({
+      'vigencias': vigenciasMap,
+      // Campos planos = precio vigente hoy (cache: listas + app vieja).
+      'tarifa_real': hoy.tarifaReal,
+      'tarifa_chofer': hoy.tarifaChofer,
+      'monto_fijo_chofer': hoy.montoFijoChofer,
+      'porcentaje_comision_dador': hoy.porcentajeComisionDador,
+      'monto_fijo_dador': hoy.montoFijoDador,
+      'vigente_desde': Timestamp.fromDate(hoy.desde),
+    });
+
+    // Recálculo automático de viajes no liquidados (cada tramo por su
+    // fecha de carga). Idempotente.
+    return ViajesService.recalcularViajesNoLiquidadosConTarifa(
+      actualizada,
+      porDni: PrefsService.dni,
+    );
+  }
+
+  static bool _mismoDia(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
   /// Cuenta cuántos viajes EN CURSO (estado PLANEADO o EN_CURSO,
   /// activos) usan esta tarifa en alguno de sus tramos.

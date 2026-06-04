@@ -99,9 +99,8 @@ class _LogisticaMapaTarifasScreenState
       title: 'Mapa de tarifas',
       actions: [
         IconButton(
-          icon: Icon(_panelAbierto
-              ? Icons.view_sidebar_outlined
-              : Icons.view_sidebar),
+          icon: Icon(
+              _panelAbierto ? Icons.view_sidebar_outlined : Icons.view_sidebar),
           tooltip: _panelAbierto ? 'Ocultar panel' : 'Mostrar panel',
           onPressed: () => setState(() => _panelAbierto = !_panelAbierto),
         ),
@@ -110,8 +109,7 @@ class _LogisticaMapaTarifasScreenState
         stream: LogisticaService.streamUbicaciones(),
         builder: (ctx, ubicSnap) {
           final ubicacionesPorId = {
-            for (final u
-                in (ubicSnap.data ?? const <UbicacionLogistica>[]))
+            for (final u in (ubicSnap.data ?? const <UbicacionLogistica>[]))
               u.id: u,
           };
           return StreamBuilder<List<TarifaLogistica>>(
@@ -240,8 +238,8 @@ class _LogisticaMapaTarifasScreenState
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.md),
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
+                      AppSpacing.md, AppSpacing.lg, AppSpacing.md),
                   child: Row(
                     children: [
                       Icon(Icons.warning_amber_outlined, color: cc.warning),
@@ -262,8 +260,8 @@ class _LogisticaMapaTarifasScreenState
                         AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.xxl),
                     itemCount: filtradas.length,
                     separatorBuilder: (_, __) => Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: AppSpacing.md),
+                      padding:
+                          const EdgeInsets.symmetric(vertical: AppSpacing.md),
                       child: AppHairline(color: cc.border),
                     ),
                     itemBuilder: (_, i) {
@@ -282,8 +280,7 @@ class _LogisticaMapaTarifasScreenState
                           const SizedBox(height: AppSpacing.xs),
                           Text(
                             f.motivo,
-                            style:
-                                AppType.bodySm.copyWith(color: cc.warning),
+                            style: AppType.bodySm.copyWith(color: cc.warning),
                           ),
                         ],
                       );
@@ -320,8 +317,7 @@ class _LogisticaMapaTarifasScreenState
             : AppButton.secondary(
                 label: 'Ver diagnóstico',
                 icon: Icons.warning_amber_outlined,
-                onPressed: () =>
-                    _mostrarDiagnostico(context, tarifasFiltradas),
+                onPressed: () => _mostrarDiagnostico(context, tarifasFiltradas),
               ),
       );
     }
@@ -426,8 +422,7 @@ class _LogisticaMapaTarifasScreenState
                                       Border.all(color: cc.text, width: 1.5),
                                   boxShadow: [
                                     BoxShadow(
-                                      color:
-                                          cc.brand.withValues(alpha: 0.6),
+                                      color: cc.brand.withValues(alpha: 0.6),
                                       blurRadius: 10,
                                     ),
                                   ],
@@ -458,8 +453,8 @@ class _LogisticaMapaTarifasScreenState
                               ? Icons.map_outlined
                               : Icons.satellite_alt_outlined,
                           label: _modoSatelite ? 'Mapa' : 'Satélite',
-                          onTap: () => setState(
-                              () => _modoSatelite = !_modoSatelite),
+                          onTap: () =>
+                              setState(() => _modoSatelite = !_modoSatelite),
                         ),
                       ),
                     // Botón "VER TODAS" — visible solo con una tarifa
@@ -471,8 +466,7 @@ class _LogisticaMapaTarifasScreenState
                         child: _BotonMapa(
                           icono: Icons.zoom_out_map,
                           label: 'Ver todas',
-                          onTap: () =>
-                              _verPanoramica(tarifasConCoords, bbox),
+                          onTap: () => _verPanoramica(tarifasConCoords, bbox),
                         ),
                       ),
                     // Leyenda de colores (abajo-izquierda).
@@ -482,10 +476,7 @@ class _LogisticaMapaTarifasScreenState
                       child: AppMapLegend(
                         items: [
                           (label: 'Ruta', status: AppMarkerStatus.info),
-                          (
-                            label: 'Resaltada',
-                            status: AppMarkerStatus.live
-                          ),
+                          (label: 'Resaltada', status: AppMarkerStatus.live),
                         ],
                       ),
                     ),
@@ -696,8 +687,8 @@ class _BotonMapa extends StatelessWidget {
               Icon(icono, size: 16, color: c.text),
               const SizedBox(width: AppSpacing.xs),
               Text(label,
-                  style: AppType.monoSm.copyWith(
-                      color: c.text, fontWeight: FontWeight.w600)),
+                  style: AppType.monoSm
+                      .copyWith(color: c.text, fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -830,12 +821,11 @@ class _PanelLateralTarifasState extends State<_PanelLateralTarifas> {
                     padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.sm, vertical: AppSpacing.sm),
                     itemCount: filtradas.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: 6),
+                    separatorBuilder: (_, __) => const SizedBox(height: 6),
                     itemBuilder: (_, i) => _TarifaTile(
                       tarifaConRuta: filtradas[i],
-                      resaltada: filtradas[i].tarifa.id ==
-                          widget.tarifaResaltadaId,
+                      resaltada:
+                          filtradas[i].tarifa.id == widget.tarifaResaltadaId,
                       onTap: () => widget.onTapTarifa(filtradas[i]),
                     ),
                   ),
@@ -879,8 +869,8 @@ class _BuscadorPanel extends StatelessWidget {
         isDense: true,
         filled: true,
         fillColor: c.surface2,
-        contentPadding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.sm, vertical: 10),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 10),
         suffixIcon: !tieneTexto
             ? null
             : IconButton(
@@ -933,8 +923,8 @@ class _TarifaTile extends StatelessWidget {
           children: [
             Text(
               t.ubicacionOrigenLimpia,
-              style: AppType.bodySm.copyWith(
-                  color: c.text, fontWeight: FontWeight.w600),
+              style: AppType.bodySm
+                  .copyWith(color: c.text, fontWeight: FontWeight.w600),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -945,8 +935,8 @@ class _TarifaTile extends StatelessWidget {
                 Expanded(
                   child: Text(
                     t.ubicacionDestinoLimpia,
-                    style: AppType.bodySm.copyWith(
-                        color: c.text, fontWeight: FontWeight.w600),
+                    style: AppType.bodySm
+                        .copyWith(color: c.text, fontWeight: FontWeight.w600),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -963,7 +953,7 @@ class _TarifaTile extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             Text(
               '${tarifaConRuta.distanciaKm.toStringAsFixed(0)} km · '
-              '\$ ${AppFormatters.formatearMonto(t.tarifaReal)}'
+              '\$ ${AppFormatters.formatearMonto(t.vigenteEn(DateTime.now()).tarifaReal)}'
               '${t.unidadTarifa.sufijoMonto}',
               style: AppType.monoSm.copyWith(
                   color: c.textSecondary, fontWeight: FontWeight.w600),
@@ -1000,7 +990,9 @@ class _DetalleTarifaSheet extends StatelessWidget {
     final c = context.colors;
     final t = tarifaConRuta.tarifa;
     final distGeodesica = tarifaConRuta.distanciaKm;
-    final margenBruto = t.tarifaReal - t.tarifaChofer;
+    // Precio vigente hoy (no el campo plano) — correcto con vigencias futuras.
+    final v = t.vigenteEn(DateTime.now());
+    final margenBruto = v.tarifaReal - v.tarifaChofer;
     return Container(
       decoration: BoxDecoration(
         color: c.surface1,
@@ -1078,14 +1070,13 @@ class _DetalleTarifaSheet extends StatelessWidget {
                   _InfoFila(
                     icono: Icons.attach_money,
                     etiqueta: 'Tarifa real / ${t.unidadTarifa.codigo}',
-                    valor: '\$ ${AppFormatters.formatearMonto(t.tarifaReal)}',
+                    valor: '\$ ${AppFormatters.formatearMonto(v.tarifaReal)}',
                     mono: true,
                   ),
                   _InfoFila(
                     icono: Icons.payments_outlined,
                     etiqueta: 'Tarifa chofer / ${t.unidadTarifa.codigo}',
-                    valor:
-                        '\$ ${AppFormatters.formatearMonto(t.tarifaChofer)}',
+                    valor: '\$ ${AppFormatters.formatearMonto(v.tarifaChofer)}',
                     mono: true,
                   ),
                   _InfoFila(
@@ -1149,8 +1140,8 @@ class _DetalleTarifaSheet extends StatelessWidget {
                         Expanded(
                           child: Text(
                             'Recorrido marcado en el mapa.',
-                            style: AppType.bodySm
-                                .copyWith(color: c.textSecondary),
+                            style:
+                                AppType.bodySm.copyWith(color: c.textSecondary),
                           ),
                         ),
                         AppButton.ghost(

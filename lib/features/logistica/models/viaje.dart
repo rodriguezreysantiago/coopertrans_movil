@@ -99,12 +99,14 @@ class TarifaSnapshot {
   final String empresaDestinoNombre;
   final String? dadorNombre;
   final double? porcentajeComisionDador;
+
   /// Monto fijo por viaje del dador (alternativa al %). Ver
   /// `TarifaLogistica.montoFijoDador`.
   final double? montoFijoDador;
   final UnidadTarifa unidadTarifa;
   final double tarifaReal;
   final double tarifaChofer;
+
   /// Override flat del monto del chofer. Si != null, la liquidación
   /// del chofer en este tramo es exactamente este valor (sin aplicar
   /// `× TN × 18%`). Heredado de `TarifaLogistica.montoFijoChofer` al
@@ -113,6 +115,7 @@ class TarifaSnapshot {
   /// la lógica que prioriza este campo cuando existe.
   final double? montoFijoChofer;
   final String? producto;
+
   /// ID de la empresa origen — necesario para poblar el dropdown de
   /// productos en el form de viaje (cada tramo usa la empresa origen
   /// de su tarifa para mostrar los productos disponibles).
@@ -154,6 +157,36 @@ class TarifaSnapshot {
       montoFijoChofer: identical(montoFijoChofer, _sentinel)
           ? this.montoFijoChofer
           : montoFijoChofer as double?,
+      producto: producto,
+      empresaOrigenId: empresaOrigenId,
+    );
+  }
+
+  /// Copia el snapshot cambiando SOLO los importes versionados
+  /// (tarifaReal, tarifaChofer, comisión/monto fijo del dador). Preserva
+  /// ruta, dador, empresas, producto, unidad Y el `montoFijoChofer` — este
+  /// último puede ser un override acordado a mano por el operador en el
+  /// tramo, así que el recálculo por vigencia NO debe pisarlo. Usado por el
+  /// recálculo masivo y por el form de tramo al re-resolver por fecha de
+  /// carga (el override del operador se aplica aparte, encima de esto).
+  TarifaSnapshot copyWithImportes({
+    required double tarifaReal,
+    required double tarifaChofer,
+    double? porcentajeComisionDador,
+    double? montoFijoDador,
+  }) {
+    return TarifaSnapshot(
+      origenEtiqueta: origenEtiqueta,
+      destinoEtiqueta: destinoEtiqueta,
+      empresaOrigenNombre: empresaOrigenNombre,
+      empresaDestinoNombre: empresaDestinoNombre,
+      dadorNombre: dadorNombre,
+      porcentajeComisionDador: porcentajeComisionDador,
+      montoFijoDador: montoFijoDador,
+      unidadTarifa: unidadTarifa,
+      tarifaReal: tarifaReal,
+      tarifaChofer: tarifaChofer,
+      montoFijoChofer: montoFijoChofer,
       producto: producto,
       empresaOrigenId: empresaOrigenId,
     );
@@ -203,24 +236,35 @@ class TarifaSnapshot {
   /// donde la localidad anexa entre paréntesis no aporta info nueva.
   /// Mismo helper que `TarifaLogistica._stripParentesis` — duplicado
   /// porque cada modelo es autocontenido.
-  static String _stripParentesis(String s) =>
-      s.replaceAll(RegExp(r'\s*\([^)]*\)\s*'), ' ')
-          .replaceAll(RegExp(r'\s+'), ' ')
-          .trim();
+  static String _stripParentesis(String s) => s
+      .replaceAll(RegExp(r'\s*\([^)]*\)\s*'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
 
-  factory TarifaSnapshot.fromTarifa(TarifaLogistica t) {
+  /// Snapshot de la tarifa con los importes vigentes al momento (precio
+  /// actual). Equivale a [fromTarifaEnFecha] con fecha = hoy.
+  factory TarifaSnapshot.fromTarifa(TarifaLogistica t) =>
+      TarifaSnapshot.fromTarifaEnFecha(t, null);
+
+  /// Snapshot de la tarifa con los importes de la versión que regía en
+  /// [fecha] (la fecha de carga del tramo). Los campos NO versionados
+  /// (ruta, dador, empresas, producto, unidad) se toman del estado actual
+  /// de la tarifa; solo los importes salen de [TarifaLogistica.vigenteEn].
+  /// Si [fecha] es null, usa el precio vigente hoy.
+  factory TarifaSnapshot.fromTarifaEnFecha(TarifaLogistica t, DateTime? fecha) {
+    final v = t.vigenteEn(fecha ?? DateTime.now());
     return TarifaSnapshot(
       origenEtiqueta: t.ubicacionOrigenEtiqueta,
       destinoEtiqueta: t.ubicacionDestinoEtiqueta,
       empresaOrigenNombre: t.empresaOrigenNombre,
       empresaDestinoNombre: t.empresaDestinoNombre,
       dadorNombre: t.dadorNombre,
-      porcentajeComisionDador: t.porcentajeComisionDador,
-      montoFijoDador: t.montoFijoDador,
+      porcentajeComisionDador: v.porcentajeComisionDador,
+      montoFijoDador: v.montoFijoDador,
       unidadTarifa: t.unidadTarifa,
-      tarifaReal: t.tarifaReal,
-      tarifaChofer: t.tarifaChofer,
-      montoFijoChofer: t.montoFijoChofer,
+      tarifaReal: v.tarifaReal,
+      tarifaChofer: v.tarifaChofer,
+      montoFijoChofer: v.montoFijoChofer,
       producto: t.producto,
       empresaOrigenId: t.empresaOrigenId,
     );
@@ -299,6 +343,7 @@ class TramoViaje {
   /// con `EMPRESAS_LOGISTICA/{empresaOrigenId}.productos`. Si es
   /// null, todavía no se eligió.
   final String? producto;
+
   /// Texto libre adicional sobre la carga ("descripción de la carga").
   /// Opcional — el producto del dropdown suele alcanzar.
   final String? descripcionCarga;
@@ -401,11 +446,9 @@ class TramoViaje {
         'fecha_descarga': Timestamp.fromDate(fechaDescarga!),
       if (remitoNumero != null) 'remito_numero': remitoNumero,
       if (remitoUrl != null) 'remito_url': remitoUrl,
-      if (remitoPathStorage != null)
-        'remito_path_storage': remitoPathStorage,
+      if (remitoPathStorage != null) 'remito_path_storage': remitoPathStorage,
       if (kgDescargados != null) 'kg_descargados': kgDescargados,
-      if (gastos.isNotEmpty)
-        'gastos': gastos.map((g) => g.toMap()).toList(),
+      if (gastos.isNotEmpty) 'gastos': gastos.map((g) => g.toMap()).toList(),
     };
   }
 
@@ -440,23 +483,18 @@ class TramoViaje {
       descripcionCarga: clearDescripcionCarga
           ? null
           : (descripcionCarga ?? this.descripcionCarga),
-      fechaCarga:
-          clearFechaCarga ? null : (fechaCarga ?? this.fechaCarga),
-      kgCargados:
-          clearKgCargados ? null : (kgCargados ?? this.kgCargados),
-      fechaDescarga: clearFechaDescarga
-          ? null
-          : (fechaDescarga ?? this.fechaDescarga),
-      remitoNumero: clearRemitoNumero
-          ? null
-          : (remitoNumero ?? this.remitoNumero),
+      fechaCarga: clearFechaCarga ? null : (fechaCarga ?? this.fechaCarga),
+      kgCargados: clearKgCargados ? null : (kgCargados ?? this.kgCargados),
+      fechaDescarga:
+          clearFechaDescarga ? null : (fechaDescarga ?? this.fechaDescarga),
+      remitoNumero:
+          clearRemitoNumero ? null : (remitoNumero ?? this.remitoNumero),
       remitoUrl: clearRemitoUrl ? null : (remitoUrl ?? this.remitoUrl),
       remitoPathStorage: clearRemitoPathStorage
           ? null
           : (remitoPathStorage ?? this.remitoPathStorage),
-      kgDescargados: clearKgDescargados
-          ? null
-          : (kgDescargados ?? this.kgDescargados),
+      kgDescargados:
+          clearKgDescargados ? null : (kgDescargados ?? this.kgDescargados),
       gastos: gastos ?? this.gastos,
     );
   }
@@ -510,6 +548,7 @@ class Viaje {
   final double? adelantoMonto;
   final DateTime? adelantoFecha;
   final String? adelantoObservacion;
+
   /// Número correlativo del comprobante impreso. Se asigna en la
   /// PRIMERA impresión del comprobante (RecibosAdelantoService),
   /// no al crear el viaje — para no quemar correlativos en viajes
@@ -517,6 +556,7 @@ class Viaje {
   /// Reimpresiones usan el mismo número (NO se re-incrementa el
   /// counter).
   final int? numeroReciboAdelanto;
+
   /// Timestamp de la primera impresión del comprobante. Útil para
   /// auditoría — si reimprimís, queda este original.
   final DateTime? reciboImpresoEn;
@@ -613,8 +653,7 @@ class Viaje {
   /// Usada para filtro mensual en LIQUIDACIÓN y para sort en el
   /// listado de viajes. Si por alguna razón el primer tramo no tiene
   /// fecha de carga, fallback a `creadoEn`.
-  DateTime? get fechaReferencia =>
-      tramoPrincipal.fechaCarga ?? creadoEn;
+  DateTime? get fechaReferencia => tramoPrincipal.fechaCarga ?? creadoEn;
 
   /// Etiqueta corta del origen-destino para listados:
   ///   - Single-tramo: "Bahía Blanca → Olavarría"
@@ -651,8 +690,7 @@ class Viaje {
     if (tramosRaw != null && tramosRaw.isNotEmpty) {
       // Modelo nuevo (≥ 1.0.44).
       tramos = tramosRaw
-          .map((t) =>
-              TramoViaje.fromMap(Map<String, dynamic>.from(t as Map)))
+          .map((t) => TramoViaje.fromMap(Map<String, dynamic>.from(t as Map)))
           .toList();
     } else {
       // Compat: viaje viejo single-tramo con campos planos al nivel

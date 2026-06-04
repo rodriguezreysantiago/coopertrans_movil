@@ -160,21 +160,31 @@ class _TramoEditState {
   /// asuma 0. La validación de "monto fijo obligatorio si activo" se
   /// hace al guardar el viaje.
   TarifaSnapshot snapshotConOverride() {
-    // Base del snapshot: si EDITAMOS un viaje y el operador NO cambió la tarifa
-    // (mismo tarifaId), conservamos el SNAPSHOT ORIGINAL — así el viaje mantiene
-    // el precio con el que se cargó aunque la tarifa se haya actualizado después
-    // (pedido Santiago 2026-06). En alta, o si eligió OTRA tarifa, reconstruimos
-    // del valor ACTUAL de la tarifa.
-    final base = (_snapshotOriginal != null && tarifa!.id == _tarifaIdOriginal)
-        ? _snapshotOriginal!
-        : TarifaSnapshot.fromTarifa(tarifa!);
+    // IMPORTES: la versión de la tarifa vigente en la FECHA DE CARGA del
+    // tramo (versionado 2026-06). Si todavía no hay fecha de carga, el
+    // precio de hoy. Así un viaje cargado tarde (carga el día 10, lo entran
+    // el 16 tras un aumento) toma el precio que regía el día 10.
+    final vig = tarifa!.vigenteEn(fechaCarga ?? DateTime.now());
+    // Campos NO versionados (ruta/dador/etiquetas/producto): si EDITAMOS un
+    // viaje y el operador NO cambió la tarifa (mismo tarifaId), conservamos
+    // los del snapshot original del tramo (la ruta con la que se cargó). En
+    // alta, o si eligió OTRA tarifa, tomamos el catálogo actual.
+    final baseNoVersionada =
+        (_snapshotOriginal != null && tarifa!.id == _tarifaIdOriginal)
+            ? _snapshotOriginal!
+            : TarifaSnapshot.fromTarifa(tarifa!);
+    final base = baseNoVersionada.copyWithImportes(
+      tarifaReal: vig.tarifaReal,
+      tarifaChofer: vig.tarifaChofer,
+      porcentajeComisionDador: vig.porcentajeComisionDador,
+      montoFijoDador: vig.montoFijoDador,
+    );
     if (!montoFijoChoferActivo) {
       // Explícitamente null para limpiar el override que la tarifa
       // pueda traer — el operador eligió volver al 18%.
       return base.copyWith(montoFijoChofer: null);
     }
-    final parsed =
-        AppFormatters.parsearMonto(montoFijoChoferCtrl.text);
+    final parsed = AppFormatters.parsearMonto(montoFijoChoferCtrl.text);
     if (parsed == null || parsed <= 0) {
       // Activo pero sin valor válido — no aplicar override (queda
       // null y el cálculo cae al 18%). El form valida esto antes de
@@ -368,7 +378,7 @@ class _TramoCard extends StatelessWidget {
         ),
         if (tarifa != null) ...[
           const SizedBox(height: AppSpacing.sm),
-          _ResumenTarifa(t: tarifa),
+          _ResumenTarifa(t: tarifa, fechaCarga: state.fechaCarga),
           const SizedBox(height: AppSpacing.md),
           // Override del pago al chofer para ESTE tramo. Útil cuando
           // la tarifa está cargada al 18% pero este viaje paga un
@@ -579,7 +589,8 @@ class _OverridePagoChofer extends StatelessWidget {
             controller: state.montoFijoChoferCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             inputFormatters: [AppFormatters.inputMilesDecimal],
-            style: AppType.mono.copyWith(color: c.text, fontWeight: FontWeight.w600),
+            style: AppType.mono
+                .copyWith(color: c.text, fontWeight: FontWeight.w600),
             decoration: _inputDecoration(
               context,
               labelText: 'Monto al chofer (por viaje)',
@@ -716,10 +727,12 @@ class _DropdownProductoState extends State<_DropdownProducto> {
   /// Caja decorada (surface3 + border + label eyebrow) que envuelve un
   /// dropdown o el progress mientras carga. Mantiene el gesto Núcleo sin
   /// migrar el dropdown a un widget que rompa la lógica del valor.
-  Widget _caja(BuildContext context, {required String label, required Widget child}) {
+  Widget _caja(BuildContext context,
+      {required String label, required Widget child}) {
     final c = context.colors;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(
         color: c.surface3,
         borderRadius: BorderRadius.circular(AppRadius.lg),
