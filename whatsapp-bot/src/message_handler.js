@@ -394,13 +394,26 @@ function crearHandler(fs, wa) {
       // Sin esto el bot procesaba su propio aviso como entrante y le
       // AUTO-RESPONDÍA el acuse al chofer (2x mensajes + señal de bot → baneo).
       const tieneFirmaBot = String(msg.body || '').includes('Bot-On');
-      if (msg.fromMe || idFromMe || idSer.startsWith('true_') || tieneFirmaBot) {
+      // Refuerzo por NÚMERO del bot (BOT_PHONE): si el mensaje viene de nuestro
+      // propio número, es saliente propio aunque fromMe/id mientan. Cubre los
+      // que NO llevan la firma (acuses, respuestas del agente). 2026-06-04.
+      const botPhone = (process.env.BOT_PHONE || '').replace(/\D/g, '');
+      const esDeMiNumero =
+        botPhone.length >= 8 &&
+        (String(msg.from || '').replace(/\D/g, '') === botPhone ||
+          String(msg.author || '').replace(/\D/g, '') === botPhone);
+      if (
+        msg.fromMe || idFromMe || idSer.startsWith('true_') ||
+        tieneFirmaBot || esDeMiNumero
+      ) {
         // Rastro cuando el getter fromMe NO lo marcó pero otra señal sí:
         // confirma el caso "sesión nueva" en los logs.
-        if (!msg.fromMe && (idFromMe || idSer.startsWith('true_') || tieneFirmaBot)) {
+        if (!msg.fromMe &&
+            (idFromMe || idSer.startsWith('true_') || tieneFirmaBot || esDeMiNumero)) {
           log.warn(
             `[handler] saliente propio atrapado (fromMe=${msg.fromMe}, ` +
-            `idFromMe=${idFromMe}, firma=${tieneFirmaBot}, id=${idSer.slice(0, 48)})`
+            `idFromMe=${idFromMe}, firma=${tieneFirmaBot}, miNumero=${esDeMiNumero}, ` +
+            `id=${idSer.slice(0, 48)})`
           );
         }
         return;

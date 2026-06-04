@@ -683,6 +683,21 @@ async function procesarSiguiente() {
       log.warn(`${docId}: agrupador falló (envío individual): ${e.message}`);
     }
 
+    // Refuerzo anti-auto-mensaje: NUNCA enviarse a sí mismo. Si el destinatario
+    // resuelto es el propio número del bot (BOT_PHONE), descartar — marca el doc
+    // ENVIADO (con flag) para que no quede en loop. 2026-06-04.
+    const _botPhone = (process.env.BOT_PHONE || '').replace(/\D/g, '');
+    if (_botPhone.length >= 8 &&
+        String(data.telefono || '').replace(/\D/g, '') === _botPhone) {
+      await docRef.update({
+        estado: fs.ESTADO.enviado,
+        enviado_en: admin.firestore.FieldValue.serverTimestamp(),
+        descartado_auto_envio: true,
+      });
+      log.warn(`${docId}: descartado — el destinatario es el propio número del bot.`);
+      return;
+    }
+
     log.info(`Enviando a ${_quien(data.telefono)} (en ${Math.round(delay / 1000)}s)...`);
     await sleep(delay);
 
