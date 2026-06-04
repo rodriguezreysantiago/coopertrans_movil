@@ -9,7 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// 2 asignaciones activas. Acá testeamos el guard en código (get+exists);
 /// la unicidad ante carrera REAL la garantiza la rule `update: if false`.
 void main() {
-  Future<bool> _existeLock(FakeFirebaseFirestore db, String recurso) async {
+  Future<bool> existeLock(FakeFirebaseFirestore db, String recurso) async {
     final snap =
         await db.collection(AppCollections.asignacionesLocks).doc(recurso).get();
     return snap.exists;
@@ -23,13 +23,13 @@ void main() {
       final r = await conMutexAsignacion(db, ['vehiculo_ABC123'], () async {
         corrio = true;
         // Durante la op el lock DEBE existir.
-        expect(await _existeLock(db, 'vehiculo_ABC123'), isTrue);
+        expect(await existeLock(db, 'vehiculo_ABC123'), isTrue);
         return 42;
       });
       expect(corrio, isTrue);
       expect(r, 42);
       // Al terminar, el lock se liberó.
-      expect(await _existeLock(db, 'vehiculo_ABC123'), isFalse);
+      expect(await existeLock(db, 'vehiculo_ABC123'), isFalse);
     });
 
     test('lock vigente (otra op en curso): rebota y NO ejecuta la op', () async {
@@ -65,7 +65,7 @@ void main() {
         corrio = true;
       });
       expect(corrio, isTrue);
-      expect(await _existeLock(db, 'vehiculo_ABC123'), isFalse);
+      expect(await existeLock(db, 'vehiculo_ABC123'), isFalse);
     });
 
     test('libera el lock aunque la op lance', () async {
@@ -76,17 +76,17 @@ void main() {
         }),
         throwsA(isA<StateError>()),
       );
-      expect(await _existeLock(db, 'chofer_111'), isFalse);
+      expect(await existeLock(db, 'chofer_111'), isFalse);
     });
 
     test('toma TODOS los recursos y los libera al terminar', () async {
       final db = FakeFirebaseFirestore();
       await conMutexAsignacion(db, ['vehiculo_A', 'chofer_1'], () async {
-        expect(await _existeLock(db, 'vehiculo_A'), isTrue);
-        expect(await _existeLock(db, 'chofer_1'), isTrue);
+        expect(await existeLock(db, 'vehiculo_A'), isTrue);
+        expect(await existeLock(db, 'chofer_1'), isTrue);
       });
-      expect(await _existeLock(db, 'vehiculo_A'), isFalse);
-      expect(await _existeLock(db, 'chofer_1'), isFalse);
+      expect(await existeLock(db, 'vehiculo_A'), isFalse);
+      expect(await existeLock(db, 'chofer_1'), isFalse);
     });
   });
 }
