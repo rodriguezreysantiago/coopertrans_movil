@@ -7,6 +7,28 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-06-04 — Auditoría Volvo: 16 unidades con suscripción VENCIDA (decisión: dejar en Sitrack por ahora)
+
+**Confirmado por Santiago**: 16 tractores Volvo tienen la suscripción de Volvo Connect **vencida** — cortaron transmisión casi simultáneamente **~29-may**. El poller los sigue "viendo" (consultado_en <1h) pero la API devuelve el último estado **congelado** de hace ~6 días. Auditoría completa esta sesión (datos en vivo en Firestore + mapeo de código con agentes).
+
+**Patentes** (16 asignadas a choferes activos, congeladas ~6 d): AC114PY, AC114QQ, AC114QP, AB927WN, AB927WU, AC274LU, AC114QR, AB421DP, AC274IS, AC383ND, AC114PX, AC383OM, AB493CP, AC114PZ, AG848IK (2 d). Más **AH490YJ** (29 d — parada de verdad, muerta también en Sitrack) y 2 sin asignar (AB787RS, AF869ZU, probablemente paradas).
+
+**Qué se perdió** (exclusivo de Volvo, irrecuperable sin renovar): combustible / AdBlue / autonomía · tell-tales del tablero (mantenimiento predictivo) · scores eco-driving (L/100km, CO₂) · alertas de seguridad activa (AEBS/ESP/LKS).
+
+**Qué NO se perdió** — Sitrack cubre toda la flota (55) y **ya está reportando esas 16 en vivo**: posición/velocidad, odómetro, iButton (chofer), sobrevelocidad cartográfica, conducta (frenada/aceleración brusca vía ICM), zonas/descargas, jornada. **El ICM oficial que audita YPF sale de Sitrack, NO de Volvo → relación con YPF intacta.** El 70% operativo siempre vivió en Sitrack; Volvo era el "plus" de telemetría de motor.
+
+**DECISIÓN (Santiago, 2026-06-04): dejar como está, operar esas 16 con Sitrack, NO renovar Volvo por ahora.** Revisitar si se necesita el control de combustible / mantenimiento predictivo de esas unidades.
+
+**Para retomar (NO hacer ahora, quedó pausado):**
+1. 🥇 **Monitor de frescura** — el verdadero problema fue perder 16 unidades 6 días sin enterarse. Cron que avise por WhatsApp cuando una unidad asignada deja de transmitir posición >X h. Esfuerzo chico, alto valor, **independiente de la decisión de suscripción**.
+2. **Service por km/horas → fallback a Sitrack** (`odometer` / `hourmeter`) para unidades sin Volvo. Horas solo donde hay ICAN (~15/55); km en todas. Verificar que el mantenimiento caiga bien.
+3. **Mejoras de código** (del mapeo): `volvoAlertasPoller` y `volvoScoresPoller` NO reintentan ante 401/403/500 (el cursor de alertas no avanza → riesgo de perder eventos en outage transitorio) — igualar a `telemetria.ts`. Colecciones muertas `ULTIMO_SERVICE_KM`/`ULTIMO_SERVICE_FECHA` (vacías; el dato vive en `VEHICULOS_TALLER`) → limpiar.
+4. **Decisión de fondo**: renovar Volvo de las 16 (recupera combustible/eco/tell-tales/seguridad) vs seguir en Sitrack. Combustible vía Sitrack existe como módulo aparte (suscripción).
+
+**El pipeline Volvo está SANO**: poller cada 5 min sobre 53/53, auth OAuth OK, alertas en tiempo real (última hace minutos), telemetría fresca, campos clave 53/53. El problema es 100% de suscripción, no del código.
+
+---
+
 ## 📅 2026-05-29 — macOS enviado a review de Apple 🎉
 
 Frente macOS destrabado end-to-end y **app enviada a review** del Mac App Store.
