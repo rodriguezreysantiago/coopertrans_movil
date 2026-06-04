@@ -927,7 +927,10 @@ def ciclo_latente(targets: dict, dry: bool):
             log("LOG", t.nombre, f"error reagendando: {e}")
             continue
         if r.get("ok"):
-            log("EXITO", t.nombre, f"REAGENDADO a {r.get('hora')} (franja '{t.franja}')")
+            _f = r.get("fecha")
+            _cuando = (f"{_fecha_ar_corta(_f)} {r.get('hora')}"
+                       if _f else r.get("hora"))
+            log("EXITO", t.nombre, f"REAGENDADO a {_cuando}")
             t.reagendar_hecho = True
             t.reagendar = False   # ya se movió → apagar el flag. CLAVE para
             if _ESCRIBIR_ESTADO:  # 'cualquiera' (que no auto-cancela): si no, al

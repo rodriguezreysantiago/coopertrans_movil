@@ -558,7 +558,8 @@ class IturnosClient:
                     "status": resp.status_code}
         ok = resp.status_code in (200, 302)
         return {"ok": ok, "motivo": "reagendado" if ok else "revisar",
-                "hora": slot["hora"], "status": resp.status_code}
+                "hora": slot["hora"], "fecha": slot.get("fecha"),
+                "status": resp.status_code}
 
     def cancelar(self, uuid: str) -> dict:
         """CANCELA el turno {uuid} en iTurnos. ⚠️ DESTRUCTIVO: libera el slot y no
