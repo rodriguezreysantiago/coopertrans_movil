@@ -35,6 +35,7 @@ La hora local del equipo se asume ART (igual que el bot en la PC dedicada).
 import json
 import os
 import random
+import re
 import sys
 import threading
 import time
@@ -106,6 +107,16 @@ def log(tag: str, quien: str, msg: str):
     # y el quien. Asi todas las lineas (cachatore + auto-update) arrancan igual.
     with _log_lock:
         print(f"[{datetime.now():%d/%m %H:%M:%S}] {tag} [{quien}] {msg}", flush=True)
+
+
+_RE_FECHA_ISO = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+
+
+def _fecha_ar_corta(s) -> str:
+    """'2026-06-05 01:30' -> '05-06 01:30'. Saca el año (siempre el corriente: no
+    se coordina un turno para otro año) y pasa la fecha a DD-MM (formato AR). Si
+    el string no trae una fecha ISO, lo deja igual."""
+    return _RE_FECHA_ISO.sub(lambda m: f"{m.group(3)}-{m.group(2)}", str(s))
 
 
 def _log_reagendar_motivo(t, msg: str):
@@ -930,13 +941,14 @@ def ciclo_latente(targets: dict, dry: bool):
         elif r.get("motivo") == "tomado":
             log("LOG", t.nombre, f"{r.get('hora')} lo tomaron al reagendar, sigo")
         elif r.get("motivo") == "sin_slot_en_franja":
-            ofrece = r.get("ofrece") or []
+            ofrece = [_fecha_ar_corta(x) for x in (r.get("ofrece") or [])]
             detalle = ("  El calendario de reagendar SÍ ofrece: "
                        + "; ".join(ofrece)) if ofrece else \
                 "  El calendario de reagendar vino VACÍO (0 huecos para mover)."
+            fecha_txt = (" / " + _fecha_ar_corta(t.fecha)) if t.fecha else ""
             _log_reagendar_motivo(
                 t, f"el calendario de reagendar NO tiene slot en franja "
-                   f"'{t.franja}'{(' / ' + t.fecha) if t.fecha else ''}.{detalle}")
+                   f"'{t.franja}'{fecha_txt}.{detalle}")
         else:
             log("LOG", t.nombre, f"reagendar sin confirmar ({r.get('motivo')})")
 
