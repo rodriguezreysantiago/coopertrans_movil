@@ -1015,7 +1015,8 @@ async function _toolCrearAdelanto(db, persona, args) {
       monto: montoFmt,
       fecha: fechaInfo.label,
       medio_pago: medioLabel,
-      nota: 'Adelanto registrado como PENDIENTE de descontar.',
+      nota: 'Adelanto registrado como PENDIENTE de descontar. El número de ' +
+        'recibo se asigna al imprimirlo desde la app.',
     };
   } catch (e) {
     return { ok: false, error: `No pude registrar el adelanto: ${e.message}` };
@@ -1038,34 +1039,59 @@ function _diasHasta(iso) {
   return Math.round((a - b) / 86400000);
 }
 
+/**
+ * Normaliza un nombre para comparar: saca tildes/diacríticos (Gastón→GASTON,
+ * Ibáñez→IBANEZ), mayúsculas, signos→espacio y colapsa espacios. Así "Gastón",
+ * "gaston" y "GASTON" matchean igual — la transcripción de voz suele meter
+ * tildes que la base no tiene (caso real Errazu/Lescano 2026-06-04).
+ */
+function _normNombre(s) {
+  // Saca diacríticos por CODEPOINT (combining marks U+0300–U+036F) en vez de un
+  // regex con combinantes — más robusto ante encoding. Gastón→GASTON, Ibáñez→IBANEZ.
+  const sinAcento = String(s || '').normalize('NFD').split('')
+    .filter((c) => { const n = c.charCodeAt(0); return n < 0x300 || n > 0x36f; })
+    .join('');
+  return sinAcento
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** Resuelve un chofer/empleado por nombre. {ok,dni,data} | {ok:false,...}. */
 async function _resolverChoferPorNombre(db, query, soloChofer) {
-  const q = String(query || '').trim();
-  if (!q) return { ok: false, error: 'Indicá el nombre.' };
+  const qNorm = _normNombre(query);
+  if (!qNorm) return { ok: false, error: 'Indicá el nombre.' };
+  // Match por TOKENS orden-independiente: todas las palabras de la query deben
+  // estar en el nombre, sin importar el orden ni las tildes. Así "Gastón
+  // Lescano" (nombre apellido, como habla la gente) matchea "LESCANO GASTON
+  // ROBERTO" igual que "Lescano Gastón". Antes era includes() literal → fallaba
+  // por orden invertido o por tilde de la transcripción de voz.
+  const qTokens = qNorm.split(' ').filter(Boolean);
   let snap;
   try {
     snap = { docs: await _getEmpleadosDocs(db) };
   } catch (e) {
     return { ok: false, error: `No pude buscar: ${e.message}` };
   }
-  const qUp = q.toUpperCase();
   const matches = snap.docs.filter((d) => {
     const data = d.data();
     if (soloChofer) {
       const rol = String(data.ROL || 'CHOFER').toUpperCase();
       if (!(rol === 'CHOFER' || rol === '' || rol === 'USUARIO')) return false;
     }
-    return String(data.NOMBRE || '').toUpperCase().includes(qUp);
+    const nomNorm = _normNombre(data.NOMBRE);
+    return qTokens.every((t) => nomNorm.includes(t));
   });
   if (matches.length === 0) {
-    return { ok: false, error: `No encontré a "${q}".` };
+    return { ok: false, error: `No encontré a "${query}".` };
   }
   if (matches.length > 1) {
     return {
       ok: false,
       ambiguo: true,
       opciones: matches.slice(0, 6).map((d) => d.data().NOMBRE),
-      error: `Varios coinciden con "${q}"; pedí que aclaren nombre y apellido.`,
+      error: `Varios coinciden con "${query}"; pedí que aclaren nombre y apellido.`,
     };
   }
   return { ok: true, dni: matches[0].id, data: matches[0].data() };

@@ -852,4 +852,24 @@ describe('agente._ejecutarTool — crear_adelanto (acción de plata)', () => {
     assert.strictEqual(r.ok, false);
     assert.strictEqual(db._escrituras.length, 0);
   });
+
+  // Regresión del caso real Errazu/Lescano (2026-06-04): nombre dicho en orden
+  // invertido (nombre apellido) + tilde de la transcripción de voz.
+  test('resuelve orden invertido + tilde: "Gastón Lescano" → LESCANO GASTON ROBERTO', async () => {
+    const db = dbMockAdel({ empleados: [
+      { id: '40', data: { NOMBRE: 'LESCANO GASTON ROBERTO', ROL: 'CHOFER', ACTIVO: true } },
+    ] });
+    const r = await agente._ejecutarTool(db, 'crear_adelanto', ADMIN, { empleado: 'Gastón Lescano', monto: 150000 });
+    assert.strictEqual(r.requiere_confirmacion, true, 'debe resolverlo, no "no encontré"');
+    assert.strictEqual(r.resumen.empleado, 'LESCANO GASTON ROBERTO');
+  });
+
+  test('resuelve sin tilde y con ñ: "ibanez cristian" → IBAÑEZ CAMPOS CRISTIAN', async () => {
+    const db = dbMockAdel({ empleados: [
+      { id: '41', data: { NOMBRE: 'IBAÑEZ CAMPOS CRISTIAN', ROL: 'CHOFER', ACTIVO: true } },
+    ] });
+    const r = await agente._ejecutarTool(db, 'crear_adelanto', ADMIN, { empleado: 'ibanez cristian', monto: 5000 });
+    assert.strictEqual(r.requiere_confirmacion, true);
+    assert.strictEqual(r.resumen.empleado, 'IBAÑEZ CAMPOS CRISTIAN');
+  });
 });
