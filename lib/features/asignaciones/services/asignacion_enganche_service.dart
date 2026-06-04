@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/app_logger.dart';
 import '../../../core/services/audit_log_service.dart';
 import '../../fleet_map/services/sitrack_snapshot_service.dart';
 import '../models/asignacion_enganche.dart';
@@ -198,8 +199,9 @@ class AsignacionEngancheService {
         : await snapTractorViejoF;
 
     // === Crear nueva asignación primero (minimiza ventana sin asignación).
+    DocumentReference<Map<String, dynamic>>? nuevaRef;
     if (!desenganchar) {
-      final nuevaRef = colAsig.doc();
+      nuevaRef = colAsig.doc();
       await nuevaRef.set(<String, dynamic>{
         'enganche_id': engancheLimpio,
         'tractor_id': tractorNorm,
@@ -232,7 +234,21 @@ class AsignacionEngancheService {
               Timestamp.fromDate(snapTractorViejo.reportDate!);
         }
       }
-      await activaEngancheDoc.reference.update(updateClose);
+      try {
+        await activaEngancheDoc.reference.update(updateClose);
+      } catch (e, st) {
+        // El cierre de la asignación previa falló DESPUÉS de crear la
+        // nueva → quedan 2 activas sin rastro automático. Visible para
+        // reconciliar a mano (cerrar la vieja `${activaEngancheDoc.id}`).
+        AppLogger.recordError(
+          e,
+          st,
+          reason:
+              'cierre de asignación previa de enganche falló; nueva=${nuevaRef?.id ?? '(desenganchar)'} '
+              'quedó activa junto con la vieja=${activaEngancheDoc.id}',
+        );
+        rethrow;
+      }
     }
 
     // === Cerrar asignación del tractor si tenía OTRO enganche. El
@@ -248,7 +264,21 @@ class AsignacionEngancheService {
               Timestamp.fromDate(snapTractorNuevo.reportDate!);
         }
       }
-      await activaTractorDoc.reference.update(updateClose);
+      try {
+        await activaTractorDoc.reference.update(updateClose);
+      } catch (e, st) {
+        // Cierre de la asignación previa del OTRO enganche sobre el tractor
+        // nuevo falló → ese enganche queda activo junto con la nueva.
+        // Visible para reconciliar (cerrar la vieja `${activaTractorDoc.id}`).
+        AppLogger.recordError(
+          e,
+          st,
+          reason:
+              'cierre de asignación previa de enganche falló; nueva=${nuevaRef?.id ?? '(desenganchar)'} '
+              'quedó activa junto con la vieja=${activaTractorDoc.id}',
+        );
+        rethrow;
+      }
     }
 
     // === Espejo en VEHICULOS.ESTADO del enganche (LIBRE / OCUPADO).
@@ -261,8 +291,11 @@ class AsignacionEngancheService {
         {'ESTADO': desenganchar ? 'LIBRE' : 'OCUPADO'},
       );
     } catch (e) {
-      // ignore: avoid_print
-      print('Aviso: actualizar ESTADO del enganche $engancheLimpio falló: $e');
+      AppLogger.recordError(
+        e,
+        StackTrace.current,
+        reason: 'actualizar ESTADO del enganche $engancheLimpio falló',
+      );
     }
 
     // Si había OTRO enganche acoplado al tractor nuevo, ese se
@@ -278,9 +311,11 @@ class AsignacionEngancheService {
               .doc(otroEngancheId)
               .update({'ESTADO': 'LIBRE'});
         } catch (e) {
-          // ignore: avoid_print
-          print(
-              'Aviso: liberar ESTADO del otro enganche $otroEngancheId falló: $e');
+          AppLogger.recordError(
+            e,
+            StackTrace.current,
+            reason: 'liberar ESTADO del otro enganche $otroEngancheId falló',
+          );
         }
       }
     }
@@ -393,8 +428,7 @@ class AsignacionEngancheService {
     if (patenteLimpia.isEmpty) return const <AsignacionEnganche>[];
 
     // Filtramos asignaciones que no terminaron antes del inicio de
-    // la ventana. Es decir: hasta es null (activa) O hasta > desde.
-    final desdeTs = Timestamp.fromDate(desde);
+    // la ventana. Es decir: hasta es null (activa) O hasta >= desde.
     final hastaTs = Timestamp.fromDate(hasta);
 
     // Asignaciones que empezaron antes del fin de la ventana.
@@ -407,13 +441,9 @@ class AsignacionEngancheService {
 
     return snap.docs
         .map(AsignacionEnganche.fromDoc)
-        .where((a) {
-          // Filtramos las que terminaron antes del inicio de la ventana.
-          if (a.hasta == null) return true;
-          return a.hasta!.isAfter(desde) ||
-              a.hasta!.isAtSameMomentAs(desde) ||
-              a.hasta!.isAfter(desdeTs.toDate());
-        })
+        // Descarta las que terminaron antes del inicio de la ventana
+        // (activa = null pasa siempre).
+        .where((a) => a.hasta == null || !a.hasta!.isBefore(desde))
         .toList();
   }
 

@@ -182,8 +182,9 @@ class AsignacionVehiculoService {
 
     // === 4. CREAR primero la nueva asignación (si aplica) — writes
     // secuenciales en orden que minimiza ventana de inconsistencia.
+    DocumentReference<Map<String, dynamic>>? nuevaRef;
     if (!desvincular) {
-      final nuevaRef = colAsig.doc();
+      nuevaRef = colAsig.doc();
       await nuevaRef.set(<String, dynamic>{
         'vehiculo_id': patenteNorm,
         'chofer_dni': dniLimpio,
@@ -214,7 +215,22 @@ class AsignacionVehiculoService {
               Timestamp.fromDate(snapVieja.reportDate!);
         }
       }
-      await activaChoferDoc.reference.update(updateClose);
+      try {
+        await activaChoferDoc.reference.update(updateClose);
+      } catch (e, st) {
+        // El cierre de la asignación previa falló DESPUÉS de haber creado
+        // la nueva → quedan 2 activas sin rastro automático. Lo dejamos
+        // visible para poder reconciliar a mano (cerrar la vieja
+        // `${activaChoferDoc.id}`).
+        AppLogger.recordError(
+          e,
+          st,
+          reason:
+              'cierre de asignación previa falló; nueva=${nuevaRef?.id ?? '(desvincular)'} '
+              'quedó activa junto con la vieja=${activaChoferDoc.id}',
+        );
+        rethrow;
+      }
     }
 
     // === 6. Cerrar asignación de la patente nueva si la tenía OTRO chofer.
@@ -231,7 +247,21 @@ class AsignacionVehiculoService {
               Timestamp.fromDate(snapNueva.reportDate!);
         }
       }
-      await activaPatenteDoc.reference.update(updateClose);
+      try {
+        await activaPatenteDoc.reference.update(updateClose);
+      } catch (e, st) {
+        // Cierre de la asignación previa del OTRO chofer sobre la patente
+        // nueva falló → ese chofer queda activo junto con la nueva. Visible
+        // para reconciliar (cerrar la vieja `${activaPatenteDoc.id}`).
+        AppLogger.recordError(
+          e,
+          st,
+          reason:
+              'cierre de asignación previa falló; nueva=${nuevaRef?.id ?? '(desvincular)'} '
+              'quedó activa junto con la vieja=${activaPatenteDoc.id}',
+        );
+        rethrow;
+      }
     }
 
     // === 7. Espejos en EMPLEADOS y VEHICULOS — best-effort. Si alguno
@@ -298,9 +328,10 @@ class AsignacionVehiculoService {
             .doc(choferActualPatente)
             .update({'VEHICULO': _sinAsignar});
       } catch (e) {
-        // ignore: avoid_print
-        print(
-          'Aviso: limpiar EMPLEADOS.$choferActualPatente.VEHICULO falló: $e',
+        AppLogger.recordError(
+          e,
+          StackTrace.current,
+          reason: 'limpiar EMPLEADOS.${_maskDni(choferActualPatente)}.VEHICULO falló',
         );
       }
     }
@@ -347,8 +378,11 @@ class AsignacionVehiculoService {
     } catch (e) {
       // No bloqueamos el cambio de tractor por un fallo del cascade.
       // El log temporal puede repararse manualmente si hace falta.
-      // ignore: avoid_print
-      print('Aviso: cascade ASIGNACIONES_ENGANCHE falló (no bloquea): $e');
+      AppLogger.recordError(
+        e,
+        StackTrace.current,
+        reason: 'cascade ASIGNACIONES_ENGANCHE falló (no bloquea el cambio de tractor)',
+      );
     }
   }
 
