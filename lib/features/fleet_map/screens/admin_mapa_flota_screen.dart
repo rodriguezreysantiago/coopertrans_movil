@@ -90,6 +90,14 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
 
   final _mapController = MapController();
 
+  /// flutter_map dispara `onMapReady` cuando el mapa terminó su primer layout
+  /// y el TileLayer ya puede pedir tiles. Si encuadramos la cámara (fitCamera)
+  /// ANTES de eso, el mapa mueve la vista pero NO carga los tiles → queda gris
+  /// hasta que el usuario mueve a mano (auditoría 2026-06). Por eso diferimos
+  /// el primer encuadre hasta que el mapa avise que está listo.
+  bool _mapaListo = false;
+  List<QueryDocumentSnapshot<Map<String, dynamic>>>? _fitPendiente;
+
   /// Keys de SharedPreferences para persistir centro/zoom entre sesiones.
   static const _prefsKeyLat = 'mapa_flota_last_lat';
   static const _prefsKeyLng = 'mapa_flota_last_lng';
@@ -180,6 +188,19 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
         padding: const EdgeInsets.all(50),
       ),
     );
+  }
+
+  /// flutter_map → `onMapReady`: el mapa ya puede recibir comandos del
+  /// controller y el TileLayer ya carga. Ejecuta el encuadre inicial que
+  /// quedó pendiente (si los datos llegaron antes de que el mapa estuviera
+  /// listo). Sin esto, el fit temprano dejaba el mapa gris hasta mover a mano.
+  void _onMapaListo() {
+    _mapaListo = true;
+    final pendiente = _fitPendiente;
+    if (pendiente != null) {
+      _fitPendiente = null;
+      _ajustarVistaATodaLaFlota(pendiente);
+    }
   }
 
   /// Centra el mapa en la unidad elegida desde el panel lateral y la marca
@@ -303,9 +324,16 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
           // respetamos el pan/zoom del usuario.
           if (!_didInitialFit && visibles.isNotEmpty) {
             _didInitialFit = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _ajustarVistaATodaLaFlota(visibles);
-            });
+            if (_mapaListo) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) _ajustarVistaATodaLaFlota(visibles);
+              });
+            } else {
+              // El mapa aún no terminó de inicializar: guardamos el encuadre
+              // para que lo ejecute `_onMapaListo`. Hacerlo ahora movería la
+              // cámara pero dejaría los tiles sin cargar (mapa gris).
+              _fitPendiente = visibles;
+            }
           }
 
           // Layout responsive:
@@ -334,6 +362,7 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
                 onMarkerTap: detalleFijo ? _seleccionarUnidad : _abrirDetalle,
                 onFitFlota: () => _ajustarVistaATodaLaFlota(visibles),
                 onPosicionCambiada: _persistirPosicion,
+                onMapaListo: _onMapaListo,
                 onAbrirPanel: panelFijo
                     ? null
                     : () => _abrirPanelMobile(visibles, ahora),
@@ -896,6 +925,10 @@ class _Mapa extends StatelessWidget {
   final VoidCallback onFitFlota;
   final void Function(LatLng center, double zoom) onPosicionCambiada;
 
+  /// flutter_map avisa que el mapa está listo (primer layout completo): el
+  /// padre difiere acá el encuadre inicial para que los tiles carguen.
+  final VoidCallback onMapaListo;
+
   /// Si no es null, muestra un botón arriba-izquierda para abrir el panel de
   /// unidades (mobile). En desktop el panel es fijo y esto es null.
   final VoidCallback? onAbrirPanel;
@@ -912,6 +945,7 @@ class _Mapa extends StatelessWidget {
     required this.onMarkerTap,
     required this.onFitFlota,
     required this.onPosicionCambiada,
+    required this.onMapaListo,
     required this.onAbrirPanel,
   });
 
@@ -938,6 +972,10 @@ class _Mapa extends StatelessWidget {
             initialZoom: zoomInicial,
             minZoom: 4,
             maxZoom: 18,
+            // El mapa avisa cuando completó su primer layout: recién ahí el
+            // padre dispara el encuadre inicial. Si lo hiciera antes, mueve la
+            // cámara pero el TileLayer no carga (mapa gris hasta mover a mano).
+            onMapReady: onMapaListo,
             // Persistir posición cuando el usuario termina un pan/zoom.
             // El debounce vive en el padre — acá solo notificamos.
             onMapEvent: (event) {
@@ -956,12 +994,16 @@ class _Mapa extends StatelessWidget {
               TileLayer(
                 urlTemplate: MapConstants.tileSatelliteUrl,
                 userAgentPackageName: MapConstants.userAgent,
+                // Pre-cargar 2 anillos de tiles alrededor del viewport (default
+                // 1): reduce las "partes faltantes" al panear (auditoría 2026-06).
+                panBuffer: 2,
               )
             else
               TileLayer(
                 urlTemplate: MapConstants.tileUrl,
                 subdomains: MapConstants.tileSubdomains,
                 userAgentPackageName: MapConstants.userAgent,
+                panBuffer: 2,
               ),
             // Agrupamos pins muy cerca (radio chico de 25px) para evitar
             // superposición en el mismo predio. A zoom alto se separan.
