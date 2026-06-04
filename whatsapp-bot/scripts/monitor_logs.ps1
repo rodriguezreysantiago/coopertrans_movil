@@ -86,6 +86,12 @@ function Write-Color([string]$line) {
         $color = 'Red'
     } elseif ($line -match '\bWARN\b|warning') {
         $color = 'Yellow'
+    } elseif ($line -match 'Agente respondi') {
+        # Respuestas del agente IA: magenta para que resalten distinto del
+        # verde de los envios del bot (pedido Santiago 2026-06-04). El patron
+        # va SIN tilde a proposito ("respondi" es prefijo de "respondio"),
+        # robusto al encoding del .ps1.
+        $color = 'Magenta'
     } elseif ($line -match '\bOK\b|listo|enviado|Heartbeat OK') {
         $color = 'Green'
     } elseif ($line -match '\bINFO\b|iniciando|cargand') {
