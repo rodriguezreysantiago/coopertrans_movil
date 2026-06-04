@@ -386,6 +386,15 @@ function crearHandler(fs, wa) {
       // acuse, duplicando envios (agravo el ban del numero nuevo, 2026-06-03).
       const idSer = String((msg.id && msg.id._serialized) || '');
       const idFromMe = !!(msg.id && msg.id.fromMe);
+      // Defensa INFALIBLE (2026-06-04): si el id es de un mensaje que ENVIAMOS
+      // nosotros, este `message_create` es el reflejo de nuestro propio saliente
+      // — descartarlo SIN importar fromMe/firma/body (que llegan corruptos en
+      // sesiones recién vinculadas y dejaban al bot auto-respondiéndose los
+      // avisos del vigilador/sitrack). El id de WhatsApp NO se puede falsear.
+      if (idSer && wa.esMensajePropio(idSer)) {
+        log.warn(`[handler] reflejo de saliente propio descartado por id (${idSer.slice(0, 48)})`);
+        return;
+      }
       // Red de seguridad (2026-06-04): TODOS los avisos del bot llevan la firma
       // "Bot-On — Coopertrans Móvil". Si un mensaje "entrante" la trae, es SÍ o
       // SÍ un saliente propio que `message_create` nos devolvió — aunque la

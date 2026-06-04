@@ -601,7 +601,10 @@ async function enviarMensaje(wid, texto) {
     throw e;
   }
   try {
-    return sent && sent.id && sent.id._serialized ? sent.id._serialized : null;
+    const idSer = sent && sent.id && sent.id._serialized
+      ? sent.id._serialized : null;
+    _marcarPropio(idSer); // para que el handler descarte su reflejo (anti-auto-respuesta)
+    return idSer;
   } catch (_) {
     return null;
   }
@@ -636,6 +639,29 @@ async function enviarMensaje(wid, texto) {
 // hay ventana donde queden 2 listeners.
 let _messageHandler = null;
 
+// IDs de WhatsApp de los mensajes que ENVIÓ el bot. El handler escucha
+// `message_create` (necesario para que dispare en chats nuevos), que TAMBIÉN
+// dispara para los salientes propios. En una sesión recién vinculada (cambio de
+// dispositivo) esos reflejos llegan con fromMe/id/body CORRUPTOS y las defensas
+// por contenido (firma "Bot-On", BOT_PHONE) fallan → el bot procesaba sus
+// propios avisos (vigilador/sitrack) como entrantes y SE AUTO-RESPONDÍA (el
+// "hablan entre ellos" reportado 2026-06-04). Registrar el id de cada saliente y
+// descartarlo en el handler es la defensa INFALIBLE: el id no se puede falsear.
+// Set acotado (FIFO) para no crecer infinito.
+const _idsPropios = new Set();
+const _MAX_IDS_PROPIOS = 2000;
+function _marcarPropio(idSer) {
+  if (!idSer || typeof idSer !== 'string') return;
+  _idsPropios.add(idSer);
+  if (_idsPropios.size > _MAX_IDS_PROPIOS) {
+    _idsPropios.delete(_idsPropios.values().next().value); // descarta el más viejo
+  }
+}
+/** ¿Este id de WhatsApp corresponde a un mensaje que enviamos nosotros? */
+function esMensajePropio(idSer) {
+  return typeof idSer === 'string' && idSer.length > 0 && _idsPropios.has(idSer);
+}
+
 function onMensajeEntrante(handler) {
   if (!client) throw new Error('Cliente no inicializado');
   // Si ya había un handler registrado, lo sacamos antes de registrar
@@ -659,7 +685,10 @@ function onMensajeEntrante(handler) {
 async function responder(msg, texto) {
   if (!client || !listo) throw new Error('Cliente no inicializado');
   try {
-    await msg.reply(texto);
+    const sent = await msg.reply(texto);
+    if (sent && sent.id && sent.id._serialized) {
+      _marcarPropio(sent.id._serialized); // anti-auto-respuesta (reflejo del saliente)
+    }
   } catch (e) {
     if (_esErrorBrowserMuerto(e)) {
       _gestionarBrowserMuerto(e);
@@ -707,6 +736,7 @@ module.exports = {
   enviarMensaje,
   onMensajeEntrante,
   responder,
+  esMensajePropio,
   obtenerTelefonoDeLid,
   destroy,
 };
