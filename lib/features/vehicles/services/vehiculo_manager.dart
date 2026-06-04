@@ -229,18 +229,46 @@ class VehiculoManager {
   // notificación (porque el `ultimo_estado` quedó en OK).
   Future<void> _evaluarMantenimiento(
     String patente,
-    double? serviceDistanceKm,
+    double? serviceDistanceApiKm,
   ) async {
+    final db = FirebaseFirestore.instance;
+    final pat = patente.trim();
+
+    // Resolución de serviceDistance: MANUAL > API > NINGUNO. MISMO criterio
+    // que la UI (`_resolverServiceDistance` en admin_mantenimiento_widgets):
+    // el service cargado a mano (`ULTIMO_SERVICE_KM`) gana porque el paquete
+    // UPTIME del contrato Volvo no está activado y el `serviceDistance` del
+    // API a veces trae basura (ej. AG218ZD: 642.069 km al próximo service
+    // para un tractor que en realidad estaba vencido). Si clasificáramos solo
+    // por el API acá, podríamos notificar "VENCIDO" (o NO notificar uno real)
+    // en contra de lo que muestra la pantalla. Usamos el helper público
+    // `serviceDistanceDesdeManual` para no duplicar la fórmula.
+    double? manualServiceDistanceKm;
+    try {
+      final vehSnap =
+          await db.collection(AppCollections.vehiculos).doc(pat).get();
+      final vehData = vehSnap.data();
+      if (vehData != null) {
+        manualServiceDistanceKm = AppMantenimiento.serviceDistanceDesdeManual(
+          ultimoServiceKm: (vehData['ULTIMO_SERVICE_KM'] as num?)?.toDouble(),
+          kmActual: (vehData['KM_ACTUAL'] as num?)?.toDouble(),
+        );
+      }
+    } catch (e) {
+      // Si no podemos leer el doc, caemos al valor del API (mejor que nada).
+      debugPrint("⚠️ [MANTENIMIENTO] no pude leer manual de $pat: $e");
+    }
+
+    final serviceDistanceKm = manualServiceDistanceKm ?? serviceDistanceApiKm;
     if (serviceDistanceKm == null) {
-      // Sin datos no podemos clasificar — no escribimos nada.
+      // Sin datos (ni manual ni API) no podemos clasificar — no escribimos.
       return;
     }
     final nuevoEstado = AppMantenimiento.clasificar(serviceDistanceKm);
 
-    final db = FirebaseFirestore.instance;
     final ref = db
         .collection(AppCollections.mantenimientosAvisados)
-        .doc(patente.trim());
+        .doc(pat);
 
     try {
       final snap = await ref.get();

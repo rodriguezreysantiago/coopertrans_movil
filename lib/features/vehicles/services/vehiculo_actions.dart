@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/vencimientos_config.dart';
+import '../../../core/services/app_logger.dart';
 import '../../../core/services/audit_log_service.dart';
 import '../../../core/services/prefs_service.dart';
 import '../../../core/services/storage_service.dart';
@@ -407,8 +408,8 @@ class VehiculoActions {
           );
         }
       } catch (e) {
-        // ignore: avoid_print
-        print('darDeBaja vehículo: cerrar asig chofer falló: $e');
+        AppLogger.recordError(e, StackTrace.current,
+            reason: 'darDeBaja vehículo: cerrar asig chofer falló');
       }
 
       // 2/3) Cerrar asignación de enganche según el tipo.
@@ -443,8 +444,8 @@ class VehiculoActions {
           );
         }
       } catch (e) {
-        // ignore: avoid_print
-        print('darDeBaja vehículo: cerrar asig enganche falló: $e');
+        AppLogger.recordError(e, StackTrace.current,
+            reason: 'darDeBaja vehículo: cerrar asig enganche falló');
       }
 
       // 4) Borrar archivos de Storage (best-effort).
@@ -458,8 +459,8 @@ class VehiculoActions {
         try {
           await FirebaseStorage.instance.refFromURL(url).delete();
         } catch (e) {
-          // ignore: avoid_print
-          print('darDeBaja vehículo: no pude borrar $url: $e');
+          AppLogger.recordError(e, StackTrace.current,
+              reason: 'darDeBaja vehículo: no pude borrar archivo Storage $url');
         }
       }
 

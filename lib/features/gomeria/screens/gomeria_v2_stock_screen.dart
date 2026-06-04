@@ -294,7 +294,7 @@ class _GomeriaV2StockScreenState extends State<GomeriaV2StockScreen> {
           ],
         );
       },
-    );
+    ).whenComplete(ctrl.dispose);
   }
 }
 

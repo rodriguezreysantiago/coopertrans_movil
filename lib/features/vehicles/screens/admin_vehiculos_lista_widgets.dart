@@ -474,7 +474,7 @@ class _DetalleVehiculo extends StatelessWidget {
     final marca = (data['MARCA'] ?? '').toString();
     final modelo = (data['MODELO'] ?? '').toString();
     final anioInt =
-        (data['ANIO'] ?? data['AÑO'] as Object?) as int? ??
+        ((data['ANIO'] ?? data['AÑO']) as num?)?.toInt() ??
             int.tryParse((data['ANIO'] ?? data['AÑO'] ?? '').toString()) ??
             0;
     final estado = (data['ESTADO'] ?? 'LIBRE').toString().toUpperCase();

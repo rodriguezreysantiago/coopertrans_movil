@@ -449,13 +449,18 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
     if (confirmar != true || !mounted) return;
 
     try {
+      // Km de cierre REAL desde el servicio (odómetro KM_ACTUAL del tractor /
+      // cálculo robusto del enganche), no reconstruido del % mostrado. Así se
+      // persiste `km_unidad_al_retirar` y un `km_recorridos` exacto para el
+      // reporte costo/km.
+      final cierre = await _service.kmCierreRetiro(m);
+      if (!mounted) return;
       await _service.retirar(
         montajeId: m.id,
         motivo: motivo,
         destino: destino,
-        kmRecorridos: e.porcentajeVida != null && m.kmVidaEstimada != null
-            ? (e.porcentajeVida! / 100) * m.kmVidaEstimada!
-            : null,
+        kmUnidadAlRetirar: cierre.kmUnidadAlRetirar,
+        kmRecorridos: cierre.kmRecorridos,
         supervisorDni: PrefsService.dni,
         supervisorNombre: PrefsService.nombre,
       );

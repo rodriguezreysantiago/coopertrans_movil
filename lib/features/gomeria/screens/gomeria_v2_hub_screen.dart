@@ -44,9 +44,6 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
   final List<_Unidad> _enganches = [];
   final List<_Chofer> _choferes = [];
 
-  static final _reEnganche =
-      RegExp(r'BATEA|TOLVA|TANQUE|ENGAN|ACOPL', caseSensitive: false);
-
   @override
   void initState() {
     super.initState();
@@ -76,7 +73,11 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
           patente: d.id,
           marca: (data['MARCA'] ?? '').toString(),
         );
-        (_reEnganche.hasMatch((data['TIPO'] ?? '').toString())
+        // Clasificación canónica por AppTiposVehiculo.enganches (incluye
+        // BIVUELCO/ACOPLADO). Antes un regex que NO capturaba BIVUELCO lo
+        // metía en _tractores y le ofrecía posiciones de tractor.
+        (AppTiposVehiculo.enganches
+                    .contains((data['TIPO'] ?? '').toString().toUpperCase().trim())
                 ? _enganches
                 : _tractores)
             .add(u);

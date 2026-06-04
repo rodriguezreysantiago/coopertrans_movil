@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/app_logger.dart';
 import '../constants/posiciones.dart';
 import '../models/montaje.dart';
 import '../models/stock_movimiento.dart';
@@ -358,6 +359,22 @@ class MontajesService {
         refUnidad: unidadId,
         refPosicion: posicion,
       );
+      // Re-check anti-carrera (TOCTOU): el lock asegura unicidad de POSICIÓN,
+      // NO de stock. Dos posiciones distintas montando el último ejemplar del
+      // mismo SKU en paralelo pueden dejar el stock negativo. No revertimos
+      // (más writes + riesgo); lo registramos para que quede traza y el
+      // inventario físico lo corrija. Best-effort: no debe tumbar el montaje.
+      try {
+        final dispPost = await stockDisponible(modeloId: modeloId, vida: vida);
+        if (dispPost < 0) {
+          AppLogger.recordError(
+            StateError(
+                'Stock negativo tras montar: $modeloEtiqueta (vida $vida) = $dispPost'),
+            StackTrace.current,
+            reason: 'gomeria.montar: carrera de stock multi-posición',
+          );
+        }
+      } catch (_) {/* re-check best-effort */}
       return ref.id;
     } catch (e) {
       // Cleanup best-effort del lock para no dejar la posición trabada.
@@ -469,6 +486,38 @@ class MontajesService {
       out[m.posicion] = await _kmEnganche(unidadId, m.desde, ahora);
     }
     return out;
+  }
+
+  /// Km de CIERRE de un montaje al retirarlo: el odómetro de la unidad
+  /// (`kmUnidadAlRetirar`) y los km que rodó la cubierta (`kmRecorridos`).
+  /// Mismo criterio que el servicio viejo (`GomeriaService.retirar`):
+  ///
+  /// - **Tractor**: `kmUnidadAlRetirar = KM_ACTUAL`; `kmRecorridos =
+  ///   KM_ACTUAL − kmUnidadAlMontar` (clamp a 0 si el odómetro retrocedió por
+  ///   un sync Volvo erróneo / reset manual). Si falta el `KM_ACTUAL` o el
+  ///   `kmUnidadAlMontar`, ambos quedan `null`.
+  /// - **Enganche**: no tiene odómetro propio → `kmUnidadAlRetirar = null`;
+  ///   `kmRecorridos` sale del cálculo robusto cruzando las duplas
+  ///   tractor↔enganche con el odómetro histórico del tractor (`_kmEnganche`).
+  ///
+  /// La cuenta vive acá (no en la UI) para no duplicar la lógica sensible que
+  /// alimenta el reporte costo/km, y para reusar los helpers ya validados.
+  Future<({double? kmUnidadAlRetirar, double? kmRecorridos})> kmCierreRetiro(
+      Montaje montaje) async {
+    if (montaje.unidadTipo == TipoUnidadCubierta.tractor) {
+      final kmActual = await _kmActualTractor(montaje.unidadId);
+      final base = montaje.kmUnidadAlMontar;
+      double? recorridos;
+      if (kmActual != null && base != null) {
+        final diff = kmActual - base;
+        recorridos = diff < 0 ? 0 : diff;
+      }
+      return (kmUnidadAlRetirar: kmActual, kmRecorridos: recorridos);
+    }
+    // Enganche: sin odómetro propio. km robusto desde el montaje hasta ahora.
+    final recorridos =
+        await _kmEnganche(montaje.unidadId, montaje.desde, DateTime.now());
+    return (kmUnidadAlRetirar: null, kmRecorridos: recorridos);
   }
 
   Future<double?> _kmActualTractor(String unidadId) async {
