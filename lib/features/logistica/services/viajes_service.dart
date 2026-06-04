@@ -387,6 +387,29 @@ class ViajesService {
   // SOFT-DELETE
   // ===========================================================================
 
+  /// Desasocia los adelantos que apuntaban a [viajeId] (viaje_id → null) y
+  /// marca el motivo en [campoMarca]. NO borra los adelantos: el adelanto se
+  /// dio igual, vuelve a quedar suelto (pedido Santiago 2026-06). Devuelve
+  /// cuántos liberó.
+  static Future<int> _desasociarAdelantos(
+      String viajeId, String campoMarca) async {
+    final adelantosQ = await _db
+        .collection(AppCollections.adelantosChofer)
+        .where('viaje_id', isEqualTo: viajeId)
+        .get();
+    if (adelantosQ.docs.isEmpty) return 0;
+    final batch = _db.batch();
+    for (final ad in adelantosQ.docs) {
+      batch.update(ad.reference, {
+        'viaje_id': FieldValue.delete(),
+        'actualizado_en': FieldValue.serverTimestamp(),
+        campoMarca: viajeId,
+      });
+    }
+    await batch.commit();
+    return adelantosQ.docs.length;
+  }
+
   /// Soft-delete: marca `activo: false` con razón y auditoría. Los
   /// viajes borrados no aparecen en el listado por default. Para
   /// reactivar, llamar `reactivar`.
@@ -405,7 +428,13 @@ class ViajesService {
       'borrado_por_dni': borradoPorDni,
       if (motivo != null) 'motivo_borrado': motivo,
     });
-    AppLogger.log('Viaje soft-deleted: $viajeId');
+    // El adelanto asociado se dio igual: lo DESASOCIAMOS (vuelve a suelto) pero
+    // NO lo borramos (pedido Santiago 2026-06). Si después se reactiva el
+    // viaje, `reactivarViaje` lo vuelve a asociar.
+    final liberados =
+        await _desasociarAdelantos(viajeId, 'liberado_por_borrar_viaje');
+    AppLogger.log(
+        'Viaje soft-deleted: $viajeId (adelantos desasociados: $liberados)');
   }
 
   static Future<void> reactivarViaje({
@@ -420,7 +449,29 @@ class ViajesService {
       'actualizado_en': FieldValue.serverTimestamp(),
       'actualizado_por_dni': reactivadoPorDni,
     });
-    AppLogger.log('Viaje reactivado: $viajeId');
+    // Re-asociar los adelantos que se liberaron al borrar ESTE viaje y siguen
+    // sueltos (si el operador los re-asignó a otro viaje mientras tanto, no los
+    // tocamos: solo re-asociamos los que quedaron con viaje_id vacío).
+    final q = await _db
+        .collection(AppCollections.adelantosChofer)
+        .where('liberado_por_borrar_viaje', isEqualTo: viajeId)
+        .get();
+    final reasociar = q.docs
+        .where((d) => (d.data()['viaje_id'] ?? '').toString().isEmpty)
+        .toList();
+    if (reasociar.isNotEmpty) {
+      final batch = _db.batch();
+      for (final ad in reasociar) {
+        batch.update(ad.reference, {
+          'viaje_id': viajeId,
+          'liberado_por_borrar_viaje': FieldValue.delete(),
+          'actualizado_en': FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
+    AppLogger.log(
+        'Viaje reactivado: $viajeId (adelantos re-asociados: ${reasociar.length})');
   }
 
   /// Hard-delete del viaje: borra el doc completo de Firestore y
@@ -478,33 +529,16 @@ class ViajesService {
 
     // Desasociar adelantos que referenciaban este viaje (auditoria
     // 2026-05-18): sin esto, el adelanto queda apuntando a un viajeId
-    // fantasma. La pantalla de detalle del adelanto rompia al querer
-    // resolver el viaje, y los reportes mostraban inconsistencias.
-    final adelantosQ = await _db
-        .collection(AppCollections.adelantosChofer)
-        .where('viaje_id', isEqualTo: viajeId)
-        .get();
-    if (adelantosQ.docs.isNotEmpty) {
-      final batch = _db.batch();
-      for (final ad in adelantosQ.docs) {
-        batch.update(ad.reference, {
-          'viaje_id': FieldValue.delete(),
-          'actualizado_en': FieldValue.serverTimestamp(),
-          'liberado_por_eliminar_viaje': viajeId,
-        });
-      }
-      await batch.commit();
-      AppLogger.log(
-        'Desasociados ${adelantosQ.docs.length} adelanto(s) del viaje $viajeId',
-      );
-    }
+    // fantasma. NO se borran — el adelanto se dio igual, vuelve a suelto.
+    final liberados =
+        await _desasociarAdelantos(viajeId, 'liberado_por_eliminar_viaje');
 
     // Hard-delete del doc.
     await _col.doc(viajeId).delete();
     AppLogger.log(
       'Viaje eliminado definitivamente: $viajeId '
       '(remitos limpiados: ${pathsRemitos.length}, '
-      'adelantos liberados: ${adelantosQ.docs.length})',
+      'adelantos liberados: $liberados)',
     );
   }
 
