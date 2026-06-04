@@ -896,15 +896,40 @@ async function _estadoJornada(db, dni, nombre) {
     };
   }
   const j = snap.docs[0].data();
+  // Manejo NETO de la jornada = bloques cerrados + bloque en curso. El
+  // vigilador los cuenta por separado (`total_manejo_seg` suma SOLO los
+  // bloques ya cerrados); el chofer entiende "cuánto manejé" como la SUMA.
+  // Exponerlos por separado confundía al modelo (respuestas tipo "20 min...
+  // y otros 20 min"). Ahora `manejo_total` ya es el neto. 2026-06-04.
+  const netoSeg = (j.total_manejo_seg || 0) + (j.bloque_actual_manejo_seg || 0);
+  // Antigüedad de la jornada: si está abierta hace muchas horas, puede que no
+  // haya cerrado por falta de señal del equipo (apagado de noche) y el total
+  // arrastre el manejo de AYER. Le avisamos al modelo para que no afirme el
+  // número como verdad si el chofer dice que descansó.
+  const inicioMs =
+    j.jornada_inicio_ts && j.jornada_inicio_ts.toMillis
+      ? j.jornada_inicio_ts.toMillis()
+      : null;
+  const horasAbierta = inicioMs ? (Date.now() - inicioMs) / 3600000 : null;
+  const posibleArrastre = horasAbierta != null && horasAbierta > 16;
   return {
     chofer: nombre || dni,
     jornada_activa: true,
     estado: j.estado || null,
-    manejo_total: _fmtHHMM(j.total_manejo_seg),
+    manejo_total: _fmtHHMM(netoSeg),
     bloques_completos: j.bloques_completos || 0,
     bloque_actual_manejo: _fmtHHMM(j.bloque_actual_manejo_seg),
     pausa_actual_min: Math.round((j.bloque_actual_pausa_seg || 0) / 60),
     unidad: j.ultima_patente || null,
+    posible_arrastre: posibleArrastre,
+    nota: posibleArrastre
+      ? 'La jornada figura abierta hace muchas horas. Si el chofer dice que ' +
+        'paró a descansar/dormir y este total de manejo le parece muy alto, ' +
+        'es probable que la jornada no se haya cerrado por falta de señal del ' +
+        'equipo durante la noche. NO afirmes el número como seguro: decile que ' +
+        'según el sistema figura ese total, pero que si descansó y no coincide, ' +
+        'lo revisa la oficina.'
+      : null,
   };
 }
 

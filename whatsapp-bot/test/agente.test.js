@@ -453,15 +453,31 @@ describe('agente — herramientas nuevas (jornada, turno, vencimientos, info)', 
     };
   }
 
-  test('mi_jornada: jornada activa → manejo y bloques', async () => {
+  test('mi_jornada: manejo_total = NETO (bloques cerrados + bloque en curso)', async () => {
     const db = dbMockFull({ jornadas: [
       { chofer_dni: '30111222', jornada_fin_ts: null, estado: 'manejando', total_manejo_seg: 5400, bloques_completos: 1, bloque_actual_manejo_seg: 1800, bloque_actual_pausa_seg: 0, ultima_patente: 'AA111AA' },
     ] });
     const r = await agente._ejecutarTool(db, 'mi_jornada', { rol: 'CHOFER', dni: '30111222', data: { NOMBRE: 'PEREZ' } });
     assert.strictEqual(r.jornada_activa, true);
-    assert.strictEqual(r.manejo_total, '1h 30m');
+    // 5400s (bloques cerrados) + 1800s (bloque en curso) = 7200s = 2h 0m.
+    // Antes exponía solo los bloques cerrados (1h 30m) y el modelo mezclaba
+    // los dos números → respuestas incoherentes. Ahora es la SUMA neta.
+    assert.strictEqual(r.manejo_total, '2h 0m');
     assert.strictEqual(r.bloques_completos, 1);
     assert.strictEqual(r.unidad, 'AA111AA');
+    assert.strictEqual(r.posible_arrastre, false);
+  });
+
+  test('mi_jornada: jornada abierta hace >16h → posible_arrastre + nota', async () => {
+    const viejaMs = Date.now() - 20 * 3600000; // abierta hace 20h (no cerró)
+    const db = dbMockFull({ jornadas: [
+      { chofer_dni: '30111222', jornada_fin_ts: null, estado: 'manejando',
+        total_manejo_seg: 43200, bloque_actual_manejo_seg: 0,
+        jornada_inicio_ts: { toMillis: () => viejaMs } },
+    ] });
+    const r = await agente._ejecutarTool(db, 'mi_jornada', { rol: 'CHOFER', dni: '30111222', data: { NOMBRE: 'PEREZ' } });
+    assert.strictEqual(r.posible_arrastre, true);
+    assert.ok(r.nota && r.nota.length > 0, 'incluye nota de arrastre para el modelo');
   });
 
   test('mi_jornada: sin jornada activa', async () => {
