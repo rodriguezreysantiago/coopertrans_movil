@@ -388,6 +388,25 @@ describe('agente._ejecutarTool — Cachatore', () => {
     const r = await agente._ejecutarTool(dbMockCacha(), 'poner_a_buscar_turno', { rol: 'ADMIN' }, {});
     assert.strictEqual(r.ok, false);
   });
+
+  // Unificación 2026-06-04: cachatore usa el mismo buscador que el resto.
+  test('poner_a_buscar_turno resuelve orden invertido + tilde (buscador unificado)', async () => {
+    const db = dbMockCacha({
+      empleados: [{ id: '50', data: { NOMBRE: 'LESCANO GASTON ROBERTO', ROL: 'CHOFER', ACTIVO: true } }],
+    });
+    const r = await agente._ejecutarTool(db, 'poner_a_buscar_turno', { rol: 'ADMIN', dni: '1' }, { chofer: 'Gastón Lescano' });
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.dni, '50');
+  });
+
+  test('poner_a_buscar_turno NO resuelve a un chofer inactivo (soloActivos)', async () => {
+    const db = dbMockCacha({
+      empleados: [{ id: '51', data: { NOMBRE: 'BAJA PEDRO', ROL: 'CHOFER', ACTIVO: false } }],
+    });
+    const r = await agente._ejecutarTool(db, 'poner_a_buscar_turno', { rol: 'ADMIN' }, { chofer: 'baja pedro' });
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(Object.keys(db._escrituras).length, 0);
+  });
 });
 
 describe('agente — memoria conversacional', () => {

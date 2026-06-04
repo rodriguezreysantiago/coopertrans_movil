@@ -820,37 +820,13 @@ async function _toolPonerABuscar(db, persona, args) {
   let fecha = args && args.fecha ? String(args.fecha).trim() : null;
   if (!fecha) fecha = null;
 
-  // Resolver el chofer ACTIVO por nombre (en Cachatore la identidad es el DNI).
-  let matches;
-  try {
-    const snap = { docs: await _getEmpleadosDocs(db) };
-    const qUp = nombreQuery.toUpperCase();
-    matches = snap.docs.filter((d) => {
-      const data = d.data();
-      const rol = String(data.ROL || 'CHOFER').toUpperCase();
-      return (
-        (rol === 'CHOFER' || rol === '' || rol === 'USUARIO') &&
-        data.ACTIVO !== false &&
-        String(data.NOMBRE || '').toUpperCase().includes(qUp)
-      );
-    });
-  } catch (e) {
-    return { ok: false, error: `No pude buscar el chofer: ${e.message}` };
-  }
-  if (matches.length === 0) {
-    return { ok: false, error: `No encontré un chofer activo con "${nombreQuery}".` };
-  }
-  if (matches.length > 1) {
-    return {
-      ok: false,
-      ambiguo: true,
-      opciones: matches.slice(0, 6).map((d) => d.data().NOMBRE),
-      error: `Hay ${matches.length} choferes que coinciden con "${nombreQuery}"; pedí que aclare con nombre y apellido.`,
-    };
-  }
-  const doc = matches[0];
-  const data = doc.data();
-  const dni = doc.id;
+  // Resolver el chofer ACTIVO por nombre con el buscador UNIFICADO (tildes +
+  // orden invertido). soloChofer=true + soloActivos=true: solo choferes activos
+  // (en Cachatore la identidad es el DNI).
+  const r = await _resolverChoferPorNombre(db, nombreQuery, true, true);
+  if (!r.ok) return r; // propaga {ambiguo, opciones, error} o "no encontré"
+  const data = r.data;
+  const dni = r.dni;
   // Contrato exacto de CACHATORE_OBJETIVOS/{dni} (igual que la UI Flutter).
   try {
     await db.collection('CACHATORE_OBJETIVOS').doc(dni).set(
@@ -1058,8 +1034,9 @@ function _normNombre(s) {
     .trim();
 }
 
-/** Resuelve un chofer/empleado por nombre. {ok,dni,data} | {ok:false,...}. */
-async function _resolverChoferPorNombre(db, query, soloChofer) {
+/** Resuelve un chofer/empleado por nombre. {ok,dni,data} | {ok:false,...}.
+ *  soloActivos=true descarta empleados dados de baja (lo usa Cachatore). */
+async function _resolverChoferPorNombre(db, query, soloChofer, soloActivos = false) {
   const qNorm = _normNombre(query);
   if (!qNorm) return { ok: false, error: 'Indicá el nombre.' };
   // Match por TOKENS orden-independiente: todas las palabras de la query deben
@@ -1076,6 +1053,7 @@ async function _resolverChoferPorNombre(db, query, soloChofer) {
   }
   const matches = snap.docs.filter((d) => {
     const data = d.data();
+    if (soloActivos && data.ACTIVO === false) return false;
     if (soloChofer) {
       const rol = String(data.ROL || 'CHOFER').toUpperCase();
       if (!(rol === 'CHOFER' || rol === '' || rol === 'USUARIO')) return false;
