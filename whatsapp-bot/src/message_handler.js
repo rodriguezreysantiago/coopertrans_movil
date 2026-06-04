@@ -332,7 +332,15 @@ async function _enviarAcuseSiCorresponde(db, wa, msg, chofer) {
   const nombreChofer = (chofer.data && chofer.data.NOMBRE) || chofer.dni;
   try {
     await wa.responder(msg, texto);
-    log.info(`Acuse automático enviado a ${nombreChofer}`);
+    // Diagnóstico (2026-06-04): si un acuse sale por un reflejo de saliente
+    // propio que se coló (auto-respuesta del vigilador), este log muestra qué
+    // traía el mensaje — fromMe / id / body — para cerrar el caso con certeza.
+    // Quitar el detalle cuando se confirme resuelto.
+    log.info(
+      `Acuse automático enviado a ${nombreChofer} ` +
+      `[fromMe=${msg.fromMe} id=${String((msg.id && msg.id._serialized) || '').slice(0, 40)} ` +
+      `bodyLen=${String(msg.body || '').length} body="${String(msg.body || '').slice(0, 60)}"]`
+    );
   } catch (e) {
     log.warn(`No se pudo enviar acuse a ${nombreChofer}: ${e.message}`);
   }
