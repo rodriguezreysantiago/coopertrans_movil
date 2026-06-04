@@ -149,7 +149,7 @@ class _LogisticaLiquidacionScreenState
                   : null);
           // ADELANTOS: aun SIN filtro de empresa/chofer hay que acotar al
           // padrón de choferes válidos. Desde 2026-05-15 los adelantos son
-          // para TODO el personal (no solo choferes); si dejáramos
+          // para todo el personal (no solo choferes); si dejáramos
           // `choferDnis: null` se colarían adelantos de administrativos y de
           // tanqueros/testers excluidos → inflaban el neto global y armaban
           // filas fantasma en la tabla por chofer y el Excel (bug audit
