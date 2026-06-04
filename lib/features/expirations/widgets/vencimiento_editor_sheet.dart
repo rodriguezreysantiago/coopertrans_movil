@@ -132,6 +132,7 @@ class _EditorSheetBodyState extends State<_EditorSheetBody> {
         'ultima_modificacion_admin': FieldValue.serverTimestamp(),
       });
 
+      if (!mounted) return;
       AppFeedback.successOn(messenger, '${widget.item.tipoDoc} actualizado con éxito');
       navigator.pop();
     } catch (e, s) {

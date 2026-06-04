@@ -1112,7 +1112,7 @@ class EmpleadoActions {
       final urlsParaBorrar = <String>[
         for (final sufijo in AppDocsEmpleado.etiquetas.values)
           (data['ARCHIVO_$sufijo'] ?? '').toString(),
-        (data['ARCHIVO_FOTO_PERFIL'] ?? '').toString(),
+        (data['ARCHIVO_PERFIL'] ?? '').toString(),
       ];
       for (final url in urlsParaBorrar) {
         if (url.isEmpty || url == '-') continue;
@@ -1136,8 +1136,9 @@ class EmpleadoActions {
         // Limpiar reactivación previa (si alguien fue reactivado y vuelve a baja).
         AppActivo.campoReactivadoEn: null,
         AppActivo.campoReactivadoPorDni: null,
-        // Limpiar foto de perfil.
-        'ARCHIVO_FOTO_PERFIL': null,
+        // Limpiar foto de perfil (campo canónico ARCHIVO_PERFIL — antes decía
+        // ARCHIVO_FOTO_PERFIL, un nombre inexistente: la foto nunca se borraba).
+        'ARCHIVO_PERFIL': null,
         // Garantizamos que el espejo de unidad quede limpio.
         'VEHICULO': '-',
         'ENGANCHE': '-',

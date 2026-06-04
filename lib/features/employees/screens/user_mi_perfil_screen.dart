@@ -578,6 +578,7 @@ class _DatosCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final messenger = ScaffoldMessenger.of(context);
     // Edad y antigüedad se calculan en vivo de las fechas (no se guardan).
     final edad = AppFormatters.edadDesde(data['FECHA_NACIMIENTO']);
     final fechaNacTxt =
@@ -640,8 +641,17 @@ class _DatosCard extends StatelessWidget {
             keyboardType: TextInputType.phone,
             aplicarMayusculas: false,
             hint: 'Ej. 2914567890 (sin 0 ni 15)',
-            onSave: (v) =>
-                onActualizarCampo('TELEFONO', PhoneFormatter.paraGuardar(v)),
+            onSave: (v) {
+              final n = PhoneFormatter.paraGuardar(v);
+              // Si tipeó algo pero no es un teléfono válido (normaliza a ""),
+              // NO pisamos el dato bueno con vacío (mismo guard que el admin).
+              if (v.trim().isNotEmpty && n.isEmpty) {
+                AppFeedback.errorOn(messenger,
+                    'Teléfono inválido. Revisá los dígitos (no se guardó).');
+                return;
+              }
+              onActualizarCampo('TELEFONO', n);
+            },
           ),
           const _SeparadorTile(),
           // Mail editable: idem teléfono, el chofer puede corregir o
@@ -655,7 +665,17 @@ class _DatosCard extends StatelessWidget {
             aplicarMayusculas: false,
             transformarLowercase: true,
             hint: 'tu@email.com',
-            onSave: (v) => onActualizarCampo('MAIL', v),
+            onSave: (v) {
+              final m = v.trim();
+              // El alta valida el mail con regex; la edición inline no lo hacía
+              // → el chofer podía guardar "asdf". Mismo criterio acá.
+              if (m.isNotEmpty &&
+                  !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(m)) {
+                AppFeedback.errorOn(messenger, 'Mail inválido (no se guardó).');
+                return;
+              }
+              onActualizarCampo('MAIL', m);
+            },
           ),
           const _SeparadorTile(),
           _InfoTile(

@@ -678,10 +678,11 @@ class _DatoEditableEmpresa extends StatelessWidget {
 
   const _DatoEditableEmpresa({required this.valor, required this.onSave});
 
-  static const List<String> _empresas = [
-    'VECCHI ARIEL Y VECCHI GRACIELA S.R.L: (30-70910015-3)',
-    'SUCESION DE VECCHI CARLOS LUIS: (20-08569424-4)',
-  ];
+  // Catálogo central (incluye "El Mundo del Repuesto", alta 2026-05-30) — antes
+  // estaba hardcodeado acá con solo 2 razones sociales y desde la ficha no se
+  // podía asignar la 3ra. El form de alta ya usa este mismo catálogo.
+  static List<String> get _empresas =>
+      AppEmpresasEmpleadoras.catalogo.map((e) => e.label).toList();
 
   @override
   Widget build(BuildContext context) {

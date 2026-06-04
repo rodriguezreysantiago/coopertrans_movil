@@ -677,7 +677,10 @@ class _HeroEstadoGeneralState extends State<_HeroEstadoGeneral> {
             .doc(p)
             .get();
         final data = snap.data();
-        if (data != null) docs.add(data);
+        // Propagamos la patente (doc id) como campo PATENTE: los docs de
+        // VEHICULOS NO guardan ese campo, así que el hero "Estado general"
+        // armaba el título con la patente vacía ("RTO de  vence en…").
+        if (data != null) docs.add({...data, 'PATENTE': snap.id});
       } catch (_) {
         // Best effort: si falla un equipo, seguimos con el resto.
       }

@@ -73,7 +73,12 @@ class VencimientoBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tieneFecha = fecha != null && fecha.toString().isNotEmpty;
+    final fechaStr = fecha?.toString().trim() ?? '';
+    // '-'/'---' son centinelas de "campo sin cargar" (datos legacy/migrados),
+    // no fechas inválidas → tratarlos como SIN fecha (no pintar rojo "Inválida",
+    // que es el mismo criterio que usa el resto de la app).
+    final tieneFecha =
+        fechaStr.isNotEmpty && fechaStr != '-' && fechaStr != '---';
     final dias = AppFormatters.calcularDiasRestantes(fecha ?? '');
     final estado = calcularEstadoVencimiento(dias, tieneFecha: tieneFecha);
 
