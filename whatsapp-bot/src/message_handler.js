@@ -385,13 +385,22 @@ function crearHandler(fs, wa) {
       // procesaba sus PROPIOS avisos como entrantes -> se AUTO-RESPONDIA con el
       // acuse, duplicando envios (agravo el ban del numero nuevo, 2026-06-03).
       const idSer = String((msg.id && msg.id._serialized) || '');
-      if (msg.fromMe || idSer.startsWith('true_')) {
-        // Rastro si el id lo marco propio pero el getter fromMe NO: confirma el
-        // caso "sesion nueva" la proxima vez (para el fix fino si hiciera falta).
-        if (!msg.fromMe && idSer.startsWith('true_')) {
+      const idFromMe = !!(msg.id && msg.id.fromMe);
+      // Red de seguridad (2026-06-04): TODOS los avisos del bot llevan la firma
+      // "Bot-On — Coopertrans Móvil". Si un mensaje "entrante" la trae, es SÍ o
+      // SÍ un saliente propio que `message_create` nos devolvió — aunque la
+      // metadata (fromMe / id) venga corrupta, lo que pasa en sesiones RECIÉN
+      // vinculadas (ej. tras cambiar el dispositivo del bot, mismo número).
+      // Sin esto el bot procesaba su propio aviso como entrante y le
+      // AUTO-RESPONDÍA el acuse al chofer (2x mensajes + señal de bot → baneo).
+      const tieneFirmaBot = String(msg.body || '').includes('Bot-On');
+      if (msg.fromMe || idFromMe || idSer.startsWith('true_') || tieneFirmaBot) {
+        // Rastro cuando el getter fromMe NO lo marcó pero otra señal sí:
+        // confirma el caso "sesión nueva" en los logs.
+        if (!msg.fromMe && (idFromMe || idSer.startsWith('true_') || tieneFirmaBot)) {
           log.warn(
-            `[handler] saliente propio atrapado por id (fromMe=${msg.fromMe}, ` +
-            `id=${idSer.slice(0, 48)})`
+            `[handler] saliente propio atrapado (fromMe=${msg.fromMe}, ` +
+            `idFromMe=${idFromMe}, firma=${tieneFirmaBot}, id=${idSer.slice(0, 48)})`
           );
         }
         return;
