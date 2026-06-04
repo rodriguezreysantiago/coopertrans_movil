@@ -56,6 +56,11 @@ class _AppOfflineBannerState<T> extends State<AppOfflineBanner<T>> {
   @override
   void initState() {
     super.initState();
+    _suscribir();
+  }
+
+  /// Arma el timer de deadline + la suscripción al stream actual.
+  void _suscribir() {
     _timer = Timer(widget.deadline, () {
       if (mounted && !_llegoAlgo) setState(() => _lenta = true);
     });
@@ -67,6 +72,22 @@ class _AppOfflineBannerState<T> extends State<AppOfflineBanner<T>> {
         });
       }
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant AppOfflineBanner<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Si la pantalla reasignó el stream (ej. cambió un filtro y la query
+    // es otra), re-suscribir. Sin esto el banner seguiría escuchando el
+    // stream viejo/muerto y el indicador de conexión quedaría
+    // desincronizado tras el cambio de filtro (audit 2026-06-04).
+    if (!identical(oldWidget.stream, widget.stream)) {
+      _sub?.cancel();
+      _timer?.cancel();
+      _llegoAlgo = false;
+      _lenta = false;
+      _suscribir();
+    }
   }
 
   @override

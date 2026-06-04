@@ -25,7 +25,14 @@ part of 'logistica_viaje_form_screen.dart';
 
 class _SeccionResumen extends StatelessWidget {
   final MontosViaje? montos;
-  const _SeccionResumen({required this.montos});
+
+  /// `true` si hay un tramo con "monto fijo del chofer" activado pero sin
+  /// importe válido. En ese caso `montos` se calculó cayendo al 18% para ese
+  /// tramo (no es lo que cobra el chofer), así que NO mostramos los montos del
+  /// chofer — solo un aviso para completar el monto. Audit 2026-06-04.
+  final bool montoFijoIncompleto;
+
+  const _SeccionResumen({required this.montos, this.montoFijoIncompleto = false});
 
   @override
   Widget build(BuildContext context) {
@@ -46,36 +53,55 @@ class _SeccionResumen extends StatelessWidget {
             valor: '\$ ${AppFormatters.formatearMonto(montos!.montoVecchi)}',
             mono: true,
           ),
-          _Linea(
-            label:
-                'Comisión chofer (${montos!.comisionChoferPct.toStringAsFixed(0)}%)',
-            valor: '\$ ${AppFormatters.formatearMonto(montos!.montoChofer)}',
-            sub: true,
-            mono: true,
-          ),
-          _Linea(
-            label: 'Comisión chofer (redondeada)',
-            valor:
-                '\$ ${AppFormatters.formatearMonto(montos!.montoChoferRedondeado)}',
-            highlight: true,
-            mono: true,
-          ),
-          _Linea(
-            label: 'Gastos extras',
-            valor:
-                '+ \$ ${AppFormatters.formatearMonto(montos!.gastosTotal)}',
-            mono: true,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          const AppHairline(),
-          const SizedBox(height: AppSpacing.sm),
-          _Linea(
-            label: 'Liquidación final al chofer',
-            valor:
-                '\$ ${AppFormatters.formatearMonto(montos!.liquidacionChofer)}',
-            highlight: true,
-            mono: true,
-          ),
+          if (montoFijoIncompleto) ...[
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline, size: 16, color: c.warning),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
+                    'Hay un tramo con "monto fijo del chofer" activado sin '
+                    'importe. Cargalo (o cambiá a 18%) para ver lo que cobra '
+                    'el chofer y la liquidación.',
+                    style: AppType.bodySm.copyWith(color: c.warning),
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            _Linea(
+              label:
+                  'Comisión chofer (${montos!.comisionChoferPct.toStringAsFixed(0)}%)',
+              valor: '\$ ${AppFormatters.formatearMonto(montos!.montoChofer)}',
+              sub: true,
+              mono: true,
+            ),
+            _Linea(
+              label: 'Comisión chofer (redondeada)',
+              valor:
+                  '\$ ${AppFormatters.formatearMonto(montos!.montoChoferRedondeado)}',
+              highlight: true,
+              mono: true,
+            ),
+            _Linea(
+              label: 'Gastos extras',
+              valor:
+                  '+ \$ ${AppFormatters.formatearMonto(montos!.gastosTotal)}',
+              mono: true,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            const AppHairline(),
+            const SizedBox(height: AppSpacing.sm),
+            _Linea(
+              label: 'Liquidación final al chofer',
+              valor:
+                  '\$ ${AppFormatters.formatearMonto(montos!.liquidacionChofer)}',
+              highlight: true,
+              mono: true,
+            ),
+          ],
         ],
       ],
     );

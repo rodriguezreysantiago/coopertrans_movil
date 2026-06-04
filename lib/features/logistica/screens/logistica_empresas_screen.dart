@@ -125,9 +125,16 @@ class _ListaEmpresasState extends State<_ListaEmpresas> {
   @override
   Widget build(BuildContext context) {
     final esCliente = widget.tipo == TipoEmpresaLogistica.cliente;
+    // Los 2 tabs (CLIENTES/DADORES) se construyen juntos en el TabBarView.
+    // Solo el scope del tab ACTIVO debe autofocus, sino ambos compiten por el
+    // foco y los atajos (Ctrl+N/Ctrl+F) terminan en el tab equivocado
+    // (audit 2026-06-04).
+    final miIndice = esCliente ? 0 : 1;
+    final tabActivo = DefaultTabController.of(context).index == miIndice;
     return KeyboardShortcutsScope(
       onNuevo: _abrirAlta,
       buscarFocusNode: _buscarFocus,
+      autofocus: tabActivo,
       child: Stack(
         children: [
           Column(

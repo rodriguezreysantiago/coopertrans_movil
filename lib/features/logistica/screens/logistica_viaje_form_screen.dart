@@ -492,6 +492,22 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
     );
   }
 
+  /// `true` si algún tramo tiene el override "monto fijo del chofer"
+  /// ACTIVADO pero sin un importe válido cargado. En ese estado
+  /// `snapshotConOverride` devuelve `montoFijoChofer: null` y el cálculo
+  /// cae al 18%, así que el resumen mostraría una "Comisión chofer (18%)"
+  /// que NO es lo que va a cobrar el chofer. El resumen lo muestra como
+  /// pendiente hasta que se cargue el monto (el guardado ya está bloqueado
+  /// por la validación de `_guardar`). Audit 2026-06-04.
+  bool get _hayMontoFijoIncompleto {
+    for (final t in _tramos) {
+      if (!t.montoFijoChoferActivo) continue;
+      final m = AppFormatters.parsearMonto(t.montoFijoChoferCtrl.text);
+      if (m == null || m <= 0) return true;
+    }
+    return false;
+  }
+
   void _agregarTramo() {
     setState(() => _tramos.add(_TramoEditState.vacio()));
   }
@@ -919,7 +935,10 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // 1. RESUMEN (arriba — totales en vivo).
-            _SeccionResumen(montos: _montosCalc),
+            _SeccionResumen(
+              montos: _montosCalc,
+              montoFijoIncompleto: _hayMontoFijoIncompleto,
+            ),
             const SizedBox(height: AppSpacing.md),
 
             // 2. ESTADO.

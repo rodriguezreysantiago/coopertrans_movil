@@ -30,6 +30,14 @@ import '../models/viaje.dart';
 ///      + gastos_total. Los gastos extraordinarios (peajes,
 ///      combustible, comida) los paga el chofer y Vecchi se los
 ///      reembolsa.
+///   6. **Comisión / monto fijo del DADOR: informativos, NO se calculan**
+///      (decisión Santiago 2026-06-04). Las tarifas guardan
+///      `porcentajeComisionDador` / `montoFijoDador` para referencia, pero
+///      NINGÚN total los descuenta: `montoVecchi = tarifaReal × TN` es el
+///      BRUTO facturado al cliente. Si en el futuro el ingreso NETO de
+///      Vecchi (descontando lo que se lleva el dador) tuviera que impactar
+///      un total, hay que sumarlo acá Y re-resolverlo por vigencia en el
+///      recálculo masivo (hoy ese campo no entra a ningún cálculo).
 class CalculosViaje {
   CalculosViaje._();
 

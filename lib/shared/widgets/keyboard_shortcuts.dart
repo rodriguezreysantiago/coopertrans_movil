@@ -43,10 +43,20 @@ class KeyboardShortcutsScope extends StatelessWidget {
   /// Contenido. Casi siempre es el body completo del Scaffold.
   final Widget child;
 
+  /// Si `false`, el scope NO toma foco automáticamente al montarse. Útil
+  /// cuando hay VARIOS scopes hermanos vivos a la vez (ej. los tabs de un
+  /// TabBarView, que se construyen todos juntos): si todos hacen autofocus
+  /// compiten y los atajos terminan disparando en el scope equivocado
+  /// (Ctrl+N abriendo el alta del tab que no se ve — audit 2026-06-04).
+  /// En ese caso solo el scope del tab activo debe pasar `autofocus: true`.
+  /// Default `true` (un único scope por pantalla, comportamiento de siempre).
+  final bool autofocus;
+
   const KeyboardShortcutsScope({
     super.key,
     this.onNuevo,
     this.buscarFocusNode,
+    this.autofocus = true,
     required this.child,
   });
 
@@ -65,7 +75,7 @@ class KeyboardShortcutsScope extends StatelessWidget {
     return CallbackShortcuts(
       bindings: bindings,
       child: Focus(
-        autofocus: true,
+        autofocus: autofocus,
         // canRequestFocus: true (default) → recibe foco cuando se
         // monta. Sin esto, los atajos solo disparan después de que el
         // operador clickee algo dentro del scope para darle foco.

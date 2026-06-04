@@ -1371,10 +1371,10 @@ class _CardAdelanto extends StatelessWidget {
             Text(
               adelanto.numeroRecibo != null
                   ? 'El número de recibo ${adelanto.numeroRecibo} queda '
-                      'quemado, pero el adelanto va a quedar visible al '
-                      'activar "Mostrar eliminados" para ver el motivo.'
-                  : 'El adelanto va a quedar visible al activar '
-                      '"Mostrar eliminados".',
+                      'quemado, pero el adelanto va a quedar visible en la '
+                      'vista "Eliminados" para ver el motivo.'
+                  : 'El adelanto va a quedar visible en la vista '
+                      '"Eliminados".',
               style:
                   AppType.label.copyWith(color: Colors.white70),
             ),

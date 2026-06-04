@@ -120,6 +120,12 @@ class _SeccionGastos extends StatelessWidget {
               onChanged: (d) {
                 if (d != null) {
                   setStateDialog(() {
+                    // `fecha` es el parámetro sobre el que cierra el
+                    // StatefulBuilder → reasignarlo refresca el botón.
+                    // `onFechaChange` propaga a `_agregar` para el guardado.
+                    // (Antes solo se llamaba onFechaChange y el botón nunca
+                    // reflejaba la fecha elegida — bug audit 2026-06-04.)
+                    fecha = d;
                     onFechaChange(d);
                   });
                 }

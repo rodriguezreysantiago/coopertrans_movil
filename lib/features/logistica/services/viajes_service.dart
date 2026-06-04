@@ -408,23 +408,15 @@ class ViajesService {
     required String porDni,
   }) async {
     if (tarifa.id.isEmpty) return 0;
-    final snap = await _col.where('activo', isEqualTo: true).get();
     final ahora = DateTime.now();
-    final updates = <String, Map<String, dynamic>>{};
-    for (final doc in snap.docs) {
-      final data = doc.data();
-      // Los viajes ya liquidados NO se tocan (ya se le pagó al chofer).
-      // Filtramos por `liquidado`, NO por estado: un CONCLUIDO todavía
-      // no liquidado SÍ se recalcula.
-      if (data['liquidado'] == true) continue;
-      final v = Viaje.fromMap(doc.id, data);
-      if (!v.tramos.any((t) => t.tarifaId == tarifa.id)) continue;
-      // Re-resolver SOLO la tarifa real de los tramos de esta tarifa, por su
-      // fecha de carga. Chofer + monto fijo chofer + comisión del dador se
-      // preservan (`conTarifaReal`). Si la real de un tramo no cambió, lo
-      // dejamos igual; si NINGÚN tramo cambió, salteamos el viaje.
+    // Helper local: recalcula los tramos de ESTA tarifa de un viaje por su
+    // fecha de carga. Re-resuelve SOLO la tarifa real (`conTarifaReal`
+    // preserva chofer + monto fijo chofer + comisión del dador). Devuelve los
+    // tramos nuevos y si hubo algún cambio. Idempotente: si la real ya
+    // coincide, no marca cambio.
+    (List<TramoViaje>, bool) recalcularTramos(Viaje v) {
       var cambio = false;
-      final nuevosTramos = v.tramos.map((t) {
+      final nuevos = v.tramos.map((t) {
         if (t.tarifaId != tarifa.id) return t;
         final vig = tarifa.vigenteEn(t.fechaCarga ?? ahora);
         if (vig.tarifaReal == t.tarifaSnapshot.tarifaReal) return t;
@@ -433,40 +425,79 @@ class ViajesService {
           tarifaSnapshot: t.tarifaSnapshot.conTarifaReal(vig.tarifaReal),
         );
       }).toList();
-      if (!cambio) continue;
-      updates[doc.id] = _construirDataActualizacion(
-        tramos: nuevosTramos,
-        choferDni: v.choferDni,
-        choferNombre: v.choferNombre,
-        vehiculoId: v.vehiculoId,
-        engancheId: v.engancheId,
-        adelantoMonto: v.adelantoMonto,
-        adelantoFecha: v.adelantoFecha,
-        adelantoObservacion: v.adelantoObservacion,
-        estado: v.estado,
-        motivoCancelacion: v.motivoCancelacion,
-        fechaPostergadoA: v.fechaPostergadoA,
-        comisionPct: v.comisionChoferPct,
-        actualizadoPorDni: porDni,
-      );
+      return (nuevos, cambio);
     }
-    if (updates.isEmpty) return 0;
-    // WriteBatch en lotes de 500 (límite Firestore). Si un lote falla, la
-    // vigencia ya quedó registrada en la tarifa → re-correr este método es
-    // idempotente y completa lo que faltó.
-    final entries = updates.entries.toList();
-    for (var i = 0; i < entries.length; i += 500) {
+
+    // 1) Scan inicial → ids de viajes CANDIDATOS (un tramo de esta tarifa cuya
+    //    real cambia). No podemos query "tiene tramo con tarifaId X" (los
+    //    tramos son un array de objetos), por eso el scan client-side.
+    final snap = await _col.where('activo', isEqualTo: true).get();
+    final candidatos = <String>[];
+    for (final doc in snap.docs) {
+      final data = doc.data();
+      // Los viajes ya liquidados NO se tocan (ya se le pagó al chofer).
+      // Filtramos por `liquidado`, NO por estado: un CONCLUIDO todavía
+      // no liquidado SÍ se recalcula.
+      if (data['liquidado'] == true) continue;
+      final v = Viaje.fromMap(doc.id, data);
+      if (!v.tramos.any((t) => t.tarifaId == tarifa.id)) continue;
+      final (_, cambia) = recalcularTramos(v);
+      if (cambia) candidatos.add(doc.id);
+    }
+    if (candidatos.isEmpty) return 0;
+
+    // 2) Por cada candidato, RE-LEER el doc JUSTO antes del batch (guarda
+    //    anti lost-update, patrón de `marcarLiquidadosBulk`): recalculamos
+    //    sobre el estado MÁS RECIENTE del viaje, no sobre el del scan inicial.
+    //    Así una edición concurrente (kg descargados, otro tramo, multi-PC) no
+    //    se pisa con datos viejos. WriteBatch en lotes de 500 (límite
+    //    Firestore). Si un lote falla, la vigencia ya quedó en la tarifa →
+    //    re-correr el método es idempotente y completa lo que faltó.
+    var actualizados = 0;
+    for (var i = 0; i < candidatos.length; i += 500) {
+      final chunk = candidatos.skip(i).take(500).toList();
       final batch = _db.batch();
-      for (final e in entries.skip(i).take(500)) {
-        batch.update(_col.doc(e.key), e.value);
+      var enBatch = 0;
+      for (final id in chunk) {
+        final fresh = await _col.doc(id).get();
+        final data = fresh.data();
+        // Pudo borrarse o liquidarse entre el scan y ahora → no tocar.
+        if (data == null ||
+            data['activo'] != true ||
+            data['liquidado'] == true) {
+          continue;
+        }
+        final v = Viaje.fromMap(fresh.id, data);
+        final (nuevosTramos, cambio) = recalcularTramos(v);
+        if (!cambio) continue; // ya estaba al día (idempotencia)
+        batch.update(
+          _col.doc(id),
+          _construirDataActualizacion(
+            tramos: nuevosTramos,
+            choferDni: v.choferDni,
+            choferNombre: v.choferNombre,
+            vehiculoId: v.vehiculoId,
+            engancheId: v.engancheId,
+            adelantoMonto: v.adelantoMonto,
+            adelantoFecha: v.adelantoFecha,
+            adelantoObservacion: v.adelantoObservacion,
+            estado: v.estado,
+            motivoCancelacion: v.motivoCancelacion,
+            fechaPostergadoA: v.fechaPostergadoA,
+            comisionPct: v.comisionChoferPct,
+            actualizadoPorDni: porDni,
+          ),
+        );
+        enBatch++;
       }
-      await batch.commit();
+      if (enBatch > 0) await batch.commit();
+      actualizados += enBatch;
     }
     AppLogger.log(
-      'Recalculados ${updates.length} viaje(s) por nuevo precio de '
+      'Recalculados $actualizados viaje(s) por nuevo precio de '
       'tarifa ${tarifa.id}',
     );
-    return updates.length;
+    return actualizados;
   }
 
   /// Marca el viaje como liquidado. Sin tocar montos — la liquidación
@@ -536,7 +567,18 @@ class ViajesService {
     required String borradoPorDni,
     String? motivo,
   }) async {
-    await _col.doc(viajeId).update({
+    // ATÓMICO (audit 2026-06-04): el soft-delete del viaje y la desasociación
+    // de sus adelantos van en UN solo WriteBatch (todo-o-nada). Antes eran 2
+    // commits separados → si fallaba el 2do quedaban adelantos apuntando a un
+    // viaje ya inactivo. El query de adelantos es lectura (no entra al batch),
+    // así que va primero. NO usamos runTransaction (prohibido en Windows por
+    // bugs de cloud_firestore desktop).
+    final adelantosQ = await _db
+        .collection(AppCollections.adelantosChofer)
+        .where('viaje_id', isEqualTo: viajeId)
+        .get();
+    final batch = _db.batch();
+    batch.update(_col.doc(viajeId), {
       'activo': false,
       'borrado_en': FieldValue.serverTimestamp(),
       'borrado_por_dni': borradoPorDni,
@@ -545,24 +587,25 @@ class ViajesService {
     // El adelanto asociado se dio igual: lo DESASOCIAMOS (vuelve a suelto) pero
     // NO lo borramos (pedido Santiago 2026-06). Si después se reactiva el
     // viaje, `reactivarViaje` lo vuelve a asociar.
-    final liberados =
-        await _desasociarAdelantos(viajeId, 'liberado_por_borrar_viaje');
+    for (final ad in adelantosQ.docs) {
+      batch.update(ad.reference, {
+        'viaje_id': FieldValue.delete(),
+        'actualizado_en': FieldValue.serverTimestamp(),
+        'liberado_por_borrar_viaje': viajeId,
+      });
+    }
+    await batch.commit();
     AppLogger.log(
-        'Viaje soft-deleted: $viajeId (adelantos desasociados: $liberados)');
+        'Viaje soft-deleted: $viajeId (adelantos desasociados: ${adelantosQ.docs.length})');
   }
 
   static Future<void> reactivarViaje({
     required String viajeId,
     required String reactivadoPorDni,
   }) async {
-    await _col.doc(viajeId).update({
-      'activo': true,
-      'borrado_en': null,
-      'borrado_por_dni': null,
-      'motivo_borrado': null,
-      'actualizado_en': FieldValue.serverTimestamp(),
-      'actualizado_por_dni': reactivadoPorDni,
-    });
+    // ATÓMICO (audit 2026-06-04): reactivación del viaje + re-asociación de
+    // sus adelantos liberados en UN solo WriteBatch. El query es lectura → va
+    // primero; el filtro de "cuáles re-asociar" depende de él.
     // Re-asociar los adelantos que se liberaron al borrar ESTE viaje y siguen
     // sueltos (si el operador los re-asignó a otro viaje mientras tanto, no los
     // tocamos: solo re-asociamos los que quedaron con viaje_id vacío).
@@ -573,17 +616,23 @@ class ViajesService {
     final reasociar = q.docs
         .where((d) => (d.data()['viaje_id'] ?? '').toString().isEmpty)
         .toList();
-    if (reasociar.isNotEmpty) {
-      final batch = _db.batch();
-      for (final ad in reasociar) {
-        batch.update(ad.reference, {
-          'viaje_id': viajeId,
-          'liberado_por_borrar_viaje': FieldValue.delete(),
-          'actualizado_en': FieldValue.serverTimestamp(),
-        });
-      }
-      await batch.commit();
+    final batch = _db.batch();
+    batch.update(_col.doc(viajeId), {
+      'activo': true,
+      'borrado_en': null,
+      'borrado_por_dni': null,
+      'motivo_borrado': null,
+      'actualizado_en': FieldValue.serverTimestamp(),
+      'actualizado_por_dni': reactivadoPorDni,
+    });
+    for (final ad in reasociar) {
+      batch.update(ad.reference, {
+        'viaje_id': viajeId,
+        'liberado_por_borrar_viaje': FieldValue.delete(),
+        'actualizado_en': FieldValue.serverTimestamp(),
+      });
     }
+    await batch.commit();
     AppLogger.log(
         'Viaje reactivado: $viajeId (adelantos re-asociados: ${reasociar.length})');
   }

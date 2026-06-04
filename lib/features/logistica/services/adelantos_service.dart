@@ -420,12 +420,21 @@ class AdelantosService {
   /// docs con el mismo viaje_id (data corrupta), tomamos el primero.
   static Future<AdelantoChofer?> getPorViaje(String viajeId) async {
     if (viajeId.isEmpty) return null;
-    final snap = await _col
-        .where('viaje_id', isEqualTo: viajeId)
-        .limit(1)
-        .get();
+    // Sin .limit(1): si por data corrupta hubiera más de un adelanto con el
+    // mismo viaje_id, tomamos el más reciente de forma DETERMINÍSTICA. Antes
+    // .limit(1) sin orderBy devolvía uno arbitrario (Firestore no garantiza
+    // orden sin orderBy) → el detalle del viaje podía mostrar un adelanto
+    // distinto entre recargas (audit 2026-06-04). El caso normal es 0 o 1 doc,
+    // así que traer todos los matches no tiene costo. Ordenamos client-side
+    // (where(==) + orderBy(otro campo) exigiría un índice compuesto).
+    final snap = await _col.where('viaje_id', isEqualTo: viajeId).get();
     if (snap.docs.isEmpty) return null;
-    return AdelantoChofer.fromDoc(snap.docs.first);
+    final adelantos = snap.docs.map((d) => AdelantoChofer.fromDoc(d)).toList()
+      ..sort((a, b) {
+        final porFecha = b.fecha.compareTo(a.fecha);
+        return porFecha != 0 ? porFecha : a.id.compareTo(b.id);
+      });
+    return adelantos.first;
   }
 
   /// Toggle del estado `pagado` de un adelanto. Si `pagado == true`,
@@ -444,17 +453,22 @@ class AdelantosService {
     }
     final data = <String, dynamic>{
       'pagado': pagado,
-      if (pagado)
-        'pagado_en': FieldValue.serverTimestamp()
-      else
-        'pagado_en': FieldValue.delete(),
-      if (pagado)
-        'pagado_por_dni': marcadoPorDni
-      else
-        'pagado_por_dni': FieldValue.delete(),
       'actualizado_en': FieldValue.serverTimestamp(),
       'actualizado_por_dni': marcadoPorDni,
     };
+    if (pagado) {
+      data['pagado_en'] = FieldValue.serverTimestamp();
+      data['pagado_por_dni'] = marcadoPorDni;
+    } else {
+      // Al desmarcar limpiamos el estado de pago (display = "pendiente") pero
+      // registramos QUIÉN lo revirtió y CUÁNDO, en vez de borrar todo rastro
+      // de que el adelanto estuvo pagado (audit 2026-06-04 — antes un
+      // des-marcado no dejaba ninguna traza de auditoría).
+      data['pagado_en'] = FieldValue.delete();
+      data['pagado_por_dni'] = FieldValue.delete();
+      data['despagado_en'] = FieldValue.serverTimestamp();
+      data['despagado_por_dni'] = marcadoPorDni;
+    }
     await _col.doc(adelantoId).update(data);
     AppLogger.log(
       'Adelanto $adelantoId → pagado=$pagado por $marcadoPorDni',

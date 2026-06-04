@@ -147,6 +147,15 @@ class _LogisticaLiquidacionScreenState
               : (_empresaCuit != null
                   ? choferesFiltrados.keys.toSet()
                   : null);
+          // ADELANTOS: aun SIN filtro de empresa/chofer hay que acotar al
+          // padrón de choferes válidos. Desde 2026-05-15 los adelantos son
+          // para TODO el personal (no solo choferes); si dejáramos
+          // `choferDnis: null` se colarían adelantos de administrativos y de
+          // tanqueros/testers excluidos → inflaban el neto global y armaban
+          // filas fantasma en la tabla por chofer y el Excel (bug audit
+          // 2026-06-04). `empleados` ya viene filtrado a ROL=CHOFER + ACTIVO
+          // + sin excluidos, así que es el universo correcto.
+          final dnisAdelantos = dnisFiltro ?? empleados.keys.toSet();
 
           return Column(
             children: [
@@ -199,7 +208,7 @@ class _LogisticaLiquidacionScreenState
                       stream: AdelantosService.streamAdelantosEnRango(
                         desde: _inicioMes,
                         hasta: _inicioMesSiguiente,
-                        choferDnis: dnisFiltro,
+                        choferDnis: dnisAdelantos,
                       ),
                       builder: (ctx, adSnap) {
                         if (adSnap.hasError) {
@@ -1189,15 +1198,24 @@ class _ViajeCardLiquidacionState extends State<_ViajeCardLiquidacion> {
           const SizedBox(height: AppSpacing.sm),
           _LineaMonto(label: 'Facturado', valor: v.montoVecchi),
           _LineaMonto(label: 'Ganancia chofer', valor: v.montoChoferRedondeado),
-          if ((v.adelantoMonto ?? 0) > 0)
-            _LineaMonto(
-                label: 'Adelanto', valor: -(v.adelantoMonto ?? 0), color: c.warning),
+          // Adelantos: NO se muestran por-viaje en liquidación. Desde el
+          // refactor 2026-05-13 viven en ADELANTOS_CHOFER y se restan a nivel
+          // chofer/período (no por viaje). El `adelanto_monto` legacy embebido
+          // era data de testing que el agregado ya ignora; mostrarlo acá
+          // descuadraba la card contra los KPIs (audit 2026-06-04).
           if (v.gastosTotal > 0)
             _LineaMonto(label: 'Gastos', valor: v.gastosTotal, color: c.warning),
           const SizedBox(height: AppSpacing.xs),
           const AppHairline(),
           const SizedBox(height: AppSpacing.xs),
-          _LineaMonto(label: 'Neto', valor: v.liquidacionChofer, destacado: true),
+          // Neto del viaje = ganancia chofer (redondeada) + gastos. Para viajes
+          // nuevos es idéntico a liquidacionChofer (adelanto=0); para legacy con
+          // adelanto embebido evita el descuadre con el desglose visible y con
+          // el neto agregado (que suma montoChoferRedondeado + gastos por viaje).
+          _LineaMonto(
+              label: 'Neto',
+              valor: v.montoChoferRedondeado + v.gastosTotal,
+              destacado: true),
           // Toggle desplegable solo si tiene más de 1 tramo.
           if (v.esMultiTramo) ...[
             const SizedBox(height: AppSpacing.sm),

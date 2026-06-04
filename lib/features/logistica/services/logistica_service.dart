@@ -65,15 +65,17 @@ class LogisticaService {
     if (nombreNorm.isEmpty) {
       throw ArgumentError('El nombre de la empresa no puede estar vacío.');
     }
-    // Pre-check de unicidad por nombre (case-insensitive). Best-effort
-    // — sin transaction — pero suficiente para el caso real (operadores
-    // humanos cargando uno por vez).
-    final existentes = await empresasCol.get();
-    for (final d in existentes.docs) {
-      final n = (d.data()['nombre'] ?? '').toString().trim().toUpperCase();
-      if (n == nombreNorm) {
-        throw StateError('Ya existe una empresa con ese nombre.');
-      }
+    // Pre-check de unicidad por nombre. El campo `nombre` se persiste SIEMPRE
+    // normalizado a upper (ver `add` abajo), así que una query puntual por
+    // igualdad alcanza — antes se bajaba la colección entera para comparar en
+    // cliente (full-collection read evitable, audit 2026-06-04). Best-effort
+    // (sin transaction): suficiente para operadores humanos cargando de a uno.
+    final dup = await empresasCol
+        .where('nombre', isEqualTo: nombreNorm)
+        .limit(1)
+        .get();
+    if (dup.docs.isNotEmpty) {
+      throw StateError('Ya existe una empresa con ese nombre.');
     }
     final apodoTrim = apodo?.trim() ?? '';
     final nombreContactoTrim = nombreContacto?.trim() ?? '';
@@ -223,13 +225,15 @@ class LogisticaService {
     }
     // Pre-check unicidad: el "nombre" de una ubicación es el alias
     // operativo (ej. "Acopio Lartirigoyen — Tres Arroyos") y debe ser
-    // único para que las tarifas no muestren ambigüedad.
-    final existentes = await ubicacionesCol.get();
-    for (final d in existentes.docs) {
-      final n = (d.data()['nombre'] ?? '').toString().trim().toUpperCase();
-      if (n == nombreNorm) {
-        throw StateError('Ya existe una ubicación con ese nombre.');
-      }
+    // único para que las tarifas no muestren ambigüedad. El nombre se
+    // persiste normalizado a upper (ver `add` abajo) → query puntual por
+    // igualdad en vez de bajar la colección entera (audit 2026-06-04).
+    final dup = await ubicacionesCol
+        .where('nombre', isEqualTo: nombreNorm)
+        .limit(1)
+        .get();
+    if (dup.docs.isNotEmpty) {
+      throw StateError('Ya existe una ubicación con ese nombre.');
     }
     return ubicacionesCol.add({
       'nombre': nombreNorm,

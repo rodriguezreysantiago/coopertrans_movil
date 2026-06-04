@@ -53,10 +53,25 @@ import '../services/viajes_service.dart';
 ///   - Borrar (soft-delete con motivo).
 ///   - Reactivar (si está borrado).
 ///   - Eliminar definitivo (hard-delete, solo si ya está soft-deleted).
-class LogisticaViajeDetalleScreen extends StatelessWidget {
+class LogisticaViajeDetalleScreen extends StatefulWidget {
   final String viajeId;
 
   const LogisticaViajeDetalleScreen({super.key, required this.viajeId});
+
+  @override
+  State<LogisticaViajeDetalleScreen> createState() =>
+      _LogisticaViajeDetalleScreenState();
+}
+
+class _LogisticaViajeDetalleScreenState
+    extends State<LogisticaViajeDetalleScreen> {
+  // El adelanto asociado se lee UNA sola vez (el viajeId no cambia en esta
+  // pantalla). Antes el FutureBuilder vivía dentro del StreamBuilder del viaje
+  // y se re-disparaba en cada snapshot → lecturas de más + parpadeo del KPI
+  // "Adelanto" (audit 2026-06-04). La pantalla es read-only; al re-entrar,
+  // initState recrea el future.
+  late final Future<AdelantoChofer?> _adelantoFuture =
+      AdelantosService.getPorViaje(widget.viajeId);
 
   @override
   Widget build(BuildContext context) {
@@ -64,7 +79,7 @@ class LogisticaViajeDetalleScreen extends StatelessWidget {
     return AppScaffold(
       title: 'Detalle del viaje',
       body: StreamBuilder<Viaje?>(
-        stream: ViajesService.streamViaje(viajeId),
+        stream: ViajesService.streamViaje(widget.viajeId),
         builder: (ctx, snap) {
           if (snap.hasError) {
             return AppErrorState(
@@ -83,11 +98,10 @@ class LogisticaViajeDetalleScreen extends StatelessWidget {
               subtitle: 'Puede haber sido eliminado definitivamente.',
             );
           }
-          // El adelanto asociado se lee UNA vez y se baja a quien lo
-          // necesite (KPI strip + card de detalle). Mismo service call
-          // que antes, solo hoisteado al tope.
+          // El adelanto asociado (cacheado en el State) se baja a quien lo
+          // necesite: KPI strip + card de detalle.
           return FutureBuilder<AdelantoChofer?>(
-            future: AdelantosService.getPorViaje(v.id),
+            future: _adelantoFuture,
             builder: (fctx, fsnap) {
               final adelanto = fsnap.data;
               return SingleChildScrollView(
@@ -188,9 +202,9 @@ class _Hero extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          // Número de viaje (hero). El "número" operativo del viaje es
-          // su id de Firestore — lo mostramos en mono, que es la tinta
-          // técnica del sistema.
+          // Descripción de la carga (hero). Es el título visible del viaje
+          // — lo que el operador reconoce de un vistazo. Si no hay
+          // descripción, placeholder muted. (El id de Firestore va al pie.)
           Text(
             tieneCarga ? carga : 'Sin descripción de carga',
             maxLines: 2,
@@ -877,7 +891,12 @@ class _SeccionMontos extends StatelessWidget {
         ),
         if (diferenciaRedondeo > 0.01)
           _Linea(
-            label: 'Redondeo aplicado',
+            // En multi-tramo el redondeo es la SUMA de los redondeos por
+            // tramo (puede superar $5) — lo aclaramos para que no sorprenda
+            // (audit 2026-06-04).
+            label: v.esMultiTramo
+                ? 'Redondeo aplicado (suma por tramo)'
+                : 'Redondeo aplicado',
             valor: '−\$ ${AppFormatters.formatearMonto(diferenciaRedondeo)}',
             sub: true,
             mono: true,
