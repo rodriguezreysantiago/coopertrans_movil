@@ -11,7 +11,7 @@ part of 'admin_vehiculos_lista_screen.dart';
 // LISTA POR TIPO (un AppListPage por tab)
 // =============================================================================
 
-class _ListaPorTipo extends StatelessWidget {
+class _ListaPorTipo extends StatefulWidget {
   final String tipo;
   final bool mostrarInactivos;
   final bool mostrarExcluidos;
@@ -24,32 +24,68 @@ class _ListaPorTipo extends StatelessWidget {
   });
 
   @override
+  State<_ListaPorTipo> createState() => _ListaPorTipoState();
+}
+
+class _ListaPorTipoState extends State<_ListaPorTipo> {
+  // Stream PROPIO de la lista por tipo — NO el broadcast cacheado de
+  // `VehiculoProvider.getVehiculosPorTipo`.
+  //
+  // Bug 2026-06-04 (tocar un chip de tipo no cambiaba la lista): ese stream
+  // está cacheado y compartido, y CADA chip lo mantiene vivo para su
+  // contador. Al cambiar de tipo, la lista se re-suscribía a un broadcast
+  // que YA había emitido su snapshot — y los broadcast streams NO replamean
+  // el último evento a un suscriptor nuevo. La lista quedaba sin recibir
+  // datos del tipo nuevo. Acá la lista crea su PROPIO `snapshots()` por tipo
+  // (recreado al cambiar el tipo), así Firestore le entrega el snapshot
+  // inicial al instante. Mismo espíritu que Gestión de Personal (un stream
+  // estable propio del listado).
+  late Stream<QuerySnapshot> _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = _crearStream();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ListaPorTipo old) {
+    super.didUpdateWidget(old);
+    if (old.tipo != widget.tipo) {
+      _stream = _crearStream();
+    }
+  }
+
+  Stream<QuerySnapshot> _crearStream() => FirebaseFirestore.instance
+      .collection(AppCollections.vehiculos)
+      .where('TIPO', isEqualTo: widget.tipo)
+      .snapshots();
+
+  @override
   Widget build(BuildContext context) {
-    return Consumer<VehiculoProvider>(
-      builder: (ctx, provider, _) => AppListPage(
-        stream: provider.getVehiculosPorTipo(tipo),
-        searchHint: 'Buscar patente, marca, modelo o VIN...',
-        emptyTitle: 'Sin ${_pluralPretty(tipo)} cargados',
-        emptySubtitle: 'Tocá el botón + para agregar uno',
-        emptyIcon: Icons.local_shipping_outlined,
-        filter: (doc, q) {
-          final data = doc.data() as Map<String, dynamic>;
-          if (!mostrarInactivos && !AppActivo.esActivo(data)) {
-            return false;
-          }
-          // Excluidos: tanques combustibles + tractores asignados a
-          // tanqueros. La patente es el `doc.id`.
-          if (!mostrarExcluidos &&
-              ExcluidosService.esExcluido(excluidos, patente: doc.id)) {
-            return false;
-          }
-          final hay = '${doc.id} ${data['MARCA'] ?? ''} '
-                  '${data['MODELO'] ?? ''} ${data['VIN'] ?? ''}'
-              .toUpperCase();
-          return hay.contains(q);
-        },
-        itemBuilder: (ctx, doc) => _VehiculoCard(doc: doc),
-      ),
+    return AppListPage(
+      stream: _stream,
+      searchHint: 'Buscar patente, marca, modelo o VIN...',
+      emptyTitle: 'Sin ${_pluralPretty(widget.tipo)} cargados',
+      emptySubtitle: 'Tocá el botón + para agregar uno',
+      emptyIcon: Icons.local_shipping_outlined,
+      filter: (doc, q) {
+        final data = doc.data() as Map<String, dynamic>;
+        if (!widget.mostrarInactivos && !AppActivo.esActivo(data)) {
+          return false;
+        }
+        // Excluidos: tanques combustibles + tractores asignados a
+        // tanqueros. La patente es el `doc.id`.
+        if (!widget.mostrarExcluidos &&
+            ExcluidosService.esExcluido(widget.excluidos, patente: doc.id)) {
+          return false;
+        }
+        final hay = '${doc.id} ${data['MARCA'] ?? ''} '
+                '${data['MODELO'] ?? ''} ${data['VIN'] ?? ''}'
+            .toUpperCase();
+        return hay.contains(q);
+      },
+      itemBuilder: (ctx, doc) => _VehiculoCard(doc: doc),
     );
   }
 
@@ -77,15 +113,13 @@ class _VehiculoCard extends StatelessWidget {
     final patente = doc.id;
     final marca = (data['MARCA'] ?? '').toString().trim();
     final modelo = (data['MODELO'] ?? '').toString().trim();
-    final marcaModelo =
-        [marca, modelo].where((s) => s.isNotEmpty).join(' ');
+    final marcaModelo = [marca, modelo].where((s) => s.isNotEmpty).join(' ');
     final estado = (data['ESTADO'] ?? 'LIBRE').toString().toUpperCase();
     final km = data['KM_ACTUAL'];
     // Avatar de la unidad: si tiene foto cargada, la mostramos circular.
     // Si no, fallback a un ícono según el tipo (tractor / enganche).
     final urlFoto = data['ARCHIVO_FOTO']?.toString();
-    final tieneFoto =
-        urlFoto != null && urlFoto.isNotEmpty && urlFoto != '-';
+    final tieneFoto = urlFoto != null && urlFoto.isNotEmpty && urlFoto != '-';
     final tipo = (data['TIPO'] ?? 'TRACTOR').toString().toUpperCase();
     final esTractor = tipo == 'TRACTOR';
 
@@ -156,8 +190,7 @@ class _VehiculoCard extends StatelessWidget {
                                 strokeWidth: 2, color: c.brand),
                           ),
                         if (state.success)
-                          Icon(Icons.check_circle,
-                              color: c.success, size: 16),
+                          Icon(Icons.check_circle, color: c.success, size: 16),
                         if (state.error != null)
                           Icon(Icons.error_outline, color: c.error, size: 16),
                       ],
@@ -198,8 +231,7 @@ class _VehiculoCard extends StatelessWidget {
                         _MiniVencimiento(
                             label: 'RTO', fecha: data['VENCIMIENTO_RTO']),
                         _MiniVencimiento(
-                            label: 'Seguro',
-                            fecha: data['VENCIMIENTO_SEGURO']),
+                            label: 'Seguro', fecha: data['VENCIMIENTO_SEGURO']),
                         _MiniVencimiento(
                             label: 'Ext. cabina',
                             fecha: data['VENCIMIENTO_EXTINTOR_CABINA']),
@@ -219,8 +251,8 @@ class _VehiculoCard extends StatelessWidget {
   }
 
   /// Dispara el sync con Volvo si corresponde y abre el bottom sheet de detalle.
-  void _abrirDetalle(BuildContext context, String patente,
-          Map<String, dynamic> data) =>
+  void _abrirDetalle(
+          BuildContext context, String patente, Map<String, dynamic> data) =>
       abrirDetalleVehiculo(context, patente, data);
 }
 
@@ -260,8 +292,8 @@ String _estadoLabel(String estado) {
 /// Pensado para que features externos (CommandPalette / búsqueda Ctrl+K,
 /// links profundos, etc.) puedan abrir el detalle sin tener que crear
 /// un `_VehiculoCard` artificial.
-void abrirDetalleVehiculo(BuildContext context, String patente,
-    Map<String, dynamic> data) {
+void abrirDetalleVehiculo(
+    BuildContext context, String patente, Map<String, dynamic> data) {
   final marca = (data['MARCA'] ?? '').toString().toUpperCase();
   final vin = (data['VIN'] ?? '').toString();
 
@@ -363,8 +395,8 @@ class _AccionesVehiculoMenu extends StatelessWidget {
             value: 'diag',
             child: ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.bug_report_outlined,
-                  color: AppColors.warning),
+              leading:
+                  Icon(Icons.bug_report_outlined, color: AppColors.warning),
               title: Text('Diagnóstico Volvo'),
               subtitle: Text(
                 'Inspeccionar última respuesta del API',
@@ -386,8 +418,7 @@ class _AccionesVehiculoMenu extends StatelessWidget {
     }
     AppFeedback.infoOn(messenger, 'Sincronizando con Volvo...');
     try {
-      final metros =
-          await VolvoApiService().traerKilometrajeCualquierVia(vin);
+      final metros = await VolvoApiService().traerKilometrajeCualquierVia(vin);
       if (metros != null && metros > 0) {
         // Update directo a Firestore — no usamos VehiculoActions.dato
         // porque su SnackBar requiere un BuildContext que ya cruzó el
@@ -405,8 +436,7 @@ class _AccionesVehiculoMenu extends StatelessWidget {
         AppFeedback.successOn(messenger,
             'KM actualizado: ${AppFormatters.formatearMiles(metros / 1000)} km');
       } else {
-        AppFeedback.warningOn(
-            messenger, 'Unidad en reposo o no encontrada.');
+        AppFeedback.warningOn(messenger, 'Unidad en reposo o no encontrada.');
       }
     } catch (e, s) {
       AppFeedback.errorTecnicoOn(
@@ -473,10 +503,9 @@ class _DetalleVehiculo extends StatelessWidget {
     final c = context.colors;
     final marca = (data['MARCA'] ?? '').toString();
     final modelo = (data['MODELO'] ?? '').toString();
-    final anioInt =
-        ((data['ANIO'] ?? data['AÑO']) as num?)?.toInt() ??
-            int.tryParse((data['ANIO'] ?? data['AÑO'] ?? '').toString()) ??
-            0;
+    final anioInt = ((data['ANIO'] ?? data['AÑO']) as num?)?.toInt() ??
+        int.tryParse((data['ANIO'] ?? data['AÑO'] ?? '').toString()) ??
+        0;
     final estado = (data['ESTADO'] ?? 'LIBRE').toString().toUpperCase();
     final vin = (data['VIN'] ?? '').toString();
     final tipo = (data['TIPO'] ?? '').toString().toUpperCase();
@@ -487,9 +516,8 @@ class _DetalleVehiculo extends StatelessWidget {
     // las agrego"). Para enganches dejamos lista vacía — se carga
     // siempre con "Otro..." y la primera vez queda como sugerencia
     // implícita en el valor actual.
-    final sugerenciasMarca = esTractor
-        ? const <String>['VOLVO']
-        : const <String>[];
+    final sugerenciasMarca =
+        esTractor ? const <String>['VOLVO'] : const <String>[];
 
     return ListView(
       controller: scrollController,
@@ -543,13 +571,13 @@ class _DetalleVehiculo extends StatelessWidget {
         // CTA para abrir el form completo.
         if (esTractor) ...[
           const SizedBox(height: 18),
-          const _SectionTitle(icon: Icons.build_circle_outlined, label: 'Service'),
+          const _SectionTitle(
+              icon: Icons.build_circle_outlined, label: 'Service'),
           _ResumenService(patente: patente, data: data),
         ],
 
         const SizedBox(height: 18),
-        const _SectionTitle(
-            icon: Icons.fingerprint, label: 'Identificación'),
+        const _SectionTitle(icon: Icons.fingerprint, label: 'Identificación'),
         DatoEditableEnumExtensible(
           etiqueta: 'MARCA',
           valorActual: marca,
@@ -594,8 +622,7 @@ class _DetalleVehiculo extends StatelessWidget {
         // en la ficha sin tocar este archivo. Antes estaba hardcoded a RTO+Seguro
         // y los extintores cargados en tractores no se veian aca aunque si en
         // la pantalla del chofer y en el form de edicion.
-        for (final spec
-            in AppVencimientos.forTipo(data['TIPO']?.toString()))
+        for (final spec in AppVencimientos.forTipo(data['TIPO']?.toString()))
           _VencimientoRow(
             patente: patente,
             etiqueta: spec.etiqueta,
@@ -1215,7 +1242,8 @@ class _DatoEditableEmpresa extends StatelessWidget {
         // se cortaba feo en mobile. 2 líneas + ellipsis para prolijidad.
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: AppType.body.copyWith(fontWeight: FontWeight.w600, color: c.text),
+        style:
+            AppType.body.copyWith(fontWeight: FontWeight.w600, color: c.text),
       ),
       // Accent verde para alinear con los `DatoEditable*` compartidos que
       // conviven en esta misma sección de Identificación (no migrables —
@@ -1284,7 +1312,8 @@ class _DatoEditableAnio extends StatelessWidget {
       ),
       subtitle: Text(
         valorActual?.toString() ?? '—',
-        style: AppType.body.copyWith(fontWeight: FontWeight.w600, color: c.text),
+        style:
+            AppType.body.copyWith(fontWeight: FontWeight.w600, color: c.text),
       ),
       // Accent verde para alinear con los `DatoEditable*` compartidos de la
       // misma sección (no migrables — viven en lib/shared/).
@@ -1439,8 +1468,8 @@ class _ResumenService extends StatelessWidget {
                   kmRestantes < 0
                       ? 'Service VENCIDO hace ${AppFormatters.formatearMiles(kmRestantes.abs())} km'
                       : 'Próximo service en ${AppFormatters.formatearMiles(kmRestantes)} km',
-                  style: AppType.label
-                      .copyWith(color: colorRestantes, fontWeight: FontWeight.w600),
+                  style: AppType.label.copyWith(
+                      color: colorRestantes, fontWeight: FontWeight.w600),
                 ),
               ],
             ),
@@ -1460,8 +1489,8 @@ class _ResumenService extends StatelessWidget {
                   sinDatos
                       ? 'Se actualiza solo desde Volvo Connect.'
                       : 'Dato automático desde Volvo Connect.',
-                  style: AppType.eyebrow
-                      .copyWith(color: c.textMuted, fontStyle: FontStyle.italic),
+                  style: AppType.eyebrow.copyWith(
+                      color: c.textMuted, fontStyle: FontStyle.italic),
                 ),
               ),
             ],
