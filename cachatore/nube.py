@@ -11,6 +11,7 @@ Colecciones (ver lib/core/constants/app_constants.dart → AppCollections):
 - CACHATORE_ESTADO/bot          : {modo, total, pendientes, ultimo_tick_en}
                                   ← SOLO lo escribe el bot (latido)
 """
+import hashlib
 from datetime import datetime
 
 from firebase_admin import firestore
@@ -392,7 +393,11 @@ def flushear_avisos_encargado(ventana_seg=90):
 
     Idempotente ante crashes: los pendientes viven en Firestore, no en
     memoria. Si el cachatore muere con un buffer pendiente, al volver el
-    próximo ciclo los flushea.
+    próximo ciclo los flushea. El doc que se encola en COLA_WHATSAPP usa un id
+    DETERMINÍSTICO derivado de los ids de los avisos flusheados (NO `.add()`
+    random) — así, si se crashea ENTRE el encolado y el `batch.commit()` que
+    limpia el buffer, al reiniciar se recalcula el MISMO id y el `.set()`
+    sobreescribe en vez de encolar un 2º mensaje (doble aviso al encargado).
 
     Devuelve cant de avisos flusheados (0 si no hizo nada)."""
     from datetime import datetime, timezone
@@ -431,7 +436,15 @@ def flushear_avisos_encargado(ventana_seg=90):
     tel = _telefono_de(db, _encargado_dni())
     # Si no hay teléfono, igual borramos el buffer (no podemos mandar)
     if tel:
-        db.collection(COL_COLA).add({
+        # Id determinístico = hash de los ids de los avisos que estamos
+        # flusheando (ordenados, así no depende del orden del stream). Si el
+        # bot crashea entre este encolado y el batch.commit() de abajo, el
+        # buffer queda intacto → al reiniciar este mismo set de avisos produce
+        # el MISMO id → .set() sobreescribe el doc en lugar de encolar otro.
+        clave = "|".join(sorted(it["ref"].id for it in items))
+        doc_id = "cachatore_agrupado_" + hashlib.sha1(
+            clave.encode("utf-8")).hexdigest()[:16]
+        db.collection(COL_COLA).document(doc_id).set({
             "telefono": tel,
             "mensaje": mensaje,
             "estado": "PENDIENTE",

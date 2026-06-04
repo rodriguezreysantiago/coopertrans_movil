@@ -251,6 +251,43 @@ _RE_TOMADO = re.compile(
 # UUID del turno en el botón Cancelar de /misiturnos (mismo UUID que reagendar).
 _RE_CANCELAR = re.compile(r"/misiturnos/cancelar/([0-9a-f-]{36})")
 
+# Challenge de Cloudflare: a veces devuelve STATUS 200 con una interstitial
+# ("Just a moment...") en lugar de la página real. Si la parseáramos como
+# agenda/turnos, no encontraría slots y daría "vacío" — indistinguible de
+# vacío REAL → se perdería un turno en silencio. La tratamos como FALLO.
+_RE_CF_CHALLENGE = re.compile(
+    r"Just a moment|cf-challenge|cf-browser-verification|"
+    r"Checking your browser|Enable JavaScript and cookies", re.I)
+
+
+class IturnosError(Exception):
+    """Falla al traer una página de iTurnos (status != 200 o challenge de
+    Cloudflare). La levantamos para que el caller NO confunda una respuesta
+    rota con 'agenda/turnos vacíos' y pierda un turno en silencio. Los callers
+    del daemon (vigia.py) ya envuelven estas llamadas en try/except — al igual
+    que la detección de sesión caída ('id="login-form"')."""
+
+
+def _validar_respuesta(resp, contexto: str):
+    """Chequea que `resp` (de curl_cffi) sea una página REAL de iTurnos antes
+    de parsearla. Levanta IturnosError si:
+      - el HTML trae un challenge de Cloudflare (status 200 pero NO es la
+        página esperada), o
+      - el status HTTP no es 200 (5xx, 4xx, etc.).
+    Devuelve el `.text` validado. `contexto` es para el mensaje de error
+    (ej. 'agenda', 'mis_turnos')."""
+    texto = resp.text or ""
+    if _RE_CF_CHALLENGE.search(texto):
+        raise IturnosError(f"{contexto}: challenge de Cloudflare (no es la "
+                           f"página real, NO es vacío)")
+    # status_code suele ser int en producción; si por algún motivo no lo es
+    # (mock en tests / objeto raro), no rompemos por eso — el challenge de
+    # arriba ya cubre el caso peligroso del 200-con-interstitial.
+    status = getattr(resp, "status_code", None)
+    if isinstance(status, int) and status != 200:
+        raise IturnosError(f"{contexto}: status HTTP {status} (esperaba 200)")
+    return texto
+
 
 class IturnosClient:
     """Sesión autenticada contra el iTurnos nuevo. Una instancia por chofer."""
@@ -304,9 +341,15 @@ class IturnosClient:
         (default del sitio); con `fecha` ('AAAA-MM-DD') navega a la semana que la
         contiene vía `?d=`. Confirmado en vivo (2026-05-30): sin `?d=` el scanner
         solo veía la semana actual y se perdía los turnos que caían en la
-        siguiente ('el cachatore no toma turnos porque aparecen la semana que viene')."""
+        siguiente ('el cachatore no toma turnos porque aparecen la semana que viene').
+
+        Levanta IturnosError si la respuesta no es 200 o es un challenge de
+        Cloudflare — así el scanner NO lo confunde con 'agenda vacía' (que
+        perdería el turno en silencio). El caller (vigia) ya lo maneja en su
+        try/except (igual que la sesión caída 'id="login-form"')."""
         url = AGENDA_URL if not fecha else f"{AGENDA_URL}?d={fecha}"
-        return self.s.get(url).text
+        resp = self.s.get(url)
+        return _validar_respuesta(resp, f"agenda ({fecha or 'semana actual'})")
 
     # ---- RESERVA -----------------------------------------------------------
     def abrir_reserva(self, url: str) -> str:
@@ -382,8 +425,14 @@ class IturnosClient:
         muestra iTurnos (ej. 'Miércoles 20 May 2026 14:00 hs.') y `hora` el HH:MM.
         Cada turno tiene un botón Cancelar con
         data-bs-href=.../misiturnos/cancelar/{uuid} y data-bs-info="<cuando>"
-        (el UUID es el mismo que usa reagendar)."""
-        html = self.s.get(f"{BASE}/misiturnos").text
+        (el UUID es el mismo que usa reagendar).
+
+        Levanta IturnosError si la respuesta no es 200 o es un challenge de
+        Cloudflare — devolver [] ante una página rota sería indistinguible de
+        'el chofer no tiene turnos' y podría doblar reserva / perder estado.
+        Todos los callers (vigia + cancelar) ya envuelven esto en try/except."""
+        resp = self.s.get(f"{BASE}/misiturnos")
+        html = _validar_respuesta(resp, "mis_turnos")
         soup = BeautifulSoup(html, "html.parser")
         vistos, turnos = set(), []
         for btn in soup.find_all(attrs={"data-bs-href": _RE_CANCELAR}):
@@ -517,8 +566,13 @@ class IturnosClient:
         modal #cancelarModal cuyo form #formCancelar (POST + _token) recibe
         action=/misiturnos/cancelar/{uuid} vía JS. Replicamos: GET /misiturnos para
         sacar el _token + POST a /misiturnos/cancelar/{uuid}. Verifica con
-        mis_turnos que el turno ya no esté (verdad autoritativa)."""
-        html = self.s.get(f"{BASE}/misiturnos").text
+        mis_turnos que el turno ya no esté (verdad autoritativa).
+
+        Levanta IturnosError si el GET inicial no es 200 o es un challenge de
+        Cloudflare — sin esto, una página rota se vería como 'sin_token' (fallo
+        confuso). El caller (vigia) ya lo maneja en su try/except y reintenta."""
+        resp = self.s.get(f"{BASE}/misiturnos")
+        html = _validar_respuesta(resp, "cancelar")
         soup = BeautifulSoup(html, "html.parser")
         token = None
         form = soup.find(id="formCancelar")

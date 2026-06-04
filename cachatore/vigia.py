@@ -485,15 +485,42 @@ def _reservar_async(t: Target, slot: dict, dry: bool):
         t.reagendar_hecho = True   # ya quedó en franja al reservar; no hay que mover
 
 
-def _en_paralelo(items, func, max_hilos=10, timeout=30):
+def _nombre_item(x) -> str:
+    """Etiqueta legible de un item de `_en_paralelo` (para el log de timeout).
+    Los items son Targets (refrescar_estado) o tuplas (Target, slot)
+    (_reservar_async). Defensivo: si no reconoce el tipo, cae a str(x)."""
+    nombre = getattr(x, "nombre", None)
+    if nombre:
+        return nombre
+    if isinstance(x, (tuple, list)) and x:
+        nombre = getattr(x[0], "nombre", None)
+        if nombre:
+            return nombre
+    return str(x)
+
+
+# timeout default por ENCIMA del peor caso de un worker (login = LOGIN_REINTENTOS
+# intentos con sleeps + GET/POST, puede pasar los 60 s). Sin esto, con el viejo
+# 30 s un login lento se daba por "colgado" y el hilo (daemon) seguía vivo
+# mutando el Target en segundo plano (worker huérfano). Los call sites del
+# barrido latente (cada ~5 s) pasan un timeout más corto a propósito.
+def _en_paralelo(items, func, max_hilos=10, timeout=90):
     items = list(items)
     for i in range(0, len(items), max_hilos):
-        lote = [threading.Thread(target=func, args=(x,), daemon=True)
-                for x in items[i:i + max_hilos]]
-        for h in lote:
+        pares = [(threading.Thread(target=func, args=(x,), daemon=True), x)
+                 for x in items[i:i + max_hilos]]
+        for h, _ in pares:
             h.start()
-        for h in lote:
+        for h, x in pares:
             h.join(timeout=timeout)
+            # El join expiró pero el hilo sigue vivo → worker huérfano: queda
+            # corriendo en segundo plano y puede mutar el Target después de que
+            # seguimos. Antes era SILENCIOSO; lo logueamos para tener visibilidad
+            # (NO matamos el hilo: es daemon y cambiar eso es arriesgado).
+            if h.is_alive():
+                log("LOG", _nombre_item(x),
+                    f"worker sigue corriendo tras {timeout}s (no terminó en "
+                    f"el join; sigue en segundo plano)")
 
 
 # ---- estado (mis_turnos) --------------------------------------------------

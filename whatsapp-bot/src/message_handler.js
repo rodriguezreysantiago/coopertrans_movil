@@ -490,6 +490,30 @@ function crearHandler(fs, wa) {
           if (esAudio) {
             const media = await msg.downloadMedia();
             if (media && media.data) {
+              // Cortar por tamaño ACÁ, apenas se descarga: un audio enorme
+              // infla memoria al serializar el body y Gemini lo rechaza igual.
+              // Antes el tope recién se chequeaba dentro de agente.responder
+              // (ya con el base64 cargado). Mismo límite que usa el agente
+              // (AGENTE_MAX_AUDIO_B64, default ~7MB de base64 ≈ varios min).
+              // Chequeamos el largo del base64 (lo que ve el agente) y, si
+              // está, el filesize (bytes crudos) — base64 ≈ 1.37× los bytes.
+              const MAX_AUDIO_B64 = parseInt(
+                process.env.AGENTE_MAX_AUDIO_B64 || '7000000', 10);
+              const muyLargo =
+                media.data.length > MAX_AUDIO_B64 ||
+                (Number(media.filesize) > 0 &&
+                  Number(media.filesize) > (MAX_AUDIO_B64 * 3) / 4);
+              if (muyLargo) {
+                log.info(
+                  `Audio de ${persona.rol} ${persona.dni || fromNumber} ` +
+                    `descartado por tamaño (b64=${media.data.length})`
+                );
+                await wa.responder(
+                  msg,
+                  'El audio es muy largo. Mandámelo más corto o escribímelo.'
+                );
+                return;
+              }
               audio = { data: media.data, mimetype: media.mimetype || 'audio/ogg' };
             }
           }

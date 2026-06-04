@@ -551,6 +551,13 @@ const _TOOLS_GESTION = [
   ...TOOLS_GESTION_VENC, ...TOOLS_GESTION_FLOTA, ...TOOLS_CACHATORE,
 ];
 
+// Tools de ACCIÓN/ESCRITURA: modifican datos (write a Firestore), no son
+// idempotentes y NO se pueden reintentar a ciegas. Si una de estas ya se
+// ejecutó en la conversación y el modelo igual devolvió sin texto, NO se
+// dispara el fallback "por vacío" (re-conversar repetiría el efecto: doble
+// objetivo / doble confirmación). Las de SOLO LECTURA sí se pueden reintentar.
+const TOOLS_DE_ACCION = new Set(['poner_a_buscar_turno']);
+
 function _toolsDelRol(rol) {
   if (rol === 'CHOFER') return TOOLS_CHOFER;
   const caps = CAPS_POR_ROL[rol] || [];
@@ -1645,6 +1652,10 @@ async function _conversarGemini(db, system, historial, userText, persona) {
     { role: 'user', parts: [{ text: userText }] },
   ];
   const toolsUsadas = [];
+  // Se vuelve true en cuanto se EJECUTA (no solo se pide) una tool de
+  // escritura. Lo devolvemos en el resultado para que _conversarRobusto NO
+  // re-converse "por vacío" y repita el write (doble objetivo Cachatore).
+  let huboToolDeAccion = false;
 
   for (let iter = 0; iter < MAX_TOOL_ITERS; iter++) {
     // En la última iteración desactivamos las tools (mode NONE): el modelo
@@ -1675,6 +1686,8 @@ async function _conversarGemini(db, system, historial, userText, persona) {
           ejecutadas++;
           try {
             resultado = await _ejecutarTool(db, fc.name, persona, fc.args || {});
+            // Marca solo cuando la tool de acción REALMENTE corrió (write hecho).
+            if (TOOLS_DE_ACCION.has(fc.name)) huboToolDeAccion = true;
           } catch (e) {
             resultado = { error: e.message };
           }
@@ -1705,6 +1718,7 @@ async function _conversarGemini(db, system, historial, userText, persona) {
         return {
           texto: null,
           toolsUsadas,
+          huboToolDeAccion,
           error: `gemini:${String(finishReason).toLowerCase()}`,
         };
       }
@@ -1712,9 +1726,9 @@ async function _conversarGemini(db, system, historial, userText, persona) {
         `[agente/gemini] respuesta sin texto: ${JSON.stringify(resp).slice(0, 300)}`
       );
     }
-    return { texto, toolsUsadas };
+    return { texto, toolsUsadas, huboToolDeAccion };
   }
-  return { texto: null, toolsUsadas, error: 'max_tool_iters' };
+  return { texto: null, toolsUsadas, huboToolDeAccion, error: 'max_tool_iters' };
 }
 
 // ───────────────────────── loop Groq (OpenAI-compat) ─────────────────────────
@@ -1870,7 +1884,12 @@ async function _conversarRobusto(provider, db, system, historial, userText, pers
   }
   // Gemini respondio SIN texto y NO es un bloqueo de safety -> saturacion
   // encubierta o se quedo sin pasos: intentar el fallback antes del mensaje mudo.
-  if (r && !r.texto && !_esBloqueoContenido(r.error)) {
+  // EXCEPCION: si ya se ejecutó una tool de ESCRITURA (huboToolDeAccion), NO
+  // re-conversamos — el fallback reinicia la charla con el userText original y
+  // volvería a disparar el write (doble objetivo / doble confirmación). En ese
+  // caso devolvemos el resultado mudo y arriba sale el mensaje de fallback
+  // estándar (la acción ya quedó hecha; el admin verifica en Cachatore).
+  if (r && !r.texto && !r.huboToolDeAccion && !_esBloqueoContenido(r.error)) {
     log.warn(`[agente] Gemini sin texto (${r.error || 'vacio'}); intento fallback`);
     const fb = await _fallbackLLM(args);
     if (fb && fb.texto) return fb;
