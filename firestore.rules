@@ -139,18 +139,27 @@ service cloud.firestore {
       // el nuevo hash (ver functions/src/index.ts).
       // Cualquier otro campo (DNI, rol, vencimientos, vehículo asignado,
       // etc.) está reservado a admin/supervisor.
-      // ADMIN: cualquier campo. SUPERVISOR: todo MENOS el campo ACTIVO —
-      // dar de baja / reactivar personal quedó como acción solo-ADMIN
-      // (decisión Santiago 2026-06-01). El chofer (dueño): solo sus 3 campos
-      // self-service.
+      // ADMIN: cualquier campo. SUPERVISOR: todo MENOS ACTIVO/ROL/CONTRASEÑA
+      // — dar de baja/reactivar quedó solo-ADMIN (decisión 2026-06-01); y
+      // ROL/CONTRASEÑA NO se editan por update directo (auditoría 2026-06: era
+      // una escalada — un supervisor podía hacerse ROL='ADMIN' y al re-loguear
+      // loginConDni emitía el claim ADMIN). El rol cambia por la callable
+      // actualizarRolEmpleado (solo-admin) y la pass por cambiarContraseñaChofer.
+      // El chofer (dueño): solo sus 3 campos self-service, validados como string
+      // (no objetos/arrays — antes podía meter un mapa enorme en MAIL/TELEFONO).
       allow update: if isAdmin()
         || (isSupervisor()
             && !request.resource.data.diff(resource.data)
-                 .affectedKeys().hasAny(['ACTIVO']))
+                 .affectedKeys().hasAny(['ACTIVO', 'ROL', 'CONTRASEÑA']))
         || (isSelf(dni)
             && request.resource.data.diff(resource.data)
-                 .affectedKeys().hasOnly(['ARCHIVO_PERFIL',
-                                          'TELEFONO', 'MAIL']));
+                 .affectedKeys().hasOnly(['ARCHIVO_PERFIL', 'TELEFONO', 'MAIL'])
+            && (request.resource.data.TELEFONO == null
+                || request.resource.data.TELEFONO is string)
+            && (request.resource.data.MAIL == null
+                || request.resource.data.MAIL is string)
+            && (request.resource.data.ARCHIVO_PERFIL == null
+                || request.resource.data.ARCHIVO_PERFIL is string));
     }
 
     // ========================================================================
@@ -210,7 +219,7 @@ service cloud.firestore {
         // solicitudes de cambio. La logica de aprobacion (planificarAprobacion)
         // valida la misma whitelist como defensa en profundidad.
         && request.resource.data.coleccion_destino in ['EMPLEADOS', 'VEHICULOS']
-        && (request.resource.data.campo.matches('VENCIMIENTO_.*')
+        && (request.resource.data.campo.matches('^VENCIMIENTO_[A-Z0-9_]+$')
             || request.resource.data.campo == 'SOLICITUD_VEHICULO'
             || request.resource.data.campo == 'SOLICITUD_ENGANCHE');
       // Admin/supervisor aprueban o rechazan.

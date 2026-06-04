@@ -82,16 +82,16 @@ service firebase.storage {
       // otro y bajar su foto. Ahora: admin/supervisor todos, chofer
       // solo SU foto (archivo arranca con su UID).
       allow read: if isAdminOrSupervisor()
-        || (isSignedIn() && archivo.matches(request.auth.uid + '\\..*'));
+        || (isSignedIn() && archivo.matches('^' + request.auth.uid + '\\..*'));
       // write: admin/supervisor (gestión de Personal) o el chofer su propia foto.
       allow write: if isAdminOrSupervisor()
-        || (isSignedIn() && archivo.matches(request.auth.uid + '\\..*'));
+        || (isSignedIn() && archivo.matches('^' + request.auth.uid + '\\..*'));
     }
     match /perfiles/{archivo} {
       allow read: if isAdminOrSupervisor()
-        || (isSignedIn() && archivo.matches(request.auth.uid + '\\..*'));
+        || (isSignedIn() && archivo.matches('^' + request.auth.uid + '\\..*'));
       allow write: if isAdminOrSupervisor()
-        || (isSignedIn() && archivo.matches(request.auth.uid + '\\..*'));
+        || (isSignedIn() && archivo.matches('^' + request.auth.uid + '\\..*'));
     }
 
     // ========================================================================
@@ -194,7 +194,7 @@ service firebase.storage {
       // psicofisico, DNI escaneado) de otros choferes. Ahora: admin/supervisor
       // todos + chofer SOLO los suyos (archivo arranca con su UID).
       allow read: if isAdminOrSupervisor()
-        || (isSignedIn() && archivo.matches(request.auth.uid + '_.*'));
+        || (isSignedIn() && archivo.matches('^' + request.auth.uid + '_.*'));
       // Cualquier signedIn (chofer) puede subir su comprobante.
       // El admin lo aprueba/rechaza desde la app.
       //
@@ -211,7 +211,7 @@ service firebase.storage {
       //  - tamano <= 10 MB. Suficiente para PDFs y fotos HD; por
       //    encima de eso es ruido (videos, scanners no comprimidos).
       allow write: if isSignedIn()
-        && (isAdminOrSupervisor() || archivo.matches(request.auth.uid + '_.*'))
+        && (isAdminOrSupervisor() || archivo.matches('^' + request.auth.uid + '_.*'))
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('image/.*|application/pdf');
     }
