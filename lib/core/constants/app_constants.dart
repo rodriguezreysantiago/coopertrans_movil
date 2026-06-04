@@ -183,6 +183,15 @@ class AppCollections {
   /// Único punto de escritura: `AsignacionEngancheService`.
   static const String asignacionesEnganche = 'ASIGNACIONES_ENGANCHE';
 
+  /// Mutex de OPERACIÓN para los cambios de asignación (NO es estado: existe
+  /// solo MIENTRAS corre `cambiarAsignacion`). Doc id `vehiculo_<id>` /
+  /// `chofer_<dni>` / `enganche_<id>` / `tractor_<id>`. Create-only (rule
+  /// `update: if false`): si dos cambios concurrentes tocan el mismo recurso,
+  /// el 2do rebota → no quedan 2 asignaciones activas (auditoría 2026-06). Se
+  /// borra al terminar; `expira_en` (~2 min) limpia el huérfano si el proceso
+  /// crashea entremedio.
+  static const String asignacionesLocks = 'ASIGNACIONES_LOCKS';
+
   // ─── Módulo Gomería (2026-05-04) ───
   /// Marcas de cubiertas. Doc: `{nombre, activo}`. ABM desde la app
   /// por ADMIN. Soft-delete (campo `activo`) para no romper referencias

@@ -8,6 +8,7 @@ import '../../../core/services/audit_log_service.dart';
 import '../../fleet_map/services/sitrack_snapshot_service.dart';
 import '../models/asignacion_enganche.dart';
 import '../models/asignacion_vehiculo.dart';
+import 'asignacion_mutex.dart';
 
 /// Un enganche que un chofer LLEVÓ (derivado chofer→tractor→enganche), con el
 /// período EFECTIVO en que estuvieron juntos. Para la auditoría por chofer.
@@ -56,6 +57,38 @@ class AsignacionEngancheService {
   /// Convención del codebase: "sin asignar" se representa con `-`.
   static const String _sinAsignar = '-';
 
+  /// Punto de entrada PÚBLICO. Toma un mutex de operación (por enganche +
+  /// tractor) para que dos cambios concurrentes NO dejen 2 asignaciones activas
+  /// (auditoría 2026-06). La lógica real, intacta, vive en
+  /// [_cambiarAsignacionInterno].
+  Future<void> cambiarAsignacion({
+    required String engancheId,
+    required String? nuevoTractorId,
+    required String asignadoPorDni,
+    String? tractorModelo,
+    String? asignadoPorNombre,
+    String? motivo,
+  }) async {
+    final eng = _normalizarPatente(engancheId);
+    final tractor = _normalizarPatente(nuevoTractorId);
+    final recursos = <String>[
+      if (eng != null) 'enganche_$eng',
+      if (tractor != null) 'tractor_$tractor',
+    ];
+    return conMutexAsignacion(
+      _db,
+      recursos,
+      () => _cambiarAsignacionInterno(
+        engancheId: engancheId,
+        nuevoTractorId: nuevoTractorId,
+        asignadoPorDni: asignadoPorDni,
+        tractorModelo: tractorModelo,
+        asignadoPorNombre: asignadoPorNombre,
+        motivo: motivo,
+      ),
+    );
+  }
+
   /// Cambia la asignación del [engancheId] al [nuevoTractorId].
   ///
   /// - Si [nuevoTractorId] es `null`, vacío o `-`, desengancha
@@ -73,7 +106,7 @@ class AsignacionEngancheService {
   /// tx.update (ver `feedback_windows_cloud_firestore_bugs.md`).
   ///
   /// El audit log (fire-and-forget) se dispara después.
-  Future<void> cambiarAsignacion({
+  Future<void> _cambiarAsignacionInterno({
     required String engancheId,
     required String? nuevoTractorId,
     required String asignadoPorDni,

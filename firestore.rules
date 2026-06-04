@@ -1063,6 +1063,23 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // ASIGNACIONES_LOCKS — mutex de operación de los cambios de asignación
+    // ========================================================================
+    // Auditoría 2026-06: el modelo de writes secuenciales (sin runTransaction,
+    // prohibido en Windows) permitía que 2 cambios concurrentes sobre la misma
+    // patente/chofer dejaran 2 asignaciones ACTIVAS. Este lock create-only es
+    // un MUTEX de operación (existe solo mientras corre `cambiarAsignacion`):
+    // un `set` sobre un lock ya tomado cae en update → denegado → el 2do
+    // cambio rebota en vez de duplicar. Lo escriben/borran admin/supervisor.
+    match /ASIGNACIONES_LOCKS/{recurso} {
+      allow read: if isAdminOrSupervisor();
+      allow create: if isAdminOrSupervisor()
+        && request.resource.data.expira_en is timestamp;
+      // SIN update a propósito: es lo que garantiza la unicidad del mutex.
+      allow delete: if isAdminOrSupervisor();
+    }
+
+    // ========================================================================
     // CUBIERTAS_MARCAS — catálogo de marcas de cubiertas (ABM admin)
     // ========================================================================
     // Soft-delete con `activo: false` para no romper referencias históricas

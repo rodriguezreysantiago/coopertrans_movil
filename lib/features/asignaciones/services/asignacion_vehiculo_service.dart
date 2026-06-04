@@ -8,6 +8,7 @@ import '../../../core/services/audit_log_service.dart';
 import '../../fleet_map/services/sitrack_snapshot_service.dart';
 import '../models/asignacion_vehiculo.dart';
 import 'asignacion_enganche_service.dart';
+import 'asignacion_mutex.dart';
 
 /// Único punto de entrada para cambiar la asignación chofer↔vehículo.
 ///
@@ -36,6 +37,38 @@ class AsignacionVehiculoService {
   /// Estados del campo `VEHICULOS.ESTADO`.
   static const String _estadoOcupado = 'OCUPADO';
   static const String _estadoLibre = 'LIBRE';
+
+  /// Punto de entrada PÚBLICO. Toma un mutex de operación (por vehículo +
+  /// chofer) para que dos cambios concurrentes NO dejen 2 asignaciones activas
+  /// (auditoría 2026-06: el race del modelo de writes secuenciales). La lógica
+  /// real, intacta, vive en [_cambiarAsignacionInterno].
+  Future<void> cambiarAsignacion({
+    required String choferDni,
+    required String? nuevaPatente,
+    required String asignadoPorDni,
+    String? choferNombre,
+    String? asignadoPorNombre,
+    String? motivo,
+  }) async {
+    final dni = choferDni.trim();
+    final pat = _normalizarPatente(nuevaPatente);
+    final recursos = <String>[
+      if (dni.isNotEmpty) 'chofer_$dni',
+      if (pat != null) 'vehiculo_$pat',
+    ];
+    return conMutexAsignacion(
+      _db,
+      recursos,
+      () => _cambiarAsignacionInterno(
+        choferDni: choferDni,
+        nuevaPatente: nuevaPatente,
+        asignadoPorDni: asignadoPorDni,
+        choferNombre: choferNombre,
+        asignadoPorNombre: asignadoPorNombre,
+        motivo: motivo,
+      ),
+    );
+  }
 
   /// Cambia la asignación del [choferDni] a [nuevaPatente].
   ///
@@ -67,7 +100,7 @@ class AsignacionVehiculoService {
   /// nueva + alguna vieja) pero no queda al chofer "sin asignación".
   ///
   /// El audit log (fire-and-forget) se dispara después.
-  Future<void> cambiarAsignacion({
+  Future<void> _cambiarAsignacionInterno({
     required String choferDni,
     required String? nuevaPatente,
     required String asignadoPorDni,
