@@ -4,6 +4,12 @@ Lo que queda de Mac / App Store Connect. **iOS se puede hacer también desde
 Windows/web** (Xcode Cloud + ASC son web), pero acá queda todo junto.
 `git pull` en la Mac para tener este archivo.
 
+> ⚠️ **Antes de buildear, ojo con la versión.** Después del bump 1.0.89+92
+> entraron los fixes del **audit total de Logística** (`b999d2b`). Si todavía
+> NO disparaste el build de 1.0.89 → hacé **`release_completo` de nuevo (1.0.90)**
+> desde Windows ANTES de buildear, así el build los incluye. Si ya disparaste
+> 1.0.89, van en el próximo release. Detalle en `PENDIENTES.md`.
+
 ---
 
 ## 1. iOS — App Store 1.0.89+92 (lo largaste hoy)
@@ -23,7 +29,9 @@ El `release_completo` ya hizo el bump (1.0.89+92) y pusheó. Falta el build + su
 
 **Qué incluye esta versión** (para el "qué hay de nuevo"): fix de tarifas con
 chofer a monto fijo, editar service a mano en Mantenimiento, mejoras del módulo
-Cachatore. (Lo del bot/agente NO va en la app — corre en la PC dedicada.)
+Cachatore. **Si re-bumpeás a 1.0.90** (ver nota arriba): sumá los arreglos del
+audit de Logística (liquidación, formularios de viaje, adelantos). (Lo del
+bot/agente NO va en la app — corre en la PC dedicada.)
 
 ---
 

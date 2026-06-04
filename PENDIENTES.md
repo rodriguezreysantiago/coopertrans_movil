@@ -40,8 +40,24 @@ por GAP de reportes** (fix "dormí 8 h → me decía 12 h" — equipo apagado de
   "$0" engañoso).
 - **Mantenimiento**: **editar el service a mano** (km último service, fecha, km
   actual) desde el detalle — override mientras Volvo no reporta.
+- **Auditoría total de Logística** (commit `b999d2b`, ⚠️ POST-bump — ver nota
+  abajo): liquidación ya no resta adelantos de no-choferes ni arma filas
+  fantasma; fecha del gasto se refleja en el botón; resumen avisa si el monto
+  fijo del chofer quedó vacío; `borrarViaje`/`reactivarViaje` atómicos; recálculo
+  masivo con guarda anti lost-update; `getPorViaje` determinístico; duplicados de
+  empresa/ubicación con query puntual; banner de conexión se re-sincroniza;
+  detalle sin parpadeo del adelanto; atajos al tab correcto en Empresas.
+  `flutter analyze` limpio + 87 tests verdes.
 - (+ lo acumulado desde el bump 1.0.88+91 si no se había subido: versionado de
   tarifas por vigencia, filtro de Flota por tipo, tooltip de jornada, etc.)
+
+> ⚠️ **OJO con el número de versión**: el bump **1.0.89+92** (`1dfd7dd`) quedó
+> ANTES de los fixes del audit de Logística (`b999d2b` / `f530283`). Si ya
+> disparaste el build de 1.0.89 → esos fixes **NO entraron**: corré
+> `release_completo` de nuevo (1.0.90+93) para incluirlos. Si todavía NO
+> disparaste el build, podés hacerlo desde HEAD (entran con el número 1.0.89),
+> pero conviene re-bump para que el número refleje el contenido. Lo del bot/CF
+> post-bump ya está en prod por auto-update — NO necesita release.
 
 ### 🔧 Pendientes / a verificar (Santiago)
 - **Alerta de presupuesto de Gemini** en Cloud Billing (preventiva; el aviso del
