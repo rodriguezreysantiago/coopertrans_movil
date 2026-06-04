@@ -743,7 +743,7 @@ class _Contenido extends StatelessWidget {
         const SizedBox(height: AppSpacing.mdDense),
         _KpiStripJornada(j: jornada),
         const SizedBox(height: AppSpacing.mdDense),
-        _GraficoVelocidad(j: jornada),
+        _GraficoVelocidad(j: jornada, multiDia: multiDia),
         const SizedBox(height: AppSpacing.mdDense),
         _SeccionTramos(j: jornada, multiDia: multiDia),
         const SizedBox(height: AppSpacing.mdDense),
@@ -947,7 +947,8 @@ class _KpiStripJornada extends StatelessWidget {
 
 class _GraficoVelocidad extends StatelessWidget {
   final JornadaDia j;
-  const _GraficoVelocidad({required this.j});
+  final bool multiDia;
+  const _GraficoVelocidad({required this.j, required this.multiDia});
 
   @override
   Widget build(BuildContext context) {
@@ -1046,6 +1047,25 @@ class _GraficoVelocidad extends StatelessWidget {
                   ),
                 ),
                 borderData: FlBorderData(show: false),
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipItems: (touchedSpots) => touchedSpots.map((s) {
+                      final d =
+                          DateTime.fromMillisecondsSinceEpoch(s.x.toInt());
+                      // Hora exacta (HH:mm) del punto + la velocidad. Antes el
+                      // tooltip por defecto mostraba solo el valor (ej. "0.0")
+                      // sin la hora — pedido Santiago 2026-06.
+                      return LineTooltipItem(
+                        '${_fmtHoraSegun(d, multiDia: multiDia)}\n'
+                        '${s.y.toStringAsFixed(1)} km/h',
+                        AppType.monoSm.copyWith(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
                 lineBarsData: [
                   LineChartBarData(
                     spots: spots,
