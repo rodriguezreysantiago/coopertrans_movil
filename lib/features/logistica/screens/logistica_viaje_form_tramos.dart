@@ -32,6 +32,14 @@ class _TramoEditState {
   TarifaLogistica? tarifa;
   String? producto;
 
+  /// Snapshot ORIGINAL del tramo al EDITAR un viaje existente (null en alta).
+  /// Si el operador NO cambia la tarifa, lo conservamos al guardar para que el
+  /// viaje mantenga el precio con el que se cargó, aunque la tarifa se haya
+  /// actualizado después (pedido Santiago 2026-06). Si elige OTRA tarifa
+  /// (cambia el tarifaId), reconstruimos el snapshot del valor ACTUAL.
+  final TarifaSnapshot? _snapshotOriginal;
+  final String? _tarifaIdOriginal;
+
   /// Controller del campo "producto libre" — solo se usa cuando la
   /// empresa origen NO tiene productos catalogados (fallback). Vive
   /// en el state del tramo (no se recrea en cada build) para no
@@ -68,6 +76,8 @@ class _TramoEditState {
     required this.id,
     this.tarifa,
     this.producto,
+    TarifaSnapshot? snapshotOriginal,
+    String? tarifaIdOriginal,
     String? descripcionCarga,
     this.fechaCarga,
     String? kgCargados,
@@ -78,7 +88,9 @@ class _TramoEditState {
     this.remitoPathStorage,
     List<GastoViaje>? gastos,
     double? montoFijoChoferInicial,
-  })  : productoLibreCtrl = TextEditingController(text: producto ?? ''),
+  })  : _snapshotOriginal = snapshotOriginal,
+        _tarifaIdOriginal = tarifaIdOriginal,
+        productoLibreCtrl = TextEditingController(text: producto ?? ''),
         montoFijoChoferActivo = montoFijoChoferInicial != null,
         montoFijoChoferCtrl = TextEditingController(
           text: montoFijoChoferInicial != null
@@ -109,6 +121,8 @@ class _TramoEditState {
     return _TramoEditState._(
       id: t.id,
       tarifa: tarifaResuelta,
+      snapshotOriginal: t.tarifaSnapshot,
+      tarifaIdOriginal: t.tarifaId,
       producto: t.producto,
       descripcionCarga: t.descripcionCarga,
       fechaCarga: t.fechaCarga,
@@ -146,7 +160,14 @@ class _TramoEditState {
   /// asuma 0. La validación de "monto fijo obligatorio si activo" se
   /// hace al guardar el viaje.
   TarifaSnapshot snapshotConOverride() {
-    final base = TarifaSnapshot.fromTarifa(tarifa!);
+    // Base del snapshot: si EDITAMOS un viaje y el operador NO cambió la tarifa
+    // (mismo tarifaId), conservamos el SNAPSHOT ORIGINAL — así el viaje mantiene
+    // el precio con el que se cargó aunque la tarifa se haya actualizado después
+    // (pedido Santiago 2026-06). En alta, o si eligió OTRA tarifa, reconstruimos
+    // del valor ACTUAL de la tarifa.
+    final base = (_snapshotOriginal != null && tarifa!.id == _tarifaIdOriginal)
+        ? _snapshotOriginal!
+        : TarifaSnapshot.fromTarifa(tarifa!);
     if (!montoFijoChoferActivo) {
       // Explícitamente null para limpiar el override que la tarifa
       // pueda traer — el operador eligió volver al 18%.
