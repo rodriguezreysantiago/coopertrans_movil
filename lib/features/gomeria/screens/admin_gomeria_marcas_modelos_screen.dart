@@ -416,19 +416,36 @@ class _ModelosTab extends StatelessWidget {
 /// Bottom sheet de edición de un `CubiertaModelo`. Pattern inline-edit
 /// (cada ListTile abre un dialog que persiste un solo campo) — alineado
 /// al pattern de Personal/Flota.
-class _EditarModeloSheet extends StatelessWidget {
+class _EditarModeloSheet extends StatefulWidget {
   final CubiertaModelo modelo;
   const _EditarModeloSheet({required this.modelo});
 
   @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
+  State<_EditarModeloSheet> createState() => _EditarModeloSheetState();
+}
+
+class _EditarModeloSheetState extends State<_EditarModeloSheet> {
+  // Copia local del modelo que se REFRESCA tras cada guardado. Antes el sheet
+  // era Stateless y mostraba el `modelo` cacheado que recibió al abrir, así que
+  // tras "Guardar" un campo quedaba el dato viejo hasta cerrar y reabrir el
+  // sheet (bug 2026-06-04). Ahora re-leemos el doc y hacemos setState para que
+  // el cambio se vea al instante.
+  late CubiertaModelo modelo = widget.modelo;
+
+  Future<void> setCampo(String campo, dynamic valor) async {
     final ref = FirebaseFirestore.instance
         .collection(AppCollections.cubiertasModelos)
         .doc(modelo.id);
-    Future<void> setCampo(String campo, dynamic valor) async {
-      await ref.update({campo: valor});
+    await ref.update({campo: valor});
+    final fresh = await ref.get();
+    if (mounted && fresh.exists) {
+      setState(() => modelo = CubiertaModelo.fromDoc(fresh));
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
 
     return DraggableScrollableSheet(
       expand: false,
