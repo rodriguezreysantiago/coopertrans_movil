@@ -98,31 +98,30 @@ const diasEntre = (iso1, iso2) => {
     const emp = (e.cuil && porCuil.get(e.cuil)) || porNombre.get(norm(e.nombre));
     if (!emp) { problemas.push(`SIN MATCH: ${e.nombre} (cuil ${e.cuil || '—'})`); continue; }
 
+    // Períodos a persistir: SOLO inicio/fin (el modelo deriva `dias`).
     const periodos = e.periodos.map(([i, f]) => ({
       inicio: admin.firestore.Timestamp.fromDate(new Date(i + 'T00:00:00Z')),
       fin: admin.firestore.Timestamp.fromDate(new Date(f + 'T00:00:00Z')),
-      dias: diasEntre(i, f),
     }));
-    const tomados = periodos.reduce((a, p) => a + p.dias, 0);
+    const tomados = e.periodos.reduce((a, [i, f]) => a + diasEntre(i, f), 0);
     const diasCorresponden = Number(e.dias_g) || 0;
     const restan = diasCorresponden - tomados;
 
+    // El doc guarda SOLO datos propios de vacaciones — nombre/empresa/área
+    // viven en EMPLEADOS (se leen al armar la vista); tomados/restan se
+    // derivan. No duplicamos (pedido Santiago 2026-06-05).
     docs.push({
       id: `${ANIO}_${emp.dni}`,
       data: {
         dni: emp.dni,
-        nombre: emp.nombre || e.nombre,
         anio: ANIO,
-        empresa: emp.empresa,
-        area: emp.area,
         diasCorresponden,
         diasAuto: false,
         periodos,
-        tomados,
-        restan,
         actualizadoEn: admin.firestore.FieldValue.serverTimestamp(),
         actualizadoPorDni: 'import_excel',
       },
+      // Solo para el reporte en pantalla (NO se persiste):
       _dbg: { nombre: emp.nombre || e.nombre, diasCorresponden, tomados, restan,
         nperiodos: periodos.length, tomados_h: e.tomados_h, area: emp.area },
     });

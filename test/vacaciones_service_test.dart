@@ -41,10 +41,7 @@ void main() {
   group('Vacacion — derivados', () {
     Vacacion base({List<PeriodoVacaciones> periodos = const []}) => Vacacion(
           dni: '31584396',
-          nombre: 'VILLARREAL CRISTIAN IVAN',
           anio: 2025,
-          empresa: 'SRL',
-          area: 'manejo',
           diasCorresponden: 21,
           periodos: periodos,
         );
@@ -104,64 +101,73 @@ void main() {
       svc = VacacionesService(db: db);
     });
 
-    Vacacion nuevo(String dni, String nombre,
+    Vacacion nuevo(String dni,
             {int anio = 2025,
-            String area = 'manejo',
+            int diasCorresponden = 21,
             List<PeriodoVacaciones> periodos = const []}) =>
         Vacacion(
           dni: dni,
-          nombre: nombre,
           anio: anio,
-          empresa: 'SRL',
-          area: area,
-          diasCorresponden: 21,
+          diasCorresponden: diasCorresponden,
           periodos: periodos,
         );
 
     test('guardar + obtener roundtrip preserva períodos y derivados',
         () async {
-      final v = nuevo('1', 'PEREZ JUAN', periodos: [
+      final v = nuevo('1', periodos: [
         PeriodoVacaciones(inicio: DateTime(2026, 1, 5), fin: DateTime(2026, 1, 18)),
       ]);
       await svc.guardar(v, actualizadoPorDni: '999');
       final leido = await svc.obtener('1', 2025);
       expect(leido, isNotNull);
-      expect(leido!.nombre, 'PEREZ JUAN');
+      expect(leido!.dni, '1');
       expect(leido.periodos.length, 1);
       expect(leido.tomados, 14);
       expect(leido.restan, 7);
       expect(leido.actualizadoPorDni, '999');
     });
 
-    test('guardar es idempotente por id determinístico (no duplica)',
-        () async {
-      await svc.guardar(nuevo('1', 'PEREZ JUAN'));
-      await svc.guardar(nuevo('1', 'PEREZ J.')); // mismo dni+año
-      final snap = await db.collection('VACACIONES').get();
-      expect(snap.size, 1);
-      expect((await svc.obtener('1', 2025))!.nombre, 'PEREZ J.');
-    });
-
-    test('streamPorAnio filtra por año y ordena por nombre', () async {
-      await svc.guardar(nuevo('1', 'ZARATE', anio: 2025));
-      await svc.guardar(nuevo('2', 'ALVAREZ', anio: 2025));
-      await svc.guardar(nuevo('3', 'BENITEZ', anio: 2024)); // otro año
-      final lista = await svc.streamPorAnio(2025).first;
-      expect(lista.map((v) => v.nombre), ['ALVAREZ', 'ZARATE']);
-    });
-
-    test('tomados/restan se persisten para la vista de saldos', () async {
-      await svc.guardar(nuevo('1', 'PEREZ', periodos: [
-        PeriodoVacaciones(inicio: DateTime(2026, 1, 5), fin: DateTime(2026, 1, 11)), // 7
+    test('el doc NO duplica info de EMPLEADOS ni derivados (DRY)', () async {
+      await svc.guardar(nuevo('1', periodos: [
+        PeriodoVacaciones(inicio: DateTime(2026, 1, 5), fin: DateTime(2026, 1, 11)),
       ]));
       final raw =
           (await db.collection('VACACIONES').doc('2025_1').get()).data()!;
-      expect(raw['tomados'], 7);
-      expect(raw['restan'], 14);
+      // Solo datos propios de vacaciones:
+      expect(raw.keys, containsAll(['dni', 'anio', 'diasCorresponden', 'diasAuto', 'periodos']));
+      // NADA que ya viva en EMPLEADOS ni derivados que se calculan:
+      expect(raw.containsKey('nombre'), false);
+      expect(raw.containsKey('empresa'), false);
+      expect(raw.containsKey('area'), false);
+      expect(raw.containsKey('tomados'), false);
+      expect(raw.containsKey('restan'), false);
+      // El período persiste solo inicio/fin (dias es derivado):
+      final p0 = (raw['periodos'] as List).first as Map;
+      expect(p0.containsKey('inicio'), true);
+      expect(p0.containsKey('fin'), true);
+      expect(p0.containsKey('dias'), false);
+    });
+
+    test('guardar es idempotente por id determinístico (no duplica)',
+        () async {
+      await svc.guardar(nuevo('1', diasCorresponden: 21));
+      await svc.guardar(nuevo('1', diasCorresponden: 28)); // mismo dni+año
+      final snap = await db.collection('VACACIONES').get();
+      expect(snap.size, 1);
+      expect((await svc.obtener('1', 2025))!.diasCorresponden, 28);
+    });
+
+    test('streamPorAnio filtra por año', () async {
+      await svc.guardar(nuevo('1', anio: 2025));
+      await svc.guardar(nuevo('2', anio: 2025));
+      await svc.guardar(nuevo('3', anio: 2024)); // otro año
+      final lista = await svc.streamPorAnio(2025).first;
+      expect(lista.length, 2);
+      expect(lista.map((v) => v.dni).toSet(), {'1', '2'});
     });
 
     test('agregarPeriodo suma sobre lo existente', () async {
-      await svc.guardar(nuevo('1', 'PEREZ', periodos: [
+      await svc.guardar(nuevo('1', periodos: [
         PeriodoVacaciones(inicio: DateTime(2026, 1, 5), fin: DateTime(2026, 1, 18)), // 14
       ]));
       await svc.agregarPeriodo(
@@ -175,7 +181,7 @@ void main() {
     });
 
     test('eliminar borra el registro', () async {
-      await svc.guardar(nuevo('1', 'PEREZ'));
+      await svc.guardar(nuevo('1'));
       await svc.eliminar('1', 2025);
       expect(await svc.obtener('1', 2025), isNull);
     });

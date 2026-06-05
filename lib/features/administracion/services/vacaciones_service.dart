@@ -24,15 +24,14 @@ class VacacionesService {
   CollectionReference<Map<String, dynamic>> get col =>
       _db.collection(AppCollections.vacaciones);
 
-  /// Stream de todas las vacaciones de un [anio] devengado, ordenadas por
-  /// nombre. Base de la tabla anual.
+  /// Stream de todas las vacaciones de un [anio] devengado. Base de la tabla
+  /// anual. NO ordena por nombre (no vive acá — está en EMPLEADOS): la vista
+  /// joinea por DNI y ordena ahí.
   Stream<List<Vacacion>> streamPorAnio(int anio) {
     return col
         .where('anio', isEqualTo: anio)
         .snapshots()
-        .map((s) => s.docs.map(Vacacion.fromDoc).toList()
-          ..sort((a, b) =>
-              a.nombre.toUpperCase().compareTo(b.nombre.toUpperCase())));
+        .map((s) => s.docs.map(Vacacion.fromDoc).toList());
   }
 
   /// Stream del historial de un empleado (todos sus años), más nuevo primero.
