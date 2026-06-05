@@ -445,6 +445,24 @@ function crearHandler(fs, wa) {
       }
       if (msg.isStatus) return; // status updates
       if (msg.from && msg.from.endsWith('@g.us')) return; // grupo
+      // Tipos de mensaje NO conversacionales: WhatsApp dispara message_create
+      // con body vacío y `fromMe=false` para reacciones (👍 a un aviso del bot),
+      // ACKs y eventos internos (e2e_notification, protocol, gp2, revoked,
+      // ciphertext, etc.). Cuando el chat es `@lid` (chofer con privacidad de
+      // número), esos eventos NO traen firma "Bot-On" ni vienen de BOT_PHONE
+      // — no los atrapaba ninguna defensa, llegaban a "chofer registrado sin
+      // texto" y disparaban el acuse automático aunque el chofer no hubiera
+      // escrito nada. Tipos válidos a procesar: chat / ptt / audio / image /
+      // video / document / sticker (caption opcional). Cualquier otro: ignorar.
+      // (Bug 2026-06-05: Villarreal recibió aviso del vigilador + acuse instant
+      //  con body="" id=false_<lid>@lid... — sin que él escribiera nada.)
+      const TIPOS_CONVERSACIONALES = new Set([
+        'chat', 'ptt', 'audio', 'image', 'video', 'document', 'sticker',
+      ]);
+      if (msg.type && !TIPOS_CONVERSACIONALES.has(msg.type)) {
+        log.debug(`Tipo no conversacional descartado: ${msg.type}`);
+        return;
+      }
       // Aceptamos @c.us (chats con contactos) y @lid (linked-id de
       // WhatsApp moderno: aparece en chats con números NO agendados).
       // En @lid, msg.from no es un número directo — el resolver de
@@ -596,6 +614,20 @@ function crearHandler(fs, wa) {
       // como agujero negro y el chofer puede sentirse ignorado).
       // Cap: 1 acuse por chofer por día — si responde 10 veces el mismo
       // día, no lo spameamos. Doc en `BOT_ACUSES/{dni}_{YYYY-MM-DD}`.
+      //
+      // Guard de CONTENIDO: solo acusamos si el chofer realmente escribió
+      // algo (texto / audio / media / cita). Sin esto, cualquier evento
+      // "fantasma" (reaction al aviso del bot, ACK, etc.) que sortee los
+      // filtros de saliente propio dispara un acuse "Tu mensaje me llegó"
+      // ante la nada — el chofer recibe spam sin haber escrito.
+      const hayContenido =
+        (typeof msg.body === 'string' && msg.body.trim().length > 0) ||
+        !!msg.hasMedia ||
+        !!msg.hasQuotedMsg;
+      if (!hayContenido) {
+        log.debug('Mensaje sin contenido procesable, no acuso.');
+        return;
+      }
       const respuestasHabilitado =
         String(process.env.AUTO_RESPUESTAS_ENABLED || 'false').toLowerCase() === 'true';
       if (!respuestasHabilitado) {
