@@ -351,6 +351,22 @@ const TOOLS_GESTION_VENC = [
       query: { type: 'string', description: 'Nombre o apellido del chofer.' },
     },
   },
+  {
+    name: 'listar_empleados_por_rol',
+    description:
+      'Lista los empleados ACTIVOS de un ROL (ADMIN, SUPERVISOR, CHOFER, ' +
+      'PLANTA, GOMERIA, SEG_HIGIENE). Usala para "quiénes son los ' +
+      'administradores", "qué supervisores hay", "nombrame los choferes ' +
+      'activos". Si no aclaran el rol, asumí ADMIN.',
+    params: {
+      rol: {
+        type: 'string',
+        description:
+          'ADMIN | SUPERVISOR | CHOFER | PLANTA | GOMERIA | SEG_HIGIENE. ' +
+          'Default ADMIN.',
+      },
+    },
+  },
 ];
 
 // Cachatore (turnos YPF). Solo roles con verCachatore (ADMIN / SUPERVISOR).
@@ -521,6 +537,23 @@ const TOOLS_GESTION_LOGISTICA = [
       },
     },
   },
+  {
+    name: 'adelantos_pendientes',
+    description:
+      'Lista los ADELANTOS de dinero PENDIENTES de descontar (no pagados) de ' +
+      'todo el personal, o de un empleado puntual si pasás `empleado`. Devuelve ' +
+      'cuántos hay, el total en pesos y el detalle. Usala para "qué adelantos ' +
+      'están preparados/pendientes", "a quién le debemos adelantos", "cuánto ' +
+      'tiene pendiente Fulano". Es SOLO CONSULTA (no registra ni paga nada).',
+    params: {
+      empleado: {
+        type: 'string',
+        description:
+          'Opcional. Nombre o apellido para filtrar a un solo empleado. ' +
+          'Vacío = todos los pendientes.',
+      },
+    },
+  },
 ];
 
 // ─── RBAC del agente = capabilities de la app ───
@@ -531,11 +564,11 @@ const TOOLS_GESTION_LOGISTICA = [
 // módulo de donde sale el dato (la misma que gatea la pantalla en la app).
 const TOOLS_POR_CAPABILITY = {
   verVencimientos: ['buscar_vencimientos', 'vencimientos_proximos'],
-  verListaPersonal: ['info_chofer'],
+  verListaPersonal: ['info_chofer', 'listar_empleados_por_rol'],
   verIcm: ['jornada_de'], // la jornada vive dentro del módulo ICM en la app
   verAlertasVolvo: ['donde_esta', 'estado_flota', 'alertas_unidad'],
   verDescargas: ['quien_esta_descargando', 'descargas_historico'],
-  verLogistica: ['viajes_resumen', 'crear_adelanto'],
+  verLogistica: ['viajes_resumen', 'crear_adelanto', 'adelantos_pendientes'],
   verMantenimiento: ['service_unidad'],
   verCachatore: ['cachatore_estado', 'turnos_ypf_detalle', 'poner_a_buscar_turno'],
 };
@@ -547,7 +580,8 @@ const FRASE_POR_CAPABILITY = {
   verVencimientos:
     'Consultar los vencimientos (papeles) de cualquier chofer o de cualquier unidad.',
   verListaPersonal:
-    'Consultar datos de un chofer (rol, teléfono, unidad, licencia).',
+    'Consultar datos de un chofer (rol, teléfono, unidad, licencia) y listar ' +
+    'los empleados de un rol (ej. quiénes son los administradores/supervisores).',
   verIcm:
     'Ver la jornada de manejo de hoy de un chofer (cuánto manejó, en qué bloque ' +
     'va, pausas/descanso) — para conducta de manejo y fatiga.',
@@ -557,11 +591,15 @@ const FRASE_POR_CAPABILITY = {
   verDescargas:
     'Ver qué unidades están ahora dentro de una zona de carga/descarga YPF.',
   verLogistica:
-    'Ver el resumen de viajes de los últimos días, y REGISTRAR un adelanto de ' +
-    'dinero a un empleado. Registrar el adelanto es una ACCIÓN que toca plata: ' +
-    'primero mostrá un resumen (a quién, cuánto, fecha, medio de pago) y pedí ' +
-    'confirmación; recién con el "sí" del usuario lo registrás. Si el nombre ' +
-    'coincide con varias personas, NO registres y pedí que aclaren.',
+    'Ver el resumen de viajes de los últimos días, CONSULTAR los adelantos ' +
+    'pendientes de descontar, y REGISTRAR un adelanto de dinero a un empleado. ' +
+    'Registrar el adelanto es una ACCIÓN que toca plata: primero mostrá un ' +
+    'resumen (a quién, cuánto, fecha, medio de pago) y pedí confirmación; recién ' +
+    'con el "sí" del usuario lo registrás. Si el nombre coincide con varias ' +
+    'personas, NO registres y pedí que aclaren. Si te piden VARIOS adelantos en ' +
+    'un mismo mensaje (ej. "150 a Fulano y 150 a Mengano"), llamá crear_adelanto ' +
+    'para cada uno: mostrá el resumen de TODOS junto y pedí UNA sola ' +
+    'confirmación; con el "sí", registralos uno por uno (confirmado=true cada uno).',
   verMantenimiento: 'Ver el estado de service de una unidad (horas de motor).',
   verCachatore:
     'Ver el estado de Cachatore / turnos YPF, y poner a un chofer a buscar ' +
@@ -1374,6 +1412,77 @@ async function _viajesDe(db, dni) {
 async function _toolMisAdelantos(db, persona) {
   return await _adelantosDe(db, persona.dni, persona.data && persona.data.NOMBRE);
 }
+
+// Adelantos PENDIENTES de descontar (no pagados), de todo el personal o de un
+// empleado puntual. Solo CONSULTA. Todos los adelantos llevan `pagado` (la app
+// y crear_adelanto lo setean), así que el where es seguro; filtramos eliminados
+// y, si pidieron un empleado, por su DNI (client-side, evita índice compuesto).
+async function _toolAdelantosPendientes(db, args) {
+  const nombreQuery = String((args && args.empleado) || '').trim();
+  let dniFiltro = null, nombreFiltro = null;
+  if (nombreQuery) {
+    const r = await _resolverChoferPorNombre(db, nombreQuery, false);
+    if (!r.ok) return r; // propaga ambiguo / no encontrado
+    dniFiltro = r.dni;
+    nombreFiltro = r.data.NOMBRE || r.dni;
+  }
+  let docs;
+  try {
+    const snap = await db.collection('ADELANTOS_CHOFER').where('pagado', '==', false).get();
+    docs = snap.docs.map((d) => d.data()).filter((a) => a.eliminado !== true);
+  } catch (e) {
+    return { error: `No pude leer los adelantos: ${e.message}` };
+  }
+  if (dniFiltro) docs = docs.filter((a) => a.chofer_dni === dniFiltro);
+  let total = 0;
+  for (const a of docs) total += Number(a.monto) || 0;
+  docs.sort((a, b) => {
+    const fa = a.fecha && a.fecha.toMillis ? a.fecha.toMillis() : 0;
+    const fb = b.fecha && b.fecha.toMillis ? b.fecha.toMillis() : 0;
+    return fb - fa;
+  });
+  return {
+    filtro: nombreFiltro,
+    cantidad: docs.length,
+    total_pendiente: total,
+    adelantos: docs.map((a) => ({
+      empleado: a.chofer_nombre || a.chofer_dni,
+      monto: Number(a.monto) || 0,
+      fecha: _fechaIso(a.fecha),
+      observacion: a.observacion || null,
+    })),
+    nota: docs.length === 0
+      ? (nombreFiltro ? `${nombreFiltro} no tiene adelantos pendientes.`
+        : 'No hay adelantos pendientes de descontar.')
+      : `${docs.length} adelanto(s) pendiente(s)${nombreFiltro ? ' de ' + nombreFiltro : ''}, ` +
+        `total $${total.toLocaleString('es-AR')}.`,
+  };
+}
+
+// Lista los empleados ACTIVOS de un rol (default ADMIN). Para "quiénes son los
+// administradores", "qué supervisores hay", etc.
+async function _toolListarEmpleadosPorRol(db, args) {
+  const rol = String((args && args.rol) || 'ADMIN').trim().toUpperCase();
+  let nombres;
+  try {
+    const snap = await db.collection('EMPLEADOS').where('ROL', '==', rol).get();
+    nombres = snap.docs
+      .map((d) => d.data())
+      .filter((e) => e.ACTIVO !== false)
+      .map((e) => e.NOMBRE || '(sin nombre)')
+      .sort();
+  } catch (e) {
+    return { error: `No pude leer el personal: ${e.message}` };
+  }
+  return {
+    rol,
+    cantidad: nombres.length,
+    empleados: nombres,
+    nota: nombres.length === 0
+      ? `No hay empleados activos con rol ${rol}.`
+      : `${nombres.length} con rol ${rol}: ${nombres.join(', ')}.`,
+  };
+}
 async function _toolMisViajes(db, persona) {
   return await _viajesDe(db, persona.dni);
 }
@@ -1632,6 +1741,10 @@ async function _ejecutarTool(db, nombre, persona, args) {
       return await _toolServiceUnidad(db, args);
     case 'crear_adelanto':
       return await _toolCrearAdelanto(db, persona, args);
+    case 'adelantos_pendientes':
+      return await _toolAdelantosPendientes(db, args);
+    case 'listar_empleados_por_rol':
+      return await _toolListarEmpleadosPorRol(db, args);
     default:
       return { error: `Herramienta desconocida: ${nombre}` };
   }
