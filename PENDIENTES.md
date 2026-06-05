@@ -7,6 +7,22 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-06-04 PM — Fix Gomería + auditoría no-refresh
+
+- **Bug arreglado** (`5f6111b`): el editor de un MODELO de cubierta (catálogo
+  Marcas y Modelos) era `StatelessWidget` con el objeto cacheado → tras "Guardar"
+  un campo mostraba el dato viejo hasta cerrar/reabrir el panel. Ahora re-lee el
+  doc + `setState`. **⏳ Pendiente de salir en 1.0.92** — quedó DESPUÉS del build
+  de 1.0.91, así que NO está en lo que se subió hoy (Android/iOS/macOS/Windows/web
+  van con 1.0.91 sin este fix). Bug menor (admin-only).
+- **Auditoría sistémica** del mismo patrón en toda la app (Personal, Flota,
+  Empresas, Ubicaciones, mantenimiento, revisiones, asignaciones, ICM, cachatore,
+  volvo, vencimientos, empresas empleadoras…): **el de Gomería era el ÚNICO bug**.
+  El resto usa el patrón correcto (editor sobre `StreamBuilder` del doc, o
+  `setState` tras guardar). Patrón estándar a respetar a futuro.
+
+---
+
 ## 📅 2026-06-04 — Sesión grande: agente IA + cachatore + tarifas + mantenimiento + Volvo
 
 ~17 commits (todo en main + pusheado). **Bot y Cloud Functions YA en producción**
@@ -33,44 +49,27 @@ que larga Santiago.
 por GAP de reportes** (fix "dormí 8 h → me decía 12 h" — equipo apagado de noche).
 **Firestore**: limpiado el fantasma `alertasVolvoDiario` de `BOT_HEALTH/main`.
 
-### 📦 EN EL RELEASE que largás (app Flutter)
-- **Cachatore**: card muestra "buscando reagendar" EN VIVO (KPI + badge por flag
-  `reagendar`, ya no condicionado por estado).
-- **Tarifas**: "CHOFER FIJO $X" cuando el chofer cobra monto fijo (antes mostraba
-  "$0" engañoso).
-- **Mantenimiento**: **editar el service a mano** (km último service, fecha, km
-  actual) desde el detalle — override mientras Volvo no reporta.
-- **Auditoría total de Logística** (commit `b999d2b`, ⚠️ POST-bump — ver nota
-  abajo): liquidación ya no resta adelantos de no-choferes ni arma filas
-  fantasma; fecha del gasto se refleja en el botón; resumen avisa si el monto
-  fijo del chofer quedó vacío; `borrarViaje`/`reactivarViaje` atómicos; recálculo
-  masivo con guarda anti lost-update; `getPorViaje` determinístico; duplicados de
-  empresa/ubicación con query puntual; banner de conexión se re-sincroniza;
-  detalle sin parpadeo del adelanto; atajos al tab correcto en Empresas.
-  `flutter analyze` limpio + 87 tests verdes.
-- (+ lo acumulado desde el bump 1.0.88+91 si no se había subido: versionado de
-  tarifas por vigencia, filtro de Flota por tipo, tooltip de jornada, etc.)
-
-> ⚠️ **OJO con el número de versión**: el bump **1.0.89+92** (`1dfd7dd`) quedó
-> ANTES de TODO lo que entró después: el audit de Logística (`b999d2b`/`f530283`)
-> y la **auditoría iOS/macOS** de la Mac (`c6c1d98` — permisos, CI, config de
-> build). Si ya disparaste el build de 1.0.89 → nada de eso entró: corré
-> `release_completo` de nuevo (1.0.90+93) para incluirlo. Si todavía NO
-> disparaste, podés buildear desde HEAD (entra con 1.0.89), pero conviene
-> re-bump para que el número refleje el contenido. **Los cambios de iOS/macOS
-> tocan el BUILD** (entitlements / Info.plist / ci_post_clone / Podfile.lock) →
-> importante que el build los tome. Lo del bot/CF post-bump ya está en prod por
-> auto-update — NO necesita release.
+### ✅ SALIÓ EN 1.0.91+94 (app Flutter — Windows + AAB a Play + web + iOS/macOS)
+- **Cachatore**: card "buscando reagendar" EN VIVO (KPI + badge por flag).
+- **Tarifas**: "CHOFER FIJO $X" cuando el chofer cobra monto fijo.
+- **Mantenimiento**: editar el service a mano desde el detalle.
+- **Auditoría total de Logística** (`b999d2b`): liquidación sin adelantos de
+  no-choferes ni filas fantasma; fecha del gasto refleja; resumen avisa monto
+  fijo vacío; borrar/reactivar viaje atómicos; recálculo anti lost-update;
+  `getPorViaje` determinístico; dup empresa/ubicación con query puntual; banner
+  re-sincroniza; detalle sin parpadeo; atajos al tab correcto en Empresas.
+- **Auditoría iOS/macOS** (`c6c1d98`): permisos (sin cámara macOS, sin add-photos
+  iOS, dark mode real), CI pin flutterfire, `Podfile.lock` macOS, bundle ids.
+- (+ versionado de tarifas por vigencia, filtro de Flota por tipo, tooltip de
+  jornada, etc., acumulado de bumps previos.)
 
 ### 🔧 Pendientes / a verificar (Santiago)
-- **Alerta de presupuesto de Gemini** en Cloud Billing (preventiva; el aviso del
-  bot es reactivo). Ver "cómo vigilar el saldo".
 - **Corregir 2 tarifas** mal cargadas: Sea White (B.Bca) → La Martineta (Gral
   Lamadrid) sin tarifa de chofer; Río Colorado → Monte Hermoso (Devic) chofer **$2**.
-- **¿Franja de reagendar de AVIT?** Quedó "noche"; si pediste "tarde", hay bug del
-  selector de reagendar → confirmar.
 - **Monitorear primer día**: vigilador de jornada (avisos coherentes) +
   anti-auto-respuesta (log `[handler] reflejo de saliente propio descartado por id`).
+- ✅ Resueltos 2026-06-04: ~~alerta presupuesto Gemini (Cloud Billing)~~ ·
+  ~~franja reagendar AVIT~~ · ~~subir AAB a Play~~ · ~~iOS/macOS build + submit~~.
 
 ### 🟡 Para retomar (en pausa)
 Monitor de frescura Volvo · fallbacks de mantenimiento a Sitrack · suscripciones
