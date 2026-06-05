@@ -448,6 +448,102 @@ class MontajesService {
     }
   }
 
+  /// Rota la cubierta de [montajeId] a [posicionDestino] de la MISMA unidad.
+  /// El km "viaja" con la cubierta: como es la misma unidad, se conservan
+  /// `desde` y `km_unidad_al_montar` (solo cambia `posicion`), así el % de
+  /// vida sigue siendo continuo. NO toca stock (las cubiertas no pasan por el
+  /// depósito).
+  ///
+  /// Si el destino está OCUPADO hace SWAP (las dos cubiertas intercambian de
+  /// posición). Valida que el tipo de uso y la regla de recapada de cada
+  /// cubierta sean compatibles con su nueva posición.
+  Future<void> rotar({
+    required String montajeId,
+    required String posicionDestino,
+    required String supervisorDni,
+    String? supervisorNombre,
+  }) async {
+    final refA = _montajes.doc(montajeId);
+    final snapA = await refA.get();
+    if (!snapA.exists) {
+      throw MontajeException('El montaje no existe.');
+    }
+    final mA = Montaje.fromMap(snapA.id, snapA.data());
+    if (!mA.esActivo) {
+      throw MontajeException('La cubierta ya fue retirada.');
+    }
+    final codigoOrigen = mA.posicion;
+    if (codigoOrigen == posicionDestino) {
+      throw MontajeException('La cubierta ya está en esa posición.');
+    }
+
+    final posOrigen = posicionPorCodigo[codigoOrigen];
+    final posDest = posicionPorCodigo[posicionDestino];
+    if (posOrigen == null || posDest == null) {
+      throw MontajeException('Posición desconocida.');
+    }
+    if (posDest.tipoUnidad != mA.unidadTipo) {
+      throw MontajeException(
+          'La posición destino no pertenece a un ${mA.unidadTipo.codigo}.');
+    }
+    // La cubierta que se mueve tiene que entrar en el destino.
+    _validarCompatible(posDest, mA.tipoUso, mA.vida);
+
+    final lockDestRef = _locks.doc(_posLockId(mA.unidadId, posicionDestino));
+    final lockDestSnap = await lockDestRef.get();
+
+    if (lockDestSnap.exists) {
+      // SWAP — el destino está ocupado: buscamos su montaje activo.
+      final qDest = await _montajes
+          .where('unidad_id', isEqualTo: mA.unidadId)
+          .where('posicion', isEqualTo: posicionDestino)
+          .where('hasta', isNull: true)
+          .limit(1)
+          .get();
+      if (qDest.docs.isEmpty) {
+        throw MontajeException(
+            'La posición destino está bloqueada pero sin cubierta activa. '
+            'Revisá manualmente.');
+      }
+      final mB = Montaje.fromMap(qDest.docs.first.id, qDest.docs.first.data());
+      // La cubierta del destino tiene que poder venir a la posición origen.
+      _validarCompatible(posOrigen, mB.tipoUso, mB.vida);
+      // Intercambiar posiciones. Los locks de ambas posiciones ya existen y
+      // siguen marcándolas ocupadas → no se tocan.
+      await refA.update({'posicion': posicionDestino});
+      await _montajes.doc(mB.id).update({'posicion': codigoOrigen});
+      return;
+    }
+
+    // Destino LIBRE: reservar el lock destino, mover, liberar el origen.
+    await lockDestRef.set({
+      'unidad_id': mA.unidadId,
+      'posicion': posicionDestino,
+      'desde': FieldValue.serverTimestamp(),
+    });
+    await refA.update({'posicion': posicionDestino});
+    try {
+      await _locks.doc(_posLockId(mA.unidadId, codigoOrigen)).delete();
+    } catch (_) {/* best-effort: posición origen queda como "ocupada" huérfana */}
+  }
+
+  /// Valida que una cubierta de [tipoUso]/[vida] pueda ir en [pos]: mismo
+  /// tipo de uso (STRICT) y, si es recapada (vida ≥ 2), que la posición lo
+  /// permita. Lanza [MontajeException] si no.
+  void _validarCompatible(
+      PosicionCubierta pos, TipoUsoCubierta tipoUso, int vida) {
+    if (pos.tipoUsoRequerido != tipoUso) {
+      throw MontajeException(
+          'No se puede poner una cubierta ${tipoUso.etiqueta} en una '
+          'posición ${pos.tipoUsoRequerido.etiqueta}.');
+    }
+    if (!pos.permiteRecapada && vida >= 2) {
+      throw MontajeException(
+          'La posición ${pos.etiqueta} solo admite cubiertas nuevas '
+          '(las recapadas van solo en el primer eje del enganche).');
+    }
+  }
+
   // ===========================================================================
   // LECTURA
   // ===========================================================================

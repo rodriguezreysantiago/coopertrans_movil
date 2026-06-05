@@ -139,8 +139,9 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
     final esquema = EsquemaUnidadV2View(
       tipo: widget.unidadTipo,
       estados: estados,
-      onTapPosicion: (e) =>
-          e.montaje == null ? _montar(e) : _retirar(e, e.montaje!),
+      onTapPosicion: (e) => e.montaje == null
+          ? _montar(e)
+          : _accionesOcupada(e, e.montaje!, estados),
     );
 
     final ayuda = _Leyenda();
@@ -152,7 +153,7 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
           padding: const EdgeInsets.fromLTRB(0, AppSpacing.md, 0, AppSpacing.sm),
           child: AppEyebrow('Eje $eje'),
         ),
-        for (final e in porEje[eje]!) _tilePosicion(e),
+        for (final e in porEje[eje]!) _tilePosicion(e, estados),
       ],
     ];
 
@@ -217,7 +218,7 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
     );
   }
 
-  Widget _tilePosicion(EstadoPosicion e) {
+  Widget _tilePosicion(EstadoPosicion e, List<EstadoPosicion> estados) {
     final c = context.colors;
     final m = e.montaje;
     final pct = e.porcentajeVida;
@@ -248,7 +249,7 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
 
     return AppCard(
       tier: 1,
-      onTap: () => vacia ? _montar(e) : _retirar(e, m),
+      onTap: () => vacia ? _montar(e) : _accionesOcupada(e, m, estados),
       padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md, vertical: AppSpacing.md),
       child: Row(
@@ -307,6 +308,132 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
         ],
       ),
     );
+  }
+
+  // ─────────────────── ACCIONES sobre posición ocupada ───────────────────
+
+  /// Al tocar una posición con cubierta, elegir entre ROTAR (mover sin tocar
+  /// el desgaste) o RETIRAR (sacar del vehículo).
+  Future<void> _accionesOcupada(
+      EstadoPosicion e, Montaje m, List<EstadoPosicion> estados) async {
+    final accion = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: context.colors.surface2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          children: [
+            _SheetHeader(
+              titulo: e.posicion.etiqueta,
+              subtitulo: '${m.modeloEtiqueta} · ${m.etiquetaVida}',
+            ),
+            _SheetOpcion(
+              icon: Icons.swap_horiz,
+              titulo: 'Rotar a otra posición',
+              subtitulo: 'Mover la cubierta conservando su desgaste',
+              onTap: () => Navigator.pop(sheetCtx, 'rotar'),
+            ),
+            _SheetOpcion(
+              icon: Icons.logout_outlined,
+              titulo: 'Retirar',
+              subtitulo: 'Sacar del vehículo (depósito / recapar / baja)',
+              onTap: () => Navigator.pop(sheetCtx, 'retirar'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (accion == null || !mounted) return;
+    if (accion == 'rotar') {
+      await _rotar(e, m, estados);
+    } else {
+      await _retirar(e, m);
+    }
+  }
+
+  /// Rota la cubierta a otra posición de la MISMA unidad. Ofrece solo destinos
+  /// compatibles (mismo tipo de uso + regla de recapada, en ambos sentidos si
+  /// hay swap). El km viaja con la cubierta (lo resuelve el servicio).
+  Future<void> _rotar(
+      EstadoPosicion e, Montaje m, List<EstadoPosicion> estados) async {
+    final destinos = estados.where((d) {
+      if (d.posicion.codigo == e.posicion.codigo) return false;
+      // La cubierta actual tiene que entrar en el destino.
+      if (d.posicion.tipoUsoRequerido != m.tipoUso) return false;
+      if (!d.posicion.permiteRecapada && m.vida >= 2) return false;
+      // Si el destino está ocupado (swap), su cubierta tiene que poder venir
+      // a la posición origen.
+      final mb = d.montaje;
+      if (mb != null && !e.posicion.permiteRecapada && mb.vida >= 2) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    if (destinos.isEmpty) {
+      AppFeedback.error(context,
+          'No hay otra posición compatible para rotar esta cubierta.');
+      return;
+    }
+
+    final destino = await showModalBottomSheet<EstadoPosicion>(
+      context: context,
+      backgroundColor: context.colors.surface2,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+      ),
+      builder: (sheetCtx) {
+        final c = sheetCtx.colors;
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            children: [
+              _SheetHeader(titulo: 'Rotar a…', subtitulo: e.posicion.etiqueta),
+              for (final d in destinos)
+                _SheetOpcion(
+                  icon: d.montaje == null
+                      ? Icons.radio_button_unchecked
+                      : Icons.swap_horiz,
+                  titulo: d.posicion.etiqueta,
+                  subtitulo: d.montaje == null
+                      ? 'Posición vacía'
+                      : 'Intercambiar con ${d.montaje!.modeloEtiqueta} · ${d.montaje!.etiquetaVida}',
+                  trailing: d.montaje == null
+                      ? Text('Vacía',
+                          style: AppType.monoSm.copyWith(color: c.textMuted))
+                      : null,
+                  onTap: () => Navigator.pop(sheetCtx, d),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+    if (destino == null || !mounted) return;
+
+    try {
+      await _service.rotar(
+        montajeId: m.id,
+        posicionDestino: destino.posicion.codigo,
+        supervisorDni: PrefsService.dni,
+        supervisorNombre: PrefsService.nombre,
+      );
+      if (mounted) {
+        AppFeedback.success(
+          context,
+          destino.montaje == null
+              ? 'Cubierta rotada a ${destino.posicion.etiqueta}.'
+              : 'Cubiertas intercambiadas.',
+        );
+      }
+    } catch (err) {
+      if (mounted) AppFeedback.error(context, err.toString());
+    }
   }
 
   // ───────────────────────── MONTAR ─────────────────────────

@@ -186,6 +186,136 @@ void main() {
     });
   });
 
+  group('rotar', () {
+    // Stock de arrastre vida 2 (recapada) para los tests de la regla de vida.
+    Future<void> stockRecapArrastre() async {
+      await service.comprar(
+          modeloId: 'arr',
+          modeloEtiqueta: 'X arrastre',
+          cantidad: 3,
+          supervisorDni: '1');
+      await service.mandarARecapar(
+          modeloId: 'arr',
+          modeloEtiqueta: 'X arrastre',
+          vida: 1,
+          cantidad: 3,
+          supervisorDni: '1');
+      await service.recibirDeRecapado(
+          modeloId: 'arr',
+          modeloEtiqueta: 'X arrastre',
+          vidaPrevia: 1,
+          recibidas: 3,
+          supervisorDni: '1');
+    }
+
+    Future<String> montarEng(String posicion, {int vida = 1}) => service.montar(
+          unidadId: 'ENG999',
+          unidadTipo: TipoUnidadCubierta.enganche,
+          posicion: posicion,
+          modeloId: 'arr',
+          modeloEtiqueta: 'X arrastre',
+          tipoUso: TipoUsoCubierta.arrastre,
+          vida: vida,
+          kmVidaEstimada: 60000,
+          supervisorDni: '1',
+        );
+
+    test('a posición LIBRE: mueve la cubierta y NO toca el stock', () async {
+      await comprar5();
+      final id = await montarTrac('TRAC1_IZQ_EXT'); // stock 4
+      await service.rotar(
+          montajeId: id, posicionDestino: 'TRAC1_DER_EXT', supervisorDni: '1');
+      final activos =
+          await service.streamMontajesActivosPorUnidad('AB123CD').first;
+      expect(activos.length, 1);
+      expect(activos.single.posicion, 'TRAC1_DER_EXT');
+      expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 4);
+    });
+
+    test('el km VIAJA: km_unidad_al_montar y desde se conservan', () async {
+      await comprar5();
+      final id = await montarTrac('TRAC1_IZQ_EXT'); // kmAlMontar 100000
+      final antes =
+          (await service.streamMontajesActivosPorUnidad('AB123CD').first).single;
+      await service.rotar(
+          montajeId: id, posicionDestino: 'TRAC1_DER_EXT', supervisorDni: '1');
+      final despues =
+          (await service.streamMontajesActivosPorUnidad('AB123CD').first).single;
+      expect(despues.kmUnidadAlMontar, antes.kmUnidadAlMontar);
+      expect(despues.desde, antes.desde);
+    });
+
+    test('a posición OCUPADA: SWAP de las dos cubiertas', () async {
+      await comprar5();
+      final idA = await montarTrac('TRAC1_IZQ_EXT');
+      final idB = await montarTrac('TRAC1_DER_EXT');
+      await service.rotar(
+          montajeId: idA, posicionDestino: 'TRAC1_DER_EXT', supervisorDni: '1');
+      final activos =
+          await service.streamMontajesActivosPorUnidad('AB123CD').first;
+      final porId = {for (final m in activos) m.id: m};
+      expect(porId[idA]!.posicion, 'TRAC1_DER_EXT');
+      expect(porId[idB]!.posicion, 'TRAC1_IZQ_EXT');
+      expect(activos.length, 2);
+      expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 3);
+    });
+
+    test('rechaza rotar a un tipo de uso incompatible', () async {
+      await comprar5();
+      final id = await montarTrac('TRAC1_IZQ_EXT');
+      expect(
+        () => service.rotar(
+            montajeId: id, posicionDestino: 'DIR_IZQ', supervisorDni: '1'),
+        throwsA(isA<MontajeException>()),
+      );
+    });
+
+    test('rechaza rotar una RECAPADA a una posición que solo admite nuevas',
+        () async {
+      await stockRecapArrastre();
+      // ENG1 permite recapada; ENG2 no.
+      final id = await montarEng('ENG1_IZQ_EXT', vida: 2);
+      expect(
+        () => service.rotar(
+            montajeId: id,
+            posicionDestino: 'ENG2_IZQ_EXT',
+            supervisorDni: '1'),
+        throwsA(isA<MontajeException>()),
+      );
+    });
+
+    test('SWAP inválido: la cubierta del destino no entra en el origen',
+        () async {
+      await stockRecapArrastre(); // vida 2: 3
+      await service.comprar(
+          modeloId: 'arr',
+          modeloEtiqueta: 'X arrastre',
+          cantidad: 3,
+          supervisorDni: '1'); // vida 1: 3
+      // ENG2 (solo nuevas) con una NUEVA; ENG1 (permite) con una RECAPADA.
+      final idNueva = await montarEng('ENG2_IZQ_EXT', vida: 1);
+      await montarEng('ENG1_IZQ_EXT', vida: 2);
+      // Rotar la nueva a ENG1 mandaría la recapada a ENG2 → rechazado.
+      expect(
+        () => service.rotar(
+            montajeId: idNueva,
+            posicionDestino: 'ENG1_IZQ_EXT',
+            supervisorDni: '1'),
+        throwsA(isA<MontajeException>()),
+      );
+    });
+
+    test('rotar un montaje inexistente lanza', () async {
+      expect(
+        () => service.rotar(
+            montajeId: 'nope',
+            posicionDestino: 'TRAC1_DER_EXT',
+            supervisorDni: '1'),
+        throwsA(isA<MontajeException>()),
+      );
+    });
+  });
+
   group('operaciones de stock de depósito', () {
     test('ajustarInventario: faltante baja el stock y devuelve delta negativo',
         () async {

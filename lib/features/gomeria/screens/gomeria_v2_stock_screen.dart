@@ -255,7 +255,7 @@ class _GomeriaV2StockScreenState extends State<GomeriaV2StockScreen> {
             for (final m in modelos)
               _SheetOpcion(
                 icon: Icons.tire_repair_outlined,
-                titulo: '${m.marcaNombre} ${m.modelo} ${m.medida}',
+                titulo: m.etiquetaCorta,
                 subtitulo: m.tipoUso.etiqueta,
                 onTap: () => Navigator.pop(sheetCtx, m),
               ),
@@ -269,8 +269,7 @@ class _GomeriaV2StockScreenState extends State<GomeriaV2StockScreen> {
     try {
       await _service.comprar(
         modeloId: modelo.id,
-        modeloEtiqueta:
-            '${modelo.marcaNombre} ${modelo.modelo} ${modelo.medida}',
+        modeloEtiqueta: modelo.etiquetaCorta,
         cantidad: cant,
         supervisorDni: PrefsService.dni,
         supervisorNombre: PrefsService.nombre,

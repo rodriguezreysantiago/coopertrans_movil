@@ -75,10 +75,16 @@ class CubiertaModelo {
     required this.activo,
   });
 
+  /// Marca + modelo + medida, sin campos vacíos. Evita el doble espacio
+  /// cuando el modelo no tiene nombre (ej. los placeholders "DEFAULT", que
+  /// tienen `modelo == ''`). Es la etiqueta que se snapshotea en montajes y
+  /// movimientos de stock.
+  String get etiquetaCorta =>
+      [marcaNombre, modelo, medida].where((s) => s.trim().isNotEmpty).join(' ');
+
   /// Etiqueta legible compacta para listados ("Bridgestone R268
   /// 295/80R22.5 — Tracción").
-  String get etiqueta =>
-      '$marcaNombre $modelo $medida — ${tipoUso.etiqueta}';
+  String get etiqueta => '$etiquetaCorta — ${tipoUso.etiqueta}';
 
   /// Devuelve los km esperados de vida según [vidas] (1 = nueva,
   /// 2+ = recapada). null si no hay valor configurado para esa vida.
