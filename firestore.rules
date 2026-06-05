@@ -283,6 +283,17 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // VACACIONES — módulo Administración (RRHH), 2026-06-05
+    // ========================================================================
+    // Un doc por empleado/año (`<anio>_<dni>`): días que corresponden +
+    // períodos de goce. Gestión de oficina: admin y supervisor leen/escriben.
+    // El empleado NO accede (pedido Santiago: "solo oficina"). El import
+    // inicial corre con Admin SDK (bypasea rules).
+    match /VACACIONES/{doc} {
+      allow read, write: if isAdminOrSupervisor();
+    }
+
+    // ========================================================================
     // WHATSAPP_HISTORICO — espejo de mensajes terminales (M8, 2026-05-24)
     // ========================================================================
     // Doc espejo de COLA_WHATSAPP cuando el mensaje llega a estado terminal

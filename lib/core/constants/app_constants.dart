@@ -390,6 +390,13 @@ class AppCollections {
   /// adelantos borrados sin imprimir.
   static const String adelantosChofer = 'ADELANTOS_CHOFER';
 
+  /// Vacaciones del personal (módulo Administración). Un doc por empleado/año
+  /// devengado, id determinístico `<anio>_<dni>` (ej. `2025_31584396`).
+  /// Guarda los días que corresponden (autocalculados por antigüedad LCT,
+  /// con override) + los períodos de goce (inicio/fin). `tomados` y `restan`
+  /// se derivan. Referencia al legajo por DNI; identidad vive en EMPLEADOS.
+  static const String vacaciones = 'VACACIONES';
+
   /// Contadores atómicos para correlativos que requieren orden estricto
   /// (sin gaps, sin duplicados). Cada doc representa un correlativo
   /// independiente — `COUNTERS/recibos_adelanto.next` para el número
