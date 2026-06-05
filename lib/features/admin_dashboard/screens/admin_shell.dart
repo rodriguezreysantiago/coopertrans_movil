@@ -10,6 +10,7 @@ import '../../../core/services/prefs_service.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
+import '../../administracion/screens/administracion_hub_screen.dart';
 import '../../employees/screens/admin_personal_lista_screen.dart';
 import '../../expirations/screens/admin_vencimientos_menu_screen.dart';
 import '../../reports/screens/admin_reports_screen.dart';
@@ -90,6 +91,18 @@ class _AdminShellState extends State<AdminShell> {
       iconActive: Icons.badge,
       build: () => const AdminPersonalListaScreen(),
       requiredCapability: Capability.verListaPersonal,
+    ),
+    // "Administración" — hub agrupador de submódulos de gestión interna
+    // (RRHH). Arranca con Vacaciones; se van sumando más a medida que se
+    // armen. Capability `verPanelAdmin`: misma puerta de entrada que el
+    // resto del panel (ADMIN/SUPERVISOR/SEG_HIGIENE), si después se quiere
+    // restringir a solo ADMIN se crea una capability propia.
+    _ShellSection(
+      label: 'Administración',
+      icon: Icons.admin_panel_settings_outlined,
+      iconActive: Icons.admin_panel_settings,
+      build: () => const AdministracionHubScreen(),
+      requiredCapability: Capability.verPanelAdmin,
     ),
     _ShellSection(
       label: 'Flota',

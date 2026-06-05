@@ -30,7 +30,7 @@ import '../../vehicles/services/vehiculo_repository.dart';
 ///   colores de categoría — solo iconos sobre surface3 chip.
 /// - "Mis Vencimientos" promovido a tile full-width con preview del
 ///   próximo vencimiento + countdown ("ART · vence el 14-06 · faltan 23d").
-/// - Si admin, una 4ta tile full-width para "Panel de administración".
+/// - Si admin, una 4ta tile full-width para "Panel de control".
 /// - Sin all-caps gritado, sin letter-spacing exagerado.
 class MainPanel extends StatelessWidget {
   final String dni;
@@ -48,14 +48,14 @@ class MainPanel extends StatelessWidget {
 
   bool get _isAdmin => rol.trim().toUpperCase() == 'ADMIN';
 
-  /// Puede entrar al Panel de administración (shell). ADMIN, SUPERVISOR y
+  /// Puede entrar al Panel de control (shell). ADMIN, SUPERVISOR y
   /// SEG_HIGIENE. GOMERIA ya NO (2026-05-30): va directo a su módulo. Antes el
   /// tile de acceso se mostraba SOLO a ADMIN (bug: un SUPERVISOR no entraba).
   bool get _puedeVerPanelAdmin =>
       Capabilities.can(rol, Capability.verPanelAdmin);
 
   /// GOMERIA — rol especializado del taller. En el menú de inicio ve un tile
-  /// "Gomería" que abre directo el hub, en vez de "Panel de administración".
+  /// "Gomería" que abre directo el hub, en vez de "Panel de control".
   bool get _esGomeria => AppRoles.normalizar(rol) == AppRoles.gomeria;
 
   /// Tiles personales "Mi unidad" + "Mis vencimientos": las ven los choferes
@@ -162,7 +162,7 @@ class MainPanel extends StatelessWidget {
                             ] else if (_puedeVerPanelAdmin) ...[
                               const SizedBox(height: AppSpacing.md),
                               _TileWide(
-                                titulo: 'Panel de administración',
+                                titulo: 'Panel de control',
                                 subtitulo: 'Personal, flota, vencimientos y más',
                                 icono: Icons.admin_panel_settings_outlined,
                                 onTap: () => Navigator.pushNamed(
