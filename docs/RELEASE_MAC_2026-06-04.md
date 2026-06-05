@@ -5,10 +5,35 @@ Windows/web** (Xcode Cloud + ASC son web), pero acá queda todo junto.
 `git pull` en la Mac para tener este archivo.
 
 > ⚠️ **Antes de buildear, ojo con la versión.** Después del bump 1.0.89+92
-> entraron los fixes del **audit total de Logística** (`b999d2b`). Si todavía
-> NO disparaste el build de 1.0.89 → hacé **`release_completo` de nuevo (1.0.90)**
-> desde Windows ANTES de buildear, así el build los incluye. Si ya disparaste
-> 1.0.89, van en el próximo release. Detalle en `PENDIENTES.md`.
+> entraron DOS tandas: el **audit de Logística** (`b999d2b`) y la **auditoría
+> iOS/macOS** que hiciste en la Mac (`c6c1d98` — ver sección 0). Como los
+> cambios de plataforma (entitlements, Info.plist, ci_post_clone, Podfile.lock)
+> afectan el BUILD, conviene **`release_completo` de nuevo (1.0.90) desde
+> Windows ANTES de buildear** así el build los toma. Si ya disparaste 1.0.89,
+> van en el próximo release. Detalle en `PENDIENTES.md`.
+
+---
+
+## 0. ✅ Ya resuelto en la Mac — auditoría iOS/macOS (4-jun, commit `c6c1d98`)
+
+Auditoría multi-agente con verificación adversarial (14 de 16 hallazgos
+aplicados; 2 descartados). Validado: `flutter analyze` limpio + 437 tests +
+`plutil -lint` OK + `pod install` macOS resuelve. **Ya está en main.**
+
+- **Permisos**: macOS sin `device.camera`/`NSCameraUsageDescription`
+  (image_picker en macOS no abre cámara → menos fricción en App Review); iOS
+  sin `NSPhotoLibraryAddUsageDescription` (la app solo LEE galería); macOS
+  `NSAppearance=DarkAqua` fuerza dark mode real en el chrome nativo.
+- **CI/reproducibilidad**: `ci_post_clone` pinea `flutterfire_cli 1.3.2` + valida
+  el Name del profile; `macos/Podfile.lock` versionado.
+- **Config**: `RunnerTests` bundle id → `com.coopertrans.movil.RunnerTests`
+  (iOS+macOS, cierra el pendiente histórico); `CODE_SIGN_IDENTITY` iOS → `Apple
+  Development/Distribution` (nombres modernos; signing real sigue Manual).
+- **Comentarios desincronizados**: `Release.xcconfig` (macOS) y
+  `map_navigation_helper.dart` corregidos.
+
+El signing iOS moderno y el dark mode visual se **confirman en el próximo build
+de Xcode Cloud**.
 
 ---
 

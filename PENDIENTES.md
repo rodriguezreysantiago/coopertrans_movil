@@ -52,12 +52,15 @@ por GAP de reportes** (fix "dormí 8 h → me decía 12 h" — equipo apagado de
   tarifas por vigencia, filtro de Flota por tipo, tooltip de jornada, etc.)
 
 > ⚠️ **OJO con el número de versión**: el bump **1.0.89+92** (`1dfd7dd`) quedó
-> ANTES de los fixes del audit de Logística (`b999d2b` / `f530283`). Si ya
-> disparaste el build de 1.0.89 → esos fixes **NO entraron**: corré
-> `release_completo` de nuevo (1.0.90+93) para incluirlos. Si todavía NO
-> disparaste el build, podés hacerlo desde HEAD (entran con el número 1.0.89),
-> pero conviene re-bump para que el número refleje el contenido. Lo del bot/CF
-> post-bump ya está en prod por auto-update — NO necesita release.
+> ANTES de TODO lo que entró después: el audit de Logística (`b999d2b`/`f530283`)
+> y la **auditoría iOS/macOS** de la Mac (`c6c1d98` — permisos, CI, config de
+> build). Si ya disparaste el build de 1.0.89 → nada de eso entró: corré
+> `release_completo` de nuevo (1.0.90+93) para incluirlo. Si todavía NO
+> disparaste, podés buildear desde HEAD (entra con 1.0.89), pero conviene
+> re-bump para que el número refleje el contenido. **Los cambios de iOS/macOS
+> tocan el BUILD** (entitlements / Info.plist / ci_post_clone / Podfile.lock) →
+> importante que el build los tome. Lo del bot/CF post-bump ya está en prod por
+> auto-update — NO necesita release.
 
 ### 🔧 Pendientes / a verificar (Santiago)
 - **Alerta de presupuesto de Gemini** en Cloud Billing (preventiva; el aviso del
