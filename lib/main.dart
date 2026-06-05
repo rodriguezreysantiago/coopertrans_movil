@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -16,6 +18,7 @@ import 'routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/platform_chrome.dart';
 import 'core/window/desktop_window.dart';
+import 'core/window/refrescar_icono_escritorio.dart';
 import 'shared/widgets/app_platform_chrome.dart';
 import 'core/constants/app_constants.dart';
 
@@ -47,6 +50,13 @@ void main() async {
   // Desktop (Windows/macOS/Linux): ventana nativa — tamaño mínimo 1200×720,
   // título y fondo near-black (sin flash blanco al abrir). No-op en móvil/web.
   await initDesktopWindow();
+
+  // Windows: refrescar el caché de íconos del escritorio una sola vez por
+  // versión nueva, para que el ícono del .exe recién actualizado se vea
+  // (Windows lo cachea y no lo refresca solo al sobrescribir el .exe). Así
+  // un release con ícono nuevo arregla todas las PCs sin tocarlas. Es
+  // fire-and-forget (no debe demorar el primer frame) y no-op en móvil/web.
+  unawaited(refrescarIconoEscritorioWindows());
 
   // Refactor Núcleo: status bar transparente + íconos claros y system nav bar
   // near-black (iOS/Android). No-op en web/desktop. Idempotente.

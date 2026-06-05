@@ -7,6 +7,35 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-06-05 PM — Ícono Windows no se actualizaba en el escritorio (caché)
+
+**Síntoma**: tras aplicar el ícono v2, el escritorio de Windows seguía mostrando
+el ícono viejo aunque el `.exe` ya tenía el nuevo embebido.
+
+**Causa (NO era el build)**: el `.exe` en `C:\ProgramData\CoopertransMovil\` ya
+trae el ícono v2 (verificado extrayéndolo) y el shortcut apunta bien
+(`...coopertrans_movil.exe,0`). Es el **caché de íconos de Windows**, que no se
+invalida solo al sobrescribir el `.exe` con uno del mismo path. El launcher tenía
+un bug: corría `ie4uinit -show` **solo si cambiaba el IconLocation** del shortcut
+— y en un cambio de ícono el path NO cambia, solo el contenido del `.exe`. Peor:
+el launcher vive en `Program Files` (read-only) y **no se auto-actualiza**, y el
+shortcut está en `%PUBLIC%\Desktop` creado por el instalador como admin →
+read-only para el user (no se puede tocar sin UAC).
+
+**Fix (se propaga SOLO con el próximo release, sin tocar PC por PC)**: lo dispara
+la **APP** (lo único que se actualiza garantizado en cada PC vía auto-update). Al
+arrancar en Windows, `refrescarIconoEscritorioWindows()` (`lib/core/window/`,
+conditional import con stub web igual que `desktop_window`) corre `ie4uinit -show`
+**una vez por versión nueva** (marcador en SharedPreferences). No requiere admin,
+no toca el shortcut, no es disruptivo. Validado a mano en esta PC: el escritorio
+pasó al C neón sin reinicio ni UAC. Defensa en profundidad: el `launcher.ps1` ahora
+refresca el caché SIEMPRE (no solo si cambia el shortcut) → beneficia
+instalaciones nuevas vía el instalador. `flutter analyze` limpio.
+
+**⏳ Sale en 1.0.92** (entra con el próximo release de app que largue Santiago).
+
+---
+
 ## 📅 2026-06-05 — Fix jornada inflada (Volvo vencido) + adaptación a Sitrack
 
 **Bug**: choferes veían manejo absurdo (Laina 23h25, Bastias 19h55). El vigilador

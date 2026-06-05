@@ -93,18 +93,25 @@ function Refrescar-IconoEscritorio {
                 Log "No pude tocar $lnk : $($_.Exception.Message)" 'Yellow'
             }
         }
-        if ($algunRefrescado) {
-            # ie4uinit -show fuerza a Windows a releer iconos de
-            # shortcuts sin tener que matar explorer (no disruptivo).
-            try {
-                $ie4 = "$env:WINDIR\System32\ie4uinit.exe"
-                if (Test-Path $ie4) {
-                    Start-Process -FilePath $ie4 -ArgumentList '-show' -WindowStyle Hidden -Wait
-                }
-            } catch {
-                # Best-effort — si falla, el nuevo icono aparece despues
-                # de cerrar/abrir explorer o reboot. No es bloqueante.
+        # Refrescar SIEMPRE el cache de iconos, no solo cuando cambia el
+        # IconLocation del shortcut. Al salir un release con icono nuevo, el
+        # .exe cambia de CONTENIDO pero sigue en el mismo path -> el
+        # IconLocation no cambia aunque el icono SI, y Windows muestra el
+        # viejo cacheado. ie4uinit -show invalida el cache sin matar explorer
+        # (no disruptivo). Nota: $algunRefrescado puede ser $false aca y esta
+        # bien (el shortcut publico es read-only para el user sin admin, asi
+        # que el Save de arriba suele fallar; igual queremos refrescar).
+        # El refresco PRINCIPAL lo hace la app al arrancar (1 vez por version,
+        # core/window/refrescar_icono_escritorio.dart); esto es defensa en
+        # profundidad para instalaciones nuevas via el instalador.
+        try {
+            $ie4 = "$env:WINDIR\System32\ie4uinit.exe"
+            if (Test-Path $ie4) {
+                Start-Process -FilePath $ie4 -ArgumentList '-show' -WindowStyle Hidden -Wait
             }
+        } catch {
+            # Best-effort — si falla, el nuevo icono aparece despues
+            # de cerrar/abrir explorer o reboot. No es bloqueante.
         }
     } catch {
         Log "Refrescar-IconoEscritorio fallo: $($_.Exception.Message)" 'Yellow'
