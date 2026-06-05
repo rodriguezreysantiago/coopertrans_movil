@@ -288,6 +288,12 @@ class AppCollections {
   /// (modelo+vida). Ver modelo `StockMovimiento`.
   static const String gomeriaStockMovimientos = 'GOMERIA_STOCK_MOVIMIENTOS';
 
+  /// Conteos de inventario "a ciegas" de gomería: el operador (rol GOMERIA)
+  /// reporta cuántas cubiertas ve por modelo (nuevas/recapadas) SIN ver el
+  /// stock teórico; el admin compara contra el sistema. NO ajusta solo. Ver
+  /// modelo `ConteoGomeria` (pedido Santiago 2026-06-05).
+  static const String gomeriaConteos = 'GOMERIA_CONTEOS';
+
   /// Lock de unicidad de posición (1 montaje activo por posición). DocId
   /// `{unidad}__{posicion}`. Rule `allow update: if false` da la unicidad
   /// sin runTransaction (prohibido en Windows). Existe sii la posición

@@ -9,6 +9,8 @@ import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../constants/posiciones.dart';
+import 'gomeria_conteo_screen.dart';
+import 'gomeria_conteos_revision_screen.dart';
 import 'gomeria_v2_stock_screen.dart';
 import 'gomeria_v2_unidad_screen.dart';
 
@@ -220,6 +222,30 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
               AppStat(label: 'Choferes', value: '${_choferes.length}'),
             ],
           ),
+          const SizedBox(height: AppSpacing.md),
+          // Conteo de inventario — lo carga el operador (a ciegas, sin ver el
+          // stock). Lo ven todos los que operan gomería.
+          _Acceso(
+            icon: Icons.inventory_2_outlined,
+            titulo: 'Conteo de inventario',
+            subtitulo: 'Contar las cubiertas del depósito',
+            onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const GomeriaConteoScreen())),
+          ),
+          if (_puedeVerStock) ...[
+            const SizedBox(height: AppSpacing.sm),
+            // Revisar conteos — solo admin/supervisor: compara lo contado
+            // contra el stock teórico del sistema.
+            _Acceso(
+              icon: Icons.fact_check_outlined,
+              titulo: 'Revisar conteos',
+              subtitulo: 'Comparar lo contado contra el sistema',
+              onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const GomeriaConteosRevisionScreen())),
+            ),
+          ],
           if (esAdmin) ...[
             const SizedBox(height: AppSpacing.md),
             _AccesoCatalogo(
@@ -386,6 +412,52 @@ class _Tabs extends StatelessWidget {
 // =============================================================================
 // ACCESO al catálogo (solo admin) — AppCard tappeable estilo bento.
 // =============================================================================
+
+/// Fila de acceso genérica del encabezado (icono + título + subtítulo +
+/// chevron). Misma factura que `_AccesoCatalogo` pero parametrizable.
+class _Acceso extends StatelessWidget {
+  final IconData icon;
+  final String titulo;
+  final String subtitulo;
+  final VoidCallback onTap;
+  const _Acceso({
+    required this.icon,
+    required this.titulo,
+    required this.subtitulo,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return AppCard(
+      tier: 1,
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.md),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: c.brand),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(titulo,
+                    style: AppType.body.copyWith(fontWeight: FontWeight.w600),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(subtitulo,
+                    style: AppType.monoSm.copyWith(color: c.textMuted),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right, size: 18, color: c.textMuted),
+        ],
+      ),
+    );
+  }
+}
 
 class _AccesoCatalogo extends StatelessWidget {
   final VoidCallback onTap;

@@ -1242,6 +1242,19 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Conteos de inventario "a ciegas" (2026-06-05). El operador (rol GOMERIA)
+    // crea su conteo y lee; el que crea es el responsable (no falsificable). La
+    // comparacion contra el stock teorico es client-side (solo admin/supervisor
+    // entra a "Revisar conteos"). Solo admin/supervisor actualiza (marcar
+    // revisado). Sin delete (queda como registro del control).
+    match /GOMERIA_CONTEOS/{doc} {
+      allow read: if puedeOperarGomeria();
+      allow create: if puedeOperarGomeria()
+        && request.resource.data.responsable_dni == request.auth.uid;
+      allow update: if isAdminOrSupervisor();
+      allow delete: if false;
+    }
+
     // Lock de unicidad de posición. `update: if false` garantiza que una
     // posición no tenga 2 montajes activos sin necesitar runTransaction
     // (prohibido en Windows): un `set` sobre un lock existente rebota.
