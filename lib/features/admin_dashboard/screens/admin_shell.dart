@@ -102,7 +102,8 @@ class _AdminShellState extends State<AdminShell> {
       icon: Icons.admin_panel_settings_outlined,
       iconActive: Icons.admin_panel_settings,
       build: () => const AdministracionHubScreen(),
-      requiredCapability: Capability.verPanelAdmin,
+      // Solo ADMIN + SUPERVISOR (no SEG_HIGIENE) — pedido Santiago 2026-06-05.
+      requiredCapability: Capability.verAdministracion,
     ),
     _ShellSection(
       label: 'Flota',

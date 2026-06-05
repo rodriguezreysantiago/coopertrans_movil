@@ -75,6 +75,12 @@ enum Capability {
   /// elige a qué choferes les caza turno, en qué franja, y se ve el
   /// estado en vivo. Acceso ADMIN + SUPERVISOR (operación, como Logística).
   verCachatore,
+  /// Módulo Administración (RRHH) — hub de submenús de gestión interna del
+  /// personal (Vacaciones, etc.). Acceso SOLO ADMIN + SUPERVISOR (pedido
+  /// Santiago 2026-06-05): SEG_HIGIENE y demás NO entran, aunque tengan
+  /// `verPanelAdmin`. Las rules de VACACIONES ya son `isAdminOrSupervisor` —
+  /// esta capability alinea el MENÚ con esa restricción.
+  verAdministracion,
 
   // ─── Acciones sobre personal ───
   crearEmpleado,
@@ -150,6 +156,8 @@ class Capabilities {
       Capability.verIcm,
       Capability.verVistaEjecutiva,
       Capability.verCachatore,
+      // Módulo Administración (RRHH): solo ADMIN + SUPERVISOR. ADMIN lo hereda.
+      Capability.verAdministracion,
       // Editar y crear personal/vehículos: sí. Pero NO puede asignar
       // rol ADMIN ni cambiar rol de admins existentes.
       Capability.crearEmpleado,
