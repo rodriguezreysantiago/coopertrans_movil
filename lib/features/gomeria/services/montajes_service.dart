@@ -299,6 +299,14 @@ class MontajesService {
           'No se puede montar una cubierta ${tipoUso.etiqueta} en una '
           'posición ${pos.tipoUsoRequerido.etiqueta}.');
     }
+    // 2b) Regla de VIDA: algunas posiciones solo admiten cubiertas nuevas.
+    //     (Vecchi 2026-06-05: en el enganche, las recapadas van SOLO en el
+    //     primer eje; los ejes 2 y 3 solo nuevas.)
+    if (!pos.permiteRecapada && vida >= 2) {
+      throw MontajeException(
+          'La posición ${pos.etiqueta} solo admite cubiertas NUEVAS '
+          '(las recapadas van solo en el primer eje del enganche).');
+    }
     // 3) Validar stock disponible del SKU.
     final disp = await stockDisponible(modeloId: modeloId, vida: vida);
     if (disp <= 0) {

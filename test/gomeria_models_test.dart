@@ -128,6 +128,22 @@ void main() {
           isTrue);
     });
 
+    test('enganche: recapadas SOLO en el primer eje (ejes 2 y 3 solo nuevas)',
+        () {
+      final eje1 = posicionesEnganche.where((p) => p.eje == 1);
+      final ejes23 = posicionesEnganche.where((p) => p.eje != 1);
+      expect(eje1.isNotEmpty, isTrue);
+      expect(eje1.every((p) => p.permiteRecapada), isTrue,
+          reason: 'el primer eje del enganche admite recapadas');
+      expect(ejes23.every((p) => !p.permiteRecapada), isTrue,
+          reason: 'los ejes 2 y 3 del enganche solo admiten nuevas');
+    });
+
+    test('tractor: todas las posiciones admiten recapada (sin regla de vida)',
+        () {
+      expect(posicionesTractor.every((p) => p.permiteRecapada), isTrue);
+    });
+
     test('posición de enganche acepta SOLO ARRASTRE (no traccion ni direccion)',
         () {
       final pEng = posicionesEnganche.first;

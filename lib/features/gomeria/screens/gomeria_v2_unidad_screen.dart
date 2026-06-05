@@ -324,7 +324,13 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
     // Filtrar stock por tipo de uso de la posición.
     final opciones = stock.where((s) {
       final mod = modelos[s.modeloId];
-      return mod != null && mod.tipoUso == e.posicion.tipoUsoRequerido;
+      if (mod == null || mod.tipoUso != e.posicion.tipoUsoRequerido) {
+        return false;
+      }
+      // Regla de vida: si la posición no admite recapadas (enganche ejes 2/3),
+      // ocultar del stock las recapadas (vida >= 2) — solo se ofrecen nuevas.
+      if (!e.posicion.permiteRecapada && s.vida >= 2) return false;
+      return true;
     }).toList();
 
     if (!mounted) return;

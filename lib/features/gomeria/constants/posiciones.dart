@@ -70,6 +70,12 @@ class PosicionCubierta {
   /// los 4: IZQ_EXT, IZQ_INT, DER_INT, DER_EXT.
   final String lado;
 
+  /// `true` si esta posición admite cubiertas RECAPADAS (vida ≥ 2). Si es
+  /// `false`, solo se pueden montar NUEVAS (vida 1). Regla Vecchi 2026-06-05:
+  /// en el ENGANCHE las recapadas van SOLO en el primer eje; los ejes 2 y 3
+  /// solo nuevas. El tractor no tiene restricción de vida (queda en `true`).
+  final bool permiteRecapada;
+
   const PosicionCubierta({
     required this.codigo,
     required this.etiqueta,
@@ -77,6 +83,7 @@ class PosicionCubierta {
     required this.tipoUnidad,
     required this.eje,
     required this.lado,
+    this.permiteRecapada = true,
   });
 
   /// `true` si una cubierta con [tipoUso] puede ir en esta posición.
@@ -205,40 +212,49 @@ const List<PosicionCubierta> posicionesTractor = [
 // Todas las posiciones de enganche son ARRASTRE (ejes libres: ni dirección
 // ni tracción). Antes estaban como TRACCIÓN por falta del tipo ARRASTRE.
 
-List<PosicionCubierta> _generarEjeEnganche(int eje) => [
-      PosicionCubierta(
-        codigo: 'ENG${eje}_IZQ_EXT',
-        etiqueta: 'Eje $eje Izquierda Externa',
-        tipoUsoRequerido: TipoUsoCubierta.arrastre,
-        tipoUnidad: TipoUnidadCubierta.enganche,
-        eje: eje,
-        lado: 'IZQ_EXT',
-      ),
-      PosicionCubierta(
-        codigo: 'ENG${eje}_IZQ_INT',
-        etiqueta: 'Eje $eje Izquierda Interna',
-        tipoUsoRequerido: TipoUsoCubierta.arrastre,
-        tipoUnidad: TipoUnidadCubierta.enganche,
-        eje: eje,
-        lado: 'IZQ_INT',
-      ),
-      PosicionCubierta(
-        codigo: 'ENG${eje}_DER_INT',
-        etiqueta: 'Eje $eje Derecha Interna',
-        tipoUsoRequerido: TipoUsoCubierta.arrastre,
-        tipoUnidad: TipoUnidadCubierta.enganche,
-        eje: eje,
-        lado: 'DER_INT',
-      ),
-      PosicionCubierta(
-        codigo: 'ENG${eje}_DER_EXT',
-        etiqueta: 'Eje $eje Derecha Externa',
-        tipoUsoRequerido: TipoUsoCubierta.arrastre,
-        tipoUnidad: TipoUnidadCubierta.enganche,
-        eje: eje,
-        lado: 'DER_EXT',
-      ),
-    ];
+List<PosicionCubierta> _generarEjeEnganche(int eje) {
+  // Regla Vecchi 2026-06-05: las cubiertas RECAPADAS solo se montan en el
+  // PRIMER eje del enganche. Los ejes 2 y 3 solo admiten nuevas.
+  final permiteRec = eje == 1;
+  return [
+    PosicionCubierta(
+      codigo: 'ENG${eje}_IZQ_EXT',
+      etiqueta: 'Eje $eje Izquierda Externa',
+      tipoUsoRequerido: TipoUsoCubierta.arrastre,
+      tipoUnidad: TipoUnidadCubierta.enganche,
+      eje: eje,
+      lado: 'IZQ_EXT',
+      permiteRecapada: permiteRec,
+    ),
+    PosicionCubierta(
+      codigo: 'ENG${eje}_IZQ_INT',
+      etiqueta: 'Eje $eje Izquierda Interna',
+      tipoUsoRequerido: TipoUsoCubierta.arrastre,
+      tipoUnidad: TipoUnidadCubierta.enganche,
+      eje: eje,
+      lado: 'IZQ_INT',
+      permiteRecapada: permiteRec,
+    ),
+    PosicionCubierta(
+      codigo: 'ENG${eje}_DER_INT',
+      etiqueta: 'Eje $eje Derecha Interna',
+      tipoUsoRequerido: TipoUsoCubierta.arrastre,
+      tipoUnidad: TipoUnidadCubierta.enganche,
+      eje: eje,
+      lado: 'DER_INT',
+      permiteRecapada: permiteRec,
+    ),
+    PosicionCubierta(
+      codigo: 'ENG${eje}_DER_EXT',
+      etiqueta: 'Eje $eje Derecha Externa',
+      tipoUsoRequerido: TipoUsoCubierta.arrastre,
+      tipoUnidad: TipoUnidadCubierta.enganche,
+      eje: eje,
+      lado: 'DER_EXT',
+      permiteRecapada: permiteRec,
+    ),
+  ];
+}
 
 /// Las 12 posiciones del enganche estándar de Coopertrans (3 ejes × 4
 /// ruedas duales). En orden: eje 1 → eje 2 → eje 3, IZQ→DER, EXT→INT.
