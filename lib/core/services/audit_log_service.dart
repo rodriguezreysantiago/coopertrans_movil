@@ -172,15 +172,8 @@ enum AuditAccion {
   rechazarRevision('RECHAZAR_REVISION'),
 
   // ---- Alertas Volvo ----
-  marcarAlertaVolvoAtendida('MARCAR_ALERTA_VOLVO_ATENDIDA'),
-
-  // ---- Gomería ----
-  crearCubierta('CREAR_CUBIERTA'),
-  instalarCubierta('INSTALAR_CUBIERTA'),
-  retirarCubierta('RETIRAR_CUBIERTA'),
-  descartarCubierta('DESCARTAR_CUBIERTA'),
-  enviarCubiertaARecapar('ENVIAR_CUBIERTA_A_RECAPAR'),
-  recibirCubiertaDeRecapado('RECIBIR_CUBIERTA_DE_RECAPADO');
+  marcarAlertaVolvoAtendida('MARCAR_ALERTA_VOLVO_ATENDIDA');
+  // (Gomería viejo serializado borrado 2026-06-05; el V2 no audita aún.)
 
   final String codigo;
   const AuditAccion(this.codigo);

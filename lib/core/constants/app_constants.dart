@@ -205,75 +205,11 @@ class AppCollections {
   /// se puede instalar la cubierta.
   static const String cubiertasModelos = 'CUBIERTAS_MODELOS';
 
-  /// Cubiertas individuales (1 doc por cubierta física). Doc:
-  /// `{codigo (CUB-XXXX legible), modelo_id, modelo_snapshot, estado,
-  /// vidas, km_acumulados, observaciones}`.
-  /// Estado: `EN_DEPOSITO` | `INSTALADA` | `EN_RECAPADO` | `DESCARTADA`.
-  /// `vidas` arranca en 1 (nueva), incrementa con cada recapado exitoso.
-  static const String cubiertas = 'CUBIERTAS';
-
-  /// Registro temporal inmutable de instalaciones cubierta↔posición.
-  /// Espejo conceptual de ASIGNACIONES_VEHICULO pero para cubiertas.
-  /// Doc: `{cubierta_id, codigo (snapshot), unidad_id, unidad_tipo
-  /// (TRACTOR|ENGANCHE), posicion, vida (al instalar), desde, hasta,
-  /// km_unidad_al_instalar, km_unidad_al_retirar, km_recorridos}`.
-  /// La instalación activa tiene `hasta == null`. Único punto de
-  /// escritura: `GomeriaService`.
-  static const String cubiertasInstaladas = 'CUBIERTAS_INSTALADAS';
-
-  /// Eventos de recapado (1 doc por cada vez que se manda a recapar).
-  /// Doc: `{cubierta_id, codigo (snapshot), vida_recapado, proveedor,
-  /// fecha_envio, fecha_retorno, costo, resultado (RECIBIDA |
-  /// DESCARTADA_POR_PROVEEDOR), notas}`.
-  static const String cubiertasRecapados = 'CUBIERTAS_RECAPADOS';
-
-  /// Histórico inmutable de controles de presión y profundidad de banda
-  /// realizados sobre cubiertas instaladas. 1 doc por lectura — la
-  /// "última" en `CUBIERTAS_INSTALADAS` se mantiene como atajo para
-  /// la grilla, pero la verdad histórica vive acá. Doc:
-  /// `{cubierta_id, cubierta_codigo, instalacion_id, unidad_id,
-  /// posicion, presion_psi, profundidad_banda_mm, fecha,
-  /// registrado_por_dni, registrado_por_nombre}`.
-  static const String cubiertasControles = 'CUBIERTAS_CONTROLES';
-
-  /// Cola de reconciliacion de km_acumulados. Si una operación de
-  /// retiro/rotar falla en actualizar el contador de la cubierta tras
-  /// 3 reintentos, persiste el delta acá. Auditoría 2026-05-18:
-  /// reemplaza el patrón viejo de try/catch "log y continuar" que
-  /// perdía km permanentemente — la cubierta parecía más nueva en
-  /// reportes y se descartaba tarde.
-  /// Doc: `{cubierta_id, km_delta, km_acumulados_esperado_post,
-  /// campos_extra, creado_en, estado, ultimo_error}`.
-  /// Estados: PENDIENTE | APLICADO | DESCARTADO.
-  static const String cubiertasKmPendientes = 'CUBIERTAS_KM_PENDIENTES';
-
-  /// Docs de control transaccional para garantizar unicidad de
-  /// instalación. DocId: `{patente}__{POSICION}` (ej.
-  /// `AB123CD__DIR_IZQ`). El doc EXISTE si y solo si esa posición está
-  /// ocupada.
-  ///
-  /// Existe porque las queries `where().get()` dentro de una transaction
-  /// del client SDK NO son transaccionales (solo `tx.get(DocRef)` lo
-  /// es). Con 2 supervisores instalando en simultáneo en la misma
-  /// posición las queries no detectaban la colisión y Firestore
-  /// permitía crear 2 instalaciones activas. Este doc se lee con
-  /// `tx.get` antes de crear → garantiza atomicidad.
-  static const String cubiertasPosicionesActivas =
-      'CUBIERTAS_POSICIONES_ACTIVAS';
-
-  /// Espejo del anterior pero indexado por cubierta — garantiza que
-  /// una misma cubierta no figure activa en 2 posiciones distintas.
-  /// DocId: `{cubierta_id}`. Existe si y solo si la cubierta está
-  /// instalada actualmente.
-  static const String cubiertasActivas = 'CUBIERTAS_ACTIVAS';
-
-  /// Catálogo de proveedores de recapado. Doc: `{nombre, activo}`.
-  /// Existe para evitar typos en `CUBIERTAS_RECAPADOS.proveedor` que
-  /// rompen reportes ("Recauchutados Sur" vs "RECAUCHUTADOS SUR" vs
-  /// "Rec. Sur"). Soft-delete con `activo` para mantener proveedores
-  /// históricos visibles en reportes viejos sin que aparezcan al
-  /// elegir uno nuevo.
-  static const String cubiertasProveedores = 'CUBIERTAS_PROVEEDORES';
+  // El sistema VIEJO serializado (CUBIERTAS / CUBIERTAS_INSTALADAS /
+  // CUBIERTAS_RECAPADOS / CUBIERTAS_CONTROLES / CUBIERTAS_KM_PENDIENTES / los
+  // locks CUBIERTAS_POSICIONES_ACTIVAS + CUBIERTAS_ACTIVAS / CUBIERTAS_PROVEEDORES)
+  // se BORRÓ el 2026-06-05 (código + datos). El catálogo CUBIERTAS_MARCAS /
+  // CUBIERTAS_MODELOS (arriba) lo sigue usando el sistema nuevo (V2).
 
   // ─── Rediseño gomería 2026-05-29 (modelo por posición+km+marca) ──────────
   // Sistema NUEVO, coexiste con el viejo hasta migrar. No serializa cubiertas.

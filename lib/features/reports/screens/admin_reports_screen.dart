@@ -9,7 +9,6 @@ import '../../vehicles/services/volvo_api_service.dart';
 import '../services/report_checklist.dart';
 import '../services/report_consumo.dart';
 import '../services/report_flota.dart';
-import '../services/report_gomeria.dart';
 import '../services/report_icm.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
@@ -61,20 +60,6 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
             'No se pudo generar el reporte de checklists. Probá de nuevo.',
             esError: true);
         debugPrint('admin_reports checklist error: $e');
-      }
-    }
-  }
-
-  Future<void> _ejecutarReporteGomeria() async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ReportGomeriaService.mostrarOpcionesYGenerar(context);
-    } catch (e) {
-      if (mounted) {
-        _mostrarSnack(messenger,
-            'No se pudo generar el reporte de gomería. Probá de nuevo.',
-            esError: true);
-        debugPrint('admin_reports gomeria error: $e');
       }
     }
   }
@@ -208,14 +193,6 @@ class _AdminReportsScreenState extends State<AdminReportsScreen> {
         formato: 'Excel',
         requiereVolvo: true,
         onTap: _ejecutarReporteConsumo,
-      ),
-      _ReporteDef(
-        titulo: 'Gomería',
-        descripcion:
-            'Estado de flota, histórico de recapados y costo por km por modelo.',
-        icono: Icons.tire_repair_outlined,
-        formato: 'Excel',
-        onTap: _ejecutarReporteGomeria,
       ),
       _ReporteDef(
         titulo: 'ICM semanal',
