@@ -33,13 +33,15 @@ auto-cierran esta noche.
 `monitor_jornadas.js` (jornadas abiertas + marca colgadas), `reparar_jornadas_colgadas.js`
 (dry-run + `--aplicar`), `leer_chats_agente.js`, `leer_jornada.js`, `diag_fuente.js`.
 
-### ⏳ Pendiente del AGENTE (revisión de chats 2026-06-05, NO hecho aún)
-- **Respuestas vacías**: cuando una tool devuelve listas vacías sin "nota" (ej.
-  `turnos_ypf_detalle` para "mañana"), el modelo no genera texto y se loguea
-  respuesta vacía. Fix: check vacío robusto a whitespace en `responder` +
-  `error:'sin_texto'` en el STOP vacío + notas en tools que devuelven vacío.
-- **3 huecos de tools**: consultar adelantos pendientes/preparados; crear varios
-  adelantos en un mensaje (batch); listar/nombrar administradores.
+### ✅ AGENTE — revisión de chats 2026-06-05 (HECHO, va por auto-update del bot)
+- **Respuestas vacías** (`f297588`): `turnos_ypf_detalle` ahora trae siempre una
+  `nota` (si no hay turnos, el modelo igual tiene qué decir) + el STOP sin texto
+  marca `error:'sin_texto'` → fallback en vez de mudo + check de vacío robusto a
+  whitespace en `responder`.
+- **3 huecos de tools** (`e2b9ddc`): tool `adelantos_pendientes` (consulta, no
+  registra) + tool `listar_empleados_por_rol` (ej. "quiénes son los admins") +
+  guía en el prompt para crear VARIOS adelantos en un mensaje (crear_adelanto ×N
+  con una sola confirmación). Validado contra datos reales.
 
 ---
 
