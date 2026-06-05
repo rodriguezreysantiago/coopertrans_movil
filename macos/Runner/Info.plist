@@ -36,9 +36,6 @@
 	     dispara el prompt. Si están vacías o faltan, el sandbox NO
 	     concede el permiso y la feature queda muda. -->
 
-	<key>NSCameraUsageDescription</key>
-	<string>Coopertrans usa la cámara para sacar fotos de comprobantes (licencia, RTO, seguro) y fotos de perfil.</string>
-
 	<key>NSLocationUsageDescription</key>
 	<string>Coopertrans usa la ubicación para autocompletar coordenadas cuando el operador carga una nueva ubicación logística (silos, plantas, depósitos).</string>
 
@@ -56,9 +53,13 @@
 
 	<!-- ─── App appearance ─── -->
 	<!-- Coopertrans Móvil tiene tema oscuro (fondo cobalto profundo).
-	     Forzamos dark mode para que el title bar y los menúes nativos
-	     macOS combinen con la app y no se vea un AppBar oscuro pegado a
-	     un title bar blanco. -->
+	     NSAppearance=DarkAqua fuerza dark mode REAL en el title bar y los
+	     menúes nativos macOS, así combinan con la app y no se ve un AppBar
+	     oscuro pegado a un title bar claro. (NSRequiresAquaSystemAppearance
+	     solo habilita seguir al sistema; NO fuerza dark — por eso hace falta
+	     NSAppearance.) -->
+	<key>NSAppearance</key>
+	<string>NSAppearanceNameDarkAqua</string>
 	<key>NSRequiresAquaSystemAppearance</key>
 	<false/>
 

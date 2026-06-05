@@ -49,8 +49,12 @@ flutter --version
 # "FlutterFire: flutterfire upload-crashlytics-symbols" del pbxproj
 # para subir los dSYMs a Firebase Crashlytics. Sin esto, el archive
 # falla con "flutterfire: command not found".)
-echo "==> Instalando flutterfire CLI..."
-dart pub global activate flutterfire_cli
+echo "==> Instalando flutterfire CLI (version PINEADA)..."
+# Pin de version: sin pin, `activate` baja el ULTIMO de pub.dev en cada run y
+# una version con flags cambiados de `upload-crashlytics-symbols` rompe el
+# archive sin warning (misma clase de fragilidad que el pin de Flutter de
+# arriba). Update manual + smoke test al adoptar una nueva.
+dart pub global activate flutterfire_cli 1.3.2
 export PATH="$HOME/.pub-cache/bin:$PATH"
 ln -sf "$HOME/.pub-cache/bin/flutterfire" /usr/local/bin/flutterfire
 which flutterfire
@@ -170,6 +174,20 @@ if [ -n "$IOS_DIST_CERT_P12_BASE64" ] && [ -n "$IOS_DIST_CERT_P12_PASSWORD" ] &&
         echo "ERROR: profile decoded vacio o muy chico ($PROFILE_SIZE bytes). El base64 esta corrupto."
         exit 1
     fi
+
+    # Validar que el Name INTERNO del profile coincida con el
+    # PROVISIONING_PROFILE_SPECIFIER del pbxproj ("Coopertrans Movil App
+    # Store"). xcodebuild resuelve el profile por su Name interno (no por el
+    # nombre de archivo): si el secret trae OTRO profile, el archive falla con
+    # un error poco evidente. Abortamos acá con un mensaje claro. Best-effort:
+    # si no se puede leer el Name, no abortamos.
+    PROFILE_NAME=$(security cms -D -i "$PROFILE_PATH" 2>/dev/null | plutil -extract Name raw - 2>/dev/null || echo "")
+    EXPECTED_PROFILE_NAME="Coopertrans Movil App Store"
+    if [ -n "$PROFILE_NAME" ] && [ "$PROFILE_NAME" != "$EXPECTED_PROFILE_NAME" ]; then
+        echo "ERROR: el profile instalado tiene Name '$PROFILE_NAME' pero el pbxproj espera '$EXPECTED_PROFILE_NAME'. Revisar el secret IOS_DIST_PROFILE_BASE64."
+        exit 1
+    fi
+    echo "   profile Name       : ${PROFILE_NAME:-(no se pudo leer, sigo)}"
 
     # ─── Profiles adicionales OPCIONALES (Ad Hoc + Development) ───────
     # Xcode Cloud SIEMPRE genera los 3 tipos de export-archive (App Store

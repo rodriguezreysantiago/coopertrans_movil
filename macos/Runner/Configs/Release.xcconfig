@@ -6,7 +6,9 @@
 
 // NOTA: los parches STRIP_INSTALLED_PRODUCT=NO y OTHER_CODE_SIGN_FLAGS=--deep
 // que estuvieron acá (commits 74b4402 + 2a21fe6, Builds 40/43) NO resolvieron
-// el "code object is not signed at all" del .app raíz. Reemplazados por un
-// Run Script Phase en el target Runner del pbxproj que firma manualmente el
-// binario interno antes del CodeSign implícito del .app (ver el shell phase
-// "CodeSign binary interno (workaround Xcode Cloud macOS)" en project.pbxproj).
+// el "code object is not signed at all" del .app raíz. La causa REAL era la
+// TILDE en el nombre del ejecutable: codesign no resuelve un CFBundleExecutable
+// no-ASCII al sellar el bundle sin --deep. Solución vigente:
+// EXECUTABLE_NAME=CoopertransMovil (ASCII) en AppInfo.xcconfig. Ya NO hay ningún
+// Run Script Phase de codesign en el pbxproj (se removió en d6bbd95).
+// Detalle completo en docs/RUNBOOK_macos_signing.md.

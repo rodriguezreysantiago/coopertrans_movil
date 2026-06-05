@@ -7,9 +7,12 @@
 //   - Android: intent URI `geo:lat,lng?q=lat,lng(label)` que respeta
 //     la app default de mapas del usuario (Google Maps, Maps.me, etc.).
 //     Para forzar Waze: `https://waze.com/ul?ll=lat,lng&navigate=yes`.
-//   - iOS: Google Maps URL scheme `comgooglemaps://?q=lat,lng` si
-//     está instalado, sino Apple Maps `https://maps.apple.com/?ll=...`
-//     (siempre instalado). Waze: `waze://?ll=lat,lng&navigate=yes`.
+//   - iOS: HTTPS universal link de Google Maps
+//     `https://www.google.com/maps/search/?api=1&query=lat,lng` (abre la
+//     app de Google Maps si está instalada, sino el navegador). Waze:
+//     `https://waze.com/ul?ll=lat,lng&navigate=yes`. NO usamos los schemes
+//     nativos comgooglemaps:// / waze:// (necesitarían
+//     LSApplicationQueriesSchemes en Info.plist, que no está declarado).
 //   - Windows / Web: link web a Google Maps en el browser.
 //
 // Como Vecchi opera multi-plataforma (admin Windows + chofer Android),
@@ -65,9 +68,10 @@ class MapNavigationHelper {
         final lab = label != null ? '($label)' : '';
         return Uri.parse('geo:$lat,$lng?q=$lat,$lng$lab');
       case TargetPlatform.iOS:
-        // Google Maps URL scheme. Si Google Maps no está
-        // instalado, url_launcher fall-backea automáticamente al
-        // link web que abre Apple Maps.
+        // HTTPS universal link: abre la app de Google Maps si está
+        // instalada, sino Google Maps en el navegador (no Apple Maps).
+        // No usamos comgooglemaps:// para no depender de
+        // LSApplicationQueriesSchemes en el Info.plist.
         return Uri.parse(
           'https://www.google.com/maps/search/?api=1&query=$lat,$lng',
         );

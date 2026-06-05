@@ -34,8 +34,6 @@
 	<string>Coopertrans Móvil usa la cámara para fotografiar comprobantes de trámites y documentos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Coopertrans Móvil accede a tu galería para adjuntar fotos de comprobantes y documentos.</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>Coopertrans Móvil puede guardar imágenes de comprobantes en tu galería.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

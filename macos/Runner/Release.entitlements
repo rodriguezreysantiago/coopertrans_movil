@@ -12,11 +12,6 @@
 	<key>com.apple.security.network.client</key>
 	<true/>
 
-	<!-- Cámara: image_picker.tomarFoto() para subir foto de comprobantes
-	     (RTO, seguro, licencia) o foto de perfil. -->
-	<key>com.apple.security.device.camera</key>
-	<true/>
-
 	<!-- Selección manual de archivos: file_picker permite al admin
 	     adjuntar PDFs (vencimientos, facturas) y al chofer fotos desde
 	     Finder. user-selected.read-write porque también podemos guardar
