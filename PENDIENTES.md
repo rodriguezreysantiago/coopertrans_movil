@@ -7,6 +7,42 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-06-05 — Fix jornada inflada (Volvo vencido) + adaptación a Sitrack
+
+**Bug**: choferes veían manejo absurdo (Laina 23h25, Bastias 19h55). El vigilador
+decidía el descanso por "el equipo dice parado"; los 16 Volvo con suscripción
+VENCIDA quedan congelados y reportan velocidad falsa → la rama "manejando"
+reseteaba el reloj de descanso cada tick → la jornada nunca cerraba y acumulaba
+DÍAS.
+
+**Fix DEPLOYADO** (`b484cf6`, CF `vigiladorJornadaChofer` southamerica-east1):
+en `jornadas_v2.ts` / `evaluarTickJornada`, cierre por **POSICIÓN QUIETA** (lat/lng
+sin moverse del radio 1 km en ≥8h, sin mirar la velocidad) + **cap defensivo**
+(manejo neto ≥14h → cierre forzado). Aditivo, 184 tests verdes (3 nuevos).
+
+**El vigilador YA mide con SITRACK**: el gate de frescura de 10 min descarta solo
+el Volvo congelado (verificado: `posicion_ts` de las vencidas es de hace ~7 días).
+La jornada NO depende de Volvo. Renovar las 16 suscripciones sigue dando la
+telemetría de motor (combustible/AdBlue/eco) pero la jornada no la necesita.
+
+**Reparación one-shot**: cerradas 8 jornadas colgadas que arrastraban de antes del
+fix (incl. zombie de Erasmo, 407h, dado de baja). Quedan 2 borderline que se
+auto-cierran esta noche.
+
+**Herramientas nuevas en `scripts/`** (para medir el vigilador y el agente):
+`monitor_jornadas.js` (jornadas abiertas + marca colgadas), `reparar_jornadas_colgadas.js`
+(dry-run + `--aplicar`), `leer_chats_agente.js`, `leer_jornada.js`, `diag_fuente.js`.
+
+### ⏳ Pendiente del AGENTE (revisión de chats 2026-06-05, NO hecho aún)
+- **Respuestas vacías**: cuando una tool devuelve listas vacías sin "nota" (ej.
+  `turnos_ypf_detalle` para "mañana"), el modelo no genera texto y se loguea
+  respuesta vacía. Fix: check vacío robusto a whitespace en `responder` +
+  `error:'sin_texto'` en el STOP vacío + notas en tools que devuelven vacío.
+- **3 huecos de tools**: consultar adelantos pendientes/preparados; crear varios
+  adelantos en un mensaje (batch); listar/nombrar administradores.
+
+---
+
 ## 📅 2026-06-04 PM — Fix Gomería + auditoría no-refresh
 
 - **Bug arreglado** (`5f6111b`): el editor de un MODELO de cubierta (catálogo
