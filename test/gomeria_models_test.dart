@@ -139,9 +139,16 @@ void main() {
           reason: 'los ejes 2 y 3 del enganche solo admiten nuevas');
     });
 
-    test('tractor: todas las posiciones admiten recapada (sin regla de vida)',
+    test('tractor: recapadas SOLO en el eje neumático (dir y tracción nuevas)',
         () {
-      expect(posicionesTractor.every((p) => p.permiteRecapada), isTrue);
+      // Eje 3 = neumático (libre) → admite recapadas. Ejes 1 (dirección) y 2
+      // (tracción/motriz) → solo nuevas (ejes críticos, seguridad).
+      final neumatico = posicionesTractor.where((p) => p.eje == 3);
+      final dirYTrac = posicionesTractor.where((p) => p.eje != 3);
+      expect(neumatico.every((p) => p.permiteRecapada), isTrue,
+          reason: 'el eje neumático admite recapadas');
+      expect(dirYTrac.every((p) => !p.permiteRecapada), isTrue,
+          reason: 'dirección y tracción solo nuevas');
     });
 
     test('posición de enganche acepta SOLO ARRASTRE (no traccion ni direccion)',

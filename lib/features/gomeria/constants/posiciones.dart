@@ -72,8 +72,10 @@ class PosicionCubierta {
 
   /// `true` si esta posición admite cubiertas RECAPADAS (vida ≥ 2). Si es
   /// `false`, solo se pueden montar NUEVAS (vida 1). Regla Vecchi 2026-06-05:
-  /// en el ENGANCHE las recapadas van SOLO en el primer eje; los ejes 2 y 3
-  /// solo nuevas. El tractor no tiene restricción de vida (queda en `true`).
+  /// las recapadas van SOLO en los ejes LIBRES designados — el eje neumático
+  /// del tractor y el PRIMER eje del enganche. Dirección, tracción y el resto
+  /// del enganche: solo nuevas (ejes críticos / seguridad). Default `false`
+  /// (conservador): una posición es solo-nuevas salvo que se la habilite.
   final bool permiteRecapada;
 
   const PosicionCubierta({
@@ -83,7 +85,7 @@ class PosicionCubierta {
     required this.tipoUnidad,
     required this.eje,
     required this.lado,
-    this.permiteRecapada = true,
+    this.permiteRecapada = false,
   });
 
   /// `true` si una cubierta con [tipoUso] puede ir en esta posición.
@@ -160,6 +162,7 @@ const PosicionCubierta posTractorTrac2IzqExt = PosicionCubierta(
   tipoUnidad: TipoUnidadCubierta.tractor,
   eje: 3,
   lado: 'IZQ_EXT',
+  permiteRecapada: true, // eje libre → admite recapadas
 );
 const PosicionCubierta posTractorTrac2IzqInt = PosicionCubierta(
   codigo: 'TRAC2_IZQ_INT',
@@ -168,6 +171,7 @@ const PosicionCubierta posTractorTrac2IzqInt = PosicionCubierta(
   tipoUnidad: TipoUnidadCubierta.tractor,
   eje: 3,
   lado: 'IZQ_INT',
+  permiteRecapada: true, // eje libre → admite recapadas
 );
 const PosicionCubierta posTractorTrac2DerInt = PosicionCubierta(
   codigo: 'TRAC2_DER_INT',
@@ -176,6 +180,7 @@ const PosicionCubierta posTractorTrac2DerInt = PosicionCubierta(
   tipoUnidad: TipoUnidadCubierta.tractor,
   eje: 3,
   lado: 'DER_INT',
+  permiteRecapada: true, // eje libre → admite recapadas
 );
 const PosicionCubierta posTractorTrac2DerExt = PosicionCubierta(
   codigo: 'TRAC2_DER_EXT',
@@ -184,6 +189,7 @@ const PosicionCubierta posTractorTrac2DerExt = PosicionCubierta(
   tipoUnidad: TipoUnidadCubierta.tractor,
   eje: 3,
   lado: 'DER_EXT',
+  permiteRecapada: true, // eje libre → admite recapadas
 );
 
 /// Las 10 posiciones del tractor estándar de Coopertrans, en orden
