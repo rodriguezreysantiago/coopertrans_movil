@@ -109,6 +109,11 @@ const TTL_RESUMEN_DIARIO_MIN = 24 * 60;  // resumen diario vale el dia
 // _expiraEnMin movido a helpers.ts como `expiraEnMin` (refactor 2026-05-18).
 export const DESCANSO_MIN_SEGUNDOS = 8 * 3600;
 export const DESCANSO_RADIO_METROS = 1000;
+// Cap defensivo de manejo neto (fix 2026-06-05): ningún chofer maneja más de
+// esto en una jornada (el límite legal son 12h). Si una jornada lo supera es
+// porque arrastró días sin cerrar (típico de equipo Volvo congelado que
+// reporta velocidad falsa) → cierre forzado, el próximo tick abre una limpia.
+export const CAP_MANEJO_ABSURDO_SEGUNDOS = 14 * 3600;
 export const VEDA_NOCTURNA_DESDE_HORA = 0; // 00:00 ART
 export const VEDA_NOCTURNA_HASTA_HORA = 6; // 06:00 ART (no se usa para alertar,
 // el descanso de 8h ya garantiza no arrancar antes)
@@ -149,6 +154,18 @@ export interface JornadaDoc {
   descanso_inicio_lat: number | null;
   descanso_inicio_lng: number | null;
   descanso_segundos: number;
+
+  // Anti-jornada-colgada (fix 2026-06-05): quietud por POSICIÓN REAL, medida
+  // SIEMPRE (no solo cuando el equipo dice "parado"). El tracking de descanso
+  // de arriba se reseteaba en cada tick "manejando" → un equipo Volvo congelado
+  // (suscripción vencida) que reporta velocidad falsa lo reiniciaba para
+  // siempre y la jornada nunca cerraba (caso Laina 23h, AC114QQ vencida). Acá
+  // anclamos la última posición y, si no se mueve del radio en >=8h, cerramos
+  // sin mirar la velocidad. Opcionales para compat con docs viejos (se
+  // inicializan en el primer tick).
+  pos_estatica_desde_ts?: FsTimestamp | null;
+  pos_estatica_lat?: number | null;
+  pos_estatica_lng?: number | null;
 
   // Estado actual descriptivo
   estado: string; // 'manejando' | 'pausa_intra_bloque' | 'descanso_post_bloque'
@@ -846,6 +863,9 @@ function nuevaJornada(
     descanso_inicio_lat: null,
     descanso_inicio_lng: null,
     descanso_segundos: 0,
+    pos_estatica_desde_ts: ahora,
+    pos_estatica_lat: lat,
+    pos_estatica_lng: lng,
     estado: "manejando",
     alerta_3_30_enviada: false,
     alerta_3_45_enviada: false,
@@ -948,6 +968,63 @@ export function evaluarTickJornada(
   const ahora = Timestamp.fromMillis(ahoraMs);
   const avisos: AvisoJornada[] = [];
   let cerrada = false;
+
+  // ── Red anti-jornada-colgada (fix 2026-06-05) ─────────────────────────────
+  // El cierre por descanso de las ramas de abajo depende de que el equipo
+  // reporte "parado". Los Volvo con suscripción VENCIDA quedan CONGELADOS y
+  // devuelven su última velocidad ("74 km/h") de hace días → el sistema cree
+  // que el chofer maneja siempre, la rama "manejando" resetea el tracking de
+  // descanso en cada tick y la jornada NUNCA cierra: acumula manejo de DÍAS
+  // (caso real Laina 23h25, unidad AC114QQ vencida). Acá medimos la quietud por
+  // POSICIÓN REAL, sin mirar la velocidad: si el camión no se movió del radio de
+  // descanso (1 km) en >= 8h, descansó sí o sí. Va ANTES de sumar manejo para no
+  // inflar el acumulado. Si maneja de verdad, la posición se aleja y el reloj se
+  // reancla, así que NO afecta a un chofer en ruta.
+  if (lat != null && lng != null) {
+    if (
+      j.pos_estatica_desde_ts == null ||
+      j.pos_estatica_lat == null ||
+      j.pos_estatica_lng == null
+    ) {
+      j.pos_estatica_desde_ts = ahora;
+      j.pos_estatica_lat = lat;
+      j.pos_estatica_lng = lng;
+    } else {
+      const distEstatica = distanciaMetros(
+        j.pos_estatica_lat, j.pos_estatica_lng, lat, lng
+      );
+      if (distEstatica > DESCANSO_RADIO_METROS) {
+        // Se movió de verdad → reancla el reloj de quietud.
+        j.pos_estatica_desde_ts = ahora;
+        j.pos_estatica_lat = lat;
+        j.pos_estatica_lng = lng;
+      } else {
+        const quietoSeg = (ahoraMs - j.pos_estatica_desde_ts.toMillis()) / 1000;
+        if (quietoSeg >= DESCANSO_MIN_SEGUNDOS) {
+          j.descanso_segundos = quietoSeg;
+          j.estado = "descanso_jornada";
+          j.jornada_fin_ts = ahora;
+          j.ultima_actualizacion_ts = ahora;
+          return { avisos, cerrada: true };
+        }
+      }
+    }
+  }
+
+  // ── Cap defensivo: manejo absurdo ─────────────────────────────────────────
+  // Red final por si la posición "salta" (GPS errático de un equipo congelado)
+  // y el tracking de quietud no llega a disparar: ningún chofer maneja > 14h
+  // netas (el límite legal son 12h). Si llegamos ahí, la jornada arrastró días
+  // → cierre forzado; el próximo tick abre una nueva limpia.
+  if (
+    j.total_manejo_seg + j.bloque_actual_manejo_seg >=
+    CAP_MANEJO_ABSURDO_SEGUNDOS
+  ) {
+    j.estado = "descanso_jornada";
+    j.jornada_fin_ts = ahora;
+    j.ultima_actualizacion_ts = ahora;
+    return { avisos, cerrada: true };
+  }
 
   if (manejando) {
     // === Está manejando ===

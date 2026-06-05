@@ -25,6 +25,7 @@ const {
   JORNADA_MANEJO_LIMITE_SEGUNDOS, // 12h
   PAUSA_BLOQUE_SEGUNDOS, // 15 min
   DESCANSO_MIN_SEGUNDOS, // 8h
+  CAP_MANEJO_ABSURDO_SEGUNDOS, // 14h (red final anti-colgada)
 } = require('../lib/jornadas_v2');
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -99,6 +100,46 @@ function tickParado(j, deltaSeg, opts = {}) {
     pausaPreviaSeg: opts.pausaPreviaSeg ?? null,
   });
 }
+
+// ── Anti-jornada-colgada: cierre por posición quieta + cap (fix 2026-06-05) ──
+// El equipo Volvo con suscripción vencida queda CONGELADO y reporta su última
+// velocidad (>0) para siempre → el sistema cree que el chofer maneja sin parar
+// y la jornada nunca cerraba (caso real Laina 23h25, AC114QQ vencida).
+
+describe('evaluarTickJornada — cierre por posición quieta (equipo congelado)', () => {
+  const LAT = -38.6786, LNG = -68.2214; // Añelo (caso real AC114QQ)
+
+  test('velocidad falsa pero MISMA posición >= 8h → cierra la jornada', () => {
+    const j = nuevaJornadaTest({ total_manejo_seg: 2 * 3600 });
+    const t1 = MEDIODIA_MS;
+    // Tick 1: ancla la posición estática (no cierra).
+    const r1 = tickManejando(j, 300, { ahoraMs: t1, lat: LAT, lng: LNG });
+    assert.equal(r1.cerrada, false);
+    assert.equal(j.pos_estatica_lat, LAT);
+    // Tick 8h+ después: el equipo congelado reporta la MISMA posición "a 74 km/h".
+    const t2 = t1 + (DESCANSO_MIN_SEGUNDOS + 300) * 1000;
+    const r2 = tickManejando(j, 300, { ahoraMs: t2, lat: LAT, lng: LNG });
+    assert.equal(r2.cerrada, true, 'no se movió en 8h → descansó (pese a la velocidad)');
+    assert.equal(j.estado, 'descanso_jornada');
+  });
+
+  test('chofer en ruta (la posición cambia) NO cierra aunque pasen > 8h', () => {
+    const j = nuevaJornadaTest();
+    let t = MEDIODIA_MS;
+    for (let i = 0; i < 5; i++) {
+      const r = tickManejando(j, 300, { ahoraMs: t, lat: LAT + i * 0.05, lng: LNG });
+      assert.equal(r.cerrada, false, `tick ${i} no debe cerrar: se está moviendo`);
+      t += 2 * 3600 * 1000; // 2h entre ticks → >8h total, pero avanzando ~5 km
+    }
+  });
+
+  test('cap defensivo: manejo neto >= cap absurdo → cierre forzado', () => {
+    const j = nuevaJornadaTest({ total_manejo_seg: CAP_MANEJO_ABSURDO_SEGUNDOS });
+    const r = tickManejando(j, 300, { ahoraMs: MEDIODIA_MS });
+    assert.equal(r.cerrada, true);
+    assert.equal(j.estado, 'descanso_jornada');
+  });
+});
 
 // ── Manejo: acumulación + avisos de bloque ──────────────────────────
 
