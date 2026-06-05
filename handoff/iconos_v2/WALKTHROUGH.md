@@ -202,9 +202,8 @@ cd build/web && python -m http.server 8000
 
 - **Google Play:** `handoff/iconos_v2/playstore-512.png` → Play Console > Grow > Store presence > Main store listing > Graphic assets > **App icon** (512×512, 32-bit PNG).
 - **App Store:** `Icon-1024.png` del appiconset iOS ya cubre el slot de marketing.
-- **Feature graphic / Screenshots:** sin cambios — siguen siendo `assets/playstore/feature-graphic-1024x500.png` y el resto de capturas existentes.
-
-> Si querés que el feature graphic refleje el ícono nuevo, decímelo y lo rediseño aparte.
+- **Feature graphic (gráfico de funciones, 1024×500):** rediseñado con el branding v2 → `handoff/iconos_v2/playstore-feature-1024x500.png` (PNG **24-bit, sin alpha** — requisito de Play). Se regenera con `python handoff/iconos_v2/_gen_feature.py` (Pillow; reusa la paleta del `icon-master.svg` y compone ícono + wordmark "Coopertrans Móvil"). Subir en Play Console > Aumenta la cantidad de usuarios > Presencia en la tienda > Ficha principal de la tienda > Recursos gráficos > **Gráfico de funciones**. Es solo de marketing (la ficha de la tienda); NO entra en el AAB ni afecta el build.
+- **Screenshots:** sin cambios — siguen siendo las capturas existentes.
 
 ---
 
