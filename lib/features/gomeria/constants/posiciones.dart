@@ -1,7 +1,9 @@
 // Constantes de posiciones de cubiertas para el módulo Gomería.
 //
-// Layout fijo confirmado por Santiago el 2026-05-04:
-// - Tractor: 3 ejes (1 dirección, 2 tracción duales) = 10 posiciones.
+// Layout fijo confirmado por Santiago el 2026-05-04 (eje neumático corregido a
+// ARRASTRE el 2026-06-05):
+// - Tractor: 3 ejes (1 dirección, 1 tracción dual, 1 arrastre dual=neumático)
+//   = 10 posiciones.
 // - Enganche: 3 ejes (todos con duales en cada lado) = 12 posiciones.
 //
 // Si la flota suma un layout distinto en el futuro (tractor 6x2, enganche
@@ -86,9 +88,12 @@ class PosicionCubierta {
 // LAYOUT TRACTOR — 10 posiciones
 // =============================================================================
 // Eje 1: dirección (2 posiciones simples, IZQ + DER)
-// Eje 2: tracción duales (4: IZQ_EXT, IZQ_INT, DER_INT, DER_EXT)
-// Eje 3: tracción duales (4: IZQ_EXT, IZQ_INT, DER_INT, DER_EXT)
-//        Es el eje neumático (suspensión de aire) pero usa duales.
+// Eje 2: tracción duales (4: IZQ_EXT, IZQ_INT, DER_INT, DER_EXT) — eje motriz.
+// Eje 3: ARRASTRE duales (4: IZQ_EXT, IZQ_INT, DER_INT, DER_EXT) — eje neumático
+//        (suspensión de aire), LIBRE/no motriz → lleva arrastre, no tracción.
+//        Confirmado Santiago 2026-06-05 (corrección del modelado original, que
+//        lo tenía como tracción). El `codigo` TRAC2_* se mantiene para no
+//        romper montajes/locks ya referenciados — es solo identificador.
 
 const PosicionCubierta posTractorDirIzq = PosicionCubierta(
   codigo: 'DIR_IZQ',
@@ -143,32 +148,32 @@ const PosicionCubierta posTractorTrac1DerExt = PosicionCubierta(
 
 const PosicionCubierta posTractorTrac2IzqExt = PosicionCubierta(
   codigo: 'TRAC2_IZQ_EXT',
-  etiqueta: 'Tracción 2 Izquierda Externa (eje neumático)',
-  tipoUsoRequerido: TipoUsoCubierta.traccion,
+  etiqueta: 'Eje neumático Izquierda Externa',
+  tipoUsoRequerido: TipoUsoCubierta.arrastre,
   tipoUnidad: TipoUnidadCubierta.tractor,
   eje: 3,
   lado: 'IZQ_EXT',
 );
 const PosicionCubierta posTractorTrac2IzqInt = PosicionCubierta(
   codigo: 'TRAC2_IZQ_INT',
-  etiqueta: 'Tracción 2 Izquierda Interna (eje neumático)',
-  tipoUsoRequerido: TipoUsoCubierta.traccion,
+  etiqueta: 'Eje neumático Izquierda Interna',
+  tipoUsoRequerido: TipoUsoCubierta.arrastre,
   tipoUnidad: TipoUnidadCubierta.tractor,
   eje: 3,
   lado: 'IZQ_INT',
 );
 const PosicionCubierta posTractorTrac2DerInt = PosicionCubierta(
   codigo: 'TRAC2_DER_INT',
-  etiqueta: 'Tracción 2 Derecha Interna (eje neumático)',
-  tipoUsoRequerido: TipoUsoCubierta.traccion,
+  etiqueta: 'Eje neumático Derecha Interna',
+  tipoUsoRequerido: TipoUsoCubierta.arrastre,
   tipoUnidad: TipoUnidadCubierta.tractor,
   eje: 3,
   lado: 'DER_INT',
 );
 const PosicionCubierta posTractorTrac2DerExt = PosicionCubierta(
   codigo: 'TRAC2_DER_EXT',
-  etiqueta: 'Tracción 2 Derecha Externa (eje neumático)',
-  tipoUsoRequerido: TipoUsoCubierta.traccion,
+  etiqueta: 'Eje neumático Derecha Externa',
+  tipoUsoRequerido: TipoUsoCubierta.arrastre,
   tipoUnidad: TipoUnidadCubierta.tractor,
   eje: 3,
   lado: 'DER_EXT',

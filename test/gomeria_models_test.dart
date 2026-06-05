@@ -36,15 +36,25 @@ void main() {
           reason: 'no debe haber códigos duplicados entre tractor y enganche');
     });
 
-    test('tractor: 2 posiciones DIRECCION, 8 TRACCION', () {
+    test('tractor: 2 DIRECCION, 4 TRACCION (motriz), 4 ARRASTRE (neumático)', () {
       final dir = posicionesTractor
           .where((p) => p.tipoUsoRequerido == TipoUsoCubierta.direccion)
           .length;
       final trac = posicionesTractor
           .where((p) => p.tipoUsoRequerido == TipoUsoCubierta.traccion)
           .length;
+      final arr = posicionesTractor
+          .where((p) => p.tipoUsoRequerido == TipoUsoCubierta.arrastre)
+          .length;
       expect(dir, 2);
-      expect(trac, 8);
+      expect(trac, 4); // solo el eje motriz (TRAC1)
+      expect(arr, 4); // el eje neumático (TRAC2) es libre → arrastre (fix 2026-06-05)
+    });
+
+    test('eje neumático del tractor (TRAC2) acepta ARRASTRE, no tracción', () {
+      expect(posTractorTrac2IzqExt.tipoUsoRequerido, TipoUsoCubierta.arrastre);
+      expect(posTractorTrac2IzqExt.aceptaTipoUso(TipoUsoCubierta.arrastre), isTrue);
+      expect(posTractorTrac2IzqExt.aceptaTipoUso(TipoUsoCubierta.traccion), isFalse);
     });
 
     test('enganche: 0 DIRECCION, 0 TRACCION, 12 ARRASTRE', () {
