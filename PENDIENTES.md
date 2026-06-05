@@ -182,8 +182,8 @@ por GAP de reportes** (fix "dormí 8 h → me decía 12 h" — equipo apagado de
   jornada, etc., acumulado de bumps previos.)
 
 ### 🔧 Pendientes / a verificar (Santiago)
-- **Corregir 2 tarifas** mal cargadas: Sea White (B.Bca) → La Martineta (Gral
-  Lamadrid) sin tarifa de chofer; Río Colorado → Monte Hermoso (Devic) chofer **$2**.
+- ✅ Resuelto 2026-06-05: ~~corregir 2 tarifas mal cargadas (Sea White→La
+  Martineta sin tarifa de chofer; Río Colorado→Monte Hermoso/Devic chofer $2)~~.
 - **Monitorear primer día**: vigilador de jornada (avisos coherentes) +
   anti-auto-respuesta (log `[handler] reflejo de saliente propio descartado por id`).
 - ✅ Resueltos 2026-06-04: ~~alerta presupuesto Gemini (Cloud Billing)~~ ·
