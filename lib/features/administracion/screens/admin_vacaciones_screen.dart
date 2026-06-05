@@ -16,6 +16,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../models/vacacion.dart';
 import '../services/vacaciones_service.dart';
+import 'vacaciones_editor_screen.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
@@ -28,6 +29,7 @@ class _FilaVac {
   final String empresa;
   final String area;
   final bool activo;
+  final DateTime? fechaIngreso;
   final Vacacion? vac;
   _FilaVac({
     required this.dni,
@@ -35,8 +37,18 @@ class _FilaVac {
     required this.empresa,
     required this.area,
     required this.activo,
+    required this.fechaIngreso,
     required this.vac,
   });
+}
+
+/// FECHA_INGRESO en EMPLEADOS puede venir como String ISO (lo que escribe el
+/// form) o como Timestamp (docs viejos). Normaliza a DateTime para que el
+/// editor pueda sugerir los días por antigüedad.
+DateTime? _parseFechaIngreso(dynamic raw) {
+  if (raw is Timestamp) return raw.toDate();
+  if (raw is String && raw.isNotEmpty) return DateTime.tryParse(raw);
+  return null;
 }
 
 class AdminVacacionesScreen extends StatefulWidget {
@@ -99,6 +111,7 @@ class _AdminVacacionesScreenState extends State<AdminVacacionesScreen> {
                   empresa: (m['EMPRESA'] ?? '').toString(),
                   area: (m['AREA'] ?? '').toString(),
                   activo: activo,
+                  fechaIngreso: _parseFechaIngreso(m['FECHA_INGRESO']),
                   vac: vac,
                 ));
               }
@@ -224,7 +237,7 @@ class _AdminVacacionesScreenState extends State<AdminVacacionesScreen> {
                             const SizedBox(height: AppSpacing.sm),
                         itemBuilder: (_, i) => _FilaWidget(
                           fila: filtradas[i],
-                          onTap: () => _verDetalle(filtradas[i]),
+                          onTap: () => _abrirEditor(filtradas[i]),
                         ),
                       ),
           ),
@@ -233,16 +246,18 @@ class _AdminVacacionesScreenState extends State<AdminVacacionesScreen> {
     );
   }
 
-  void _verDetalle(_FilaVac f) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  void _abrirEditor(_FilaVac f) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => VacacionEditorScreen(
+        dni: f.dni,
+        nombre: f.nombre,
+        empresa: f.empresa,
+        area: f.area,
+        fechaIngreso: f.fechaIngreso,
+        anio: _anio,
+        inicial: f.vac,
       ),
-      builder: (ctx) => _DetalleSheet(fila: f, anio: _anio),
-    );
+    ));
   }
 }
 
@@ -409,141 +424,7 @@ class _Num extends StatelessWidget {
   }
 }
 
-/// Bottom sheet con el detalle de los períodos del empleado.
-class _DetalleSheet extends StatelessWidget {
-  final _FilaVac fila;
-  final int anio;
-  const _DetalleSheet({required this.fila, required this.anio});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final v = fila.vac;
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg, AppSpacing.sm, AppSpacing.lg, AppSpacing.lg),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 36, height: 4,
-                margin: const EdgeInsets.only(bottom: AppSpacing.md),
-                decoration: BoxDecoration(
-                    color: Colors.white24,
-                    borderRadius: BorderRadius.circular(2)),
-              ),
-            ),
-            Text(fila.nombre, style: AppType.h4.copyWith(color: c.text)),
-            const SizedBox(height: 2),
-            Text(
-              [
-                if (fila.empresa.isNotEmpty) fila.empresa,
-                if (fila.area.isNotEmpty) _capitalizar(fila.area),
-                'Año $anio',
-              ].join(' · '),
-              style: AppType.monoSm.copyWith(color: c.textMuted),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            if (v == null)
-              Text('Sin vacaciones cargadas para $anio.',
-                  style: AppType.bodySm.copyWith(color: c.textSecondary))
-            else ...[
-              Row(
-                children: [
-                  _ResumenChip('Corresponden', '${v.diasCorresponden}', c.brand),
-                  const SizedBox(width: AppSpacing.sm),
-                  _ResumenChip('Tomados', '${v.tomados}', c.textSecondary),
-                  const SizedBox(width: AppSpacing.sm),
-                  _ResumenChip(
-                      'Restan',
-                      '${v.restan}',
-                      v.restan < 0
-                          ? AppColors.error
-                          : (v.restan == 0 ? c.textMuted : AppColors.success)),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text('PERÍODOS',
-                  style: AppType.eyebrow
-                      .copyWith(color: AppColors.success, letterSpacing: 1.2)),
-              const SizedBox(height: AppSpacing.sm),
-              if (v.periodos.isEmpty)
-                Text('Sin períodos cargados.',
-                    style: AppType.bodySm.copyWith(color: c.textMuted))
-              else
-                ...v.periodos.map((p) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-                      child: Row(
-                        children: [
-                          Icon(Icons.event_outlined, size: 15, color: c.textMuted),
-                          const SizedBox(width: AppSpacing.sm),
-                          Expanded(
-                            child: Text('${_fecha(p.inicio)}  →  ${_fecha(p.fin)}',
-                                style: AppType.bodySm.copyWith(color: c.text)),
-                          ),
-                          AppBadge(
-                              text: '${p.dias} días',
-                              color: c.brand,
-                              size: AppBadgeSize.sm),
-                        ],
-                      ),
-                    )),
-              if (v.tienePeriodosSolapados) ...[
-                const SizedBox(height: AppSpacing.sm),
-                Row(children: [
-                  const Icon(Icons.warning_amber_rounded,
-                      size: 15, color: AppColors.error),
-                  const SizedBox(width: 6),
-                  Text('Hay períodos solapados',
-                      style: AppType.monoSm.copyWith(color: AppColors.error)),
-                ]),
-              ],
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ResumenChip extends StatelessWidget {
-  final String label;
-  final String valor;
-  final Color color;
-  const _ResumenChip(this.label, this.valor, this.color);
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-            vertical: AppSpacing.sm, horizontal: AppSpacing.sm),
-        decoration: BoxDecoration(
-          color: c.surface3,
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-        ),
-        child: Column(
-          children: [
-            Text(valor,
-                style: AppType.h4.copyWith(color: color, fontWeight: FontWeight.bold)),
-            Text(label.toUpperCase(),
-                style: AppType.eyebrow.copyWith(color: c.textMuted, fontSize: 9),
-                maxLines: 1, overflow: TextOverflow.ellipsis),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 String _capitalizar(String s) {
   if (s.isEmpty) return s;
   return s[0].toUpperCase() + s.substring(1).toLowerCase();
 }
-
-String _fecha(DateTime d) =>
-    '${d.day.toString().padLeft(2, '0')}-${d.month.toString().padLeft(2, '0')}-${d.year}';
