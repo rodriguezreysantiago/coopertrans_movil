@@ -34,6 +34,18 @@ class VacacionesService {
         .map((s) => s.docs.map(Vacacion.fromDoc).toList());
   }
 
+  /// Stream de las vacaciones de varios años devengados a la vez. Lo usa el
+  /// calendario mensual: un período gozado en (p.ej.) enero 2026 puede vivir
+  /// en el doc devengado 2025 (gozado al año siguiente) o 2026 → hay que
+  /// mirar ambos. `whereIn` admite hasta 10 valores (de sobra acá).
+  Stream<List<Vacacion>> streamPorAnios(List<int> anios) {
+    if (anios.isEmpty) return Stream<List<Vacacion>>.value(const []);
+    return col
+        .where('anio', whereIn: anios)
+        .snapshots()
+        .map((s) => s.docs.map(Vacacion.fromDoc).toList());
+  }
+
   /// Stream del historial de un empleado (todos sus años), más nuevo primero.
   Stream<List<Vacacion>> streamPorEmpleado(String dni) {
     return col

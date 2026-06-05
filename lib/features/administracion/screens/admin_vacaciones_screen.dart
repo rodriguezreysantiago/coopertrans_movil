@@ -16,6 +16,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../models/vacacion.dart';
 import '../services/vacaciones_service.dart';
+import 'vacaciones_calendario_screen.dart';
 import 'vacaciones_editor_screen.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
@@ -82,6 +83,15 @@ class _AdminVacacionesScreenState extends State<AdminVacacionesScreen> {
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Vacaciones',
+      actions: [
+        IconButton(
+          tooltip: 'Calendario mensual',
+          icon: const Icon(Icons.calendar_month_outlined),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+            builder: (_) => const VacacionesCalendarioScreen(),
+          )),
+        ),
+      ],
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: _empleadosStream,
         builder: (context, empSnap) {
