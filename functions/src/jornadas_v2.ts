@@ -185,6 +185,10 @@ export interface JornadaDoc {
 
   // Auditoría
   creado_en: FsTimestamp;
+  /** true si la jornada se cerró por el barrido de choferes dados de BAJA (no
+   * por descanso real). El chofer inactivo ya no maneja → su jornada abierta
+   * quedaba zombie; el tick la cierra. Auditoría 2026-06-05. */
+  cerrada_por_baja?: boolean;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -1520,8 +1524,38 @@ export async function tickVigiladorJornada(): Promise<void> {
     }
   }
 
+  // Cerrar jornadas ABIERTAS de choferes dados de BAJA. El loop de arriba itera
+  // unidades que reportan en SITRACK; un chofer inactivo ya no maneja ninguna →
+  // su DNI no aparece y su jornada abierta quedaba colgada PARA SIEMPRE (caso
+  // Erasmo: 17 días zombie, fix 2026-06-05). Barremos las abiertas y cerramos
+  // las de inactivos. Barato: 1 query + las pocas que matcheen.
+  let cerradasBaja = 0;
+  try {
+    const abiertas = await db()
+      .collection(COLECCION)
+      .where("jornada_fin_ts", "==", null)
+      .get();
+    for (const d of abiertas.docs) {
+      const jd = d.data() as JornadaDoc;
+      if (!inactivos.has(jd.chofer_dni)) continue;
+      const ahoraTs = Timestamp.now();
+      await d.ref.update({
+        estado: "descanso_jornada",
+        jornada_fin_ts: ahoraTs,
+        ultima_actualizacion_ts: ahoraTs,
+        cerrada_por_baja: true,
+      });
+      cerradasBaja++;
+    }
+  } catch (e) {
+    logger.warn("[jornadas_v2.tick] barrido de jornadas de inactivos falló", {
+      error: (e as Error).message,
+    });
+  }
+
   logger.info("[jornadas_v2.tick] OK", {
     evaluados, avisosEnviados, silenciadosCount, nuevasJornadas, cerradas,
+    cerradasBaja,
     silenciados: silenciados.size,
     fuenteVolvo, fuenteSitrack, fuenteEventos,
   });
