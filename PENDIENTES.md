@@ -32,6 +32,17 @@ pasó al C neón sin reinicio ni UAC. Defensa en profundidad: el `launcher.ps1` 
 refresca el caché SIEMPRE (no solo si cambia el shortcut) → beneficia
 instalaciones nuevas vía el instalador. `flutter analyze` limpio.
 
+**Pin de la barra de tareas** (`773fb30` + follow-up): el escritorio lo arregla
+`ie4uinit -show`, pero el **pin de la taskbar** guarda su PROPIO ícono cacheado que
+`ie4uinit` no toca → hay que re-escribir su `.lnk`. La app lo hace vía **COM/FFI**
+(`win32`, IShellLink + IPersistFile; toggle del IconLocation), **sin lanzar
+PowerShell** (evita falsos positivos de antivirus en una app no firmada). El `.lnk`
+del pin es del usuario (`%APPDATA%\...\TaskBar`, writable; a diferencia del
+escritorio público que es read-only sin admin). Validado: mecánica COM probada
+sobre copia + `flutter build apk --debug` OK (el import de win32 NO rompe Android;
+sólo corre dentro del guard `Platform.isWindows`). Pedido de Santiago: que el pin
+también se arregle solo, sin tocar PC por PC.
+
 **⏳ Sale en 1.0.92** (entra con el próximo release de app que largue Santiago).
 
 ---
