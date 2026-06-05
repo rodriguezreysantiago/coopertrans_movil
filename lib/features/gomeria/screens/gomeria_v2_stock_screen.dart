@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/capabilities.dart';
 import '../../../core/services/prefs_service.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -37,6 +38,20 @@ class _GomeriaV2StockScreenState extends State<GomeriaV2StockScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    // El depósito es de administración. El rol GOMERIA opera (monta/retira)
+    // pero NO ve las cantidades en stock — control de inventario (cuenta a
+    // ciegas, el admin compara). Pedido Santiago 2026-06-05.
+    if (!Capabilities.can(PrefsService.rol, Capability.verGomeriaStock)) {
+      return const AppScaffold(
+        title: 'Stock de gomería',
+        body: AppEmptyState(
+          icon: Icons.lock_outline,
+          title: 'Sin acceso al stock',
+          subtitle:
+              'El depósito es de administración. Podés montar cubiertas, pero las cantidades en stock no se muestran a tu rol.',
+        ),
+      );
+    }
     return AppScaffold(
       title: 'Stock de gomería',
       body: StreamBuilder<List<StockItem>>(

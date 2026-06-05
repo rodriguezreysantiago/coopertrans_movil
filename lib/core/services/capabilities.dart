@@ -51,6 +51,13 @@ enum Capability {
   /// con AREA=GOMERIA, sea el operador habitual). El gating fino por
   /// AREA lo decidirá Vecchi si más adelante quieren restringir.
   verGomeria,
+  /// Ver el STOCK de cubiertas (depósito: cantidades por SKU + ajuste de
+  /// inventario). Solo ADMIN + SUPERVISOR (pedido Santiago 2026-06-05): el rol
+  /// GOMERIA opera el módulo (monta/retira cubiertas) PERO no ve cuántas hay
+  /// en stock — control de inventario: el gomero cuenta a ciegas y el admin
+  /// compara contra el teórico. Sin esta capability, el FAB Stock, la pantalla
+  /// de depósito y las cantidades del sheet de montaje quedan ocultos.
+  verGomeriaStock,
   /// Módulo Logística — catálogos de empresas, ubicaciones y tarifas
   /// que arman la base del futuro sistema de planeamiento de viajes.
   /// Acceso ADMIN + SUPERVISOR (mismo nivel que personal/flota: son los
@@ -152,6 +159,7 @@ class Capabilities {
       Capability.verAlertasVolvo,
       Capability.verDescargas,
       Capability.verGomeria,
+      Capability.verGomeriaStock, // stock/depósito: admin+supervisor (no GOMERIA)
       Capability.verLogistica,
       Capability.verIcm,
       Capability.verVistaEjecutiva,

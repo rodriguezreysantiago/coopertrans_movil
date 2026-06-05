@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/capabilities.dart';
 import '../../../core/services/prefs_service.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -333,6 +334,10 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
       return;
     }
 
+    // El stock (cantidades) es solo para admin/supervisor. Al rol GOMERIA le
+    // mostramos QUÉ modelo montar pero SIN el número "X en depósito".
+    final verStock =
+        Capabilities.can(PrefsService.rol, Capability.verGomeriaStock);
     final elegido = await showModalBottomSheet<StockItem>(
       context: context,
       backgroundColor: context.colors.surface2,
@@ -355,10 +360,12 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
                   icon: Icons.tire_repair_outlined,
                   titulo: s.modeloEtiqueta,
                   subtitulo: s.etiquetaVida,
-                  trailing: Text(
-                    '${s.cantidad} en depósito',
-                    style: AppType.monoSm.copyWith(color: c.textMuted),
-                  ),
+                  trailing: verStock
+                      ? Text(
+                          '${s.cantidad} en depósito',
+                          style: AppType.monoSm.copyWith(color: c.textMuted),
+                        )
+                      : null,
                   onTap: () => Navigator.pop(sheetCtx, s),
                 ),
             ],

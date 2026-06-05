@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/capabilities.dart';
 import '../../../core/services/prefs_service.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -43,6 +44,11 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
   final List<_Unidad> _tractores = [];
   final List<_Unidad> _enganches = [];
   final List<_Chofer> _choferes = [];
+
+  /// Ver el stock (depósito). ADMIN + SUPERVISOR. El rol GOMERIA opera pero
+  /// NO ve cantidades — el FAB Stock se le oculta (pedido Santiago 2026-06-05).
+  bool get _puedeVerStock =>
+      Capabilities.can(PrefsService.rol, Capability.verGomeriaStock);
 
   @override
   void initState() {
@@ -162,7 +168,7 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
                     ),
                   ],
                 ),
-      floatingActionButton: _cargando || _error != null
+      floatingActionButton: (_cargando || _error != null || !_puedeVerStock)
           ? null
           : FloatingActionButton.extended(
               backgroundColor: c.brand,
