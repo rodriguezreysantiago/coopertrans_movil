@@ -61,6 +61,14 @@ function _construirCliente() {
       strict: false,
     },
     puppeteer: {
+      // protocolTimeout: tope de cada llamada al browser headless (protocolo
+      // DevTools). El default de puppeteer (180s) timeouteaba en la dedicada
+      // bajo carga/lentitud — "Runtime.callFunctionOn timed out" en
+      // `tieneWhatsApp`/envíos, dejando la cola trabada sin mandar (incidente
+      // 2026-06-05: mandó hasta cierto punto y se degradó). Lo subimos a 4 min
+      // para tolerar picos. (Si el browser se CUELGA de verdad, el restart del
+      // servicio + `_matarChromesHuerfanos` lo recupera.)
+      protocolTimeout: 240000,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
