@@ -12,6 +12,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/excluidos_service.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../models/vacacion.dart';
@@ -63,6 +64,10 @@ class _AdminVacacionesScreenState extends State<AdminVacacionesScreen> {
   final _svc = VacacionesService();
   late final Stream<QuerySnapshot<Map<String, dynamic>>> _empleadosStream;
 
+  /// Excluidos de la tabla: tanqueros + testers (revisores de Apple/Google).
+  /// Null hasta que carga (fail-safe: no esconde a nadie mientras tanto).
+  ExcluidosSet? _excluidos;
+
   int _anio = 2025;
   String? _empresaFiltro;
   String? _areaFiltro;
@@ -77,6 +82,11 @@ class _AdminVacacionesScreenState extends State<AdminVacacionesScreen> {
         .collection(AppCollections.empleados)
         .orderBy('NOMBRE')
         .snapshots();
+    // Excluir tanqueros + testers (revisores Apple/Google), igual que el resto
+    // de la app. Al cargar, setState re-filtra la tabla.
+    ExcluidosService.cargar().then((s) {
+      if (mounted) setState(() => _excluidos = s);
+    });
   }
 
   @override
@@ -112,6 +122,10 @@ class _AdminVacacionesScreenState extends State<AdminVacacionesScreen> {
               final filas = <_FilaVac>[];
               for (final d in empleados) {
                 final m = d.data();
+                // Tanqueros + testers (Apple/Google) fuera de la tabla.
+                if (ExcluidosService.esExcluido(_excluidos, dni: d.id)) {
+                  continue;
+                }
                 final activo = m['ACTIVO'] != false;
                 final vac = porDni[d.id];
                 if (!activo && vac == null) continue;

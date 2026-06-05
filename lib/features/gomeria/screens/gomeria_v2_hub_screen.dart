@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/capabilities.dart';
+import '../../../core/services/excluidos_service.dart';
 import '../../../core/services/prefs_service.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -74,8 +75,12 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
   Future<void> _cargar() async {
     try {
       final fs = FirebaseFirestore.instance;
+      // Excluir tanques + tractores de los choferes tanqueros (igual que el
+      // resto de los menús de la app).
+      final excl = await ExcluidosService.cargar();
       final vSnap = await fs.collection(AppCollections.vehiculos).get();
       for (final d in vSnap.docs) {
+        if (ExcluidosService.esExcluido(excl, patente: d.id)) continue;
         final data = d.data();
         final u = _Unidad(
           patente: d.id,
@@ -97,6 +102,9 @@ class _GomeriaV2HubScreenState extends State<GomeriaV2HubScreen>
       for (final d in eSnap.docs) {
         final data = d.data();
         if (data['ACTIVO'] == false) continue;
+        // Los choferes tanqueros se excluyen (su tractor + enganche son
+        // unidades que tampoco controlamos).
+        if (ExcluidosService.esExcluido(excl, dni: d.id)) continue;
         final tractor = (data['VEHICULO'] ?? '').toString().trim();
         final enganche = (data['ENGANCHE'] ?? '').toString().trim();
         final tieneT = tractor.isNotEmpty && tractor != '-';
