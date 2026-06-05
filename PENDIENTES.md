@@ -7,6 +7,27 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-06-05 PM — Módulo Vacaciones (Administración) — construido completo
+
+"Panel de administración" → **"Panel de control"**. Nuevo módulo **Administración**
+(hub RRHH) con submenú **Vacaciones**. De cero en 1 sesión (commits `33fd8fe` →
+`05f5c83`):
+- Colección `VACACIONES` (doc/empleado/año, **sin duplicar EMPLEADOS** — pedido
+  Santiago; nombre/empresa/área se joinean por DNI, tomados/restan derivados).
+- Cálculo días por antigüedad LCT (`vacaciones_calculo.dart`, validado **69/72**
+  vs el Excel) + 24 tests verdes.
+- **Import del Excel 2025 = 72 docs EN PROD** (`scripts/vacaciones_import.js`, vía
+  Admin SDK; match CUIL 71/72 + 1 nombre, 0 huérfanos). **Rules deployadas.**
+- 3 pantallas: tabla anual (filtros + saldos) + editor (días auto + períodos +
+  guardar/borrar) + calendario Gantt mensual. Solo oficina (admin/supervisor).
+
+**⏳ FALTA verificar visualmente** — se codeó con `flutter analyze` limpio pero NO
+se corrió la UI. Validar al abrir **1.0.92** (o `flutter run`). Los 3 proporcionales
+de 1er año (Balbiano/Celiz/Álvarez) a confirmar a mano. Detalle en memoria
+`project_modulo_vacaciones.md`.
+
+---
+
 ## 📅 2026-06-05 PM — Ícono Windows no se actualizaba en el escritorio (caché)
 
 **Síntoma**: tras aplicar el ícono v2, el escritorio de Windows seguía mostrando
