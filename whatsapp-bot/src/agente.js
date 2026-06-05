@@ -1254,11 +1254,22 @@ async function _toolTurnosYpfDetalle(db) {
   } catch (e) {
     return { error: `No pude leer Cachatore: ${e.message}` };
   }
+  const totalObjetivos =
+    reservado.length + buscando.length + reagendar.length + problemas.length;
   return {
     con_turno: reservado,
     buscando,
     para_reagendar: reagendar,
     con_problemas: problemas,
+    // Nota SIEMPRE presente: si los 4 arrays vienen vacíos, sin esto el modelo
+    // no tenía "nada que decir" y devolvía respuesta VACÍA → el admin no recibía
+    // nada (caso real 2026-06-04: "qué turnos reservamos para mañana"). Fix
+    // 2026-06-05.
+    nota:
+      totalObjetivos === 0
+        ? 'No hay ningún turno de YPF cargado en Cachatore por ahora.'
+        : `Cachatore: ${reservado.length} con turno, ${buscando.length} buscando, ` +
+          `${reagendar.length} para reagendar, ${problemas.length} con problema.`,
   };
 }
 
@@ -1940,9 +1951,20 @@ async function _conversarGemini(db, system, historial, userText, persona) {
           error: `gemini:${String(finishReason).toLowerCase()}`,
         };
       }
+      // STOP pero sin texto: el modelo llamó tools y no generó respuesta final,
+      // o devolvió vacío. Antes caía al `return` de abajo con texto:'' SIN error
+      // → el usuario quedaba sin respuesta (caso real 2026-06-04: "turnos de
+      // mañana", "nombramelos"). Marcamos error para que aguas arriba mande un
+      // fallback en vez de un mensaje mudo. Fix 2026-06-05.
       log.warn(
-        `[agente/gemini] respuesta sin texto: ${JSON.stringify(resp).slice(0, 300)}`
+        `[agente/gemini] respuesta sin texto (STOP): ${JSON.stringify(resp).slice(0, 300)}`
       );
+      return {
+        texto: null,
+        toolsUsadas,
+        huboToolDeAccion,
+        error: bloqueo ? `gemini:block:${bloqueo}` : 'sin_texto',
+      };
     }
     return { texto, toolsUsadas, huboToolDeAccion };
   }
@@ -2191,7 +2213,7 @@ async function responder({ texto, persona, telefono, audio }, fs) {
     const r = await _conversarRobusto(
       provider, db, system, historial, userText, persona);
 
-    if (!r.texto) {
+    if (!r.texto || !String(r.texto).trim()) {
       log.warn(`[agente] sin respuesta (${r.error || 'vacío'}) rol=${persona.rol}`);
       // Activo pero sin poder responder: devolvemos un fallback (no null) para
       // que NADIE quede en silencio — antes el admin no recibía nada ante un
