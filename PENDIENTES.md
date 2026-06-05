@@ -7,6 +7,25 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-06-05 PM — Gomería: stock solo admin + conteo de inventario a ciegas
+
+Pedido Santiago. Dos partes (commits `bc200aa` + `9489a9e`, rules deployadas):
+- **(a) Stock oculto al rol GOMERIA**: capability nueva `verGomeriaStock`
+  (ADMIN+SUPERVISOR). El gomero monta/retira cubiertas pero NO ve cantidades —
+  FAB Stock oculto, pantalla de depósito con guard, y en el sheet de montaje
+  ve qué modelo poner SIN el número "en depósito".
+- **(b) Conteo a ciegas** (`GOMERIA_CONTEOS`): el gomero reporta cuántas ve por
+  modelo × nueva/recapada (sin ver el teórico); admin/supervisor compara contra
+  el sistema en "Revisar conteos" y ve faltan/sobran. NO auto-ajusta (el admin
+  decide). `compararConteoVsStock` pura + 9 tests. 2 pantallas nuevas + 2 tiles
+  en el hub.
+
+**⏳ FALTA verificación visual** (se codeó con analyze limpio + 36 tests, no se
+corrió la UI). La colección arranca vacía (se llena con el 1er conteo real).
+Sale en 1.0.92. Detalle: memoria `project_modulo_gomeria.md`.
+
+---
+
 ## 📅 2026-06-05 PM — Módulo Vacaciones (Administración) — construido completo
 
 "Panel de administración" → **"Panel de control"**. Nuevo módulo **Administración**
