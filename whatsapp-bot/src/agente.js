@@ -23,6 +23,9 @@ const log = require('./logger');
 // de modo que el agente y los avisos automáticos no discrepen ±1 día sobre
 // Timestamps de Firestore (auditoría 2026-06-06).
 const { aIsoLocal, diasEntreIso } = require('./fechas');
+// Tanqueros (choferes de enganches TANQUE, otra área de Vecchi) + testers se
+// excluyen del agente, igual que en los crons (decisión Santiago 2026-06-06).
+const { cargarExcluidos, esExcluido } = require('./excluidos');
 
 // ── Anthropic ──
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
@@ -2691,32 +2694,20 @@ async function responder({ texto, persona, telefono, audio }, fs) {
   // agente no actúa, cae al flujo de siempre.
   if (_toolsDelRol(persona.rol).length === 0) return null;
 
-  // ── DECISIÓN DE PRODUCTO PENDIENTE: el self-service del agente NO aplica la
-  //    exclusión de tanqueros/testers (cargarExcluidos/esExcluido de
-  //    excluidos.js) ───────────────────────────────────────────────────────
-  // Los crons SÍ filtran por esa lista (no le mandan avisos a los 3 choferes
-  // de enganches TANQUE —otra área de Vecchi— ni a los usuarios tester de
-  // Play/TestFlight). Acá, en cambio, las tools self-service (mi_jornada,
-  // mi_turno_ypf, mis_adelantos, mis_vencimientos, mi_unidad, mis_viajes,
-  // donde_esta_mi_unidad, etc.) responden por `persona.dni` SIN pasar por
-  // esExcluido → un tanquero o un tester que le escriba al bot obtendría sus
-  // propios datos.
-  //
-  // Se deja A PROPÓSITO sin filtrar: bloquear a alguien del self-service es una
-  // decisión de PRODUCTO, no un bug. Diferencias con los crons que lo hacen
-  // seguro por defecto:
-  //   - Un cron ESCRIBE proactivamente a un número que quizá no es nuestro
-  //     (los tanqueros son de otra área) → molesto/indebido. El self-service,
-  //     en cambio, solo RESPONDE a quien YA escribió, y solo con SUS PROPIOS
-  //     datos (la privacidad por DNI sigue intacta: un tanquero no ve a otro).
-  //   - Los testers no tienen WhatsApp real → en la práctica no llegan acá.
-  //
-  // Si el dueño decide excluirlos, el patrón seguro NO es devolver `null` (eso
-  // los manda al acuse genérico, confuso), sino una respuesta explícita del
-  // estilo "tu unidad es de otra área, comunicate con la oficina" — gateando
-  // por `await esExcluido(await cargarExcluidos(db), { dni: persona.dni })`
-  // ANTES de armar el prompt. Queda pendiente de definición. (Auditoría
-  // 2026-06-06, fix 4.)
+  // Excluir tanqueros/testers del self-service (decisión Santiago 2026-06-06).
+  // Los 3 choferes de enganches TANQUE son de OTRA área de Vecchi y los testers
+  // son usuarios de prueba — el agente NO les da datos del sistema, los deriva a
+  // la oficina (mismo set que usan los crons, `excluidos.js`). Va ANTES de armar
+  // el prompt / consumir cuota. Fail-safe: si la lista no carga, NO excluimos
+  // (mejor atender de más que dejar a un chofer real sin respuesta). La
+  // privacidad por DNI ya estaba intacta; esto evita atender a quien no es flota.
+  try {
+    if (esExcluido(await cargarExcluidos(db), { dni: persona.dni })) {
+      return 'Hola. Tu unidad pertenece a otra área de la empresa, así que ' +
+        'desde acá no te puedo dar información del sistema. Para lo que ' +
+        'necesites, comunicate con la oficina.';
+    }
+  } catch (_) { /* fail-safe: ante fallo de la lista, no excluir */ }
 
   const rlKey = persona.dni || telefono || 'anon';
   if (_rateLimited(rlKey)) {
