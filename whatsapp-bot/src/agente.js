@@ -1223,6 +1223,7 @@ async function _resolverChoferPorNombre(db, query, soloChofer, soloActivos = fal
   // transcriptos del audio ("Akerman" → "ACKERMANN"). Solo cuando el exacto dio
   // 0, para no ensuciar los matches exactos. Si el fuzzy trae varios, cae en la
   // rama "ambiguo" de abajo y el agente pide que aclaren.
+  let porFuzzy = false;
   if (matches.length === 0) {
     matches = snap.docs.filter((d) => {
       const data = d.data();
@@ -1230,6 +1231,7 @@ async function _resolverChoferPorNombre(db, query, soloChofer, soloActivos = fal
       const nomTokens = _normNombre(data.NOMBRE).split(' ').filter(Boolean);
       return qTokens.every((t) => _tokenFuzzyMatch(t, nomTokens));
     });
+    porFuzzy = matches.length > 0;
   }
   if (matches.length === 0) {
     return { ok: false, error: `No encontré a "${query}".` };
@@ -1242,6 +1244,20 @@ async function _resolverChoferPorNombre(db, query, soloChofer, soloActivos = fal
       error: `Varios coinciden con "${query}"; pedí que aclaren nombre y apellido.`,
     };
   }
+  // Match ÚNICO pero APROXIMADO (vino del fuzzy, no exacto): NO resolvemos en
+  // silencio — un apellido parecido ("Gracia"/"García", "Peralta"/"Peratta")
+  // puede ser OTRA persona. Pedimos confirmar antes de devolver datos o ejecutar
+  // acciones sobre el equivocado.
+  if (porFuzzy) {
+    const sug = matches[0].data().NOMBRE;
+    return {
+      ok: false,
+      ambiguo: true,
+      sugerencia: sug,
+      opciones: [sug],
+      error: `No encontré "${query}" exacto. ¿Quisiste decir ${sug}? Confirmámelo antes de seguir.`,
+    };
+  }
   return { ok: true, dni: matches[0].id, data: matches[0].data() };
 }
 
@@ -1251,7 +1267,7 @@ async function _estadoJornada(db, dni, nombre) {
     snap = await db.collection('JORNADAS')
       .where('chofer_dni', '==', dni)
       .where('jornada_fin_ts', '==', null)
-      .limit(1).get();
+      .get();
   } catch (e) {
     return { error: `No pude leer la jornada: ${e.message}` };
   }
@@ -1262,7 +1278,18 @@ async function _estadoJornada(db, dni, nombre) {
       nota: 'No hay una jornada de manejo en curso ahora.',
     };
   }
-  const j = snap.docs[0].data();
+  // Puede haber MÁS de una jornada abierta si alguna quedó colgada (no cerró por
+  // falta de señal). Sin orderBy en la query (evita un índice compuesto),
+  // elegimos la de inicio MÁS RECIENTE — la de hoy — no una vieja arbitraria.
+  const _abiertas = snap.docs.map((d) => d.data());
+  _abiertas.sort((a, b) => {
+    const ta = a.jornada_inicio_ts && a.jornada_inicio_ts.toMillis
+      ? a.jornada_inicio_ts.toMillis() : 0;
+    const tb = b.jornada_inicio_ts && b.jornada_inicio_ts.toMillis
+      ? b.jornada_inicio_ts.toMillis() : 0;
+    return tb - ta;
+  });
+  const j = _abiertas[0];
   // Manejo NETO de la jornada = bloques cerrados + bloque en curso. El
   // vigilador los cuenta por separado (`total_manejo_seg` suma SOLO los
   // bloques ya cerrados); el chofer entiende "cuánto manejé" como la SUMA.
@@ -1677,10 +1704,11 @@ async function _toolAdelantosPendientes(db, args) {
 async function _toolAdelantosEmitidos(db, args) {
   let dias = parseInt((args && args.dias) || 1, 10);
   if (isNaN(dias) || dias <= 0) dias = 1;
-  // Inicio de la ventana: 00:00 ART de hace (dias-1) días. La dedicada corre en
-  // hora AR, así que `new Date('YYYY-MM-DDT00:00:00')` es medianoche local ART.
-  const desde = new Date(`${_hoyIso()}T00:00:00`);
-  desde.setDate(desde.getDate() - (dias - 1));
+  // Inicio de la ventana: 00:00 ART de hace (dias-1) días. Anclado en UTC
+  // (00:00 ART = 03:00 UTC) para NO depender de la TZ del proceso — robusto si
+  // el bot algún día no corre en hora AR.
+  const desde = new Date(`${_hoyIso()}T03:00:00Z`);
+  desde.setUTCDate(desde.getUTCDate() - (dias - 1));
   const desdeMs = desde.getTime();
   let docs;
   try {
@@ -2335,7 +2363,21 @@ async function _conversarGemini(db, system, historial, userText, persona) {
     if (ultimaIter) {
       reqBody.toolConfig = { functionCallingConfig: { mode: 'NONE' } };
     }
-    const resp = await _fetchJson(url, headers, reqBody);
+    let resp;
+    try {
+      resp = await _fetchJson(url, headers, reqBody);
+    } catch (e) {
+      // Si YA ejecutamos una tool de ESCRITURA en una iteración previa y la API
+      // falla ahora (típico: 429 al pedir la redacción de la confirmación), NO
+      // propagamos. Propagarlo haría que `_conversarRobusto` reintente la charla
+      // desde cero y el modelo repita el write (caso real: DOBLE adelanto de
+      // plata). Devolvemos mudo con la marca → arriba sale el fallback y la
+      // acción queda hecha UNA sola vez.
+      if (huboToolDeAccion) {
+        return { texto: null, toolsUsadas, huboToolDeAccion, error: 'cuota_post_accion' };
+      }
+      throw e; // sin write previo: que reintente/fallback normal
+    }
     const cand = (resp && resp.candidates && resp.candidates[0]) || null;
     const finishReason = cand && cand.finishReason;
     const parts = (cand && cand.content && cand.content.parts) || [];

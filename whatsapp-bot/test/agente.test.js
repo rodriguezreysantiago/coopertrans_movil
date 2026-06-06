@@ -943,13 +943,15 @@ describe('agente — mejoras 2026-06-06 (fuzzy + jornada pasada + adelantos emit
   }
   const ts = (d) => ({ toDate: () => d, toMillis: () => d.getTime() });
 
-  test('fuzzy: "akerman" resuelve ACKERMANN (info_chofer)', async () => {
+  test('fuzzy: "akerman" NO resuelve directo, sugiere ACKERMANN para confirmar', async () => {
     const db = dbMix({ empleados: [
       { id: '35416448', data: { NOMBRE: 'ACKERMANN HERNAN', ROL: 'CHOFER', ACTIVO: true } },
       { id: '99', data: { NOMBRE: 'GOMEZ JUAN', ROL: 'CHOFER', ACTIVO: true } },
     ] });
     const r = await agente._ejecutarTool(db, 'info_chofer', { rol: 'ADMIN' }, { query: 'akerman' });
-    assert.strictEqual(r.nombre, 'ACKERMANN HERNAN');
+    // Match aproximado de 1 sola persona → pide confirmar, no actúa sobre el posible equivocado.
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.sugerencia, 'ACKERMANN HERNAN');
   });
 
   test('fuzzy NO pisa el match exacto si existe', async () => {
