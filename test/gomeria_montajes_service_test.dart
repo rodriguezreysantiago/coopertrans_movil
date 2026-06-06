@@ -50,7 +50,10 @@ void main() {
     test('cantidad <= 0 lanza MontajeException', () async {
       expect(
         () => service.comprar(
-            modeloId: 'm1', modeloEtiqueta: 'x', cantidad: 0, supervisorDni: '1'),
+            modeloId: 'm1',
+            modeloEtiqueta: 'x',
+            cantidad: 0,
+            supervisorDni: '1'),
         throwsA(isA<MontajeException>()),
       );
     });
@@ -73,8 +76,8 @@ void main() {
     test('rechaza montar en una posición ya ocupada', () async {
       await comprar5();
       await montarTrac('TRAC1_IZQ_EXT');
-      expect(() => montarTrac('TRAC1_IZQ_EXT'),
-          throwsA(isA<MontajeException>()));
+      expect(
+          () => montarTrac('TRAC1_IZQ_EXT'), throwsA(isA<MontajeException>()));
       // y el stock no se tocó de más (sigue en 4).
       expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 4);
     });
@@ -98,8 +101,8 @@ void main() {
 
     test('rechaza si no hay stock del SKU', () async {
       // sin comprar
-      expect(() => montarTrac('TRAC1_IZQ_EXT'),
-          throwsA(isA<MontajeException>()));
+      expect(
+          () => montarTrac('TRAC1_IZQ_EXT'), throwsA(isA<MontajeException>()));
     });
 
     test('rechaza posición de otro tipo de unidad', () async {
@@ -184,6 +187,112 @@ void main() {
         throwsA(isA<MontajeException>()),
       );
     });
+
+    // ── Idempotencia del +1 al stock (bug TOCTOU de doble crédito) ──────────
+    test(
+        'doble retiro SECUENCIAL del mismo montaje no suma de más (segundo lanza)',
+        () async {
+      await comprar5();
+      final id = await montarTrac('TRAC1_IZQ_EXT'); // stock 4
+      await service.retirar(
+        montajeId: id,
+        motivo: MotivoRetiro.desgaste,
+        destino: DestinoRetiro.deposito,
+        supervisorDni: '1',
+      );
+      // El segundo intento (doble-tap) rebota — ya estaba retirado.
+      expect(
+        () => service.retirar(
+            montajeId: id,
+            motivo: MotivoRetiro.desgaste,
+            destino: DestinoRetiro.deposito,
+            supervisorDni: '1'),
+        throwsA(isA<MontajeException>()),
+      );
+      // El stock vuelve a 5 una sola vez (no 6).
+      expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 5);
+    });
+
+    test(
+        'doble retiro CONCURRENTE (Future.wait) del mismo montaje no duplica el stock',
+        () async {
+      await comprar5();
+      final id = await montarTrac('TRAC1_IZQ_EXT'); // stock 4
+      // Dos retiros a depósito en paralelo (doble-tap real / 2 tablets):
+      // pueden interleaverse en los await. Uno puede fallar; lo toleramos.
+      final futuros = [
+        service.retirar(
+          montajeId: id,
+          motivo: MotivoRetiro.desgaste,
+          destino: DestinoRetiro.deposito,
+          supervisorDni: '1',
+        ),
+        service.retirar(
+          montajeId: id,
+          motivo: MotivoRetiro.desgaste,
+          destino: DestinoRetiro.deposito,
+          supervisorDni: '1',
+        ),
+      ];
+      // Al menos uno tiene que completar; el otro puede tirar MontajeException.
+      var ok = 0;
+      for (final f in futuros) {
+        try {
+          await f;
+          ok++;
+        } on MontajeException {/* el perdedor de la carrera */}
+      }
+      expect(ok, greaterThanOrEqualTo(1));
+      // Lo que importa: el +1 se emitió UNA sola vez → stock 5, nunca 6.
+      expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 5);
+      // Y hay un único movimiento de retiro a depósito (docId determinístico).
+      final movs = await fake.collection('GOMERIA_STOCK_MOVIMIENTOS').get();
+      final retiros = movs.docs
+          .where((d) => d.data()['tipo'] == 'RETIRO_A_DEPOSITO')
+          .toList();
+      expect(retiros.length, 1);
+    });
+  });
+
+  group('lock huérfano (Fix 2)', () {
+    test('montar destraba una posición con lock huérfano (sin montaje activo)',
+        () async {
+      await comprar5();
+      // Simular el caso real: el `delete` best-effort del lock en retirar/rotar
+      // falló y quedó un lock sin montaje activo → el esquema la muestra
+      // "vacía" pero antes la posición quedaba trabada para siempre.
+      await fake
+          .collection('GOMERIA_POSICIONES_ACTIVAS')
+          .doc('AB123CD__TRAC1_IZQ_EXT')
+          .set({
+        'unidad_id': 'AB123CD',
+        'posicion': 'TRAC1_IZQ_EXT',
+        'desde': Timestamp.now(),
+      });
+      // No hay ningún montaje activo en esa posición.
+      final activosAntes =
+          await service.streamMontajesActivosPorUnidad('AB123CD').first;
+      expect(activosAntes, isEmpty);
+
+      // Montar debe destrabar (borrar el lock huérfano) y crear el montaje.
+      final id = await montarTrac('TRAC1_IZQ_EXT');
+      expect(id, isNotEmpty);
+      final activos =
+          await service.streamMontajesActivosPorUnidad('AB123CD').first;
+      expect(activos.length, 1);
+      expect(activos.single.posicion, 'TRAC1_IZQ_EXT');
+      expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 4);
+    });
+
+    test('posición REALMENTE ocupada (lock + montaje activo) sigue rechazando',
+        () async {
+      await comprar5();
+      await montarTrac('TRAC1_IZQ_EXT'); // crea lock + montaje activo
+      // No es huérfano: hay un montaje activo. Debe seguir rechazando.
+      expect(
+          () => montarTrac('TRAC1_IZQ_EXT'), throwsA(isA<MontajeException>()));
+      expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 4);
+    });
   });
 
   group('rotar', () {
@@ -236,11 +345,13 @@ void main() {
       await comprar5();
       final id = await montarTrac('TRAC1_IZQ_EXT'); // kmAlMontar 100000
       final antes =
-          (await service.streamMontajesActivosPorUnidad('AB123CD').first).single;
+          (await service.streamMontajesActivosPorUnidad('AB123CD').first)
+              .single;
       await service.rotar(
           montajeId: id, posicionDestino: 'TRAC1_DER_EXT', supervisorDni: '1');
       final despues =
-          (await service.streamMontajesActivosPorUnidad('AB123CD').first).single;
+          (await service.streamMontajesActivosPorUnidad('AB123CD').first)
+              .single;
       expect(despues.kmUnidadAlMontar, antes.kmUnidadAlMontar);
       expect(despues.desde, antes.desde);
     });
@@ -277,9 +388,7 @@ void main() {
       final id = await montarEng('ENG1_IZQ_EXT', vida: 2);
       expect(
         () => service.rotar(
-            montajeId: id,
-            posicionDestino: 'ENG2_IZQ_EXT',
-            supervisorDni: '1'),
+            montajeId: id, posicionDestino: 'ENG2_IZQ_EXT', supervisorDni: '1'),
         throwsA(isA<MontajeException>()),
       );
     });
@@ -384,6 +493,51 @@ void main() {
           supervisorDni: '1');
       expect(await service.stockDisponible(modeloId: 'm1', vida: 2), 2);
       expect(await service.stockDisponible(modeloId: 'm1', vida: 1), 2);
+    });
+
+    test('recibirDeRecapado con recibidas negativas lanza', () async {
+      expect(
+        () => service.recibirDeRecapado(
+            modeloId: 'm1',
+            modeloEtiqueta: 'x',
+            vidaPrevia: 1,
+            recibidas: -1,
+            supervisorDni: '1'),
+        throwsA(isA<MontajeException>()),
+      );
+    });
+
+    test('recibirDeRecapado 0 no genera movimiento (no-op)', () async {
+      await service.recibirDeRecapado(
+          modeloId: 'm1',
+          modeloEtiqueta: 'x',
+          vidaPrevia: 1,
+          recibidas: 0,
+          supervisorDni: '1');
+      // sin movimientos => stock vacío.
+      expect(await service.stockActual(), isEmpty);
+    });
+
+    test(
+        'recibirDeRecapado NO topea contra lo enviado (decisión deliberada Fix 4)',
+        () async {
+      // Se mandaron 3 a recapar pero el proveedor "devuelve" 5 (caso de
+      // retornos parciales/escalonados / carga manual): NO se rebota — el
+      // control real es el inventario físico. Documentado en el servicio.
+      await comprar5(); // vida 1: 5
+      await service.mandarARecapar(
+          modeloId: 'm1',
+          modeloEtiqueta: 'x',
+          vida: 1,
+          cantidad: 3,
+          supervisorDni: '1');
+      await service.recibirDeRecapado(
+          modeloId: 'm1',
+          modeloEtiqueta: 'x',
+          vidaPrevia: 1,
+          recibidas: 5,
+          supervisorDni: '1');
+      expect(await service.stockDisponible(modeloId: 'm1', vida: 2), 5);
     });
   });
 

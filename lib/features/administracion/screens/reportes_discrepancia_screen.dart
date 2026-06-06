@@ -16,6 +16,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
+import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../models/reporte_discrepancia.dart';
 import '../services/reportes_discrepancia_service.dart';
@@ -202,13 +203,6 @@ class _Fila extends StatelessWidget {
   const _Fila(
       {required this.reporte, required this.onRevisar, required this.onReabrir});
 
-  String _fecha(DateTime? d) {
-    if (d == null) return '';
-    final l = d.toLocal();
-    String dos(int n) => n.toString().padLeft(2, '0');
-    return '${dos(l.day)}-${dos(l.month)} ${dos(l.hour)}:${dos(l.minute)}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -240,7 +234,8 @@ class _Fila extends StatelessWidget {
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
-              Text(_fecha(r.creadoEn),
+              // Con año: un reclamo de hace meses se distinguía de uno de hoy.
+              Text(AppFormatters.formatearFechaHoraSinSegundos(r.creadoEn),
                   style: AppType.monoSm.copyWith(color: c.textMuted)),
               const Spacer(),
               if (r.pendiente)

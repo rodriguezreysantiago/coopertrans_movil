@@ -33,7 +33,12 @@ class _GomeriaConteoScreenState extends State<GomeriaConteoScreen> {
   final _ctrlRecap = <String, TextEditingController>{};
   bool _enviando = false;
 
-  TextEditingController _ctrl(Map<String, TextEditingController> m, String id) =>
+  /// `true` una vez que el conteo se envió OK: dejamos salir sin preguntar
+  /// (el `Navigator.pop` post-envío no debe disparar la confirmación).
+  bool _guardado = false;
+
+  TextEditingController _ctrl(
+          Map<String, TextEditingController> m, String id) =>
       m.putIfAbsent(id, () => TextEditingController());
 
   @override
@@ -49,6 +54,38 @@ class _GomeriaConteoScreenState extends State<GomeriaConteoScreen> {
 
   int _leer(Map<String, TextEditingController> m, String id) =>
       int.tryParse((m[id]?.text ?? '').trim()) ?? 0;
+
+  /// `true` si el gomero tipeó alguna cantidad (cualquier campo no vacío y
+  /// distinto de 0). Sirve para avisar antes de salir y no perder el conteo.
+  bool _tieneDatos() {
+    bool algo(Map<String, TextEditingController> m) =>
+        m.values.any((c) => (int.tryParse(c.text.trim()) ?? 0) != 0);
+    return algo(_ctrlNuevas) || algo(_ctrlRecap);
+  }
+
+  /// Confirma la salida cuando hay datos sin enviar. Devuelve `true` si el
+  /// usuario decide salir igual (descartar lo tipeado).
+  Future<bool> _confirmarSalida() async {
+    if (_guardado || _enviando || !_tieneDatos()) return true;
+    final salir = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('¿Salir sin enviar?'),
+        content: const Text(
+            'Cargaste cantidades que todavía no enviaste. Si salís ahora se '
+            'pierde el conteo.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Seguir contando')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Salir igual')),
+        ],
+      ),
+    );
+    return salir ?? false;
+  }
 
   Future<void> _enviar(List<CubiertaModelo> modelos) async {
     final lineas = <LineaConteo>[];
@@ -93,6 +130,7 @@ class _GomeriaConteoScreenState extends State<GomeriaConteoScreen> {
         responsableNombre: PrefsService.nombre,
       );
       if (!mounted) return;
+      _guardado = true; // ya se envió: la salida no debe pedir confirmación.
       Navigator.pop(context);
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Conteo enviado. La oficina lo va a controlar.')));
@@ -107,80 +145,99 @@ class _GomeriaConteoScreenState extends State<GomeriaConteoScreen> {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return AppScaffold(
-      title: 'Conteo de inventario',
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection(AppCollections.cubiertasModelos)
-            .where('activo', isEqualTo: true)
-            .snapshots(),
-        builder: (context, snap) {
-          if (snap.hasError) {
-            return const AppErrorState(title: 'No se pudieron cargar los modelos');
-          }
-          if (!snap.hasData) return const AppLoadingState();
-          final modelos = snap.data!.docs.map(CubiertaModelo.fromDoc).toList()
-            ..sort((a, b) => a.etiqueta.toUpperCase().compareTo(b.etiqueta.toUpperCase()));
-          if (modelos.isEmpty) {
-            return const AppEmptyState(
-              icon: Icons.tire_repair_outlined,
-              title: 'Sin modelos en el catálogo',
-              subtitle: 'No hay modelos de cubierta activos para contar.',
-            );
-          }
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
-                child: AppCard(
-                  glow: true,
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  child: Row(
-                    children: [
-                      Icon(Icons.inventory_2_outlined, size: 18, color: c.brand),
-                      const SizedBox(width: AppSpacing.sm),
-                      Expanded(
-                        child: Text(
-                          'Contá cuántas cubiertas hay en el depósito de cada '
-                          'modelo. La oficina compara con el sistema.',
-                          style: AppType.bodySm.copyWith(color: c.textSecondary),
+    return PopScope(
+      // Avisar antes de salir si hay un conteo a medio cargar (back del
+      // sistema o flecha del AppBar): no perder lo tipeado por un toque.
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        // Capturamos el Navigator ANTES del await para no usar `context`
+        // cruzando el gap async (el `mounted` igual lo confirma).
+        final nav = Navigator.of(context);
+        if (await _confirmarSalida() && mounted) {
+          nav.pop();
+        }
+      },
+      child: AppScaffold(
+        title: 'Conteo de inventario',
+        body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+          stream: FirebaseFirestore.instance
+              .collection(AppCollections.cubiertasModelos)
+              .where('activo', isEqualTo: true)
+              .snapshots(),
+          builder: (context, snap) {
+            if (snap.hasError) {
+              return const AppErrorState(
+                  title: 'No se pudieron cargar los modelos');
+            }
+            if (!snap.hasData) return const AppLoadingState();
+            final modelos = snap.data!.docs.map(CubiertaModelo.fromDoc).toList()
+              ..sort((a, b) =>
+                  a.etiqueta.toUpperCase().compareTo(b.etiqueta.toUpperCase()));
+            if (modelos.isEmpty) {
+              return const AppEmptyState(
+                icon: Icons.tire_repair_outlined,
+                title: 'Sin modelos en el catálogo',
+                subtitle: 'No hay modelos de cubierta activos para contar.',
+              );
+            }
+            return Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.lg,
+                      AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
+                  child: AppCard(
+                    glow: true,
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Row(
+                      children: [
+                        Icon(Icons.inventory_2_outlined,
+                            size: 18, color: c.brand),
+                        const SizedBox(width: AppSpacing.sm),
+                        Expanded(
+                          child: Text(
+                            'Contá cuántas cubiertas hay en el depósito de cada '
+                            'modelo. La oficina compara con el sistema.',
+                            style:
+                                AppType.bodySm.copyWith(color: c.textSecondary),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
-                  itemCount: modelos.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
-                  itemBuilder: (_, i) => _FilaModelo(
-                    modelo: modelos[i],
-                    ctrlNuevas: _ctrl(_ctrlNuevas, modelos[i].id),
-                    ctrlRecap: _ctrl(_ctrlRecap, modelos[i].id),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
+                    itemCount: modelos.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: AppSpacing.sm),
+                    itemBuilder: (_, i) => _FilaModelo(
+                      modelo: modelos[i],
+                      ctrlNuevas: _ctrl(_ctrlNuevas, modelos[i].id),
+                      ctrlRecap: _ctrl(_ctrlRecap, modelos[i].id),
+                    ),
                   ),
                 ),
-              ),
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
-                  child: AppButton(
-                    label: 'Enviar conteo',
-                    icon: Icons.send_outlined,
-                    expand: true,
-                    loading: _enviando,
-                    onPressed: _enviando ? null : () => _enviar(modelos),
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
+                    child: AppButton(
+                      label: 'Enviar conteo',
+                      icon: Icons.send_outlined,
+                      expand: true,
+                      loading: _enviando,
+                      onPressed: _enviando ? null : () => _enviar(modelos),
+                    ),
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -238,7 +295,8 @@ class _CampoNum extends StatelessWidget {
         children: [
           Text(label.toUpperCase(),
               style: AppType.eyebrow.copyWith(color: c.textMuted, fontSize: 8),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
           const SizedBox(height: 2),
           TextField(
             controller: ctrl,

@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/excluidos_service.dart';
 import '../../../shared/constants/app_colors.dart';
+import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../models/vacacion.dart';
 import '../services/vacaciones_service.dart';
@@ -44,13 +45,19 @@ class _FilaVac {
   });
 }
 
-/// FECHA_INGRESO en EMPLEADOS puede venir como String ISO (lo que escribe el
-/// form) o como Timestamp (docs viejos). Normaliza a DateTime para que el
-/// editor pueda sugerir los días por antigüedad.
+/// FECHA_INGRESO en EMPLEADOS puede venir como Timestamp (docs viejos), como
+/// String ISO (lo que escribe el form actual) o como DD-MM-AAAA / DD/MM/AAAA
+/// (ediciones manuales en consola o migraciones). Normaliza a DateTime para
+/// que el editor pueda sugerir los días por antigüedad.
+///
+/// El Timestamp se resuelve acá (su `.toString()` no es parseable); el resto
+/// de los formatos los maneja el parser canónico `AppFormatters.tryParseFecha`
+/// (local-safe, igual que el resto de la app). Antes el parseo de String era
+/// solo `DateTime.tryParse` (ISO) → a quien tenía la fecha en DD-MM no se le
+/// calculaba la sugerencia de días.
 DateTime? _parseFechaIngreso(dynamic raw) {
   if (raw is Timestamp) return raw.toDate();
-  if (raw is String && raw.isNotEmpty) return DateTime.tryParse(raw);
-  return null;
+  return AppFormatters.tryParseFecha(raw);
 }
 
 class AdminVacacionesScreen extends StatefulWidget {
@@ -167,8 +174,13 @@ class _AdminVacacionesScreenState extends State<AdminVacacionesScreen> {
 
     // KPIs sobre lo filtrado.
     final conVac = filtradas.where((f) => f.vac != null).toList();
+    // El total clampea cada saldo a >= 0: un saldo negativo es señal de carga
+    // errónea (cargaron más días de los que corresponden), no "días de menos"
+    // que compensen a otro. Sumarlo crudo dejaba que un +5 y un −5 se anularan
+    // y escondía AMBAS anomalías. Los negativos se cuentan aparte abajo.
     final restanTotal =
-        conVac.fold<int>(0, (acc, f) => acc + (f.vac!.restan));
+        conVac.fold<int>(0, (acc, f) => acc + (f.vac!.restan < 0 ? 0 : f.vac!.restan));
+    final conNegativo = conVac.where((f) => f.vac!.restan < 0).length;
     final sinCargar = filtradas.length - conVac.length;
 
     return Padding(
@@ -200,9 +212,19 @@ class _AdminVacacionesScreenState extends State<AdminVacacionesScreen> {
           const SizedBox(height: AppSpacing.md),
 
           // ── KPIs ──
+          // "Días restantes" suma solo saldos >= 0 (ver restanTotal). Si hay
+          // saldos negativos —carga errónea— se avisa con un delta en rojo en
+          // vez de dejarlos compensar el total y desaparecer.
           AppKpiStrip(stats: [
             AppStat(label: 'Empleados', value: '${filtradas.length}'),
-            AppStat(label: 'Días restantes', value: '$restanTotal'),
+            AppStat(
+              label: 'Días restantes',
+              value: '$restanTotal',
+              delta: conNegativo > 0
+                  ? '$conNegativo en negativo'
+                  : null,
+              deltaColor: AppColors.error,
+            ),
             AppStat(label: 'Sin cargar', value: '$sinCargar'),
           ]),
           const SizedBox(height: AppSpacing.md),

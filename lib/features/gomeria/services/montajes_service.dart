@@ -39,6 +39,8 @@ class MontajesService {
       _db.collection(AppCollections.gomeriaStockMovimientos);
   CollectionReference<Map<String, dynamic>> get _locks =>
       _db.collection(AppCollections.gomeriaPosicionesActivas);
+  CollectionReference<Map<String, dynamic>> get _retirosLock =>
+      _db.collection(AppCollections.gomeriaRetirosLock);
 
   // ===========================================================================
   // STOCK
@@ -97,6 +99,12 @@ class MontajesService {
     return total;
   }
 
+  /// Emite un movimiento de stock. Si se pasa [docId], usa un id
+  /// DETERMINÍSTICO con `set` (en vez de `add`), de modo que reemitir el mismo
+  /// movimiento (p.ej. dos retiros concurrentes del mismo montaje) produzca UN
+  /// solo documento → el stock se ajusta una sola vez (idempotencia sin
+  /// runTransaction). Sin [docId] usa `add` (id aleatorio, comportamiento de
+  /// siempre para compras/ajustes/etc.).
   Future<void> _emitirMovimiento({
     required TipoMovimientoStock tipo,
     required String modeloId,
@@ -108,6 +116,7 @@ class MontajesService {
     String? motivo,
     String? refUnidad,
     String? refPosicion,
+    String? docId,
   }) async {
     final mov = StockMovimiento(
       id: '',
@@ -123,7 +132,11 @@ class MontajesService {
       refUnidad: refUnidad,
       refPosicion: refPosicion,
     );
-    await _movs.add(mov.toMap());
+    if (docId != null) {
+      await _movs.doc(docId).set(mov.toMap());
+    } else {
+      await _movs.add(mov.toMap());
+    }
   }
 
   /// Ajuste por INVENTARIO FÍSICO (control anti-robo). El gomero contó
@@ -206,6 +219,16 @@ class MontajesService {
   /// Recibe cubiertas del proveedor de recapado: `recibidas` vuelven al
   /// depósito con vida +1 (las descartadas por el proveedor no vuelven, no
   /// generan movimiento). `vidaPrevia` es la vida con la que se enviaron.
+  ///
+  /// DECISIÓN DELIBERADA (no es un bug): NO se valida `recibidas` contra cuánto
+  /// se mandó a recapar. El stock se lleva por CANTIDADES, no por lotes: este
+  /// servicio no rastrea "cuántas de vida N están afuera en el proveedor" ni
+  /// liga envío↔retorno, y los retornos suelen ser PARCIALES y escalonados
+  /// (vuelven 2 hoy, 1 la semana que viene). Un tope acá podría rebotar un
+  /// retorno legítimo. La consistencia la da el conteo de inventario físico
+  /// periódico (`ajustarInventario`), que es el control de verdad — mismo
+  /// criterio que el resto del módulo. Si en el futuro se modela el recapado
+  /// por lotes (saldo enviado por SKU), acá iría la validación contra ese saldo.
   Future<void> recibirDeRecapado({
     required String modeloId,
     required String modeloEtiqueta,
@@ -311,14 +334,38 @@ class MontajesService {
     final disp = await stockDisponible(modeloId: modeloId, vida: vida);
     if (disp <= 0) {
       throw MontajeException(
-          'No hay stock de "$modeloEtiqueta" ($vida=vida) en el depósito.');
+          'No hay stock de "$modeloEtiqueta" (vida $vida) en el depósito.');
     }
-    // 4) Posición libre: el lock NO debe existir.
+    // 4) Posición libre: el lock NO debe existir. Si existe, verificamos que
+    //    de verdad haya un montaje activo en esa unidad+posición. Si el lock
+    //    está HUÉRFANO (quedó de un retirar/rotar cuyo `delete` best-effort
+    //    falló: la posición se muestra "vacía" en el esquema pero el lock la
+    //    traba), lo borramos y seguimos en lugar de rechazar para siempre.
     final lockRef = _locks.doc(_posLockId(unidadId, posicion));
     final lockSnap = await lockRef.get();
     if (lockSnap.exists) {
-      throw MontajeException(
-          'La posición $posicion de $unidadId ya está ocupada.');
+      final qActivo = await _montajes
+          .where('unidad_id', isEqualTo: unidadId)
+          .where('posicion', isEqualTo: posicion)
+          .where('hasta', isNull: true)
+          .limit(1)
+          .get();
+      if (qActivo.docs.isNotEmpty) {
+        // Ocupada de verdad: hay una cubierta activa ahí.
+        throw MontajeException(
+            'La posición $posicion de $unidadId ya está ocupada.');
+      }
+      // Lock huérfano: sin montaje activo. Liberarlo para destrabar la
+      // posición. Si el delete falla, el set de abajo igual rebota (rule
+      // `update: if false`) y queda como estaba — no empeoramos nada.
+      AppLogger.recordError(
+        StateError('Lock huérfano en $unidadId/$posicion (sin montaje activo)'),
+        StackTrace.current,
+        reason: 'gomeria.montar: limpiando lock huérfano',
+      );
+      try {
+        await lockRef.delete();
+      } catch (_) {/* best-effort: el set de abajo decide */}
     }
 
     // 5) Crear el lock. En producción la rule `update: if false` garantiza
@@ -397,6 +444,15 @@ class MontajesService {
   /// motivo), libera el lock de posición y, si el destino es el depósito,
   /// suma 1 al stock del SKU. Recapado/descarte no tocan el stock de
   /// depósito (la cubierta va directo del vehículo al proveedor/baja).
+  ///
+  /// IDEMPOTENTE ante dos retiros concurrentes del MISMO montaje (doble-tap /
+  /// 2 tablets): el chequeo `esActivo` tiene una ventana TOCTOU (ambos leen
+  /// `hasta == null` antes de que el primero cierre), así que el +1 al stock
+  /// se protege con un LOCK de cierre dedicado (`GOMERIA_RETIROS_LOCK`, docId
+  /// = montajeId, rule `update: if false`): el primero que crea el lock emite
+  /// el movimiento; el segundo choca con el lock y NO vuelve a sumar. Mismo
+  /// patrón que el lock de posición — sin runTransaction (prohibido en
+  /// Windows).
   Future<void> retirar({
     required String montajeId,
     required MotivoRetiro motivo,
@@ -416,6 +472,21 @@ class MontajesService {
       throw MontajeException('El montaje $montajeId ya estaba retirado.');
     }
 
+    // Tomar el lock de cierre ANTES de tocar el stock. Esto es lo que hace
+    // idempotente al +1: si dos retiros del mismo montaje corren a la par,
+    // solo uno crea el lock; el otro rebota acá (en producción por la rule
+    // `update: if false`; en código por el get previo) y sale sin sumar.
+    final lockRetiroRef = _retirosLock.doc(montajeId);
+    final lockRetiroSnap = await lockRetiroRef.get();
+    if (lockRetiroSnap.exists) {
+      throw MontajeException('El montaje $montajeId ya estaba retirado.');
+    }
+    await lockRetiroRef.set({
+      'montaje_id': montajeId,
+      'fecha': FieldValue.serverTimestamp(),
+      'retirado_por_dni': supervisorDni,
+    });
+
     // Cerrar el montaje.
     await ref.update({
       'hasta': FieldValue.serverTimestamp(),
@@ -432,7 +503,13 @@ class MontajesService {
       await _locks.doc(_posLockId(montaje.unidadId, montaje.posicion)).delete();
     } catch (_) {/* best-effort */}
 
-    // Stock: solo el destino DEPÓSITO devuelve la cubierta al stock.
+    // Stock: solo el destino DEPÓSITO devuelve la cubierta al stock. Doble
+    // candado contra el +1 fantasma de dos retiros concurrentes del mismo
+    // montaje: (1) el lock de cierre tomado arriba, y (2) un docId
+    // DETERMINÍSTICO para el movimiento (`retiro_<montajeId>`), de modo que aun
+    // si por una carrera se llegase a emitir dos veces, ambos `set` colapsan
+    // en UN solo documento y el stock suma +1 una sola vez. Esto cubre incluso
+    // el caso fake/sin-rules donde el get-then-set del lock no es atómico.
     if (destino == DestinoRetiro.deposito) {
       await _emitirMovimiento(
         tipo: TipoMovimientoStock.retiroADeposito,
@@ -444,6 +521,7 @@ class MontajesService {
         supervisorNombre: supervisorNombre,
         refUnidad: montaje.unidadId,
         refPosicion: montaje.posicion,
+        docId: 'retiro_$montajeId',
       );
     }
   }
@@ -524,7 +602,9 @@ class MontajesService {
     await refA.update({'posicion': posicionDestino});
     try {
       await _locks.doc(_posLockId(mA.unidadId, codigoOrigen)).delete();
-    } catch (_) {/* best-effort: posición origen queda como "ocupada" huérfana */}
+    } catch (_) {
+      /* best-effort: posición origen queda como "ocupada" huérfana */
+    }
   }
 
   /// Valida que una cubierta de [tipoUso]/[vida] pueda ir en [pos]: mismo
@@ -554,7 +634,8 @@ class MontajesService {
         .where('unidad_id', isEqualTo: unidadId)
         .where('hasta', isNull: true)
         .snapshots()
-        .map((s) => s.docs.map((d) => Montaje.fromMap(d.id, d.data())).toList());
+        .map(
+            (s) => s.docs.map((d) => Montaje.fromMap(d.id, d.data())).toList());
   }
 
   // ===========================================================================

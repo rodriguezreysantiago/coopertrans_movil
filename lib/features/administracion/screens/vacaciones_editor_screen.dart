@@ -102,12 +102,17 @@ class _VacacionEditorScreenState extends State<VacacionEditorScreen> {
     return false;
   }
 
+  /// Fin del rango permitido del date picker (los goces pueden caer en años
+  /// siguientes al período). Único origen — lo usan el picker y el default de
+  /// `_agregarPeriodo` para no desincronizarse.
+  DateTime get _lastDate => DateTime(widget.anio + 2, 12, 31);
+
   Future<DateTime?> _pickFecha(DateTime inicial) {
     return showDatePicker(
       context: context,
       initialDate: inicial,
       firstDate: DateTime(widget.anio, 1, 1),
-      lastDate: DateTime(widget.anio + 2, 12, 31),
+      lastDate: _lastDate,
       locale: const Locale('es', 'AR'),
       helpText: 'Elegí la fecha',
     );
@@ -115,10 +120,16 @@ class _VacacionEditorScreenState extends State<VacacionEditorScreen> {
 
   void _agregarPeriodo() {
     // Default sensato: enero del año siguiente (como suele cargarse), 7 días.
-    final base = _periodos.isEmpty
+    var inicio = _periodos.isEmpty
         ? DateTime(widget.anio + 1, 1, 5)
         : _periodos.last.fin.add(const Duration(days: 30));
-    setState(() => _periodos.add(_PeriodoEdit(base, base.add(const Duration(days: 6)))));
+    // El default no puede superar el lastDate del picker (si el último período
+    // ya está cerca del tope, +30 días se iría de rango y el initialDate del
+    // picker quedaría fuera de [firstDate, lastDate] → assert).
+    if (inicio.isAfter(_lastDate)) inicio = _lastDate;
+    var fin = inicio.add(const Duration(days: 6));
+    if (fin.isAfter(_lastDate)) fin = _lastDate;
+    setState(() => _periodos.add(_PeriodoEdit(inicio, fin)));
   }
 
   Future<void> _guardar() async {
@@ -129,6 +140,31 @@ class _VacacionEditorScreenState extends State<VacacionEditorScreen> {
             content: Text('Un período tiene el fin antes del inicio.')));
         return;
       }
+    }
+    // Aviso si hay períodos solapados (mismo banner rojo que muestra la UI).
+    // Mismo patrón "¿guardar igual?" que los días negativos: no bloqueamos
+    // de plano (puede ser intencional un solapamiento de 1 día por reintegro),
+    // pero forzamos una confirmación para que no se persista por descuido.
+    if (_haySolapados) {
+      final seguir = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Períodos solapados'),
+          content: const Text(
+              'Hay períodos de vacaciones que se pisan entre sí. '
+              '¿Guardar igual?'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Revisar')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Guardar igual')),
+          ],
+        ),
+      );
+      if (seguir != true) return;
+      if (!mounted) return;
     }
     // Aviso si quedan días negativos (cargó más de lo que corresponde).
     if (_restan < 0) {
@@ -269,9 +305,16 @@ class _VacacionEditorScreenState extends State<VacacionEditorScreen> {
                               ),
                             ),
                             onChanged: (txt) {
-                              final n = int.tryParse(txt.trim());
+                              final t = txt.trim();
+                              // Vacío = el operador está borrando para retipear.
+                              // NO caemos a 0 ni marcamos override hasta que
+                              // haya un número válido (antes un campo vacío
+                              // momentáneo fijaba 0 días y pasaba a "manual").
+                              if (t.isEmpty) return;
+                              final n = int.tryParse(t);
+                              if (n == null) return;
                               setState(() {
-                                _dias = n ?? 0;
+                                _dias = n;
                                 // Tocar el campo = override manual.
                                 _diasAuto = false;
                               });

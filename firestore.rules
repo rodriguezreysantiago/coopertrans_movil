@@ -1275,6 +1275,16 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // Lock de idempotencia del RETIRO (docId = montajeId). Mismo patrón que el
+    // lock de posición: `update: if false` hace que un segundo retiro
+    // concurrente del MISMO montaje (doble-tap / 2 tablets) rebote y NO vuelva
+    // a sumar +1 al stock. Sin delete (queda como traza del cierre).
+    match /GOMERIA_RETIROS_LOCK/{doc} {
+      allow read: if puedeOperarGomeria();
+      allow create: if puedeOperarGomeria();
+      allow update, delete: if false;
+    }
+
     // ========================================================================
     // CUBIERTAS_PROVEEDORES — catálogo de proveedores de recapado
     // ========================================================================

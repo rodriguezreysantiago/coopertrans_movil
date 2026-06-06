@@ -47,6 +47,27 @@ class GomeriaV2UnidadScreen extends StatefulWidget {
 class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
   final _service = MontajesService();
 
+  /// Cache de modelos ACTIVOS (`CUBIERTAS_MODELOS`) por id, a nivel pantalla.
+  /// El catálogo de modelos cambia muy poco (un admin agrega un modelo cada
+  /// tanto), así que se lee UNA vez por visita en lugar de releer toda la
+  /// colección en cada apertura del sheet de montaje. Se refresca al re-entrar
+  /// a la pantalla (instancia nueva).
+  Map<String, CubiertaModelo>? _modelosCache;
+
+  Future<Map<String, CubiertaModelo>> _modelosActivos() async {
+    final cache = _modelosCache;
+    if (cache != null) return cache;
+    final snap = await FirebaseFirestore.instance
+        .collection(AppCollections.cubiertasModelos)
+        .where('activo', isEqualTo: true)
+        .get();
+    final modelos = {
+      for (final d in snap.docs) d.id: CubiertaModelo.fromDoc(d),
+    };
+    _modelosCache = modelos;
+    return modelos;
+  }
+
   /// Color semántico del semáforo de desgaste, en tokens del tema.
   Color _colorNivel(NivelDesgaste n, AppColorsExt c) {
     switch (n) {
@@ -150,7 +171,8 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
     final secciones = <Widget>[
       for (final eje in ejes) ...[
         Padding(
-          padding: const EdgeInsets.fromLTRB(0, AppSpacing.md, 0, AppSpacing.sm),
+          padding:
+              const EdgeInsets.fromLTRB(0, AppSpacing.md, 0, AppSpacing.sm),
           child: AppEyebrow('Eje $eje'),
         ),
         for (final e in porEje[eje]!) _tilePosicion(e, estados),
@@ -182,8 +204,8 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(AppSpacing.lg, 0,
-                          AppSpacing.sm, AppSpacing.lg),
+                      padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.lg, 0, AppSpacing.sm, AppSpacing.lg),
                       child: ayuda,
                     ),
                   ],
@@ -193,8 +215,8 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
               Expanded(
                 flex: 4,
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.sm, AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
+                  padding: const EdgeInsets.fromLTRB(AppSpacing.sm,
+                      AppSpacing.lg, AppSpacing.lg, AppSpacing.xxl),
                   children: secciones,
                 ),
               ),
@@ -320,7 +342,8 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
       context: context,
       backgroundColor: context.colors.surface2,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
       ),
       builder: (sheetCtx) => SafeArea(
         child: ListView(
@@ -375,8 +398,8 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
     }).toList();
 
     if (destinos.isEmpty) {
-      AppFeedback.error(context,
-          'No hay otra posición compatible para rotar esta cubierta.');
+      AppFeedback.error(
+          context, 'No hay otra posición compatible para rotar esta cubierta.');
       return;
     }
 
@@ -384,7 +407,8 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
       context: context,
       backgroundColor: context.colors.surface2,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
       ),
       builder: (sheetCtx) {
         final c = sheetCtx.colors;
@@ -441,13 +465,7 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
   Future<void> _montar(EstadoPosicion e) async {
     // Stock disponible + modelos compatibles con el tipo de uso de la posición.
     final stock = await _service.stockActual();
-    final modelosSnap = await FirebaseFirestore.instance
-        .collection(AppCollections.cubiertasModelos)
-        .where('activo', isEqualTo: true)
-        .get();
-    final modelos = {
-      for (final d in modelosSnap.docs) d.id: CubiertaModelo.fromDoc(d),
-    };
+    final modelos = await _modelosActivos();
     // Filtrar stock por tipo de uso de la posición.
     final opciones = stock.where((s) {
       final mod = modelos[s.modeloId];
@@ -475,7 +493,8 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
       context: context,
       backgroundColor: context.colors.surface2,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
       ),
       builder: (sheetCtx) {
         final c = sheetCtx.colors;
@@ -509,8 +528,9 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
     if (elegido == null || !mounted) return;
 
     final mod = modelos[elegido.modeloId]!;
-    final kmVida =
-        elegido.vida <= 1 ? mod.kmVidaEstimadaNueva : mod.kmVidaEstimadaRecapada;
+    final kmVida = elegido.vida <= 1
+        ? mod.kmVidaEstimadaNueva
+        : mod.kmVidaEstimadaRecapada;
     try {
       await _service.montar(
         unidadId: widget.unidadId,
@@ -579,8 +599,7 @@ class _GomeriaV2UnidadScreenState extends State<GomeriaV2UnidadScreen> {
                   label: 'Cancelar',
                   onPressed: () => Navigator.pop(ctx, false)),
               AppButton.danger(
-                  label: 'Retirar',
-                  onPressed: () => Navigator.pop(ctx, true)),
+                  label: 'Retirar', onPressed: () => Navigator.pop(ctx, true)),
             ],
           ),
         );
@@ -811,8 +830,8 @@ class _SheetOpcion extends StatelessWidget {
                 children: [
                   Text(
                     titulo,
-                    style: AppType.body.copyWith(
-                        color: c.text, fontWeight: FontWeight.w500),
+                    style: AppType.body
+                        .copyWith(color: c.text, fontWeight: FontWeight.w500),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),

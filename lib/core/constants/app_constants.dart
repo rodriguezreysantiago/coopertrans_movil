@@ -38,12 +38,14 @@ class AppRoutes {
   static const String adminIcmRanking = '/admin_icm_ranking';
   static const String adminIcmReporteSemanal = '/admin_icm_reporte_semanal';
   static const String adminIcmMapaCalor = '/admin_icm_mapa_calor';
+
   /// Detalle individual de un chofer en ICM (ICM mes + comparativa vs mes
   /// anterior + urbano/no-urbano + infracciones). El tile directo del hub
   /// quedó eliminado 2026-05-23 (baja utilidad como entry point general),
   /// pero la pantalla se mantiene como destino de los tap → detalle desde
   /// el ranking + top 5 mejores/peores del hub + top 5 del reporte mensual.
   static const String adminIcmDetalleChofer = '/admin_icm_detalle_chofer';
+
   /// Jornada por chofer y día — inicio/fin, tramos de manejo y paradas
   /// reconstruidos desde SITRACK_EVENTOS por la CF
   /// `reconstruirJornadasDiario`. Marca descansos suficientes (≥15 min
@@ -53,7 +55,8 @@ class AppRoutes {
   /// Auditoría de asignaciones — cruza el histórico REAL del iButton
   /// (SITRACK_IBUTTONS_HISTORICO) contra ASIGNACIONES_VEHICULO. Util
   /// para multas tardías + investigaciones + reconciliación.
-  static const String adminAuditoriaAsignaciones = '/admin_auditoria_asignaciones';
+  static const String adminAuditoriaAsignaciones =
+      '/admin_auditoria_asignaciones';
 
   /// Módulo "Descargas" — cola en vivo + recién + KPIs basado en
   /// presencia REAL en geocercas configurables. Reemplazó al detector
@@ -73,28 +76,34 @@ class AppRoutes {
   static const String adminVolvoAlertas = '/admin_volvo_alertas';
   static const String adminEcoDriving = '/admin_eco_driving';
   static const String adminEstadoBot = '/admin_estado_bot';
+
   /// CRUD de destinatarios de notificación (M5, 2026-05-24). Override
   /// editable desde la app de los DNIs hardcoded en CF y bot.
   static const String adminDestinatariosNotificacion =
       '/admin_destinatarios_notificacion';
 
   // Gomería (V2 montaje por posición; el sistema viejo CUB-XXXX se dio de baja).
-  static const String adminGomeriaMarcasModelos = '/admin_gomeria_marcas_modelos';
+  static const String adminGomeriaMarcasModelos =
+      '/admin_gomeria_marcas_modelos';
 
   // Logística — preparación del módulo de planeamiento de viajes.
   // Por ahora son catálogos (empresas, ubicaciones, tarifas) que en el
   // futuro alimentan la planificación de viajes y reportes de margen.
   static const String adminLogisticaHub = '/admin_logistica';
   static const String adminLogisticaEmpresas = '/admin_logistica_empresas';
-  static const String adminLogisticaUbicaciones = '/admin_logistica_ubicaciones';
+  static const String adminLogisticaUbicaciones =
+      '/admin_logistica_ubicaciones';
   static const String adminLogisticaTarifas = '/admin_logistica_tarifas';
   static const String adminLogisticaTarifaForm = '/admin_logistica_tarifa_form';
-  static const String adminLogisticaMapaTarifas = '/admin_logistica_mapa_tarifas';
+  static const String adminLogisticaMapaTarifas =
+      '/admin_logistica_mapa_tarifas';
   // Viajes — ejecución y liquidación (2026-05-09).
   static const String adminLogisticaViajes = '/admin_logistica_viajes';
   static const String adminLogisticaViajeForm = '/admin_logistica_viaje_form';
-  static const String adminLogisticaViajeDetalle = '/admin_logistica_viaje_detalle';
-  static const String adminLogisticaLiquidacion = '/admin_logistica_liquidacion';
+  static const String adminLogisticaViajeDetalle =
+      '/admin_logistica_viaje_detalle';
+  static const String adminLogisticaLiquidacion =
+      '/admin_logistica_liquidacion';
   // Adelantos — independientes de viajes (2026-05-13). Por sueldo o
   // por viaje específico, con comprobante imprimible (mismo counter
   // que tenía el adelanto del viaje en la versión vieja).
@@ -110,7 +119,6 @@ class AppRoutes {
   // en iTurnos (corre 24/7 en la PC dedicada). La app escribe la selección
   // (qué choferes, qué franja) en Firestore y el bot la lee en vivo.
   static const String adminCachatoreHub = '/admin_cachatore';
-
 
   // Auditorías
   static const String vencimientosChoferes = '/vencimientos_choferes';
@@ -148,10 +156,12 @@ class AppCollections {
   static const String revisiones = 'REVISIONES';
   static const String checklists = 'CHECKLISTS';
   static const String telemetriaHistorico = 'TELEMETRIA_HISTORICO';
+
   /// Idempotencia para notificaciones de mantenimiento: cada vez que un
   /// tractor cruza un umbral, escribimos un doc para no notificar dos
   /// veces el mismo evento en el mismo "ciclo".
   static const String mantenimientosAvisados = 'MANTENIMIENTOS_AVISADOS';
+
   /// Eventos del Volvo Vehicle Alerts API (IDLING, OVERSPEED,
   /// DISTANCE_ALERT, PTO, TELL_TALE, ALARM, etc.). La popula la
   /// scheduled function `volvoAlertasPoller` cada 5 min — el admin
@@ -235,6 +245,15 @@ class AppCollections {
   /// sin runTransaction (prohibido en Windows). Existe sii la posición
   /// está ocupada por un montaje activo.
   static const String gomeriaPosicionesActivas = 'GOMERIA_POSICIONES_ACTIVAS';
+
+  /// Lock de idempotencia del RETIRO de un montaje. DocId = `{montajeId}`.
+  /// Mismo patrón que el lock de posición (rule `allow update: if false`): el
+  /// primer retiro crea el doc y emite el movimiento de stock; un segundo
+  /// retiro concurrente (doble-tap / 2 tablets) choca con el lock y NO vuelve
+  /// a sumar al stock — evita el +1 fantasma sin runTransaction (prohibido en
+  /// Windows). Se crea una sola vez por montaje y no se borra (queda como
+  /// traza de que ese montaje ya fue cerrado).
+  static const String gomeriaRetirosLock = 'GOMERIA_RETIROS_LOCK';
 
   /// Colección de configs / cursores internos del backend (Volvo poller
   /// cursor, contadores como `cubiertas_counter`, etc.). Acceso

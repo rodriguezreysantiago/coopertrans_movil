@@ -35,6 +35,24 @@ class GomeriaV2StockScreen extends StatefulWidget {
 class _GomeriaV2StockScreenState extends State<GomeriaV2StockScreen> {
   final _service = MontajesService();
 
+  /// Cache de modelos ACTIVOS (`CUBIERTAS_MODELOS`) a nivel pantalla. El
+  /// catálogo cambia muy poco, así que se lee UNA vez por visita en lugar de
+  /// releer toda la colección en cada apertura del sheet de compra. Se refresca
+  /// al re-entrar a la pantalla (instancia nueva).
+  List<CubiertaModelo>? _modelosCache;
+
+  Future<List<CubiertaModelo>> _modelosActivos() async {
+    final cache = _modelosCache;
+    if (cache != null) return cache;
+    final snap = await FirebaseFirestore.instance
+        .collection(AppCollections.cubiertasModelos)
+        .where('activo', isEqualTo: true)
+        .get();
+    final modelos = snap.docs.map(CubiertaModelo.fromDoc).toList();
+    _modelosCache = modelos;
+    return modelos;
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -95,7 +113,10 @@ class _GomeriaV2StockScreenState extends State<GomeriaV2StockScreen> {
               Widget skus() {
                 if (columnas == 1) {
                   return Column(
-                    children: [for (final s in stock) _TileSku(item: s, onTap: () => _acciones(s))],
+                    children: [
+                      for (final s in stock)
+                        _TileSku(item: s, onTap: () => _acciones(s))
+                    ],
                   );
                 }
                 const spacing = AppSpacing.md;
@@ -119,7 +140,8 @@ class _GomeriaV2StockScreenState extends State<GomeriaV2StockScreen> {
                 padding: const EdgeInsets.fromLTRB(
                     AppSpacing.lg, AppSpacing.md, AppSpacing.lg, 96),
                 children: [
-                  _Header(total: total, skus: stock.length, faltantes: faltantes),
+                  _Header(
+                      total: total, skus: stock.length, faltantes: faltantes),
                   const SizedBox(height: AppSpacing.md),
                   skus(),
                 ],
@@ -143,7 +165,8 @@ class _GomeriaV2StockScreenState extends State<GomeriaV2StockScreen> {
       context: context,
       backgroundColor: context.colors.surface2,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
       ),
       builder: (sheetCtx) {
         final c = sheetCtx.colors;
@@ -229,11 +252,7 @@ class _GomeriaV2StockScreenState extends State<GomeriaV2StockScreen> {
   }
 
   Future<void> _comprar() async {
-    final modelosSnap = await FirebaseFirestore.instance
-        .collection(AppCollections.cubiertasModelos)
-        .where('activo', isEqualTo: true)
-        .get();
-    final modelos = modelosSnap.docs.map(CubiertaModelo.fromDoc).toList();
+    final modelos = await _modelosActivos();
     if (!mounted) return;
     if (modelos.isEmpty) {
       AppFeedback.error(context,
@@ -244,14 +263,16 @@ class _GomeriaV2StockScreenState extends State<GomeriaV2StockScreen> {
       context: context,
       backgroundColor: context.colors.surface2,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
       ),
       builder: (sheetCtx) => SafeArea(
         child: ListView(
           shrinkWrap: true,
           padding: const EdgeInsets.only(bottom: AppSpacing.sm),
           children: [
-            const _SheetHeader(titulo: 'Comprar', subtitulo: '¿Qué cubierta compraste?'),
+            const _SheetHeader(
+                titulo: 'Comprar', subtitulo: '¿Qué cubierta compraste?'),
             for (final m in modelos)
               _SheetOpcion(
                 icon: Icons.tire_repair_outlined,
