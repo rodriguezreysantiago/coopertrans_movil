@@ -344,11 +344,19 @@ const TOOLS_GESTION_VENC = [
   {
     name: 'jornada_de',
     description:
-      'Estado de la jornada de manejo de HOY de un chofer indicado por ' +
-      'nombre o apellido (cuánto manejó, en qué bloque va, pausa/descanso). ' +
-      'Usala para "cómo viene la jornada de Fulano", "cuánto manejó X".',
+      'Estado de la jornada de manejo de un chofer indicado por nombre o ' +
+      'apellido (cuánto manejó, en qué bloque va, pausa/descanso). Por defecto ' +
+      'la de HOY (en curso); con `dia` podés pedir una jornada PASADA ya ' +
+      'cerrada. Usala para "cómo viene la jornada de Fulano", "cuánto manejó X", ' +
+      '"cómo estuvo la jornada de Y ayer / el 03-06".',
     params: {
       query: { type: 'string', description: 'Nombre o apellido del chofer.' },
+      dia: {
+        type: 'string',
+        description:
+          'Opcional. Día a consultar: vacío u "hoy" = jornada de hoy; "ayer"; ' +
+          'o una fecha AAAA-MM-DD para una jornada pasada.',
+      },
     },
   },
   {
@@ -538,6 +546,22 @@ const TOOLS_GESTION_LOGISTICA = [
     },
   },
   {
+    name: 'adelantos_emitidos',
+    description:
+      'Cuántos adelantos de dinero se EMITIERON (registraron) en un período y ' +
+      'el total en pesos. Por defecto HOY; con `dias` mirás una ventana hacia ' +
+      'atrás (ej. 7 = última semana). Usala para "cuántos adelantos emitimos ' +
+      'hoy", "qué se adelantó esta semana". OJO: es distinto de ' +
+      'adelantos_pendientes (esos son los que faltan descontar, sin importar ' +
+      'cuándo se emitieron).',
+    params: {
+      dias: {
+        type: 'integer',
+        description: 'Ventana hacia atrás en días (default 1 = hoy). Ej: 7, 30.',
+      },
+    },
+  },
+  {
     name: 'adelantos_pendientes',
     description:
       'Lista los ADELANTOS de dinero PENDIENTES de descontar (no pagados) de ' +
@@ -557,6 +581,41 @@ const TOOLS_GESTION_LOGISTICA = [
 ];
 
 // ─── RBAC del agente = capabilities de la app ───
+// Directorio de contactos de la oficina por ÁREA → DNI del responsable. El
+// nombre y el teléfono se resuelven en vivo de EMPLEADOS (si cambia el número
+// se actualiza solo; si cambia el encargado, se edita este mapa). Alineado con
+// META/destinatarios_notificacion (quién recibe cada alerta).
+const CONTACTOS_POR_AREA = {
+  mantenimiento: '29820141', // Corchete Emmanuel — taller, service, desperfectos, cubiertas
+  logistica: '25022800',     // Errazu Esteban — viajes, turnos YPF, cargas, peaje/cospel
+  documentacion: '26456455', // Giagante Guillermo — papeles, licencia, vencimientos, seguros
+  sistema: '35244439',       // Santiago — errores/problemas de la app o el bot
+  seguridad: '34730329',     // Molina Alejandra — jornada, descansos, conducta, seg. e higiene
+};
+
+// Tools disponibles para TODOS los roles que entran al agente (chofer + gestión).
+const TOOLS_COMUNES = [
+  {
+    name: 'contacto_oficina',
+    description:
+      'Devuelve a quién de la oficina contactar según el TEMA, con su nombre y ' +
+      'teléfono. Usala cuando pregunten "a quién llamo / con quién me comunico", ' +
+      'o cuando haya un tema que vos NO podés resolver y haya que derivarlo. ' +
+      'Elegí el área por el motivo: mantenimiento (taller, desperfecto, service, ' +
+      'cubiertas), logistica (viajes, turnos, cargas, cospel/peaje), ' +
+      'documentacion (papeles, licencia, vencimientos, seguros), sistema (algo ' +
+      'que no anda en la app o el bot), seguridad (jornada, descansos, conducta).',
+    params: {
+      area: {
+        type: 'string',
+        description:
+          'mantenimiento | logistica | documentacion | sistema | seguridad. ' +
+          'Elegila según el motivo de la consulta.',
+      },
+    },
+  },
+];
+
 // El agente expone, por rol, las MISMAS áreas que el rol puede usar en la app.
 // Fuente de verdad: lib/core/services/capabilities.dart. NO hay código
 // compartido entre la app (Dart) y el bot (Node): si cambian las capabilities
@@ -568,7 +627,7 @@ const TOOLS_POR_CAPABILITY = {
   verIcm: ['jornada_de'], // la jornada vive dentro del módulo ICM en la app
   verAlertasVolvo: ['donde_esta', 'estado_flota', 'alertas_unidad'],
   verDescargas: ['quien_esta_descargando', 'descargas_historico'],
-  verLogistica: ['viajes_resumen', 'crear_adelanto', 'adelantos_pendientes'],
+  verLogistica: ['viajes_resumen', 'crear_adelanto', 'adelantos_pendientes', 'adelantos_emitidos'],
   verMantenimiento: ['service_unidad'],
   verCachatore: ['cachatore_estado', 'turnos_ypf_detalle', 'poner_a_buscar_turno'],
 };
@@ -644,14 +703,14 @@ const _TOOLS_GESTION = [
 const TOOLS_DE_ACCION = new Set(['poner_a_buscar_turno', 'crear_adelanto']);
 
 function _toolsDelRol(rol) {
-  if (rol === 'CHOFER') return TOOLS_CHOFER;
+  if (rol === 'CHOFER') return [...TOOLS_CHOFER, ...TOOLS_COMUNES];
   const caps = CAPS_POR_ROL[rol] || [];
   if (caps.length === 0) return []; // PLANTA / GOMERIA / rol desconocido
   const nombres = new Set();
   for (const cap of caps) {
     for (const n of (TOOLS_POR_CAPABILITY[cap] || [])) nombres.add(n);
   }
-  return _TOOLS_GESTION.filter((t) => nombres.has(t.name));
+  return [..._TOOLS_GESTION.filter((t) => nombres.has(t.name)), ...TOOLS_COMUNES];
 }
 
 function _toolsAnthropic(rol) {
@@ -1072,6 +1131,36 @@ function _normNombre(s) {
     .trim();
 }
 
+/** Distancia de Levenshtein (edición) entre dos strings. Base del match
+ *  fuzzy de nombres mal escritos o mal transcriptos del audio. */
+function _levenshtein(a, b) {
+  a = a || ''; b = b || '';
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 0; i < a.length; i++) {
+    const cur = [i + 1];
+    for (let j = 0; j < b.length; j++) {
+      const cost = a[i] === b[j] ? 0 : 1;
+      cur[j + 1] = Math.min(cur[j] + 1, prev[j + 1] + 1, prev[j] + cost);
+    }
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/** ¿`qt` (token de la query) matchea de forma aproximada algún token del
+ *  nombre? Umbral según largo del token: exacto para <4, 1 hasta 5, 2 desde 6
+ *  chars (así "AKERMAN" cae en "ACKERMANN" pero no se confunden apellidos cortos). */
+function _tokenFuzzyMatch(qt, nomTokens) {
+  const umbral = qt.length >= 6 ? 2 : (qt.length >= 4 ? 1 : 0);
+  if (umbral === 0) return nomTokens.includes(qt);
+  return nomTokens.some(
+    (nt) => Math.abs(nt.length - qt.length) <= umbral && _levenshtein(qt, nt) <= umbral
+  );
+}
+
 /** Resuelve un chofer/empleado por nombre. {ok,dni,data} | {ok:false,...}.
  *  soloActivos=true descarta empleados dados de baja (lo usa Cachatore). */
 async function _resolverChoferPorNombre(db, query, soloChofer, soloActivos = false) {
@@ -1089,16 +1178,33 @@ async function _resolverChoferPorNombre(db, query, soloChofer, soloActivos = fal
   } catch (e) {
     return { ok: false, error: `No pude buscar: ${e.message}` };
   }
-  const matches = snap.docs.filter((d) => {
-    const data = d.data();
+  const _pasaFiltroRol = (data) => {
     if (soloActivos && data.ACTIVO === false) return false;
     if (soloChofer) {
       const rol = String(data.ROL || 'CHOFER').toUpperCase();
       if (!(rol === 'CHOFER' || rol === '' || rol === 'USUARIO')) return false;
     }
+    return true;
+  };
+  let matches = snap.docs.filter((d) => {
+    const data = d.data();
+    if (!_pasaFiltroRol(data)) return false;
     const nomNorm = _normNombre(data.NOMBRE);
     return qTokens.every((t) => nomNorm.includes(t));
   });
+  // Fallback FUZZY: si el match exacto (substring) no encontró a nadie,
+  // reintentamos por distancia de edición — cubre nombres mal escritos o mal
+  // transcriptos del audio ("Akerman" → "ACKERMANN"). Solo cuando el exacto dio
+  // 0, para no ensuciar los matches exactos. Si el fuzzy trae varios, cae en la
+  // rama "ambiguo" de abajo y el agente pide que aclaren.
+  if (matches.length === 0) {
+    matches = snap.docs.filter((d) => {
+      const data = d.data();
+      if (!_pasaFiltroRol(data)) return false;
+      const nomTokens = _normNombre(data.NOMBRE).split(' ').filter(Boolean);
+      return qTokens.every((t) => _tokenFuzzyMatch(t, nomTokens));
+    });
+  }
   if (matches.length === 0) {
     return { ok: false, error: `No encontré a "${query}".` };
   }
@@ -1265,10 +1371,90 @@ async function _toolInfoChofer(db, args) {
   };
 }
 
+/** Día calendario ART (YYYY-MM-DD) de un Timestamp. NO usar `_fechaIso` acá:
+ *  ese corta el ISO en UTC y una jornada que arranca de noche ART caería en el
+ *  día UTC siguiente. */
+function _diaArtDeTs(ts) {
+  if (!ts || typeof ts.toDate !== 'function') return null;
+  try {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: process.env.BOT_TIMEZONE || 'America/Argentina/Buenos_Aires',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).format(ts.toDate());
+  } catch (_) { return null; }
+}
+
+/** Hora HH:MM ART de un Timestamp (para mostrar inicio/fin de jornada). */
+function _horaArtDeTs(ts) {
+  if (!ts || typeof ts.toDate !== 'function') return null;
+  try {
+    return ts.toDate().toLocaleTimeString('es-AR', {
+      timeZone: process.env.BOT_TIMEZONE || 'America/Argentina/Buenos_Aires',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch (_) { return null; }
+}
+
+/** Resuelve el "día" pedido (vacío/"hoy" | "ayer"/"anteayer" | AAAA-MM-DD) a un
+ *  YYYY-MM-DD ART. Devuelve null si no se reconoce. */
+function _resolverDiaIso(raw) {
+  const s = String(raw || '').trim().toLowerCase();
+  if (!s || s === 'hoy') return _hoyIso();
+  if (s === 'ayer' || s === 'antier' || s === 'anteayer') {
+    const restar = s === 'ayer' ? 1 : 2;
+    const d = new Date(`${_hoyIso()}T12:00:00Z`); // mediodía → sin cruce de día
+    d.setUTCDate(d.getUTCDate() - restar);
+    return d.toISOString().slice(0, 10);
+  }
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
+
+/** Jornada de un chofer en un día PASADO (ya cerrada). Busca las que arrancaron
+ *  ese día ART; si hubo más de una, devuelve la de mayor manejo y lo avisa. */
+async function _jornadaDeDia(db, dni, nombre, diaIso) {
+  let docs;
+  try {
+    const snap = await db.collection('JORNADAS').where('chofer_dni', '==', dni).get();
+    docs = snap.docs.map((d) => d.data());
+  } catch (e) {
+    return { error: `No pude leer la jornada: ${e.message}` };
+  }
+  const delDia = docs.filter((j) => _diaArtDeTs(j.jornada_inicio_ts) === diaIso);
+  if (delDia.length === 0) {
+    return {
+      chofer: nombre || dni, dia: diaIso, hay_jornada: false,
+      nota: `No hay una jornada de ${nombre || dni} que haya arrancado el ${diaIso}.`,
+    };
+  }
+  delDia.sort((a, b) => (b.total_manejo_seg || 0) - (a.total_manejo_seg || 0));
+  const j = delDia[0];
+  const netoSeg = (j.total_manejo_seg || 0) + (j.bloque_actual_manejo_seg || 0);
+  return {
+    chofer: nombre || dni,
+    dia: diaIso,
+    hay_jornada: true,
+    cerrada: j.jornada_fin_ts != null,
+    manejo_total: _fmtHHMM(netoSeg),
+    bloques_completos: j.bloques_completos || 0,
+    inicio: _horaArtDeTs(j.jornada_inicio_ts),
+    fin: j.jornada_fin_ts ? _horaArtDeTs(j.jornada_fin_ts) : 'sin cerrar',
+    unidad: j.ultima_patente || null,
+    nota: delDia.length > 1
+      ? `Ese día hubo ${delDia.length} jornadas; te muestro la de mayor manejo.`
+      : null,
+  };
+}
+
 async function _toolJornadaDe(db, args) {
   const r = await _resolverChoferPorNombre(db, args && args.query, true);
   if (!r.ok) return r;
-  return await _estadoJornada(db, r.dni, r.data.NOMBRE);
+  const diaIso = _resolverDiaIso(args && args.dia);
+  if (diaIso == null) {
+    return { error: 'No entendí el día. Usá "hoy", "ayer" o una fecha AAAA-MM-DD.' };
+  }
+  // Hoy → estado en vivo (jornada abierta). Día pasado → la cerrada de ese día.
+  if (diaIso === _hoyIso()) return await _estadoJornada(db, r.dni, r.data.NOMBRE);
+  return await _jornadaDeDia(db, r.dni, r.data.NOMBRE, diaIso);
 }
 
 async function _toolTurnosYpfDetalle(db) {
@@ -1456,6 +1642,50 @@ async function _toolAdelantosPendientes(db, args) {
         : 'No hay adelantos pendientes de descontar.')
       : `${docs.length} adelanto(s) pendiente(s)${nombreFiltro ? ' de ' + nombreFiltro : ''}, ` +
         `total $${total.toLocaleString('es-AR')}.`,
+  };
+}
+
+// Adelantos EMITIDOS (registrados) en una ventana de `dias` (default 1 = hoy).
+// Cuenta por `creado_en` (cuándo se registró), NO por `fecha` (que el operador
+// puede backdatear). Distinto de adelantos_pendientes (esos miran `pagado`).
+async function _toolAdelantosEmitidos(db, args) {
+  let dias = parseInt((args && args.dias) || 1, 10);
+  if (isNaN(dias) || dias <= 0) dias = 1;
+  // Inicio de la ventana: 00:00 ART de hace (dias-1) días. La dedicada corre en
+  // hora AR, así que `new Date('YYYY-MM-DDT00:00:00')` es medianoche local ART.
+  const desde = new Date(`${_hoyIso()}T00:00:00`);
+  desde.setDate(desde.getDate() - (dias - 1));
+  const desdeMs = desde.getTime();
+  let docs;
+  try {
+    const snap = await db.collection('ADELANTOS_CHOFER').get();
+    docs = snap.docs.map((d) => d.data()).filter((a) => a.eliminado !== true);
+  } catch (e) {
+    return { error: `No pude leer los adelantos: ${e.message}` };
+  }
+  const _ms = (a) => {
+    const t = a.creado_en && a.creado_en.toMillis ? a.creado_en.toMillis()
+      : (a.fecha && a.fecha.toMillis ? a.fecha.toMillis() : null);
+    return t;
+  };
+  const enVentana = docs.filter((a) => { const t = _ms(a); return t != null && t >= desdeMs; });
+  let total = 0;
+  for (const a of enVentana) total += Number(a.monto) || 0;
+  enVentana.sort((a, b) => (_ms(b) || 0) - (_ms(a) || 0));
+  const periodo = dias === 1 ? 'hoy' : `los últimos ${dias} días`;
+  return {
+    periodo,
+    cantidad: enVentana.length,
+    total,
+    adelantos: enVentana.slice(0, 40).map((a) => ({
+      empleado: a.chofer_nombre || a.chofer_dni,
+      monto: Number(a.monto) || 0,
+      medio_pago: a.medio_pago || null,
+      registrado_por: a.creado_por_nombre || a.creado_por_dni || null,
+    })),
+    nota: enVentana.length === 0
+      ? `No se emitió ningún adelanto ${periodo}.`
+      : `${enVentana.length} adelanto(s) emitido(s) ${periodo}, total $${total.toLocaleString('es-AR')}.`,
   };
 }
 
@@ -1695,6 +1925,35 @@ async function _toolServiceUnidad(db, args) {
   }
 }
 
+async function _toolContactoOficina(db, args) {
+  const area = String((args && args.area) || '').trim().toLowerCase();
+  const dni = CONTACTOS_POR_AREA[area];
+  if (!dni) {
+    return {
+      ok: false,
+      areas_validas: Object.keys(CONTACTOS_POR_AREA),
+      nota: 'No me quedó claro el área. Preguntá el motivo (mantenimiento, ' +
+        'logística, documentación, sistema/app o seguridad) y volvé a intentar.',
+    };
+  }
+  let data;
+  try {
+    const d = await db.collection('EMPLEADOS').doc(dni).get();
+    data = d.exists ? d.data() : null;
+  } catch (e) {
+    return { error: `No pude leer el contacto: ${e.message}` };
+  }
+  if (!data) return { error: 'El contacto de esa área no está cargado en el sistema.' };
+  return {
+    area,
+    nombre: data.NOMBRE || dni,
+    telefono: data.TELEFONO || null,
+    nota: data.TELEFONO
+      ? 'Pasale el nombre y el teléfono.'
+      : 'Ese responsable no tiene teléfono cargado; decile que lo vea con la oficina.',
+  };
+}
+
 async function _ejecutarTool(db, nombre, persona, args) {
   switch (nombre) {
     case 'mis_vencimientos':
@@ -1743,8 +2002,12 @@ async function _ejecutarTool(db, nombre, persona, args) {
       return await _toolCrearAdelanto(db, persona, args);
     case 'adelantos_pendientes':
       return await _toolAdelantosPendientes(db, args);
+    case 'adelantos_emitidos':
+      return await _toolAdelantosEmitidos(db, args);
     case 'listar_empleados_por_rol':
       return await _toolListarEmpleadosPorRol(db, args);
+    case 'contacto_oficina':
+      return await _toolContactoOficina(db, args);
     default:
       return { error: `Herramienta desconocida: ${nombre}` };
   }
@@ -1800,6 +2063,9 @@ function _systemPrompt(persona) {
       '',
       'PODÉS, con las herramientas:',
       ...podes,
+      '- Dar el contacto (nombre y teléfono) del responsable de un área de la',
+      '  oficina según el tema (mantenimiento, logística, documentación,',
+      '  sistema/app, seguridad) — para vos o para derivar a un chofer.',
       '',
       'REGLAS:',
       '- Solo podés hacer lo que figura en la lista de arriba. Si te piden algo',
@@ -1820,10 +2086,14 @@ function _systemPrompt(persona) {
     '',
     'REGLAS:',
     '- Solo podés ver los datos del chofer que te escribe. Si pregunta por',
-    '  otra persona, decile que solo podés darle info de él.',
-    '- Si te preguntan algo que no podés resolver con las herramientas',
-    '  (trámites, sueldos, viajes, permisos), decile que para eso se',
-    '  comunique con la oficina.',
+    '  OTRA persona, decile que solo podés darle info de él. PERO si menciona la',
+    '  PATENTE de SU PROPIA unidad (el tractor o enganche que tiene asignado),',
+    '  sigue siendo él: respondé normal con mi_jornada / mi_unidad /',
+    '  donde_esta_mi_unidad.',
+    '- Si te preguntan algo que NO podés resolver con tus herramientas (un',
+    '  desperfecto, un trámite, un problema de la app, etc.), NO mandes un',
+    '  "comunicate con la oficina" genérico: usá contacto_oficina con el área',
+    '  del tema y pasale el NOMBRE y el TELÉFONO de quien lo resuelve.',
     ...comun,
   ].join('\n');
 }

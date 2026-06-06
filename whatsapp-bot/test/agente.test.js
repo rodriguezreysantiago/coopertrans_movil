@@ -96,13 +96,22 @@ describe('agente._textoDeRespuesta', () => {
 });
 
 describe('agente — tools por rol y conversores', () => {
-  test('CHOFER: tools sin parámetros', () => {
+  test('CHOFER: self-service sin parámetros + contacto_oficina (común) con area', () => {
     const a = agente._toolsAnthropic('CHOFER');
     assert.ok(a.length >= 2);
     for (const t of a) assert.strictEqual(t.input_schema.type, 'object');
     const g = agente._toolsGemini('CHOFER');
+    assert.ok(
+      g[0].functionDeclarations.some((d) => d.name === 'contacto_oficina'),
+      'CHOFER tiene la tool común contacto_oficina'
+    );
     for (const d of g[0].functionDeclarations) {
-      assert.strictEqual(d.parameters, undefined); // sin args
+      if (d.name === 'contacto_oficina') {
+        // Única tool de chofer con parámetro: el área a la que derivar.
+        assert.ok(d.parameters.properties.area, 'contacto_oficina lleva area');
+      } else {
+        assert.strictEqual(d.parameters, undefined); // self-service sin args
+      }
     }
   });
   test('ADMIN: buscar_vencimientos con parámetro query', () => {
@@ -890,5 +899,128 @@ describe('agente._ejecutarTool — crear_adelanto (acción de plata)', () => {
     const r = await agente._ejecutarTool(db, 'crear_adelanto', ADMIN, { empleado: 'ibanez cristian', monto: 5000 });
     assert.strictEqual(r.requiere_confirmacion, true);
     assert.strictEqual(r.resumen.empleado, 'IBAÑEZ CAMPOS CRISTIAN');
+  });
+});
+
+describe('agente — mejoras 2026-06-06 (fuzzy + jornada pasada + adelantos emitidos + contacto)', () => {
+  // Mock que distingue colecciones: EMPLEADOS (lista + doc), JORNADAS
+  // (where/get) y ADELANTOS_CHOFER (get).
+  function dbMix({ empleados = [], jornadas = [], adelantos = [] } = {}) {
+    return {
+      collection(name) {
+        if (name === 'JORNADAS') {
+          const q = { _f: {} };
+          q.where = (c, _o, v) => { q._f[c] = v; return q; };
+          q.limit = () => q;
+          q.get = async () => {
+            let r = jornadas;
+            if ('chofer_dni' in q._f) r = r.filter((j) => j.chofer_dni === q._f.chofer_dni);
+            if ('jornada_fin_ts' in q._f) r = r.filter((j) => (j.jornada_fin_ts ?? null) === q._f.jornada_fin_ts);
+            return { empty: r.length === 0, docs: r.map((j) => ({ id: j.chofer_dni, data: () => j })) };
+          };
+          return q;
+        }
+        return {
+          doc: (id) => ({
+            get: async () => {
+              if (name === 'EMPLEADOS') {
+                const e = empleados.find((x) => x.id === id);
+                return { exists: !!e, data: () => e && e.data };
+              }
+              return { exists: false, data: () => undefined };
+            },
+          }),
+          get: async () => {
+            if (name === 'EMPLEADOS') return { docs: empleados.map((e) => ({ id: e.id, data: () => e.data })) };
+            if (name === 'ADELANTOS_CHOFER') return { docs: adelantos.map((a, i) => ({ id: String(i), data: () => a })) };
+            return { docs: [] };
+          },
+        };
+      },
+    };
+  }
+  const ts = (d) => ({ toDate: () => d, toMillis: () => d.getTime() });
+
+  test('fuzzy: "akerman" resuelve ACKERMANN (info_chofer)', async () => {
+    const db = dbMix({ empleados: [
+      { id: '35416448', data: { NOMBRE: 'ACKERMANN HERNAN', ROL: 'CHOFER', ACTIVO: true } },
+      { id: '99', data: { NOMBRE: 'GOMEZ JUAN', ROL: 'CHOFER', ACTIVO: true } },
+    ] });
+    const r = await agente._ejecutarTool(db, 'info_chofer', { rol: 'ADMIN' }, { query: 'akerman' });
+    assert.strictEqual(r.nombre, 'ACKERMANN HERNAN');
+  });
+
+  test('fuzzy NO pisa el match exacto si existe', async () => {
+    const db = dbMix({ empleados: [
+      { id: '1', data: { NOMBRE: 'PEREZ JUAN', ROL: 'CHOFER', ACTIVO: true } },
+      { id: '2', data: { NOMBRE: 'PERES CARLOS', ROL: 'CHOFER', ACTIVO: true } },
+    ] });
+    const r = await agente._ejecutarTool(db, 'info_chofer', { rol: 'ADMIN' }, { query: 'perez' });
+    assert.strictEqual(r.nombre, 'PEREZ JUAN'); // exacto, sin fuzzy a "PERES"
+  });
+
+  test('jornada_de con dia="ayer" trae la jornada cerrada de ese día', async () => {
+    const ayer = new Date(Date.now() - 24 * 3600 * 1000);
+    const db = dbMix({
+      empleados: [{ id: '1', data: { NOMBRE: 'PEREZ JUAN', ROL: 'CHOFER', ACTIVO: true } }],
+      jornadas: [{
+        chofer_dni: '1', jornada_fin_ts: ts(new Date()), jornada_inicio_ts: ts(ayer),
+        total_manejo_seg: 28800, bloques_completos: 2, ultima_patente: 'AA111AA',
+      }],
+    });
+    const r = await agente._ejecutarTool(db, 'jornada_de', { rol: 'ADMIN' }, { query: 'perez', dia: 'ayer' });
+    assert.strictEqual(r.hay_jornada, true);
+    assert.strictEqual(r.cerrada, true);
+    assert.strictEqual(r.manejo_total, '8h 0m');
+  });
+
+  test('jornada_de día sin jornada → hay_jornada false', async () => {
+    const db = dbMix({ empleados: [{ id: '1', data: { NOMBRE: 'PEREZ', ROL: 'CHOFER', ACTIVO: true } }], jornadas: [] });
+    const r = await agente._ejecutarTool(db, 'jornada_de', { rol: 'ADMIN' }, { query: 'perez', dia: '2026-01-01' });
+    assert.strictEqual(r.hay_jornada, false);
+  });
+
+  test('adelantos_emitidos: cuenta solo los creados en la ventana (hoy)', async () => {
+    const hoyTs = { toMillis: () => Date.now() };
+    const viejoTs = { toMillis: () => Date.now() - 5 * 24 * 3600 * 1000 };
+    const db = dbMix({ adelantos: [
+      { chofer_nombre: 'A', monto: 1000, creado_en: hoyTs },
+      { chofer_nombre: 'B', monto: 2000, creado_en: hoyTs },
+      { chofer_nombre: 'C', monto: 9999, creado_en: viejoTs },
+    ] });
+    const r = await agente._ejecutarTool(db, 'adelantos_emitidos', { rol: 'ADMIN' }, {});
+    assert.strictEqual(r.cantidad, 2);
+    assert.strictEqual(r.total, 3000);
+  });
+
+  test('adelantos_emitidos: ignora los eliminados', async () => {
+    const hoyTs = { toMillis: () => Date.now() };
+    const db = dbMix({ adelantos: [
+      { chofer_nombre: 'A', monto: 1000, creado_en: hoyTs },
+      { chofer_nombre: 'B', monto: 2000, creado_en: hoyTs, eliminado: true },
+    ] });
+    const r = await agente._ejecutarTool(db, 'adelantos_emitidos', { rol: 'ADMIN' }, {});
+    assert.strictEqual(r.cantidad, 1);
+    assert.strictEqual(r.total, 1000);
+  });
+
+  test('contacto_oficina: mantenimiento → Corchete Emmanuel con teléfono', async () => {
+    const db = dbMix({ empleados: [
+      { id: '29820141', data: { NOMBRE: 'CORCHETE EMMANUEL', TELEFONO: '5492914072695' } },
+    ] });
+    const r = await agente._ejecutarTool(db, 'contacto_oficina', { rol: 'CHOFER', dni: '1' }, { area: 'mantenimiento' });
+    assert.strictEqual(r.nombre, 'CORCHETE EMMANUEL');
+    assert.strictEqual(r.telefono, '5492914072695');
+  });
+
+  test('contacto_oficina: área desconocida → pide aclarar (no inventa)', async () => {
+    const r = await agente._ejecutarTool(dbMix({}), 'contacto_oficina', { rol: 'CHOFER', dni: '1' }, { area: 'cualquiera' });
+    assert.strictEqual(r.ok, false);
+    assert.ok(Array.isArray(r.areas_validas));
+  });
+
+  test('CHOFER tiene contacto_oficina entre sus tools', () => {
+    const nombres = agente._toolsAnthropic('CHOFER').map((t) => t.name);
+    assert.ok(nombres.includes('contacto_oficina'));
   });
 });
