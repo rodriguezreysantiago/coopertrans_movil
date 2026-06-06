@@ -32,14 +32,14 @@
 #       .\instalar_todo.ps1
 #
 # Flags opcionales:
-#   -RepoUrl   URL del repo (default: https://github.com/rodriguezreysantiago/logistica_app_profesional.git)
+#   -RepoUrl   URL del repo (default: https://github.com/rodriguezreysantiago/coopertrans_movil.git)
 #   -RepoPath  Donde clonar (default: C:\coopertrans_movil)
 #   -SkipNode  No intentar instalar Node (asume que ya esta)
 #   -SkipGit   No intentar instalar Git (asume que ya esta)
 
 [CmdletBinding()]
 param(
-    [string]$RepoUrl  = 'https://github.com/rodriguezreysantiago/logistica_app_profesional.git',
+    [string]$RepoUrl  = 'https://github.com/rodriguezreysantiago/coopertrans_movil.git',
     [string]$RepoPath = 'C:\coopertrans_movil',
     [switch]$SkipNode,
     [switch]$SkipGit

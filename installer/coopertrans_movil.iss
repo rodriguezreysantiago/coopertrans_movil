@@ -36,7 +36,7 @@
 #define MyAppName       "Coopertrans Movil"
 #define MyAppExeName    "coopertrans_movil.exe"
 #define MyAppPublisher  "Coopertrans"
-#define MyAppURL        "https://github.com/rodriguezreysantiago/logistica_app_profesional"
+#define MyAppURL        "https://github.com/rodriguezreysantiago/coopertrans_movil"
 #define MyAppId         "{{B6F7E8A9-1234-4567-8901-COOPERTRANSMOV}"
 
 [Setup]

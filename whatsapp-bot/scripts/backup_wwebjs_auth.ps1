@@ -15,7 +15,7 @@
 #        Program: powershell.exe
 #        Arguments:
 #          -NoProfile -ExecutionPolicy Bypass -File
-#          "C:\Users\santi\logistica_app_profesional\whatsapp-bot\scripts\backup_wwebjs_auth.ps1"
+#          "C:\coopertrans_movil\whatsapp-bot\scripts\backup_wwebjs_auth.ps1"
 #   5. Conditions: marcar "Wake the computer to run this task".
 #
 # Sale con exit 0 si OK, 1 si algo fallo. Loguea en

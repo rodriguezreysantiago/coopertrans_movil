@@ -52,7 +52,7 @@ Xcode → Settings → Accounts → "+" → Apple ID
 
 ```bash
 cd ~
-git clone https://github.com/rodriguezreysantiago/logistica_app_profesional.git coopertrans_movil
+git clone https://github.com/rodriguezreysantiago/coopertrans_movil.git coopertrans_movil
 cd coopertrans_movil
 flutter pub get
 ```

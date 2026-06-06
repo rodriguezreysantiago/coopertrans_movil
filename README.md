@@ -1,6 +1,6 @@
 # Coopertrans Móvil
 
-[![CI](https://github.com/rodriguezreysantiago/logistica_app_profesional/actions/workflows/ci.yml/badge.svg)](https://github.com/rodriguezreysantiago/logistica_app_profesional/actions/workflows/ci.yml)
+[![CI](https://github.com/rodriguezreysantiago/coopertrans_movil/actions/workflows/ci.yml/badge.svg)](https://github.com/rodriguezreysantiago/coopertrans_movil/actions/workflows/ci.yml)
 
 Sistema de gestión de flota para la empresa de transporte **Vecchi / Sucesión Vecchi** (Bahía Blanca). Maneja personal, flota, vencimientos de papeles, checklists, revisiones, integración con Volvo Connect (telemetría + Vehicle Alerts API + Scores API) y un bot de WhatsApp para avisos automáticos.
 
@@ -19,7 +19,7 @@ Sistema de gestión de flota para la empresa de transporte **Vecchi / Sucesión 
 
 ```powershell
 # Clonar
-git clone https://github.com/rodriguezreysantiago/logistica_app_profesional.git
+git clone https://github.com/rodriguezreysantiago/coopertrans_movil.git
 cd coopertrans_movil
 
 flutter pub get

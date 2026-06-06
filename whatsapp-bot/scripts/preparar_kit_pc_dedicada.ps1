@@ -229,7 +229,7 @@ CAMINO MANUAL (solo si algo falla en el automatico)
 
 2) Clonar el repo en C:\
        cd C:\
-       git clone https://github.com/rodriguezreysantiago/logistica_app_profesional.git coopertrans_movil
+       git clone https://github.com/rodriguezreysantiago/coopertrans_movil.git coopertrans_movil
        cd coopertrans_movil\whatsapp-bot
        npm install
 

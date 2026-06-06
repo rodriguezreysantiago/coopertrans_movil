@@ -19,7 +19,7 @@
 $ErrorActionPreference = 'Stop'
 
 # === CONFIG ========================================================
-$repo    = 'rodriguezreysantiago/logistica_app_profesional'
+$repo    = 'rodriguezreysantiago/coopertrans_movil'
 $exeName = 'coopertrans_movil.exe'
 
 # Install dir con auto-deteccion:

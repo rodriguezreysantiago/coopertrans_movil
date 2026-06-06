@@ -66,7 +66,7 @@ App Flutter multiplataforma (Android / iOS / Web / Windows) para gestión de flo
 ## 3. Arquitectura
 
 ```
-logistica_app_profesional/
+coopertrans_movil/
 ├── lib/
 │   ├── core/
 │   │   ├── constants/
@@ -907,7 +907,7 @@ Cierre completo del rebrand "S.M.A.R.T. Logística" → "Coopertrans Móvil":
 - **9 docs/configs**: README, RUNBOOK, MANUAL_USUARIO, ESTADO_PROYECTO header, firestore.rules, storage.rules, .gitattributes, .gitignore, functions/package.json description, functions/src/index.ts header.
 - **Footer del WhatsApp del bot** (user-facing real, requiere deploy de functions): "_Sistema S.M.A.R.T. Logística — Mensaje automático._" → "_Coopertrans Móvil — Mensaje automático._".
 - **`whatsapp-bot/.env.example`**: `FIREBASE_PROJECT_ID=logisticaapp-e539a` (apuntaba al proyecto viejo) → `coopertrans-movil`. Si alguien arranca el bot desde cero ahora pega contra el proyecto correcto.
-- **NO se renombró** el package Dart (`logistica_app_profesional` en pubspec.yaml + imports `package:`): decisión documentada (alta inversión, valor invisible al usuario).
+- ~~**NO se renombró** el package Dart (`logistica_app_profesional` en pubspec.yaml + imports `package:`)~~ → revertido el 2026-05-08 (commit `22b6825`): el package Dart se renombró a `coopertrans_movil` y todos los `import 'package:logistica_app_profesional/...'` pasaron a `import 'package:coopertrans_movil/...'`.
 
 Detalle del brand en memoria: `feedback_brand_visual.md`.
 
@@ -1141,8 +1141,8 @@ El proyecto quedó en estado `DELETE_REQUESTED` con grace period de 30 días: **
 ### Pasos
 ```powershell
 # 1. Clonar
-git clone <url-del-repo> logistica_app_profesional
-cd logistica_app_profesional
+git clone <url-del-repo> coopertrans_movil
+cd coopertrans_movil
 
 # 2. Recrear `serviceAccountKey.json` (NO está en git) si vas a correr
 #    scripts/admin o el bot. Copiarlo desde Bitwarden / Drive privado.
@@ -1170,7 +1170,7 @@ flutter run -d windows
 
 Cowork no sincroniza historial entre desktops. Para una conversación nueva (otra máquina, o nuevo Claude), pegale al iniciar:
 
-> Hola Claude. Vengo trabajando en una app Flutter de gestión de flota llamada **logistica_app_profesional** (S.M.A.R.T. Logística, empresa Vecchi en Bahía Blanca). Antes de empezar, leé `ESTADO_PROYECTO.md` y `AUDITORIA_2026-04-28.md` que están en la raíz del repo — ahí tenés el contexto completo: arquitectura, convenciones, lo que está hecho, lo que queda pendiente y las decisiones tomadas con sus razones. Trabajamos siguiendo esas convenciones (input de fecha DD/MM/AAAA con `pickFecha`, listas centralizadas en `AppVencimientos` y `AppTiposVehiculo`, mensajes con firma "_mensaje automático del sistema_", `AppFeedback` para SnackBars, `AppLoadingDialog` para loadings, `AppConfirmDialog` para confirmaciones, `AppColors` en lugar de hardcodear, etc). El próximo paso pendiente es <X>. ¿Listo para arrancar?
+> Hola Claude. Vengo trabajando en una app Flutter de gestión de flota llamada **coopertrans_movil** (Coopertrans Móvil, empresa Vecchi en Bahía Blanca). Antes de empezar, leé `ESTADO_PROYECTO.md` y `AUDITORIA_2026-04-28.md` que están en la raíz del repo — ahí tenés el contexto completo: arquitectura, convenciones, lo que está hecho, lo que queda pendiente y las decisiones tomadas con sus razones. Trabajamos siguiendo esas convenciones (input de fecha DD/MM/AAAA con `pickFecha`, listas centralizadas en `AppVencimientos` y `AppTiposVehiculo`, mensajes con firma "_mensaje automático del sistema_", `AppFeedback` para SnackBars, `AppLoadingDialog` para loadings, `AppConfirmDialog` para confirmaciones, `AppColors` en lugar de hardcodear, etc). El próximo paso pendiente es <X>. ¿Listo para arrancar?
 
 Reemplazá `<X>` con lo que quieras hacer ese día.
 

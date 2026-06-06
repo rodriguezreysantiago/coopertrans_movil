@@ -97,7 +97,7 @@ $instalador = @'
 
 [CmdletBinding()]
 param(
-    [string]$RepoUrl  = 'https://github.com/rodriguezreysantiago/logistica_app_profesional.git',
+    [string]$RepoUrl  = 'https://github.com/rodriguezreysantiago/coopertrans_movil.git',
     [string]$RepoPath = 'C:\coopertrans_movil',
     [switch]$SkipMonitorLogs
 )

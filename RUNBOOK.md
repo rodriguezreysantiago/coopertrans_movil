@@ -983,7 +983,7 @@ Workflow en `.github/workflows/ci.yml` que corre **3 jobs en paralelo** en cada 
 
 Sin protection, los ✗ rojos del CI son **informativos** — se pueden mergear igual. Para hacerlos **bloqueantes**:
 
-1. Ir a: https://github.com/rodriguezreysantiago/logistica_app_profesional/settings/branches
+1. Ir a: https://github.com/rodriguezreysantiago/coopertrans_movil/settings/branches
 2. Click en **"Add branch ruleset"** (o "Add rule" si está en la UI vieja).
 3. **Branch name pattern**: `main`.
 4. Activar:
@@ -1282,7 +1282,7 @@ node scripts/diagnosticar_vigilador_chofer.js <DNI>
 | **Bitwarden vault** | Cuenta personal de Santiago. Tiene: Volvo Connect (user `018B1E992E` + password v2 vigente), Google/Firebase/GCP (`santiagocoopertrans@gmail.com`), GitHub (`rodriguezreysantiago`), email principal, WhatsApp del bot. Master password en sobre cerrado en casa de Santiago + recovery code de 2FA en el mismo sobre. |
 | **Firebase Console** | https://console.firebase.google.com/project/coopertrans-movil |
 | **Google Cloud Console** | https://console.cloud.google.com/?project=coopertrans-movil — project number `808925655961`. |
-| **GitHub** | https://github.com/rodriguezreysantiago/logistica_app_profesional |
+| **GitHub** | https://github.com/rodriguezreysantiago/coopertrans_movil |
 | **WhatsApp del bot** | ⚠️ TODO: completar número del celular descartable. Solo Santiago lo conoce hoy. Una vez completado, ese número va al campo de Bitwarden item "WhatsApp del bot" si todavía no está. |
 | **`ADMIN_PHONES`** (whitelist comandos del bot) | En `whatsapp-bot/.env` de la PC oficina (instancia primaria) y PC casa (backup standby). NO en git por seguridad — duplicar a mano si se cambia. |
 
