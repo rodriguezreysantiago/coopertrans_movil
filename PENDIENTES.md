@@ -38,10 +38,13 @@ bug real del sistema o el chofer mintiendo).
   → registra en `REPORTES_DISCREPANCIA` {chofer_dni, chofer_nombre, tema, detalle,
   estado:pendiente, creado_en} SIN tocar ningún dato. Alcance: cualquier dato
   (jornada/unidad/adelantos/vencimientos). El agente no le da la razón, solo anota.
-- ⬜ **Fase 2 (pantalla, entra en el RELEASE)**: pantalla en el panel (admin/sup)
-  para revisar los reportes — lista, marcar cierto/no/revisado, cruzar con la
-  telemetría. Falta: rules `REPORTES_DISCREPANCIA` (read admin/sup, write backend) +
-  modelo Dart + service + pantalla + ruta + entrada de menú.
+- ✅ **Fase 2 (commit `04bfb86`, rules DEPLOYADAS)**: pantalla "Reportes de
+  choferes" en el hub Administración (admin/sup, tile con `builder` directo) —
+  lista pendientes/todos + KPIs, marcar CIERTO / NO COINCIDE + nota, reabrir.
+  Modelo `ReporteDiscrepancia` + `ReportesDiscrepanciaService` + 6 tests. Rules
+  `REPORTES_DISCREPANCIA` read/update admin-sup, create/delete false (solo el bot
+  escribe). ⏳ Verificar visual al salir el release (la pantalla viaja con la app;
+  las rules ya están vivas).
 
 Verificar en próximos chats que las 4 mejoras + el buzón se usen bien.
 
