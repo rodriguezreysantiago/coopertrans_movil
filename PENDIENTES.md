@@ -28,9 +28,22 @@ auto-update del bot — `whatsapp-bot/src/agente.js`):
    en "ACKERMANN"; + el chofer puede consultar su jornada/unidad mencionando SU
    patente (antes lo rechazaba).
 
-+9 tests (agente 77/77). **A futuro (no en este lote, decisión de Santiago)**: tool
-para que el chofer REPORTE una discrepancia de jornada (hoy se deriva); registrar
-un problema operativo (cospel). Verificar en próximos chats que las 4 se usen bien.
++9 tests (agente 77/77).
+
+**Buzón de discrepancias del chofer (Santiago 06-jun)** — los choferes a veces
+mienten sobre jornada/datos: NO se les cree (el dato lo define la telemetría/GPS),
+pero SÍ se guarda lo que dicen como feedback para revisar caso por caso (puede ser
+bug real del sistema o el chofer mintiendo).
+- ✅ **Fase 1 (bot, commit `5c50eb7`, por auto-update)**: tool `reportar_discrepancia`
+  → registra en `REPORTES_DISCREPANCIA` {chofer_dni, chofer_nombre, tema, detalle,
+  estado:pendiente, creado_en} SIN tocar ningún dato. Alcance: cualquier dato
+  (jornada/unidad/adelantos/vencimientos). El agente no le da la razón, solo anota.
+- ⬜ **Fase 2 (pantalla, entra en el RELEASE)**: pantalla en el panel (admin/sup)
+  para revisar los reportes — lista, marcar cierto/no/revisado, cruzar con la
+  telemetría. Falta: rules `REPORTES_DISCREPANCIA` (read admin/sup, write backend) +
+  modelo Dart + service + pantalla + ruta + entrada de menú.
+
+Verificar en próximos chats que las 4 mejoras + el buzón se usen bien.
 
 ---
 
