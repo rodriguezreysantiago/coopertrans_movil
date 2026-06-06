@@ -28,10 +28,5 @@
 	     picker de Logística. Solo cuando se solicita, no background. -->
 	<key>com.apple.security.personal-information.location</key>
 	<true/>
-
-	<!-- Apple Events: flutter_local_notifications usa NSAppleEventManager
-	     para algunas operaciones (defensivo, no estrictamente requerido). -->
-	<key>com.apple.security.automation.apple-events</key>
-	<false/>
 </dict>
 </plist>

@@ -7,6 +7,34 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-06-06 — macOS rechazado por Apple — entitlement inválido (FIX HECHO)
+
+Apple rechazó **macOS 1.0 (58)** (Submission `47e2ee0a-fbd1-4ef1-9557-f6c95848cb54`)
+por **Guideline 2.4.5(i) — Performance**:
+> The app incorrectly implements sandboxing, or it contains one or more entitlements
+> with invalid values. — `com.apple.security.automation.apple-events`
+
+**Causa**: `macos/Runner/Release.entitlements` declaraba el entitlement con valor
+`false`. Apple lo trata como inválido — la regla del sandbox es:
+- si NO necesitás el permiso, **no declarés el entitlement** (false ya es el default);
+- si lo necesitás, lo declarás con `true`.
+
+El comentario que decía "flutter_local_notifications usa NSAppleEventManager" era
+erróneo: notificaciones locales van por `UNUserNotificationCenter`, no por Apple
+Events. Confirmado: 0 referencias a `apple-events` / `NSAppleEventManager` /
+`NSAppleScript` / `AppleEvent` en `macos/`. `DebugProfile.entitlements` ya no lo
+tenía.
+
+**Fix** (commit acompañando este doc): eliminada la entrada del Release.entitlements.
+`plutil -lint` OK. No cambia comportamiento — solo limpia un entitlement nulo del
+binario firmado.
+
+**⏳ Pendiente Santiago**: re-submit a App Store Connect macOS con un build nuevo
+(Xcode Cloud lo arma con el próximo push de tag de versión). Probablemente entra
+directo con la 1.0.92+95 o el bump siguiente — sin tocar nada más.
+
+---
+
 ## 📅 2026-06-05 PM — Gomería: stock solo admin + conteo de inventario a ciegas
 
 Pedido Santiago. Dos partes (commits `bc200aa` + `9489a9e`, rules deployadas):
