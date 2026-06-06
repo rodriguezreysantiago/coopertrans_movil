@@ -18,6 +18,11 @@
 
 const admin = require('firebase-admin');
 const log = require('./logger');
+// Helpers de fecha TZ-ART compartidos con el cron — UNA sola fuente de verdad
+// para la conversión de fecha (aIsoLocal) y el conteo de días (diasEntreIso),
+// de modo que el agente y los avisos automáticos no discrepen ±1 día sobre
+// Timestamps de Firestore (auditoría 2026-06-06).
+const { aIsoLocal, diasEntreIso } = require('./fechas');
 
 // ── Anthropic ──
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
@@ -155,24 +160,29 @@ async function _agenteActivo(db) {
   return _flagCache;
 }
 
+// Normaliza cualquier representación de fecha a `YYYY-MM-DD`.
+//
+// Para STRINGS en formato AR (DD/MM/AAAA o DD-MM-AAAA) hace el parseo acá —
+// `aIsoLocal` NO entiende ese formato (lo mandaría a `new Date()` y lo
+// misparsea). Para TODO lo demás (Timestamp de Firestore, Date, objeto
+// serializado con _seconds, y strings ISO YYYY-MM-DD) delega en `aIsoLocal`
+// de fechas.js → MISMA conversión que usa el cron. Antes este helper hacía
+// `ts.toDate().toISOString().slice(0,10)` (día UTC), que para Timestamps con
+// hora real distinta de medianoche-UTC se corría ±1 día respecto del aviso
+// automático (que ya usaba aIsoLocal). Auditoría 2026-06-06.
 function _fechaIso(v) {
   if (v == null || v === '') return null;
-  if (typeof v.toDate === 'function') {
-    try {
-      return v.toDate().toISOString().slice(0, 10);
-    } catch (_) {
-      return null;
+  // String formato AR (la app vieja / data importada): DD/MM/AAAA o DD-MM-AAAA.
+  if (typeof v === 'string') {
+    const m = v.trim().match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+    if (m) {
+      const dd = m[1].padStart(2, '0');
+      const mm = m[2].padStart(2, '0');
+      return `${m[3]}-${mm}-${dd}`;
     }
   }
-  const s = String(v).trim();
-  const m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  if (m) {
-    const dd = m[1].padStart(2, '0');
-    const mm = m[2].padStart(2, '0');
-    return `${m[3]}-${mm}-${dd}`;
-  }
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
-  return null;
+  // Resto (Timestamp / Date / {_seconds} / string ISO): fuente única con el cron.
+  return aIsoLocal(v);
 }
 
 function _hoyIso() {
@@ -1129,13 +1139,15 @@ function _fmtHHMM(seg) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-/** Días entre hoy y `iso` (YYYY-MM-DD). Negativo = ya venció. null si inválida. */
+/**
+ * Días entre hoy (ART) y `iso` (YYYY-MM-DD). Negativo = ya venció. null si
+ * inválida. Usa `diasEntreIso` de fechas.js — MISMA aritmética que el cron
+ * (`calcularDiasRestantes`): medianoche LOCAL en ambos extremos. Antes hacía
+ * la resta a medianoche UTC y discrepaba ±1 día con el aviso automático.
+ */
 function _diasHasta(iso) {
   if (!iso) return null;
-  const a = new Date(`${iso}T00:00:00Z`).getTime();
-  const b = new Date(`${_hoyIso()}T00:00:00Z`).getTime();
-  if (isNaN(a) || isNaN(b)) return null;
-  return Math.round((a - b) / 86400000);
+  return diasEntreIso(_hoyIso(), iso);
 }
 
 /**
@@ -2027,7 +2039,23 @@ async function _toolContactoOficina(db, args) {
   } catch (e) {
     return { error: `No pude leer el contacto: ${e.message}` };
   }
-  if (!data) return { error: 'El contacto de esa área no está cargado en el sistema.' };
+  if (!data) {
+    // El mapa CONTACTOS_POR_AREA quedó stale: apunta a un DNI que ya no existe
+    // en EMPLEADOS (baja/renombre del responsable). Avisar para corregirlo.
+    log.warn(
+      `[agente] contacto_oficina: area "${area}" → DNI ${dni} no existe en ` +
+        `EMPLEADOS (mapa CONTACTOS_POR_AREA desactualizado).`,
+    );
+    return { error: 'El contacto de esa área no está cargado en el sistema.' };
+  }
+  if (!data.TELEFONO) {
+    // Existe el empleado pero sin teléfono cargado — el contacto que devolvemos
+    // es inútil. Avisar para que carguen el TELEFONO o revisen el mapa.
+    log.warn(
+      `[agente] contacto_oficina: area "${area}" → ${data.NOMBRE || dni} ` +
+        `(DNI ${dni}) sin TELEFONO cargado.`,
+    );
+  }
   return {
     area,
     nombre: data.NOMBRE || dni,
@@ -2662,6 +2690,33 @@ async function responder({ texto, persona, telefono, audio }, fs) {
   // Roles sin herramientas propias todavía (PLANTA/GOMERIA/SEG_HIGIENE): el
   // agente no actúa, cae al flujo de siempre.
   if (_toolsDelRol(persona.rol).length === 0) return null;
+
+  // ── DECISIÓN DE PRODUCTO PENDIENTE: el self-service del agente NO aplica la
+  //    exclusión de tanqueros/testers (cargarExcluidos/esExcluido de
+  //    excluidos.js) ───────────────────────────────────────────────────────
+  // Los crons SÍ filtran por esa lista (no le mandan avisos a los 3 choferes
+  // de enganches TANQUE —otra área de Vecchi— ni a los usuarios tester de
+  // Play/TestFlight). Acá, en cambio, las tools self-service (mi_jornada,
+  // mi_turno_ypf, mis_adelantos, mis_vencimientos, mi_unidad, mis_viajes,
+  // donde_esta_mi_unidad, etc.) responden por `persona.dni` SIN pasar por
+  // esExcluido → un tanquero o un tester que le escriba al bot obtendría sus
+  // propios datos.
+  //
+  // Se deja A PROPÓSITO sin filtrar: bloquear a alguien del self-service es una
+  // decisión de PRODUCTO, no un bug. Diferencias con los crons que lo hacen
+  // seguro por defecto:
+  //   - Un cron ESCRIBE proactivamente a un número que quizá no es nuestro
+  //     (los tanqueros son de otra área) → molesto/indebido. El self-service,
+  //     en cambio, solo RESPONDE a quien YA escribió, y solo con SUS PROPIOS
+  //     datos (la privacidad por DNI sigue intacta: un tanquero no ve a otro).
+  //   - Los testers no tienen WhatsApp real → en la práctica no llegan acá.
+  //
+  // Si el dueño decide excluirlos, el patrón seguro NO es devolver `null` (eso
+  // los manda al acuse genérico, confuso), sino una respuesta explícita del
+  // estilo "tu unidad es de otra área, comunicate con la oficina" — gateando
+  // por `await esExcluido(await cargarExcluidos(db), { dni: persona.dni })`
+  // ANTES de armar el prompt. Queda pendiente de definición. (Auditoría
+  // 2026-06-06, fix 4.)
 
   const rlKey = persona.dni || telefono || 'anon';
   if (_rateLimited(rlKey)) {

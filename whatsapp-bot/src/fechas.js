@@ -151,6 +151,41 @@ function aLocalTime(fecha) {
 }
 
 /**
+ * Días entre dos fechas-calendario expresadas como `YYYY-MM-DD` (o ISO con
+ * tail). Devuelve `hasta - desde` en días corridos (positivo si `hasta` es
+ * posterior; negativo si ya pasó). `null` si alguna no parsea.
+ *
+ * Misma aritmética que `calcularDiasRestantes` en cron.js: parseo MANUAL de los
+ * componentes Y-M-D y `new Date(y, m, d)` (medianoche LOCAL) en ambos extremos,
+ * para NO sufrir el shift `new Date("YYYY-MM-DD")` = medianoche UTC = 21h del día
+ * anterior en ART. Centraliza ese cálculo para que el agente (agente._diasHasta)
+ * y el cron cuenten los días con la MISMA fórmula — antes el agente usaba
+ * medianoche UTC y discrepaba ±1 día con el aviso automático.
+ *
+ * @param {string} isoDesde - YYYY-MM-DD (típicamente hoy en ART).
+ * @param {string} isoHasta - YYYY-MM-DD (la fecha de vencimiento).
+ * @returns {number|null}
+ */
+function diasEntreIso(isoDesde, isoHasta) {
+  const a = _isoYmdALocalDate(isoDesde);
+  const b = _isoYmdALocalDate(isoHasta);
+  if (!a || !b) return null;
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+/**
+ * Helper interno: `YYYY-MM-DD` (o ISO con tail) → Date a medianoche LOCAL.
+ * Parseo manual de los 3 componentes (NO `new Date(str)`, que interpreta
+ * `YYYY-MM-DD` como UTC). Devuelve null si no matchea el patrón.
+ */
+function _isoYmdALocalDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || '').trim());
+  if (!m) return null;
+  const d = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
  * Helper interno: convierte un Date a YYYY-MM-DD eligiendo entre
  * componentes UTC (cuando es fecha calendario, hora UTC = 00:00:00.000)
  * o componentes locales (cuando es momento real con hora). Ver el
@@ -185,6 +220,7 @@ module.exports = {
   aDdMmYyyyLocal,
   aLocalDateTime,
   aLocalTime,
+  diasEntreIso,
   // Exportado para tests / debugging.
   _dateToIsoSafe,
 };

@@ -9,6 +9,8 @@ process.env.TZ = 'America/Argentina/Buenos_Aires';
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
 const agente = require('../src/agente');
+// aIsoLocal: normalizador que usa el cron — oráculo del test de equivalencia.
+const { aIsoLocal } = require('../src/fechas');
 
 describe('agente._fechaIso — normaliza a YYYY-MM-DD', () => {
   test('Timestamp de Firestore', () => {
@@ -28,6 +30,24 @@ describe('agente._fechaIso — normaliza a YYYY-MM-DD', () => {
     assert.strictEqual(agente._fechaIso(''), null);
     assert.strictEqual(agente._fechaIso(null), null);
     assert.strictEqual(agente._fechaIso('no es fecha'), null);
+  });
+  // Fix 2 (auditoría 2026-06-06): _fechaIso ahora delega Timestamps/Date en
+  // aIsoLocal (misma conversión que el cron), en vez de toISOString() (día UTC).
+  test('Timestamp midnight-UTC (fecha calendario) → día UTC, no shift ART', () => {
+    // Python guarda datetime(2026,5,30) como medianoche UTC. En ART eso es
+    // 21h del 29; el día que el usuario quiso guardar es el 30.
+    const ts = { toDate: () => new Date(Date.UTC(2026, 4, 30, 0, 0, 0, 0)) };
+    assert.strictEqual(agente._fechaIso(ts), '2026-05-30');
+  });
+  test('Timestamp con hora real (no medianoche-UTC) usa componentes locales (ART)', () => {
+    // 2026-06-14 22:00 ART = 2026-06-15 01:00 UTC. El día-calendario en ART es
+    // el 14 — el código viejo (toISOString) devolvía 15 (off-by-one).
+    const ts = { toDate: () => new Date(Date.UTC(2026, 5, 15, 1, 0, 0, 0)) };
+    assert.strictEqual(agente._fechaIso(ts), '2026-06-14');
+  });
+  test('Timestamp serializado JSON con _seconds (midnight-UTC)', () => {
+    const secs = Date.UTC(2026, 4, 30, 0, 0, 0, 0) / 1000;
+    assert.strictEqual(agente._fechaIso({ _seconds: secs, _nanoseconds: 0 }), '2026-05-30');
   });
 });
 
@@ -76,6 +96,94 @@ describe('agente._systemPrompt — por rol', () => {
     assert.ok(!/cachatore/i.test(p), 'NO menciona Cachatore en lo que PODÉS');
     assert.ok(/NUNCA inventes/i.test(p));
   });
+});
+
+// ── Fix 2 (auditoría 2026-06-06): _diasHasta del agente debe contar los días
+//    con la MISMA fórmula que el cron, para no discrepar ±1 día con el aviso
+//    automático sobre Timestamps de Firestore ──────────────────────────────
+//
+// Oráculo: réplica EXACTA de cron.calcularDiasRestantes (cron.js) — parseo
+// manual de componentes Y-M-D y new Date(y,m,d) (medianoche LOCAL) en ambos
+// extremos. Lo replicamos inline en vez de require('../src/cron') para que el
+// test quede hermético (cron.js arrastra whatsapp/health/firestore). Si el
+// algoritmo del cron cambiara, este oráculo (y el test) deben acompañarlo.
+function _cronCalcularDiasRestantes(fechaIso) {
+  if (!fechaIso) return null;
+  const str = String(fechaIso).trim();
+  let venc;
+  const mIso = /^(\d{4})-(\d{2})-(\d{2})/.exec(str);
+  const mAr = /^(\d{2})[\/\-](\d{2})[\/\-](\d{4})/.exec(str);
+  if (mIso) {
+    venc = new Date(parseInt(mIso[1], 10), parseInt(mIso[2], 10) - 1, parseInt(mIso[3], 10));
+  } else if (mAr) {
+    venc = new Date(parseInt(mAr[3], 10), parseInt(mAr[2], 10) - 1, parseInt(mAr[1], 10));
+  } else {
+    venc = new Date(str);
+  }
+  if (isNaN(venc.getTime())) return null;
+  const hoy = new Date();
+  const a = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+  const b = new Date(venc.getFullYear(), venc.getMonth(), venc.getDate());
+  return Math.round((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+// Timestamp de Firestore (mock) cuyo día-calendario ART es `hoy + offsetDias`.
+// La hora UTC se elige según el modo:
+//   - 'medianoche': medianoche UTC (caso migración Python datetime(Y,M,D)).
+//   - 'horaReal': 23:00 ART (= 02:00 UTC del día siguiente) — el caso que el
+//     código viejo (toISOString) corría +1 día.
+function _tsParaOffset(offsetDias, modo) {
+  const base = new Date();
+  base.setHours(0, 0, 0, 0);
+  base.setDate(base.getDate() + offsetDias);
+  const y = base.getFullYear();
+  const m = base.getMonth();
+  const d = base.getDate();
+  const date = modo === 'horaReal'
+    ? new Date(y, m, d, 23, 0, 0, 0) // 23:00 hora LOCAL (ART en el runner)
+    : new Date(Date.UTC(y, m, d, 0, 0, 0, 0)); // medianoche UTC
+  return { toDate: () => date };
+}
+
+describe('agente._diasHasta — conteo de días', () => {
+  test('hoy (ISO) → 0; mañana → 1; ayer → -1', () => {
+    const hoy = agente._hoyIso();
+    assert.strictEqual(agente._diasHasta(hoy), 0);
+    const [y, m, d] = hoy.split('-').map((n) => parseInt(n, 10));
+    const manana = new Date(y, m - 1, d + 1);
+    const isoManana = `${manana.getFullYear()}-${String(manana.getMonth() + 1).padStart(2, '0')}-${String(manana.getDate()).padStart(2, '0')}`;
+    assert.strictEqual(agente._diasHasta(isoManana), 1);
+    const ayer = new Date(y, m - 1, d - 1);
+    const isoAyer = `${ayer.getFullYear()}-${String(ayer.getMonth() + 1).padStart(2, '0')}-${String(ayer.getDate()).padStart(2, '0')}`;
+    assert.strictEqual(agente._diasHasta(isoAyer), -1);
+  });
+
+  test('null / fecha inválida → null', () => {
+    assert.strictEqual(agente._diasHasta(null), null);
+    assert.strictEqual(agente._diasHasta(''), null);
+    assert.strictEqual(agente._diasHasta('xxxx'), null);
+  });
+
+  // EL TEST QUE FIJA EL FIX: para un Timestamp de Firestore, el conteo del
+  // agente (_diasHasta ∘ _fechaIso) debe ser IDÉNTICO al del cron
+  // (calcularDiasRestantes ∘ aIsoLocal). Antes del fix, _fechaIso usaba el día
+  // UTC y _diasHasta restaba a medianoche UTC → discrepaba ±1 con el cron.
+  for (const offset of [-5, -1, 0, 1, 7, 30]) {
+    for (const modo of ['medianoche', 'horaReal']) {
+      test(`equivalencia con el cron — Timestamp ${modo}, hoy+${offset}d`, () => {
+        const ts = _tsParaOffset(offset, modo);
+        const delAgente = agente._diasHasta(agente._fechaIso(ts));
+        // El cron normaliza con aIsoLocal y cuenta con calcularDiasRestantes.
+        const delCron = _cronCalcularDiasRestantes(aIsoLocal(ts));
+        assert.strictEqual(
+          delAgente, delCron,
+          `agente=${delAgente} cron=${delCron} (modo=${modo}, offset=${offset})`,
+        );
+        // Y debe coincidir con el offset pedido (sanity, sin off-by-one).
+        assert.strictEqual(delAgente, offset);
+      });
+    }
+  }
 });
 
 describe('agente._textoDeRespuesta', () => {

@@ -678,16 +678,32 @@ function esMensajePropio(idSer) {
 // llegar ANTES de que `_marcarPropio` lo registre → race (el bot seguía
 // auto-respondiéndose, 2026-06-04 17:17). El TEXTO lo conocemos ANTES de enviar,
 // así que lo marcamos sincrónicamente antes del envío: cuando el reflejo llega
-// (mismo body), ya está marcado y se descarta. Solo textos >= 12 chars para no
-// chocar con "ok"/"hola" de un chofer. Map texto→ts, TTL 90s.
+// (mismo body), ya está marcado y se descarta. Map texto→ts, TTL 90s.
+//
+// ACOTADO POR FIRMA (auditoría 2026-06-06): esta capa SOLO mira textos que llevan
+// la firma del bot ("Bot-On"). Antes marcaba/descartaba CUALQUIER saliente de ≥12
+// chars, y un entrante que casualmente coincidía con una frase fija del bot ("No
+// tenés unidad asignada.", etc.) se descartaba como "reflejo propio" → el chofer
+// copiaba/repetía esa frase y su mensaje se perdía sin acuse. El motivo real de
+// esta capa es el reflejo corrupto de la sesión recién vinculada de los AVISOS del
+// vigilador/sitrack (el "hablan entre ellos", ver whatsapp.js:653) — y TODOS esos
+// avisos llevan "Bot-On". Los salientes SIN firma (acuses, respuestas del agente)
+// ya quedan cubiertos por la defensa infalible del id (_marcarPropio) + BOT_PHONE,
+// así que sacarlos de esta capa no abre ningún hueco y evita el falso positivo.
+const _FIRMA_BOT = 'Bot-On';
 const _textosPropios = new Map();
 const _TEXTO_PROPIO_TTL_MS = 90 * 1000;
 function _normTextoPropio(t) {
   return String(t || '').trim().replace(/\s+/g, ' ').slice(0, 600);
 }
+function _llevaFirmaBot(texto) {
+  return String(texto || '').includes(_FIRMA_BOT);
+}
 function _marcarTextoPropio(texto) {
+  // Solo los avisos firmados entran al cerrojo por contenido — ver cabecera.
+  if (!_llevaFirmaBot(texto)) return;
   const k = _normTextoPropio(texto);
-  if (k.length < 12) return; // textos cortos NO son avisos del bot → evita falsos +
+  if (k.length < 12) return; // defensivo: avisos reales son largos
   const ahora = Date.now();
   _textosPropios.set(k, ahora);
   if (_textosPropios.size > 300) {
@@ -696,8 +712,13 @@ function _marcarTextoPropio(texto) {
     }
   }
 }
-/** ¿El body coincide con un saliente nuestro de los últimos ~90s? */
+/**
+ * ¿El body coincide con un saliente FIRMADO nuestro de los últimos ~90s?
+ * Solo aplica a textos con la firma "Bot-On" (avisos del bot) — un entrante
+ * sin firma nunca se descarta por esta capa aunque copie una frase del bot.
+ */
 function esTextoPropio(texto) {
+  if (!_llevaFirmaBot(texto)) return false;
   const k = _normTextoPropio(texto);
   if (k.length < 12) return false;
   const ts = _textosPropios.get(k);
@@ -783,4 +804,7 @@ module.exports = {
   esTextoPropio,
   obtenerTelefonoDeLid,
   destroy,
+  // Exportados para tests del cerrojo por contenido (fix 1, 2026-06-06).
+  _marcarTextoPropio,
+  _resetTextosPropiosParaTests: () => _textosPropios.clear(),
 };

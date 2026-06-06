@@ -8,7 +8,9 @@ process.env.TZ = 'America/Argentina/Buenos_Aires';
 
 const { test, describe } = require('node:test');
 const assert = require('node:assert');
-const { aIsoLocal, aDdMmYyyyLocal, aLocalDateTime } = require('../src/fechas');
+const {
+  aIsoLocal, aDdMmYyyyLocal, aLocalDateTime, diasEntreIso,
+} = require('../src/fechas');
 
 describe('fechas.aIsoLocal — string inputs', () => {
   test('string YYYY-MM-DD se devuelve tal cual', () => {
@@ -176,5 +178,40 @@ describe('fechas.aLocalDateTime', () => {
     const r = aLocalDateTime(dt);
     assert.ok(!r.includes('T'), `No debe contener "T": ${r}`);
     assert.ok(!r.includes('Z'), `No debe contener "Z": ${r}`);
+  });
+});
+
+describe('fechas.diasEntreIso — conteo de días corridos', () => {
+  test('mismo día → 0', () => {
+    assert.strictEqual(diasEntreIso('2026-06-06', '2026-06-06'), 0);
+  });
+
+  test('un día después → 1; un día antes → -1', () => {
+    assert.strictEqual(diasEntreIso('2026-06-06', '2026-06-07'), 1);
+    assert.strictEqual(diasEntreIso('2026-06-06', '2026-06-05'), -1);
+  });
+
+  test('cruza fin de mes correctamente', () => {
+    // 30-may a 02-jun = 3 días.
+    assert.strictEqual(diasEntreIso('2026-05-30', '2026-06-02'), 3);
+  });
+
+  test('acepta ISO con tail (toma los primeros 10 chars)', () => {
+    assert.strictEqual(
+      diasEntreIso('2026-06-06T00:00:00.000Z', '2026-06-16T23:59:00Z'),
+      10,
+    );
+  });
+
+  test('NO sufre el shift UTC: medianoche ISO no resta un día', () => {
+    // El bug que motiva el helper: new Date("2026-06-07") es medianoche UTC =
+    // 21h del 06 en ART. Con parseo manual de componentes locales, 06→07 = 1.
+    assert.strictEqual(diasEntreIso('2026-06-06', '2026-06-07'), 1);
+  });
+
+  test('input inválido → null', () => {
+    assert.strictEqual(diasEntreIso('xxxx', '2026-06-06'), null);
+    assert.strictEqual(diasEntreIso('2026-06-06', ''), null);
+    assert.strictEqual(diasEntreIso(null, null), null);
   });
 });

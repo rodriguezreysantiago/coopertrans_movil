@@ -404,11 +404,15 @@ function crearHandler(fs, wa) {
         return;
       }
       // Cerrojo por CONTENIDO (cubre el race del id, que se genera dentro de
-      // sendMessage): si el body coincide con un saliente nuestro reciente, es
-      // el reflejo de message_create — descartar. Cierra el auto-diálogo del
-      // vigilador que el id solo no atrapaba (2026-06-04).
+      // sendMessage): si el body coincide con un saliente FIRMADO nuestro
+      // reciente, es el reflejo de message_create — descartar. Cierra el
+      // auto-diálogo del vigilador que el id solo no atrapaba (2026-06-04).
+      // Acotado a textos con firma "Bot-On" (auditoría 2026-06-06): un entrante
+      // legítimo que copie una frase fija del bot NO se descarta acá (ver
+      // whatsapp.js:_marcarTextoPropio); los salientes sin firma ya los atrapan
+      // el id (esMensajePropio) y BOT_PHONE más abajo.
       if (wa.esTextoPropio && wa.esTextoPropio(msg.body)) {
-        log.warn('[handler] reflejo de saliente propio descartado por contenido');
+        log.warn('[handler] reflejo de saliente propio descartado por contenido (firmado)');
         return;
       }
       // Red de seguridad (2026-06-04): TODOS los avisos del bot llevan la firma
