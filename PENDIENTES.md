@@ -7,6 +7,33 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-06-06 — Agente WhatsApp: 4 mejoras de la revisión de chats (HECHO, por auto-update)
+
+Revisión de TODO el histórico del agente (82 chats, 1→5 jun): **0 fallbacks**. De
+los 10 casos donde declinó salieron 4 mejoras (commit `a5cd686`, en prod por
+auto-update del bot — `whatsapp-bot/src/agente.js`):
+1. **`jornada_de` con `dia`** — consulta jornadas PASADAS ya cerradas ("la de
+   ayer / el 03-06"), no solo la de hoy. Día ART por `Intl` (no el ISO-UTC de
+   `_fechaIso`).
+2. **`contacto_oficina`** (tool común chofer + gestión) — da nombre + teléfono
+   del responsable por ÁREA: mantenimiento=Corchete (29820141), logística=Errazu
+   (25022800), documentación=Giagante (26456455), sistema/app=Santiago
+   (35244439), seguridad=Molina (34730329). Mapa `CONTACTOS_POR_AREA`; el
+   teléfono se resuelve en vivo de EMPLEADOS. Reemplaza el "comunicate con la
+   oficina" genérico.
+3. **`adelantos_emitidos`** (verLogistica) — cuántos adelantos se registraron en
+   una ventana (default hoy) + total, por `creado_en`. Distinto de
+   `adelantos_pendientes`.
+4. **Match de nombres FUZZY** (Levenshtein, fallback del exacto) → "Akerman" cae
+   en "ACKERMANN"; + el chofer puede consultar su jornada/unidad mencionando SU
+   patente (antes lo rechazaba).
+
++9 tests (agente 77/77). **A futuro (no en este lote, decisión de Santiago)**: tool
+para que el chofer REPORTE una discrepancia de jornada (hoy se deriva); registrar
+un problema operativo (cospel). Verificar en próximos chats que las 4 se usen bien.
+
+---
+
 ## 📅 2026-06-06 — macOS rechazado por Apple — entitlement inválido (FIX HECHO)
 
 Apple rechazó **macOS 1.0 (58)** (Submission `47e2ee0a-fbd1-4ef1-9557-f6c95848cb54`)
