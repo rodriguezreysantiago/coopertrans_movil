@@ -294,6 +294,17 @@ service cloud.firestore {
     }
 
     // ========================================================================
+    // REPORTES_DISCREPANCIA — reclamos de choferes vía bot (2026-06-06)
+    // ========================================================================
+    // Los crea SOLO el bot (tool reportar_discrepancia, Admin SDK → bypasea
+    // rules). Admin/supervisor LEEN y marcan revisado (update). Nadie crea ni
+    // borra desde el cliente: la verdad la define la telemetría, esto es feedback.
+    match /REPORTES_DISCREPANCIA/{doc} {
+      allow read, update: if isAdminOrSupervisor();
+      allow create, delete: if false;
+    }
+
+    // ========================================================================
     // WHATSAPP_HISTORICO — espejo de mensajes terminales (M8, 2026-05-24)
     // ========================================================================
     // Doc espejo de COLA_WHATSAPP cuando el mensaje llega a estado terminal

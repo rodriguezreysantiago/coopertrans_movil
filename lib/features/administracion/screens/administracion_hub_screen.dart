@@ -16,6 +16,7 @@ import '../../../shared/utils/responsive_grid.dart';
 import '../../../shared/widgets/app_widgets.dart';
 
 import 'admin_vacaciones_screen.dart';
+import 'reportes_discrepancia_screen.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
@@ -53,7 +54,7 @@ class AdministracionHubScreen extends StatelessWidget {
                   } else {
                     columnas = 2;
                   }
-                  const totalTiles = 1; // sumar al agregar submenús
+                  const totalTiles = 2; // sumar al agregar submenús
                   final filas = (totalTiles / columnas).ceil();
                   const spacing = AppSpacing.mdDense;
                   final ratio = computeGridRatio(
@@ -75,6 +76,12 @@ class AdministracionHubScreen extends StatelessWidget {
                         subtitulo: 'Solicitudes, calendario y saldo',
                         icono: Icons.beach_access_outlined,
                         builder: (_) => const AdminVacacionesScreen(),
+                      ),
+                      _HubTile(
+                        titulo: 'Reportes de choferes',
+                        subtitulo: 'Reclamos del bot · validar vs sistema',
+                        icono: Icons.flag_outlined,
+                        builder: (_) => const ReportesDiscrepanciaScreen(),
                       ),
                     ],
                   );

@@ -339,6 +339,12 @@ class AppCollections {
   /// se derivan. Referencia al legajo por DNI; identidad vive en EMPLEADOS.
   static const String vacaciones = 'VACACIONES';
 
+  /// Reclamos de choferes (módulo Administración). Los crea SOLO el bot de
+  /// WhatsApp (tool `reportar_discrepancia`) cuando un chofer insiste en que un
+  /// dato no le coincide. La app los LEE y marca revisado (cierto/no_cierto);
+  /// NO modifica el dato reclamado — la verdad la define la telemetría/GPS.
+  static const String reportesDiscrepancia = 'REPORTES_DISCREPANCIA';
+
   /// Contadores atómicos para correlativos que requieren orden estricto
   /// (sin gaps, sin duplicados). Cada doc representa un correlativo
   /// independiente — `COUNTERS/recibos_adelanto.next` para el número
