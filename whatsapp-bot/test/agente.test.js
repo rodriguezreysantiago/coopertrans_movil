@@ -96,7 +96,7 @@ describe('agente._textoDeRespuesta', () => {
 });
 
 describe('agente — tools por rol y conversores', () => {
-  test('CHOFER: self-service sin parámetros + contacto_oficina (común) con area', () => {
+  test('CHOFER: self-service sin parámetros + tools con args (contacto/discrepancia)', () => {
     const a = agente._toolsAnthropic('CHOFER');
     assert.ok(a.length >= 2);
     for (const t of a) assert.strictEqual(t.input_schema.type, 'object');
@@ -105,10 +105,12 @@ describe('agente — tools por rol y conversores', () => {
       g[0].functionDeclarations.some((d) => d.name === 'contacto_oficina'),
       'CHOFER tiene la tool común contacto_oficina'
     );
+    // Únicas tools de chofer con parámetros: contacto_oficina (area) y
+    // reportar_discrepancia (tema/detalle). El resto es self-service sin args.
+    const CON_PARAMS = new Set(['contacto_oficina', 'reportar_discrepancia']);
     for (const d of g[0].functionDeclarations) {
-      if (d.name === 'contacto_oficina') {
-        // Única tool de chofer con parámetro: el área a la que derivar.
-        assert.ok(d.parameters.properties.area, 'contacto_oficina lleva area');
+      if (CON_PARAMS.has(d.name)) {
+        assert.ok(d.parameters && d.parameters.properties, `${d.name} lleva parameters`);
       } else {
         assert.strictEqual(d.parameters, undefined); // self-service sin args
       }
@@ -1022,5 +1024,40 @@ describe('agente — mejoras 2026-06-06 (fuzzy + jornada pasada + adelantos emit
   test('CHOFER tiene contacto_oficina entre sus tools', () => {
     const nombres = agente._toolsAnthropic('CHOFER').map((t) => t.name);
     assert.ok(nombres.includes('contacto_oficina'));
+  });
+
+  test('reportar_discrepancia: guarda pendiente con DNI/tema, sin tocar el dato', async () => {
+    let guardado = null;
+    const db = { collection: () => ({ doc: () => ({ id: 'r1', set: async (d) => { guardado = d; } }) }) };
+    const r = await agente._ejecutarTool(
+      db, 'reportar_discrepancia',
+      { rol: 'CHOFER', dni: '30111222', data: { NOMBRE: 'PEREZ JUAN' } },
+      { tema: 'jornada', detalle: 'salio 6:45 de Deraux y no figura' }
+    );
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(guardado.estado, 'pendiente');
+    assert.strictEqual(guardado.tema, 'jornada');
+    assert.strictEqual(guardado.chofer_dni, '30111222');
+    assert.ok(/6:45/.test(guardado.detalle));
+  });
+
+  test('reportar_discrepancia: tema inválido cae a "otro"', async () => {
+    let guardado = null;
+    const db = { collection: () => ({ doc: () => ({ id: 'r1', set: async (d) => { guardado = d; } }) }) };
+    await agente._ejecutarTool(
+      db, 'reportar_discrepancia',
+      { rol: 'CHOFER', dni: '1', data: {} }, { tema: 'cualquiera', detalle: 'algo' }
+    );
+    assert.strictEqual(guardado.tema, 'otro');
+  });
+
+  test('reportar_discrepancia: sin detalle → error, NO escribe', async () => {
+    let llamado = false;
+    const db = { collection: () => ({ doc: () => ({ id: 'r1', set: async () => { llamado = true; } }) }) };
+    const r = await agente._ejecutarTool(
+      db, 'reportar_discrepancia', { rol: 'CHOFER', dni: '1', data: {} }, { tema: 'jornada', detalle: '' }
+    );
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(llamado, false);
   });
 });

@@ -298,6 +298,32 @@ const TOOLS_CHOFER = [
       'concluido, fecha y carga). Usala si preguntan por sus viajes.',
     params: {},
   },
+  {
+    name: 'reportar_discrepancia',
+    description:
+      'Registra un RECLAMO del chofer cuando insiste en que un dato que le ' +
+      'mostraste NO le coincide o que el sistema no registró algo (su jornada/' +
+      'horas, su unidad, un adelanto, un vencimiento, etc.). NO cambia ningún ' +
+      'dato ni la jornada — solo deja constancia para que la oficina lo revise ' +
+      'contra el sistema (el dato real lo define la telemetría/GPS, no lo que ' +
+      'dice el chofer). Usala recién cuando el chofer INSISTE en que algo está ' +
+      'mal (ej. "salí 6:45 y no figura", "esa no es mi unidad", "ese adelanto no ' +
+      'me lo dieron"). Tras anotarlo, decile que quedó registrado para que lo ' +
+      'revise la oficina; NUNCA le prometas que se va a corregir.',
+    params: {
+      tema: {
+        type: 'string',
+        description:
+          'jornada | unidad | adelantos | vencimientos | otro. Según de qué se queja.',
+      },
+      detalle: {
+        type: 'string',
+        description:
+          'Lo que dice el chofer en sus palabras (ej. "salió 6:45 de Deraux y la ' +
+          'jornada no lo registró"). Incluí la fecha/hora que menciona si la da.',
+      },
+    },
+  },
 ];
 
 const TOOLS_GESTION_VENC = [
@@ -1925,6 +1951,36 @@ async function _toolServiceUnidad(db, args) {
   }
 }
 
+async function _toolReportarDiscrepancia(db, persona, args) {
+  const detalle = String((args && args.detalle) || '').trim();
+  if (!detalle) {
+    return { ok: false, error: 'Falta el detalle: que el chofer cuente qué no le coincide.' };
+  }
+  const TEMAS_OK = ['jornada', 'unidad', 'adelantos', 'vencimientos', 'otro'];
+  const tema = String((args && args.tema) || 'otro').trim().toLowerCase();
+  const temaNorm = TEMAS_OK.includes(tema) ? tema : 'otro';
+  try {
+    const ref = db.collection('REPORTES_DISCREPANCIA').doc();
+    await ref.set({
+      chofer_dni: persona.dni || null,
+      chofer_nombre: (persona.data && persona.data.NOMBRE) || null,
+      tema: temaNorm,
+      detalle,
+      estado: 'pendiente', // pendiente | revisado — lo cierra un humano desde la app
+      creado_en: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return {
+      ok: true,
+      reporte_id: ref.id,
+      nota: 'Quedó registrado para que lo revise la oficina. Decile al chofer ' +
+        'que se va a revisar, SIN prometerle que se corrige (el dato lo define ' +
+        'el sistema/GPS, no lo que él dice).',
+    };
+  } catch (e) {
+    return { ok: false, error: `No pude anotar el reporte: ${e.message}` };
+  }
+}
+
 async function _toolContactoOficina(db, args) {
   const area = String((args && args.area) || '').trim().toLowerCase();
   const dni = CONTACTOS_POR_AREA[area];
@@ -2008,6 +2064,8 @@ async function _ejecutarTool(db, nombre, persona, args) {
       return await _toolListarEmpleadosPorRol(db, args);
     case 'contacto_oficina':
       return await _toolContactoOficina(db, args);
+    case 'reportar_discrepancia':
+      return await _toolReportarDiscrepancia(db, persona, args);
     default:
       return { error: `Herramienta desconocida: ${nombre}` };
   }
@@ -2094,6 +2152,11 @@ function _systemPrompt(persona) {
     '  desperfecto, un trámite, un problema de la app, etc.), NO mandes un',
     '  "comunicate con la oficina" genérico: usá contacto_oficina con el área',
     '  del tema y pasale el NOMBRE y el TELÉFONO de quien lo resuelve.',
+    '- Si el chofer INSISTE en que un dato que le mostraste está mal o que el',
+    '  sistema no le registró algo (su jornada/horas, su unidad, un adelanto…),',
+    '  NO le des la razón ni le cambies el número (ese dato lo define el sistema/',
+    '  GPS). Anotá su reclamo con reportar_discrepancia y decile que queda',
+    '  registrado para que lo revise la oficina.',
     ...comun,
   ].join('\n');
 }
