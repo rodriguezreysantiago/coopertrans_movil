@@ -212,8 +212,13 @@ por GAP de reportes** (fix "dormí 8 h → me decía 12 h" — equipo apagado de
 ### 🔧 Pendientes / a verificar (Santiago)
 - ✅ Resuelto 2026-06-05: ~~corregir 2 tarifas mal cargadas (Sea White→La
   Martineta sin tarifa de chofer; Río Colorado→Monte Hermoso/Devic chofer $2)~~.
-- **Monitorear primer día**: vigilador de jornada (avisos coherentes) +
-  anti-auto-respuesta (log `[handler] reflejo de saliente propio descartado por id`).
+- ✅ Monitoreado 2026-06-06: ~~vigilador de jornada~~ SANO (gate Volvo/Sitrack OK —
+  descarta los Volvo congelados ~7d y usa Sitrack fresco; cierra por 8h-quieto / gap de
+  reportes ≥8h / cap 14h; las jornadas que el monitor marca >16h son reales largas que
+  cruzan la noche, NO bug — cierran solas) + ~~anti-auto-respuesta~~ SANO (2 capas en el
+  handler, por id + por contenido; **0 auto-conversaciones** en los últimos 30 chats del
+  agente, 0 fallbacks). Nota de diseño: la veda nocturna AVISA pero NO cierra (política
+  Vecchi) — cambiar eso sería decisión aparte de Santiago.
 - ✅ Resueltos 2026-06-04: ~~alerta presupuesto Gemini (Cloud Billing)~~ ·
   ~~franja reagendar AVIT~~ · ~~subir AAB a Play~~ · ~~iOS/macOS build + submit~~.
 
