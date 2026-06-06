@@ -55,6 +55,10 @@ class _DashboardBot extends StatelessWidget {
         _TileAbrirReglas(
           cantidad: ((data['reglasNotificacion'] as Map?) ?? const {}).length,
         ),
+        const SizedBox(height: AppSpacing.md),
+        // Reclamos que dejan los choferes por el bot ("ese dato no coincide").
+        // No tocan el dato — se validan contra la telemetría desde acá.
+        const _TileAbrirReportes(),
         const SizedBox(height: AppSpacing.xl),
       ],
     );
@@ -925,6 +929,59 @@ class _CardConfig extends StatelessWidget {
 /// recientes" (buffer de log técnico, solo lectura) se quitaron el mismo
 /// día: no eran accionables para el operador y alargaban el dashboard. La
 /// data sigue en BOT_HEALTH/main para diagnóstico.
+class _TileAbrirReportes extends StatelessWidget {
+  const _TileAbrirReportes();
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const ReportesDiscrepanciaScreen(),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Row(
+            children: [
+              Icon(Icons.flag_outlined,
+                  color: context.colors.textSecondary, size: 20),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Reportes de choferes',
+                      style: AppType.label.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Reclamos del bot · validar contra el sistema',
+                      style: AppType.label.copyWith(
+                        color: AppColors.textTertiary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right,
+                  color: context.colors.textMuted, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _TileAbrirReglas extends StatelessWidget {
   final int cantidad;
   const _TileAbrirReglas({required this.cantidad});

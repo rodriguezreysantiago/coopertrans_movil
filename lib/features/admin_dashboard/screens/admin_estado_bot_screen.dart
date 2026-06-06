@@ -13,6 +13,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../../whatsapp_bot/screens/admin_whatsapp_cola_screen.dart';
 import '../../whatsapp_bot/screens/admin_whatsapp_historico_screen.dart';
 import '../../whatsapp_bot/services/whatsapp_historico_service.dart';
+import '../../administracion/screens/reportes_discrepancia_screen.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
