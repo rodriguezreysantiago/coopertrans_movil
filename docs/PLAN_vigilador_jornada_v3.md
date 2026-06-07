@@ -385,4 +385,22 @@ habilita queries) + **índice compuesto** (chofer_dni ASC, fecha DESC). `flutter
 backend ya está vivo y con datos, así que en cuanto se libere la app, el chofer ve sus jornadas.
 Verificación visual final = al correr/liberar la app.
 
-Después: Paso 3 (aviso en vivo humilde sobre el v2) y Paso 4 (destronar al v2 como fuente de verdad).
+## Paso 3 — aviso en vivo HUMILDE (07-jun, HECHO en código · pendiente deploy)
+Parte A del plan, sobre el v2: antes de avisarle al chofer "3h30" / "4h sin pausar", se exige que el
+último dato sea FRESCO (`FRESCURA_AVISO_SEGUNDOS = 7 min`). Si está viejo (entró a zona sin cobertura)
+NO avisa — pudo haber parado y todavía no lo vemos → posterga hasta confirmar con dato fresco. Corta
+los avisos injustos (reclamos FERNANDEZ/LOPEZ) SIN tocar el cómputo (el manejo se sigue acumulando; el
+registro v3 captura la verdad igual).
+
+- `evaluarTickJornada`: input opcional `dataFresca` (default true = compat) que gatea el push+flag de
+  `3h30` y `bloque_excedido`. Se gatea TAMBIÉN el flag para no AFIRMAR una infracción dudosa (ni al
+  chofer ni al resumen); si fue real, al volver el dato fresco se dispara (no se pierde).
+- `tickVigiladorJornada`: `dataFresca` = edad del reporte más nuevo (Volvo/SITRACK) ≤ 7 min. Umbral
+  calibrado con datos (07-jun): camiones en marcha reportan a 2-4 min; se ven viejos a 10-15 min.
+- Cambio MÍNIMO y conservador: solo SUPRIME avisos (no puede generar spam). 5 tests nuevos. 241/241.
+
+**Pendiente: deploy** `firebase deploy --only functions:vigiladorJornadaChofer` — cambia avisos en
+vivo a choferes reales, así que va con OK de Santiago. Reversible (revert + redeploy).
+
+Después: Paso 4 (destronar al v2 como fuente de verdad — el registro v3 pasa a ser la fuente para
+liquidación/disputa y el v2 queda solo como aviso preventivo).
