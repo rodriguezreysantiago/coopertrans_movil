@@ -76,7 +76,7 @@ class _BannerActualizacionState extends State<_BannerActualizacion> {
             const SizedBox(width: 8),
             Flexible(
               child: Text(
-                'Actualización ${widget.info.version} · ${widget.info.sizeMb} MB',
+                'Actualización ${widget.info.versionCorta} · ${widget.info.sizeMb} MB',
                 style: tema.textTheme.bodyMedium?.copyWith(
                   color: onColor,
                   fontWeight: FontWeight.w600,

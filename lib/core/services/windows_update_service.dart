@@ -224,6 +224,11 @@ class WinUpdateInfo {
   final int sizeBytes;
 
   int get sizeMb => (sizeBytes / 1024 / 1024).round();
+
+  /// Sólo el semver visible para el usuario (sin el +build): "1.2.2".
+  /// El `version` completo (con +build) se sigue usando internamente para
+  /// comparar y para el VERSION.txt; esto es únicamente cosmético.
+  String get versionCorta => version.split('+').first;
 }
 
 /// Versión semver+build. Comparación: major > minor > patch > build.
