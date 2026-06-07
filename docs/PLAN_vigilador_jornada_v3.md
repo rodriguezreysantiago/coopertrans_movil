@@ -108,3 +108,53 @@ está integrado. Máximo impacto, le saca el cálculo frágil al código. Requie
 - **B) Reconstruir el batch con lo que YA tenemos** (contacto/detenido + ignition + posición) →
   autónomo, más trabajo nuestro; es el plan v3 de arriba.
 - **Ideal: pedir A en paralelo (gestión) y avanzar con B mientras** (B no queda bloqueado por A).
+
+> **Decisión Santiago 07-jun: Camino B** (reconstruir nosotros, autónomo, sin depender de Sitrack).
+
+## Paso 1 — DISEÑO DETALLADO (Camino B, listo para codear)
+Reconstruir con las señales que ya tenemos. **Lógica PURA + tests, sin I/O** (patrón del repo:
+se testea sin emulador). El v2 sigue corriendo en paralelo; v3 se construye al lado.
+
+### Dónde
+`functions/src/jornadas_v3.ts` (módulo nuevo) + tests `functions/test/jornadas_v3.test.js`.
+
+### Input — `EventoJornadaLite`
+Por cada evento Sitrack del turno: `ms`, `eventId`, `eventName`, `speed`, `gpsSpeed`,
+`ignition` (0/1/null), `lat`, `lng`, `gpsValidity`. Se mapean de `SITRACK_EVENTOS`
+(campos confirmados — ver poller `sitrack.ts:691`).
+
+### Señales (event_id confirmados en el Paso 0)
+- **Paró** (cierra tramo de manejo): `164 Contacto OFF`, `6 Inicio de detenido`,
+  `331/332 Detenido sin/con contacto`. Refuerzo: `ignition==0`, `speed<=15`.
+- **Arrancó** (reanuda): `163 Contacto ON`, `7 Fin de detenido`, `333/334 Movimiento`.
+  Refuerzo: `ignition==1` + `speed>15`.
+- **En marcha**: `283 Cambio de curso` + cualquier evento con `speed>15`.
+- **Baja confianza**: `386 Bloqueo celular y GPS`, `gpsValidity` baja, o gaps sin posición.
+
+### Algoritmo (determinístico, auditable)
+1. Ordenar los eventos del turno por `ms`.
+2. Armar SEGMENTOS alternados manejo/pausa con sus timestamps de borde:
+   - Pausa = desde un evento "paró" hasta el siguiente "arrancó".
+   - **Gap entre 2 eventos de movimiento** (sin eventos en el medio): misma posición
+     (≤ `RADIO_PAUSA_GAP_METROS`=500) → PAUSA encubierta; se movió → manejo. (Reusar la idea
+     de `analizarEventosDetencion`, fix `d7b751f`.)
+3. Acumular **manejo neto** (Σ manejo) y **pausas** (Σ pausas).
+4. Partir en **bloques** con el modelo del v2 (3h45 manejo + 15 min pausa; reusar
+   `PAUSA_BLOQUE_SEGUNDOS` y demás constantes de `jornadas_v2.ts`).
+5. **Turno**: inicio = primer movimiento del día; fin = descanso ≥8h misma posición
+   (reusar `DESCANSO_RADIO_METROS` + criterio 8h del v2).
+6. Marcar **confianza por segmento** (alta/baja según señales y cobertura).
+7. Devolver `RegistroJornada { manejoNetoSeg, pausas[], bloques[], inicioTurno, finTurno,
+   confianza, explicacion[] }`. `explicacion[]` = líneas legibles para el chofer
+   ("paró 13:50–14:40 en Baigorrita — Contacto OFF").
+
+### Tests (TDD — escribir primero)
+Casos reales del 06-jun: **FERNANDEZ** (~50 min en Baigorrita), **LOPEZ** (baño en
+Chinchinales). + sintéticos: turno simple, pausa por Contacto OFF/ON, pausa por gap+posición,
+baja confianza por `Bloqueo GPS`, turno que cruza medianoche. Los eventos reales se sacan con
+`whatsapp-bot/scripts/investigar_jornada_paradas.js`.
+
+### Después del Paso 1 (no ahora)
+Paso 2: persistir `RegistroJornada` (colección nueva) + pantalla "mi jornada" del chofer +
+cron batch 1×/día (o al cierre de turno), idempotente. **NO deployar sin OK de Santiago**
+(jornada = horas de trabajo, sensible).

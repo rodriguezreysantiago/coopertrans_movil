@@ -30,7 +30,13 @@ silencia un aviso de descanso legítimo). `EventoDetencionLite` +lat/lng (de SIT
   un parche; el plan v3 resuelve los 3 dolores (precisión + reclamos + fragilidad) separando el
   **aviso en vivo** (humilde, solo con dato fresco) del **registro de jornada** (batch a posteriori
   sobre TODOS los eventos Sitrack del turno, determinístico y explicado al chofer). Solo Sitrack por
-  ahora. Incremental (no tira el v2). Arrancar por el Paso 0 (catalogar `event_id`) en sesión dedicada.
+  ahora. Incremental (no tira el v2).
+  **Paso 0 HECHO (07-jun):** señales confiables identificadas (`164/6` paró, `163/7` arrancó,
+  `283` en marcha, + `ignition`/`speed`/posición) y **el módulo de jornada NATIVO de Sitrack está
+  APAGADO** en Vecchi (0/24 eventos de turno/conducción en 90 días). Santiago eligió **Camino B**
+  (reconstruir nosotros). **Próximo = Paso 1**: batch de reconstrucción (lógica pura + tests con
+  casos reales FERNANDEZ/LOPEZ) — **diseño detallado ya escrito en el plan**. Scripts de diagnóstico
+  en `whatsapp-bot/scripts/` (`catalogo_eventos_sitrack`, `verificar_eventos_jornada_sitrack`).
 
 ### 2) Landing de descargas — cooper-trans.com.ar/app (LIVE)
 Página única con los 5 puntos (iPhone/iPad + Android + Mac + Windows + web), branding VAVG.
