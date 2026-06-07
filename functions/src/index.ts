@@ -48,3 +48,7 @@ export * from "./historico_descargas";
 export * from "./historico_ibuttons";
 export * from "./jornada_historico";
 export * from "./resumenes_diarios";
+// Vigilador de jornada v3 — registro a posteriori (Paso 2). Cron DARK por flag
+// (META/config_vigilador_v3.registro_batch_activo, default false) + backfill
+// ADMIN. No toca el v2 (JORNADAS) ni el histórico. Ver jornadas_v3_batch.ts.
+export * from "./jornadas_v3_batch";
