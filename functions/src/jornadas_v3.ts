@@ -129,6 +129,13 @@ export const DRIFT_SOLAPE_SEGUNDOS = 15 * 60;
  * (la distancia ya prueba que estuvo manejando). */
 export const VEL_CORROBORA_KMH = 45;
 
+/** Veda nocturna Vecchi: prohibido manejar 00:00–06:00 ART. El registro mide
+ * cuánto manejo cayó en esa franja; si supera VEDA_MIN_SEGUNDOS lo marca como
+ * `vedaExcedida` (un blip de borde, p.ej. parar 00:02, no cuenta). Paridad con
+ * el flag `veda_excedida` del v2, pero medido a posteriori sobre los segmentos. */
+export const VEDA_FIN_HORA = 6; // 06:00 ART
+export const VEDA_MIN_SEGUNDOS = 5 * 60;
+
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 /** Evento Sitrack mínimo que consume el batch. Se mapea de SITRACK_EVENTOS
@@ -227,6 +234,10 @@ export interface RegistroJornada {
    * un chofer puede no exceder ningún bloque y aun así pasar las 12 h netas
    * sumando bloques (caso real FERNANDEZ 06-jun: 12h30 en 5 bloques < 4 h). */
   jornadaExcedida: boolean;
+  /** manejo (seg) dentro de la veda 00:00–06:00 ART. */
+  manejoNocturnoSeg: number;
+  /** true si manejó de noche por encima del umbral (veda Vecchi). */
+  vedaExcedida: boolean;
   confianza: Confianza;
   /** líneas legibles para el chofer / supervisor (Paso 2 las muestra). */
   explicacion: string[];
@@ -451,6 +462,8 @@ function registroDeSegmentos(
   const bloques = partirEnBloques(segTurno);
   const bloquesExcedidos = bloques.filter((b) => b.excedido).length;
   const jornadaExcedida = manejoNetoSeg >= JORNADA_MANEJO_LIMITE_SEGUNDOS;
+  const manejoNoctSeg = manejoNocturnoSeg(segTurno);
+  const vedaExcedida = manejoNoctSeg >= VEDA_MIN_SEGUNDOS;
   const descansoInsuficiente =
     descansoPrevioSeg != null && descansoPrevioSeg < DESCANSO_MIN_SEGUNDOS;
   let confianza = confianzaGlobal(
@@ -462,13 +475,14 @@ function registroDeSegmentos(
   const explicacion = construirExplicacion({
     inicioTurnoMs, finTurnoMs, manejoNetoSeg, pausas, bloques,
     bloquesExcedidos, jornadaExcedida, descansoPrevioSeg, descansoInsuficiente,
-    driftFiltrado, confianza,
+    manejoNocturnoSeg: manejoNoctSeg, vedaExcedida, driftFiltrado, confianza,
   });
 
   return {
     inicioTurnoMs, finTurnoMs, manejoNetoSeg, pausaTotalSeg, recorridoKm,
     segmentos: segTurno, pausas, bloques, bloquesExcedidos,
-    descansoPrevioSeg, descansoInsuficiente, jornadaExcedida, driftFiltrado,
+    descansoPrevioSeg, descansoInsuficiente, jornadaExcedida,
+    manejoNocturnoSeg: manejoNoctSeg, vedaExcedida, driftFiltrado,
     confianza, explicacion,
   };
 }
@@ -584,6 +598,34 @@ function distanciaRecorridaKm(
     ) / 1000;
   }
   return km;
+}
+
+/** 00:00 ART (en epoch ms) del día ART al que pertenece `ms`. ART = UTC-3 fijo
+ * (sin DST), así que 00:00 ART = 03:00 UTC del mismo día calendario ART. */
+function medianocheArtMs(ms: number): number {
+  const f = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(ms));
+  return Date.parse(`${f}T03:00:00Z`);
+}
+
+/** Manejo nocturno (segundos) en la veda 00:00–06:00 ART: suma la porción de
+ * cada segmento de MANEJO que cae en esa franja. Robusto a segmentos que cruzan
+ * medianoche (recorre día por día). */
+function manejoNocturnoSeg(segs: SegmentoJornada[]): number {
+  let total = 0;
+  for (const s of segs) {
+    if (s.tipo !== "manejo") continue;
+    let dia = medianocheArtMs(s.inicioMs);
+    while (dia < s.finMs) {
+      const nocheFin = dia + VEDA_FIN_HORA * 3600 * 1000;
+      const ov = Math.min(s.finMs, nocheFin) - Math.max(s.inicioMs, dia);
+      if (ov > 0) total += ov / 1000;
+      dia += 24 * 3600 * 1000;
+    }
+  }
+  return total;
 }
 
 function construirPausas(segs: SegmentoJornada[]): PausaJornada[] {
@@ -711,7 +753,8 @@ function construirExplicacion(r: {
   inicioTurnoMs: number; finTurnoMs: number; manejoNetoSeg: number;
   pausas: PausaJornada[]; bloques: BloqueJornada[]; bloquesExcedidos: number;
   jornadaExcedida: boolean; descansoPrevioSeg: number | null;
-  descansoInsuficiente: boolean; driftFiltrado: boolean; confianza: Confianza;
+  descansoInsuficiente: boolean; manejoNocturnoSeg: number;
+  vedaExcedida: boolean; driftFiltrado: boolean; confianza: Confianza;
 }): string[] {
   const lineas: string[] = [];
   lineas.push(
@@ -744,6 +787,11 @@ function construirExplicacion(r: {
       "mínimas entre jornadas"
     );
   }
+  if (r.vedaExcedida) {
+    lineas.push(
+      `⚠ Manejó ${hhmm(r.manejoNocturnoSeg)} en veda nocturna (00:00–06:00 ART)`
+    );
+  }
   if (r.driftFiltrado) {
     lineas.push(
       "⚠ Se descartaron eventos de otra patente (posible chofer distinto) — " +
@@ -774,6 +822,8 @@ function jornadaVacia(): RegistroJornada {
     descansoInsuficiente: false,
     driftFiltrado: false,
     jornadaExcedida: false,
+    manejoNocturnoSeg: 0,
+    vedaExcedida: false,
     confianza: "alta",
     explicacion: [],
   };

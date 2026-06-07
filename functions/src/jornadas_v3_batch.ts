@@ -32,6 +32,8 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
 import { adquirirLockTick } from "./index";
+import { expiraEnMin, primerNombre } from "./helpers";
+import { cargarExcluidos } from "./excluidos";
 import {
   EventoJornadaLite,
   RegistroJornada,
@@ -184,6 +186,8 @@ export function registroToFirestore(
     jornada_excedida: r.jornadaExcedida,
     descanso_previo_seg: r.descansoPrevioSeg,
     descanso_insuficiente: r.descansoInsuficiente,
+    manejo_nocturno_seg: r.manejoNocturnoSeg,
+    veda_excedida: r.vedaExcedida,
     drift_filtrado: r.driftFiltrado,
     confianza: r.confianza,
     bloques: r.bloques.map((b) => ({
@@ -379,3 +383,175 @@ export const backfillRegistrosV3 = onCall(
     };
   },
 );
+
+// ─── Resumen diario de infracciones a Molina (Paso 4 — fuente oficial v3) ─────
+//
+// Reemplaza la data del resumen del v2 (flags del tick en vivo) por el registro
+// v3 a posteriori (preciso). Mismo destinatario (Molina / Seg e Higiene) y mismo
+// horario (lo dispara el cron `resumenExcesosJornadaDiario` 08:00 ART, ya que el
+// registro v3 se escribe 06:45). El v2 queda solo como aviso preventivo en vivo.
+
+/** DNI de Molina (Seg e Higiene) — mismo destinatario que el resumen v2. */
+const MOLINA_DNI = "34730329";
+const TTL_RESUMEN_MIN = 24 * 60;
+
+export interface ViolacionJornadaV3 {
+  choferDni: string;
+  patente: string | null;
+  inicioMs: number;
+  manejoNetoSeg: number;
+  recorridoKm: number;
+  confianza: string;
+  jornadaExcedida: boolean;
+  bloquesExcedidos: number;
+  descansoInsuficiente: boolean;
+  descansoPrevioSeg: number | null;
+  vedaExcedida: boolean;
+}
+
+function hhmmDur(s: number): string {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${h}:${m.toString().padStart(2, "0")}`;
+}
+
+/**
+ * Texto del resumen diario de jornadas con incidencias para Molina, a partir del
+ * registro v3. PURA — testeable sin Firestore.
+ */
+export function construirMensajeResumenV3(
+  viol: ViolacionJornadaV3[],
+  nombrePorDni: Map<string, string>,
+  saludo: string,
+  fmtFecha: string,
+): string {
+  const cierre = "_Bot-On — Coopertrans Móvil_";
+  const header = `📋 *Resumen jornadas (registro v3) — ${fmtFecha}*`;
+  if (viol.length === 0) {
+    return (
+      `${saludo},\n\n${header}\n\n` +
+      "✅ Sin incidencias: ninguna jornada de ayer registró exceso de bloque, " +
+      "jornada > 12 h, descanso corto ni veda nocturna.\n\n" +
+      `${cierre}`
+    );
+  }
+  const lineas = viol.map((x) => {
+    const nombre = nombrePorDni.get(x.choferDni) || `DNI ${x.choferDni}`;
+    const flags: string[] = [];
+    if (x.bloquesExcedidos > 0) {
+      flags.push(`${x.bloquesExcedidos} bloque(s) > 4 h sin pausa`);
+    }
+    if (x.jornadaExcedida) flags.push("jornada > 12 h");
+    if (x.descansoInsuficiente && x.descansoPrevioSeg != null) {
+      flags.push(`descanso previo ${hhmmDur(x.descansoPrevioSeg)} (< 8 h)`);
+    }
+    if (x.vedaExcedida) flags.push("circuló en veda nocturna (00:00–06:00)");
+    const conf = x.confianza !== "alta" ? ` · confianza ${x.confianza}` : "";
+    return (
+      `🚛 *${x.patente || "—"}* — ${nombre} (DNI ${x.choferDni})\n` +
+      `   Arrancó ${horaMinArt(x.inicioMs)} · ${hhmmDur(x.manejoNetoSeg)} hs ` +
+      `manejo · ${x.recorridoKm} km${conf}\n` +
+      `   ⚠️ ${flags.join(", ")}`
+    );
+  });
+  return (
+    `${saludo},\n\n${header}\n\n` +
+    `${viol.length} jornada${viol.length === 1 ? "" : "s"} con incidencias:\n\n` +
+    `${lineas.join("\n\n")}\n\n` +
+    "_Registro reconstruido a posteriori desde Sitrack (señales de contacto/" +
+    "detenido + corroboración por distancia). 'confianza media/baja' = hubo " +
+    "tramos sin reporte; verificá antes de accionar._\n\n" +
+    `${cierre}`
+  );
+}
+
+/**
+ * Arma y encola el resumen v3 de infracciones de AYER a Molina. Lo llama el cron
+ * `resumenExcesosJornadaDiario` (08:00 ART). Lee REGISTRO_JORNADAS (fecha=ayer).
+ */
+export async function armarResumenJornadasV3Diario(): Promise<void> {
+  logger.info("[jornadas_v3.resumen] iniciando");
+  const fechaAyer = fechaArt(Date.now() - 24 * 60 * 60 * 1000);
+
+  const snap = await db.collection(COLECCION_REGISTRO)
+    .where("fecha", "==", fechaAyer).get();
+  const excluidos = await cargarExcluidos(db);
+
+  const viol: ViolacionJornadaV3[] = [];
+  for (const d of snap.docs) {
+    const r = d.data();
+    const tiene =
+      r.jornada_excedida === true ||
+      ((r.bloques_excedidos as number) ?? 0) > 0 ||
+      r.descanso_insuficiente === true ||
+      r.veda_excedida === true;
+    if (!tiene) continue;
+    const dni = (r.chofer_dni ?? "").toString();
+    if (excluidos.dnis.has(dni)) continue;
+    viol.push({
+      choferDni: dni,
+      patente: (r.patente as string | null) ?? null,
+      inicioMs: (r.inicio_turno as Timestamp | undefined)?.toMillis() ?? 0,
+      manejoNetoSeg: (r.manejo_neto_seg as number) ?? 0,
+      recorridoKm: (r.recorrido_km as number) ?? 0,
+      confianza: (r.confianza as string) ?? "alta",
+      jornadaExcedida: r.jornada_excedida === true,
+      bloquesExcedidos: (r.bloques_excedidos as number) ?? 0,
+      descansoInsuficiente: r.descanso_insuficiente === true,
+      descansoPrevioSeg: (r.descanso_previo_seg as number | null) ?? null,
+      vedaExcedida: r.veda_excedida === true,
+    });
+  }
+  viol.sort((a, b) => a.inicioMs - b.inicioMs);
+
+  const empSnap = await db.collection("EMPLEADOS").doc(MOLINA_DNI).get();
+  if (!empSnap.exists) {
+    logger.error("[jornadas_v3.resumen] destinatario no existe", {
+      dni: MOLINA_DNI,
+    });
+    return;
+  }
+  const empData = empSnap.data() ?? {};
+  const tel = (empData.TELEFONO ?? "").toString().trim();
+  if (!tel || tel === "-") {
+    logger.error("[jornadas_v3.resumen] destinatario sin TELEFONO");
+    return;
+  }
+  const apodo = (empData.APODO ?? "").toString().trim();
+  const saludoNombre =
+    apodo || primerNombre((empData.NOMBRE ?? "").toString().trim()) || "";
+  const saludo = saludoNombre ? `Hola ${saludoNombre}` : "Hola";
+  const fmtFecha = fechaAyer.split("-").reverse().join("/");
+
+  const nombrePorDni = new Map<string, string>();
+  const dnis = new Set(viol.map((v) => v.choferDni));
+  if (dnis.size > 0) {
+    try {
+      const refs = [...dnis].map((dni) => db.collection("EMPLEADOS").doc(dni));
+      const snaps = await db.getAll(...refs);
+      for (const s of snaps) {
+        nombrePorDni.set(
+          s.id, s.exists ? (s.data()?.NOMBRE ?? "").toString().trim() : "");
+      }
+    } catch (e) {
+      logger.warn("[jornadas_v3.resumen] getAll nombres falló", {
+        error: (e as Error).message,
+      });
+    }
+  }
+
+  const mensaje = construirMensajeResumenV3(
+    viol, nombrePorDni, saludo, fmtFecha);
+  await db.collection("COLA_WHATSAPP").add({
+    telefono: tel, mensaje, estado: "PENDIENTE",
+    encolado_en: FieldValue.serverTimestamp(),
+    expira_en: expiraEnMin(TTL_RESUMEN_MIN),
+    enviado_en: null, error: null, intentos: 0,
+    origen: "resumen_jornadas_v3", destinatario_coleccion: "EMPLEADOS",
+    destinatario_id: MOLINA_DNI, campo_base: "JORNADA",
+    admin_dni: "BOT", admin_nombre: "Bot resumen jornadas v3",
+  });
+  logger.info("[jornadas_v3.resumen] OK", {
+    incidencias: viol.length, destinatario: MOLINA_DNI,
+  });
+}

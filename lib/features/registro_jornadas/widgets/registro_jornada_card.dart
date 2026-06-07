@@ -85,6 +85,13 @@ class RegistroJornadaCard extends StatelessWidget {
                     size: AppBadgeSize.sm,
                     icon: Icons.error_outline,
                   ),
+                if (j.vedaExcedida)
+                  AppBadge(
+                    text: 'Manejó de noche (00–06)',
+                    color: c.warning,
+                    size: AppBadgeSize.sm,
+                    icon: Icons.nightlight_outlined,
+                  ),
                 if (j.descansoInsuficiente && j.descansoPrevioSeg != null)
                   AppBadge(
                     text: 'Descanso previo ${_hm(j.descansoPrevioSeg!)}',
@@ -118,6 +125,7 @@ class RegistroJornadaCard extends StatelessWidget {
       j.jornadaExcedida ||
       j.bloquesExcedidos > 0 ||
       j.descansoInsuficiente ||
+      j.vedaExcedida ||
       j.driftFiltrado;
 
   Widget _metric(AppColorsExt c, String label, String value) {

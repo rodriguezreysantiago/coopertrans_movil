@@ -17,6 +17,7 @@ const {
   docIdRegistro,
   agruparYReconstruir,
   registroToFirestore,
+  construirMensajeResumenV3,
 } = require('../lib/jornadas_v3_batch');
 
 // Doc estilo SITRACK_EVENTOS (campos del poller). `in` respeta null/0 explícito.
@@ -174,6 +175,8 @@ describe('v3 batch — registroToFirestore', () => {
     assert.equal(typeof fs.jornada_excedida, 'boolean');
     assert.equal(typeof fs.descanso_insuficiente, 'boolean');
     assert.equal(typeof fs.drift_filtrado, 'boolean');
+    assert.equal(typeof fs.veda_excedida, 'boolean');
+    assert.equal(typeof fs.manejo_nocturno_seg, 'number');
     assert.ok('descanso_previo_seg' in fs); // number | null
     assert.equal(typeof fs.confianza, 'string');
     assert.ok(Array.isArray(fs.explicacion) && fs.explicacion.length > 0);
@@ -199,5 +202,44 @@ describe('v3 batch — registroToFirestore', () => {
 
   test('procesado_en presente (FieldValue sentinel)', () => {
     assert.ok(fs.procesado_en != null);
+  });
+});
+
+// ── Resumen v3 a Molina (Paso 4) ────────────────────────────────────
+
+describe('v3 resumen — construirMensajeResumenV3', () => {
+  test('sin violaciones → "Sin incidencias"', () => {
+    const m = construirMensajeResumenV3([], new Map(), 'Hola Molina', '06/06/2026');
+    assert.ok(m.includes('Sin incidencias'));
+    assert.ok(m.includes('06/06/2026'));
+  });
+
+  test('con violaciones → una línea por jornada, con sus flags', () => {
+    const viol = [{
+      choferDni: '123', patente: 'AAA111',
+      inicioMs: Date.UTC(2026, 5, 6, 9, 0, 0), // 06:00 ART
+      manejoNetoSeg: 13 * 3600, recorridoKm: 900, confianza: 'media',
+      jornadaExcedida: true, bloquesExcedidos: 1, descansoInsuficiente: true,
+      descansoPrevioSeg: 7 * 3600, vedaExcedida: false,
+    }];
+    const m = construirMensajeResumenV3(
+      viol, new Map([['123', 'JUAN PEREZ']]), 'Hola', '06/06/2026');
+    assert.ok(m.includes('AAA111'));
+    assert.ok(m.includes('JUAN PEREZ'));
+    assert.ok(m.includes('jornada > 12 h'));
+    assert.ok(m.includes('bloque'));
+    assert.ok(m.includes('< 8 h'));
+    assert.ok(m.includes('confianza media'));
+  });
+
+  test('flag de veda nocturna se incluye', () => {
+    const viol = [{
+      choferDni: '9', patente: 'ZZ', inicioMs: Date.UTC(2026, 5, 6, 5, 0, 0),
+      manejoNetoSeg: 3 * 3600, recorridoKm: 200, confianza: 'alta',
+      jornadaExcedida: false, bloquesExcedidos: 0, descansoInsuficiente: false,
+      descansoPrevioSeg: null, vedaExcedida: true,
+    }];
+    const m = construirMensajeResumenV3(viol, new Map(), 'Hola', '06/06/2026');
+    assert.ok(m.includes('veda nocturna'));
   });
 });

@@ -35,6 +35,9 @@ class RegistroJornada {
   /// Manejo neto > 12 h (tope de jornada).
   final bool jornadaExcedida;
 
+  /// Manejó en la veda nocturna 00:00–06:00 ART por encima del umbral.
+  final bool vedaExcedida;
+
   /// Descanso antes de este turno (segundos), null si no se ve.
   final int? descansoPrevioSeg;
 
@@ -65,6 +68,7 @@ class RegistroJornada {
     required this.bloquesCount,
     required this.bloquesExcedidos,
     required this.jornadaExcedida,
+    required this.vedaExcedida,
     required this.descansoPrevioSeg,
     required this.descansoInsuficiente,
     required this.driftFiltrado,
@@ -91,6 +95,7 @@ class RegistroJornada {
       bloquesCount: ((m['bloques'] as List?) ?? const []).length,
       bloquesExcedidos: (m['bloques_excedidos'] as num?)?.toInt() ?? 0,
       jornadaExcedida: m['jornada_excedida'] as bool? ?? false,
+      vedaExcedida: m['veda_excedida'] as bool? ?? false,
       descansoPrevioSeg: (m['descanso_previo_seg'] as num?)?.toInt(),
       descansoInsuficiente: m['descanso_insuficiente'] as bool? ?? false,
       driftFiltrado: m['drift_filtrado'] as bool? ?? false,

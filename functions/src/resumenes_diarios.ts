@@ -36,7 +36,7 @@ import {
   TTL_RESUMEN_DIARIO_MIN,
 } from "./index";
 import { expiraEnMin, formatFechaArg, formatHoraArg, primerNombre } from "./helpers";
-import * as jornadasV2 from "./jornadas_v2";
+import * as jornadasV3Batch from "./jornadas_v3_batch";
 import { cargarExcluidos } from "./excluidos";
 import { estaCanalPausado } from "./canales_pausados";
 
@@ -599,7 +599,11 @@ export const resumenExcesosJornadaDiario = onSchedule(
     // 2026-05-18) — sino Molina no recibe el resumen del dia.
     let exitoCron = false;
     try {
-      await jornadasV2.armarResumenJornadasDiario();
+      // Paso 4 — fuente oficial v3: el resumen a Molina pasa a calcularse del
+      // registro a posteriori (REGISTRO_JORNADAS, preciso) en vez de los flags
+      // del tick en vivo del v2. El v2 (`armarResumenJornadasDiario`) queda como
+      // fallback de rollback (revertir = volver a llamarlo acá).
+      await jornadasV3Batch.armarResumenJornadasV3Diario();
       exitoCron = true;
     } finally {
       if (!exitoCron) {

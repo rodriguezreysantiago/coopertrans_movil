@@ -694,6 +694,27 @@ describe('v3 — drift CHOFER_DISTINTO (filtrar 2ª patente solapada)', () => {
 // Bordes
 // ══════════════════════════════════════════════════════════════════════
 
+describe('v3 — veda nocturna (manejo 00:00–06:00 ART)', () => {
+  test('manejo de madrugada (02:00–04:00 ART) → vedaExcedida', () => {
+    const t0 = Date.UTC(2026, 5, 6, 5, 0, 0); // 02:00 ART
+    const rows = [];
+    for (let i = 0; i <= 12; i++) {
+      rows.push(ev(t0 + i * 10 * MIN, { sp: 70, lat: -38.0 + i * 0.02, lng: -68.0 }));
+    }
+    const r = reconstruirJornada(rows);
+    assert.equal(r.vedaExcedida, true);
+    assert.ok(r.manejoNocturnoSeg >= 90 * 60,
+      `~2h de noche, fue ${(r.manejoNocturnoSeg / 60).toFixed(0)} min`);
+    assert.ok(r.explicacion.some((l) => l.includes('veda nocturna')));
+  });
+
+  test('manejo diurno (FERNANDEZ 08-15) → veda false', () => {
+    const r = reconstruirJornada(FERNANDEZ);
+    assert.equal(r.vedaExcedida, false);
+    assert.equal(r.manejoNocturnoSeg, 0);
+  });
+});
+
 describe('v3 — bordes', () => {
   test('sin eventos → jornada vacía', () => {
     const r = reconstruirJornada([]);
