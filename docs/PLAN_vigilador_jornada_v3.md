@@ -358,6 +358,17 @@ Validación en vivo (gcloud scheduler run del cron):
 (una corrida/día, ayer). NO manda avisos al chofer, NO toca el v2 (`JORNADAS`) ni el histórico. Cero
 impacto operativo; reversible al instante (`flag_jornada_v3.js off`). De acá en más acumula 1 día/día.
 
-Pendiente (no urgente): **backfill de historia** (la callable `backfillRegistrosV3` existe; falta un
-disparador — botón en la pantalla o sesión deliberada) y la **pantalla/bot "mi jornada"** (Paso 2
-transparencia). Después: Paso 3 (aviso en vivo humilde) y Paso 4 (destronar al v2).
+### Backfill de historia — HECHO (07-jun)
+`backfill_jornada_v3.js [dias]` (usa la lógica CANÓNICA `procesarVentana` vía ADC, idempotente).
+Backfilleados ~25 días disponibles (SITRACK_EVENTOS arranca ~05-13): **1030 registros** en
+`REGISTRO_JORNADAS`.
+
+**Bug de correctitud que destapó el backfill → ARREGLADO:** con doc-id `dni_fecha`, un chofer con 2
+turnos el MISMO día calendario (separados por descanso ≥7 h — GARCIA 05-19: 09:54 + 19:09) perdía un
+turno (1030 reconstruidos → 914 docs, 116 colisiones). Doc-id pasó a **`dni_fecha_HHMM`** (único por
+turno, idempotente, DNI de prefijo para la regla). Redeploy de las 2 functions + wipe + re-backfill →
+**1030 docs, sin colisión** (GARCIA 05-19 ahora con sus 2 turnos). 119 jornadas >12h persistidas.
+(La regla de Firestore no cambió funcionalmente — solo el comentario; no se redeployó.)
+
+Pendiente: la **pantalla/bot "mi jornada"** (Paso 2 transparencia). Después: Paso 3 (aviso en vivo
+humilde) y Paso 4 (destronar al v2).
