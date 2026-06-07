@@ -647,6 +647,56 @@ describe('analizarEventosDetencion', () => {
     assert.strictEqual(r.fuente, 'eventos'); // NO van al fallback
     assert.strictEqual(r.parado, true);
   });
+
+  // ── pausa encubierta en GAP de reporte (#2, 2026-06-07) ──────────────
+  // Zonas sin cobertura: el equipo deja de reportar. Si entre dos eventos de
+  // movimiento hay un gap ≥15min y la posición casi no cambió, el camión estuvo
+  // parado en el medio (caso real: choferes que paran 20-50 min y el sistema
+  // los seguía contando "en ruta" → avisos de "4h" injustos).
+  const evPos = (min, speed, lat, lng) => ({
+    ms: Date.UTC(2026, 4, 28, 20, min, 0), speed, gpsSpeed: speed, eventId: null, lat, lng,
+  });
+
+  test('gap largo con MISMA posición → pausa encubierta detectada', () => {
+    // Manejando 17:00, gap de 50 min sin reportes, reaparece manejando 17:50 en
+    // el MISMO lugar (~70 m) → estuvo parado todo el gap.
+    const eventos = [
+      evPos(0, 60, -38.7000, -62.3000),
+      evPos(50, 60, -38.7005, -62.3005),
+    ];
+    const r = analizarEventosDetencion(eventos, Date.UTC(2026, 4, 28, 20, 52, 0));
+    assert.strictEqual(r.parado, false); // manejando ahora
+    assert.strictEqual(r.arrancoMs, eventos[1].ms); // arranque = post-gap
+    assert.strictEqual(Math.round(r.pausaPreviaSeg / 60), 50); // pausa = el gap
+    assert.ok(r.pausaPreviaSeg >= PAUSA_BLOQUE_SEGUNDOS); // cierra el bloque
+  });
+
+  test('gap largo pero se MOVIÓ → NO es pausa (manejó sin cobertura)', () => {
+    const eventos = [
+      evPos(0, 60, -38.7000, -62.3000),
+      evPos(50, 60, -38.9000, -62.6000), // ~30 km: se movió
+    ];
+    const r = analizarEventosDetencion(eventos, Date.UTC(2026, 4, 28, 20, 52, 0));
+    assert.strictEqual(r.parado, false);
+    assert.strictEqual(r.arrancoMs, eventos[0].ms); // racha unida (manejo real)
+    assert.strictEqual(r.pausaPreviaSeg, null);
+  });
+
+  test('gap largo SIN lat/lng → no asume pausa (conservador)', () => {
+    const eventos = [ev(0, 60), ev(50, 60)]; // sin posición
+    const r = analizarEventosDetencion(eventos, Date.UTC(2026, 4, 28, 20, 52, 0));
+    assert.strictEqual(r.parado, false);
+    assert.strictEqual(r.pausaPreviaSeg, null); // sin posición no infiere parada
+  });
+
+  test('gap CORTO (<15min) con misma posición → no cuenta como pausa', () => {
+    const eventos = [
+      evPos(0, 60, -38.7000, -62.3000),
+      evPos(8, 60, -38.7005, -62.3005), // 8 min: bajo el umbral
+    ];
+    const r = analizarEventosDetencion(eventos, Date.UTC(2026, 4, 28, 20, 12, 0));
+    assert.strictEqual(r.pausaPreviaSeg, null);
+  });
 });
 
 // ── evaluarTickJornada con detección por eventos (fix AB493CP) ───────

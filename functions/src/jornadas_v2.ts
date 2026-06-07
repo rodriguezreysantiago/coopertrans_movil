@@ -109,6 +109,11 @@ const TTL_RESUMEN_DIARIO_MIN = 24 * 60;  // resumen diario vale el dia
 // _expiraEnMin movido a helpers.ts como `expiraEnMin` (refactor 2026-05-18).
 export const DESCANSO_MIN_SEGUNDOS = 8 * 3600;
 export const DESCANSO_RADIO_METROS = 1000;
+/** Radio para considerar que el camión NO se movió entre dos eventos separados
+ * por un gap de reporte: si la distancia es ≤ esto, fue una PAUSA encubierta
+ * (paró sin cobertura). Más chico que el de descanso porque acá es "no se
+ * movió", no "está descansando en la misma zona". */
+export const RADIO_PAUSA_GAP_METROS = 500;
 // Cap defensivo de manejo neto (fix 2026-06-05): ningún chofer maneja más de
 // esto en una jornada (el límite legal son 12h). Si una jornada lo supera es
 // porque arrastró días sin cerrar (típico de equipo Volvo congelado que
@@ -356,6 +361,12 @@ export interface EventoDetencionLite {
    * la trae (dato viejo). Se usa para no mezclar eventos de 2 unidades cuando
    * un DNI sufre drift CHOFER_DISTINTO. */
   patente: string | null;
+  /** Posición del evento. Sirve para detectar PAUSAS encubiertas: cuando entre
+   * dos eventos de movimiento hay un gap temporal grande (el equipo no reportó,
+   * típico de zonas sin cobertura) pero la posición casi no cambió, el camión
+   * estuvo parado en el medio. null si el doc no trae lat/lng. */
+  lat?: number | null;
+  lng?: number | null;
 }
 
 export interface DeteccionDetencion {
@@ -378,6 +389,22 @@ function esEventoMovimiento(ev: EventoDetencionLite): boolean {
     (ev.gpsSpeed != null && ev.gpsSpeed > UMBRAL_MOVIMIENTO_KMH) ||
     ev.eventId === 7 // "Fin de detenido" siempre marca arranque
   );
+}
+
+/**
+ * ¿El gap entre dos eventos de MOVIMIENTO fue en realidad una PAUSA? Lo es si la
+ * posición casi no cambió (≤ RADIO_PAUSA_GAP_METROS) — el camión estuvo quieto
+ * pese a que el equipo dejó de reportar (zona sin cobertura). Si a alguno le
+ * falta lat/lng, devolvemos false: NO asumimos parada (se cuenta como manejo,
+ * el lado conservador para la seguridad del chofer / aviso de descanso).
+ */
+function gapEsPausaEncubierta(
+  a: EventoDetencionLite, b: EventoDetencionLite
+): boolean {
+  if (a.lat == null || a.lng == null || b.lat == null || b.lng == null) {
+    return false;
+  }
+  return distanciaMetros(a.lat, a.lng, b.lat, b.lng) <= RADIO_PAUSA_GAP_METROS;
 }
 
 /**
@@ -409,13 +436,28 @@ export function analizarEventosDetencion(
   }
   const ult = evs[evs.length - 1];
   if (esEventoMovimiento(ult)) {
-    // Manejando ahora. Inicio de la racha de movimiento final = arranque.
+    // Manejando ahora. Inicio de la racha de movimiento final = arranque. PERO
+    // un gap temporal grande entre dos eventos de movimiento con posición casi
+    // sin cambio es una PAUSA encubierta (paró sin cobertura): cortamos la racha
+    // ahí, el arranque es el evento post-gap y la pausa previa = el gap. Esto
+    // evita contar como "manejo continuo" un tiempo en que el camión estuvo
+    // quieto (bug: avisaba "4h de manejo" tras una parada no reportada).
     let i = evs.length - 1;
-    while (i > 0 && esEventoMovimiento(evs[i - 1])) i--;
+    let pausaPorGapSeg: number | null = null;
+    while (i > 0 && esEventoMovimiento(evs[i - 1])) {
+      const gapSeg = (evs[i].ms - evs[i - 1].ms) / 1000;
+      if (gapSeg >= PAUSA_BLOQUE_SEGUNDOS &&
+          gapEsPausaEncubierta(evs[i - 1], evs[i])) {
+        pausaPorGapSeg = gapSeg;
+        break; // el camión estuvo quieto durante el gap → arranque = evs[i].
+      }
+      i--;
+    }
     const arrancoMs = evs[i].ms;
-    // Detención inmediatamente anterior al arranque (si la hubo en la ventana).
-    let pausaPreviaSeg: number | null = null;
-    if (i > 0) {
+    // Pausa previa al arranque: la del gap encubierto si lo hubo; si no, la
+    // detención explícita inmediatamente anterior (si la hubo en la ventana).
+    let pausaPreviaSeg: number | null = pausaPorGapSeg;
+    if (pausaPreviaSeg == null && i > 0) {
       let j = i - 1;
       while (j > 0 && !esEventoMovimiento(evs[j - 1])) j--;
       pausaPreviaSeg = (arrancoMs - evs[j].ms) / 1000;
@@ -1322,6 +1364,8 @@ export async function tickVigiladorJornada(): Promise<void> {
         // SITRACK_POSICIONES, ya trim+upper) → normalizamos para poder
         // compararlo con la patente del chofer y no cruzar unidades.
         patente: ((x.asset_id ?? "").toString().trim().toUpperCase()) || null,
+        lat: typeof x.latitude === "number" ? x.latitude : null,
+        lng: typeof x.longitude === "number" ? x.longitude : null,
       });
     }
   } catch (e) {
