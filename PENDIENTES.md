@@ -7,6 +7,31 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-06-07 (cont.) — Link estable de descarga Windows + Paso 0 vigilador v3
+
+### Link de descarga Windows ESTABLE (commits `89f5dc7`, `a230b5c`)
+El botón Windows de la landing (`cooper-trans.com.ar/app`) ahora apunta a
+`…/releases/latest/download/CoopertransMovil-Setup.exe` — GitHub redirige al `.exe` del ÚLTIMO
+release → **descarga directa, sin JS** (antes el JS caía al fallback que abría la página de GitHub).
+`release_app.ps1` sube ahora, además del `.exe` versionado, una **copia con nombre fijo
+`CoopertransMovil-Setup.exe`** en cada release (la subí manual al 1.2.2 actual para que ande ya).
+Verificado: 200 · 22.9 MB.
+
+### Cosmético: banner de update sin `+build` (`a230b5c`)
+`WinUpdateInfo.versionCorta` → el banner muestra `1.2.2` en vez de `1.2.2+10202`. Cosmético (el
+version completo se sigue usando para comparar). Se ve limpio **a partir de la 1.2.3** (lo dibuja la
+app instalada).
+- [ ] **PENDIENTE (lo ve Santiago): dice que el `+10202` aparece en "varios lugares" de la app, no
+  solo el banner.** Revisado el código actual (login/panel = `v 1.2.2`, barra de título =
+  `Coopertrans Móvil`, banner ya arreglado) → todo limpio. Falta que precise EN QUÉ pantallas lo ve
+  (captura). Hipótesis: está mirando la 1.2.2 instalada (pre-fix del banner). A confirmar.
+
+### Vigilador v3 — Paso 0 HECHO, Camino B
+Ver detalle en la entrada de abajo + `docs/PLAN_vigilador_jornada_v3.md`. Próximo: **Paso 1** (batch
+de reconstrucción, lógica pura + tests) — texto de arranque listo, ejecutar en sesión fresca.
+
+---
+
 ## 📅 2026-06-07 — Fix vigilador (pausas en gaps), landing de descargas, serie 1.2.x
 
 Sesión de revisión del agente + reportes de choferes → derivó en 4 cosas:
