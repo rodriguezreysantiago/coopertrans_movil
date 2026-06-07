@@ -339,7 +339,25 @@ km/h, el manejo está corroborado por la distancia → confianza media (no baja)
 
 Suite functions **236/236**, eslint OK. Sin deploy.
 
-**Siguiente (con OK de Santiago): pantalla/bot "mi jornada"** que lee `REGISTRO_JORNADAS` y muestra
-el registro explicado (pausas + confianza + descanso insuficiente + drift + km) — la pata de
-transparencia del Paso 2. Después: Paso 3 (aviso en vivo humilde) y Paso 4 (destronar al v2). **Nada
-se deploya sin OK de Santiago.**
+## DEPLOY del backend — HECHO y EN VIVO (07-jun, OK de Santiago "deployemos")
+Qué tocó prod (deploy deliberado, por pasos):
+- `index.ts` re-exporta `jornadas_v3_batch` (commit `8811454`).
+- **2 Cloud Functions nuevas** en `southamerica-east1`: `registrarJornadasV3Diario` (cron 06:45 ART)
+  + `backfillRegistrosV3` (callable ADMIN). `firebase deploy --only functions:...` (las 2 solas).
+- **firestore.rules** desplegadas (regla de lectura de `REGISTRO_JORNADAS`) — comando SEPARADO.
+- **Flag activado**: `META/config_vigilador_v3.registro_batch_activo = true`
+  (`flag_jornada_v3.js on|off` = kill-switch inmediato, sin redeploy).
+
+Validación en vivo (gcloud scheduler run del cron):
+- Flag OFF → log "dark (flag off) — no se procesa nada" (kill-switch confirmado, no escribió nada).
+- Flag ON → "OK"; `REGISTRO_JORNADAS` quedó con **35 docs de 06-06**. FERNANDEZ
+  `26129762_2026-06-06`: manejo 12h30 / 831 km, 5 bloques, pausa 13:15 motor apagado registrada,
+  jornada_excedida=true, confianza media, explicación completa. Ej. grave: CORREA 18h18 / 1164 km.
+
+**Naturaleza del deploy: SILENCIOSO.** El cron solo ESCRIBE la colección nueva `REGISTRO_JORNADAS`
+(una corrida/día, ayer). NO manda avisos al chofer, NO toca el v2 (`JORNADAS`) ni el histórico. Cero
+impacto operativo; reversible al instante (`flag_jornada_v3.js off`). De acá en más acumula 1 día/día.
+
+Pendiente (no urgente): **backfill de historia** (la callable `backfillRegistrosV3` existe; falta un
+disparador — botón en la pantalla o sesión deliberada) y la **pantalla/bot "mi jornada"** (Paso 2
+transparencia). Después: Paso 3 (aviso en vivo humilde) y Paso 4 (destronar al v2).
