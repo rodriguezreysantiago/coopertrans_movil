@@ -80,3 +80,31 @@ futuro, no dependencias ahora.)
 - Eventos Sitrack que llegan **muy tarde** (después del batch) → batch **idempotente / re-ejecutable**.
 - Chofer sin Sitrack fresco (mismo límite de cobertura): el registro lo marca como **"baja confianza"**
   en vez de inventar — y ahí sí puede pedir confirmación al chofer (no antes).
+
+## Paso 0 — RESULTADO (07-jun, HECHO)
+Catálogo oficial leído (1427 tipos, en `G:\Mi unidad\API SITRACK\`) + verificado contra la data real
+de Vecchi (scripts read-only en `whatsapp-bot/scripts/`: `catalogo_eventos_sitrack.js`,
+`verificar_eventos_jornada_sitrack.js`).
+
+**Señales de jornada CONFIABLES que ya recibimos** (frecuentes, casi todos los choferes):
+- Parada: `6 Inicio de detenido`, `164 Contacto OFF` (motor apagado).
+- Arranque: `7 Fin de detenido`, `163 Contacto ON`.
+- Tracking en marcha: `283 Cambio de curso` (el evento más frecuente, ~57% del total).
+- Por evento: `ignition` (0/1), `speed`, `latitude/longitude`, `hourmeter`.
+- Baja cobertura: `386 Bloqueo celular y GPS` → marcador para "baja confianza".
+→ Base sólida para el batch v3 (Parte B): contacto/detenido dan los bordes de cada pausa.
+
+**HALLAZGO GRANDE:** Sitrack tiene un **módulo nativo de control de jornada** (`565/566 inicio/fin de
+turno`, `152/513/514 conducción continua`, `1239/1246 descanso cumplido`, `1244/1245 preaviso`,
+`190/191 exceso de conducción`) — pero en la cuenta de Vecchi está **APAGADO**: **0 de 24 tipos en
+~90 días**. Si Sitrack lo activa, el equipo/plataforma calcula la jornada (turno, conducción continua,
+descanso) y nosotros solo **consumimos** esos eventos → análogo al tacógrafo, pero con Sitrack que ya
+está integrado. Máximo impacto, le saca el cálculo frágil al código. Requiere gestión con Sitrack
+(activar el módulo + posible config por unidad/plan).
+
+**Bifurcación para el Paso 1:**
+- **A) Pedir a Sitrack activar el módulo de jornada** → consumir eventos nativos (máximo impacto,
+  depende del proveedor / costo / tiempo).
+- **B) Reconstruir el batch con lo que YA tenemos** (contacto/detenido + ignition + posición) →
+  autónomo, más trabajo nuestro; es el plan v3 de arriba.
+- **Ideal: pedir A en paralelo (gestión) y avanzar con B mientras** (B no queda bloqueado por A).
