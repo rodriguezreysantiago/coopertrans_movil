@@ -423,6 +423,27 @@ jornada real" que abre la vista admin del registro v3 con ese chofer pre-selecci
 que originó el proyecto: el revisor adjudica con el dato preciso, no a ciegas. Cambio mínimo (param
 `onVerJornada` en la fila + navegación con choferDni). `flutter analyze` limpio.
 
-**Pendientes opcionales del Paso 4** (cuando Santiago quiera, tocan superficies en vivo → con su OK):
-(a) cambiar el **resumen diario** de infracciones (Molina/Seg-Higiene) de los flags del v2 al
-registro v3; (c) upgradear la **pantalla Jornada del hub ICM** (speed-based) para que use v3.
+**Hecho — Resumen diario a Molina desde v3 + veda nocturna** (07-jun · DEPLOYADO): el cron
+`resumenExcesosJornadaDiario` (08:00 ART) ahora calcula el resumen de infracciones desde el registro
+v3 (REGISTRO_JORNADAS) en vez de los flags del tick en vivo del v2. El v2
+(`armarResumenJornadasDiario`) queda como fallback de rollback (revertir = volver a llamarlo en
+resumenes_diarios.ts). Para no perder la **veda nocturna** (que v3 no computaba), se agregó al
+registro v3: `manejoNocturnoSeg` + `vedaExcedida` (manejo 00:00–06:00 ART, robusto a cruce de
+medianoche) — en la lógica pura, la serialización, el resumen, y el modelo + card de Flutter (badge
+"Manejó de noche"). Resumen v3: `armarResumenJornadasV3Diario` + builder puro `construirMensajeResumenV3`
+(incidencias: bloque>4h / >12h / descanso<8h / veda + confianza). **Deployado**
+`registrarJornadasV3Diario` (escribe veda) + `resumenExcesosJornadaDiario` (v3) +
+`backfillRegistrosV3`. Re-backfill (1030 registros con veda). Verificado read-only: 242 registros con
+veda en el histórico; el resumen de 06-06 reportaría 17/38 con todos los flags OK. Cadena: 06:45
+registro cron escribe ayer (con veda) → 08:00 resumen lo lee → Molina. Tests 246/246. Mañana 08:00
+Molina recibe el resumen v3.
+
+**Único pendiente real: el RELEASE de la app** (lo larga Santiago) — sube las 3 pantallas (mi jornada,
+vista admin v3, botón en disputas). Backend/rules/índices/crons ya están vivos. Opcional menor (NO
+necesario): upgradear la vieja pantalla "Jornada" speed-based del hub ICM — redundante con la nueva
+"Jornada real (v3)" ya agregada; se puede dejar o limpiar después.
+
+---
+**El plan vigilador v3 está COMPLETO** (Pasos 1–4) y vivo en producción, salvo el release de la app
+para las 3 superficies de UI. El v2 quedó como aviso preventivo en vivo; el registro v3 es la fuente
+oficial (disputas, compliance, resumen a Molina).
