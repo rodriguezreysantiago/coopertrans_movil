@@ -177,7 +177,11 @@ async function main() {
         dist[r.confianza]++;
         if (r.jornadaExcedida) dist.excedidaJornada++;
         if (r.bloquesExcedidos > 0) dist.excedidaBloque++;
-        if (r.descansoInsuficiente) dist.descansoInsuf++;
+        if (r.descansoInsuficiente) {
+          dist.descansoInsuf++;
+          const hIni = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', hour12: false }).format(new Date(r.inicioTurnoMs)));
+          anomalias.push(`[DESC-INSUF ${ymd}] ${nombre} (${dni}): descanso ${hh(r.descansoPrevioSeg)} → turno arranca ${artHm(r.inicioTurnoMs)}${(hIni >= 4 && hIni <= 9) ? ' (nocturno OK)' : ' ⚠REVISAR (no madrugada)'}`);
+        }
         const spanH = (r.finTurnoMs - r.inicioTurnoMs) / 3600000;
 
         if (r.manejoNetoSeg >= 14 * 3600) {
