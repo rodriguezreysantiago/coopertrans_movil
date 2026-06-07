@@ -282,6 +282,25 @@ turnos largos reales o levemente inflados por telemetría rala, bien marcados `e
 para revisión (límite honesto de reconstruir con data rala — no se ocultan manejando los gaps como
 descanso). Suite functions **231/231**, eslint OK. Los 5 casos en disputa siguen reivindicados 5/5.
 
+## Inflado de manejo — INVESTIGADO, no existe (07-jun · read-only)
+Sospecha: en telemetría rala (eventos cada 1-3 h), ¿se cuenta como manejo tiempo en que el camión
+estuvo parado dentro del gap? Medido 3 formas con `auditar_jornada_v3.js gaps` + `detalle`:
+1. **Velocidad promedio de los gaps** "con desplazamiento" (≥30 min, ambos extremos en movimiento),
+   8 días, 922 gaps: **97% promedian ≥ 55 km/h, 621 en 70-85 km/h** (crucero). Solo 22 gaps (2,4%)
+   bajan de 55.
+2. **Descuento simulado** (estimar manejo = distancia/crucero): con crucero 70 km/h se descontaría
+   2% del tiempo de gaps; con 60, ~0%. No hay nada material que descontar.
+3. **Cross-check distancia ÷ manejo** en los casos "absurdos": GASTON 1025 km/15,8 h = 65 km/h;
+   LACEAR 1047/15,9 = 66; BAJENETA 1124/17,0 = 66; FERNANDEZ 840/12,6 = 66. La velocidad implícita
+   ~65 km/h es manejo REAL de ruta (si fuera inflado por idle/paradas daría 25-40 km/h).
+
+**Conclusión:** el manejo NO está inflado. Los "15-17 h" son días de manejo REALES (1000+ km) =
+sobre-jornada grave que v3 detecta correctamente (`jornadaExcedida` + confianza baja/media para
+revisión). **Descontar manejo sería un atajo peligroso: ocultaría violaciones de seguridad reales y
+acreditaría descanso que no ocurrió.** No se toca la lógica de manejo. El descuento físico
+(distancia/crucero) queda DESCARTADO por la evidencia. (Si en el futuro aparecen unidades con
+telemetría que sí muestre idle contado como manejo, el auditor `gaps` lo detectaría — vigilar.)
+
 **Siguiente (con OK de Santiago): pantalla/bot "mi jornada"** que lee `REGISTRO_JORNADAS` y muestra
 el registro explicado (pausas + confianza + descanso insuficiente) — la pata de transparencia del
 Paso 2. Después: Paso 3 (aviso en vivo humilde) y Paso 4 (destronar al v2). **Nada se deploya sin OK

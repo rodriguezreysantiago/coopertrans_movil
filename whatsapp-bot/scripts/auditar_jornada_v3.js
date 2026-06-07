@@ -103,8 +103,17 @@ async function detalle(dni, ymd) {
   const evs = [];
   snap.forEach((doc) => { const e = doc.data(); if (String(e.driver_dni || '') === dni) { const m = mapEvento(e); if (m) evs.push(m); } });
   evs.sort((a, b) => a.ms - b.ms);
-  console.log(`${dni} ${ymd}: ${evs.length} eventos`);
+  // Cross-check de inflado: distancia total del recorrido ÷ horas de manejo.
+  // Si ≈ velocidad crucero (~70-80), el manejo es REAL; si << , estaría inflado.
+  let kmTot = 0;
+  for (let k = 1; k < evs.length; k++) {
+    const dm = distM(evs[k - 1].lat, evs[k - 1].lng, evs[k].lat, evs[k].lng);
+    if (dm != null) kmTot += dm / 1000;
+  }
+  console.log(`${dni} ${ymd}: ${evs.length} eventos · recorrido ${kmTot.toFixed(0)} km`);
   const turnos = v3.reconstruirJornadas(evs);
+  const manejoTot = turnos.reduce((s, r) => s + r.manejoNetoSeg, 0) / 3600;
+  if (manejoTot > 0) console.log(`  manejo total ${manejoTot.toFixed(1)}h → velocidad implícita ${(kmTot / manejoTot).toFixed(0)} km/h (≈crucero ⇒ manejo real; <<crucero ⇒ inflado)`);
   console.log(`turnos: ${turnos.length}`);
   turnos.forEach((r, i) => {
     const dp = r.descansoPrevioSeg == null ? '—' : hh(r.descansoPrevioSeg) + (r.descansoInsuficiente ? ' INSUF' : '');
@@ -138,9 +147,63 @@ async function histograma(dias) {
   process.exit(0);
 }
 
+// Haversine inline (no importar jornadas_v2 para no arrastrar firebase-admin).
+function distM(aLat, aLng, bLat, bLng) {
+  if (aLat == null || aLng == null || bLat == null || bLng == null) return null;
+  const R = 6371000, toRad = (g) => g * Math.PI / 180;
+  const dLat = toRad(bLat - aLat), dLng = toRad(bLng - aLng);
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
+
+// Analiza los GAPS "con desplazamiento" (los que hoy se cuentan enteros como
+// manejo): velocidad promedio + simula cuánto manejo se DESCONTARÍA estimando el
+// tiempo de manejo como distancia/crucero. Calibra el descuento de inflado.
+async function gaps(dias) {
+  const GAP_MIN_S = 30 * 60, RADIO = 500;
+  const vbuckets = { '<20': 0, '20-40': 0, '40-55': 0, '55-70': 0, '70-85': 0, '85+': 0 };
+  const bucketV = (v) => v < 20 ? '<20' : v < 40 ? '20-40' : v < 55 ? '40-55' : v < 70 ? '55-70' : v < 85 ? '70-85' : '85+';
+  let gapDurTotal = 0; // seg actualmente contados como manejo en gaps con despl.
+  const cruceros = [50, 60, 70];
+  const desc = { 50: 0, 60: 0, 70: 0 }; // seg que se descontarían con cada crucero
+  let nGaps = 0;
+  const hoyArt = new Date(Date.now() - 3 * 3600 * 1000);
+  for (let i = 1; i <= dias; i++) {
+    const d = new Date(Date.UTC(hoyArt.getUTCFullYear(), hoyArt.getUTCMonth(), hoyArt.getUTCDate() - i, 12, 0, 0));
+    const { porDni } = await eventosDelDia(diaArt(d));
+    for (const dni of Object.keys(porDni)) {
+      const evs = porDni[dni].sort((a, b) => a.ms - b.ms);
+      for (let k = 1; k < evs.length; k++) {
+        const a = evs[k - 1], b = evs[k];
+        const dur = (b.ms - a.ms) / 1000;
+        if (dur < GAP_MIN_S) continue;
+        const va = Math.max(a.speed ?? -1, a.gpsSpeed ?? -1), vb = Math.max(b.speed ?? -1, b.gpsSpeed ?? -1);
+        if (va <= 15 || vb <= 15) continue; // ambos en movimiento (gap de manejo)
+        const dm = distM(a.lat, a.lng, b.lat, b.lng);
+        if (dm == null || dm <= RADIO) continue; // con desplazamiento
+        const vAvg = (dm / 1000) / (dur / 3600);
+        vbuckets[bucketV(vAvg)]++;
+        gapDurTotal += dur;
+        nGaps++;
+        for (const c of cruceros) {
+          const manejoEst = Math.min(dur, (dm / 1000) / c * 3600);
+          desc[c] += dur - manejoEst; // tiempo parado estimado
+        }
+      }
+    }
+  }
+  console.log(`Gaps "con desplazamiento" (≥30min, ambos en movimiento), ${dias} días: ${nGaps} gaps`);
+  console.log('Velocidad PROMEDIO del gap (km/h):');
+  for (const k of Object.keys(vbuckets)) console.log(`  ${k.padStart(6)}: ${'█'.repeat(Math.min(60, vbuckets[k]))} ${vbuckets[k]}`);
+  console.log(`\nTiempo en estos gaps (hoy todo manejo): ${hh(gapDurTotal)}`);
+  for (const c of cruceros) console.log(`  con crucero ${c} km/h se descontaría (parado estimado): ${hh(desc[c])} (${(100 * desc[c] / gapDurTotal).toFixed(0)}% del tiempo de gaps)`);
+  process.exit(0);
+}
+
 async function main() {
   if (process.argv[2] === 'detalle') { await detalle(process.argv[3], process.argv[4]); return; }
   if (process.argv[2] === 'histograma') { await histograma(Math.max(1, Math.min(31, Number(process.argv[3] || 6)))); return; }
+  if (process.argv[2] === 'gaps') { await gaps(Math.max(1, Math.min(31, Number(process.argv[3] || 6)))); return; }
   const anomalias = [];
   const dist = { turnos: 0, alta: 0, media: 0, baja: 0, excedidaJornada: 0, excedidaBloque: 0, descansoInsuf: 0, dnis: 0 };
   const hoyArt = new Date(Date.now() - 3 * 3600 * 1000);
