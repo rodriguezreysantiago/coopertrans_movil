@@ -192,6 +192,15 @@ if (Test-Path $installerExe) {
     $instMB = [math]::Round((Get-Item $installerExe).Length / 1MB, 1)
     Write-Host "  Sumando instalador: $(Split-Path $installerExe -Leaf) ($instMB MB)" -ForegroundColor Cyan
     $assets += $installerExe
+    # Copia con NOMBRE FIJO para el link de descarga directa estable de la web.
+    # GitHub redirige  /releases/latest/download/CoopertransMovil-Setup.exe  al
+    # asset del ULTIMO release → la landing (cooper-trans.com.ar/app) baja siempre
+    # la version mas nueva, sin JS ni depender de la API. Se sube en cada release
+    # (clobber) asi el link estable siempre cuelga del latest.
+    $installerFijo = Join-Path $repoRoot "dist\CoopertransMovil-Setup.exe"
+    Copy-Item $installerExe $installerFijo -Force
+    $assets += $installerFijo
+    Write-Host "  + copia nombre fijo: CoopertransMovil-Setup.exe (link estable web)" -ForegroundColor Cyan
 } else {
     Write-Host "  (sin instalador .exe en dist\ — para sumarlo: .\scripts\build_installer.ps1)" -ForegroundColor DarkGray
 }
