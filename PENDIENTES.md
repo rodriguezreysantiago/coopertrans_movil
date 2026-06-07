@@ -26,6 +26,11 @@ silencia un aviso de descanso legítimo). `EventoDetencionLite` +lat/lng (de SIT
 `RADIO_PAUSA_GAP_METROS=500`; gap mínimo = `PAUSA_BLOQUE_SEGUNDOS` (15 min); +4 tests (188/188).
 - [ ] Monitorear el buzón: los reportes de "parada no detectada" deberían cesar.
 - [ ] Marcar revisados los 5 reportes pendientes (pantalla "Reportes de choferes").
+- **Dirección de fondo (plan, NO ejecutado):** `docs/PLAN_vigilador_jornada_v3.md` — el fix de hoy es
+  un parche; el plan v3 resuelve los 3 dolores (precisión + reclamos + fragilidad) separando el
+  **aviso en vivo** (humilde, solo con dato fresco) del **registro de jornada** (batch a posteriori
+  sobre TODOS los eventos Sitrack del turno, determinístico y explicado al chofer). Solo Sitrack por
+  ahora. Incremental (no tira el v2). Arrancar por el Paso 0 (catalogar `event_id`) en sesión dedicada.
 
 ### 2) Landing de descargas — cooper-trans.com.ar/app (LIVE)
 Página única con los 5 puntos (iPhone/iPad + Android + Mac + Windows + web), branding VAVG.
@@ -35,10 +40,12 @@ que consulta la GitHub Releases API y baja el `.exe` directo (sin abrir GitHub);
 - [ ] (Opcional) Linkearla desde la home del sitio + badges oficiales de las stores.
 - [ ] (Opcional) Commitear el archivo en el repo del sitio (`sitio_nuevo` tiene su propio git).
 
-### 3) Versionado: serie 1.2.x (commit `ad91664`)
-`bump_version.ps1` ahora apunta a una **serie objetivo** (`$serieMajor=1`, `$serieMinor=2`): el
-próximo `release_completo` salta **1.0.94 → 1.2.0+98** y de ahí sube solo el patch (1.2.1,
-1.2.2…). Para saltar a 1.3.x más adelante: cambiar `$serieMinor`. El build sigue +1 siempre.
+### 3) Versionado: serie 1.2.x + build derivado (commits `ad91664`, `b357bb5`)
+`bump_version.ps1` apunta a una **serie objetivo** (`$serieMajor=1`, `$serieMinor=2`) y sube solo
+el patch (1.2.1, 1.2.2…). El **build se DERIVA del semver** (`M*10000+m*100+patch` → 1.2.2 = `+10202`),
+ya NO es un contador aparte: solo se maneja `1.2.X` y el build (que Play/App Store exigen único y
+creciente) se arma solo. Para saltar a 1.3.x: cambiar `$serieMinor`. Ya se largaron 1.2.0 y 1.2.1;
+el próximo release da **1.2.2+10202**.
 
 ### 4) Agente WhatsApp: sano
 99 chats/7d, **0 fallbacks**. Los 17 errores eran históricos (1-4 jun) por saldo/cuota de
