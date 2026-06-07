@@ -56,6 +56,11 @@ class AppRoutes {
   /// `reconstruirJornadasDiario`. Marca descansos suficientes (≥15 min
   /// para corte de bloque, ≥8h para fin de jornada según política Vecchi v2).
   static const String adminIcmJornadaDia = '/admin_icm_jornada_dia';
+
+  /// Registro de jornada v3 (vista admin/supervisor) — la jornada REAL
+  /// reconstruida por señales Sitrack (REGISTRO_JORNADAS). Fuente oficial para
+  /// adjudicar disputas y revisar compliance (Paso 4 del plan vigilador v3).
+  static const String adminRegistroJornada = '/admin_registro_jornada';
   // Pantallas Volvo restantes (mantienen `verAlertasVolvo` por ahora):
   /// Auditoría de asignaciones — cruza el histórico REAL del iButton
   /// (SITRACK_IBUTTONS_HISTORICO) contra ASIGNACIONES_VEHICULO. Util

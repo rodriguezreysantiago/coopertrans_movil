@@ -58,6 +58,7 @@ import '../features/icm/screens/icm_reporte_semanal_screen.dart';
 import '../features/icm/screens/icm_mapa_calor_screen.dart';
 import '../features/icm/screens/icm_detalle_chofer_screen.dart';
 import '../features/jornada_historico/screens/jornada_dia_screen.dart';
+import '../features/registro_jornadas/screens/admin_registro_jornada_screen.dart';
 
 import '../features/cachatore/screens/cachatore_hub_screen.dart';
 
@@ -305,6 +306,17 @@ class AppRouter {
       case AppRoutes.adminIcmJornadaDia:
         return _buildRoute(
           _protegerAdmin(const JornadaDiaScreen(), Capability.verIcm),
+          settings,
+        );
+
+      case AppRoutes.adminRegistroJornada:
+        return _buildRoute(
+          _protegerAdmin(
+            AdminRegistroJornadaScreen(
+              choferDniInicial: settings.arguments as String?,
+            ),
+            Capability.verIcm,
+          ),
           settings,
         );
 

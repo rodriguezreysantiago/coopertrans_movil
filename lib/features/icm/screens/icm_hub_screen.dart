@@ -274,6 +274,12 @@ class _GridSubpantallas extends StatelessWidget {
               icono: Icons.timeline,
               ruta: AppRoutes.adminIcmJornadaDia,
             ),
+            _HubTile(
+              titulo: 'Jornada real (v3)',
+              subtitulo: 'Registro a posteriori: manejo, pausas y confianza',
+              icono: Icons.fact_check_outlined,
+              ruta: AppRoutes.adminRegistroJornada,
+            ),
           ],
         );
       },
