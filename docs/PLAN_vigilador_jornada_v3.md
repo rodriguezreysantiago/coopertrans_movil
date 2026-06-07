@@ -399,8 +399,10 @@ registro v3 captura la verdad igual).
   calibrado con datos (07-jun): camiones en marcha reportan a 2-4 min; se ven viejos a 10-15 min.
 - Cambio MÍNIMO y conservador: solo SUPRIME avisos (no puede generar spam). 5 tests nuevos. 241/241.
 
-**Pendiente: deploy** `firebase deploy --only functions:vigiladorJornadaChofer` — cambia avisos en
-vivo a choferes reales, así que va con OK de Santiago. Reversible (revert + redeploy).
+**DEPLOYADO** (07-jun, OK de Santiago): `firebase deploy --only functions:vigiladorJornadaChofer`.
+Verificado en vivo: el cron hace `[jornadas_v2.tick] OK` limpio cada 5 min, sin errores, con el gate
+de frescura activo. Desde ahora el chofer solo recibe "3h30"/"4h" con dato fresco (≤7 min); con dato
+viejo se posterga. Reversible (revert + redeploy).
 
 Después: Paso 4 (destronar al v2 como fuente de verdad — el registro v3 pasa a ser la fuente para
 liquidación/disputa y el v2 queda solo como aviso preventivo).
