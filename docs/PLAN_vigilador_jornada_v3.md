@@ -198,3 +198,38 @@ read-only, reconstruye con el compilado):
 
 **Siguiente: Paso 2** (persistir + pantalla "mi jornada" + cron batch idempotente). **NO deployar
 sin OK de Santiago** (jornada = horas de trabajo, sensible).
+
+## Paso 2 — backend (07-jun, HECHO · DORMIDO, SIN deploy)
+Capa de I/O alrededor de la lógica pura: `functions/src/jornadas_v3_batch.ts` +
+`functions/test/jornadas_v3_batch.test.js` (13 tests). Calcado del patrón de `jornada_historico.ts`
+(cron diario + backfill + funciones puras testeables), pero persistiendo la reconstrucción v3.
+Suite functions **225/225**, eslint limpio.
+
+**DOBLE RED para no tocar prod sin OK** (jornada sensible):
+1. **No wired**: `index.ts` NO lo re-exporta → Firebase no lo ve, `firebase deploy` no crea nada.
+2. **Dark por flag**: el cron chequea `META/config_vigilador_v3.registro_batch_activo` (default
+   false) → aunque se deploye, no escribe hasta prender el flag, y se apaga al instante bajándolo.
+
+**Qué hace** (cuando se active):
+- Colección NUEVA `REGISTRO_JORNADAS`, permanente, en paralelo (NO toca `JORNADAS` del v2 ni
+  `VOLVO_JORNADAS_HISTORICO`). Doc id determinístico `{dni}_{YYYY-MM-DD}` → idempotente +
+  compatible con la regla que da al chofer su propio registro (`doc.split('_')[0] == uid`).
+- `registrarJornadasV3Diario`: cron 06:45 ART, ventana [ayer 00:00, ahora] para completar turnos
+  que cruzan medianoche; persiste solo los que INICIARON ayer (filtro inicio) → sin fragmentos.
+- `backfillRegistrosV3`: callable ADMIN, reprocesa N días (1..60), idempotente.
+- Funciones puras testeadas: `mapearDocEvento` (SITRACK_EVENTOS → EventoJornadaLite), `fechaArt`,
+  `docIdRegistro`, `agruparYReconstruir`, `registroToFirestore`.
+- Regla Firestore `REGISTRO_JORNADAS` agregada (lectura admin/supervisor/SEG_HIGIENE + chofer dueño;
+  escritura solo CF) — **NO deployada** todavía.
+
+**ACTIVACIÓN (3 pasos, los hace Santiago):**
+1. `export * from "./jornadas_v3_batch";` en `functions/src/index.ts`.
+2. `firebase deploy --only functions:registrarJornadasV3Diario,functions:backfillRegistrosV3` +
+   `firebase deploy --only firestore:rules`.
+3. Prender `META/config_vigilador_v3.registro_batch_activo = true` (o correr el backfill 1×).
+Recomendado: backfill de unos días → comparar `REGISTRO_JORNADAS` vs `JORNADAS` (v2) en los casos
+en disputa antes de exponerlo al chofer.
+
+**Siguiente: pantalla "mi jornada"** (Flutter) que lee `REGISTRO_JORNADAS` y muestra el registro
+explicado (pausas + confianza) — la pata de transparencia del Paso 2. Después: Paso 3 (aviso en vivo
+humilde) y Paso 4 (destronar al v2). **Nada se deploya sin OK de Santiago.**
