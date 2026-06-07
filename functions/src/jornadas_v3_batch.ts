@@ -36,6 +36,7 @@ import {
   EventoJornadaLite,
   RegistroJornada,
   reconstruirJornadas,
+  horaMinArt,
 } from "./jornadas_v3";
 
 /** Colección del registro a posteriori (la VERDAD auditable). Permanente —
@@ -94,12 +95,16 @@ export function fechaArt(ms: number): string {
   }).format(new Date(ms));
 }
 
-/** Doc id determinístico = `{dni}_{fecha-ART-del-inicio-de-turno}`. Idempotente
- * (re-procesar la misma jornada pisa el mismo doc) y compatible con la regla de
- * Firestore que da al chofer su propio registro (`doc.split('_')[0] == uid`),
- * igual que VOLVO_JORNADAS_HISTORICO. */
+/** Doc id determinístico = `{dni}_{fecha-ART}_{HHMM-inicio-ART}`. Incluye la HORA
+ * de inicio porque un chofer puede tener DOS turnos el mismo día calendario
+ * (separados por un descanso ≥ 7 h — caso real GARCIA 05-19: turno 09:54 + turno
+ * 19:09); con solo la fecha, el 2º pisaba al 1º (pérdida de datos). Sigue siendo
+ * idempotente (re-procesar el mismo turno da el mismo inicio → mismo id) y el
+ * prefijo antes del 1er `_` sigue siendo el DNI, así que la regla de Firestore
+ * (`doc.split('_')[0] == uid`) le da al chofer su propio registro. */
 export function docIdRegistro(dni: string, inicioTurnoMs: number): string {
-  return `${dni}_${fechaArt(inicioTurnoMs)}`;
+  const hhmm = horaMinArt(inicioTurnoMs).replace(":", "");
+  return `${dni}_${fechaArt(inicioTurnoMs)}_${hhmm}`;
 }
 
 // ─── Agrupar + reconstruir (PURO) ────────────────────────────────────────────

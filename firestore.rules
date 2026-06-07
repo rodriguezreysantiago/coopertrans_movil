@@ -926,9 +926,10 @@ service cloud.firestore {
     // La CF `registrarJornadasV3Diario` (jornadas_v3_batch) reconstruye la
     // jornada por SEÑALES Sitrack (Contacto OFF/ON, detenido, pausa encubierta)
     // a posteriori: manejo neto, pausas, bloques y CONFIANZA por tramo.
-    // DocId determinístico `{dni}_{YYYY-MM-DD}`. Solo escribe la CF.
-    // Lectura: admin/supervisor/SEG_HIGIENE + el chofer SU PROPIO registro
-    // (transparencia — Paso 2 del plan). Mismo criterio que el histórico.
+    // DocId determinístico `{dni}_{YYYY-MM-DD}_{HHMM}` (la hora evita colisión
+    // si hay 2 turnos el mismo día). Solo escribe la CF. Lectura:
+    // admin/supervisor/SEG_HIGIENE + el chofer SU PROPIO registro (split('_')[0]
+    // = DNI; transparencia — Paso 2 del plan). Mismo criterio que el histórico.
     match /REGISTRO_JORNADAS/{doc} {
       allow read: if puedeVerVolvoTableros()
                   || (isSignedIn() && doc.split('_')[0] == request.auth.uid);

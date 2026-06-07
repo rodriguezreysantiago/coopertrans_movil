@@ -88,12 +88,15 @@ describe('v3 batch — fechaArt / docIdRegistro', () => {
     assert.equal(fechaArt(Date.UTC(2026, 5, 6, 2, 59, 0)), '2026-06-05');
   });
 
-  test('docIdRegistro = dni_fecha (determinístico → idempotente)', () => {
+  test('docIdRegistro = dni_fecha_HHMM (único por turno → sin colisión)', () => {
     const ms = Date.UTC(2026, 5, 6, 13, 0, 0); // 10:00 ART del 6/6
-    assert.equal(docIdRegistro('26129762', ms), '26129762_2026-06-06');
-    // El prefijo antes del '_' es el DNI → la regla de Firestore se lo da al
+    assert.equal(docIdRegistro('26129762', ms), '26129762_2026-06-06_1000');
+    // El prefijo antes del 1er '_' es el DNI → la regla de Firestore se lo da al
     // chofer dueño (doc.split('_')[0] == uid), igual que VOLVO_JORNADAS_HISTORICO.
     assert.equal(docIdRegistro('26129762', ms).split('_')[0], '26129762');
+    // Dos turnos el MISMO día (descanso en el medio) → doc ids distintos.
+    const tarde = Date.UTC(2026, 5, 6, 22, 0, 0); // 19:00 ART
+    assert.notEqual(docIdRegistro('26129762', ms), docIdRegistro('26129762', tarde));
   });
 });
 
