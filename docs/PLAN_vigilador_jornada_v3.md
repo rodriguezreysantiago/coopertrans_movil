@@ -417,8 +417,12 @@ la pantalla del chofer y la admin). NO tocó Firestore (la rule ya habilita al a
 `puedeVerVolvoTableros` y el índice `chofer_dni+fecha` ya estaba). `flutter analyze` limpio. Llega al
 operador con el próximo RELEASE de la app.
 
-**Pendientes opcionales del Paso 4** (cuando Santiago quiera): (a) cambiar el **resumen diario** de
-infracciones (Molina/Seg-Higiene) de los flags del v2 al registro v3; (b) integrar el registro v3 en
-el **buzón de disputas** (REPORTES_DISCREPANCIA) — mostrarlo al lado del reclamo; (c) upgradear la
-**pantalla Jornada del hub ICM** (speed-based) para que use v3. Ambos (a) y (c) tocan superficies en
-vivo → con OK de Santiago.
+**Hecho — v3 en el buzón de disputas** (07-jun · código, pendiente release): en la pantalla de
+Reportes de choferes (REPORTES_DISCREPANCIA), los reclamos de tema `jornada` tienen un botón "Ver
+jornada real" que abre la vista admin del registro v3 con ese chofer pre-seleccionado. Cierra el loop
+que originó el proyecto: el revisor adjudica con el dato preciso, no a ciegas. Cambio mínimo (param
+`onVerJornada` en la fila + navegación con choferDni). `flutter analyze` limpio.
+
+**Pendientes opcionales del Paso 4** (cuando Santiago quiera, tocan superficies en vivo → con su OK):
+(a) cambiar el **resumen diario** de infracciones (Molina/Seg-Higiene) de los flags del v2 al
+registro v3; (c) upgradear la **pantalla Jornada del hub ICM** (speed-based) para que use v3.
