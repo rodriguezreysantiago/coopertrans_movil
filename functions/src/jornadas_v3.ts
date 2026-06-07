@@ -100,6 +100,21 @@ export const GAP_BAJA_CONFIANZA_SEGUNDOS = 30 * 60;
  * las ≥ PAUSA_BLOQUE_SEGUNDOS; estas se muestran igual para transparencia. */
 export const PAUSA_REPORTABLE_SEGUNDOS = 5 * 60;
 
+/**
+ * Umbral para considerar que una parada es un DESCANSO que CORTA el turno (no un
+ * break dentro de la jornada). MÁS BAJO que el descanso legal de 8 h a propósito:
+ * un descanso real a menudo se MIDE algo corto por el slop de la telemetría
+ * (cuándo dispara "detenido"/"fin de detenido") — caso real GASTON DIETRICH:
+ * descansó 21:48→05:32 = 7h44 y, con corte estricto a 8 h, su turno encadenaba
+ * día+noche+día → manejo neto inflado y falsos "jornada excedida".
+ *
+ * Elegido con datos (histograma de pausas, 8 días / ~270 chofer-días): los
+ * breaks decrecen hasta un VALLE en 5-7 h (~33 c/u) y los descansos REPUNTAN en
+ * 7-8 h (60) con pico en 8-9 h (80). 7 h cae en el borde del valle: separa break
+ * de descanso y tolera el slop. El descanso < 8 h legal NO se pierde: se marca
+ * aparte con `descansoInsuficiente` (ver RegistroJornada). */
+export const DESCANSO_TURNO_SEGUNDOS = 7 * 3600;
+
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 /** Evento Sitrack mínimo que consume el batch. Se mapea de SITRACK_EVENTOS
@@ -174,6 +189,13 @@ export interface RegistroJornada {
   bloques: BloqueJornada[];
   /** cantidad de bloques que superaron 4 h de manejo continuo. */
   bloquesExcedidos: number;
+  /** duración (seg) del descanso INMEDIATAMENTE ANTERIOR a este turno, si se
+   * pudo ver en los datos. null = no se ve (es el primer turno del rango). */
+  descansoPrevioSeg: number | null;
+  /** true si el descanso previo existió pero fue < 8 h (el mínimo legal Vecchi).
+   * El turno se corta igual (fue claramente un descanso) pero queda señalado:
+   * el chofer no completó las 8 h de descanso entre jornadas. */
+  descansoInsuficiente: boolean;
   /** true si el manejo NETO de la jornada superó el tope de 12 h (paridad con
    * el aviso `cuota` del v2). Distinto de `bloquesExcedidos` (4 h por bloque):
    * un chofer puede no exceder ningún bloque y aun así pasar las 12 h netas
@@ -262,13 +284,13 @@ interface IntervaloCrudo {
  *     esconderse una parada que no vemos).
  *  4. Eventos 386 (Bloqueo GPS) bajan la confianza del intervalo que tocan.
  */
-function reconstruirUnTurno(eventos: EventoJornadaLite[]): RegistroJornada {
+/** Construye la línea de tiempo (segmentos + intervalos crudos) de una secuencia
+ * de eventos YA ordenados-able. NO parte en turnos — eso lo hace el caller. */
+function construirSegmentos(
+  eventos: EventoJornadaLite[]
+): { segmentos: SegmentoJornada[]; intervalos: IntervaloCrudo[] } {
   const evs = [...eventos].sort((a, b) => a.ms - b.ms);
-  if (evs.length === 0) return jornadaVacia();
-  if (evs.length === 1) {
-    // Un solo evento: no hay intervalos que medir.
-    return jornadaVacia();
-  }
+  if (evs.length < 2) return { segmentos: [], intervalos: [] };
 
   // 1) Estado físico dejado por cada evento.
   const estados: TipoSegmento[] = new Array(evs.length);
@@ -289,7 +311,15 @@ function reconstruirUnTurno(eventos: EventoJornadaLite[]): RegistroJornada {
     let origen: OrigenPausa | undefined;
     let motivoBaja: string | undefined;
 
-    if (tipo === "manejo" && dur >= GAP_GRANDE_SEGUNDOS) {
+    if (dur >= DESCANSO_TURNO_SEGUNDOS) {
+      // ≥ 7 h sin un solo reporte es un DESCANSO, no manejo: nadie maneja 7 h
+      // sin que el equipo emita un `283` (el camión estuvo parado, con el equipo
+      // apagado o no). Forzamos pausa → `partirSegmentosEnTurnos` corta el turno
+      // acá. Cubre tanto el gap (equipo apagado) como, tras el merge, el descanso
+      // en el lugar con heartbeats.
+      tipo = "pausa";
+      origen = esParoEvento(a) ? origenDePausa(a) : "parado";
+    } else if (tipo === "manejo" && dur >= GAP_GRANDE_SEGUNDOS) {
       const hayPos =
         a.lat != null && a.lng != null && b.lat != null && b.lng != null;
       if (!hayPos) {
@@ -327,15 +357,59 @@ function reconstruirUnTurno(eventos: EventoJornadaLite[]): RegistroJornada {
     });
   }
 
-  // Merge de intervalos consecutivos del mismo tipo → segmentos.
-  const segmentos = fusionarSegmentos(intervalos);
+  return { segmentos: fusionarSegmentos(intervalos), intervalos };
+}
 
+/**
+ * Parte una lista de segmentos en TURNOS en cada PAUSA de descanso (≥ 8 h). Esa
+ * pausa es la frontera (descanso entre jornadas) y NO pertenece a ningún turno.
+ *
+ * Por qué hace falta (hallazgo de la auditoría 07-jun sobre la flota real): el
+ * descanso nocturno casi nunca es un GAP sin reportes — el equipo sigue mandando
+ * heartbeats con el camión parado, así que `partirEnTurnos` (que corta por gap
+ * ≥ 8 h) no lo veía y el turno encadenaba día+noche+día → manejo neto inflado
+ * (11-16 h) y falsos "jornada excedida". Un descanso en el lugar de ≥ 8 h ES una
+ * frontera de jornada por la regla Vecchi, aunque el equipo no se haya apagado.
+ */
+interface GrupoTurno {
+  segmentos: SegmentoJornada[];
+  /** descanso (seg) que precede a este grupo; null para el primero del rango. */
+  descansoPrevioSeg: number | null;
+}
+
+function partirSegmentosEnTurnos(
+  segmentos: SegmentoJornada[]
+): GrupoTurno[] {
+  const grupos: GrupoTurno[] = [];
+  let actual: SegmentoJornada[] = [];
+  let descansoPrevio: number | null = null;
+  for (const seg of segmentos) {
+    if (seg.tipo === "pausa" && seg.durSeg >= DESCANSO_TURNO_SEGUNDOS) {
+      if (actual.length) {
+        grupos.push({ segmentos: actual, descansoPrevioSeg: descansoPrevio });
+      }
+      actual = [];
+      descansoPrevio = seg.durSeg; // este descanso precede al PRÓXIMO turno
+    } else {
+      actual.push(seg);
+    }
+  }
+  if (actual.length) {
+    grupos.push({ segmentos: actual, descansoPrevioSeg: descansoPrevio });
+  }
+  return grupos;
+}
+
+/** Arma el RegistroJornada de UN turno a partir de sus segmentos (ya sin
+ * descansos ≥ 8 h adentro). `intervalos` es la lista completa del chunk — sirve
+ * para la confianza global, que se acota sola a [inicioTurno, finTurno]. */
+function registroDeSegmentos(
+  segmentos: SegmentoJornada[], intervalos: IntervaloCrudo[],
+  evs: EventoJornadaLite[], descansoPrevioSeg: number | null
+): RegistroJornada {
   // Turno = desde el primer segmento de MANEJO (primer movimiento del día).
   const idxPrimerManejo = segmentos.findIndex((s) => s.tipo === "manejo");
-  if (idxPrimerManejo === -1) {
-    // Nunca manejó (todo pausa): no hay jornada de manejo que registrar.
-    return jornadaVacia();
-  }
+  if (idxPrimerManejo === -1) return jornadaVacia();
   const segTurno = segmentos.slice(idxPrimerManejo);
   const inicioTurnoMs = segTurno[0].inicioMs;
   const finTurnoMs = segTurno[segTurno.length - 1].finMs;
@@ -347,19 +421,31 @@ function reconstruirUnTurno(eventos: EventoJornadaLite[]): RegistroJornada {
   const bloques = partirEnBloques(segTurno);
   const bloquesExcedidos = bloques.filter((b) => b.excedido).length;
   const jornadaExcedida = manejoNetoSeg >= JORNADA_MANEJO_LIMITE_SEGUNDOS;
+  const descansoInsuficiente =
+    descansoPrevioSeg != null && descansoPrevioSeg < DESCANSO_MIN_SEGUNDOS;
   const confianza = confianzaGlobal(
     intervalos, evs, inicioTurnoMs, finTurnoMs
   );
   const explicacion = construirExplicacion({
     inicioTurnoMs, finTurnoMs, manejoNetoSeg, pausas, bloques,
-    bloquesExcedidos, jornadaExcedida, confianza,
+    bloquesExcedidos, jornadaExcedida, descansoPrevioSeg, descansoInsuficiente,
+    confianza,
   });
 
   return {
     inicioTurnoMs, finTurnoMs, manejoNetoSeg, pausaTotalSeg,
-    segmentos: segTurno, pausas, bloques, bloquesExcedidos, jornadaExcedida,
+    segmentos: segTurno, pausas, bloques, bloquesExcedidos,
+    descansoPrevioSeg, descansoInsuficiente, jornadaExcedida,
     confianza, explicacion,
   };
+}
+
+/** Línea de tiempo completa (segmentos manejo/pausa) SIN partir en turnos.
+ * Útil para diagnóstico/calibración (p.ej. histograma de duraciones de pausa). */
+export function lineaDeTiempo(
+  eventos: EventoJornadaLite[]
+): SegmentoJornada[] {
+  return construirSegmentos(eventos).segmentos;
 }
 
 function fusionarSegmentos(intervalos: IntervaloCrudo[]): SegmentoJornada[] {
@@ -511,7 +597,8 @@ function descOrigen(o: OrigenPausa): string {
 function construirExplicacion(r: {
   inicioTurnoMs: number; finTurnoMs: number; manejoNetoSeg: number;
   pausas: PausaJornada[]; bloques: BloqueJornada[]; bloquesExcedidos: number;
-  jornadaExcedida: boolean; confianza: Confianza;
+  jornadaExcedida: boolean; descansoPrevioSeg: number | null;
+  descansoInsuficiente: boolean; confianza: Confianza;
 }): string[] {
   const lineas: string[] = [];
   lineas.push(
@@ -538,6 +625,12 @@ function construirExplicacion(r: {
       "tope de 12 h"
     );
   }
+  if (r.descansoInsuficiente && r.descansoPrevioSeg != null) {
+    lineas.push(
+      `⚠ Descanso previo ${hhmm(r.descansoPrevioSeg)} — menor a las 8 h ` +
+      "mínimas entre jornadas"
+    );
+  }
   if (r.confianza !== "alta") {
     lineas.push(
       `⚠ Confianza ${r.confianza}: hay tramos sin reporte confiable — ` +
@@ -557,6 +650,8 @@ function jornadaVacia(): RegistroJornada {
     pausas: [],
     bloques: [],
     bloquesExcedidos: 0,
+    descansoPrevioSeg: null,
+    descansoInsuficiente: false,
     jornadaExcedida: false,
     confianza: "alta",
     explicacion: [],
@@ -566,10 +661,11 @@ function jornadaVacia(): RegistroJornada {
 // ─── API pública ─────────────────────────────────────────────────────────────
 
 /**
- * Parte una secuencia de eventos en turnos: un gap ≥ 8 h entre eventos
- * consecutivos es un descanso de jornada (corte de turno). Robusto para
- * multi-día / turnos que cruzan medianoche (NO se corta por medianoche — solo
- * por descanso real). Asume eventos ordenables por `ms`.
+ * Utilidad: parte una secuencia de eventos en chunks por GAP ≥ 8 h entre eventos
+ * consecutivos (equipo apagado por completo). `reconstruirJornadas` YA NO la usa
+ * (el corte de turno se hace a nivel de segmento, que cubre gap + pausa en el
+ * lugar de forma unificada); se mantiene exportada como utilidad/diagnóstico.
+ * NO corta por medianoche. Asume eventos ordenables por `ms`.
  */
 export function partirEnTurnos(
   eventos: EventoJornadaLite[]
@@ -591,30 +687,33 @@ export function partirEnTurnos(
 }
 
 /**
- * Reconstruye TODAS las jornadas presentes en los eventos (parte por descanso
- * de 8 h y reconstruye cada turno). Devuelve solo las que tienen manejo real.
+ * Reconstruye TODAS las jornadas presentes en los eventos. Corte UNIFICADO a
+ * nivel de segmento: arma la línea de tiempo y la parte en cada DESCANSO ≥ 7 h
+ * (`partirSegmentosEnTurnos`), que cubre por igual el descanso con equipo
+ * apagado (gap, forzado a pausa en `construirSegmentos`) y el descanso en el
+ * lugar con heartbeats (pausa mergeada). Devuelve solo jornadas con manejo real.
  */
 export function reconstruirJornadas(
   eventos: EventoJornadaLite[]
 ): RegistroJornada[] {
-  return partirEnTurnos(eventos)
-    .map(reconstruirUnTurno)
-    .filter((r) => r.inicioTurnoMs != null);
+  const { segmentos, intervalos } = construirSegmentos(eventos);
+  if (segmentos.length === 0) return [];
+  const out: RegistroJornada[] = [];
+  for (const g of partirSegmentosEnTurnos(segmentos)) {
+    const r = registroDeSegmentos(
+      g.segmentos, intervalos, eventos, g.descansoPrevioSeg
+    );
+    if (r.inicioTurnoMs != null) out.push(r);
+  }
+  return out;
 }
 
 /**
- * Reconstruye la PRIMERA jornada de los eventos (el caso típico: el caller pasa
- * los eventos de un turno). Si hay un descanso de 8 h adentro, corta el turno
- * ahí (el resto es otra jornada — usar `reconstruirJornadas`). Devuelve una
- * jornada vacía si no hubo manejo.
+ * Reconstruye la PRIMERA jornada de los eventos. Devuelve una jornada vacía si
+ * no hubo manejo. (Para todas las jornadas del rango, usar `reconstruirJornadas`.)
  */
 export function reconstruirJornada(
   eventos: EventoJornadaLite[]
 ): RegistroJornada {
-  const turnos = partirEnTurnos(eventos);
-  for (const t of turnos) {
-    const r = reconstruirUnTurno(t);
-    if (r.inicioTurnoMs != null) return r;
-  }
-  return jornadaVacia();
+  return reconstruirJornadas(eventos)[0] ?? jornadaVacia();
 }

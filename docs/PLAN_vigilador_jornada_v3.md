@@ -254,6 +254,35 @@ quedó ABIERTA (no cerró por descanso) y arrastró horas a la madrugada; el v3 
 real con sus pausas y lo explica. Antes de exponer al chofer conviene 1–2 semanas de
 `REGISTRO_JORNADAS` real (deploy + flag) para comparar a escala.
 
+## Pulido con data de flota (07-jun · read-only, SIN deploy)
+Auditor `whatsapp-bot/scripts/auditar_jornada_v3.js` (read-only): corre v3 sobre TODA la flota y N
+días, lista anomalías + distribución + modos `detalle <dni> <fecha>` e `histograma <dias>`. Destapó
+dos cosas:
+
+1. **BUG dominante — corte de turno (ARREGLADO).** Sobre 6 días, la mayoría de los turnos abarcaban
+   ~24 h (manejo inflado 11-16 h, 44 falsos "jornada excedida"). Causa: el descanso nocturno casi
+   nunca es un GAP — el equipo manda heartbeats con el camión parado, y el corte solo miraba gaps de
+   ≥8 h. Caso real GASTON DIETRICH: descansó **7h44** (21:48→05:32) y, con corte estricto a 8 h, su
+   turno encadenaba día+noche+día.
+   **Fix:** corte de turno UNIFICADO a nivel de segmento — cualquier intervalo/pausa ≥ 7 h sin
+   actividad es un descanso y corta el turno (cubre gap apagado + pausa en el lugar). El umbral 7 h
+   se eligió con el **histograma de pausas** (8 días/~270 chofer-días): breaks decrecen hasta un
+   valle en 5-7 h y los descansos repuntan en 7-8 h (60) con pico 8-9 h (80). Resultado: anomalías
+   "turno largo" de ~50 → ~8; turnos bien cortados; FERNANDEZ ahora cierra el turno cuando estaciona
+   (21:27), no metido en la noche.
+2. **Señal nueva — `descansoInsuficiente` (AGREGADO).** Al cortar a 7 h se podía perder que un
+   descanso fue < 8 h (mínimo legal). Se agregó `RegistroJornada.descansoPrevioSeg` + `descanso
+   Insuficiente` (descanso previo < 8 h): **19 turnos con descanso corto en 6 días** que antes eran
+   invisibles (sepultados en el turno de 24 h). Compliance real para Vecchi.
+
+**Verificado:** el **drift multi-patente** (un DNI con 2 patentes solapadas, que mezclaría 2 camiones)
+NO aparece en 6 días de flota → ese riesgo no se materializó (queda el auditor para vigilarlo). La
+**confianza** es a nivel intervalo (precisa): los pocos "manejo absurdo" (>14 h) que quedan son
+turnos largos reales o levemente inflados por telemetría rala, bien marcados `excedida` + media/baja
+para revisión (límite honesto de reconstruir con data rala — no se ocultan manejando los gaps como
+descanso). Suite functions **231/231**, eslint OK. Los 5 casos en disputa siguen reivindicados 5/5.
+
 **Siguiente (con OK de Santiago): pantalla/bot "mi jornada"** que lee `REGISTRO_JORNADAS` y muestra
-el registro explicado (pausas + confianza) — la pata de transparencia del Paso 2. Después: Paso 3
-(aviso en vivo humilde) y Paso 4 (destronar al v2). **Nada se deploya sin OK de Santiago.**
+el registro explicado (pausas + confianza + descanso insuficiente) — la pata de transparencia del
+Paso 2. Después: Paso 3 (aviso en vivo humilde) y Paso 4 (destronar al v2). **Nada se deploya sin OK
+de Santiago.**

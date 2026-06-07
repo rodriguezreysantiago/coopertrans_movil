@@ -537,6 +537,75 @@ describe('v3 — partición en turnos', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
+// Corte de turno por DESCANSO EN EL LUGAR (hallazgo de la auditoría de flota)
+// ══════════════════════════════════════════════════════════════════════
+// El bug dominante: el descanso nocturno casi nunca es un GAP — el equipo manda
+// heartbeats con el camión parado, así que el turno encadenaba día+noche+día y
+// el manejo se inflaba. Se corta por una PAUSA ≥ 7 h (umbral tolerante al slop
+// de la telemetría; caso real GASTON descansó 7h44). El descanso < 8 h legal se
+// marca aparte con descansoInsuficiente (no se pierde la señal de compliance).
+
+describe('v3 — corte por descanso en el lugar + descanso insuficiente', () => {
+  // Helper: descanso parado en MISMA posición con heartbeats cada 30 min.
+  function conDescanso(horasDescanso) {
+    const t0 = Date.UTC(2026, 5, 6, 9, 0, 0); // 06:00 ART
+    const rows = [
+      ev(t0, { sp: 70, lat: -38.0, lng: -68.0 }),
+      ev(t0 + 30 * MIN, { sp: 70, lat: -38.1, lng: -68.0 }),
+      ev(t0 + 60 * MIN, { id: 164, sp: 0, lat: -38.2, lng: -68.0 }), // para
+    ];
+    const base = t0 + 60 * MIN;
+    const n = Math.round((horasDescanso * 60) / 30); // heartbeats cada 30 min
+    for (let k = 1; k <= n; k++) {
+      rows.push(ev(base + k * 30 * MIN, { id: 6, sp: 0, lat: -38.2, lng: -68.0 }));
+    }
+    const arranque = base + n * 30 * MIN + 10 * MIN;
+    rows.push(ev(arranque, { id: 7, sp: 55, lat: -38.2, lng: -68.0 }));
+    rows.push(ev(arranque + 30 * MIN, { sp: 70, lat: -38.3, lng: -68.0 }));
+    return rows;
+  }
+
+  test('descanso 7h30 en el lugar (equipo reportando) → corta en 2 turnos', () => {
+    const turnos = reconstruirJornadas(conDescanso(7.5));
+    assert.equal(turnos.length, 2);
+    // El turno 1 termina al parar (no encadena la noche).
+    assert.ok(turnos[0].manejoNetoSeg < 2 * 3600);
+    assert.equal(turnos[1].descansoInsuficiente, true,
+      'descanso 7h30 < 8h → insuficiente');
+    assert.ok(turnos[1].descansoPrevioSeg >= 7 * 3600 &&
+      turnos[1].descansoPrevioSeg < 8 * 3600);
+  });
+
+  test('descanso 9h en el lugar → corta y NO marca insuficiente', () => {
+    const turnos = reconstruirJornadas(conDescanso(9));
+    assert.equal(turnos.length, 2);
+    assert.equal(turnos[1].descansoInsuficiente, false);
+    assert.ok(turnos[1].descansoPrevioSeg >= 8 * 3600);
+  });
+
+  test('gap ≥7h sin reportes tras movimiento (equipo apagado) también corta', () => {
+    const t0 = Date.UTC(2026, 5, 6, 9, 0, 0);
+    const rows = [
+      ev(t0, { sp: 70, lat: -38.0, lng: -68.0 }),
+      ev(t0 + 30 * MIN, { sp: 70, lat: -38.1, lng: -68.0 }),
+      // 7h30 sin un solo reporte y reaparece lejos manejando: descanso, no manejo.
+      ev(t0 + 30 * MIN + 7.5 * H, { sp: 70, lat: -38.7, lng: -68.0 }),
+      ev(t0 + 30 * MIN + 8 * H, { sp: 70, lat: -38.8, lng: -68.0 }),
+    ];
+    const turnos = reconstruirJornadas(rows);
+    assert.equal(turnos.length, 2);
+    // El gap NO se contó como manejo (sería ~8h de manejo falso).
+    assert.ok(turnos[0].manejoNetoSeg < 2 * 3600);
+  });
+
+  test('parada de 4 h (break largo, no descanso) NO corta el turno', () => {
+    const turnos = reconstruirJornadas(conDescanso(4));
+    assert.equal(turnos.length, 1, 'un break de 4h sigue siendo un turno');
+    assert.equal(turnos[0].descansoInsuficiente, false);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════
 // Bordes
 // ══════════════════════════════════════════════════════════════════════
 
