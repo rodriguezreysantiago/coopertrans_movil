@@ -15,6 +15,11 @@ class AppRoutes {
   static const String equipo = '/equipo';
   static const String misVencimientos = '/mis_vencimientos';
 
+  /// "Mi jornada" — el chofer ve su propio registro de jornada v3
+  /// (REGISTRO_JORNADAS): turno, manejo neto, pausas explicadas, recorrido y
+  /// confianza. Transparencia (Paso 2 del plan vigilador v3).
+  static const String miJornada = '/mi_jornada';
+
   // Admin
   static const String adminPanel = '/admin_panel';
   // Vista Ejecutiva — tablero CEO con KPIs grandes + gráficos de tendencia
@@ -446,6 +451,15 @@ class AppCollections {
   /// tramos de manejo y paradas clasificadas (≥15 min para corte de
   /// bloque, ≥8h para fin de jornada).
   static const String volvoJornadasHistorico = 'VOLVO_JORNADAS_HISTORICO';
+
+  /// Registro de jornada v3 (a posteriori, por SEÑALES Sitrack). Lo escribe
+  /// la CF `registrarJornadasV3Diario` (cron 06:45 ART). DocId
+  /// `{dni}_{YYYY-MM-DD}_{HHMM}` (único por turno). Lo lee la pantalla
+  /// "Mi jornada" del chofer (su propio registro: turno, manejo neto, pausas
+  /// con motivo, recorrido, confianza, descanso insuficiente). Distinto del
+  /// histórico de arriba (speed-based, hub ICM): este usa Contacto OFF/ON +
+  /// detenido + corroboración por distancia. Ver functions/src/jornadas_v3*.
+  static const String registroJornadas = 'REGISTRO_JORNADAS';
 
   /// Doc dentro de `META` con map { key: dni } editable desde la app
   /// (pantalla "Destinatarios de notificación") para cambiar a quién le

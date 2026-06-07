@@ -135,6 +135,19 @@ class MainPanel extends StatelessWidget {
                               ),
                               const SizedBox(height: AppSpacing.md),
                               _TileVencimientos(dni: dni),
+                              // "Mi jornada" solo para roles que conducen.
+                              if (AppRoles.tieneVehiculo(rol)) ...[
+                                const SizedBox(height: AppSpacing.md),
+                                _TileWide(
+                                  titulo: 'Mi jornada',
+                                  subtitulo: 'Tus horas de manejo y paradas',
+                                  icono: Icons.route_outlined,
+                                  onTap: () => Navigator.pushNamed(
+                                    context,
+                                    AppRoutes.miJornada,
+                                  ),
+                                ),
+                              ],
                             ] else
                               _TileWide(
                                 titulo: 'Mi perfil',

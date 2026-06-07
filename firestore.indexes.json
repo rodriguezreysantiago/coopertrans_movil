@@ -352,6 +352,14 @@
       ]
     },
     {
+      "collectionGroup": "REGISTRO_JORNADAS",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "chofer_dni", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "TELEMETRIA_HISTORICO",
       "queryScope": "COLLECTION",
       "fields": [

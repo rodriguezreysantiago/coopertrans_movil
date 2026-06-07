@@ -928,11 +928,14 @@ service cloud.firestore {
     // a posteriori: manejo neto, pausas, bloques y CONFIANZA por tramo.
     // DocId determinístico `{dni}_{YYYY-MM-DD}_{HHMM}` (la hora evita colisión
     // si hay 2 turnos el mismo día). Solo escribe la CF. Lectura:
-    // admin/supervisor/SEG_HIGIENE + el chofer SU PROPIO registro (split('_')[0]
-    // = DNI; transparencia — Paso 2 del plan). Mismo criterio que el histórico.
+    // admin/supervisor/SEG_HIGIENE + el chofer SU PROPIO registro. Se filtra por
+    // el CAMPO `chofer_dni` (no por el docId) para que el chofer pueda LISTAR sus
+    // jornadas con `where('chofer_dni','==', su_uid)` — una rule basada en el
+    // docId no habilita queries. Transparencia (Paso 2 del plan vigilador v3).
     match /REGISTRO_JORNADAS/{doc} {
       allow read: if puedeVerVolvoTableros()
-                  || (isSignedIn() && doc.split('_')[0] == request.auth.uid);
+                  || (isSignedIn()
+                      && resource.data.chofer_dni == request.auth.uid);
       allow create, update, delete: if false;
     }
 

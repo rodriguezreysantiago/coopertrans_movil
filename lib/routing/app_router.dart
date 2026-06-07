@@ -13,6 +13,7 @@ import '../features/home/screens/main_panel.dart';
 import '../features/vehicles/screens/user_mi_equipo_screen.dart';
 import '../features/employees/screens/user_mi_perfil_screen.dart';
 import '../features/expirations/screens/user_mis_vencimientos_screen.dart';
+import '../features/registro_jornadas/screens/mi_jornada_screen.dart';
 
 import '../features/admin_dashboard/screens/admin_shell.dart';
 import '../features/admin_dashboard/screens/admin_panel_screen.dart';
@@ -153,6 +154,12 @@ class AppRouter {
               dniUser: settings.arguments as String? ?? PrefsService.dni,
             ),
           ),
+          settings,
+        );
+
+      case AppRoutes.miJornada:
+        return _buildRoute(
+          _proteger(const MiJornadaScreen()),
           settings,
         );
 
