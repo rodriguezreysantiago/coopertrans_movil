@@ -174,6 +174,7 @@ export function registroToFirestore(
     fin_turno: Timestamp.fromMillis(fin),
     manejo_neto_seg: r.manejoNetoSeg,
     pausa_total_seg: r.pausaTotalSeg,
+    recorrido_km: Math.round(r.recorridoKm),
     bloques_excedidos: r.bloquesExcedidos,
     jornada_excedida: r.jornadaExcedida,
     descanso_previo_seg: r.descansoPrevioSeg,

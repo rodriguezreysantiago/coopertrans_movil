@@ -121,6 +121,14 @@ export const DESCANSO_TURNO_SEGUNDOS = 7 * 3600;
  * drifts reales solapan 60 min+; un cambio de camión legítimo solapa ~0. */
 export const DRIFT_SOLAPE_SEGUNDOS = 15 * 60;
 
+/** Velocidad implícita (km recorridos ÷ horas de manejo) por encima de la cual
+ * la DISTANCIA corrobora que el manejo fue real, aunque la telemetría tuviera
+ * gaps. Validado con datos: los días de manejo real dan ~65 km/h implícitos; si
+ * el manejo estuviera inflado (idle/paradas contadas como manejo) daría 25-40.
+ * Por encima de esto, un gap con desplazamiento NO baja la confianza a "baja"
+ * (la distancia ya prueba que estuvo manejando). */
+export const VEL_CORROBORA_KMH = 45;
+
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 /** Evento Sitrack mínimo que consume el batch. Se mapea de SITRACK_EVENTOS
@@ -194,6 +202,9 @@ export interface RegistroJornada {
   finTurnoMs: number | null;
   manejoNetoSeg: number;
   pausaTotalSeg: number;
+  /** km recorridos en el turno (suma de tramos entre eventos con posición).
+   * Corrobora el manejo: recorridoKm ÷ (manejoNetoSeg/3600) ≈ crucero ⇒ real. */
+  recorridoKm: number;
   segmentos: SegmentoJornada[];
   pausas: PausaJornada[];
   bloques: BloqueJornada[];
@@ -432,6 +443,9 @@ function registroDeSegmentos(
 
   const manejoNetoSeg = sumDur(segTurno, "manejo");
   const pausaTotalSeg = sumDur(segTurno, "pausa");
+  const recorridoKm = distanciaRecorridaKm(evs, inicioTurnoMs, finTurnoMs);
+  const impliedKmh = manejoNetoSeg > 0 ?
+    recorridoKm / (manejoNetoSeg / 3600) : 0;
 
   const pausas = construirPausas(segTurno);
   const bloques = partirEnBloques(segTurno);
@@ -440,7 +454,7 @@ function registroDeSegmentos(
   const descansoInsuficiente =
     descansoPrevioSeg != null && descansoPrevioSeg < DESCANSO_MIN_SEGUNDOS;
   let confianza = confianzaGlobal(
-    intervalos, evs, inicioTurnoMs, finTurnoMs
+    intervalos, evs, inicioTurnoMs, finTurnoMs, impliedKmh
   );
   // El drift descartó eventos de otra patente → la atribución pudo quedar
   // ambigua: la confianza no puede ser "alta".
@@ -452,7 +466,7 @@ function registroDeSegmentos(
   });
 
   return {
-    inicioTurnoMs, finTurnoMs, manejoNetoSeg, pausaTotalSeg,
+    inicioTurnoMs, finTurnoMs, manejoNetoSeg, pausaTotalSeg, recorridoKm,
     segmentos: segTurno, pausas, bloques, bloquesExcedidos,
     descansoPrevioSeg, descansoInsuficiente, jornadaExcedida, driftFiltrado,
     confianza, explicacion,
@@ -553,6 +567,25 @@ function sumDur(segs: SegmentoJornada[], tipo: TipoSegmento): number {
     .reduce((acc, s) => acc + s.durSeg, 0);
 }
 
+/** Distancia recorrida (km) sumando tramos entre eventos consecutivos con
+ * posición dentro de [inicioMs, finMs]. Sirve para corroborar el manejo: si
+ * km/horas-de-manejo ≈ velocidad de crucero, el manejo fue real. */
+function distanciaRecorridaKm(
+  evs: EventoJornadaLite[], inicioMs: number, finMs: number
+): number {
+  const e2 = evs
+    .filter((e) => e.ms >= inicioMs && e.ms <= finMs &&
+      e.lat != null && e.lng != null)
+    .sort((a, b) => a.ms - b.ms);
+  let km = 0;
+  for (let i = 1; i < e2.length; i++) {
+    km += distanciaMetros(
+      e2[i - 1].lat!, e2[i - 1].lng!, e2[i].lat!, e2[i].lng!
+    ) / 1000;
+  }
+  return km;
+}
+
 function construirPausas(segs: SegmentoJornada[]): PausaJornada[] {
   return segs
     .filter((s) => s.tipo === "pausa" && s.durSeg >= PAUSA_REPORTABLE_SEGUNDOS)
@@ -610,26 +643,40 @@ function partirEnBloques(segs: SegmentoJornada[]): BloqueJornada[] {
 }
 
 /**
- * Confianza global del registro. Mide la fracción del turno cubierta por TIEMPO
- * DE GAP DUDOSO (no por segmentos enteros: un gap de 51 min adentro de un tramo
- * de 3 h de manejo ensucia solo esos 51 min, no las 3 h). Un solo Bloqueo GPS
- * en el turno ya la baja a "baja" (señal explícita de cobertura perdida).
+ * Confianza global del registro. Distingue dos tipos de tiempo dudoso (por TIEMPO
+ * de gap, no por segmentos enteros):
+ *   - CIEGO: gap sin posición o Bloqueo GPS → no se puede corroborar nada.
+ *   - GAP con desplazamiento: el camión se movió pero sin reportes intermedios.
+ *     Acá la DISTANCIA corrobora: si km/horas-de-manejo ≈ crucero, el manejo fue
+ *     real (validado con datos: ~65 km/h en días reales; 25-40 si fuera inflado).
+ * Reglas: Bloqueo GPS o mucho tiempo ciego → baja. Gaps con desplazamiento
+ * grandes pero corroborados por distancia → media (no baja). Sin dudas → alta.
  */
 function confianzaGlobal(
   intervalos: IntervaloCrudo[], evs: EventoJornadaLite[],
-  inicioMs: number, finMs: number
+  inicioMs: number, finMs: number, impliedKmh: number
 ): Confianza {
   const hayBloqueoGps = evs.some(
     (e) => e.eventId === EV.BLOQUEO_GPS && e.ms >= inicioMs && e.ms <= finMs
   );
+  if (hayBloqueoGps) return "baja";
   const turnoSeg = Math.max(1, (finMs - inicioMs) / 1000);
-  const bajaSeg = intervalos
-    .filter((iv) => iv.confianza === "baja" &&
-      iv.inicioMs >= inicioMs && iv.finMs <= finMs)
-    .reduce((acc, iv) => acc + (iv.finMs - iv.inicioMs) / 1000, 0);
-  const frac = bajaSeg / turnoSeg;
-  if (hayBloqueoGps || frac > 0.5) return "baja";
-  if (bajaSeg > 0) return "media";
+  let ciegoSeg = 0; // gap sin posición (no corroborable)
+  let gapSeg = 0; // gap con desplazamiento (corroborable por distancia)
+  for (const iv of intervalos) {
+    if (iv.confianza !== "baja") continue;
+    if (iv.inicioMs < inicioMs || iv.finMs > finMs) continue;
+    const dur = (iv.finMs - iv.inicioMs) / 1000;
+    if (iv.motivoBaja && iv.motivoBaja.includes("posición")) ciegoSeg += dur;
+    else gapSeg += dur;
+  }
+  // Tiempo ciego significativo → baja (no hay forma de saber qué pasó).
+  if (ciegoSeg / turnoSeg > 0.33) return "baja";
+  // Gaps con desplazamiento dominantes: la distancia decide.
+  if (gapSeg / turnoSeg > 0.5) {
+    return impliedKmh >= VEL_CORROBORA_KMH ? "media" : "baja";
+  }
+  if (ciegoSeg > 0 || gapSeg > 0) return "media";
   return "alta";
 }
 
@@ -718,6 +765,7 @@ function jornadaVacia(): RegistroJornada {
     finTurnoMs: null,
     manejoNetoSeg: 0,
     pausaTotalSeg: 0,
+    recorridoKm: 0,
     segmentos: [],
     pausas: [],
     bloques: [],

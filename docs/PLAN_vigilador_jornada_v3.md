@@ -321,7 +321,25 @@ telemetría que sí muestre idle contado como manejo, el auditor `gaps` lo detec
 
 Suite functions **234/234**, eslint OK. Los 5 casos en disputa siguen 5/5. Sin deploy.
 
+## Reporte de sobre-jornada + confianza corroborada por distancia (07-jun · read-only)
+`auditar_jornada_v3.js reporte <dias>`: ranking operativo por chofer de días con jornada >12h,
+bloque >4h continuo y descanso <8h. Read-only.
+
+Al armarlo saltó que casi todos los >12h salían con confianza media/baja (por los gaps de telemetría
+de los días largos) → riesgo de leerlos como "ruido" cuando YA probamos que el manejo es real. Fix
+en `confianzaGlobal`: **distingue gap CIEGO (sin posición / Bloqueo GPS → no corroborable) de gap con
+DESPLAZAMIENTO (corroborable)**, y si la velocidad implícita (recorridoKm ÷ horas-de-manejo) ≥ 45
+km/h, el manejo está corroborado por la distancia → confianza media (no baja). Se agregó
+`RegistroJornada.recorridoKm` (+ `recorrido_km` al doc) — la distancia es ahora parte del registro.
+
+**Resultado del reporte (28 días, 1012 chofer-días):** 48 choferes con sobre-jornada · **127 días
+>12h, TODOS sólidos** (alta/media, corroborados por distancia — no ruido) · 271 días con bloque >4h ·
+70 con descanso <8h. Peores: BAJENETA 16h57/1123 km, DARIO DIETRICH 16h54/1058 km, GASTON DIETRICH
+16h32/1049 km. Es sobre-jornada REAL (seguridad + legal) — sale sola cuando se despliegue.
+
+Suite functions **236/236**, eslint OK. Sin deploy.
+
 **Siguiente (con OK de Santiago): pantalla/bot "mi jornada"** que lee `REGISTRO_JORNADAS` y muestra
-el registro explicado (pausas + confianza + descanso insuficiente + drift) — la pata de transparencia
-del Paso 2. Después: Paso 3 (aviso en vivo humilde) y Paso 4 (destronar al v2). **Nada se deploya sin
-OK de Santiago.**
+el registro explicado (pausas + confianza + descanso insuficiente + drift + km) — la pata de
+transparencia del Paso 2. Después: Paso 3 (aviso en vivo humilde) y Paso 4 (destronar al v2). **Nada
+se deploya sin OK de Santiago.**

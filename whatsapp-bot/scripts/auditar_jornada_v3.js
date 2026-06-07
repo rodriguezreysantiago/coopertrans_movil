@@ -216,10 +216,60 @@ async function gaps(dias) {
   process.exit(0);
 }
 
+// Reporte operativo de SOBRE-JORNADA: por chofer, días con jornada >12h, con
+// bloque >4h continuo y con descanso previo <8h, sobre N días. Read-only — para
+// REVISIÓN (no sanción automática: confianza media/baja = verificar). Usa el
+// motor v3 ya validado.
+async function reporte(dias) {
+  const porDni = {};
+  const hoyArt = new Date(Date.now() - 3 * 3600 * 1000);
+  for (let i = 1; i <= dias; i++) {
+    const d = new Date(Date.UTC(hoyArt.getUTCFullYear(), hoyArt.getUTCMonth(), hoyArt.getUTCDate() - i, 12, 0, 0));
+    const ymd = diaArt(d);
+    let res;
+    try { res = await eventosDelDia(ymd); } catch { continue; }
+    for (const dni of Object.keys(res.porDni)) {
+      const evs = res.porDni[dni].sort((a, b) => a.ms - b.ms);
+      const nombre = (evs.find((e) => e._nombre)?._nombre) || dni;
+      // Atribuir cada turno al día en que ARRANCA (evita doble conteo por el
+      // solape de ventanas de 32h).
+      const turnos = v3.reconstruirJornadas(evs).filter((t) => diaArt(new Date(t.inicioTurnoMs)) === ymd);
+      for (const r of turnos) {
+        const a = porDni[dni] || (porDni[dni] = { nombre, turnos: 0, exc12: 0, exc12Solida: 0, excBloque: 0, descInsuf: 0, peor: 0, peorFecha: '', peorConf: '', peorKm: 0 });
+        a.turnos++;
+        if (r.jornadaExcedida) { a.exc12++; if (r.confianza !== 'baja') a.exc12Solida++; }
+        if (r.bloquesExcedidos > 0) a.excBloque++;
+        if (r.descansoInsuficiente) a.descInsuf++;
+        if (r.manejoNetoSeg > a.peor) { a.peor = r.manejoNetoSeg; a.peorFecha = ymd; a.peorConf = r.confianza; a.peorKm = Math.round(r.recorridoKm); }
+      }
+    }
+  }
+  const filas = Object.entries(porDni)
+    .map(([dni, a]) => ({ dni, ...a, score: a.exc12 + a.excBloque + a.descInsuf }))
+    .filter((f) => f.score > 0)
+    .sort((x, y) => (y.exc12 - x.exc12) || (y.excBloque - x.excBloque) || (y.descInsuf - x.descInsuf));
+  console.log(`\n████ REPORTE DE SOBRE-JORNADA — últimos ${dias} días (ART) ████`);
+  console.log('  Read-only · alta/media = corroborado por distancia (sólido) · baja = verificar a mano\n');
+  console.log('  ' + 'CHOFER (DNI)'.padEnd(36) + 'turnos  >12h(sólida)  bloq>4h  desc<8h  peor jornada');
+  console.log('  ' + '─'.repeat(98));
+  let tEx = 0, tExS = 0, tBl = 0, tDe = 0;
+  for (const f of filas) {
+    tEx += f.exc12; tExS += f.exc12Solida; tBl += f.excBloque; tDe += f.descInsuf;
+    const etiq = `${f.nombre} (${f.dni})`.slice(0, 35).padEnd(36);
+    const peor = `${hh(f.peor)}/${f.peorKm}km (${f.peorFecha.slice(5)}, ${f.peorConf})`;
+    console.log('  ' + etiq + String(f.turnos).padStart(5) + String(`${f.exc12}(${f.exc12Solida})`).padStart(13) + String(f.excBloque).padStart(9) + String(f.descInsuf).padStart(9) + '   ' + peor);
+  }
+  console.log('  ' + '─'.repeat(98));
+  console.log(`  ${filas.length} choferes con sobre-jornada · totales: >12h=${tEx} (sólidas=${tExS}) · bloque>4h=${tBl} · descanso<8h=${tDe}`);
+  console.log('  ( >12h(sólida) = días >12h con confianza alta/media — corroborados por distancia, NO ruido. baja = verificar )');
+  process.exit(0);
+}
+
 async function main() {
   if (process.argv[2] === 'detalle') { await detalle(process.argv[3], process.argv[4]); return; }
   if (process.argv[2] === 'histograma') { await histograma(Math.max(1, Math.min(31, Number(process.argv[3] || 6)))); return; }
   if (process.argv[2] === 'gaps') { await gaps(Math.max(1, Math.min(31, Number(process.argv[3] || 6)))); return; }
+  if (process.argv[2] === 'reporte') { await reporte(Math.max(1, Math.min(31, Number(process.argv[3] || 14)))); return; }
   const anomalias = [];
   const dist = { turnos: 0, alta: 0, media: 0, baja: 0, excedidaJornada: 0, excedidaBloque: 0, descansoInsuf: 0, dnis: 0 };
   const hoyArt = new Date(Date.now() - 3 * 3600 * 1000);

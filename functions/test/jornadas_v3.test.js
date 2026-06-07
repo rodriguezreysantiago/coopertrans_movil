@@ -607,6 +607,40 @@ describe('v3 — corte por descanso en el lugar + descanso insuficiente', () => 
 });
 
 // ══════════════════════════════════════════════════════════════════════
+// Confianza corroborada por distancia (los días de manejo real no son "baja")
+// ══════════════════════════════════════════════════════════════════════
+// Probado con datos: los días reales dan ~65 km/h implícitos (distancia÷manejo).
+// Un gap con desplazamiento donde la distancia corrobora el manejo NO debe tirar
+// la confianza a baja (subvendería sobre-jornadas reales). Si apenas se movió
+// (implícita << crucero), sí queda baja (manejo dudoso).
+
+describe('v3 — confianza corroborada por distancia', () => {
+  test('manejo con gaps grandes pero distancia ≈ crucero → media (no baja)', () => {
+    const t0 = Date.UTC(2026, 5, 6, 12, 0, 0);
+    const rows = [
+      ev(t0, { sp: 75, lat: -38.0, lng: -68.0 }),
+      ev(t0 + 40 * MIN, { sp: 75, lat: -38.45, lng: -68.0 }), // ~50 km
+      ev(t0 + 80 * MIN, { sp: 75, lat: -38.90, lng: -68.0 }), // ~50 km
+    ];
+    const r = reconstruirJornada(rows);
+    assert.equal(r.confianza, 'media', 'gaps grandes pero ~75 km/h implícitos');
+    assert.ok(r.recorridoKm > 80, `recorrido ${r.recorridoKm.toFixed(0)} km`);
+  });
+
+  test('manejo gappy SIN corroboración (apenas se movió) → baja', () => {
+    const t0 = Date.UTC(2026, 5, 6, 12, 0, 0);
+    const rows = [
+      ev(t0, { sp: 70, lat: -38.0, lng: -68.0 }),
+      // 50 min "manejando" pero solo ~670 m de desplazamiento: dudoso.
+      ev(t0 + 50 * MIN, { sp: 70, lat: -38.006, lng: -68.0 }),
+      ev(t0 + 55 * MIN, { sp: 70, lat: -38.05, lng: -68.0 }),
+    ];
+    const r = reconstruirJornada(rows);
+    assert.equal(r.confianza, 'baja');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════
 // Drift CHOFER_DISTINTO (un DNI con 2 patentes) — hallazgo de la auditoría 28d
 // ══════════════════════════════════════════════════════════════════════
 // Casos reales: GARCIA (AB421DP + AB787RS solapan 209min), FLORES (AB787RS +

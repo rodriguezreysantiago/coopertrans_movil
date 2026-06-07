@@ -167,6 +167,7 @@ describe('v3 batch — registroToFirestore', () => {
     assert.equal(fs.patente, 'BBB222');
     assert.equal(fs.fecha, '2026-06-06');
     assert.equal(typeof fs.manejo_neto_seg, 'number');
+    assert.equal(typeof fs.recorrido_km, 'number');
     assert.equal(typeof fs.jornada_excedida, 'boolean');
     assert.equal(typeof fs.descanso_insuficiente, 'boolean');
     assert.equal(typeof fs.drift_filtrado, 'boolean');
