@@ -7,6 +7,47 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-06-07 — Fix vigilador (pausas en gaps), landing de descargas, serie 1.2.x
+
+Sesión de revisión del agente + reportes de choferes → derivó en 4 cosas:
+
+### 1) Fix vigilador de jornada: pausas encubiertas en gaps de reporte (DEPLOYADO)
+5 reportes de choferes el 6/6 (buzón de discrepancias): "paré 20-50 min y el sistema
+me sigue contando en ruta" → avisos de "4h" injustos. **Diagnóstico con datos:** NO era
+feed caído ni que mintieran — eran **gaps de reporte por cobertura GSM** en zonas rurales
+(Baigorrita, Chinchinales). `analizarEventosDetencion` unía dos eventos de movimiento
+separados por un gap como **manejo continuo** (el gap de 51 min de FERNANDEZ = su parada
+real de ~50 min). **Volvo NO sirve de respaldo**: es snapshot sin histórico y su posición
+está mucho peor (mediana 21,5 h stale, 85% de la flota >30 min; peor que Sitrack).
+**Fix (commit `d7b751f`, función `vigiladorJornadaChofer` DEPLOYADA):** si entre 2 eventos
+de movimiento hay un gap ≥15 min y la posición casi no cambió (≤500 m) → **pausa encubierta**
+(corta el bloque). Si se movió (>500 m) o falta lat/lng → cuenta manejo (conservador, no
+silencia un aviso de descanso legítimo). `EventoDetencionLite` +lat/lng (de SITRACK_EVENTOS);
+`RADIO_PAUSA_GAP_METROS=500`; gap mínimo = `PAUSA_BLOQUE_SEGUNDOS` (15 min); +4 tests (188/188).
+- [ ] Monitorear el buzón: los reportes de "parada no detectada" deberían cesar.
+- [ ] Marcar revisados los 5 reportes pendientes (pantalla "Reportes de choferes").
+
+### 2) Landing de descargas — cooper-trans.com.ar/app (LIVE)
+Página única con los 5 puntos (iPhone/iPad + Android + Mac + Windows + web), branding VAVG.
+Archivo `web_coopertrans/sitio_nuevo/app/index.html`, subida por FTP (`python _subir_sitio.py app`).
+App Store id `6769592572` (ficha universal iOS/Mac); Play `com.coopertrans.movil`; Windows = botón
+que consulta la GitHub Releases API y baja el `.exe` directo (sin abrir GitHub); web = `/sistema/`.
+- [ ] (Opcional) Linkearla desde la home del sitio + badges oficiales de las stores.
+- [ ] (Opcional) Commitear el archivo en el repo del sitio (`sitio_nuevo` tiene su propio git).
+
+### 3) Versionado: serie 1.2.x (commit `ad91664`)
+`bump_version.ps1` ahora apunta a una **serie objetivo** (`$serieMajor=1`, `$serieMinor=2`): el
+próximo `release_completo` salta **1.0.94 → 1.2.0+98** y de ahí sube solo el patch (1.2.1,
+1.2.2…). Para saltar a 1.3.x más adelante: cambiar `$serieMinor`. El build sigue +1 siempre.
+
+### 4) Agente WhatsApp: sano
+99 chats/7d, **0 fallbacks**. Los 17 errores eran históricos (1-4 jun) por saldo/cuota de
+Gemini + Groq (Groq ya eliminado del código). Desde el 5/6 responde limpio. Sin acción.
+Scripts de diagnóstico read-only en `whatsapp-bot/scripts/` (`revisar_agente_reportes`,
+`investigar_jornada_paradas`, `comparar_volvo_sitrack`) — sin commitear, por si reusás.
+
+---
+
 ## 📅 2026-06-06 — Windows: crash 1.0.93 fixeado + update IN-APP → 1.0.94 LIVE y validada
 
 **Dos cosas en una versión (1.0.94+97 — ya largada y validada end-to-end):**
