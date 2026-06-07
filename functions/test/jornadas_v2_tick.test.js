@@ -84,6 +84,8 @@ function tickManejando(j, deltaSeg, opts = {}) {
     paroEnMs: opts.paroEnMs ?? null,
     arrancoMs: opts.arrancoMs ?? null,
     pausaPreviaSeg: opts.pausaPreviaSeg ?? null,
+    // undefined => evaluarTickJornada lo trata como true (compat con tests viejos).
+    dataFresca: opts.dataFresca,
   });
 }
 
@@ -323,6 +325,67 @@ describe('evaluarTickJornada — aviso 4h (bloque excedido)', () => {
       r2.avisos.includes('bloque_excedido'),
       'la 2ª infracción de 4h en la misma jornada también avisa'
     );
+  });
+});
+
+// ── Aviso en vivo HUMILDE (Paso 3 / Parte A): gate de frescura ──────────
+// Si el dato del chofer está viejo (entró a zona sin cobertura), NO avisamos
+// "3h30"/"4h" — pudo haber parado y todavía no lo vemos. Se posterga hasta
+// tener confirmación fresca. Corta los reclamos sin tocar el cómputo.
+
+describe('evaluarTickJornada — aviso humilde (gate de frescura)', () => {
+  test('4h con dato VIEJO → NO avisa y NO marca bloque_excedido', () => {
+    const j = nuevaJornadaTest({
+      bloque_actual_manejo_seg: BLOQUE_EXCEDIDO_SEGUNDOS - 100,
+    });
+    const { avisos } = tickManejando(j, 200, { dataFresca: false });
+    assert.ok(!avisos.includes('bloque_excedido'),
+      'con dato viejo no se acusa la infracción');
+    assert.strictEqual(j.bloque_excedido, false,
+      'el flag queda en false → se posterga (no se pierde)');
+  });
+
+  test('postergado: dato viejo y luego FRESCO → recién ahí avisa 4h', () => {
+    const j = nuevaJornadaTest({
+      bloque_actual_manejo_seg: BLOQUE_EXCEDIDO_SEGUNDOS - 100,
+    });
+    // Tick 1: viejo → nada.
+    const r1 = tickManejando(j, 200, { dataFresca: false });
+    assert.ok(!r1.avisos.includes('bloque_excedido'));
+    // Tick 2: fresco y sigue manejando → ahora sí.
+    const r2 = tickManejando(j, 60, { dataFresca: true });
+    assert.ok(r2.avisos.includes('bloque_excedido'),
+      'con dato fresco confirma y avisa');
+    assert.strictEqual(j.bloque_excedido, true);
+  });
+
+  test('3h30 con dato viejo se posterga; fresco dispara', () => {
+    const j = nuevaJornadaTest({
+      bloque_actual_manejo_seg: BLOQUE_ALERTA_TEMPRANA_SEGUNDOS - 100,
+    });
+    const r1 = tickManejando(j, 200, { dataFresca: false });
+    assert.ok(!r1.avisos.includes('3h30'));
+    assert.strictEqual(j.alerta_3_30_enviada, false);
+    const r2 = tickManejando(j, 60, { dataFresca: true });
+    assert.ok(r2.avisos.includes('3h30'));
+  });
+
+  test('default (sin dataFresca) = fresco → avisa (compat con el v2 previo)', () => {
+    const j = nuevaJornadaTest({
+      bloque_actual_manejo_seg: BLOQUE_EXCEDIDO_SEGUNDOS - 100,
+    });
+    const { avisos } = tickManejando(j, 200); // sin opts.dataFresca
+    assert.ok(avisos.includes('bloque_excedido'));
+  });
+
+  test('el cómputo NO cambia con dato viejo: el manejo se sigue acumulando', () => {
+    const j = nuevaJornadaTest({
+      bloque_actual_manejo_seg: BLOQUE_EXCEDIDO_SEGUNDOS - 100,
+    });
+    tickManejando(j, 200, { dataFresca: false });
+    // 4h-100 + 200 = 4h+100: el manejo acumuló igual, solo se gateó el aviso.
+    assert.strictEqual(
+      j.bloque_actual_manejo_seg, BLOQUE_EXCEDIDO_SEGUNDOS + 100);
   });
 });
 

@@ -57,6 +57,18 @@ type FsTimestamp = admin.firestore.Timestamp;
 
 export const UMBRAL_MOVIMIENTO_KMH = 15;
 export const POLL_STALE_SEGUNDOS = 10 * 60;
+/**
+ * Frescura máxima del último dato para que un AVISO DE BLOQUE en vivo (3h30 / 4h)
+ * se considere CONFIABLE (Paso 3 / Parte A — aviso humilde). Más estricto que
+ * POLL_STALE (que decide si se cuenta manejo): el manejo se acumula hasta los
+ * 10 min de stale, pero para ACUSAR al chofer ("llevás 4h") pedimos confirmación
+ * más fresca. Calibrado con datos (07-jun): los camiones en marcha reportan a
+ * 2-4 min; recién a los 10-15 min se ven "viejos". 7 min pasa lo normal y retiene
+ * el dato que se está poniendo viejo (típico al entrar a una zona sin cobertura),
+ * antes del corte duro de 10 min. Si el dato está más viejo que esto, el aviso se
+ * posterga hasta tener confirmación fresca → cero avisos injustos.
+ */
+export const FRESCURA_AVISO_SEGUNDOS = 7 * 60;
 // Pausa entre bloques (decision Vecchi 2026-05-18):
 //   - Interno (lo que mide el sistema): 15 min — alineado con norma YPF.
 //   - Mensajes al chofer: pedimos 20 min — 5 min extra de margen para
@@ -961,6 +973,14 @@ export interface EvaluarTickInput {
   paroEnMs: number | null;
   arrancoMs: number | null;
   pausaPreviaSeg: number | null;
+  /**
+   * Aviso en vivo HUMILDE (Paso 3): ¿el último dato del chofer es FRESCO (edad ≤
+   * FRESCURA_AVISO_SEGUNDOS)? Solo cuando es true se disparan los avisos de
+   * bloque (3h30 / 4h). Si es false (dato viejo → no sabemos si sigue manejando)
+   * se postergan. Opcional: default true (compat con callers/tests previos). NO
+   * afecta el cómputo, solo el gateo del aviso.
+   */
+  dataFresca?: boolean;
 }
 
 export interface EvaluarTickResult {
@@ -1011,6 +1031,14 @@ export function evaluarTickJornada(
     manejando, deltaSeg, ahoraMs, lat, lng, tieneDescansoPrevio,
     paroEnMs, arrancoMs, pausaPreviaSeg,
   } = input;
+  // Aviso en vivo HUMILDE (Paso 3 / Parte A del plan v3): solo avisamos al
+  // chofer "3h30" / "4h sin pausar" si el dato es FRESCO (confiamos en que está
+  // manejando AHORA). Si el último reporte está viejo (entró a una zona sin
+  // cobertura) NO avisamos: el chofer pudo haber parado y todavía no lo vemos →
+  // postergamos hasta tener confirmación fresca. Default true (compat con tests
+  // y con cualquier caller que no lo pase). El cómputo NO cambia: el manejo se
+  // sigue acumulando; solo se gatea el aviso. El registro v3 captura la verdad.
+  const dataFresca = input.dataFresca ?? true;
   const ahora = Timestamp.fromMillis(ahoraMs);
   const avisos: AvisoJornada[] = [];
   let cerrada = false;
@@ -1134,19 +1162,28 @@ export function evaluarTickJornada(
     j.descanso_inicio_lng = null;
     j.descanso_segundos = 0;
 
-    // Aviso 3h30 (heads-up del bloque actual de manejo continuo).
+    // Aviso 3h30 (heads-up del bloque actual de manejo continuo). Gateado por
+    // `dataFresca`: si el dato está viejo, NO avisamos (el flag queda en false →
+    // se posterga hasta el próximo tick con dato fresco; no se pierde).
     if (
       j.bloque_actual_manejo_seg >= BLOQUE_ALERTA_TEMPRANA_SEGUNDOS &&
-      !j.alerta_3_30_enviada
+      !j.alerta_3_30_enviada &&
+      dataFresca
     ) {
       avisos.push("3h30");
       j.alerta_3_30_enviada = true;
     }
 
-    // Aviso 4h (infracción de bloque sin pausar). 1 vez por bloque.
+    // Aviso 4h (infracción de bloque sin pausar). 1 vez por bloque. Gateado por
+    // `dataFresca`: con dato viejo NO afirmamos la infracción (ni al chofer ni
+    // al flag que alimenta el resumen) — no estamos seguros de que siguió
+    // manejando hasta las 4h; pudo parar en una zona sin cobertura. Se posterga
+    // hasta confirmar con dato fresco. Si paró, el bloque se cierra y nunca
+    // dispara (justo). El registro v3 a posteriori captura la verdad igual.
     if (
       j.bloque_actual_manejo_seg >= BLOQUE_EXCEDIDO_SEGUNDOS &&
-      !j.bloque_excedido
+      !j.bloque_excedido &&
+      dataFresca
     ) {
       avisos.push("bloque_excedido");
       j.bloque_excedido = true;
@@ -1505,6 +1542,19 @@ export async function tickVigiladorJornada(): Promise<void> {
         }
       }
 
+      // Frescura del último dato (Paso 3 — aviso humilde): edad del reporte más
+      // NUEVO entre Volvo y SITRACK. Si supera FRESCURA_AVISO_SEGUNDOS, los
+      // avisos de bloque (3h30/4h) se postergan (no acusamos con dato viejo).
+      const nowFreshMs = Date.now();
+      const volFreshMs =
+        vol?.posicion_ts != null ? Date.parse(vol.posicion_ts) : NaN;
+      const volEdadSeg = Number.isFinite(volFreshMs) ?
+        (nowFreshMs - volFreshMs) / 1000 : Infinity;
+      const sitEdadSeg = sitReportMs != null && sitReportMs > 0 ?
+        (nowFreshMs - sitReportMs) / 1000 : Infinity;
+      const dataFresca =
+        Math.min(volEdadSeg, sitEdadSeg) <= FRESCURA_AVISO_SEGUNDOS;
+
       const { avisos: avisosPendientes, cerrada } = evaluarTickJornada(j, {
         manejando,
         deltaSeg,
@@ -1515,6 +1565,7 @@ export async function tickVigiladorJornada(): Promise<void> {
         paroEnMs: det.paroEnMs,
         arrancoMs: det.arrancoMs,
         pausaPreviaSeg: det.pausaPreviaSeg,
+        dataFresca,
       });
       if (cerrada) cerradas++;
       j.ultima_patente = patente;
