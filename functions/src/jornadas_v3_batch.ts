@@ -79,6 +79,8 @@ export function mapearDocEvento(
     lng: typeof data.longitude === "number" ? data.longitude : null,
     gpsValidity: typeof data.gps_validity === "number" ?
       data.gps_validity : null,
+    // asset_id viene CRUDO → trim+upper, para detectar drift CHOFER_DISTINTO.
+    patente: ((data.asset_id ?? "").toString().trim().toUpperCase()) || null,
   };
 }
 
@@ -176,6 +178,7 @@ export function registroToFirestore(
     jornada_excedida: r.jornadaExcedida,
     descanso_previo_seg: r.descansoPrevioSeg,
     descanso_insuficiente: r.descansoInsuficiente,
+    drift_filtrado: r.driftFiltrado,
     confianza: r.confianza,
     bloques: r.bloques.map((b) => ({
       indice: b.indice,

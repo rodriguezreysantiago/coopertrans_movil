@@ -169,6 +169,7 @@ describe('v3 batch — registroToFirestore', () => {
     assert.equal(typeof fs.manejo_neto_seg, 'number');
     assert.equal(typeof fs.jornada_excedida, 'boolean');
     assert.equal(typeof fs.descanso_insuficiente, 'boolean');
+    assert.equal(typeof fs.drift_filtrado, 'boolean');
     assert.ok('descanso_previo_seg' in fs); // number | null
     assert.equal(typeof fs.confianza, 'string');
     assert.ok(Array.isArray(fs.explicacion) && fs.explicacion.length > 0);

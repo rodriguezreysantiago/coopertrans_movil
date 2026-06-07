@@ -115,6 +115,12 @@ export const PAUSA_REPORTABLE_SEGUNDOS = 5 * 60;
  * aparte con `descansoInsuficiente` (ver RegistroJornada). */
 export const DESCANSO_TURNO_SEGUNDOS = 7 * 3600;
 
+/** Solapamiento temporal mínimo entre dos patentes de un MISMO DNI para tratarlo
+ * como DRIFT (CHOFER_DISTINTO: el iButton del chofer en una unidad + otra unidad
+ * reportando su nombre legacy) y no como un cambio de unidad secuencial. Los
+ * drifts reales solapan 60 min+; un cambio de camión legítimo solapa ~0. */
+export const DRIFT_SOLAPE_SEGUNDOS = 15 * 60;
+
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
 /** Evento Sitrack mínimo que consume el batch. Se mapea de SITRACK_EVENTOS
@@ -133,6 +139,10 @@ export interface EventoJornadaLite {
   lat: number | null;
   lng: number | null;
   gpsValidity?: number | null;
+  /** Patente (asset_id) del evento, normalizada. Opcional: si se provee, permite
+   * detectar y filtrar el drift CHOFER_DISTINTO (un DNI con eventos de 2 unidades
+   * solapadas en el tiempo → se reconstruiría una mezcla de 2 camiones). */
+  patente?: string | null;
 }
 
 export type TipoSegmento = "manejo" | "pausa";
@@ -196,6 +206,11 @@ export interface RegistroJornada {
    * El turno se corta igual (fue claramente un descanso) pero queda señalado:
    * el chofer no completó las 8 h de descanso entre jornadas. */
   descansoInsuficiente: boolean;
+  /** true si se descartaron eventos de OTRA patente (drift CHOFER_DISTINTO): un
+   * 2º camión reportaba el nombre de este chofer solapado en el tiempo. El
+   * registro se reconstruyó solo con la patente dominante; queda señalado porque
+   * la atribución de unidad pudo quedar ambigua (confianza se baja a ≤ media). */
+  driftFiltrado: boolean;
   /** true si el manejo NETO de la jornada superó el tope de 12 h (paridad con
    * el aviso `cuota` del v2). Distinto de `bloquesExcedidos` (4 h por bloque):
    * un chofer puede no exceder ningún bloque y aun así pasar las 12 h netas
@@ -405,7 +420,8 @@ function partirSegmentosEnTurnos(
  * para la confianza global, que se acota sola a [inicioTurno, finTurno]. */
 function registroDeSegmentos(
   segmentos: SegmentoJornada[], intervalos: IntervaloCrudo[],
-  evs: EventoJornadaLite[], descansoPrevioSeg: number | null
+  evs: EventoJornadaLite[], descansoPrevioSeg: number | null,
+  driftFiltrado: boolean
 ): RegistroJornada {
   // Turno = desde el primer segmento de MANEJO (primer movimiento del día).
   const idxPrimerManejo = segmentos.findIndex((s) => s.tipo === "manejo");
@@ -423,19 +439,22 @@ function registroDeSegmentos(
   const jornadaExcedida = manejoNetoSeg >= JORNADA_MANEJO_LIMITE_SEGUNDOS;
   const descansoInsuficiente =
     descansoPrevioSeg != null && descansoPrevioSeg < DESCANSO_MIN_SEGUNDOS;
-  const confianza = confianzaGlobal(
+  let confianza = confianzaGlobal(
     intervalos, evs, inicioTurnoMs, finTurnoMs
   );
+  // El drift descartó eventos de otra patente → la atribución pudo quedar
+  // ambigua: la confianza no puede ser "alta".
+  if (driftFiltrado && confianza === "alta") confianza = "media";
   const explicacion = construirExplicacion({
     inicioTurnoMs, finTurnoMs, manejoNetoSeg, pausas, bloques,
     bloquesExcedidos, jornadaExcedida, descansoPrevioSeg, descansoInsuficiente,
-    confianza,
+    driftFiltrado, confianza,
   });
 
   return {
     inicioTurnoMs, finTurnoMs, manejoNetoSeg, pausaTotalSeg,
     segmentos: segTurno, pausas, bloques, bloquesExcedidos,
-    descansoPrevioSeg, descansoInsuficiente, jornadaExcedida,
+    descansoPrevioSeg, descansoInsuficiente, jornadaExcedida, driftFiltrado,
     confianza, explicacion,
   };
 }
@@ -446,6 +465,53 @@ export function lineaDeTiempo(
   eventos: EventoJornadaLite[]
 ): SegmentoJornada[] {
   return construirSegmentos(eventos).segmentos;
+}
+
+/**
+ * Filtra el DRIFT CHOFER_DISTINTO: si los eventos de un DNI vienen de 2+ patentes
+ * SOLAPADAS en el tiempo (≥ DRIFT_SOLAPE_SEGUNDOS), se queda con la patente
+ * DOMINANTE (más eventos) + los eventos sin patente. Sin esto, reconstruir la
+ * mezcla de 2 camiones (uno parado, otro en ruta) da una línea de tiempo basura
+ * (saltos de posición → pausas/manejo fantasma). Es el equivalente batch del
+ * filtro `patenteEsperada` del v2. Si no hay patente o es una sola, no toca nada;
+ * si las patentes son secuenciales (cambio de unidad, sin solape) tampoco. PURA.
+ */
+export function filtrarDriftPatente(
+  eventos: EventoJornadaLite[]
+): { eventos: EventoJornadaLite[]; driftFiltrado: boolean } {
+  const rangos = new Map<string, { min: number; max: number; n: number }>();
+  for (const e of eventos) {
+    const p = e.patente;
+    if (p == null || p === "") continue;
+    const r = rangos.get(p);
+    if (!r) rangos.set(p, { min: e.ms, max: e.ms, n: 1 });
+    else {
+      r.min = Math.min(r.min, e.ms);
+      r.max = Math.max(r.max, e.ms);
+      r.n++;
+    }
+  }
+  if (rangos.size < 2) return { eventos, driftFiltrado: false };
+  const pats = [...rangos.entries()];
+  let solapeMs = 0;
+  for (let i = 0; i < pats.length; i++) {
+    for (let j = i + 1; j < pats.length; j++) {
+      const a = pats[i][1];
+      const b = pats[j][1];
+      const ov = Math.min(a.max, b.max) - Math.max(a.min, b.min);
+      if (ov > solapeMs) solapeMs = ov;
+    }
+  }
+  if (solapeMs < DRIFT_SOLAPE_SEGUNDOS * 1000) {
+    return { eventos, driftFiltrado: false }; // cambio de unidad secuencial: OK
+  }
+  let dom = pats[0][0];
+  let domN = pats[0][1].n;
+  for (const [p, r] of pats) if (r.n > domN) { dom = p; domN = r.n; }
+  const filtrados = eventos.filter(
+    (e) => e.patente == null || e.patente === "" || e.patente === dom
+  );
+  return { eventos: filtrados, driftFiltrado: true };
 }
 
 function fusionarSegmentos(intervalos: IntervaloCrudo[]): SegmentoJornada[] {
@@ -598,7 +664,7 @@ function construirExplicacion(r: {
   inicioTurnoMs: number; finTurnoMs: number; manejoNetoSeg: number;
   pausas: PausaJornada[]; bloques: BloqueJornada[]; bloquesExcedidos: number;
   jornadaExcedida: boolean; descansoPrevioSeg: number | null;
-  descansoInsuficiente: boolean; confianza: Confianza;
+  descansoInsuficiente: boolean; driftFiltrado: boolean; confianza: Confianza;
 }): string[] {
   const lineas: string[] = [];
   lineas.push(
@@ -631,6 +697,12 @@ function construirExplicacion(r: {
       "mínimas entre jornadas"
     );
   }
+  if (r.driftFiltrado) {
+    lineas.push(
+      "⚠ Se descartaron eventos de otra patente (posible chofer distinto) — " +
+      "revisar a qué unidad corresponde la jornada"
+    );
+  }
   if (r.confianza !== "alta") {
     lineas.push(
       `⚠ Confianza ${r.confianza}: hay tramos sin reporte confiable — ` +
@@ -652,6 +724,7 @@ function jornadaVacia(): RegistroJornada {
     bloquesExcedidos: 0,
     descansoPrevioSeg: null,
     descansoInsuficiente: false,
+    driftFiltrado: false,
     jornadaExcedida: false,
     confianza: "alta",
     explicacion: [],
@@ -696,12 +769,15 @@ export function partirEnTurnos(
 export function reconstruirJornadas(
   eventos: EventoJornadaLite[]
 ): RegistroJornada[] {
-  const { segmentos, intervalos } = construirSegmentos(eventos);
+  // Filtrar drift CHOFER_DISTINTO ANTES de armar la línea de tiempo (si no, la
+  // mezcla de 2 patentes da segmentos basura).
+  const { eventos: limpios, driftFiltrado } = filtrarDriftPatente(eventos);
+  const { segmentos, intervalos } = construirSegmentos(limpios);
   if (segmentos.length === 0) return [];
   const out: RegistroJornada[] = [];
   for (const g of partirSegmentosEnTurnos(segmentos)) {
     const r = registroDeSegmentos(
-      g.segmentos, intervalos, eventos, g.descansoPrevioSeg
+      g.segmentos, intervalos, limpios, g.descansoPrevioSeg, driftFiltrado
     );
     if (r.inicioTurnoMs != null) out.push(r);
   }

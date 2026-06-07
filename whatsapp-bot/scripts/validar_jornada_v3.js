@@ -45,6 +45,7 @@ function mapEvento(e) {
     lat: typeof e.latitude === 'number' ? e.latitude : null,
     lng: typeof e.longitude === 'number' ? e.longitude : null,
     gpsValidity: typeof e.gps_validity === 'number' ? e.gps_validity : null,
+    patente: (e.asset_id || '').toString().trim().toUpperCase() || null,
   };
 }
 

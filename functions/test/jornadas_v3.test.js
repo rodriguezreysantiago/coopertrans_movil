@@ -65,6 +65,7 @@ function ev(ms, over = {}) {
     lat: pick('lat', -38.0),
     lng: pick('lng', -68.0),
     gpsValidity: pick('val', 32),
+    patente: pick('pat', undefined),
   };
 }
 
@@ -602,6 +603,56 @@ describe('v3 — corte por descanso en el lugar + descanso insuficiente', () => 
     const turnos = reconstruirJornadas(conDescanso(4));
     assert.equal(turnos.length, 1, 'un break de 4h sigue siendo un turno');
     assert.equal(turnos[0].descansoInsuficiente, false);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// Drift CHOFER_DISTINTO (un DNI con 2 patentes) — hallazgo de la auditoría 28d
+// ══════════════════════════════════════════════════════════════════════
+// Casos reales: GARCIA (AB421DP + AB787RS solapan 209min), FLORES (AB787RS +
+// AI162YT parada solapan 223min). Sin filtrar, v3 mezcla 2 camiones → línea de
+// tiempo basura. Se filtra a la patente dominante (más eventos), como el v2.
+
+describe('v3 — drift CHOFER_DISTINTO (filtrar 2ª patente solapada)', () => {
+  test('2 patentes SOLAPADAS → filtra a la dominante + marca driftFiltrado', () => {
+    const t0 = Date.UTC(2026, 5, 6, 12, 0, 0);
+    const rows = [];
+    // PATA (dominante): maneja, 8 eventos, avanzando.
+    for (let i = 0; i < 8; i++) {
+      rows.push(ev(t0 + i * 15 * MIN, { pat: 'PATA', sp: 70, lat: -38.0 + i * 0.03, lng: -68.0 }));
+    }
+    // PATB (intruso): 3 eventos parados LEJOS, interleaved (solapan en el tiempo).
+    rows.push(ev(t0 + 10 * MIN, { pat: 'PATB', id: 6, sp: 0, lat: -40.0, lng: -66.0 }));
+    rows.push(ev(t0 + 40 * MIN, { pat: 'PATB', id: 6, sp: 0, lat: -40.0, lng: -66.0 }));
+    rows.push(ev(t0 + 70 * MIN, { pat: 'PATB', id: 6, sp: 0, lat: -40.0, lng: -66.0 }));
+    const turnos = reconstruirJornadas(rows);
+    assert.equal(turnos.length, 1);
+    assert.equal(turnos[0].driftFiltrado, true);
+    assert.notEqual(turnos[0].confianza, 'alta', 'drift baja la confianza');
+    // Sin el intruso, es manejo PATA continuo: 7×15min, sin pausas fantasma.
+    assert.equal(turnos[0].pausas.length, 0);
+    assert.equal(turnos[0].manejoNetoSeg, 7 * 15 * 60);
+    assert.ok(turnos[0].explicacion.some((l) => l.includes('otra patente')));
+  });
+
+  test('cambio de unidad SECUENCIAL (sin solape) NO se filtra', () => {
+    const t0 = Date.UTC(2026, 5, 6, 9, 0, 0);
+    const rows = [];
+    // PATA 06:00→08:00, luego PATB 08:30→10:30 (gap, sin solape temporal).
+    for (let i = 0; i < 5; i++) {
+      rows.push(ev(t0 + i * 30 * MIN, { pat: 'PATA', sp: 70, lat: -38.0 + i * 0.05, lng: -68.0 }));
+    }
+    for (let i = 0; i < 5; i++) {
+      rows.push(ev(t0 + 2.5 * H + i * 30 * MIN, { pat: 'PATB', sp: 70, lat: -38.3 + i * 0.05, lng: -68.0 }));
+    }
+    const turnos = reconstruirJornadas(rows);
+    assert.ok(turnos.every((t) => !t.driftFiltrado),
+      'un cambio de unidad legítimo no es drift');
+  });
+
+  test('una sola patente / sin patente → no se filtra nada', () => {
+    const r1 = reconstruirJornada(FERNANDEZ); // fixture sin patente
+    assert.equal(r1.driftFiltrado, false);
   });
 });
 

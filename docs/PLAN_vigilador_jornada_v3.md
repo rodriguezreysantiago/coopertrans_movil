@@ -301,7 +301,27 @@ acreditaría descanso que no ocurrió.** No se toca la lógica de manejo. El des
 (distancia/crucero) queda DESCARTADO por la evidencia. (Si en el futuro aparecen unidades con
 telemetría que sí muestre idle contado como manejo, el auditor `gaps` lo detectaría — vigilar.)
 
+## Caza de casos borde — auditoría de 28 días (07-jun · read-only)
+`auditar_jornada_v3.js 28` (1012 chofer-días, 1029 turnos). Las anomalías raras que NO salieron en
+8 días sí aparecieron:
+
+1. **DRIFT CHOFER_DISTINTO — 3 casos (ARREGLADO).** Un DNI con eventos de 2 patentes SOLAPADAS en el
+   tiempo (GARCIA AB421DP+AB787RS 209min; FLORES AB787RS+AI162YT-parada 223min; VOGEL 61min). v3
+   reconstruía la MEZCLA de 2 camiones → línea de tiempo basura (GARCIA daba 87km/2,5h = 34 km/h
+   implícito). Nota: AB787RS aparecía en 2 DNIs → patente "que filtra" nombres.
+   **Fix (capa pura, equivalente batch del `patenteEsperada` del v2):** `filtrarDriftPatente` — si
+   hay 2+ patentes solapadas ≥ 15 min, se queda con la DOMINANTE (más eventos) + descarta la otra;
+   marca `driftFiltrado` y baja la confianza a ≤ media + línea en la explicación. Un cambio de unidad
+   SECUENCIAL (sin solape) NO se filtra (es legítimo). Tras el fix, GARCIA en su camión real apenas
+   manejó 45 min ese día (estuvo parado), no las 2h31 corruptas. Se agregó `patente?` a
+   `EventoJornadaLite` + `drift_filtrado` al doc persistido.
+2. **SIN-TURNO — 3 casos (BENIGNO, no se toca).** "Eventos pero v3 no arma turno ese día": es
+   artefacto de la VENTANA del auditor (el chofer apenas manejó ese día —p.ej. WEIMANN 56 km— y su
+   turno real arranca el día siguiente). v3 sí arma el turno, solo que cae en otra fecha. No es bug.
+
+Suite functions **234/234**, eslint OK. Los 5 casos en disputa siguen 5/5. Sin deploy.
+
 **Siguiente (con OK de Santiago): pantalla/bot "mi jornada"** que lee `REGISTRO_JORNADAS` y muestra
-el registro explicado (pausas + confianza + descanso insuficiente) — la pata de transparencia del
-Paso 2. Después: Paso 3 (aviso en vivo humilde) y Paso 4 (destronar al v2). **Nada se deploya sin OK
-de Santiago.**
+el registro explicado (pausas + confianza + descanso insuficiente + drift) — la pata de transparencia
+del Paso 2. Después: Paso 3 (aviso en vivo humilde) y Paso 4 (destronar al v2). **Nada se deploya sin
+OK de Santiago.**

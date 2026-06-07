@@ -45,6 +45,7 @@ function mapEvento(e) {
     lat: typeof e.latitude === 'number' ? e.latitude : null,
     lng: typeof e.longitude === 'number' ? e.longitude : null,
     gpsValidity: typeof e.gps_validity === 'number' ? e.gps_validity : null,
+    patente: (e.asset_id || '').toString().trim().toUpperCase() || null,
     _patente: (e.asset_id || '').toString().trim().toUpperCase() || null,
     _nombre: `${e.driver_last_name || ''} ${e.driver_name || ''}`.trim(),
   };
@@ -111,13 +112,28 @@ async function detalle(dni, ymd) {
     if (dm != null) kmTot += dm / 1000;
   }
   console.log(`${dni} ${ymd}: ${evs.length} eventos · recorrido ${kmTot.toFixed(0)} km`);
+  // Desglose por patente (para diagnóstico de drift CHOFER_DISTINTO).
+  const porPat = {};
+  for (const e of evs) {
+    const p = e._patente || '?';
+    const r = porPat[p] || (porPat[p] = { n: 0, mov: 0, min: e.ms, max: e.ms });
+    r.n++; if ((e.speed ?? 0) > 15) r.mov++;
+    if (e.ms < r.min) r.min = e.ms; if (e.ms > r.max) r.max = e.ms;
+  }
+  if (Object.keys(porPat).length > 1) {
+    console.log('  patentes:');
+    for (const p of Object.keys(porPat)) {
+      const r = porPat[p];
+      console.log(`    ${p}: ${r.n} ev (${r.mov} mov) ${artHm(r.min)}→${artHm(r.max)}`);
+    }
+  }
   const turnos = v3.reconstruirJornadas(evs);
   const manejoTot = turnos.reduce((s, r) => s + r.manejoNetoSeg, 0) / 3600;
   if (manejoTot > 0) console.log(`  manejo total ${manejoTot.toFixed(1)}h → velocidad implícita ${(kmTot / manejoTot).toFixed(0)} km/h (≈crucero ⇒ manejo real; <<crucero ⇒ inflado)`);
   console.log(`turnos: ${turnos.length}`);
   turnos.forEach((r, i) => {
     const dp = r.descansoPrevioSeg == null ? '—' : hh(r.descansoPrevioSeg) + (r.descansoInsuficiente ? ' INSUF' : '');
-    console.log(`\n── turno ${i + 1}: ${artHm(r.inicioTurnoMs)}→${artHm(r.finTurnoMs)} manejo=${hh(r.manejoNetoSeg)} pausa=${hh(r.pausaTotalSeg)} descansoPrevio=${dp} conf=${r.confianza} exc=${r.jornadaExcedida}`);
+    console.log(`\n── turno ${i + 1}: ${artHm(r.inicioTurnoMs)}→${artHm(r.finTurnoMs)} manejo=${hh(r.manejoNetoSeg)} pausa=${hh(r.pausaTotalSeg)} descansoPrevio=${dp} conf=${r.confianza} exc=${r.jornadaExcedida}${r.driftFiltrado ? ' DRIFT-FILTRADO' : ''}`);
     r.segmentos.forEach((s) => {
       const tag = s.tipo === 'pausa' ? `PAUSA ${s.origen}` : 'manejo';
       console.log(`   ${artHm(s.inicioMs)}→${artHm(s.finMs)} ${hh(s.durSeg)} ${tag} ${s.confianza}${s.motivoBaja ? ' ('+s.motivoBaja+')' : ''}`);
