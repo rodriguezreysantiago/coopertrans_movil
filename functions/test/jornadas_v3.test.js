@@ -457,6 +457,50 @@ describe('v3 sintético — bloque excedido (4 h sin pausa)', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
+// Jornada excedida (>12 h manejo neto) — paridad con la cuota del v2
+// ══════════════════════════════════════════════════════════════════════
+// Hallazgo de la validación 06-jun: FERNANDEZ manejó 12h30 NETAS repartidas en
+// 5 bloques, ninguno > 4 h. Sin un flag a nivel jornada, el registro no lo
+// señalaría (el v2 sí avisa `cuota` a las 12 h).
+
+describe('v3 — jornada excedida (>12 h manejo neto)', () => {
+  test('turno corto (FERNANDEZ ventana 8-16, 5h17) NO excede jornada', () => {
+    const r = reconstruirJornada(FERNANDEZ);
+    assert.equal(r.jornadaExcedida, false);
+  });
+
+  test('12h40 en 4 bloques (ninguno >4h) → jornadaExcedida SIN bloquesExcedidos', () => {
+    const t0 = Date.UTC(2026, 5, 6, 9, 0, 0);
+    const rows = [];
+    let ms = t0;
+    let lat = -38.0;
+    for (let b = 0; b < 4; b++) {
+      // Tramo de 3h10 manejando (evento cada 10 min, avanzando): < 4 h.
+      for (let i = 0; i <= 19; i++) {
+        rows.push(ev(ms, { sp: 70, lat, lng: -68.0 }));
+        ms += 10 * MIN;
+        lat += 0.02;
+      }
+      if (b < 3) {
+        // Pausa de 20 min (motor apagado) que cierra el bloque.
+        rows.push(ev(ms, { id: 164, sp: 0, lat, lng: -68.0 }));
+        ms += 20 * MIN;
+        rows.push(ev(ms, { id: 7, sp: 55, lat, lng: -68.0 }));
+        ms += 10 * MIN;
+        lat += 0.02;
+      }
+    }
+    const r = reconstruirJornada(rows);
+    assert.equal(r.jornadaExcedida, true);
+    assert.equal(r.bloquesExcedidos, 0, 'ningún bloque llegó a 4 h');
+    assert.ok(r.manejoNetoSeg >= 12 * 3600,
+      `manejo ${(r.manejoNetoSeg / 3600).toFixed(1)}h ≥ 12h`);
+    assert.ok(r.explicacion.some((l) => l.includes('supera el')),
+      'la explicación debe avisar el exceso de jornada');
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════
 // Turnos: corte por descanso de 8 h y cruce de medianoche
 // ══════════════════════════════════════════════════════════════════════
 

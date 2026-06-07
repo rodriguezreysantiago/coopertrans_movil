@@ -50,6 +50,7 @@ import {
   DESCANSO_MIN_SEGUNDOS, // 8 h — descanso mínimo entre jornadas (corte de turno)
   UMBRAL_MOVIMIENTO_KMH, // 15 km/h — umbral manejo/parado
   BLOQUE_EXCEDIDO_SEGUNDOS, // 4 h — manejo continuo sin pausar = infracción
+  JORNADA_MANEJO_LIMITE_SEGUNDOS, // 12 h — tope de manejo neto por jornada
 } from "./jornadas_v2";
 // Nota: el corte de turno usa el GAP de 8 h entre eventos (el caso real: el
 // equipo se apaga de noche y deja de transmitir), igual que la ruta robusta del
@@ -173,6 +174,11 @@ export interface RegistroJornada {
   bloques: BloqueJornada[];
   /** cantidad de bloques que superaron 4 h de manejo continuo. */
   bloquesExcedidos: number;
+  /** true si el manejo NETO de la jornada superó el tope de 12 h (paridad con
+   * el aviso `cuota` del v2). Distinto de `bloquesExcedidos` (4 h por bloque):
+   * un chofer puede no exceder ningún bloque y aun así pasar las 12 h netas
+   * sumando bloques (caso real FERNANDEZ 06-jun: 12h30 en 5 bloques < 4 h). */
+  jornadaExcedida: boolean;
   confianza: Confianza;
   /** líneas legibles para el chofer / supervisor (Paso 2 las muestra). */
   explicacion: string[];
@@ -340,18 +346,19 @@ function reconstruirUnTurno(eventos: EventoJornadaLite[]): RegistroJornada {
   const pausas = construirPausas(segTurno);
   const bloques = partirEnBloques(segTurno);
   const bloquesExcedidos = bloques.filter((b) => b.excedido).length;
+  const jornadaExcedida = manejoNetoSeg >= JORNADA_MANEJO_LIMITE_SEGUNDOS;
   const confianza = confianzaGlobal(
     intervalos, evs, inicioTurnoMs, finTurnoMs
   );
   const explicacion = construirExplicacion({
     inicioTurnoMs, finTurnoMs, manejoNetoSeg, pausas, bloques,
-    bloquesExcedidos, confianza,
+    bloquesExcedidos, jornadaExcedida, confianza,
   });
 
   return {
     inicioTurnoMs, finTurnoMs, manejoNetoSeg, pausaTotalSeg,
-    segmentos: segTurno, pausas, bloques, bloquesExcedidos, confianza,
-    explicacion,
+    segmentos: segTurno, pausas, bloques, bloquesExcedidos, jornadaExcedida,
+    confianza, explicacion,
   };
 }
 
@@ -504,7 +511,7 @@ function descOrigen(o: OrigenPausa): string {
 function construirExplicacion(r: {
   inicioTurnoMs: number; finTurnoMs: number; manejoNetoSeg: number;
   pausas: PausaJornada[]; bloques: BloqueJornada[]; bloquesExcedidos: number;
-  confianza: Confianza;
+  jornadaExcedida: boolean; confianza: Confianza;
 }): string[] {
   const lineas: string[] = [];
   lineas.push(
@@ -523,6 +530,12 @@ function construirExplicacion(r: {
   if (r.bloquesExcedidos > 0) {
     lineas.push(
       `⚠ ${r.bloquesExcedidos} bloque(s) superaron 4 h de manejo continuo`
+    );
+  }
+  if (r.jornadaExcedida) {
+    lineas.push(
+      `⚠ Jornada: ${hhmm(r.manejoNetoSeg)} de manejo neto — supera el ` +
+      "tope de 12 h"
     );
   }
   if (r.confianza !== "alta") {
@@ -544,6 +557,7 @@ function jornadaVacia(): RegistroJornada {
     pausas: [],
     bloques: [],
     bloquesExcedidos: 0,
+    jornadaExcedida: false,
     confianza: "alta",
     explicacion: [],
   };

@@ -230,6 +230,30 @@ Suite functions **225/225**, eslint limpio.
 Recomendado: backfill de unos días → comparar `REGISTRO_JORNADAS` vs `JORNADAS` (v2) en los casos
 en disputa antes de exponerlo al chofer.
 
-**Siguiente: pantalla "mi jornada"** (Flutter) que lee `REGISTRO_JORNADAS` y muestra el registro
-explicado (pausas + confianza) — la pata de transparencia del Paso 2. Después: Paso 3 (aviso en vivo
-humilde) y Paso 4 (destronar al v2). **Nada se deploya sin OK de Santiago.**
+## Validación v3 vs v2 (07-jun, "validar primero" · read-only, SIN deploy)
+Script `whatsapp-bot/scripts/validar_jornada_v3.js` (read-only): corre la reconstrucción v3 contra
+los SITRACK_EVENTOS reales de Firestore y la compara, lado a lado, con lo que registró el v2
+(colección JORNADAS), sobre los 5 casos del buzón REPORTES_DISCREPANCIA del 06-jun. NO escribe nada.
+
+**Resultado: v3 reivindica los 5/5 casos en disputa.** Detecta TODAS las pausas que los choferes
+reclamaban, con evidencia (`Contacto OFF` / `Inicio de detenido`) y confianza por tramo:
+- **FERNANDEZ** (DNI 26129762): v3 muestra 5 pausas que cierran bloque (incl. 13:15–13:41 motor
+  apagado, la del reclamo). Manejo neto 12h30 → **dispara el flag de jornada excedida** (ver abajo).
+- **LOPEZ** (22987952): pausa 12:28–13:28 (1 h, baño Chinchinales) acreditada; paró antes de 4 h.
+- **WEIMANN** (32563425): pausa 09:45–10:13 (27 min) + un descanso parcial nocturno de 5h13.
+- **CHAVEZ** (24861891): pausa 12:48–13:10 (21 min) + parada larga 14:09–17:49 (3h40).
+- Todos con confianza media/baja (la data real tiene gaps) → honesto, "revisar antes de liquidar".
+
+**Hallazgo de la validación → fix aplicado:** con el día COMPLETO, FERNANDEZ manejó 12h30 NETAS en
+5 bloques, ninguno > 4 h. El registro no lo señalaba (solo medía el exceso por bloque de 4 h). Se
+agregó `RegistroJornada.jornadaExcedida` (manejo neto ≥ 12 h, paridad con la `cuota` del v2) + línea
+en la explicación. Tests: 227/227 functions. Commit del fix junto con el script de validación.
+
+**Lectura para decidir el deploy:** el v2 suele mostrar `total_manejo` inflado porque la jornada
+quedó ABIERTA (no cerró por descanso) y arrastró horas a la madrugada; el v3 reconstruye el turno
+real con sus pausas y lo explica. Antes de exponer al chofer conviene 1–2 semanas de
+`REGISTRO_JORNADAS` real (deploy + flag) para comparar a escala.
+
+**Siguiente (con OK de Santiago): pantalla/bot "mi jornada"** que lee `REGISTRO_JORNADAS` y muestra
+el registro explicado (pausas + confianza) — la pata de transparencia del Paso 2. Después: Paso 3
+(aviso en vivo humilde) y Paso 4 (destronar al v2). **Nada se deploya sin OK de Santiago.**

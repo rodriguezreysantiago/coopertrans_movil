@@ -173,6 +173,7 @@ export function registroToFirestore(
     manejo_neto_seg: r.manejoNetoSeg,
     pausa_total_seg: r.pausaTotalSeg,
     bloques_excedidos: r.bloquesExcedidos,
+    jornada_excedida: r.jornadaExcedida,
     confianza: r.confianza,
     bloques: r.bloques.map((b) => ({
       indice: b.indice,
