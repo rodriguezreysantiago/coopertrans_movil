@@ -370,5 +370,19 @@ turno, idempotente, DNI de prefijo para la regla). Redeploy de las 2 functions +
 **1030 docs, sin colisión** (GARCIA 05-19 ahora con sus 2 turnos). 119 jornadas >12h persistidas.
 (La regla de Firestore no cambió funcionalmente — solo el comentario; no se redeployó.)
 
-Pendiente: la **pantalla/bot "mi jornada"** (Paso 2 transparencia). Después: Paso 3 (aviso en vivo
-humilde) y Paso 4 (destronar al v2).
+### Pantalla "Mi jornada" del chofer — HECHA (07-jun, pendiente release de app)
+Pata de transparencia del Paso 2 (Parte C). El chofer ve su propio registro:
+`lib/features/registro_jornadas/` (modelo + servicio + pantalla `MiJornadaScreen`), imitando
+`jornada_historico` + el design system. Por turno muestra: manejo neto, recorrido, pausas con su
+motivo (motor apagado / detenido), confianza y flags (>12 h, bloque >4 h, descanso <8 h, drift).
+Tile "Mi jornada" en `MainPanel` (solo roles que conducen) + ruta `miJornada` en el router.
+
+Infra deployada (no es release): **firestore.rules** de `REGISTRO_JORNADAS` pasó a field-based
+(`resource.data.chofer_dni == uid`) para que el chofer pueda LISTAR lo suyo (una rule por docId no
+habilita queries) + **índice compuesto** (chofer_dni ASC, fecha DESC). `flutter analyze` limpio.
+
+**Pendiente: la pantalla llega al chofer con el próximo RELEASE de la app (lo larga Santiago).** El
+backend ya está vivo y con datos, así que en cuanto se libere la app, el chofer ve sus jornadas.
+Verificación visual final = al correr/liberar la app.
+
+Después: Paso 3 (aviso en vivo humilde sobre el v2) y Paso 4 (destronar al v2 como fuente de verdad).
