@@ -11,6 +11,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/services/prefs_service.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -104,6 +105,15 @@ class _ReportesDiscrepanciaScreenState
                       reporte: lista[i],
                       onRevisar: () => _revisar(lista[i]),
                       onReabrir: () => _reabrir(lista[i]),
+                      // Solo en reclamos de jornada: atajo a la jornada REAL (v3)
+                      // del chofer para adjudicar con el dato preciso.
+                      onVerJornada: lista[i].tema == 'jornada'
+                          ? () => Navigator.pushNamed(
+                                context,
+                                AppRoutes.adminRegistroJornada,
+                                arguments: lista[i].choferDni,
+                              )
+                          : null,
                     ),
                   ),
           ),
@@ -200,8 +210,13 @@ class _Fila extends StatelessWidget {
   final ReporteDiscrepancia reporte;
   final VoidCallback onRevisar;
   final VoidCallback onReabrir;
+  /// Solo en reclamos de jornada: abre la jornada real (v3) del chofer.
+  final VoidCallback? onVerJornada;
   const _Fila(
-      {required this.reporte, required this.onRevisar, required this.onReabrir});
+      {required this.reporte,
+      required this.onRevisar,
+      required this.onReabrir,
+      this.onVerJornada});
 
   @override
   Widget build(BuildContext context) {
@@ -231,6 +246,24 @@ class _Fila extends StatelessWidget {
           const SizedBox(height: 4),
           Text('"${r.detalle}"',
               style: AppType.bodySm.copyWith(color: c.textSecondary)),
+          if (onVerJornada != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: onVerJornada,
+                icon: Icon(Icons.fact_check_outlined, size: 16, color: c.brand),
+                label: Text('Ver jornada real',
+                    style: AppType.monoSm.copyWith(color: c.brand)),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.sm, vertical: 2),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
