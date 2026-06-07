@@ -141,7 +141,7 @@ class AppTexts {
 
   static const String rutaNoEncontrada = 'Ruta no encontrada';
   // Podés mantener un registro visual de tu versión acá
-  static const String appVersion = 'v 1.0.94';
+  static const String appVersion = 'v 1.2.0';
 }
 
 // ===========================================================================
