@@ -24,19 +24,19 @@ de movimiento hay un gap ≥15 min y la posición casi no cambió (≤500 m) →
 (corta el bloque). Si se movió (>500 m) o falta lat/lng → cuenta manejo (conservador, no
 silencia un aviso de descanso legítimo). `EventoDetencionLite` +lat/lng (de SITRACK_EVENTOS);
 `RADIO_PAUSA_GAP_METROS=500`; gap mínimo = `PAUSA_BLOQUE_SEGUNDOS` (15 min); +4 tests (188/188).
-- [ ] Monitorear el buzón: los reportes de "parada no detectada" deberían cesar.
-- [ ] Marcar revisados los 5 reportes pendientes (pantalla "Reportes de choferes").
-- **Dirección de fondo (plan, NO ejecutado):** `docs/PLAN_vigilador_jornada_v3.md` — el fix de hoy es
-  un parche; el plan v3 resuelve los 3 dolores (precisión + reclamos + fragilidad) separando el
-  **aviso en vivo** (humilde, solo con dato fresco) del **registro de jornada** (batch a posteriori
-  sobre TODOS los eventos Sitrack del turno, determinístico y explicado al chofer). Solo Sitrack por
-  ahora. Incremental (no tira el v2).
-  **Paso 0 HECHO (07-jun):** señales confiables identificadas (`164/6` paró, `163/7` arrancó,
-  `283` en marcha, + `ignition`/`speed`/posición) y **el módulo de jornada NATIVO de Sitrack está
-  APAGADO** en Vecchi (0/24 eventos de turno/conducción en 90 días). Santiago eligió **Camino B**
-  (reconstruir nosotros). **Próximo = Paso 1**: batch de reconstrucción (lógica pura + tests con
-  casos reales FERNANDEZ/LOPEZ) — **diseño detallado ya escrito en el plan**. Scripts de diagnóstico
-  en `whatsapp-bot/scripts/` (`catalogo_eventos_sitrack`, `verificar_eventos_jornada_sitrack`).
+- [ ] Marcar revisados los 5 reportes pendientes (pantalla "Reportes de choferes") — ahora con el
+  botón "Ver jornada real" que abre el registro v3 del chofer.
+- ✅ **SUPERADO por el VIGILADOR v3 — COMPLETO y VIVO (07-jun).** El parche de arriba quedó subsumido
+  por el rediseño v3 (`docs/PLAN_vigilador_jornada_v3.md`, memoria `project_vigilador_jornada_v3.md`):
+  Pasos 1-4 hechos. **Vivo en prod:** lógica pura `jornadas_v3.ts` + crons `jornadas_v3_batch.ts`
+  (registro 06:45 → `REGISTRO_JORNADAS`, fuente oficial; backfill 1030 registros; resumen a Molina
+  08:00 ahora sale de v3) + **aviso en vivo humilde** en el v2 (gate de frescura 7 min, deployado).
+  El v2 quedó como aviso preventivo + fallback. Manejo NO está inflado (verificado 3 formas). Flag
+  `META/config_vigilador_v3.registro_batch_activo` ON (off = `flag_jornada_v3.js off`). 246/246 tests.
+  - [ ] **RELEASE de la app** (Santiago): sube las 3 pantallas v3 (mi jornada chofer + vista admin +
+    botón en disputas) de `lib/features/registro_jornadas/`. Backend/rules/índices ya vivos.
+  - [ ] Mañana 08:00: confirmar visual el **primer resumen v3** que recibe Molina.
+  - [ ] (Opcional) Monitorear el buzón: los reportes de "parada no detectada" deberían cesar.
 
 ### 2) Landing de descargas — cooper-trans.com.ar/app (LIVE)
 Página única con los 5 puntos (iPhone/iPad + Android + Mac + Windows + web), branding VAVG.
