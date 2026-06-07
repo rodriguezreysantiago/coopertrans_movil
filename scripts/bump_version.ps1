@@ -41,10 +41,24 @@ $patch   = [int]$matches[3]
 $build   = [int]$matches[4]
 
 # --- Decidir versión nueva -----------------------------------------
+# Serie de versión vigente: el auto-bump mantiene MAJOR.MINOR fijos y sólo
+# sube el PATCH (el último número) + el BUILD. Para saltar de serie (ej. el
+# día que quieras pasar a 1.3.x), cambiá $serieMinor/$serieMajor acá abajo:
+# el próximo bump arranca la serie nueva en ".0". El BUILD siempre sube +1
+# (las stores exigen versionCode monótono).
+$serieMajor = 1
+$serieMinor = 2
 if ($Version -eq '') {
-    $nuevoPatch = $patch + 1
     $nuevoBuild = $build + 1
-    $Version    = "$major.$minor.$nuevoPatch+$nuevoBuild"
+    if ($major -eq $serieMajor -and $minor -eq $serieMinor) {
+        # Ya estamos en la serie: subir sólo el último número (patch).
+        $nuevoPatch = $patch + 1
+    } else {
+        # Cambio de serie (ej. 1.0.x -> 1.2.x): arrancar la serie nueva en .0.
+        $nuevoPatch = 0
+        Write-Host "Cambio de serie: $major.$minor.x -> $serieMajor.$serieMinor.x (arranca en .0)" -ForegroundColor Yellow
+    }
+    $Version    = "$serieMajor.$serieMinor.$nuevoPatch+$nuevoBuild"
     Write-Host "Sugerida: $verActual -> $Version" -ForegroundColor Cyan
 }
 
