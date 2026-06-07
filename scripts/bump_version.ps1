@@ -49,7 +49,6 @@ $build   = [int]$matches[4]
 $serieMajor = 1
 $serieMinor = 2
 if ($Version -eq '') {
-    $nuevoBuild = $build + 1
     if ($major -eq $serieMajor -and $minor -eq $serieMinor) {
         # Ya estamos en la serie: subir sólo el último número (patch).
         $nuevoPatch = $patch + 1
@@ -58,8 +57,15 @@ if ($Version -eq '') {
         $nuevoPatch = 0
         Write-Host "Cambio de serie: $major.$minor.x -> $serieMajor.$serieMinor.x (arranca en .0)" -ForegroundColor Yellow
     }
+    # Build DERIVADO del semver (NO un contador aparte): vos manejás SOLO X.Y.Z
+    # (1.2.1, 1.2.2…) y el build se calcula solo. Play/App Store exigen un
+    # versionCode/build único y creciente — este esquema (M*10000 + m*100 +
+    # patch) lo garantiza mientras la versión suba. El guard final asegura que
+    # nunca quede <= al build actual (robustez ante un cambio de serie raro).
+    $nuevoBuild = $serieMajor * 10000 + $serieMinor * 100 + $nuevoPatch
+    if ($nuevoBuild -le $build) { $nuevoBuild = $build + 1 }
     $Version    = "$serieMajor.$serieMinor.$nuevoPatch+$nuevoBuild"
-    Write-Host "Sugerida: $verActual -> $Version" -ForegroundColor Cyan
+    Write-Host "Sugerida: $serieMajor.$serieMinor.$nuevoPatch  (build interno $nuevoBuild, automatico)" -ForegroundColor Cyan
 }
 
 if (-not ($Version -match '^(\d+)\.(\d+)\.(\d+)\+(\d+)$')) {
