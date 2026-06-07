@@ -404,5 +404,21 @@ Verificado en vivo: el cron hace `[jornadas_v2.tick] OK` limpio cada 5 min, sin 
 de frescura activo. Desde ahora el chofer solo recibe "3h30"/"4h" con dato fresco (≤7 min); con dato
 viejo se posterga. Reversible (revert + redeploy).
 
-Después: Paso 4 (destronar al v2 como fuente de verdad — el registro v3 pasa a ser la fuente para
-liquidación/disputa y el v2 queda solo como aviso preventivo).
+## Paso 4 — destronar al v2 (en marcha)
+"El registro v3 pasa a ser la fuente oficial (liquidación/disputa); el v2 queda solo como aviso
+preventivo." Es más organizacional + varias superficies. Se ataca por partes (Santiago elige).
+
+**Hecho — Vista admin del registro v3** (07-jun · código, pendiente release de app): pantalla
+admin/supervisor `AdminRegistroJornadaScreen` ("Jornada real (registro v3)", tile en el hub ICM,
+gateada por `Capability.verIcm`). El operador elige un chofer y ve su jornada v3 reconstruida (turno,
+manejo neto, pausas con motivo, recorrido, confianza, flags) — la base para adjudicar disputas y
+revisar compliance con el dato preciso. `RegistroJornadaCard` extraída a widget compartido (la usan
+la pantalla del chofer y la admin). NO tocó Firestore (la rule ya habilita al admin vía
+`puedeVerVolvoTableros` y el índice `chofer_dni+fecha` ya estaba). `flutter analyze` limpio. Llega al
+operador con el próximo RELEASE de la app.
+
+**Pendientes opcionales del Paso 4** (cuando Santiago quiera): (a) cambiar el **resumen diario** de
+infracciones (Molina/Seg-Higiene) de los flags del v2 al registro v3; (b) integrar el registro v3 en
+el **buzón de disputas** (REPORTES_DISCREPANCIA) — mostrarlo al lado del reclamo; (c) upgradear la
+**pantalla Jornada del hub ICM** (speed-based) para que use v3. Ambos (a) y (c) tocan superficies en
+vivo → con OK de Santiago.
