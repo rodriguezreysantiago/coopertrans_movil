@@ -158,3 +158,43 @@ baja confianza por `Bloqueo GPS`, turno que cruza medianoche. Los eventos reales
 Paso 2: persistir `RegistroJornada` (colección nueva) + pantalla "mi jornada" del chofer +
 cron batch 1×/día (o al cierre de turno), idempotente. **NO deployar sin OK de Santiago**
 (jornada = horas de trabajo, sensible).
+
+## Paso 1 — RESULTADO (07-jun, HECHO · lógica pura + tests, SIN deploy)
+Implementado `functions/src/jornadas_v3.ts` (batch puro, sin I/O) + `functions/test/jornadas_v3.test.js`
+(24 tests, TDD). **Inerte en prod**: no lo importa `index.ts`, no exporta ninguna Cloud Function
+todavía → `firebase deploy` no lo levanta. El v2 sigue intacto. Suite total functions **212/212**,
+eslint limpio.
+
+**API pública** (`jornadas_v3.ts`):
+- `reconstruirJornada(eventos)` → `RegistroJornada` (primer turno) · `reconstruirJornadas` (todos) ·
+  `partirEnTurnos` (corta por gap ≥ 8 h) · helpers `esParoEvento`/`esArranqueEvento`/`esMovimientoEvento`/
+  `horaMinArt` + constantes.
+- `RegistroJornada { inicioTurnoMs, finTurnoMs, manejoNetoSeg, pausaTotalSeg, segmentos[], pausas[],
+  bloques[], bloquesExcedidos, confianza('alta'|'media'|'baja'), explicacion[] }`.
+- Reusa del v2: `distanciaMetros`, `PAUSA_BLOQUE_SEGUNDOS`, `RADIO_PAUSA_GAP_METROS`,
+  `DESCANSO_MIN_SEGUNDOS`, `UMBRAL_MOVIMIENTO_KMH`, `BLOQUE_EXCEDIDO_SEGUNDOS`.
+
+**Decisiones finas (de la data real, no del catálogo):**
+- **`ignition` NO es gatillo de paro.** Hay eventos `283` con `ignition==0` y `speed==75` (FERNANDEZ
+  11:56) → en marcha el campo miente. El paro se decide por `event_id` (164/6/331/332); `ignition`
+  queda solo informativo.
+- **Contacto ON (163) NO es arranque.** El motor enciende pero el chofer sigue en pausa (LOPEZ: 163 a
+  las 13:13, arranca de verdad 13:28 con `Fin de detenido`). Arranque = 7/333/334 o speed>15.
+- **Dos umbrales de gap distintos**: pausa encubierta (misma posición ≤ 500 m) desde **15 min**; baja
+  confianza por gap CON desplazamiento desde **30 min** (un tramo recto de autopista no dispara `283`
+  por 15-25 min — marcar todo ≥ 15 min como "baja" volvería la señal inútil). Gap **sin posición** =
+  ciego desde los 15 min.
+- **Confianza global** por fracción del turno cubierta por TIEMPO de gap dudoso (no por segmentos
+  enteros): un gap de 51 min adentro de 3 h de manejo ensucia esos 51 min, no las 3 h.
+
+**Validación contra la data viva del 06-jun** (`whatsapp-bot/scripts/dump_eventos_jornada_v3.js`,
+read-only, reconstruye con el compilado):
+- **FERNANDEZ**: pausa **13:15–13:41 (26 min) motor apagado REGISTRADA** (la que el v2 no vio) +
+  2 detenciones de playón (30/49 min); manejo neto 5h17 en 4 bloques, **0 excedidos**; la parada que
+  el chofer ubica 13:50–14:40 cae en un gap de 51 min con +59 km → **no se inventa, se marca a
+  revisar**. Confianza media.
+- **LOPEZ**: pausa **12:28–13:28 (1h) ACREDITADA**; bloque 1 ≈ 3h22 (< 3h45) → **paró antes de las
+  4 h, cero infracción** (el v2 le marcaba "4h05 y sigue manejando"). Confianza media.
+
+**Siguiente: Paso 2** (persistir + pantalla "mi jornada" + cron batch idempotente). **NO deployar
+sin OK de Santiago** (jornada = horas de trabajo, sensible).
