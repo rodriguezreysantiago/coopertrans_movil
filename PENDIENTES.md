@@ -7,6 +7,61 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 📅 2026-06-06 — Update IN-APP Windows (banner) — reemplaza la ventana del launcher (HECHO; requiere re-instalar PCs)
+
+Migrado el auto-update de Windows al modelo de sport_manager ("igual que macOS"):
+el ícono abre `coopertrans_movil.exe` DIRECTO (sin `launcher.ps1`, **sin la
+ventana negra de PowerShell**) y la app actualiza sola.
+- `lib/core/services/windows_update_service.dart`: al arrancar (4 s, en bg)
+  consulta la **GitHub Releases API** del repo, compara la versión local
+  (PackageInfo) vs el `tag_name` del último release, y si hay nueva baja el
+  `.zip` con `dio` y lanza un **helper PowerShell OCULTO** (`-WindowStyle Hidden`
+  + detached) que espera el cierre, reemplaza ProgramData con backup + rollback,
+  reescribe `VERSION.txt` y relanza. No-op fuera de Windows y en el build dir dev.
+- `lib/shared/widgets/windows_update_banner.dart`: banner descartable ("Más
+  tarde" / "Actualizar") + dialog de progreso, en el `builder` del MaterialApp.
+- `installer/coopertrans_movil.iss`: shortcut (menú + escritorio) y `[Run]` abren
+  el `.exe` directo. `launcher.ps1` queda como LEGACY (fallback).
+- NO usa FFI/COM in-process (lección del crash 1.0.93): todo lo nativo va por
+  PowerShell externo. `flutter analyze` limpio.
+
+**PENDIENTE de Santiago:**
+- [ ] **Re-instalar el setup nuevo 1 vez en cada PC Windows** ya instalada. El
+  ícono viejo es read-only (apunta al launcher) y la app sin admin no lo puede
+  cambiar → hasta re-instalar, esas PCs siguen viendo la ventana del launcher.
+  Las PCs nuevas ya salen con el modelo nuevo.
+- [ ] Smoke test en release: abrir el `.exe` instalado y confirmar que el banner
+  aparece cuando hay una versión más nueva publicada y que actualiza sin ventana.
+
+---
+
+## 📅 2026-06-06 — Windows 1.0.93 ROTA (crash al arranque) → re-largar 1.0.94 (PENDIENTE: lo larga Santiago)
+
+**Síntoma:** la app de Windows 1.0.93 "se abre y se cierra" — crash inmediato al arrancar, en **todos** los arranques.
+
+**Causa raíz:** `refrescarIconoEscritorioWindows()` (`lib/core/window/refrescar_icono_escritorio_io.dart`)
+ADEMÁS de `ie4uinit -show` reescribía el `.lnk` del pin de la barra de tareas vía **COM/FFI (win32)**
+para forzar el refresco de su ícono. En el build **RELEASE** eso tiraba **ACCESS VIOLATION (0xC0000005)** —
+un crash **NATIVO in-process** que el `try/catch` de Dart **NO atrapa**. Como ocurría *antes* de marcar la
+versión en prefs, rompía cada arranque. (En debug/dev no se había visto: solo revienta en release build.)
+
+**Diagnóstico:** correr el `.exe` a mano → `ExitCode -1073741819` (= 0xC0000005).
+
+**Fix (commit `bf19072`):** se **eliminó todo el COM/FFI**. Queda solo `ie4uinit -show` (proceso del sistema
+aparte) + marker en prefs. `.exe` reconstruido y verificado: arranca y se mantiene vivo.
+
+**⚠️ Lección (no repetir):** **NUNCA usar FFI/COM in-process al arranque de la app.** Un fallo nativo ahí no
+es atrapable por Dart y tumba el proceso entero. Si en el futuro hace falta refrescar el pin de la taskbar,
+hacerlo **fuera** del proceso (script del `launcher.ps1`), nunca por FFI. Y todo lo que toque APIs nativas de
+Windows hay que **probarlo en un build RELEASE real**, no solo en dev.
+
+**PENDIENTE de Santiago:**
+- [ ] Largar `release_completo.ps1` de nuevo → genera **1.0.94** (con el fix `bf19072`).
+- [ ] **NO subir el AAB de 1.0.93 a Play** — subir el de **1.0.94**.
+- [ ] Verificar en la PC que la 1.0.94 de Windows abre y se mantiene.
+
+---
+
 ## 📅 2026-06-06 — Agente WhatsApp: 4 mejoras de la revisión de chats (HECHO, por auto-update)
 
 Revisión de TODO el histórico del agente (82 chats, 1→5 jun): **0 fallbacks**. De

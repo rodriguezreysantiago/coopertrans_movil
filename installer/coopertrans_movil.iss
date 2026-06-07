@@ -10,7 +10,8 @@
 ;
 ; ARQUITECTURA del install resultante:
 ;   Program Files\CoopertransMovil\
-;     ├── launcher.ps1                  (auto-update vía GitHub Releases)
+;     ├── launcher.ps1                  (LEGACY: fallback manual de update; el
+;     │                                  ícono ya NO lo usa — ver modelo abajo)
 ;     └── app_icon.ico                  (ícono compartido)
 ;
 ;   ProgramData\CoopertransMovil\       (Permissions: users-modify)
@@ -20,14 +21,20 @@
 ;     ├── ...                           (DLLs nativos)
 ;     └── VERSION.txt                   (versión instalada)
 ;
-; FLUJO:
-;   1. Pendrive con .exe → doble click → UAC → instala ambas carpetas.
-;   2. Doble click en icono "Coopertrans Móvil" del escritorio → corre
-;      launcher.ps1 (sin UAC) → chequea último release en GitHub →
-;      si hay nuevo, descarga el zip y reemplaza los archivos en
-;      ProgramData\CoopertransMovil → lanza la app.
-;   3. Updates futuros: simplemente abrir el icono. No hace falta
-;      pendrive ni reinstalar.
+; FLUJO (modelo update IN-APP desde 2026-06-06):
+;   1. Pendrive/descarga del .exe → doble click → UAC → instala ambas carpetas.
+;   2. El ícono "Coopertrans Móvil" abre coopertrans_movil.exe DIRECTO (sin
+;      launcher, SIN ventana de PowerShell).
+;   3. Updates futuros: 100% IN-APP. La app consulta la GitHub Releases API al
+;      arrancar y muestra un banner; el updater in-app (lib/core/services/
+;      windows_update_service.dart) baja el zip y lo reemplaza con un helper
+;      PowerShell OCULTO, y relanza. No hace falta pendrive ni reinstalar.
+;   4. launcher.ps1 queda como LEGACY (fallback manual / dev). El ícono ya no lo
+;      usa → NO vuelve a aparecer la ventana negra.
+;
+; MIGRACIÓN: las PCs con un install VIEJO tienen el ícono apuntando al launcher
+; (read-only, la app sin admin no lo puede cambiar). Para pasarlas al modelo
+; nuevo hay que correr ESTE instalador una vez en cada una.
 
 #ifndef MyAppVersion
   #error MyAppVersion no definido. Compilar via scripts\build_installer.ps1
@@ -92,24 +99,20 @@ Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{commonappdata}\Coope
 Source: "VERSION.txt"; DestDir: "{commonappdata}\CoopertransMovil"; Flags: ignoreversion
 
 [Icons]
-; Inno Setup escapa comillas dentro de strings con "" (dos comillas).
-; powershell.exe necesita comillas alrededor del path al .ps1 porque
-; el path contiene espacios ("Program Files\CoopertransMovil\...").
-;
-; IconFilename apunta al ICONO EMBEBIDO del .exe en ProgramData (IconIndex 0),
-; NO al app_icon.ico estatico de Program Files. Asi, cuando el auto-update
-; (launcher) reemplaza el .exe con un release nuevo, el icono del shortcut se
-; actualiza SOLO — sin re-correr el instalador ni el script actualizar_icono.
-; El .exe que copia este instalador ya trae el icono nuevo embebido (Runner.rc).
-Name: "{group}\{#MyAppName}"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File ""{app}\launcher.ps1"""; IconFilename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; IconIndex: 0; WorkingDir: "{app}"
+; El shortcut abre coopertrans_movil.exe DIRECTO (modelo update in-app, sin
+; launcher ni ventana de PowerShell). IconFilename apunta al ICONO EMBEBIDO del
+; mismo .exe en ProgramData (IconIndex 0): cuando el updater in-app reemplaza el
+; .exe con un release nuevo, el icono del shortcut se actualiza SOLO. El .exe que
+; copia este instalador ya trae el icono nuevo embebido (Runner.rc).
+Name: "{group}\{#MyAppName}"; Filename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; IconFilename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; IconIndex: 0; WorkingDir: "{commonappdata}\CoopertransMovil"
 Name: "{group}\Desinstalar {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Minimized -File ""{app}\launcher.ps1"""; IconFilename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; IconIndex: 0; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; IconFilename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; IconIndex: 0; WorkingDir: "{commonappdata}\CoopertransMovil"; Tasks: desktopicon
 
 [Run]
-; Ofrecer arrancar la app al final del install, vía el launcher (que
-; chequea si hay versión más nueva en GitHub que la incluida en el
-; instalador, y la baja si corresponde).
-Filename: "powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\launcher.ps1"""; Description: "Iniciar {#MyAppName}"; Flags: nowait postinstall skipifsilent
+; Ofrecer arrancar la app al final del install — abre el .exe DIRECTO. El propio
+; updater in-app consultará la GitHub Releases API al arrancar y ofrecerá la
+; última versión si el instalador trajera una más vieja.
+Filename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; WorkingDir: "{commonappdata}\CoopertransMovil"; Description: "Iniciar {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
 ; Limpiar logs y carpeta de la app de ProgramData. La data del usuario

@@ -14,12 +14,14 @@ import 'firebase_options.dart';
 import 'core/services/app_logger.dart';
 import 'core/services/prefs_service.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/windows_update_service.dart';
 import 'routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/platform_chrome.dart';
 import 'core/window/desktop_window.dart';
 import 'core/window/refrescar_icono_escritorio.dart';
 import 'shared/widgets/app_platform_chrome.dart';
+import 'shared/widgets/windows_update_banner.dart';
 import 'core/constants/app_constants.dart';
 
 // 🔹 DEPENDENCIAS
@@ -154,6 +156,11 @@ void main() async {
     'SENTRY_ENV',
     defaultValue: 'production',
   );
+
+  // Windows: chequeo de actualización in-app (banner al iniciar) que reemplaza
+  // la ventana del launcher PowerShell. Idempotente, no-op fuera de Windows o si
+  // la app corre desde el build dir de dev. Fire-and-forget: NO bloquea arranque.
+  WindowsUpdateService.instance.iniciar();
 
   if (sentryDsn.isEmpty) {
     AppLogger.log('SENTRY_DSN vacío → Sentry deshabilitado (modo dev)');
@@ -452,8 +459,14 @@ class _LogisticaAppState extends State<LogisticaApp> {
 
       // Desktop: title bar custom Núcleo (near-black, botones propios) por
       // encima de TODAS las rutas. En móvil/web devuelve el child sin tocar.
-      builder: (context, child) =>
-          AppPlatformChrome(child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => AppPlatformChrome(
+        child: Stack(
+          children: [
+            child ?? const SizedBox.shrink(),
+            WindowsUpdateOverlay(navigatorKey: navigatorKey),
+          ],
+        ),
+      ),
 
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
