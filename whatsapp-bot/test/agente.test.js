@@ -204,10 +204,11 @@ describe('agente._textoDeRespuesta', () => {
 });
 
 describe('agente — tools por rol y conversores', () => {
+  // Helper: nombres de las tools que el rol tiene definidas en Gemini.
+  const nombresPara = (rol) =>
+    agente._toolsGemini(rol)[0].functionDeclarations.map((d) => d.name);
+
   test('CHOFER: self-service sin parámetros + tools con args (contacto/discrepancia)', () => {
-    const a = agente._toolsAnthropic('CHOFER');
-    assert.ok(a.length >= 2);
-    for (const t of a) assert.strictEqual(t.input_schema.type, 'object');
     const g = agente._toolsGemini('CHOFER');
     assert.ok(
       g[0].functionDeclarations.some((d) => d.name === 'contacto_oficina'),
@@ -225,19 +226,16 @@ describe('agente — tools por rol y conversores', () => {
     }
   });
   test('ADMIN: buscar_vencimientos con parámetro query', () => {
-    const a = agente._toolsAnthropic('ADMIN');
-    const bv = a.find((t) => t.name === 'buscar_vencimientos');
-    assert.ok(bv, 'existe buscar_vencimientos');
-    assert.ok(bv.input_schema.properties.query);
     const g = agente._toolsGemini('ADMIN');
     const gbv = g[0].functionDeclarations.find(
       (d) => d.name === 'buscar_vencimientos'
     );
+    assert.ok(gbv, 'existe buscar_vencimientos');
     assert.ok(gbv.parameters.properties.query); // admin SÍ lleva parameters
   });
   test('ADMIN/SUPERVISOR: set completo de gestión (vencimientos + flota + cachatore)', () => {
     for (const rol of ['ADMIN', 'SUPERVISOR']) {
-      const t = agente._toolsAnthropic(rol).map((x) => x.name);
+      const t = nombresPara(rol);
       assert.ok(t.includes('buscar_vencimientos'), `${rol} buscar_vencimientos`);
       assert.ok(t.includes('donde_esta'), `${rol} donde_esta`);
       assert.ok(t.includes('viajes_resumen'), `${rol} viajes_resumen`);
@@ -247,7 +245,7 @@ describe('agente — tools por rol y conversores', () => {
     }
   });
   test('SEG_HIGIENE: jornada (ICM) + posición/flota/alertas; NO vencimientos/cachatore/personal (RBAC)', () => {
-    const t = agente._toolsAnthropic('SEG_HIGIENE').map((x) => x.name);
+    const t = nombresPara('SEG_HIGIENE');
     // verIcm → jornada de un chofer (conducta de manejo — Molina la necesita).
     assert.ok(t.includes('jornada_de'), 'SEG_HIGIENE jornada_de (verIcm)');
     // verAlertasVolvo (Mapa Flota + tableros Volvo) → estas 3.
@@ -260,14 +258,19 @@ describe('agente — tools por rol y conversores', () => {
     assert.ok(!t.includes('info_chofer'), 'SEG_HIGIENE sin datos de personal');
   });
   test('PLANTA / GOMERIA: sin tools (su módulo no tiene tool en el agente todavía)', () => {
-    assert.strictEqual(agente._toolsAnthropic('PLANTA').length, 0);
-    assert.strictEqual(agente._toolsAnthropic('GOMERIA').length, 0);
+    assert.strictEqual(
+      agente._toolsGemini('PLANTA')[0].functionDeclarations.length, 0);
+    assert.strictEqual(
+      agente._toolsGemini('GOMERIA')[0].functionDeclarations.length, 0);
   });
 });
 
-describe('agente._provider — selección de proveedor', () => {
+describe('agente._provider — Gemini único', () => {
+  // El bot quedó con Gemini como único proveedor (2026-06-08). El selector
+  // se mantiene como interfaz por compat (firma de `_conversarRobusto`, log
+  // y posibles fallbacks futuros), pero la lógica colapsó a "hay key o no".
   function conEnv(vars, fn) {
-    const keys = ['AGENTE_PROVIDER', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY'];
+    const keys = ['GEMINI_API_KEY'];
     const prev = {};
     for (const k of keys) prev[k] = process.env[k];
     for (const k of keys) delete process.env[k];
@@ -281,22 +284,11 @@ describe('agente._provider — selección de proveedor', () => {
       }
     }
   }
-  test('respeta AGENTE_PROVIDER explícito', () => {
-    conEnv({ AGENTE_PROVIDER: 'anthropic' }, () =>
-      assert.strictEqual(agente._provider(), 'anthropic')
-    );
-    conEnv({ AGENTE_PROVIDER: 'gemini' }, () =>
-      assert.strictEqual(agente._provider(), 'gemini')
-    );
-  });
-  test('sin nada configurado → null', () => {
+  test('sin GEMINI_API_KEY → null (agente apagado)', () => {
     conEnv({}, () => assert.strictEqual(agente._provider(), null));
   });
-  test('autodetecta por key; Gemini tiene prioridad', () => {
-    conEnv({ ANTHROPIC_API_KEY: 'x' }, () =>
-      assert.strictEqual(agente._provider(), 'anthropic')
-    );
-    conEnv({ ANTHROPIC_API_KEY: 'x', GEMINI_API_KEY: 'y' }, () =>
+  test('con GEMINI_API_KEY → "gemini"', () => {
+    conEnv({ GEMINI_API_KEY: 'g-test' }, () =>
       assert.strictEqual(agente._provider(), 'gemini')
     );
   });
@@ -822,25 +814,10 @@ describe('agente — herramientas de flota / operación', () => {
     assert.strictEqual(a, b);
   });
 
-  test('responder: audio con proveedor Anthropic → null (Claude no oye audio)', async () => {
-    const prevP = process.env.AGENTE_PROVIDER;
-    const prevK = process.env.ANTHROPIC_API_KEY;
-    const prevG = process.env.GEMINI_API_KEY;
-    process.env.AGENTE_PROVIDER = 'anthropic';
-    process.env.ANTHROPIC_API_KEY = 'sk-test';
-    delete process.env.GEMINI_API_KEY;
-    try {
-      const r = await agente.responder(
-        { texto: '', audio: { data: 'AAA', mimetype: 'audio/ogg' }, persona: { rol: 'CHOFER', dni: '1' }, telefono: '1' },
-        { inicializar: () => ({}) }
-      );
-      assert.strictEqual(r, null);
-    } finally {
-      if (prevP === undefined) delete process.env.AGENTE_PROVIDER; else process.env.AGENTE_PROVIDER = prevP;
-      if (prevK === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = prevK;
-      if (prevG === undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY = prevG;
-    }
-  });
+  // Test "audio con proveedor Anthropic → null" eliminado 2026-06-08: el bot
+  // ahora solo usa Gemini, que sí transcribe audio nativamente. No hay caso
+  // donde un audio caiga al "no oye → null". Si entra un audio sin GEMINI_API_KEY
+  // (agente apagado), ya está cubierto por el guard de responder() arriba.
 
   test('responder: audio que supera el tope de tamaño → mensaje claro (B9)', async () => {
     const prev = {
@@ -1132,7 +1109,8 @@ describe('agente — mejoras 2026-06-06 (fuzzy + jornada pasada + adelantos emit
   });
 
   test('CHOFER tiene contacto_oficina entre sus tools', () => {
-    const nombres = agente._toolsAnthropic('CHOFER').map((t) => t.name);
+    const nombres = agente._toolsGemini('CHOFER')[0].functionDeclarations
+      .map((d) => d.name);
     assert.ok(nombres.includes('contacto_oficina'));
   });
 

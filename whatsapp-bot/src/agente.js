@@ -1,7 +1,9 @@
 // Agente conversacional del bot — Fase 1 (consultas read-only).
 //
-// MULTI-PROVEEDOR: Google Gemini (free tier) o Anthropic Claude (AGENTE_PROVIDER
-//   o autodetección por la API key cargada; Gemini primero).
+// PROVEEDOR ÚNICO: Google Gemini (Santiago tiene plan paga, sin cuota — fallback
+//   a otro proveedor ya no aporta). Anthropic se sacó 2026-06-08 después de
+//   eliminar Groq el 2026-06-04. Si en el futuro hace falta multi-proveedor,
+//   ver el commit `fc4f124` (estado con Gemini + Anthropic fallback).
 // MULTI-ROL: responde a CHOFERES (solo sus propios datos) y a roles de GESTIÓN
 //   — ADMIN y SUPERVISOR — que pueden consultar datos de cualquier chofer/
 //   unidad. Cada rol tiene sus tools (TOOLS_CHOFER vs TOOLS_GESTION_*).
@@ -27,11 +29,7 @@ const { aIsoLocal, diasEntreIso } = require('./fechas');
 // excluyen del agente, igual que en los crons (decisión Santiago 2026-06-06).
 const { cargarExcluidos, esExcluido } = require('./excluidos');
 
-// ── Anthropic ──
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
-const ANTHROPIC_VERSION = '2023-06-01';
-const MODELO_ANTHROPIC = process.env.AGENTE_MODELO || 'claude-3-5-haiku-latest';
-// ── Gemini ──
+// ── Gemini (único proveedor) ──
 const GEMINI_API_BASE =
   'https://generativelanguage.googleapis.com/v1beta/models';
 const MODELO_GEMINI = process.env.AGENTE_MODELO_GEMINI || 'gemini-2.5-flash';
@@ -77,18 +75,16 @@ let _flagCacheTs = 0;
 const _FLAG_TTL_MS = 30000;
 
 // ───────────────────────── proveedor ─────────────────────────
+// Gemini es el único proveedor desde 2026-06-08. La pareja `_provider`/`_keyDe`
+// se mantiene como interfaz por compat de tests y por si en el futuro hace
+// falta volver a multi-proveedor (ver commit fc4f124).
 
 function _provider() {
-  const p = String(process.env.AGENTE_PROVIDER || '').toLowerCase().trim();
-  if (p === 'anthropic' || p === 'gemini') return p;
-  if (process.env.GEMINI_API_KEY) return 'gemini';
-  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
-  return null;
+  return process.env.GEMINI_API_KEY ? 'gemini' : null;
 }
 
 function _keyDe(provider) {
   if (provider === 'gemini') return process.env.GEMINI_API_KEY || null;
-  if (provider === 'anthropic') return process.env.ANTHROPIC_API_KEY || null;
   return null;
 }
 
@@ -750,14 +746,6 @@ function _toolsDelRol(rol) {
     for (const n of (TOOLS_POR_CAPABILITY[cap] || [])) nombres.add(n);
   }
   return [..._TOOLS_GESTION.filter((t) => nombres.has(t.name)), ...TOOLS_COMUNES];
-}
-
-function _toolsAnthropic(rol) {
-  return _toolsDelRol(rol).map((t) => ({
-    name: t.name,
-    description: t.description,
-    input_schema: { type: 'object', properties: t.params || {} },
-  }));
 }
 
 function _toolsGemini(rol) {
@@ -2291,74 +2279,6 @@ async function _transcribirAudio(audio) {
   return texto || null;
 }
 
-async function _conversarAnthropic(db, system, historial, userText, persona) {
-  const headers = {
-    'x-api-key': process.env.ANTHROPIC_API_KEY,
-    'anthropic-version': ANTHROPIC_VERSION,
-    'content-type': 'application/json',
-  };
-  const messages = [
-    ...historial.map((t) => ({
-      role: t.rol === 'assistant' ? 'assistant' : 'user',
-      content: String(t.texto || '').slice(0, HIST_MAX_CHARS),
-    })),
-    { role: 'user', content: userText },
-  ];
-  const toolsUsadas = [];
-
-  for (let iter = 0; iter < MAX_TOOL_ITERS; iter++) {
-    // En la última iteración forzamos `tool_choice: none`: el modelo redacta la
-    // respuesta final con los resultados que ya juntó, en vez de pedir otra
-    // tool y dejarnos sin texto (fix B11 — antes caía a un fallback mudo).
-    const ultimaIter = iter === MAX_TOOL_ITERS - 1;
-    const reqBody = {
-      model: MODELO_ANTHROPIC,
-      max_tokens: MAX_TOKENS,
-      system,
-      tools: _toolsAnthropic(persona.rol),
-      messages,
-    };
-    if (ultimaIter) reqBody.tool_choice = { type: 'none' };
-    const resp = await _fetchJson(ANTHROPIC_API_URL, headers, reqBody);
-
-    if (!ultimaIter && resp.stop_reason === 'tool_use') {
-      messages.push({ role: 'assistant', content: resp.content });
-      const toolResults = [];
-      let ejecutadas = 0;
-      for (const bloque of resp.content) {
-        if (bloque.type !== 'tool_use') continue;
-        toolsUsadas.push(bloque.name);
-        let resultado;
-        if (ejecutadas >= MAX_TOOLS_POR_ITER) {
-          resultado = { error: 'Demasiadas consultas en un solo paso; pedímelas de a una.' };
-        } else {
-          ejecutadas++;
-          try {
-            resultado = await _ejecutarTool(db, bloque.name, persona, bloque.input);
-          } catch (e) {
-            resultado = { error: e.message };
-          }
-        }
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: bloque.id,
-          content: JSON.stringify(resultado),
-        });
-      }
-      messages.push({ role: 'user', content: toolResults });
-      continue;
-    }
-
-    const texto = _textoDeRespuesta(resp);
-    // Sin texto y cortado por longitud → error específico (no fallback mudo).
-    if (!texto && resp.stop_reason === 'max_tokens') {
-      return { texto: null, toolsUsadas, error: 'max_tokens' };
-    }
-    return { texto, toolsUsadas };
-  }
-  return { texto: null, toolsUsadas, error: 'max_tool_iters' };
-}
-
 // ───────────────────────── loop Gemini ─────────────────────────
 
 async function _conversarGemini(db, system, historial, userText, persona) {
@@ -2491,10 +2411,11 @@ async function _conversarGemini(db, system, historial, userText, persona) {
 }
 
 // ───────────────────── robustez ante 429 ─────────────────────
-// Causa #1 de fallos observada el 2026-06-03: una ráfaga de consultas agota
-// el rate limit de Gemini (free tier) → el agente deja de responder. Mitigación
-// en capas: reintento corto (los límites por minuto se liberan rápido) y, si
-// persiste, fallback a Anthropic/Claude cuando hay ANTHROPIC_API_KEY.
+// Con Gemini paga el rate limit es raro pero existe (cuota por minuto). Ante
+// 429 reintentamos UNA vez con backoff corto — el límite por minuto se libera
+// rápido. Si persiste, sube al catch del responder() que devuelve el fallback
+// genérico al usuario. Sin proveedor de respaldo desde 2026-06-08 (Santiago
+// tiene Gemini paga, el fallback ya no aporta).
 const RETRY_429_MS = parseInt(process.env.AGENTE_RETRY_429_MS || '3500', 10);
 const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -2505,39 +2426,12 @@ function _esCuota(e) {
   );
 }
 
-/** Conversa con el provider primario; ante cuota agotada de Gemini reintenta
- *  una vez y, si sigue, cae a Anthropic (si hay key). Sin Anthropic, el
- *  reintento igual cubre los 429 transitorios; el resto sube al catch que
- *  responde "probá en un rato". */
-// Fallback ante cuota/caída de Gemini: cae a Anthropic/Claude SOLO si hay
-// ANTHROPIC_API_KEY (respaldo opcional). Sin esa key, corre 100% Gemini.
-// Devuelve la respuesta, o null si no hay fallback configurado.
-async function _fallbackLLM(args) {
-  if (process.env.ANTHROPIC_API_KEY) {
-    log.warn('[agente] fallback a Anthropic (Claude)');
-    return _conversarAnthropic(...args);
-  }
-  return null; // sin fallback configurado
-}
-
-// Errores donde otro modelo NO ayuda (el contenido es el problema): bloqueos
-// de safety/recitation. El resto de los "sin texto" (vacio inexplicable,
-// max_tool_iters) SI vale reintentarlos con el fallback — el free tier de
-// Gemini saturado a veces devuelve VACIO en vez de 429 (caso real 2026-06-03).
-function _esBloqueoContenido(error) {
-  return typeof error === 'string' &&
-    /safety|recitation|blocked|prohibited/i.test(error);
-}
-
 async function _conversarRobusto(provider, db, system, historial, userText, persona) {
+  // `provider` lo mantenemos por compat de la firma — siempre es 'gemini'
+  // ahora (ver `_provider()`). El argumento queda para diagnosticar a futuro.
   const args = [db, system, historial, userText, persona];
-  // Provider forzado por env (AGENTE_PROVIDER): anthropic directo. Sirve para
-  // PROBAR Anthropic aislado sin esperar a que Gemini falle.
-  if (provider !== 'gemini') return _conversarAnthropic(...args);
-
-  let r;
   try {
-    r = await _conversarGemini(...args);
+    return await _conversarGemini(...args);
   } catch (e) {
     if (!_esCuota(e)) throw e;
     log.warn(
@@ -2545,28 +2439,8 @@ async function _conversarRobusto(provider, db, system, historial, userText, pers
         `reintento en ${RETRY_429_MS}ms`
     );
     await _sleep(RETRY_429_MS);
-    try {
-      r = await _conversarGemini(...args);
-    } catch (e2) {
-      if (!_esCuota(e2)) throw e2;
-      const fb = await _fallbackLLM(args);
-      if (fb) return fb;
-      throw e2; // sin fallback: que el catch responda "proba en un rato"
-    }
+    return _conversarGemini(...args);
   }
-  // Gemini respondio SIN texto y NO es un bloqueo de safety -> saturacion
-  // encubierta o se quedo sin pasos: intentar el fallback antes del mensaje mudo.
-  // EXCEPCION: si ya se ejecutó una tool de ESCRITURA (huboToolDeAccion), NO
-  // re-conversamos — el fallback reinicia la charla con el userText original y
-  // volvería a disparar el write (doble objetivo / doble confirmación). En ese
-  // caso devolvemos el resultado mudo y arriba sale el mensaje de fallback
-  // estándar (la acción ya quedó hecha; el admin verifica en Cachatore).
-  if (r && !r.texto && !r.huboToolDeAccion && !_esBloqueoContenido(r.error)) {
-    log.warn(`[agente] Gemini sin texto (${r.error || 'vacio'}); intento fallback`);
-    const fb = await _fallbackLLM(args);
-    if (fb && fb.texto) return fb;
-  }
-  return r;
 }
 
 // ───────────────────────── logging ─────────────────────────
@@ -2582,7 +2456,7 @@ async function _loggear(db, { provider, persona, telefono, pregunta, respuesta, 
       respuesta: String(respuesta || '').slice(0, 4000),
       tools_usadas: toolsUsadas || [],
       proveedor: provider || null,
-      modelo: provider === 'anthropic' ? MODELO_ANTHROPIC : MODELO_GEMINI,
+      modelo: MODELO_GEMINI,
       error: error || null,
       // es_fallback=true: lo que se mandó NO es una respuesta real del modelo
       // sino el mensaje de cortesía ante un fallo (cuota/sin_texto/error). Sin
@@ -2682,10 +2556,8 @@ async function responder({ texto, persona, telefono, audio }, fs) {
 
   const provider = _provider();
   if (!provider || !_keyDe(provider)) return null; // sin key → apagado
-
-  // Audio (mensaje de voz): solo Gemini lo interpreta nativamente; con
-  // Anthropic no podemos → caemos al flujo de siempre (acuse/nada).
-  if (audio && provider !== 'gemini') return null;
+  // (`provider` siempre es 'gemini' desde 2026-06-08, ver `_provider()`.
+  // El audio se transcribe con el mismo Gemini — sin guard adicional.)
 
   const db = fs.inicializar();
   if (!(await _agenteActivo(db))) return null; // kill-switch
@@ -2800,7 +2672,6 @@ module.exports = {
   _systemPrompt,
   _ejecutarTool,
   _textoDeRespuesta,
-  _toolsAnthropic,
   _toolsGemini,
   TOOLS_CHOFER,
   TOOLS_GESTION_VENC,
