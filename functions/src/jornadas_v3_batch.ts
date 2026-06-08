@@ -196,6 +196,9 @@ export function registroToFirestore(
       inicio: Timestamp.fromMillis(b.inicioMs),
       fin: Timestamp.fromMillis(b.finMs),
       excedido: b.excedido,
+      km_aprox: b.kmAprox,
+      vel_max: b.velMax,
+      vel_prom: b.velProm,
     })),
     pausas: r.pausas.map((p) => ({
       inicio: Timestamp.fromMillis(p.inicioMs),
@@ -217,6 +220,16 @@ export function registroToFirestore(
       lat: s.lat,
       lng: s.lng,
       motivo_baja: s.motivoBaja ?? null,
+      // km/vel solo van en segmentos de manejo (las pausas las dejan null).
+      km_aprox: s.kmAprox ?? null,
+      vel_max: s.velMax ?? null,
+      vel_prom: s.velProm ?? null,
+    })),
+    // Serie velocidad downsampleada (~240 pts) para el gráfico velocidad/tiempo
+    // de la UI v3. Forma plana: ts_ms (epoch ms) + speed (km/h, entero).
+    serie_velocidad: r.serieVelocidad.map((p) => ({
+      ts_ms: p.tsMs,
+      speed: p.speed,
     })),
     explicacion: r.explicacion,
     procesado_en: FieldValue.serverTimestamp(),

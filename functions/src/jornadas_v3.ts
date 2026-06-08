@@ -181,6 +181,15 @@ export interface SegmentoJornada {
   lng: number | null;
   /** si confianza baja: por qué (gap con desplazamiento, sin posición, etc.). */
   motivoBaja?: string;
+  /** Solo segmentos de MANEJO: km recorridos (haversine entre eventos del
+   * rango con posición). Pausas no traen este campo. */
+  kmAprox?: number;
+  /** Solo segmentos de MANEJO: máx speed/gpsSpeed (km/h) de los eventos del
+   * rango. 0 si ningún evento del rango tiene velocidad informada. */
+  velMax?: number;
+  /** Solo segmentos de MANEJO: promedio simple de speed/gpsSpeed (km/h) sobre
+   * los eventos del rango con velocidad informada (los nulls no cuentan). */
+  velProm?: number;
 }
 
 export interface PausaJornada {
@@ -202,7 +211,28 @@ export interface BloqueJornada {
   finMs: number;
   /** true si el manejo continuo del bloque cruzó las 4 h sin pausa de 15 min. */
   excedido: boolean;
+  /** km recorridos en el bloque (haversine entre eventos del rango con posición). */
+  kmAprox: number;
+  /** máx speed/gpsSpeed (km/h) en el bloque. 0 si ninguno tiene velocidad. */
+  velMax: number;
+  /** promedio simple de speed/gpsSpeed (km/h) sobre eventos del bloque con
+   * velocidad informada. */
+  velProm: number;
 }
+
+/** Punto (ts, velocidad) de la serie de velocidad del turno. Apto para
+ * graficar velocidad vs tiempo en la UI (downsampleado a ~MAX_PUNTOS_SERIE). */
+export interface PuntoVelocidad {
+  tsMs: number;
+  /** km/h. Mayor entre speed y gpsSpeed; 0 si ambos son null (asumimos
+   * detenido cuando no reporta velocidad). */
+  speed: number;
+}
+
+/** Tope de puntos de la serie de velocidad — paridad con el histórico v2 (240
+ * puntos dan una curva suave en 800 px sin inflar el doc). Si el turno tiene
+ * más eventos que esto, se hace un downsample uniforme por índice. */
+export const MAX_PUNTOS_SERIE = 240;
 
 export interface RegistroJornada {
   inicioTurnoMs: number | null;
@@ -215,6 +245,10 @@ export interface RegistroJornada {
   segmentos: SegmentoJornada[];
   pausas: PausaJornada[];
   bloques: BloqueJornada[];
+  /** Serie de velocidad downsampled (≤ MAX_PUNTOS_SERIE puntos) del rango del
+   * turno. Pensada para el gráfico velocidad/tiempo de la UI. Vacía si el
+   * turno no tiene eventos con velocidad. */
+  serieVelocidad: PuntoVelocidad[];
   /** cantidad de bloques que superaron 4 h de manejo continuo. */
   bloquesExcedidos: number;
   /** duración (seg) del descanso INMEDIATAMENTE ANTERIOR a este turno, si se
@@ -458,8 +492,16 @@ function registroDeSegmentos(
   const impliedKmh = manejoNetoSeg > 0 ?
     recorridoKm / (manejoNetoSeg / 3600) : 0;
 
+  // Métricas por segmento de manejo (km/vel) y serie velocidad — datos extra
+  // para la UI v3 (gráfico + listas), calculados con el mismo input que la
+  // reconstrucción (no agrega lecturas). Se calculan SOBRE el turno, no sobre
+  // toda la línea de tiempo, para no contar km/vel de descansos entre jornadas.
+  enriquecerSegmentosDeManejo(segTurno, evs);
+  const serieVelocidad = serieVelocidadDownsampled(
+    evs, inicioTurnoMs, finTurnoMs
+  );
   const pausas = construirPausas(segTurno);
-  const bloques = partirEnBloques(segTurno);
+  const bloques = enriquecerBloques(partirEnBloques(segTurno), evs);
   const bloquesExcedidos = bloques.filter((b) => b.excedido).length;
   const jornadaExcedida = manejoNetoSeg >= JORNADA_MANEJO_LIMITE_SEGUNDOS;
   const manejoNoctSeg = manejoNocturnoSeg(segTurno);
@@ -480,7 +522,7 @@ function registroDeSegmentos(
 
   return {
     inicioTurnoMs, finTurnoMs, manejoNetoSeg, pausaTotalSeg, recorridoKm,
-    segmentos: segTurno, pausas, bloques, bloquesExcedidos,
+    segmentos: segTurno, pausas, bloques, serieVelocidad, bloquesExcedidos,
     descansoPrevioSeg, descansoInsuficiente, jornadaExcedida,
     manejoNocturnoSeg: manejoNoctSeg, vedaExcedida, driftFiltrado,
     confianza, explicacion,
@@ -600,6 +642,114 @@ function distanciaRecorridaKm(
   return km;
 }
 
+/** Velocidad efectiva del evento en km/h, o `null` si no la informa (speed y
+ * gpsSpeed ambos null). Distinta de `velEf`: ésa devuelve -1 para los nulls,
+ * útil para comparar contra umbrales; ésta separa "informó 0" de "no informó". */
+function velEfNull(ev: EventoJornadaLite): number | null {
+  const s = ev.speed;
+  const g = ev.gpsSpeed;
+  if (s == null && g == null) return null;
+  return Math.max(s ?? -Infinity, g ?? -Infinity);
+}
+
+/** Stats de velocidad (max + promedio simple) de los eventos en `[inicioMs,
+ * finMs]` que informan velocidad. Devuelve {0, 0} si no hay ninguno informado.
+ * El promedio es de TODOS los puntos con velocidad informada (incluso speed=0,
+ * que son los detenidos cortos internos al bloque — representativos del ritmo
+ * del tramo). */
+function velStatsEnRango(
+  evs: EventoJornadaLite[], inicioMs: number, finMs: number
+): { velMax: number; velProm: number } {
+  let max = 0;
+  let suma = 0;
+  let n = 0;
+  for (const ev of evs) {
+    if (ev.ms < inicioMs || ev.ms > finMs) continue;
+    const v = velEfNull(ev);
+    if (v == null) continue;
+    if (v > max) max = v;
+    suma += v;
+    n++;
+  }
+  return {
+    velMax: Math.round(max),
+    velProm: n > 0 ? Math.round(suma / n) : 0,
+  };
+}
+
+/** Km recorridos sumando haversine entre eventos consecutivos con posición en
+ * `[inicioMs, finMs]`. Versión "scoped" de `distanciaRecorridaKm` para usar en
+ * segmentos y bloques. Asume `evs` ordenado por `ms`. */
+function kmEnRango(
+  evs: EventoJornadaLite[], inicioMs: number, finMs: number
+): number {
+  let prev: EventoJornadaLite | null = null;
+  let km = 0;
+  for (const ev of evs) {
+    if (ev.ms < inicioMs || ev.ms > finMs) continue;
+    if (ev.lat == null || ev.lng == null) continue;
+    if (prev) {
+      km += distanciaMetros(prev.lat!, prev.lng!, ev.lat, ev.lng) / 1000;
+    }
+    prev = ev;
+  }
+  return km;
+}
+
+/** Serie velocidad (tsMs, speed) downsampleada a ≤ MAX_PUNTOS_SERIE puntos del
+ * rango `[inicioMs, finMs]`. Si hay menos eventos que el cap, los devuelve
+ * todos; si hay más, hace un muestreo uniforme por índice (idx = i * N / cap).
+ * Eventos sin velocidad informada cuentan como speed=0 (asumimos detenido). */
+function serieVelocidadDownsampled(
+  evs: EventoJornadaLite[], inicioMs: number, finMs: number,
+  maxPuntos: number = MAX_PUNTOS_SERIE
+): PuntoVelocidad[] {
+  const enRango = evs.filter((e) => e.ms >= inicioMs && e.ms <= finMs);
+  if (enRango.length === 0) return [];
+  const toPunto = (ev: EventoJornadaLite): PuntoVelocidad => ({
+    tsMs: ev.ms,
+    speed: Math.round(velEfNull(ev) ?? 0),
+  });
+  if (enRango.length <= maxPuntos) return enRango.map(toPunto);
+  const out: PuntoVelocidad[] = [];
+  for (let i = 0; i < maxPuntos; i++) {
+    const idx = Math.floor((i * enRango.length) / maxPuntos);
+    out.push(toPunto(enRango[idx]));
+  }
+  return out;
+}
+
+/** Enriquece IN-PLACE cada segmento de tipo manejo con kmAprox/velMax/velProm
+ * computados sobre los eventos del rango. Se llama una vez que `segTurno` ya
+ * está acotado al turno. Las pausas no se tocan. */
+function enriquecerSegmentosDeManejo(
+  segs: SegmentoJornada[], evs: EventoJornadaLite[]
+): void {
+  for (const s of segs) {
+    if (s.tipo !== "manejo") continue;
+    const stats = velStatsEnRango(evs, s.inicioMs, s.finMs);
+    s.kmAprox = Math.round(kmEnRango(evs, s.inicioMs, s.finMs));
+    s.velMax = stats.velMax;
+    s.velProm = stats.velProm;
+  }
+}
+
+/** Bloques con km/vel — toma los bloques sin métricas (vienen de
+ * `partirEnBloques`) y los devuelve con los 3 campos calculados del rango. */
+function enriquecerBloques(
+  bloques: BloqueJornada[], evs: EventoJornadaLite[]
+): BloqueJornada[] {
+  return bloques.map((b) => {
+    const stats = velStatsEnRango(evs, b.inicioMs, b.finMs);
+    return {
+      ...b,
+      kmAprox: Math.round(kmEnRango(evs, b.inicioMs, b.finMs)),
+      velMax: stats.velMax,
+      velProm: stats.velProm,
+    };
+  });
+}
+
 /** 00:00 ART (en epoch ms) del día ART al que pertenece `ms`. ART = UTC-3 fijo
  * (sin DST), así que 00:00 ART = 03:00 UTC del mismo día calendario ART. */
 function medianocheArtMs(ms: number): number {
@@ -662,6 +812,11 @@ function partirEnBloques(segs: SegmentoJornada[]): BloqueJornada[] {
         indice: bloques.length + 1,
         manejoNetoSeg: manejoCont,
         inicioMs, finMs, excedido,
+        // Placeholders: enriquecerBloques() los pisa con el rango real una vez
+        // que el bloque está cerrado. Mantenemos los campos requeridos en
+        // BloqueJornada (estricto) — si alguien construye un bloque sin pasar
+        // por enriquecerBloques, los va a dejar en 0, no en undefined.
+        kmAprox: 0, velMax: 0, velProm: 0,
       });
     }
     manejoCont = 0;
@@ -817,6 +972,7 @@ function jornadaVacia(): RegistroJornada {
     segmentos: [],
     pausas: [],
     bloques: [],
+    serieVelocidad: [],
     bloquesExcedidos: 0,
     descansoPrevioSeg: null,
     descansoInsuficiente: false,
