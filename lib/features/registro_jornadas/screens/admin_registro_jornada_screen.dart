@@ -287,6 +287,70 @@ class _AdminRegistroJornadaScreenState
     }
   }
 
+  /// Abre el picker de rango pre-cargado con el rango actual y, al confirmar,
+  /// navega al detalle combinando solo los turnos que iniciaron dentro del
+  /// sub-rango. Solución al "gráfico muy denso" cuando el rango pill trae
+  /// muchos turnos: el operador acota acá sin tener que volver y cambiar el
+  /// pill global. Caps del picker = primer/último inicio de turno de la lista
+  /// (no tiene sentido permitir elegir fechas fuera de los datos cargados).
+  Future<void> _abrirCombinado(
+    BuildContext ctx,
+    List<RegistroJornada> jornadas,
+  ) async {
+    // Capturar referencias del context ANTES del await — el linter requiere
+    // que no se use el BuildContext del StreamBuilder pasado a `ctx` después
+    // de un gap async (el widget puede haberse desmontado).
+    final messenger = ScaffoldMessenger.of(ctx);
+    final navigator = Navigator.of(ctx);
+    // Ordenar para sacar caps del picker.
+    final ordenadas = [...jornadas]
+      ..sort((a, b) => a.inicioTurno.compareTo(b.inicioTurno));
+    final masViejo = _soloFecha(ordenadas.first.inicioTurno);
+    final masNuevo = _soloFecha(ordenadas.last.inicioTurno);
+    // Precarga con el rango del pill, recortado a los caps de datos para que
+    // el picker no rechace el initial (si el pill va más atrás que el primer
+    // turno disponible, Flutter tira assert).
+    final initStart = _desde.isBefore(masViejo) ? masViejo : _desde;
+    final initEnd = _hasta.isAfter(masNuevo) ? masNuevo : _hasta;
+    final r = await showDateRangePicker(
+      context: ctx,
+      initialDateRange: DateTimeRange(start: initStart, end: initEnd),
+      firstDate: masViejo,
+      lastDate: masNuevo,
+      locale: const Locale('es', 'AR'),
+      helpText: 'Acotar combinado',
+      saveText: 'Combinar',
+    );
+    if (r == null || !mounted) return;
+    final subDesde = DateTime(r.start.year, r.start.month, r.start.day);
+    final subHasta =
+        DateTime(r.end.year, r.end.month, r.end.day, 23, 59, 59);
+    final filtradas = jornadas.where((j) {
+      final d = j.inicioTurno;
+      return !d.isBefore(subDesde) && !d.isAfter(subHasta);
+    }).toList();
+
+    if (filtradas.isEmpty) {
+      messenger.showSnackBar(const SnackBar(
+        content: Text('Sin turnos en el sub-rango elegido.'),
+      ));
+      return;
+    }
+    final jornada = filtradas.length == 1
+        ? filtradas.first
+        : _combinarRegistros(filtradas);
+    await navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => RegistroJornadaDetalleScreen(
+          jornada: jornada,
+          choferNombre: _choferNombre,
+        ),
+      ),
+    );
+  }
+
+  DateTime _soloFecha(DateTime d) => DateTime(d.year, d.month, d.day);
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
@@ -385,23 +449,18 @@ class _AdminRegistroJornadaScreenState
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Botón "Ver combinado" si hay >1 turno — abre el detalle con
-            // un RegistroJornada fusionado (gráfico continuo, sumas de
-            // km/manejo, paradas y tramos ordenados cronológicamente).
+            // Botón "Ver combinado" si hay >1 turno — abre primero un
+            // date-range picker para acotar el sub-rango del combinado
+            // (con muchos turnos el gráfico queda denso). Default precargado
+            // con el rango actual del pill; si quedan 0 turnos en el sub-rango
+            // muestra snackbar, si queda 1 abre su detalle individual.
             if (jornadas.length > 1)
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                     AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
                 child: _BotonVerCombinado(
                   cantidad: jornadas.length,
-                  onTap: () => Navigator.of(ctx).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => RegistroJornadaDetalleScreen(
-                        jornada: _combinarRegistros(jornadas),
-                        choferNombre: _choferNombre,
-                      ),
-                    ),
-                  ),
+                  onTap: () => _abrirCombinado(ctx, jornadas),
                 ),
               ),
             Expanded(
