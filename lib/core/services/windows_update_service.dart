@@ -160,28 +160,34 @@ class WindowsUpdateService {
       final helperFile = File('${tmpDir.path}\\update_helper.ps1');
       await helperFile.writeAsString(_helperPs1Script);
 
-      // 3. Lanzar el helper OCULTO + detached. Args posicionales:
-      //    <zip> <installDir> <exeName> <pidApp> <nuevaVersion>
+      // 3. Lanzar el helper de forma que SOBREVIVA al cierre de la app. Lanzar
+      //    PowerShell directo con Process.start(detached) NO alcanzaba: al hacer
+      //    exit(0), el hijo moría antes de terminar de arrancar y el helper
+      //    NUNCA corría (bug 2026-06-07: descargaba pero no reemplazaba/relanzaba).
+      //    Solución: un .bat que usa `start` → crea el PowerShell FUERA del árbol
+      //    de procesos de la app (desacople real). Paths entre comillas (toleran
+      //    espacios, p.ej. el user "Colo Logistica"). Args posicionales del
+      //    helper: <zip> <installDir> <exeName> <pidApp> <nuevaVersion>.
+      String q(String s) => '"$s"';
+      final batFile = File('${tmpDir.path}\\update_run.bat');
+      await batFile.writeAsString(
+        '@echo off\r\n'
+        'start "" /min powershell.exe -NoProfile -ExecutionPolicy Bypass '
+        '-WindowStyle Hidden -File ${q(helperFile.path)} '
+        '${q(zipFile.path)} ${q(installDir)} ${q(_exeName)} $pid '
+        '${q(info.version)}\r\n',
+      );
       await Process.start(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-ExecutionPolicy', 'Bypass',
-          '-WindowStyle', 'Hidden',
-          '-File', helperFile.path,
-          zipFile.path,
-          installDir,
-          _exeName,
-          '$pid',
-          info.version,
-        ],
+        'cmd.exe',
+        ['/c', batFile.path],
         mode: ProcessStartMode.detached,
       );
 
-      // 4. Notificar UI + cerrar la app después de 1 s (el helper espera el
-      //    cierre para poder reemplazar los archivos bloqueados).
+      // 4. Notificar UI + cerrar la app. Damos 2 s para que el `start` lance el
+      //    PowerShell antes del exit; el helper igual espera a que el PID muera
+      //    para poder reemplazar los archivos bloqueados.
       onListoParaReiniciar?.call();
-      await Future<void>.delayed(const Duration(seconds: 1));
+      await Future<void>.delayed(const Duration(seconds: 2));
       exit(0);
     } catch (e) {
       debugPrint('[WinUpdate] error descargando: $e');
