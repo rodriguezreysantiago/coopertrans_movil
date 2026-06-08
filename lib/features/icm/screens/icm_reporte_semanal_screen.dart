@@ -345,20 +345,29 @@ class _InfraccionesFlota extends StatelessWidget {
 }
 
 /// Grilla de N celdas de stat en bento (cada una `Expanded` → ancho acotado).
+///
+/// Fix 2026-06-08: el `crossAxisAlignment: stretch` requiere altura finita en
+/// el padre. Dentro del SingleChildScrollView del reporte mensual eso explota
+/// porque el SCSV pasa constraints verticales infinitas → "RenderBox was not
+/// laid out" en loop, freezea la pantalla y spamea Sentry. Envolver en
+/// `IntrinsicHeight` le da a la Row el alto del hijo más alto antes de que el
+/// stretch lo distribuya — comportamiento visual idéntico, sin assert.
 class _StatGrid extends StatelessWidget {
   final List<_StatCell> cells;
   const _StatGrid({required this.cells});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < cells.length; i++) ...[
-          if (i > 0) const SizedBox(width: AppSpacing.sm),
-          Expanded(child: cells[i]),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < cells.length; i++) ...[
+            if (i > 0) const SizedBox(width: AppSpacing.sm),
+            Expanded(child: cells[i]),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
