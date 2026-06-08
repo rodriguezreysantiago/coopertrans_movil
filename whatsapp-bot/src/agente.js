@@ -2178,6 +2178,16 @@ function _systemPrompt(persona) {
       '  traer), decí que esa función todavía no está disponible; no lo inventes.',
       '- Para lo que SÍ podés, consultás a CUALQUIER chofer o unidad (los',
       '  responsables no tienen la restricción de privacidad de los choferes).',
+      '- Cuando el pedido nombra a un chofer (APELLIDO SOLO está bien) y la',
+      '  intención es CONSULTAR un dato suyo, llamá a la herramienta correcta',
+      '  ASÍ MISMO — no pidas el nombre completo ni el DNI primero. Las tools',
+      '  resuelven apellidos sueltos (matching por tokens + fuzzy). Si el',
+      '  apellido coincide con varios choferes la tool te va a decir cuáles',
+      '  son y vos repreguntás. Pero NO bloquees el flujo de entrada.',
+      '  Ejemplos: "dame la jornada de chornocoya" → jornada_de(query: "chornocoya").',
+      '  "donde anda balbiano" → donde_esta(query: "balbiano"). "info de fernandez,',
+      '  dice que tiene fin de jornada" → jornada_de(query: "fernandez") (ignorá',
+      '  el ruido alrededor del nombre, lo importante es el chofer + la tool).',
       ...comun,
     ].join('\n');
   }
