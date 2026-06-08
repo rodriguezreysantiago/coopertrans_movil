@@ -80,7 +80,44 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        
+
+        <!-- ════════════════════════════════════════════════════════════════
+             KIOSK / SINGLE-APP MODE para tablets dedicadas (ej. Gomería).
+             ────────────────────────────────────────────────────────────────
+             Activity-alias que vuelve a la app elegible como "Home"
+             (CATEGORY_HOME). Deshabilitado por DEFAULT (android:enabled
+             ="false") → en una instalación normal NO aparece en el chooser
+             de launchers, no cambia nada para los choferes/admins comunes.
+
+             Para activarlo SOLO en una tablet específica (con USB debugging
+             habilitado), corremos un comando ADB:
+
+               adb shell pm enable com.coopertrans.movil/com.coopertrans.movil.KioskHomeAlias
+
+             Después en la tablet: Settings → Apps → Default apps → Home →
+             Coopertrans Movil. Reiniciás → arranca derecho en la app, y
+             el botón Home siempre vuelve a la app. Combinado con la
+             "Pantalla fija" del sistema (Settings → Seguridad → ON + PIN
+             para desfijar) el operador queda encerrado dentro de la app.
+
+             Para revertir (volver la tablet al uso normal):
+               adb shell pm disable-user com.coopertrans.movil/com.coopertrans.movil.KioskHomeAlias
+
+             Pedido Santiago 2026-06-08 (tablet de Gomería).
+             ════════════════════════════════════════════════════════════════ -->
+        <activity-alias
+            android:name="com.coopertrans.movil.KioskHomeAlias"
+            android:targetActivity=".MainActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:label="Coopertrans Movil">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.HOME"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity-alias>
+
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
