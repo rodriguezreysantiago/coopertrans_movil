@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -36,6 +38,7 @@ class _AdminRegistroJornadaScreenState
   String? _choferNombre;
   List<_ChoferOpt> _choferes = const [];
   bool _cargandoChoferes = true;
+  bool _procesandoHoy = false;
 
   @override
   void initState() {
@@ -178,6 +181,71 @@ class _AdminRegistroJornadaScreenState
     }
   }
 
+  /// Invoca la callable `procesarJornadaHoyChoferV3` por HTTPS directo (mismo
+  /// patrón que el botón "Cargar jornada de hoy" del v2 — sin el plugin
+  /// cloud_functions porque no tiene impl Windows). La callable reconstruye
+  /// el turno en curso del chofer (00:00 ART → ahora) y lo persiste a
+  /// REGISTRO_JORNADAS; el StreamBuilder de la lista se actualiza solo al
+  /// llegar el doc nuevo. Idempotente — re-correr en el día sobre-escribe.
+  Future<void> _procesarHoy() async {
+    if (_choferDni == null || _procesandoHoy) return;
+    setState(() => _procesandoHoy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw StateError('Sin sesión activa.');
+      }
+      final idToken = await user.getIdToken();
+      if (idToken == null || idToken.isEmpty) {
+        throw StateError('No se pudo obtener el token de sesión.');
+      }
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 12),
+        receiveTimeout: const Duration(seconds: 120),
+      ));
+      const url =
+          'https://us-central1-coopertrans-movil.cloudfunctions.net/'
+          'procesarJornadaHoyChoferV3';
+      final response = await dio.post<Map<String, dynamic>>(
+        url,
+        data: {
+          'data': {'choferDni': _choferDni},
+        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $idToken',
+          },
+          validateStatus: (_) => true,
+          responseType: ResponseType.json,
+        ),
+      );
+      if (response.statusCode == null || response.statusCode! >= 400) {
+        final err = response.data?['error'] as Map<String, dynamic>?;
+        final message = (err?['message'] ?? '').toString();
+        throw Exception(
+            message.isNotEmpty ? message : 'HTTP ${response.statusCode}');
+      }
+      final result = response.data?['result'] as Map<String, dynamic>?;
+      final persistidos = (result?['persistidos'] as num?)?.toInt() ?? 0;
+      final eventos = (result?['eventos'] as num?)?.toInt() ?? 0;
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        content: Text(persistidos > 0
+            ? 'Jornada de hoy actualizada ($eventos eventos).'
+            : 'Sin actividad del chofer hoy todavía.'),
+      ));
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(
+        content: Text('No se pudo procesar la jornada: $e'),
+      ));
+    } finally {
+      if (mounted) setState(() => _procesandoHoy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
@@ -199,6 +267,20 @@ class _AdminRegistroJornadaScreenState
               onTap: _cargandoChoferes ? null : _elegirChofer,
             ),
           ),
+          // CTA "Cargar jornada de hoy" — el cron diario procesa AYER a las
+          // 06:45 ART, así que HOY no existe en REGISTRO_JORNADAS hasta
+          // mañana. Este botón dispara la callable
+          // `procesarJornadaHoyChoferV3` que reconstruye el turno parcial
+          // (00:00 ART → ahora) y lo persiste. La lista lo levanta sola.
+          if (_choferDni != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
+              child: _BotonCargarHoy(
+                cargando: _procesandoHoy,
+                onTap: _procesandoHoy ? null : _procesarHoy,
+              ),
+            ),
           Expanded(child: _contenido()),
         ],
       ),
@@ -303,6 +385,67 @@ class _SelectorPill extends StatelessWidget {
                   style: AppType.body.copyWith(
                     color: muted ? c.textMuted : c.text,
                     fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pill CTA "Cargar jornada de hoy" — mismo gesto visual que las pills de
+/// selectores pero pintado en brand para señalar acción. Estado de carga con
+/// spinner para que el admin sepa que la callable está corriendo (hasta 120 s
+/// timeout en el server).
+class _BotonCargarHoy extends StatelessWidget {
+  final bool cargando;
+  final VoidCallback? onTap;
+  const _BotonCargarHoy({required this.cargando, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final enabled = onTap != null;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: enabled ? c.brand.withValues(alpha: 0.12) : c.surface2,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(
+                color: enabled ? c.brand.withValues(alpha: 0.5) : c.border),
+          ),
+          child: Row(
+            children: [
+              cargando
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(c.brand),
+                      ),
+                    )
+                  : Icon(Icons.download_for_offline_outlined,
+                      size: 16, color: enabled ? c.brand : c.textMuted),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  cargando
+                      ? 'Procesando…'
+                      : 'Cargar jornada de hoy',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.body.copyWith(
+                    color: enabled ? c.brand : c.textMuted,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ),

@@ -27,6 +27,7 @@
 
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall } from "firebase-functions/v2/https";
+import { HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
@@ -288,6 +289,58 @@ export async function procesarVentana(
     persistidos };
 }
 
+/**
+ * Variante de `procesarVentana` para UN solo chofer (lecturas filtradas en
+ * memoria, sin pedir índice compuesto driver_dni+report_date — mismo
+ * tradeoff que `procesarDiaUnChofer` del v2). Usada por el callable
+ * `procesarJornadaHoyChoferV3` para reconstruir el turno EN VIVO.
+ *
+ * Persiste TODOS los turnos del chofer que iniciaron dentro de
+ * `[inicioMin, inicioMax)`. Para el caso "HOY" eso es uno solo (el turno
+ * en curso), pero la firma es la misma del cron por consistencia.
+ */
+export async function procesarVentanaUnChofer(
+  dni: string, desde: Date, hasta: Date,
+  inicioMin?: number, inicioMax?: number
+): Promise<ResultadoProceso> {
+  const snap = await db.collection("SITRACK_EVENTOS")
+    .where("report_date", ">=", Timestamp.fromDate(desde))
+    .where("report_date", "<", Timestamp.fromDate(hasta))
+    .get();
+  // Filtro en memoria: evita el índice compuesto driver_dni+report_date.
+  // Para uso esporádico desde la UI el costo extra (cargar todos los eventos
+  // de la ventana y descartar los que no son del chofer) es aceptable —
+  // ~3-5 K docs por día.
+  const docs = snap.docs
+    .map((d) => d.data())
+    .filter((d) => ((d.driver_dni ?? "").toString().trim()) === dni);
+  let entradas = agruparYReconstruir(docs);
+  if (inicioMin != null || inicioMax != null) {
+    const lo = inicioMin ?? -Infinity;
+    const hi = inicioMax ?? Infinity;
+    entradas = entradas.filter((e) => {
+      const i = e.registro.inicioTurnoMs;
+      return i != null && i >= lo && i < hi;
+    });
+  }
+  let persistidos = 0;
+  for (const { dni: d, patente, registro } of entradas) {
+    const docId = docIdRegistro(d, registro.inicioTurnoMs as number);
+    try {
+      await db.collection(COLECCION_REGISTRO).doc(docId)
+        .set(registroToFirestore(d, patente, registro));
+      persistidos++;
+    } catch (e) {
+      logger.warn("[jornadas_v3_batch.unChofer] persistir falló", {
+        docId, error: (e as Error).message,
+      });
+    }
+  }
+  const choferes = new Set(entradas.map((e) => e.dni)).size;
+  return { eventos: docs.length, choferes, registros: entradas.length,
+    persistidos };
+}
+
 async function batchActivo(): Promise<boolean> {
   try {
     const s = await db.collection("META").doc(FLAG_DOC).get();
@@ -393,6 +446,72 @@ export const backfillRegistrosV3 = onCall(
     return {
       ok: true, dias_procesados: dias, total_eventos: totEv,
       total_registros: totReg, total_persistidos: totPers, detalle,
+    };
+  },
+);
+
+// ─── Procesar HOY de un chofer (callable, ADMIN/SUPERVISOR/SEG_HIGIENE) ──────
+
+/**
+ * Reconstruye y persiste el turno EN CURSO de un chofer puntual (00:00 ART
+ * hasta ahora). Pensada para uso interactivo desde la pantalla "Jornada" del
+ * hub ICM cuando el admin quiere ver el día de hoy sin esperar al cron de
+ * mañana 06:45 ART. Equivalente del `procesarJornadaHoyChofer` del v2 pero
+ * persistiendo a `REGISTRO_JORNADAS` (la fuente oficial v3).
+ *
+ * Idempotente: docId determinístico → re-correrlo en el día sobre-escribe
+ * el mismo doc con la versión más fresca. Region us-central1 para uniformar
+ * con la callable v2 (la app llama por HTTPS directo, no por plugin).
+ */
+export const procesarJornadaHoyChoferV3 = onCall(
+  {
+    timeoutSeconds: 120,
+    memory: "512MiB",
+    region: "us-central1",
+  },
+  async (req) => {
+    const rol = (req.auth?.token?.rol as string | undefined) || "";
+    if (rol !== "ADMIN" && rol !== "SUPERVISOR" && rol !== "SEG_HIGIENE") {
+      throw new HttpsError(
+        "permission-denied",
+        "Solo ADMIN, SUPERVISOR o SEG_HIGIENE pueden procesar jornadas en vivo."
+      );
+    }
+    const dni = (req.data?.choferDni as string | undefined)?.trim();
+    if (!dni) {
+      throw new HttpsError("invalid-argument", "Falta choferDni.");
+    }
+
+    // HOY 00:00 ART = 03:00 UTC del mismo día calendario ART → ahora.
+    const ahoraArt = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    const hoyArt = new Date(Date.UTC(
+      ahoraArt.getUTCFullYear(),
+      ahoraArt.getUTCMonth(),
+      ahoraArt.getUTCDate(),
+      3, 0, 0, 0,
+    ));
+    const manana00 = new Date(hoyArt.getTime() + 24 * 60 * 60 * 1000);
+    const ahora = new Date();
+    const fechaLabel = fechaArt(hoyArt.getTime());
+
+    logger.info("[procesarJornadaHoyChoferV3] iniciando",
+      { dni, fechaLabel });
+    // Ventana: HOY 00:00 ART → ahora. Persistimos solo turnos que iniciaron
+    // HOY (inicioMin/inicioMax = hoy 00:00 / mañana 00:00). El cron diario
+    // (mañana 06:45) volverá a reescribir el mismo doc con la versión final
+    // cuando el turno ya esté cerrado — idempotente, mismo docId.
+    const res = await procesarVentanaUnChofer(
+      dni, hoyArt, ahora, hoyArt.getTime(), manana00.getTime(),
+    );
+    logger.info("[procesarJornadaHoyChoferV3] OK", { dni, ...res });
+
+    return {
+      ok: true,
+      chofer_dni: dni,
+      fecha: fechaLabel,
+      eventos: res.eventos,
+      registros: res.registros,
+      persistidos: res.persistidos,
     };
   },
 );
