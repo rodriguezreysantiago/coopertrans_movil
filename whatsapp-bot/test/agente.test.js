@@ -214,9 +214,12 @@ describe('agente — tools por rol y conversores', () => {
       g[0].functionDeclarations.some((d) => d.name === 'contacto_oficina'),
       'CHOFER tiene la tool común contacto_oficina'
     );
-    // Únicas tools de chofer con parámetros: contacto_oficina (area) y
-    // reportar_discrepancia (tema/detalle). El resto es self-service sin args.
-    const CON_PARAMS = new Set(['contacto_oficina', 'reportar_discrepancia']);
+    // Tools de chofer con parámetros: contacto_oficina (area), reportar_
+    // discrepancia (tema/detalle) y registrar_parada_reportada (hora_inicio/
+    // hora_fin/motivo). El resto es self-service sin args.
+    const CON_PARAMS = new Set([
+      'contacto_oficina', 'reportar_discrepancia', 'registrar_parada_reportada',
+    ]);
     for (const d of g[0].functionDeclarations) {
       if (CON_PARAMS.has(d.name)) {
         assert.ok(d.parameters && d.parameters.properties, `${d.name} lleva parameters`);
@@ -1137,6 +1140,64 @@ describe('agente — mejoras 2026-06-06 (fuzzy + jornada pasada + adelantos emit
       { rol: 'CHOFER', dni: '1', data: {} }, { tema: 'cualquiera', detalle: 'algo' }
     );
     assert.strictEqual(guardado.tema, 'otro');
+  });
+
+  test('registrar_parada_reportada: hora HH:MM + arranque + motivo → guarda con durSeg', async () => {
+    let guardado = null;
+    const db = { collection: () => ({ doc: () => ({ id: 'p1', set: async (d) => { guardado = d; } }) }) };
+    const r = await agente._ejecutarTool(
+      db, 'registrar_parada_reportada',
+      { rol: 'CHOFER', dni: '30111222', data: { NOMBRE: 'PEREZ JUAN' } },
+      { hora_inicio: '11:40', hora_fin: '12:05', motivo: 'almuerzo' }
+    );
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(guardado.chofer_dni, '30111222');
+    assert.strictEqual(guardado.inicio_label, '11:40');
+    assert.strictEqual(guardado.fin_label, '12:05');
+    assert.strictEqual(guardado.motivo, 'almuerzo');
+    assert.strictEqual(guardado.estado, 'pendiente_cruce');
+    // 25 min entre 11:40 y 12:05.
+    assert.strictEqual(guardado.dur_seg, 25 * 60);
+    assert.ok(/11:40/.test(r.mensaje) && /12:05/.test(r.mensaje));
+  });
+
+  test('registrar_parada_reportada: solo hora_inicio (parada en curso) → dur_seg null + mensaje "cuando arranques"', async () => {
+    let guardado = null;
+    const db = { collection: () => ({ doc: () => ({ id: 'p2', set: async (d) => { guardado = d; } }) }) };
+    const r = await agente._ejecutarTool(
+      db, 'registrar_parada_reportada',
+      { rol: 'CHOFER', dni: '1', data: { NOMBRE: 'GARCIA' } },
+      { hora_inicio: '9.05' } // punto en lugar de :, típico del chofer
+    );
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(guardado.inicio_label, '09:05');
+    assert.strictEqual(guardado.fin_label, null);
+    assert.strictEqual(guardado.dur_seg, null);
+    assert.ok(/cuando arranques/i.test(r.mensaje));
+  });
+
+  test('registrar_parada_reportada: hora_inicio inválida → error, NO escribe', async () => {
+    let llamado = false;
+    const db = { collection: () => ({ doc: () => ({ id: 'x', set: async () => { llamado = true; } }) }) };
+    const r = await agente._ejecutarTool(
+      db, 'registrar_parada_reportada',
+      { rol: 'CHOFER', dni: '1', data: {} }, { hora_inicio: 'pronto' }
+    );
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(llamado, false);
+  });
+
+  test('registrar_parada_reportada: formato HHMM sin separador → acepta y normaliza', async () => {
+    let guardado = null;
+    const db = { collection: () => ({ doc: () => ({ id: 'p3', set: async (d) => { guardado = d; } }) }) };
+    const r = await agente._ejecutarTool(
+      db, 'registrar_parada_reportada',
+      { rol: 'CHOFER', dni: '1', data: {} },
+      { hora_inicio: '1140', hora_fin: '1205' }
+    );
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(guardado.inicio_label, '11:40');
+    assert.strictEqual(guardado.fin_label, '12:05');
   });
 
   test('reportar_discrepancia: sin detalle → error, NO escribe', async () => {

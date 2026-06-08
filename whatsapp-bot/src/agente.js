@@ -308,6 +308,42 @@ const TOOLS_CHOFER = [
     params: {},
   },
   {
+    name: 'registrar_parada_reportada',
+    description:
+      'Registra que el CHOFER paró/arrancó en una hora puntual cuando lo ' +
+      'avisa por escrito (ej. "ya pare hora 11:40", "salí 14:40", "pause 15:50 ' +
+      'arranque 16:12", "voy a almorzar"). Anota la parada en PARADAS_REPORTADAS ' +
+      'y queda para cruzar contra el GPS más tarde — si la telemetría no la ve, ' +
+      'la oficina revisa y se evita el reclamo formal después. SIEMPRE usá esta ' +
+      'tool cuando el chofer mencione UNA HORA + el verbo paré/pause/salí/arranqué ' +
+      'aunque sea junto con otra cosa ("ya pare hora 11:40, voy a almorzar"). ' +
+      'No la confundas con reportar_discrepancia: esta es PROACTIVA (el chofer ' +
+      'AVISA en el momento); la otra es REACTIVA (el chofer reclama un dato ' +
+      'que ya está mal en el sistema). Después de anotarla, confirmale corto: ' +
+      '"Listo, anoté tu parada a las HH:MM". Si solo dio la hora de inicio, ' +
+      'cuando arranque podés pedirle que te avise.',
+    params: {
+      hora_inicio: {
+        type: 'string',
+        description:
+          'Hora en que paró, formato HH:MM o H:MM (24h). Aceptá "11:40", ' +
+          '"9.05", "1140". Si el chofer escribió "11.40" pasalo a "11:40".',
+      },
+      hora_fin: {
+        type: 'string',
+        description:
+          'Opcional. Hora en que arrancó de vuelta, mismo formato. Solo si el ' +
+          'chofer la dio en el mismo mensaje (ej. "pare 11:40 arranque 12:05").',
+      },
+      motivo: {
+        type: 'string',
+        description:
+          'Opcional. Motivo breve si el chofer lo dijo: "almorzar", "baño", ' +
+          '"carga", "espera", "descanso", etc. Una palabra/2-3 a lo sumo.',
+      },
+    },
+  },
+  {
     name: 'reportar_discrepancia',
     description:
       'Registra un RECLAMO del chofer cuando insiste en que un dato que le ' +
@@ -1982,6 +2018,116 @@ async function _toolServiceUnidad(db, args) {
   }
 }
 
+/**
+ * Parsea una hora suelta en formato HH:MM / H:MM / HH.MM / HHMM (24h).
+ * Devuelve { h, min, label } | null. Tolera punto como separador (típico de
+ * chofer: "11.40"), formato sin separador 4 dígitos ("1140") y minutos con
+ * un solo dígito ("9:5"). Limita 0–23 hs y 0–59 min.
+ */
+function _parsearHoraChofer(raw) {
+  if (raw == null) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  let m = s.match(/^(\d{1,2})[:\.](\d{1,2})$/);
+  if (!m) m = s.match(/^(\d{1,2})(\d{2})$/);
+  if (!m) return null;
+  const h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  if (!Number.isFinite(h) || !Number.isFinite(min)) return null;
+  if (h < 0 || h > 23 || min < 0 || min > 59) return null;
+  return {
+    h, min,
+    label: `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`,
+  };
+}
+
+/**
+ * Construye un epoch ms ART (UTC-3 fijo) para HOY a las HH:MM.
+ * `referenciaMs` = ahora (Date.now()); se usa para sacar el día ART vigente
+ * y para corregir si la hora reportada es DESPUÉS de "ahora" (lo que sería
+ * una pausa "futura") — caso típico es que el chofer escribió mal o que
+ * pasó medianoche; lo dejamos en HOY igual y que la oficina lo revise.
+ */
+function _epochArtParaHoraHoy(hora, referenciaMs = Date.now()) {
+  // Día ART vigente = referencia - 3h, formateado YYYY-MM-DD.
+  const refArt = new Date(referenciaMs - 3 * 60 * 60 * 1000);
+  const fecha = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date(referenciaMs));
+  // ART = UTC-3 fijo → "YYYY-MM-DDTHH:mm:00-03:00" parsea derecho.
+  const ms = Date.parse(`${fecha}T${hora.label}:00-03:00`);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * Tool registrar_parada_reportada — el chofer avisa una hora puntual de
+ * parada/arranque y queda en PARADAS_REPORTADAS para cruzar después con
+ * REGISTRO_JORNADAS (v3). Fase 1: solo persiste y confirma; el cruce
+ * automático con v3 + escalado al admin si v3 NO la ve queda para Fase 2.
+ */
+async function _toolRegistrarParadaReportada(db, persona, args) {
+  const inicio = _parsearHoraChofer(args && args.hora_inicio);
+  if (!inicio) {
+    return { ok: false, error: 'Falta la hora de la parada (formato HH:MM).' };
+  }
+  const fin = args && args.hora_fin ? _parsearHoraChofer(args.hora_fin) : null;
+  const motivo = args && args.motivo
+    ? String(args.motivo).slice(0, 120).trim() || null
+    : null;
+  const ahoraMs = Date.now();
+  const inicioMs = _epochArtParaHoraHoy(inicio, ahoraMs);
+  const finMs = fin ? _epochArtParaHoraHoy(fin, ahoraMs) : null;
+  // Si dio inicio y fin, durSeg directo. Si solo inicio, lo dejamos null
+  // (es una parada "en curso"); cuando avise el arranque se cierra.
+  const durSeg = (inicioMs != null && finMs != null && finMs > inicioMs)
+    ? Math.round((finMs - inicioMs) / 1000) : null;
+  try {
+    const ref = db.collection('PARADAS_REPORTADAS').doc();
+    await ref.set({
+      chofer_dni: persona.dni || null,
+      chofer_nombre: (persona.data && persona.data.NOMBRE) || persona.nombre || null,
+      // fecha ART del día del inicio — para indexar / cruzar con v3 que
+      // también guarda fecha YYYY-MM-DD ART.
+      fecha: new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Argentina/Buenos_Aires',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date(inicioMs ?? ahoraMs)),
+      inicio_ms: inicioMs,
+      inicio_label: inicio.label,
+      fin_ms: finMs,
+      fin_label: fin ? fin.label : null,
+      dur_seg: durSeg,
+      motivo,
+      fuente: 'agente_whatsapp',
+      // pendiente_cruce = todavía no se comparó contra REGISTRO_JORNADAS v3.
+      // confirmada_v3 = v3 vio la pausa (gran tranquilidad del chofer).
+      // no_vista_v3 = v3 no la ve → admin la revisa o se autoescalá.
+      estado: 'pendiente_cruce',
+      reportado_en: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    let mensaje;
+    if (fin) {
+      mensaje = `Anotada tu parada de ${inicio.label} a ${fin.label}` +
+        (motivo ? ` (${motivo})` : '') + '.';
+    } else {
+      mensaje = `Anotada tu parada a las ${inicio.label}` +
+        (motivo ? ` (${motivo})` : '') +
+        '. Cuando arranques avisame si querés que la cierre.';
+    }
+    return {
+      ok: true,
+      parada_id: ref.id,
+      mensaje,
+      nota: 'Confirmale al chofer corto y natural usando el mensaje sugerido. ' +
+        'NO le prometas que el sistema lo va a registrar automático — la ' +
+        'parada queda anotada y la oficina la cruza con el GPS.',
+    };
+  } catch (e) {
+    return { ok: false, error: `No pude anotar la parada: ${e.message}` };
+  }
+}
+
 async function _toolReportarDiscrepancia(db, persona, args) {
   const detalle = String((args && args.detalle) || '').trim();
   if (!detalle) {
@@ -2111,6 +2257,8 @@ async function _ejecutarTool(db, nombre, persona, args) {
       return await _toolListarEmpleadosPorRol(db, args);
     case 'contacto_oficina':
       return await _toolContactoOficina(db, args);
+    case 'registrar_parada_reportada':
+      return await _toolRegistrarParadaReportada(db, persona, args);
     case 'reportar_discrepancia':
       return await _toolReportarDiscrepancia(db, persona, args);
     default:
@@ -2209,6 +2357,16 @@ function _systemPrompt(persona) {
     '  desperfecto, un trámite, un problema de la app, etc.), NO mandes un',
     '  "comunicate con la oficina" genérico: usá contacto_oficina con el área',
     '  del tema y pasale el NOMBRE y el TELÉFONO de quien lo resuelve.',
+    '- Cuando el chofer AVISA una hora puntual de parada o arranque ("ya pare',
+    '  hora 11:40", "pause 15:50", "salí 14:40", "arranque 12:05", "voy al',
+    '  baño", "voy a almorzar"), llamá a registrar_parada_reportada CON LA',
+    '  HORA EN MANO — NO contestes solo "Listo" sin anotarla. Si el mensaje',
+    '  tiene una hora y arranca/cierra/pausa una parada, esa tool va. Después',
+    '  confirmale corto y natural con el mensaje sugerido que devuelve la',
+    '  tool. Esta tool es PROACTIVA — la usás CUANDO te avisa la parada,',
+    '  antes de que el sistema la pierda. NO la confundas con reportar_',
+    '  discrepancia (esa es REACTIVA — la usás solo si el chofer INSISTE en',
+    '  que un dato que le mostraste está mal).',
     '- Si el chofer INSISTE en que un dato que le mostraste está mal o que el',
     '  sistema no le registró algo (su jornada/horas, su unidad, un adelanto…),',
     '  NO le des la razón ni le cambies el número (ese dato lo define el sistema/',
