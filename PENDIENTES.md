@@ -17,6 +17,20 @@ release → **descarga directa, sin JS** (antes el JS caía al fallback que abr�
 `CoopertransMovil-Setup.exe`** en cada release (la subí manual al 1.2.2 actual para que ande ya).
 Verificado: 200 · 22.9 MB.
 
+### 🐛 BUG CRÍTICO ARREGLADO: el update in-app no relanzaba (`427fade`)
+El banner descargaba el `.zip` OK pero el helper PowerShell que reemplaza/relanza
+**nunca corría** → la app quedaba en la versión vieja y al reabrir salía el banner
+otra vez. Causa: `Process.start('powershell', detached)` + `exit(0)` mataba el
+helper antes de que terminara de arrancar (no sobrevivía al cierre de la app). El
+helper en sí estaba bien (probado a mano: extrae/reemplaza/relanza OK). **Fix:**
+lanzarlo desde un `.bat` que usa `start` → el PowerShell queda FUERA del árbol de
+procesos de la app (desacople real, sobrevive al exit). Validado end-to-end con el
+helper+zip reales (arranca, extrae, reemplaza el exe de 15 MB, reescribe VERSION.txt).
+- ⚠️ **Entra en la 1.2.3.** Las PCs con una versión instalada ANTERIOR (1.0.94–1.2.2)
+  corren el código viejo → su update in-app a la 1.2.3 va a fallar igual (una última vez).
+  Para llegar a la 1.2.3 hay que **re-instalar el setup 1 vez** (del link estable
+  `cooper-trans.com.ar/app`). De la 1.2.3 en adelante el update in-app anda solo.
+
 ### Cosmético: banner de update sin `+build` (`a230b5c`)
 `WinUpdateInfo.versionCorta` → el banner muestra `1.2.2` en vez de `1.2.2+10202`. Cosmético (el
 version completo se sigue usando para comparar). Se ve limpio **a partir de la 1.2.3** (lo dibuja la
