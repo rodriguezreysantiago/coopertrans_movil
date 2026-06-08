@@ -105,8 +105,21 @@ class WindowsUpdateService {
       }
       final remota = _Version.parse(tag);
       final info = await PackageInfo.fromPlatform();
-      final local = _Version.parse('${info.version}+${info.buildNumber}');
-      debugPrint('[WinUpdate] local=$local remota=$remota');
+      // En Windows, `PackageInfo.version` lee el `FileVersion` del .exe que ya
+      // viene con el `+build` adentro (string completa "1.2.5+10205") y
+      // `buildNumber` lo trae aparte ("10205"). Concatenar siempre daría
+      // "1.2.5+10205+10205" → el parser toma el primer `+`, deja build =
+      // tryParse("10205+10205") = 0 → `local = 1.2.5+0` < remota = 1.2.5+10205
+      // → banner sale aunque la app YA esté actualizada (loop infinito tras
+      // aplicar el update — reporte Santiago 2026-06-08). En Android/iOS
+      // `info.version` es solo el semver y `buildNumber` aparte, así que ahí
+      // sí hay que concatenar. Detectamos por presencia de `+`.
+      final versionRaw = info.version.contains('+')
+          ? info.version
+          : '${info.version}+${info.buildNumber}';
+      final local = _Version.parse(versionRaw);
+      debugPrint(
+          '[WinUpdate] local=$local remota=$remota (raw="$versionRaw")');
       if (remota > local) {
         actualizacionDisponible.value = WinUpdateInfo(
           version: _Version.limpiar(tag),
