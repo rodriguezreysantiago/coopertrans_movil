@@ -459,6 +459,17 @@ class _AccesoChecklist extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
+    // SIN `orderBy('FECHA', descending: true)` — la query solo necesita
+    // saber "existe al menos 1 doc de este DNI/patente/mes/año", no cuál
+    // es el más nuevo. El orderBy combinado con FieldValue.serverTimestamp
+    // en iOS dispara un bug conocido: el doc recién guardado tiene FECHA
+    // null en cache local hasta que el server confirma, y el orderBy lo
+    // EXCLUYE del snapshot local → el chofer guarda el checklist y la
+    // tarjeta sigue mostrando "pendiente" durante segundos/minutos
+    // (reporte chofer iPhone 2026-06-08). En Android el mismo doc se
+    // muestra al toque porque el SDK lo incluye igual. Quitar el orderBy
+    // resuelve el caso iOS sin perder funcionalidad — `limit(1)` con
+    // múltiples `where` ya basta para decidir completado vs pendiente.
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection(AppCollections.checklists)
@@ -466,7 +477,6 @@ class _AccesoChecklist extends StatelessWidget {
           .where('DOMINIO', isEqualTo: patente)
           .where('MES', isEqualTo: now.month)
           .where('ANIO', isEqualTo: now.year)
-          .orderBy('FECHA', descending: true)
           .limit(1)
           .snapshots(),
       builder: (context, snap) {
