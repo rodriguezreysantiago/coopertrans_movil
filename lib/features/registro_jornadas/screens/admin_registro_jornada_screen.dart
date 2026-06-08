@@ -266,7 +266,7 @@ class _AdminRegistroJornadaScreenState
       ..sort((a, b) => a.inicioTurno.compareTo(b.inicioTurno));
     final masViejo = _soloFecha(ordenadas.first.inicioTurno);
     final masNuevo = _soloFecha(ordenadas.last.inicioTurno);
-    // Precarga con TODO el rango cargado — sin pill global, el picker es la
+    // Precarga con todo el rango cargado — sin pill global, el picker es la
     // única vía para acotar. Por default abarca de la primera a la última
     // jornada listada; el usuario achica desde ahí.
     final r = await showDateRangePicker(
