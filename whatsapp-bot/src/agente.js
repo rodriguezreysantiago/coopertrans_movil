@@ -122,6 +122,37 @@ function _guardarHistorial(clave, turnos) {
   });
 }
 
+/** Normaliza un texto para detectar repetidos: lowercase, sin tildes (NFD +
+ *  drop combining marks), sin signos de puntuación, espacios colapsados.
+ *  Sensible al CONTENIDO del mensaje, no a cómo lo escribió el usuario. */
+function _normTextoUsuario(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // combining marks (acentos)
+    .replace(/[.,;:!?¡¿"'`´]/g, '')   // signos de puntuación
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** True si el `userText` actual coincide con el último turn de USER del
+ *  historial — usuario reenvió/repitió el mismo mensaje. */
+function _esRepetidoDeUltimo(userText, historial) {
+  if (!Array.isArray(historial) || historial.length === 0) return false;
+  // Buscamos el último turn de tipo 'user' del historial.
+  let ultimoUser = null;
+  for (let i = historial.length - 1; i >= 0; i--) {
+    const t = historial[i];
+    if (t && t.rol === 'user') { ultimoUser = t; break; }
+  }
+  if (!ultimoUser) return false;
+  const a = _normTextoUsuario(userText);
+  const b = _normTextoUsuario(ultimoUser.texto);
+  // Mensajes muy cortos ("hola", "ok") repetidos NO son spam — el usuario
+  // está cerrando charla, no insistiendo. Solo activamos para >= 8 chars.
+  return a.length >= 8 && a === b;
+}
+
 // Barrido periódico: purga el historial expirado y las claves de rate-limit
 // cuyas marcas ya caducaron, para que los Maps no crezcan sin límite en el
 // servicio 24/7 (sin esto, cada número distinto que escribe deja una entrada
@@ -306,6 +337,34 @@ const TOOLS_CHOFER = [
       'Viajes recientes del chofer que pregunta (estado planeado/en curso/' +
       'concluido, fecha y carga). Usala si preguntan por sus viajes.',
     params: {},
+  },
+  {
+    name: 'pedir_llamada_a_oficina',
+    description:
+      'Encolá un aviso a la oficina pidiendo que LLAMEN al chofer. Usala ' +
+      'cuando el chofer escribe pidiendo que lo contacten ("Guille llámame", ' +
+      '"que me llamen", "necesito que me llamen", "decile que me llame"). ' +
+      'Resolvé el ÁREA por el motivo si lo da: mantenimiento (taller/' +
+      'desperfecto), logistica (viajes/turnos/carga), documentacion (papeles), ' +
+      'seguridad (jornada/conducta), sistema (la app). Si no aclara, usá ' +
+      '"logistica" (Errazu) por default. Tras anotarlo, confirmale al chofer ' +
+      'con el nombre del responsable: "Listo, le avisé a {nombre} que te llame".',
+    params: {
+      area: {
+        type: 'string',
+        description:
+          'mantenimiento | logistica | documentacion | sistema | seguridad. ' +
+          'Default: logistica. Elegila según el motivo del chofer.',
+      },
+      motivo: {
+        type: 'string',
+        description:
+          'Opcional. Resumen breve del motivo en palabras del chofer (ej. "se ' +
+          'le rompió el catalizador", "no llega un cospel", "duda con un ' +
+          'adelanto"). Para que el responsable sepa de qué se trata antes de ' +
+          'llamarlo. 200 chars máx.',
+      },
+    },
   },
   {
     name: 'registrar_parada_reportada',
@@ -2158,6 +2217,88 @@ async function _toolReportarDiscrepancia(db, persona, args) {
   }
 }
 
+/**
+ * Tool `pedir_llamada_a_oficina` — encola un WhatsApp al responsable del área
+ * pidiéndole que llame al chofer. UX inmediato: el chofer ve "Listo, le avisé
+ * a Errazu que te llame" en lugar de "soy un asistente virtual".
+ *
+ * El responsable recibe el aviso por el mismo bot (lo encolamos en
+ * COLA_WHATSAPP exactamente como cualquier otro mensaje del bot — la cola lo
+ * envía dentro de la ventana de horario y con los delays anti-baneo).
+ */
+async function _toolPedirLlamadaAOficina(db, persona, args) {
+  const area = (() => {
+    const a = String((args && args.area) || '').trim().toLowerCase();
+    if (CONTACTOS_POR_AREA[a]) return a;
+    return 'logistica'; // default razonable: el supervisor logístico es Errazu
+  })();
+  const motivo = args && args.motivo
+    ? String(args.motivo).slice(0, 200).trim()
+    : null;
+  const dniResp = CONTACTOS_POR_AREA[area];
+  let respData;
+  try {
+    const d = await db.collection('EMPLEADOS').doc(dniResp).get();
+    respData = d.exists ? d.data() : null;
+  } catch (e) {
+    return { ok: false, error: `No pude leer el contacto: ${e.message}` };
+  }
+  if (!respData || !respData.TELEFONO) {
+    log.warn(
+      `[agente] pedir_llamada: area "${area}" → DNI ${dniResp} sin teléfono o ` +
+      'no existe en EMPLEADOS — no puedo encolar el aviso.'
+    );
+    return {
+      ok: false,
+      error: 'El responsable de esa área no tiene teléfono cargado en el ' +
+        'sistema. Decile al chofer que llame directo a la oficina.',
+    };
+  }
+  const nombreChofer = (persona.data && persona.data.NOMBRE) ||
+    persona.nombre || `DNI ${persona.dni}`;
+  const apodoResp = (respData.APODO || '').trim() ||
+    String(respData.NOMBRE || '').split(' ').slice(-1)[0] || 'Responsable';
+  const mensaje =
+    `Hola ${apodoResp}, te avisa el bot:\n\n` +
+    `*${nombreChofer}* (DNI ${persona.dni}) pidió que lo llamen.\n` +
+    (motivo ? `Motivo: _${motivo}_\n` : '') +
+    `\n_Bot-On — Coopertrans Móvil_`;
+  try {
+    await db.collection('COLA_WHATSAPP').add({
+      telefono: respData.TELEFONO,
+      mensaje,
+      estado: 'PENDIENTE',
+      encolado_en: admin.firestore.FieldValue.serverTimestamp(),
+      // TTL 6h: si el bot está caído más de 6h, el pedido ya perdió contexto
+      // y el chofer probablemente reescriba — preferible no spamear tarde.
+      expira_en: admin.firestore.Timestamp.fromMillis(
+        Date.now() + 6 * 60 * 60 * 1000
+      ),
+      enviado_en: null,
+      error: null,
+      intentos: 0,
+      origen: 'agente_pedir_llamada',
+      destinatario_coleccion: 'EMPLEADOS',
+      destinatario_id: dniResp,
+      campo_base: 'PEDIDO_LLAMADA',
+      admin_dni: 'BOT',
+      admin_nombre: 'Bot agente — pedido de llamada',
+    });
+  } catch (e) {
+    return { ok: false, error: `No pude encolar el aviso: ${e.message}` };
+  }
+  return {
+    ok: true,
+    responsable: respData.NOMBRE || dniResp,
+    area,
+    nota:
+      'Avisé al responsable. Confirmale corto al chofer: "Listo, le avisé ' +
+      `a ${respData.NOMBRE || apodoResp} que te llame` +
+      (motivo ? ' por ese tema' : '') +
+      '". NO le prometas un plazo; vos no sabés cuándo va a poder llamarlo.',
+  };
+}
+
 async function _toolContactoOficina(db, args) {
   const area = String((args && args.area) || '').trim().toLowerCase();
   const dni = CONTACTOS_POR_AREA[area];
@@ -2257,6 +2398,8 @@ async function _ejecutarTool(db, nombre, persona, args) {
       return await _toolListarEmpleadosPorRol(db, args);
     case 'contacto_oficina':
       return await _toolContactoOficina(db, args);
+    case 'pedir_llamada_a_oficina':
+      return await _toolPedirLlamadaAOficina(db, persona, args);
     case 'registrar_parada_reportada':
       return await _toolRegistrarParadaReportada(db, persona, args);
     case 'reportar_discrepancia':
@@ -2357,6 +2500,12 @@ function _systemPrompt(persona) {
     '  desperfecto, un trámite, un problema de la app, etc.), NO mandes un',
     '  "comunicate con la oficina" genérico: usá contacto_oficina con el área',
     '  del tema y pasale el NOMBRE y el TELÉFONO de quien lo resuelve.',
+    '- Si el chofer PIDE QUE LO LLAMEN ("llamame", "que me llame Errazu", ' +
+    '  "decile que me llame", "necesito que me llamen"), NO le respondas que ' +
+    '  "sos un asistente virtual" y ahí cortás — usá la tool ' +
+    '  pedir_llamada_a_oficina con el área correcta (por defecto logistica). ' +
+    '  La tool encola un aviso al responsable; después le confirmás al chofer ' +
+    '  "Listo, le avisé a {responsable} que te llame" sin prometerle plazo.',
     '- Cuando el chofer AVISA una hora puntual de parada o arranque ("ya pare',
     '  hora 11:40", "pause 15:50", "salí 14:40", "arranque 12:05", "voy al',
     '  baño", "voy a almorzar"), llamá a registrar_parada_reportada CON LA',
@@ -2783,9 +2932,20 @@ async function responder({ texto, persona, telefono, audio }, fs) {
   const preguntaLog = (audio ? '🎤 ' : '') + userText;
   const historial = _recuperarHistorial(rlKey);
 
+  // Detección de mensaje REPETIDO: si el último turn del user en el historial
+  // coincide con el actual (norm: lowercase + sin espacios extra + sin signos
+  // de puntuación al final), avisamos al modelo para que NO repita la misma
+  // respuesta. Caso real: usuario reenvía el mismo link 3 veces y recibe 3
+  // respuestas casi idénticas en lugar de variarlas o cortarlas (2026-06-08).
+  const userTextParaLLM = _esRepetidoDeUltimo(userText, historial)
+    ? userText + '\n\n[NOTA INTERNA: este mensaje ya lo respondiste hace un ' +
+      'momento — variá la respuesta o pedile algo más concreto al usuario, ' +
+      'no repitas el mismo texto. No menciones esta nota.]'
+    : userText;
+
   try {
     const r = await _conversarRobusto(
-      provider, db, system, historial, userText, persona);
+      provider, db, system, historial, userTextParaLLM, persona);
 
     if (!r.texto || !String(r.texto).trim()) {
       log.warn(`[agente] sin respuesta (${r.error || 'vacío'}) rol=${persona.rol}`);
@@ -2848,6 +3008,7 @@ module.exports = {
   _diasHasta,
   _recuperarHistorial,
   _guardarHistorial,
+  _esRepetidoDeUltimo,
   _getEmpleadosDocs,
   _resetRateLimit: () => _rlPorClave.clear(),
   _resetHistorial: () => _histPorClave.clear(),

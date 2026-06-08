@@ -215,10 +215,12 @@ describe('agente — tools por rol y conversores', () => {
       'CHOFER tiene la tool común contacto_oficina'
     );
     // Tools de chofer con parámetros: contacto_oficina (area), reportar_
-    // discrepancia (tema/detalle) y registrar_parada_reportada (hora_inicio/
-    // hora_fin/motivo). El resto es self-service sin args.
+    // discrepancia (tema/detalle), registrar_parada_reportada (hora_inicio/
+    // hora_fin/motivo), pedir_llamada_a_oficina (area/motivo). El resto es
+    // self-service sin args.
     const CON_PARAMS = new Set([
-      'contacto_oficina', 'reportar_discrepancia', 'registrar_parada_reportada',
+      'contacto_oficina', 'reportar_discrepancia',
+      'registrar_parada_reportada', 'pedir_llamada_a_oficina',
     ]);
     for (const d of g[0].functionDeclarations) {
       if (CON_PARAMS.has(d.name)) {
@@ -544,6 +546,64 @@ describe('agente — memoria conversacional', () => {
     const h = agente._recuperarHistorial('k');
     assert.strictEqual(h.length, 8);
     assert.strictEqual(h[0].texto, 't4'); // descartó los 4 más viejos
+  });
+});
+
+describe('agente._esRepetidoDeUltimo — detección de mensaje repetido', () => {
+  test('mismo texto que el último user turn → true', () => {
+    const h = [
+      { rol: 'user', texto: 'https://apps.apple.com/us/app/coopertrans-movil/id6769592572' },
+      { rol: 'assistant', texto: 'No puedo abrir links.' },
+    ];
+    assert.strictEqual(
+      agente._esRepetidoDeUltimo('https://apps.apple.com/us/app/coopertrans-movil/id6769592572', h),
+      true
+    );
+  });
+
+  test('diferente texto → false', () => {
+    const h = [
+      { rol: 'user', texto: 'cuantos turnos' },
+      { rol: 'assistant', texto: '4' },
+    ];
+    assert.strictEqual(agente._esRepetidoDeUltimo('y mañana?', h), false);
+  });
+
+  test('historial vacío → false (siempre)', () => {
+    assert.strictEqual(agente._esRepetidoDeUltimo('hola', []), false);
+  });
+
+  test('mensaje corto (< 8 chars) NO se considera spam aunque repita', () => {
+    const h = [
+      { rol: 'user', texto: 'ok' },
+      { rol: 'assistant', texto: 'dale' },
+    ];
+    assert.strictEqual(agente._esRepetidoDeUltimo('ok', h), false);
+  });
+
+  test('normaliza tildes y signos finales', () => {
+    const h = [
+      { rol: 'user', texto: '¿Cómo está la jornada?' },
+      { rol: 'assistant', texto: '...' },
+    ];
+    // Misma intención, distinto formato (sin signos, sin tildes, lower).
+    assert.strictEqual(
+      agente._esRepetidoDeUltimo('como esta la jornada', h),
+      true
+    );
+  });
+
+  test('ignora el último ASSISTANT y compara contra el último USER', () => {
+    const h = [
+      { rol: 'user', texto: 'mostrame la jornada de chornocoya' },
+      { rol: 'assistant', texto: 'Acá tenés...' },
+    ];
+    // user actual = igual al último user → repetido (aunque el último turn
+    // del historial sea del assistant).
+    assert.strictEqual(
+      agente._esRepetidoDeUltimo('mostrame la jornada de chornocoya', h),
+      true
+    );
   });
 });
 
@@ -1185,6 +1245,81 @@ describe('agente — mejoras 2026-06-06 (fuzzy + jornada pasada + adelantos emit
     );
     assert.strictEqual(r.ok, false);
     assert.strictEqual(llamado, false);
+  });
+
+  test('pedir_llamada_a_oficina: encola a logística por default + confirma al chofer', async () => {
+    const encolados = [];
+    const empleados = {
+      '25022800': { NOMBRE: 'ERRAZU ESTEBAN', TELEFONO: '5491111111', APODO: 'Errazu' },
+    };
+    const db = {
+      collection: (col) => {
+        if (col === 'EMPLEADOS') {
+          return { doc: (dni) => ({
+            async get() {
+              const d = empleados[dni];
+              return { exists: !!d, data: () => d };
+            },
+          }) };
+        }
+        if (col === 'COLA_WHATSAPP') {
+          return { add: async (d) => { encolados.push(d); return { id: 'q1' }; } };
+        }
+        throw new Error('coleccion desconocida ' + col);
+      },
+    };
+    const r = await agente._ejecutarTool(
+      db, 'pedir_llamada_a_oficina',
+      { rol: 'CHOFER', dni: '30111222', data: { NOMBRE: 'CHORNOCOYA GABRIEL' } },
+      { motivo: 'duda con un viaje' }
+    );
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.area, 'logistica');
+    assert.strictEqual(encolados.length, 1);
+    const enc = encolados[0];
+    assert.strictEqual(enc.telefono, '5491111111');
+    assert.strictEqual(enc.estado, 'PENDIENTE');
+    assert.strictEqual(enc.destinatario_id, '25022800');
+    assert.match(enc.mensaje, /CHORNOCOYA GABRIEL/);
+    assert.match(enc.mensaje, /duda con un viaje/);
+  });
+
+  test('pedir_llamada_a_oficina: área inválida → cae a "logistica"', async () => {
+    const encolados = [];
+    const empleados = {
+      '25022800': { NOMBRE: 'ERRAZU', TELEFONO: '5491', APODO: 'Errazu' },
+    };
+    const db = {
+      collection: (col) => col === 'EMPLEADOS'
+        ? { doc: (dni) => ({ async get() {
+            const d = empleados[dni]; return { exists: !!d, data: () => d };
+          } }) }
+        : { add: async (d) => { encolados.push(d); return { id: 'q' }; } },
+    };
+    const r = await agente._ejecutarTool(
+      db, 'pedir_llamada_a_oficina',
+      { rol: 'CHOFER', dni: '1', data: { NOMBRE: 'X' } },
+      { area: 'cualquiera' }
+    );
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.area, 'logistica');
+  });
+
+  test('pedir_llamada_a_oficina: responsable sin TELEFONO → error y NO encola', async () => {
+    let encolado = false;
+    const db = {
+      collection: (col) => col === 'EMPLEADOS'
+        ? { doc: () => ({ async get() {
+            return { exists: true, data: () => ({ NOMBRE: 'X', TELEFONO: '' }) };
+          } }) }
+        : { add: async () => { encolado = true; return { id: 'q' }; } },
+    };
+    const r = await agente._ejecutarTool(
+      db, 'pedir_llamada_a_oficina',
+      { rol: 'CHOFER', dni: '1', data: { NOMBRE: 'CHOFER' } }, { area: 'logistica' }
+    );
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(encolado, false);
   });
 
   test('registrar_parada_reportada: formato HHMM sin separador → acepta y normaliza', async () => {
