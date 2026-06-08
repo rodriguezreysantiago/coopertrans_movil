@@ -40,53 +40,12 @@ class _AdminRegistroJornadaScreenState
   bool _cargandoChoferes = true;
   bool _procesandoHoy = false;
 
-  // Rango de fechas para filtrar el listado. Default: últimos 7 días (incluye
-  // hoy). Si el usuario elige rango, se usa `streamPorRango`; sino la pantalla
-  // sigue mostrando las últimas 30 con `streamUltimasDelChofer`. El selector
-  // arranca con default precargado.
-  late DateTime _desde;
-  late DateTime _hasta;
-
   @override
   void initState() {
     super.initState();
     _choferDni = widget.choferDniInicial;
-    final hoy = DateTime.now();
-    _hasta = DateTime(hoy.year, hoy.month, hoy.day);
-    _desde = _hasta.subtract(const Duration(days: 6)); // últimos 7 días incl. hoy
     _cargarChoferes();
   }
-
-  Future<void> _elegirRango() async {
-    final hoy = DateTime.now();
-    final r = await showDateRangePicker(
-      context: context,
-      initialDateRange: DateTimeRange(start: _desde, end: _hasta),
-      firstDate: hoy.subtract(const Duration(days: 365)),
-      lastDate: hoy,
-      locale: const Locale('es', 'AR'),
-      helpText: 'Días de jornada',
-      saveText: 'Aplicar',
-    );
-    if (r == null) return;
-    setState(() {
-      _desde = DateTime(r.start.year, r.start.month, r.start.day);
-      _hasta = DateTime(r.end.year, r.end.month, r.end.day);
-    });
-  }
-
-  bool get _esUnSoloDia =>
-      _desde.year == _hasta.year &&
-      _desde.month == _hasta.month &&
-      _desde.day == _hasta.day;
-
-  String _fmtFechaCorta(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}/'
-      '${d.month.toString().padLeft(2, '0')}';
-
-  String get _labelRango => _esUnSoloDia
-      ? _fmtFechaCorta(_desde)
-      : '${_fmtFechaCorta(_desde)} → ${_fmtFechaCorta(_hasta)}';
 
   Future<void> _cargarChoferes() async {
     try {
@@ -307,14 +266,12 @@ class _AdminRegistroJornadaScreenState
       ..sort((a, b) => a.inicioTurno.compareTo(b.inicioTurno));
     final masViejo = _soloFecha(ordenadas.first.inicioTurno);
     final masNuevo = _soloFecha(ordenadas.last.inicioTurno);
-    // Precarga con el rango del pill, recortado a los caps de datos para que
-    // el picker no rechace el initial (si el pill va más atrás que el primer
-    // turno disponible, Flutter tira assert).
-    final initStart = _desde.isBefore(masViejo) ? masViejo : _desde;
-    final initEnd = _hasta.isAfter(masNuevo) ? masNuevo : _hasta;
+    // Precarga con TODO el rango cargado — sin pill global, el picker es la
+    // única vía para acotar. Por default abarca de la primera a la última
+    // jornada listada; el usuario achica desde ahí.
     final r = await showDateRangePicker(
       context: ctx,
-      initialDateRange: DateTimeRange(start: initStart, end: initEnd),
+      initialDateRange: DateTimeRange(start: masViejo, end: masNuevo),
       firstDate: masViejo,
       lastDate: masNuevo,
       locale: const Locale('es', 'AR'),
@@ -358,37 +315,21 @@ class _AdminRegistroJornadaScreenState
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Selectores chofer + rango (lado a lado, mismo patrón que la
-          // pantalla v2). El de chofer es obligatorio para listar; el de
-          // rango acota la ventana de turnos (default últimos 7 días).
+          // Selector de chofer — único pill del entry. El rango/fechas se
+          // pide ad-hoc al apretar "Ver combinado" (cada turno ya tiene su
+          // fecha en la card del listado), siguiendo el feedback de Santiago
+          // 2026-06-08: "las fechas se cambian dentro de cada chofer".
           Padding(
             padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _SelectorPill(
-                    icono: _cargandoChoferes
-                        ? Icons.hourglass_empty
-                        : Icons.person_outline,
-                    label: _choferNombre ??
-                        (_cargandoChoferes
-                            ? 'Cargando…'
-                            : 'Elegí un chofer'),
-                    muted: _choferNombre == null,
-                    onTap: _cargandoChoferes ? null : _elegirChofer,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  child: _SelectorPill(
-                    icono: Icons.date_range,
-                    label: _labelRango,
-                    mono: true,
-                    onTap: _elegirRango,
-                  ),
-                ),
-              ],
+            child: _SelectorPill(
+              icono: _cargandoChoferes
+                  ? Icons.hourglass_empty
+                  : Icons.person_outline,
+              label: _choferNombre ??
+                  (_cargandoChoferes ? 'Cargando choferes…' : 'Elegí un chofer'),
+              muted: _choferNombre == null,
+              onTap: _cargandoChoferes ? null : _elegirChofer,
             ),
           ),
           // CTA "Cargar jornada de hoy" — el cron diario procesa AYER a las
@@ -420,11 +361,8 @@ class _AdminRegistroJornadaScreenState
       );
     }
     return StreamBuilder<List<RegistroJornada>>(
-      stream: RegistroJornadaService.streamPorRango(
-        choferDni: _choferDni!,
-        desde: _desde,
-        hasta: _hasta,
-      ),
+      stream: RegistroJornadaService.streamUltimasDelChofer(
+          choferDni: _choferDni!),
       builder: (ctx, snap) {
         if (snap.hasError) {
           return AppErrorState(
@@ -439,11 +377,9 @@ class _AdminRegistroJornadaScreenState
         if (jornadas.isEmpty) {
           return AppEmptyState(
             icon: Icons.route_outlined,
-            title: 'Sin jornadas en el rango',
-            subtitle:
-                '${_choferNombre ?? _choferDni} no tiene registros entre '
-                '$_labelRango. Probá con un rango más amplio o "Cargar '
-                'jornada de hoy".',
+            title: 'Sin jornadas registradas',
+            subtitle: '${_choferNombre ?? _choferDni} no tiene registros v3 '
+                'todavía. Probá "Cargar jornada de hoy" si está manejando.',
           );
         }
         return Column(
@@ -599,20 +535,18 @@ class _ChoferOpt {
       {required this.dni, required this.nombre, required this.activo});
 }
 
-/// Pill tappable (chofer/rango). Mismo gesto que el selector de la pantalla
-/// Jornada del v2. `mono` pinta el label en mono (para fechas y números).
+/// Pill tappable (chofer). Mismo gesto que el selector de la pantalla
+/// Jornada del v2.
 class _SelectorPill extends StatelessWidget {
   final IconData icono;
   final String label;
   final bool muted;
-  final bool mono;
   final VoidCallback? onTap;
 
   const _SelectorPill({
     required this.icono,
     required this.label,
     this.muted = false,
-    this.mono = false,
     this.onTap,
   });
 
@@ -641,7 +575,7 @@ class _SelectorPill extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: (mono ? AppType.mono : AppType.body).copyWith(
+                  style: AppType.body.copyWith(
                     color: muted ? c.textMuted : c.text,
                     fontWeight: FontWeight.w500,
                   ),
