@@ -66,10 +66,10 @@ class _AdminShellState extends State<AdminShell> {
   /// Definición declarativa de las secciones del shell.
   /// Cada una incluye su pantalla, label, icon y un builder opcional
   /// para badges dinámicos.
-  // Orden del menú (Santiago 2026-06-01): Personal → Flota →
-  // Vencimientos → Mapa → Logística → Mantenimiento → ICM → Descargas
-  // → Auditoría → Reportes → Gomería → Cachatore → WhatsApp Bot.
-  // (Inicio va siempre primero — es el panel/dashboard.) El panel
+  // Orden del menú (Santiago 2026-06-08): Administración → Personal →
+  // Flota → Vencimientos → Mapa → Logística → Mantenimiento → ICM →
+  // Descargas → Auditoría → Reportes → Gomería → Cachatore → WhatsApp
+  // Bot. (Inicio va siempre primero — es el panel/dashboard.) El panel
   // central admin_panel_screen.dart ya NO lista módulos (refactor
   // 2026-05-24, quedó solo dashboard); el orden del menú vive
   // únicamente acá, en el shell.
@@ -81,6 +81,18 @@ class _AdminShellState extends State<AdminShell> {
       build: () => const AdminPanelScreen(),
       requiredCapability: Capability.verPanelAdmin,
     ),
+    // "Administración" — hub agrupador de submódulos de gestión interna
+    // (RRHH). Arranca con Vacaciones; se van sumando más a medida que se
+    // armen. Movido a segunda posición (debajo de Inicio) — pedido
+    // Santiago 2026-06-08.
+    _ShellSection(
+      label: 'Administración',
+      icon: Icons.admin_panel_settings_outlined,
+      iconActive: Icons.admin_panel_settings,
+      build: () => const AdministracionHubScreen(),
+      // Solo ADMIN + SUPERVISOR (no SEG_HIGIENE) — pedido Santiago 2026-06-05.
+      requiredCapability: Capability.verAdministracion,
+    ),
     // Vista Ejecutiva ELIMINADA del shell 2026-05-18 — sus secciones
     // (Panorama del mes, Tendencias, Personas) estan integradas en
     // INICIO arriba. Si el rol tiene capability verVistaEjecutiva,
@@ -91,19 +103,6 @@ class _AdminShellState extends State<AdminShell> {
       iconActive: Icons.badge,
       build: () => const AdminPersonalListaScreen(),
       requiredCapability: Capability.verListaPersonal,
-    ),
-    // "Administración" — hub agrupador de submódulos de gestión interna
-    // (RRHH). Arranca con Vacaciones; se van sumando más a medida que se
-    // armen. Capability `verPanelAdmin`: misma puerta de entrada que el
-    // resto del panel (ADMIN/SUPERVISOR/SEG_HIGIENE), si después se quiere
-    // restringir a solo ADMIN se crea una capability propia.
-    _ShellSection(
-      label: 'Administración',
-      icon: Icons.admin_panel_settings_outlined,
-      iconActive: Icons.admin_panel_settings,
-      build: () => const AdministracionHubScreen(),
-      // Solo ADMIN + SUPERVISOR (no SEG_HIGIENE) — pedido Santiago 2026-06-05.
-      requiredCapability: Capability.verAdministracion,
     ),
     _ShellSection(
       label: 'Flota',
