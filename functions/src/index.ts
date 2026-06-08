@@ -52,3 +52,7 @@ export * from "./resumenes_diarios";
 // (META/config_vigilador_v3.registro_batch_activo, default false) + backfill
 // ADMIN. No toca el v2 (JORNADAS) ni el histórico. Ver jornadas_v3_batch.ts.
 export * from "./jornadas_v3_batch";
+// Cruce diario PARADAS_REPORTADAS (lo que el chofer avisó por WhatsApp) vs las
+// pausas que v3 detectó. Si v3 confirma → marca la parada confirmada_v3. Si no
+// → escala a REPORTES_DISCREPANCIA para que la oficina revise. Corre 07:00 ART.
+export * from "./paradas_reportadas";
