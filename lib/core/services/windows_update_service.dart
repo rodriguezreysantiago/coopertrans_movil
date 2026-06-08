@@ -294,9 +294,24 @@ class _Version implements Comparable<_Version> {
 ///
 /// Args posicionales: `<zip> <installDir> <exeName> <pidApp> <nuevaVersion>`.
 ///
-/// Replica la lógica probada de `scripts/launcher_app.ps1` (backup atómico +
-/// rollback + VERSION.txt sin BOM) pero ESPERANDO a que la app cierre primero,
-/// porque corre mientras la app todavía está viva (la lanzó ella).
+/// REWRITE 2026-06-08 — caso reportado por Santiago tras 3 intentos:
+///   1. El log file VIVÍA en `$InstallDir\update.log` y se quedaba con handle
+///      abierto cuando intentaba mover la carpeta entera → primer ERROR en
+///      backup, helper aborta, relanza la app vieja, banner vuelve a salir.
+///   2. Algunos procesos hijo de los plugins Firebase (cloud_firestore C++
+///      worker, auth) sobreviven al `exit(0)` un par de segundos y mantienen
+///      handles a DLLs dentro de la carpeta — backup también falla por eso.
+///   3. `Move-Item` falla DURO ante cualquier lock; `Copy-Item -Force` también.
+///
+/// Solución nueva:
+///   - Log file → `%TEMP%\ctm_update.log` (fuera de la carpeta que vamos a tocar).
+///   - Stop-Process FORCE de cualquier `coopertrans_movil.exe` residual antes
+///     del backup (procesos hijo huérfanos).
+///   - Backup + reemplazo con `robocopy /MIR /R:5 /W:2` — herramienta nativa
+///     Windows hecha exactamente para esto, reintenta automáticamente cada
+///     archivo locked. Es lo que usan los installers MSI/Inno por la misma razón.
+///   - El backup es COPIA (no move) — si robocopy falla irrecoverable se
+///     re-aplica desde backup sin tener que mover carpetas.
 ///
 /// ASCII puro (PowerShell 5.1 en Windows rompe con acentos/ñ). Embebido como
 /// string para que viaje SIEMPRE con la versión correcta de la app.
@@ -313,7 +328,10 @@ $ErrorActionPreference = 'Stop'
 
 $exePath = Join-Path $InstallDir $ExeName
 $verFile = Join-Path $InstallDir 'VERSION.txt'
-$logFile = Join-Path $InstallDir 'update.log'
+# Log file fuera de InstallDir: si vive dentro de la carpeta que vamos a
+# reemplazar, el propio Add-Content deja un handle que rompe el backup
+# (caso reportado Santiago 2026-06-08).
+$logFile = Join-Path $env:TEMP 'ctm_update.log'
 
 function Log($m) {
   try {
@@ -333,6 +351,18 @@ while ($tries -lt 120) {
 }
 Start-Sleep -Milliseconds 800
 
+# 1b. Matar cualquier proceso residual con el mismo nombre — los plugins
+# Firebase (cloud_firestore, auth) lanzan workers nativos que NO mueren
+# con exit(0) y mantienen handles a DLLs dentro de InstallDir, lo que
+# rompía el backup. Si no hay nada, no pasa nada.
+try {
+  $exeBase = [IO.Path]::GetFileNameWithoutExtension($ExeName)
+  Get-Process -Name $exeBase -ErrorAction SilentlyContinue | ForEach-Object {
+    try { $_ | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+  }
+} catch {}
+Start-Sleep -Milliseconds 500
+
 # 2. Extraer el ZIP a staging.
 $staging = Join-Path $env:TEMP ("ctm_staging_" + [guid]::NewGuid().ToString('N'))
 try {
@@ -349,34 +379,48 @@ if (-not (Test-Path (Join-Path $staging $ExeName))) {
   exit 1
 }
 
-# 3. Backup atomico de la instalacion actual.
+# 3. Backup (COPIA, no move) con robocopy — soporta locks transitorios
+# reintentando archivo por archivo. /R:3 /W:1 = 3 reintentos, 1s espera.
+# Robocopy exit codes <8 son OK (1=copiado, 0=sin cambios, 2=archivos extra).
 $backup = "$InstallDir.bak"
-try {
-  if (Test-Path $backup) { Remove-Item $backup -Recurse -Force }
-  Move-Item -Path $InstallDir -Destination $backup
-  New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-} catch {
-  Log "ERROR en backup: $($_.Exception.Message)"
+if (Test-Path $backup) {
+  Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
+}
+$null = New-Item -ItemType Directory -Force -Path $backup
+Log "Backup con robocopy: $InstallDir -> $backup"
+$rb = & robocopy.exe $InstallDir $backup /E /R:3 /W:1 /NFL /NDL /NJH /NJS /NP 2>&1
+$rbCode = $LASTEXITCODE
+if ($rbCode -ge 8) {
+  Log "ERROR backup robocopy (exit=$rbCode): $rb"
   Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
   if (Test-Path $exePath) { Start-Process -FilePath $exePath -WorkingDirectory $InstallDir }
   exit 1
 }
 
-# 4. Copiar la version nueva. Si falla, ROLLBACK del backup.
-try {
-  Copy-Item -Path (Join-Path $staging '*') -Destination $InstallDir -Recurse -Force
-  # VERSION.txt con la version nueva (UTF-8 SIN BOM, como el launcher), para que
-  # el launcher externo NO la vea desactualizada y re-baje.
-  [System.IO.File]::WriteAllText($verFile, $NuevaVersion, (New-Object System.Text.UTF8Encoding $false))
-  Log "OK actualizado a $NuevaVersion"
-} catch {
-  Log "ERROR copiando, hago rollback: $($_.Exception.Message)"
-  if (Test-Path $InstallDir) { Remove-Item $InstallDir -Recurse -Force -ErrorAction SilentlyContinue }
-  Move-Item -Path $backup -Destination $InstallDir
+# 4. Reemplazar archivos con robocopy /MIR — espeja staging dentro de
+# InstallDir. /R:5 /W:2 = 5 reintentos por archivo locked, 2s espera.
+# Tolera completamente los handles transitorios de los plugins Firebase.
+Log "Aplicando version nueva con robocopy /MIR..."
+$rc = & robocopy.exe $staging $InstallDir /MIR /R:5 /W:2 /NFL /NDL /NJH /NJS /NP 2>&1
+$rcCode = $LASTEXITCODE
+if ($rcCode -ge 8) {
+  Log "ERROR copia robocopy (exit=$rcCode): $rc — hago ROLLBACK"
+  # Rollback: restaurar desde backup pisando lo que se haya copiado parcial.
+  & robocopy.exe $backup $InstallDir /MIR /R:5 /W:2 /NFL /NDL /NJH /NJS /NP | Out-Null
   Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
   if (Test-Path $exePath) { Start-Process -FilePath $exePath -WorkingDirectory $InstallDir }
   exit 1
 }
+
+# VERSION.txt con la version nueva (UTF-8 SIN BOM, como el launcher legacy).
+try {
+  [System.IO.File]::WriteAllText($verFile, $NuevaVersion, (New-Object System.Text.UTF8Encoding $false))
+} catch {
+  Log "WARN: no pude escribir VERSION.txt: $($_.Exception.Message)"
+}
+Log "OK actualizado a $NuevaVersion (robocopy exit=$rcCode)"
 
 # 5. Limpieza: backup, staging, zip.
 Remove-Item $backup -Recurse -Force -ErrorAction SilentlyContinue
