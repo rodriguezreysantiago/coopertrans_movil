@@ -268,15 +268,14 @@ class _GridSubpantallas extends StatelessWidget {
               icono: Icons.map_outlined,
               ruta: AppRoutes.adminIcmMapaCalor,
             ),
+            // Tile "Jornada" unificada (2026-06-08): la pantalla v3 ya muestra
+            // gráfico velocidad/tiempo + tramos + paradas calculados con su
+            // propia metodología (correcta), así que la antigua tile "Jornada"
+            // (v2 — adminIcmJornadaDia) salió del hub. La ruta de v2 sigue
+            // viva por compat de deep-links, no se renderea acá.
             _HubTile(
               titulo: 'Jornada',
-              subtitulo: 'Inicio, paradas y descansos por chofer + día',
-              icono: Icons.timeline,
-              ruta: AppRoutes.adminIcmJornadaDia,
-            ),
-            _HubTile(
-              titulo: 'Jornada real (v3)',
-              subtitulo: 'Registro a posteriori: manejo, pausas y confianza',
+              subtitulo: 'Manejo, paradas, velocidades y bloques por turno',
               icono: Icons.fact_check_outlined,
               ruta: AppRoutes.adminRegistroJornada,
             ),

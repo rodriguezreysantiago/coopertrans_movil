@@ -11,15 +11,21 @@ import '../models/registro_jornada.dart';
 /// fecha + confianza, turno inicio→fin + patente, métricas (manejo/recorrido/
 /// pausas/bloques), flags (>12h, bloque >4h, descanso <8h, drift) y las pausas
 /// con su motivo.
+///
+/// Opcional: `onTap` — abre el detalle visual de la jornada (gráfico
+/// velocidad/tiempo + tramos + paradas). Si es null la card es no interactiva
+/// (uso original en "Mi jornada" del chofer, donde la card es el detalle).
 class RegistroJornadaCard extends StatelessWidget {
   final RegistroJornada j;
-  const RegistroJornadaCard({super.key, required this.j});
+  final VoidCallback? onTap;
+  const RegistroJornadaCard({super.key, required this.j, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     return AppCard(
       tier: 2,
+      onTap: onTap,
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

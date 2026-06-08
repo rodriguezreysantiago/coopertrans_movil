@@ -26,8 +26,8 @@ class RegistroJornada {
   /// Km recorridos (corrobora el manejo: recorrido ÷ horas ≈ crucero ⇒ real).
   final int recorridoKm;
 
-  /// Cantidad de bloques de manejo en que se partió el turno.
-  final int bloquesCount;
+  /// Lista completa de bloques (4h) con sus métricas.
+  final List<BloqueJornada> bloques;
 
   /// Cuántos bloques superaron 4 h de manejo continuo (infracción).
   final int bloquesExcedidos;
@@ -52,6 +52,14 @@ class RegistroJornada {
 
   final List<PausaJornada> pausas;
 
+  /// Línea de tiempo completa (manejo + pausas alternados) del turno. Es la
+  /// fuente para listar tramos de manejo y paradas en la UI v3.
+  final List<SegmentoJornada> segmentos;
+
+  /// Serie velocidad/tiempo downsampleada (≤ 240 puntos) para el gráfico
+  /// fl_chart de la pantalla v3.
+  final List<PuntoVelocidad> serieVelocidad;
+
   /// Líneas legibles armadas por el backend (turno, pausas, avisos).
   final List<String> explicacion;
 
@@ -65,7 +73,7 @@ class RegistroJornada {
     required this.manejoNetoSeg,
     required this.pausaTotalSeg,
     required this.recorridoKm,
-    required this.bloquesCount,
+    required this.bloques,
     required this.bloquesExcedidos,
     required this.jornadaExcedida,
     required this.vedaExcedida,
@@ -74,8 +82,18 @@ class RegistroJornada {
     required this.driftFiltrado,
     required this.confianza,
     required this.pausas,
+    required this.segmentos,
+    required this.serieVelocidad,
     required this.explicacion,
   });
+
+  /// Cantidad de bloques (mantiene el nombre viejo de la card para evitar
+  /// renames en la UI).
+  int get bloquesCount => bloques.length;
+
+  /// Tramos de manejo extraídos de `segmentos` (atajo común en la UI).
+  List<SegmentoJornada> get tramosManejo =>
+      segmentos.where((s) => s.tipo == 'manejo').toList();
 
   factory RegistroJornada.fromDoc(
       DocumentSnapshot<Map<String, dynamic>> doc) {
@@ -92,7 +110,9 @@ class RegistroJornada {
       manejoNetoSeg: (m['manejo_neto_seg'] as num?)?.toInt() ?? 0,
       pausaTotalSeg: (m['pausa_total_seg'] as num?)?.toInt() ?? 0,
       recorridoKm: (m['recorrido_km'] as num?)?.toInt() ?? 0,
-      bloquesCount: ((m['bloques'] as List?) ?? const []).length,
+      bloques: ((m['bloques'] as List?) ?? const [])
+          .map((b) => BloqueJornada.fromMap(b as Map<String, dynamic>))
+          .toList(),
       bloquesExcedidos: (m['bloques_excedidos'] as num?)?.toInt() ?? 0,
       jornadaExcedida: m['jornada_excedida'] as bool? ?? false,
       vedaExcedida: m['veda_excedida'] as bool? ?? false,
@@ -103,9 +123,51 @@ class RegistroJornada {
       pausas: ((m['pausas'] as List?) ?? const [])
           .map((p) => PausaJornada.fromMap(p as Map<String, dynamic>))
           .toList(),
+      segmentos: ((m['segmentos'] as List?) ?? const [])
+          .map((s) => SegmentoJornada.fromMap(s as Map<String, dynamic>))
+          .toList(),
+      serieVelocidad: ((m['serie_velocidad'] as List?) ?? const [])
+          .map((p) => PuntoVelocidad.fromMap(p as Map<String, dynamic>))
+          .toList(),
       explicacion: ((m['explicacion'] as List?) ?? const []).cast<String>(),
     );
   }
+}
+
+/// Bloque de manejo (≤ 4h por política Vecchi).
+class BloqueJornada {
+  final int indice;
+  final DateTime inicio;
+  final DateTime fin;
+  final int manejoNetoSeg;
+  final bool excedido;
+  final int kmAprox;
+  final int velMax;
+  final int velProm;
+
+  const BloqueJornada({
+    required this.indice,
+    required this.inicio,
+    required this.fin,
+    required this.manejoNetoSeg,
+    required this.excedido,
+    required this.kmAprox,
+    required this.velMax,
+    required this.velProm,
+  });
+
+  factory BloqueJornada.fromMap(Map<String, dynamic> m) => BloqueJornada(
+        indice: (m['indice'] as num?)?.toInt() ?? 0,
+        inicio: (m['inicio'] as Timestamp?)?.toDate() ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        fin: (m['fin'] as Timestamp?)?.toDate() ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        manejoNetoSeg: (m['manejo_neto_seg'] as num?)?.toInt() ?? 0,
+        excedido: m['excedido'] as bool? ?? false,
+        kmAprox: (m['km_aprox'] as num?)?.toInt() ?? 0,
+        velMax: (m['vel_max'] as num?)?.toInt() ?? 0,
+        velProm: (m['vel_prom'] as num?)?.toInt() ?? 0,
+      );
 }
 
 /// Una pausa del turno (entre dos tramos de manejo).
@@ -123,6 +185,10 @@ class PausaJornada {
   /// True si la pausa ≥ 15 min (cierra un bloque de manejo).
   final bool cierraBloque;
 
+  /// Posición donde paró (del evento que abrió la pausa).
+  final double? lat;
+  final double? lng;
+
   const PausaJornada({
     required this.inicio,
     required this.fin,
@@ -130,6 +196,8 @@ class PausaJornada {
     required this.origen,
     required this.confianza,
     required this.cierraBloque,
+    required this.lat,
+    required this.lng,
   });
 
   factory PausaJornada.fromMap(Map<String, dynamic> m) => PausaJornada(
@@ -141,6 +209,8 @@ class PausaJornada {
         origen: (m['origen'] as String?) ?? 'parado',
         confianza: (m['confianza'] as String?) ?? 'alta',
         cierraBloque: m['cierra_bloque'] as bool? ?? false,
+        lat: (m['lat'] as num?)?.toDouble(),
+        lng: (m['lng'] as num?)?.toDouble(),
       );
 
   /// Texto del motivo de la pausa para mostrar al chofer.
@@ -156,4 +226,76 @@ class PausaJornada {
         return 'parado';
     }
   }
+}
+
+/// Un segmento de la línea de tiempo del turno (manejo o pausa).
+class SegmentoJornada {
+  /// 'manejo' | 'pausa'.
+  final String tipo;
+  final DateTime inicio;
+  final DateTime fin;
+  final int durSeg;
+
+  /// 'alta' | 'media' | 'baja'.
+  final String confianza;
+
+  /// Solo en pausas — cómo se detectó.
+  final String? origen;
+  final double? lat;
+  final double? lng;
+  final String? motivoBaja;
+
+  /// Solo en segmentos de manejo (null en pausas).
+  final int? kmAprox;
+  final int? velMax;
+  final int? velProm;
+
+  const SegmentoJornada({
+    required this.tipo,
+    required this.inicio,
+    required this.fin,
+    required this.durSeg,
+    required this.confianza,
+    required this.origen,
+    required this.lat,
+    required this.lng,
+    required this.motivoBaja,
+    required this.kmAprox,
+    required this.velMax,
+    required this.velProm,
+  });
+
+  factory SegmentoJornada.fromMap(Map<String, dynamic> m) => SegmentoJornada(
+        tipo: (m['tipo'] as String?) ?? 'manejo',
+        inicio: (m['inicio'] as Timestamp?)?.toDate() ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        fin: (m['fin'] as Timestamp?)?.toDate() ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        durSeg: (m['dur_seg'] as num?)?.toInt() ?? 0,
+        confianza: (m['confianza'] as String?) ?? 'alta',
+        origen: m['origen'] as String?,
+        lat: (m['lat'] as num?)?.toDouble(),
+        lng: (m['lng'] as num?)?.toDouble(),
+        motivoBaja: m['motivo_baja'] as String?,
+        kmAprox: (m['km_aprox'] as num?)?.toInt(),
+        velMax: (m['vel_max'] as num?)?.toInt(),
+        velProm: (m['vel_prom'] as num?)?.toInt(),
+      );
+
+  bool get esManejo => tipo == 'manejo';
+}
+
+/// Punto (ts, velocidad) de la serie de velocidad del turno (para el gráfico).
+class PuntoVelocidad {
+  final int tsMs;
+  final int speed;
+
+  const PuntoVelocidad({required this.tsMs, required this.speed});
+
+  factory PuntoVelocidad.fromMap(Map<String, dynamic> m) => PuntoVelocidad(
+        tsMs: (m['ts_ms'] as num?)?.toInt() ?? 0,
+        speed: (m['speed'] as num?)?.toInt() ?? 0,
+      );
+
+  DateTime get ts => DateTime.fromMillisecondsSinceEpoch(tsMs);
 }

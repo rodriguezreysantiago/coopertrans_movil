@@ -9,6 +9,7 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../models/registro_jornada.dart';
 import '../services/registro_jornada_service.dart';
 import '../widgets/registro_jornada_card.dart';
+import 'registro_jornada_detalle_screen.dart';
 
 /// Vista ADMIN/SUPERVISOR del registro de jornada v3 (Paso 4 — destronar al v2).
 ///
@@ -235,7 +236,17 @@ class _AdminRegistroJornadaScreenState
           padding: const EdgeInsets.all(AppSpacing.lg),
           itemCount: jornadas.length,
           separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
-          itemBuilder: (ctx, i) => RegistroJornadaCard(j: jornadas[i]),
+          itemBuilder: (ctx, i) => RegistroJornadaCard(
+            j: jornadas[i],
+            onTap: () => Navigator.of(ctx).push(
+              MaterialPageRoute<void>(
+                builder: (_) => RegistroJornadaDetalleScreen(
+                  jornada: jornadas[i],
+                  choferNombre: _choferNombre,
+                ),
+              ),
+            ),
+          ),
         );
       },
     );
