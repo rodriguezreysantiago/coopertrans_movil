@@ -29,4 +29,30 @@ class RegistroJornadaService {
         .snapshots()
         .map((s) => s.docs.map(RegistroJornada.fromDoc).toList());
   }
+
+  /// Stream de los turnos de un chofer en un rango de fechas calendario
+  /// (ambos inclusive). Reusa el índice existente (chofer_dni ASC, fecha
+  /// DESC) ordenando descending — la UI suele querer "más reciente
+  /// primero" igual; para combinar cronológicamente se reordena por
+  /// timestamp adentro de la función combinar.
+  static Stream<List<RegistroJornada>> streamPorRango({
+    required String choferDni,
+    required DateTime desde,
+    required DateTime hasta,
+  }) {
+    final desdeStr = _ymd(desde);
+    final hastaStr = _ymd(hasta);
+    return _col
+        .where('chofer_dni', isEqualTo: choferDni)
+        .where('fecha', isGreaterThanOrEqualTo: desdeStr)
+        .where('fecha', isLessThanOrEqualTo: hastaStr)
+        .orderBy('fecha', descending: true)
+        .snapshots()
+        .map((s) => s.docs.map(RegistroJornada.fromDoc).toList());
+  }
+
+  static String _ymd(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
 }

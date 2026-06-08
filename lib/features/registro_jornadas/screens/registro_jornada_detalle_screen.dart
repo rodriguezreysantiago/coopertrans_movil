@@ -603,6 +603,28 @@ const _meses = [
 ];
 
 String _fmtFechaLarga(String ymd, DateTime fallback) {
+  // Caso combinado multi-turno: `ymd` viene como "YYYY-MM-DD → YYYY-MM-DD".
+  // No la parseamos — formateamos cada extremo a "dd de mes" y unimos con la
+  // flecha, para que el hero diga "6 de junio → 8 de junio".
+  if (ymd.contains('→')) {
+    final partes = ymd.split('→').map((s) => s.trim()).toList();
+    if (partes.length == 2) {
+      final a = DateTime.tryParse(partes[0]);
+      final b = DateTime.tryParse(partes[1]);
+      if (a != null && b != null) {
+        final mesA = _meses[(a.month - 1).clamp(0, 11)];
+        final mesB = _meses[(b.month - 1).clamp(0, 11)];
+        // Si ambos extremos caen en el mismo mes, una sola mención del mes:
+        // "6 → 8 de junio". Si no, "6 de junio → 3 de julio".
+        if (a.year == b.year && a.month == b.month) {
+          return '${a.day} → ${b.day} de $mesA';
+        }
+        return '${a.day} de $mesA → ${b.day} de $mesB';
+      }
+    }
+    // Si por algún motivo no parsea, devolvemos el rango crudo.
+    return ymd;
+  }
   DateTime? d = DateTime.tryParse(ymd);
   d ??= fallback;
   final dia = _dias[(d.weekday - 1).clamp(0, 6)];

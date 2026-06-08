@@ -40,12 +40,53 @@ class _AdminRegistroJornadaScreenState
   bool _cargandoChoferes = true;
   bool _procesandoHoy = false;
 
+  // Rango de fechas para filtrar el listado. Default: últimos 7 días (incluye
+  // hoy). Si el usuario elige rango, se usa `streamPorRango`; sino la pantalla
+  // sigue mostrando las últimas 30 con `streamUltimasDelChofer`. El selector
+  // arranca con default precargado.
+  late DateTime _desde;
+  late DateTime _hasta;
+
   @override
   void initState() {
     super.initState();
     _choferDni = widget.choferDniInicial;
+    final hoy = DateTime.now();
+    _hasta = DateTime(hoy.year, hoy.month, hoy.day);
+    _desde = _hasta.subtract(const Duration(days: 6)); // últimos 7 días incl. hoy
     _cargarChoferes();
   }
+
+  Future<void> _elegirRango() async {
+    final hoy = DateTime.now();
+    final r = await showDateRangePicker(
+      context: context,
+      initialDateRange: DateTimeRange(start: _desde, end: _hasta),
+      firstDate: hoy.subtract(const Duration(days: 365)),
+      lastDate: hoy,
+      locale: const Locale('es', 'AR'),
+      helpText: 'Días de jornada',
+      saveText: 'Aplicar',
+    );
+    if (r == null) return;
+    setState(() {
+      _desde = DateTime(r.start.year, r.start.month, r.start.day);
+      _hasta = DateTime(r.end.year, r.end.month, r.end.day);
+    });
+  }
+
+  bool get _esUnSoloDia =>
+      _desde.year == _hasta.year &&
+      _desde.month == _hasta.month &&
+      _desde.day == _hasta.day;
+
+  String _fmtFechaCorta(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/'
+      '${d.month.toString().padLeft(2, '0')}';
+
+  String get _labelRango => _esUnSoloDia
+      ? _fmtFechaCorta(_desde)
+      : '${_fmtFechaCorta(_desde)} → ${_fmtFechaCorta(_hasta)}';
 
   Future<void> _cargarChoferes() async {
     try {
@@ -253,18 +294,37 @@ class _AdminRegistroJornadaScreenState
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Selector de chofer.
+          // Selectores chofer + rango (lado a lado, mismo patrón que la
+          // pantalla v2). El de chofer es obligatorio para listar; el de
+          // rango acota la ventana de turnos (default últimos 7 días).
           Padding(
             padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, AppSpacing.sm),
-            child: _SelectorPill(
-              icono: _cargandoChoferes
-                  ? Icons.hourglass_empty
-                  : Icons.person_outline,
-              label: _choferNombre ??
-                  (_cargandoChoferes ? 'Cargando choferes…' : 'Elegí un chofer'),
-              muted: _choferNombre == null,
-              onTap: _cargandoChoferes ? null : _elegirChofer,
+            child: Row(
+              children: [
+                Expanded(
+                  child: _SelectorPill(
+                    icono: _cargandoChoferes
+                        ? Icons.hourglass_empty
+                        : Icons.person_outline,
+                    label: _choferNombre ??
+                        (_cargandoChoferes
+                            ? 'Cargando…'
+                            : 'Elegí un chofer'),
+                    muted: _choferNombre == null,
+                    onTap: _cargandoChoferes ? null : _elegirChofer,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: _SelectorPill(
+                    icono: Icons.date_range,
+                    label: _labelRango,
+                    mono: true,
+                    onTap: _elegirRango,
+                  ),
+                ),
+              ],
             ),
           ),
           // CTA "Cargar jornada de hoy" — el cron diario procesa AYER a las
@@ -296,11 +356,17 @@ class _AdminRegistroJornadaScreenState
       );
     }
     return StreamBuilder<List<RegistroJornada>>(
-      stream: RegistroJornadaService.streamUltimasDelChofer(
-          choferDni: _choferDni!),
+      stream: RegistroJornadaService.streamPorRango(
+        choferDni: _choferDni!,
+        desde: _desde,
+        hasta: _hasta,
+      ),
       builder: (ctx, snap) {
         if (snap.hasError) {
-          return const AppErrorState(title: 'No se pudo cargar el registro');
+          return AppErrorState(
+            title: 'No se pudo cargar el registro',
+            subtitle: snap.error.toString(),
+          );
         }
         if (!snap.hasData) {
           return const AppLoadingState(message: 'Cargando registro…');
@@ -309,31 +375,162 @@ class _AdminRegistroJornadaScreenState
         if (jornadas.isEmpty) {
           return AppEmptyState(
             icon: Icons.route_outlined,
-            title: 'Sin jornadas registradas',
-            subtitle: '${_choferNombre ?? _choferDni} no tiene registros v3 '
-                'todavía.',
+            title: 'Sin jornadas en el rango',
+            subtitle:
+                '${_choferNombre ?? _choferDni} no tiene registros entre '
+                '$_labelRango. Probá con un rango más amplio o "Cargar '
+                'jornada de hoy".',
           );
         }
-        return ListView.separated(
-          padding: const EdgeInsets.all(AppSpacing.lg),
-          itemCount: jornadas.length,
-          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
-          itemBuilder: (ctx, i) => RegistroJornadaCard(
-            j: jornadas[i],
-            onTap: () => Navigator.of(ctx).push(
-              MaterialPageRoute<void>(
-                builder: (_) => RegistroJornadaDetalleScreen(
-                  jornada: jornadas[i],
-                  choferNombre: _choferNombre,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Botón "Ver combinado" si hay >1 turno — abre el detalle con
+            // un RegistroJornada fusionado (gráfico continuo, sumas de
+            // km/manejo, paradas y tramos ordenados cronológicamente).
+            if (jornadas.length > 1)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
+                child: _BotonVerCombinado(
+                  cantidad: jornadas.length,
+                  onTap: () => Navigator.of(ctx).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => RegistroJornadaDetalleScreen(
+                        jornada: _combinarRegistros(jornadas),
+                        choferNombre: _choferNombre,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            Expanded(
+              child: ListView.separated(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                itemCount: jornadas.length,
+                separatorBuilder: (_, __) =>
+                    const SizedBox(height: AppSpacing.md),
+                itemBuilder: (ctx, i) => RegistroJornadaCard(
+                  j: jornadas[i],
+                  onTap: () => Navigator.of(ctx).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => RegistroJornadaDetalleScreen(
+                        jornada: jornadas[i],
+                        choferNombre: _choferNombre,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         );
       },
     );
   }
 }
+
+// ────────────────────────────────────────────────────────────────────────
+// Fusión multi-turno (paridad con `_combinarJornadas` del v2)
+// ────────────────────────────────────────────────────────────────────────
+
+/// Fusiona varios turnos del registro v3 en un solo `RegistroJornada` sintético
+/// — la pantalla de detalle lo recibe y muestra un gráfico velocidad/tiempo
+/// continuo + tramos y paradas ordenados cronológicamente + KPIs sumados.
+///
+/// No es un doc real (id sintético `__combinado_X→Y`); es solo input para
+/// la UI. Convenciones:
+/// - Tiempos: inicio = inicioTurno del más viejo; fin = finTurno del más
+///   nuevo. Recorrer huecos entre turnos: se ven en el gráfico como tramos
+///   en 0 (no hay puntos de la serie esos minutos).
+/// - Sumas: manejo neto, pausa total, km, bloques excedidos.
+/// - OR: jornadaExcedida, vedaExcedida, descansoInsuficiente, driftFiltrado.
+/// - Min (peor): confianza.
+/// - Concat ordenado por timestamp: pausas, segmentos, serieVelocidad,
+///   bloques, explicacion.
+RegistroJornada _combinarRegistros(List<RegistroJornada> jornadas) {
+  assert(jornadas.isNotEmpty, '_combinarRegistros requiere lista no vacía');
+  final ordenadas = [...jornadas]
+    ..sort((a, b) => a.inicioTurno.compareTo(b.inicioTurno));
+  final primero = ordenadas.first;
+  final ultimo = ordenadas.last;
+
+  final bloques = <BloqueJornada>[];
+  final pausas = <PausaJornada>[];
+  final segmentos = <SegmentoJornada>[];
+  final serie = <PuntoVelocidad>[];
+  final explicacion = <String>[];
+  var manejoNeto = 0;
+  var pausaTotal = 0;
+  var recorrido = 0;
+  var bloquesExc = 0;
+  var jornadaExc = false;
+  var vedaExc = false;
+  var descansoInsuf = false;
+  var driftF = false;
+  String confianza = 'alta';
+
+  for (final j in ordenadas) {
+    bloques.addAll(j.bloques);
+    pausas.addAll(j.pausas);
+    segmentos.addAll(j.segmentos);
+    serie.addAll(j.serieVelocidad);
+    explicacion
+      ..add('— Turno ${_hhmmFecha(j.inicioTurno)} →')
+      ..addAll(j.explicacion);
+    manejoNeto += j.manejoNetoSeg;
+    pausaTotal += j.pausaTotalSeg;
+    recorrido += j.recorridoKm;
+    bloquesExc += j.bloquesExcedidos;
+    jornadaExc = jornadaExc || j.jornadaExcedida;
+    vedaExc = vedaExc || j.vedaExcedida;
+    descansoInsuf = descansoInsuf || j.descansoInsuficiente;
+    driftF = driftF || j.driftFiltrado;
+    confianza = _peorConfianza(confianza, j.confianza);
+  }
+
+  pausas.sort((a, b) => a.inicio.compareTo(b.inicio));
+  segmentos.sort((a, b) => a.inicio.compareTo(b.inicio));
+  serie.sort((a, b) => a.tsMs.compareTo(b.tsMs));
+
+  return RegistroJornada(
+    id: '__combinado_${primero.fecha}_${ultimo.fecha}',
+    choferDni: primero.choferDni,
+    patente: primero.patente,
+    fecha: primero.fecha == ultimo.fecha
+        ? primero.fecha
+        : '${primero.fecha} → ${ultimo.fecha}',
+    inicioTurno: primero.inicioTurno,
+    finTurno: ultimo.finTurno,
+    manejoNetoSeg: manejoNeto,
+    pausaTotalSeg: pausaTotal,
+    recorridoKm: recorrido,
+    bloques: bloques,
+    bloquesExcedidos: bloquesExc,
+    jornadaExcedida: jornadaExc,
+    vedaExcedida: vedaExc,
+    descansoPrevioSeg: primero.descansoPrevioSeg,
+    descansoInsuficiente: descansoInsuf,
+    driftFiltrado: driftF,
+    confianza: confianza,
+    pausas: pausas,
+    segmentos: segmentos,
+    serieVelocidad: serie,
+    explicacion: explicacion,
+  );
+}
+
+String _peorConfianza(String a, String b) {
+  // alta > media > baja → devuelve la "peor" de las dos.
+  int rank(String x) => x == 'alta' ? 2 : (x == 'media' ? 1 : 0);
+  return rank(a) <= rank(b) ? a : b;
+}
+
+String _hhmmFecha(DateTime d) =>
+    '${d.day.toString().padLeft(2, '0')}/'
+    '${d.month.toString().padLeft(2, '0')} '
+    '${d.hour.toString().padLeft(2, '0')}:'
+    '${d.minute.toString().padLeft(2, '0')}';
 
 class _ChoferOpt {
   final String dni;
@@ -343,17 +540,20 @@ class _ChoferOpt {
       {required this.dni, required this.nombre, required this.activo});
 }
 
-/// Pill tappable (chofer). Mismo gesto que el selector de la pantalla Jornada.
+/// Pill tappable (chofer/rango). Mismo gesto que el selector de la pantalla
+/// Jornada del v2. `mono` pinta el label en mono (para fechas y números).
 class _SelectorPill extends StatelessWidget {
   final IconData icono;
   final String label;
   final bool muted;
+  final bool mono;
   final VoidCallback? onTap;
 
   const _SelectorPill({
     required this.icono,
     required this.label,
     this.muted = false,
+    this.mono = false,
     this.onTap,
   });
 
@@ -382,7 +582,7 @@ class _SelectorPill extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppType.body.copyWith(
+                  style: (mono ? AppType.mono : AppType.body).copyWith(
                     color: muted ? c.textMuted : c.text,
                     fontWeight: FontWeight.w500,
                   ),
@@ -449,6 +649,53 @@ class _BotonCargarHoy extends StatelessWidget {
                   ),
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Pill CTA "Ver combinado" — visible cuando el rango trae > 1 turno. Abre el
+/// detalle con el `RegistroJornada` fusionado (gráfico continuo, tramos +
+/// paradas en orden cronológico). Pintado en info como el accent de tramos.
+class _BotonVerCombinado extends StatelessWidget {
+  final int cantidad;
+  final VoidCallback onTap;
+  const _BotonVerCombinado({required this.cantidad, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: c.info.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: c.info.withValues(alpha: 0.5)),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.timeline, size: 16, color: c.info),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  'Ver combinado · $cantidad turnos',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.body.copyWith(
+                    color: c.info,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Icon(Icons.arrow_forward, size: 14, color: c.info),
             ],
           ),
         ),
