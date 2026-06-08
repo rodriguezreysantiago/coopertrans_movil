@@ -338,30 +338,47 @@ class _BannerInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: c.surface2,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border(
-          top: BorderSide(color: c.border),
-          right: BorderSide(color: c.border),
-          bottom: BorderSide(color: c.border),
-          left: BorderSide(color: c.info, width: 3),
+    final r = BorderRadius.circular(AppRadius.xl);
+    // Fix 2026-06-08: el border con 4 lados de distinto color + borderRadius
+    // dispara "A borderRadius can only be given on borders with uniform
+    // colors" (Sentry FLUTTER-2E/2H). Mismo patrón que `AppCard` para el
+    // acento: border uniforme + ClipRRect + franja overlay en Stack.
+    return ClipRRect(
+      borderRadius: r,
+      child: Container(
+        decoration: BoxDecoration(
+          color: c.surface2,
+          border: Border.all(color: c.border),
         ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.info_outline, color: c.info, size: 18),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              texto,
-              style: AppType.bodySm.copyWith(color: c.textSecondary),
+        child: Stack(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, color: c.info, size: 18),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      texto,
+                      style: AppType.bodySm.copyWith(color: c.textSecondary),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            // Franja de acento overlay (ClipRRect respeta el radio).
+            Positioned(
+              top: 0,
+              bottom: 0,
+              left: 0,
+              child: IgnorePointer(
+                child: Container(width: 3, color: c.info),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
