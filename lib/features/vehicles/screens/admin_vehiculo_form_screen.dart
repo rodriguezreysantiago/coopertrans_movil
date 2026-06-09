@@ -328,7 +328,10 @@ class _AdminVehiculoFormScreenState extends State<AdminVehiculoFormScreen> {
           color: c.surface2,
           borderRadius:
               const BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
-          border: Border(top: BorderSide(color: c.border)),
+          // `Border(top: ...)` + borderRadius dispara "A borderRadius can only
+          // be given on borders with uniform colors" (Sentry FLUTTER-2H, jun
+          // 2026) — los otros 3 lados implícitos son BorderSide.none con color
+          // 0xFF000000, no uniforme contra c.border. El handle ya separa visual.
         ),
         child: SafeArea(
           child: Column(

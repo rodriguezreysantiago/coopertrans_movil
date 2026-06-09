@@ -47,20 +47,25 @@ class AppDetailSheet {
         maxChildSize: maxChildSize,
         expand: false,
         builder: (sheetCtx, scrollCtl) => Container(
+          // `Border(top: ...)` + borderRadius dispara
+          // "A borderRadius can only be given on borders with uniform colors"
+          // (Sentry FLUTTER-2H, jun 2026) — los otros 3 lados implícitos son
+          // BorderSide.none con color 0xFF000000, no uniforme contra primary.
+          // El acento de 2px arriba va como Container hijo dentro del Column.
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
             borderRadius: const BorderRadius.vertical(
               top: Radius.circular(25),
             ),
-            border: Border(
-              top: BorderSide(
-                color: Theme.of(context).colorScheme.primary,
-                width: 2,
-              ),
-            ),
           ),
+          clipBehavior: Clip.antiAlias,
           child: Column(
             children: [
+              // Acento de 2px arriba (antes era `border: Border(top:)`).
+              Container(
+                height: 2,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               // Handle deslizable visual (como iOS / Material 3)
               Container(
                 width: 40,

@@ -278,6 +278,64 @@ void main() async {
             return null;
           }
 
+          // ─── Capa 1c-bis: más asserts framework debug-only (jun 2026) ───
+          // Mismo principio que 1c: estos asserts NO corren en release builds
+          // (los wrappers `assert(() { ... return true; }())` se compilan out),
+          // pero los reportes vienen de Santiago corriendo debug en su PC con
+          // `environment=production` (el default). Casos vistos:
+          //   - "A RenderFlex overflowed by N pixels" → overflow visual debug.
+          //   - "BoxConstraints forces an infinite height/width" → fixed para
+          //     los casos puntuales (FLUTTER-2J/2M ICM grid) pero residual.
+          //   - "A borderRadius can only be given on borders with uniform
+          //     colors" → fixed donde aparecía (FLUTTER-2H), residual.
+          //   - "Looking up a deactivated widget's ancestor is unsafe" →
+          //     cascada del widget_inspector cuando OTRO error de framework
+          //     dispara FlutterError.reportError y trata de serializar el
+          //     árbol (FLUTTER-2D).
+          //   - "ListTile background color or ink splashes may be invisible"
+          //     → nuevo assert de Flutter 3.44 (FLUTTER-2P/2A); AppCard ya
+          //     envuelve en Material transparency pero queda residual en
+          //     ListTile sueltos.
+          //   - mouse_tracker assert PointerAdded/Removed → race de mouse
+          //     tracking en Windows (FLUTTER-2K).
+          if (texto.contains('a renderflex overflowed') ||
+              texto.contains('boxconstraints forces an infinite') ||
+              texto.contains('a borderradius can only be given') ||
+              texto.contains("looking up a deactivated widget's ancestor") ||
+              texto.contains(
+                  'listtile background color or ink splashes may be invisible') ||
+              texto.contains('mouse_tracker.dart') ||
+              (errType.contains('assertionerror') &&
+                  (texto.contains('pointeraddedevent') ||
+                      texto.contains('pointerremovedevent')))) {
+            return null;
+          }
+
+          // ─── Capa 1c-tris: cascada de DiagnosticsNode (jun 2026) ───
+          // Cuando un error de framework dispara `FlutterError.reportError`,
+          // Flutter serializa el árbol con `DiagnosticsNode.toJsonMap/List`
+          // para capturar info útil. Si el árbol está en estado inválido
+          // (mid-build, deactivated widget) la serialización misma crashea
+          // con un `TypeError: Null check operator used on a null value`
+          // adentro de `DiagnosticsNode.toJsonList → MappedListIterable →
+          // _GrowableList.of` (FLUTTER-2C). Es 100% framework noise —
+          // mismo culpable que el error original que disparó la cascada.
+          final excStack = exc?.stackTrace?.frames;
+          var stackHead = '';
+          if (excStack != null) {
+            stackHead = excStack
+                .take(10)
+                .map((f) =>
+                    '${f.module ?? ''}.${f.function ?? ''}'.toLowerCase())
+                .join(' ');
+          }
+          if (errType.contains('typeerror') &&
+              texto.contains('null check operator') &&
+              (stackHead.contains('diagnosticsnode.tojson') ||
+                  stackHead.contains('debugdescribechildren'))) {
+            return null;
+          }
+
           // ─── Capa 1d: Firestore transient (auditoría 2026-05-24) ───
           // El SDK de Firestore reporta "service unavailable" cuando hay
           // microcaídas del backend. El propio mensaje literal del

@@ -164,49 +164,64 @@ class _BloqueVolvo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: c.surface3,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border(
-          top: BorderSide(color: c.border),
-          right: BorderSide(color: c.border),
-          bottom: BorderSide(color: c.border),
-          left: BorderSide(color: c.brand, width: 3),
-        ),
-      ),
-      child: Column(
+    final br = BorderRadius.circular(AppRadius.xl);
+    // Border UNIFORME + barra de acento como overlay (mismo patrón que AppCard).
+    // Un `Border` con lados de distinto color + `borderRadius` dispara
+    // "A borderRadius can only be given on borders with uniform colors"
+    // (Sentry FLUTTER-2H, jun 2026). El ClipRRect recorta la barra del acento
+    // al radio del card.
+    return ClipRRect(
+      borderRadius: br,
+      child: Stack(
         children: [
-          _FInput(
-            controller: vinController,
-            label: 'Código VIN (Volvo)',
-            icon: Icons.fingerprint,
-            textInputAction: TextInputAction.done,
-            isLast: true,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          if (isSyncing)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-              child: CircularProgressIndicator(color: c.brand),
-            )
-          else
-            AppButton.secondary(
-              label: 'Forzar sincro Volvo',
-              icon: Icons.sync,
-              onPressed: onSync,
-              expand: true,
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            decoration: BoxDecoration(
+              color: c.surface3,
+              borderRadius: br,
+              border: Border.all(color: c.border),
             ),
-          const SizedBox(height: AppSpacing.sm),
-          // Botón de diagnóstico — abre una pantalla con el JSON crudo
-          // del response de Volvo y un análisis automático de qué campos
-          // están viniendo. Útil cuando algún dato no aparece en la UI.
-          AppButton.ghost(
-            label: 'Diagnóstico',
-            icon: Icons.bug_report,
-            onPressed: onDiagnostico,
-            expand: true,
+            child: Column(
+              children: [
+                _FInput(
+                  controller: vinController,
+                  label: 'Código VIN (Volvo)',
+                  icon: Icons.fingerprint,
+                  textInputAction: TextInputAction.done,
+                  isLast: true,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                if (isSyncing)
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                    child: CircularProgressIndicator(color: c.brand),
+                  )
+                else
+                  AppButton.secondary(
+                    label: 'Forzar sincro Volvo',
+                    icon: Icons.sync,
+                    onPressed: onSync,
+                    expand: true,
+                  ),
+                const SizedBox(height: AppSpacing.sm),
+                // Botón de diagnóstico — abre una pantalla con el JSON crudo
+                // del response de Volvo y un análisis automático de qué campos
+                // están viniendo. Útil cuando algún dato no aparece en la UI.
+                AppButton.ghost(
+                  label: 'Diagnóstico',
+                  icon: Icons.bug_report,
+                  onPressed: onDiagnostico,
+                  expand: true,
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 0,
+            bottom: 0,
+            left: 0,
+            child: IgnorePointer(child: Container(width: 3, color: c.brand)),
           ),
         ],
       ),

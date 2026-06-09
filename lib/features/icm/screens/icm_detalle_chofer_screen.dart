@@ -477,20 +477,28 @@ class _Infracciones extends StatelessWidget {
 }
 
 /// Grilla de N celdas de stat en bento (cada una `Expanded` → ancho acotado).
+///
+/// `crossAxisAlignment: stretch` requiere altura finita en el padre. Dentro del
+/// SingleChildScrollView del detalle de chofer eso explota porque el SCSV pasa
+/// constraints verticales infinitas → "BoxConstraints forces an infinite height"
+/// (Sentry FLUTTER-2J, jun 2026). `IntrinsicHeight` le da a la Row el alto del
+/// hijo más alto antes de que el stretch lo distribuya — mismo visual, sin assert.
 class _StatGrid extends StatelessWidget {
   final List<_StatCell> cells;
   const _StatGrid({required this.cells});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        for (var i = 0; i < cells.length; i++) ...[
-          if (i > 0) const SizedBox(width: AppSpacing.sm),
-          Expanded(child: cells[i]),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < cells.length; i++) ...[
+            if (i > 0) const SizedBox(width: AppSpacing.sm),
+            Expanded(child: cells[i]),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
