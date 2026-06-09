@@ -181,10 +181,22 @@ class WindowsUpdateService {
       //    de procesos de la app (desacople real). Paths entre comillas (toleran
       //    espacios, p.ej. el user "Colo Logistica"). Args posicionales del
       //    helper: <zip> <installDir> <exeName> <pidApp> <nuevaVersion>.
+      //
+      //    `cd /d %TEMP%` al inicio del .bat: CRITICO. El cmd.exe hereda CWD
+      //    del proceso padre (la app), que es InstallDir. Si lo dejamos, todo
+      //    el arbol de procesos (cmd -> powershell del helper) mantiene un
+      //    handle sobre InstallDir mientras el helper corre, y el Move-Item
+      //    falla con "el elemento esta en uso" — ¡el lock lo ponemos nosotros
+      //    mismos! Confirmado Santiago 2026-06-09: handle.exe de Sysinternals
+      //    no veia ningun otro lock; el helper fallaba 12s seguidos.
+      //
+      //    Tambien especificamos `workingDirectory: tmpDir.path` en el
+      //    Process.start para no heredar el CWD desde el primer instante.
       String q(String s) => '"$s"';
       final batFile = File('${tmpDir.path}\\update_run.bat');
       await batFile.writeAsString(
         '@echo off\r\n'
+        'cd /d "%TEMP%"\r\n'
         'start "" /min powershell.exe -NoProfile -ExecutionPolicy Bypass '
         '-WindowStyle Hidden -File ${q(helperFile.path)} '
         '${q(zipFile.path)} ${q(installDir)} ${q(_exeName)} $pid '
@@ -194,6 +206,7 @@ class WindowsUpdateService {
         'cmd.exe',
         ['/c', batFile.path],
         mode: ProcessStartMode.detached,
+        workingDirectory: tmpDir.path,
       );
 
       // 4. Notificar UI + cerrar la app. Damos 2 s para que el `start` lance el
@@ -337,6 +350,15 @@ const String _helperPs1Script = r'''param(
 # Helper de update Windows para Coopertrans Movil.
 # Generado por lib/core/services/windows_update_service.dart, no editar a mano.
 $ErrorActionPreference = 'Stop'
+
+# CRITICO: salir de cualquier CWD que el helper haya heredado del proceso padre.
+# El cmd.exe que nos lanzo (Process.start desde Dart) tiene como CWD el de la
+# app, que es InstallDir. Si dejamos eso, PowerShell mantiene un HANDLE al
+# InstallDir durante TODA la ejecucion, y el Move-Item falla con "el elemento
+# esta en uso" — no es la app, es el propio helper. Confirmado Santiago
+# 2026-06-09: el handle.exe de Sysinternals no veia ningun otro proceso
+# locking, pero el Move-Item fallaba 12 seg seguidos.
+Set-Location -LiteralPath $env:TEMP
 
 $exePath = Join-Path $InstallDir $ExeName
 $verFile = Join-Path $InstallDir 'VERSION.txt'
