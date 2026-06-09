@@ -10,6 +10,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../../whatsapp_bot/screens/admin_agente_conversaciones_screen.dart';
 import '../../whatsapp_bot/screens/admin_whatsapp_cola_screen.dart';
 import '../../whatsapp_bot/screens/admin_whatsapp_historico_screen.dart';
 import '../../whatsapp_bot/services/whatsapp_historico_service.dart';
@@ -74,6 +75,23 @@ class _AdminEstadoBotScreenState extends State<AdminEstadoBotScreen> {
     return AppScaffold(
       title: 'Estado del Bot',
       actions: [
+        // Dashboard del agente conversacional (F — 2026-06-08): tasa de
+        // éxito, tools más usadas, errores recientes, chats navegables.
+        // Reemplaza al script CLI `revisar_agente_reportes.js` con
+        // visibilidad continua desde la app.
+        IconButton(
+          icon: const Icon(Icons.smart_toy_outlined),
+          iconSize: 18,
+          color: c.textMuted,
+          tooltip: 'Agente conversacional',
+          onPressed: () {
+            Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AdminAgenteConversacionesScreen(),
+              ),
+            );
+          },
+        ),
         // M8+M10 — acceso al histórico de mensajes (30 días). El
         // dashboard muestra "Cola en vivo" (TTL horas); el histórico
         // resuelve "¿se mandó tal mensaje el lunes?".
