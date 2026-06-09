@@ -419,13 +419,16 @@ try {
       try { $r | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
     }
   }
-  Start-Sleep -Milliseconds 800
+  # Espera larga (3s) para que Windows libere TODOS los handles del proceso
+  # recien terminado: DLLs cargadas (Flutter, Firebase, Sentry), file system
+  # watchers, sub-procesos (crashpad). Los 800ms del rewrite anterior NO
+  # alcanzaban — Santiago 2026-06-09 vio el Move-Item fallar 4s despues del
+  # exit con "el elemento esta en uso" (handles todavia activos).
+  Start-Sleep -Seconds 3
 
   # 1c. Limpieza preventiva de .sentry-native: el crashpad de Sentry deja
   # %InstallDir%\.sentry-native\<UUID>.run\session.json con permisos
-  # restringidos del crashpad si la app no cerro limpia. Eso bloqueaba el
-  # Move-Item del backup con "Acceso denegado" (caso Santiago 2026-06-09).
-  # Borrar antes — best-effort, no critico.
+  # restringidos del crashpad si la app no cerro limpia. Best-effort.
   $pasoActual = 'limpiar_sentry_native'
   $sentryDir = Join-Path $InstallDir '.sentry-native'
   if (Test-Path $sentryDir) {
@@ -454,7 +457,26 @@ try {
   }
   $pasoActual = "move_a_backup(src=$InstallDir, dst=$backup)"
   Log "PASO move_a_backup: renombrando $InstallDir -> $backup..."
-  Move-Item -Path $InstallDir -Destination $backup
+  # Retries para el Move-Item: Windows a veces tarda VARIOS segundos en
+  # liberar todos los handles del proceso recien terminado (especialmente
+  # con apps grandes con Flutter+Firebase+Sentry). Si falla con "el elemento
+  # esta en uso", esperamos 2s y reintentamos hasta 5 veces (total ~10s
+  # extra). Despues sube al catch principal.
+  $moveErr = $null
+  for ($mi = 1; $mi -le 6; $mi++) {
+    try {
+      Move-Item -Path $InstallDir -Destination $backup -ErrorAction Stop
+      $moveErr = $null
+      break
+    } catch {
+      $moveErr = $_.Exception
+      if ($mi -lt 6) {
+        Log "  intento $mi fallo: $($moveErr.Message) - espero 2s y reintento..."
+        Start-Sleep -Seconds 2
+      }
+    }
+  }
+  if ($moveErr) { throw $moveErr }
   $movido = $true
 
   # 4. Copiar la version nueva a una carpeta NUEVA y VACIA (sin archivos viejos
