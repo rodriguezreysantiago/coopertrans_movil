@@ -374,10 +374,32 @@ function Relanzar {
 $staging = Join-Path $env:TEMP ("ctm_staging_" + [guid]::NewGuid().ToString('N'))
 $backup = "$InstallDir.bak"
 $movido = $false  # true una vez que renombramos InstallDir -> backup (para rollback)
+$pasoActual = '?'  # se actualiza antes de cada operacion critica para que el catch sepa donde murio
+
+# Helper para loggear excepciones con CONTEXTO: tipo + path si lo trae +
+# inner exception. Sin esto, "Acceso denegado a la ruta de acceso." sale sin
+# saber QUE ruta ni que API lo lanzo — diagnosticar imposible (caso real
+# Santiago 2026-06-09, log con 3 errores genericos).
+function LogException($ex, $paso) {
+  $tipo = $ex.GetType().FullName
+  $msg = $ex.Message
+  $ruta = $null
+  # Algunas excepciones de IO/UnauthorizedAccess traen el path en .FileName.
+  try { if ($ex.PSObject.Properties['FileName']) { $ruta = $ex.FileName } } catch {}
+  $inner = $null
+  if ($ex.InnerException) {
+    $inner = "$($ex.InnerException.GetType().FullName): $($ex.InnerException.Message)"
+  }
+  $detalle = "tipo=$tipo"
+  if ($ruta) { $detalle += " path=$ruta" }
+  if ($inner) { $detalle += " inner={$inner}" }
+  Log "ERROR fatal en [$paso]: $msg | $detalle"
+}
 
 try {
   # 1. Esperar a que la app (AppPid) cierre (libera locks de exe/DLLs).
-  Log "Esperando cierre de la app (PID $AppPid)..."
+  $pasoActual = 'wait_pid'
+  Log "PASO wait_pid: esperando cierre de la app (PID $AppPid)..."
   $tries = 0
   while ($tries -lt 120) {
     $p = Get-Process -Id $AppPid -ErrorAction SilentlyContinue
@@ -388,13 +410,20 @@ try {
   Start-Sleep -Milliseconds 800
 
   # 1b. Matar procesos residuales con el mismo nombre (defensa extra).
+  $pasoActual = 'kill_residuales'
   $exeBase = [IO.Path]::GetFileNameWithoutExtension($ExeName)
-  Get-Process -Name $exeBase -ErrorAction SilentlyContinue | ForEach-Object {
-    try { $_ | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+  $residuales = @(Get-Process -Name $exeBase -ErrorAction SilentlyContinue)
+  if ($residuales.Count -gt 0) {
+    Log "PASO kill_residuales: matando $($residuales.Count) proceso(s) residual(es)..."
+    foreach ($r in $residuales) {
+      try { $r | Stop-Process -Force -ErrorAction SilentlyContinue } catch {}
+    }
   }
   Start-Sleep -Milliseconds 800
 
   # 2. Extraer el ZIP a staging.
+  $pasoActual = "expand_archive(zip=$Zip)"
+  Log "PASO expand_archive: extrayendo zip a $staging..."
   Expand-Archive -Path $Zip -DestinationPath $staging -Force
   if (-not (Test-Path (Join-Path $staging $ExeName))) {
     throw "el zip no contiene $ExeName"
@@ -406,35 +435,46 @@ try {
   # el dir completo es UNA operacion a nivel de directorio, robusta. Mismo
   # approach que el launcher externo (scripts/launcher_app.ps1), probado en
   # produccion en esta PC.
-  if (Test-Path $backup) { Remove-Item $backup -Recurse -Force }
-  Log "Backup: moviendo carpeta a .bak..."
+  if (Test-Path $backup) {
+    $pasoActual = "limpiar_backup_previo(backup=$backup)"
+    Log "PASO limpiar_backup_previo: el .bak ya existe (residuo de intento anterior), lo borro..."
+    Remove-Item $backup -Recurse -Force
+  }
+  $pasoActual = "move_a_backup(src=$InstallDir, dst=$backup)"
+  Log "PASO move_a_backup: renombrando $InstallDir -> $backup..."
   Move-Item -Path $InstallDir -Destination $backup
   $movido = $true
 
   # 4. Copiar la version nueva a una carpeta NUEVA y VACIA (sin archivos viejos
   # locked con que pelear — esa es la clave de por que esto anda y /MIR no).
+  $pasoActual = "crear_install_vacio(dst=$InstallDir)"
+  Log "PASO crear_install_vacio: creando $InstallDir limpio..."
   New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-  Log "Copiando version nueva..."
+
+  $pasoActual = "copy_nueva(src=$staging, dst=$InstallDir)"
+  Log "PASO copy_nueva: copiando version nueva a $InstallDir..."
   Copy-Item -Path (Join-Path $staging '*') -Destination $InstallDir -Recurse -Force
 
   # VERSION.txt con la version nueva (UTF-8 SIN BOM, como el launcher legacy).
+  $pasoActual = "escribir_version(file=$verFile)"
   try {
     [System.IO.File]::WriteAllText($verFile, $NuevaVersion, (New-Object System.Text.UTF8Encoding $false))
   } catch {
-    Log "WARN: no pude escribir VERSION.txt: $($_.Exception.Message)"
+    Log "WARN escribir_version: $($_.Exception.Message)"
   }
   $movido = $false  # exito: ya no hace falta rollback
   Log "OK actualizado a $NuevaVersion"
 } catch {
-  Log "ERROR fatal: $($_.Exception.Message)"
+  LogException $_.Exception $pasoActual
   if ($movido) {
     # El backup ya se movio pero la copia nueva fallo: restaurar la vieja.
     Log "ROLLBACK: restaurando carpeta anterior..."
     try {
       if (Test-Path $InstallDir) { Remove-Item $InstallDir -Recurse -Force }
       Move-Item -Path $backup -Destination $InstallDir
+      $movido = $false
     } catch {
-      Log "ERROR en rollback: $($_.Exception.Message)"
+      LogException $_.Exception 'rollback'
     }
   }
 } finally {
