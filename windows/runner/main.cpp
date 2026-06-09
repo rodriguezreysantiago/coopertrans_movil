@@ -42,7 +42,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // ASCII en lugar de em-dash por el mismo motivo de encoding.
   // Mantener sincronizada con pubspec.yaml \u2014 `scripts/bump_version.ps1`
   // actualiza los 3 lugares (pubspec, app_constants, main.cpp).
-  if (!window.Create(L"Coopertrans Móvil — v 1.2.12 (build 10212)", origin, size)) {
+  if (!window.Create(L"Coopertrans Móvil — v 1.2.13 (build 10213)", origin, size)) {
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
