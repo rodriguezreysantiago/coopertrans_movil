@@ -1,40 +1,46 @@
-; Inno Setup script para Coopertrans Móvil — modelo "instalador + launcher".
+; Inno Setup script para Coopertrans Movil — modelo PER-USER (sin admin).
 ;
-; Compilar con `scripts\build_installer.ps1` (toma la versión del
-; pubspec.yaml y se la pasa a iscc.exe). NO compilar el .iss directo
-; sin pasarle MyAppVersion.
+; REWRITE 2026-06-09 — el modelo anterior instalaba machine-wide en
+; C:\ProgramData con permisos `users-modify` que NO incluyen Delete sobre
+; archivos individuales heredados de Admin/SYSTEM. Resultado: ningun update
+; in-app podia reemplazar la carpeta, todos fallaban con "Acceso denegado".
+; Caso reportado Santiago 2026-06-09 (3 dias peleando con el bug).
 ;
-; Pre-requisitos (una vez en la PC que crea releases):
+; Approach actual: instalacion per-user en %LOCALAPPDATA%, sin UAC. Mismo
+; modelo que Slack, Spotify, VSCode-user. Sin SYSTEM/Admin tocando archivos,
+; sin permisos heredados restrictivos. La app + updates corren bajo el user
+; logueado y pueden borrar/sobrescribir lo que crearon ellos mismos.
+;
+; Compilar con `scripts\build_installer.ps1` (toma version del pubspec.yaml).
+;
+; Pre-requisitos (PC release-master):
 ;   winget install JRSoftware.InnoSetup
 ;   flutter build windows --release  (antes de cada build del instalador)
 ;
-; ARQUITECTURA del install resultante:
-;   Program Files\CoopertransMovil\
-;     ├── launcher.ps1                  (LEGACY: fallback manual de update; el
-;     │                                  ícono ya NO lo usa — ver modelo abajo)
-;     └── app_icon.ico                  (ícono compartido)
+; ARQUITECTURA del install resultante (per-user, SIN admin):
+;   %LOCALAPPDATA%\CoopertransMovil\          (carpeta del user, sin restricciones)
+;     |- coopertrans_movil.exe                (la app real)
+;     |- flutter_windows.dll
+;     |- data\flutter_assets\                 (assets Flutter)
+;     |- launcher.ps1                         (fallback manual de update)
+;     |- app_icon.ico                         (icono compartido)
+;     |- VERSION.txt                          (version instalada)
 ;
-;   ProgramData\CoopertransMovil\       (Permissions: users-modify)
-;     ├── coopertrans_movil.exe         (la app real)
-;     ├── flutter_windows.dll
-;     ├── data\flutter_assets\          (assets de Flutter)
-;     ├── ...                           (DLLs nativos)
-;     └── VERSION.txt                   (versión instalada)
+;   Shortcut: %USERPROFILE%\Desktop\Coopertrans Movil.lnk -> coopertrans_movil.exe
 ;
-; FLUJO (modelo update IN-APP desde 2026-06-06):
-;   1. Pendrive/descarga del .exe → doble click → UAC → instala ambas carpetas.
-;   2. El ícono "Coopertrans Móvil" abre coopertrans_movil.exe DIRECTO (sin
-;      launcher, SIN ventana de PowerShell).
-;   3. Updates futuros: 100% IN-APP. La app consulta la GitHub Releases API al
-;      arrancar y muestra un banner; el updater in-app (lib/core/services/
-;      windows_update_service.dart) baja el zip y lo reemplaza con un helper
-;      PowerShell OCULTO, y relanza. No hace falta pendrive ni reinstalar.
-;   4. launcher.ps1 queda como LEGACY (fallback manual / dev). El ícono ya no lo
-;      usa → NO vuelve a aparecer la ventana negra.
+; FLUJO:
+;   1. Usuario baja el .exe del link estable (GitHub Release).
+;   2. Doble click — Inno corre como user normal, SIN UAC.
+;   3. Wizard minimo (sin pagina de directorio, va directo a LOCALAPPDATA).
+;   4. Instala todo en una carpeta del user, crea shortcut, arranca la app.
+;   5. Updates futuros: 100% IN-APP. Como la carpeta es del user, no hay
+;      problemas de permisos: Move-Item / Copy-Item / Remove-Item vuelan.
 ;
-; MIGRACIÓN: las PCs con un install VIEJO tienen el ícono apuntando al launcher
-; (read-only, la app sin admin no lo puede cambiar). Para pasarlas al modelo
-; nuevo hay que correr ESTE instalador una vez en cada una.
+; MIGRACION desde la version vieja (machine-wide en ProgramData): el operador
+; desinstala la version vieja desde "Aplicaciones" (UAC), despues corre este
+; setup nuevo (sin UAC). El AppId NUEVO (abajo) evita que Inno se confunda
+; con la entrada de Programs and Features de la version vieja — quedan como
+; 2 apps distintas hasta que el user desinstale la vieja.
 
 #ifndef MyAppVersion
   #error MyAppVersion no definido. Compilar via scripts\build_installer.ps1
@@ -44,7 +50,12 @@
 #define MyAppExeName    "coopertrans_movil.exe"
 #define MyAppPublisher  "Coopertrans"
 #define MyAppURL        "https://github.com/rodriguezreysantiago/coopertrans_movil"
-#define MyAppId         "{{B6F7E8A9-1234-4567-8901-COOPERTRANSMOV}"
+; AppId NUEVO 2026-06-09 (rewrite per-user). El AppId viejo
+; {B6F7E8A9-1234-4567-8901-COOPERTRANSMOV} corresponde al install machine-wide
+; en ProgramData; si lo dejaramos igual, Inno intentaria "actualizar" la
+; instalacion vieja (que requiere admin) en vez de crear una nueva per-user.
+; Quedan visibles como 2 apps distintas en Programs and Features.
+#define MyAppId         "{{A4F1C2B3-5678-4ABC-9DEF-CTMOVUSERINST}"
 
 [Setup]
 AppId={#MyAppId}
@@ -55,19 +66,23 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}/releases
-DefaultDirName={autopf}\CoopertransMovil
-DefaultGroupName={#MyAppName}
+
+; PER-USER: sin admin, sin UAC, sin ProgramData. Instala en LOCALAPPDATA.
+PrivilegesRequired=lowest
+DefaultDirName={localappdata}\CoopertransMovil
+; Sin "pagina de directorio" en el wizard — flujo Next-Next-Finish.
+DisableDirPage=yes
 DisableProgramGroupPage=yes
-PrivilegesRequired=admin
+
 OutputDir=..\dist
 OutputBaseFilename=CoopertransMovil-Setup-{#MyAppVersion}
 SetupIconFile=..\windows\runner\resources\app_icon.ico
-UninstallDisplayIcon={app}\app_icon.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 
-; Cierra la app si está corriendo, evitando "no se pudo reemplazar el .exe".
+; Cierra la app si esta corriendo, evitando "no se pudo reemplazar el .exe".
 CloseApplications=yes
 RestartApplications=no
 
@@ -80,42 +95,32 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Crear icono en el escritorio"; GroupDescription: "Iconos adicionales:"; Flags: checkedonce
 
-[Dirs]
-; ProgramData\CoopertransMovil con permisos modify para Users → el
-; launcher puede actualizar sin UAC. Esta es la diferencia clave vs
-; instalar la app en Program Files (que sería read-only para users).
-Name: "{commonappdata}\CoopertransMovil"; Permissions: users-modify
-
 [Files]
-; --- Launcher + ícono en Program Files (read-only por users) ----
+; Todo en la MISMA carpeta del user (%LOCALAPPDATA%\CoopertransMovil).
+; Sin separar "launcher + app" como antes — el launcher es solo otro
+; archivo dentro de la app, sin requerir Program Files (read-only).
 Source: "..\scripts\launcher_app.ps1"; DestDir: "{app}"; DestName: "launcher.ps1"; Flags: ignoreversion
 Source: "..\windows\runner\resources\app_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
-; --- App completa en ProgramData (writable por users vía launcher) ----
-Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{commonappdata}\CoopertransMovil"; Flags: ignoreversion recursesubdirs createallsubdirs
+; App completa (recursesubdirs + createallsubdirs porque hay data\ y data\flutter_assets\).
+Source: "..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; VERSION.txt para que el launcher sepa qué versión está instalada y
-; pueda compararla con la última release en GitHub.
-Source: "VERSION.txt"; DestDir: "{commonappdata}\CoopertransMovil"; Flags: ignoreversion
+; VERSION.txt para que el launcher sepa la version y la compare con GitHub.
+Source: "VERSION.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-; El shortcut abre coopertrans_movil.exe DIRECTO (modelo update in-app, sin
-; launcher ni ventana de PowerShell). IconFilename apunta al ICONO EMBEBIDO del
-; mismo .exe en ProgramData (IconIndex 0): cuando el updater in-app reemplaza el
-; .exe con un release nuevo, el icono del shortcut se actualiza SOLO. El .exe que
-; copia este instalador ya trae el icono nuevo embebido (Runner.rc).
-Name: "{group}\{#MyAppName}"; Filename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; IconFilename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; IconIndex: 0; WorkingDir: "{commonappdata}\CoopertransMovil"
-Name: "{group}\Desinstalar {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; IconFilename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; IconIndex: 0; WorkingDir: "{commonappdata}\CoopertransMovil"; Tasks: desktopicon
+; Sin grupo en Inicio (lo apago con DisableProgramGroupPage). Solo el
+; shortcut en el escritorio del user (per-user, NO Public).
+Name: "{userdesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\{#MyAppExeName}"; IconIndex: 0; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-; Ofrecer arrancar la app al final del install — abre el .exe DIRECTO. El propio
-; updater in-app consultará la GitHub Releases API al arrancar y ofrecerá la
-; última versión si el instalador trajera una más vieja.
-Filename: "{commonappdata}\CoopertransMovil\{#MyAppExeName}"; WorkingDir: "{commonappdata}\CoopertransMovil"; Description: "Iniciar {#MyAppName}"; Flags: nowait postinstall skipifsilent
+; Ofrecer arrancar la app al final. El updater in-app va a chequear GitHub
+; al primer arranque y mostrar banner si hay version mas nueva.
+Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Description: "Iniciar {#MyAppName}"; Flags: nowait postinstall skipifsilent
 
 [UninstallDelete]
-; Limpiar logs y carpeta de la app de ProgramData. La data del usuario
-; vive en %APPDATA% (Firebase cache, Sentry, etc.) — no se toca para
-; permitir reinstalación con datos preservados.
-Type: filesandordirs; Name: "{commonappdata}\CoopertransMovil"
+; Limpiar la carpeta completa al desinstalar. La data persistente de la app
+; (Firebase cache, secure storage DPAPI, etc.) vive en otros paths del user
+; (%APPDATA%, Credential Manager) — no se toca para permitir reinstall sin
+; reloguear.
+Type: filesandordirs; Name: "{app}"

@@ -45,12 +45,28 @@ $apiHeaders = @{
 }
 
 # === HELPERS =======================================================
+# Tolerar fallas de log (-EA SilentlyContinue + try/catch): caso reportado
+# Santiago 2026-06-09 — el update.log del InstallDir habia sido creado
+# alguna vez con permisos de SYSTEM (heredados de archivos Inno) y el
+# Add-Content moria con "Acceso denegado" en la PRIMERA linea de Log con
+# $ErrorActionPreference='Stop' implicito. El launcher ni siquiera llegaba
+# a chequear si habia update. Ahora el log es best-effort: si no puede
+# escribir, sigue corriendo. (Para evitar que vuelva a pasar, el rewrite
+; per-user del .iss 2026-06-09 instala en %LOCALAPPDATA% sin permisos
+# heredados de SYSTEM; este try/catch es defensa en profundidad.)
 function Log {
     param([string]$Msg, [string]$Color = 'White')
     Write-Host $Msg -ForegroundColor $Color
-    if (Test-Path $installDir) {
-        $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-        Add-Content -Path $logFile -Value "[$ts] $Msg" -Encoding UTF8
+    try {
+        if (Test-Path $installDir) {
+            $ts = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+            Add-Content -Path $logFile -Value "[$ts] $Msg" -Encoding UTF8 -ErrorAction Stop
+        }
+    } catch {
+        # No podemos escribir al log — no critico, seguimos. La salida por
+        # Write-Host arriba ya quedo (visible si alguien ejecuta el launcher
+        # interactivo). El logFile roto se va a regenerar despues de un
+        # update / reinstall.
     }
 }
 
@@ -213,6 +229,14 @@ try {
 
     # Backup atomico de la version actual (si existia algo instalado).
     if (Test-Path (Join-Path $installDir $exeName)) {
+        # Limpieza preventiva ANTES del Move: el crashpad de Sentry crea
+        # %InstallDir%\.sentry-native\<UUID>.run\session.json mientras la app
+        # corre. Si la app no cerro bien (crash, kill, alt-F4 forzado), esos
+        # archivos quedan con permisos restringidos del proceso crashpad y
+        # bloquean el Move-Item del backup. Borrarlos antes nos saca ese pie
+        # de la trampa. -EA SilentlyContinue: si no hay nada, no pasa nada.
+        Remove-Item -Path (Join-Path $installDir '.sentry-native') -Recurse -Force -ErrorAction SilentlyContinue
+
         $backupDir = "$installDir.bak"
         if (Test-Path $backupDir) { Remove-Item $backupDir -Recurse -Force }
         Log "Backup de version actual..." 'Cyan'

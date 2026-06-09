@@ -421,6 +421,18 @@ try {
   }
   Start-Sleep -Milliseconds 800
 
+  # 1c. Limpieza preventiva de .sentry-native: el crashpad de Sentry deja
+  # %InstallDir%\.sentry-native\<UUID>.run\session.json con permisos
+  # restringidos del crashpad si la app no cerro limpia. Eso bloqueaba el
+  # Move-Item del backup con "Acceso denegado" (caso Santiago 2026-06-09).
+  # Borrar antes — best-effort, no critico.
+  $pasoActual = 'limpiar_sentry_native'
+  $sentryDir = Join-Path $InstallDir '.sentry-native'
+  if (Test-Path $sentryDir) {
+    Log "PASO limpiar_sentry_native: borrando .sentry-native preventivamente..."
+    try { Remove-Item $sentryDir -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+  }
+
   # 2. Extraer el ZIP a staging.
   $pasoActual = "expand_archive(zip=$Zip)"
   Log "PASO expand_archive: extrayendo zip a $staging..."
