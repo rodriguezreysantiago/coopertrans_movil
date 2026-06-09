@@ -41,6 +41,16 @@
          celulares modernos aunque el canal est� creado. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Auto-arranque al boot para tablets dedicadas (kiosk Gomería).
+         El BootReceiver escucha ACTION_BOOT_COMPLETED y lanza la app
+         automáticamente cuando la tablet termina de bootear. Combinado
+         con Pantalla Fija (Settings → Seguridad), el operador queda
+         encerrado dentro de la app y la tablet siempre arranca con
+         Coopertrans. Pedido Santiago 2026-06-09: Samsung One UI bloquea
+         "app como Default Home", así que vamos por este camino que
+         funciona en cualquier OEM sin ADB ni device owner. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- GPS para el bot�n "Usar mi ubicaci�n" del picker de ubicaciones
          de log�stica. Solo cuando la app est� en uso (no background).
          Privacy: el �nico uso es capturar coords manuales del operador
@@ -82,29 +92,40 @@
         </activity>
 
         <!-- ════════════════════════════════════════════════════════════════
-             KIOSK / SINGLE-APP MODE para tablets dedicadas (ej. Gomería).
+             KIOSK / SINGLE-APP MODE para tablets dedicadas (Gomería).
              ────────────────────────────────────────────────────────────────
-             Activity-alias que vuelve a la app elegible como "Home"
-             (CATEGORY_HOME). Deshabilitado por DEFAULT (android:enabled
-             ="false") → en una instalación normal NO aparece en el chooser
-             de launchers, no cambia nada para los choferes/admins comunes.
+             BootReceiver: auto-arranca la app cuando la tablet termina de
+             bootear. Es la estrategia "kiosk para Samsung One UI" — el
+             approach de "app como Default Home" (commit 08745da, descartado
+             2026-06-09) NO funcionaba en Samsung con Android 13/14 porque
+             Knox bloquea apps de terceros como Home.
 
-             Para activarlo SOLO en una tablet específica (con USB debugging
-             habilitado), corremos un comando ADB:
+             Setup en cada tablet nueva (sin ADB, sin device owner):
+               1. Instalar el APK.
+               2. Lanzar la app una vez (registra el BootReceiver).
+               3. Settings → Seguridad → Pantalla fija → ON + PIN.
+               4. Abrir Coopertrans → botón Recientes → fijar.
+               5. Listo: al apagar/prender, arranca en Coopertrans; el
+                  operador no puede salir sin el PIN.
 
-               adb shell pm enable com.coopertrans.movil/com.coopertrans.movil.KioskHomeAlias
-
-             Después en la tablet: Settings → Apps → Default apps → Home →
-             Coopertrans Movil. Reiniciás → arranca derecho en la app, y
-             el botón Home siempre vuelve a la app. Combinado con la
-             "Pantalla fija" del sistema (Settings → Seguridad → ON + PIN
-             para desfijar) el operador queda encerrado dentro de la app.
-
-             Para revertir (volver la tablet al uso normal):
-               adb shell pm disable-user com.coopertrans.movil/com.coopertrans.movil.KioskHomeAlias
-
-             Pedido Santiago 2026-06-08 (tablet de Gomería).
+             Funciona en cualquier OEM (Samsung incluido).
              ════════════════════════════════════════════════════════════════ -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter android:priority="999">
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+
+        <!-- Activity-alias LEGACY (kiosk via "Default Home"). Quedó
+             deshabilitado y se mantiene SOLO por compat de PCs/tablets que
+             alguna vez lo hayan habilitado con ADB. El approach actual
+             (BootReceiver arriba) no lo necesita. NO borrar sin revisar que
+             ninguna tablet de campo lo tenga activo. -->
         <activity-alias
             android:name="com.coopertrans.movil.KioskHomeAlias"
             android:targetActivity=".MainActivity"
