@@ -125,9 +125,10 @@ function Write-Utf8NoBom {
 # no-ASCII (acentos, eñe, "·", "—") se decodifican como Latin-1 → al
 # re-escribir en UTF-8 cada byte se vuelve 2 bytes → mojibake. Y cada
 # release lo amplifica. Caso reportado Santiago 2026-06-09: la pantalla
-# splash mostraba la `tagline` como ASCII soup ("GESTIÃƒÆ'...DE FLOTA...
-# COOPERTRANS"). Sin -Encoding UTF8 el bug es invisible hasta que
-# alguien mira la app en pantalla.
+# splash mostraba la `tagline` como ASCII soup (basura tipo "GESTI<...>
+# DE FLOTA <...> COOPERTRANS" en lugar de "GESTIÓN DE FLOTA · COOPERTRANS").
+# Sin -Encoding UTF8 el bug es invisible hasta que alguien mira la app
+# en pantalla.
 $pubContent = Get-Content $pubspec -Raw -Encoding UTF8
 $pubContent = $pubContent -replace "version:\s*\S+", "version: $Version"
 Write-Utf8NoBom $pubspec $pubContent
