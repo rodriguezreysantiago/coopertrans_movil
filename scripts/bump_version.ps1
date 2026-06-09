@@ -119,15 +119,24 @@ function Write-Utf8NoBom {
     )
 }
 
-$pubContent = Get-Content $pubspec -Raw
+# LEER en UTF-8 EXPLICITO. En PowerShell 5.1, `Get-Content -Raw` SIN
+# -Encoding lee con la codificacion del sistema (Windows-1252/Latin-1).
+# Si el archivo es UTF-8 (como debe ser todo .dart/.yaml), los caracteres
+# no-ASCII (acentos, eñe, "·", "—") se decodifican como Latin-1 → al
+# re-escribir en UTF-8 cada byte se vuelve 2 bytes → mojibake. Y cada
+# release lo amplifica. Caso reportado Santiago 2026-06-09: la pantalla
+# splash mostraba la `tagline` como ASCII soup ("GESTIÃƒÆ'...DE FLOTA...
+# COOPERTRANS"). Sin -Encoding UTF8 el bug es invisible hasta que
+# alguien mira la app en pantalla.
+$pubContent = Get-Content $pubspec -Raw -Encoding UTF8
 $pubContent = $pubContent -replace "version:\s*\S+", "version: $Version"
 Write-Utf8NoBom $pubspec $pubContent
 
-$constContent = Get-Content $appConstants -Raw
+$constContent = Get-Content $appConstants -Raw -Encoding UTF8
 $constContent = $constContent -replace "appVersion\s*=\s*'v [^']+'", "appVersion = '$appVer'"
 Write-Utf8NoBom $appConstants $constContent
 
-$mainContent = Get-Content $mainCpp -Raw
+$mainContent = Get-Content $mainCpp -Raw -Encoding UTF8
 # Reemplaza el string del titulo. Tolerante con o sin acento, con
 # diferentes formatos de version.
 $mainContent = $mainContent -replace 'L"Coopertrans M[^"]*"', "L`"Coopertrans Móvil — $appVer (build $nBuild)`""
