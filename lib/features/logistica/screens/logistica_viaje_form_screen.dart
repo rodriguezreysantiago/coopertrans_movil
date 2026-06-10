@@ -39,7 +39,7 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 //                                            _BannerEncadenamiento + _DropdownProducto
 //   logistica_viaje_form_secciones.dart  <- _SeccionResumen + _SeccionEstado +
 //                                            _SeccionChofer + _SeccionUnidad +
-//                                            _SeccionAdelantoAsociado + _UpperCaseFormatter
+//                                            _SeccionAdelantosAsociados + _UpperCaseFormatter
 //   logistica_viaje_form_gastos.dart     <- _SeccionGastos (gastos por tramo)
 //   logistica_viaje_form_widgets.dart    <- _SeccionCard + _SubseccionTitulo +
 //                                            _BotonFecha + _ResumenTarifa + _BotonesGuardar
@@ -57,7 +57,7 @@ part 'logistica_viaje_form_tarifa_picker.dart';
 ///   1. **Resumen** arriba (totales en vivo).
 ///   2. **Estado** del viaje.
 ///   3. **Chofer + Unidad** (chofer auto-llena unidad asignada).
-///   4. **Adelanto** al chofer.
+///   4. **Adelantos asociados** (multi-select de adelantos del chofer).
 ///   5. **Gastos extraordinarios**.
 ///   6. **Tramos** — uno o varios, con botón "+ AGREGAR TRAMO".
 ///
@@ -83,14 +83,16 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
   final _engancheCtrl = TextEditingController();
 
   // Adelanto: la sección de alta inline se removió 2026-05-13 (ahora
-  // viven en `ADELANTOS_CHOFER`). El 2026-05-13 también se agregó la
-  // posibilidad de ASOCIAR un adelanto preexistente al viaje desde
-  // este form — `_adelantoAsociadoId` es el doc id elegido en el
-  // dropdown. `_adelantoAsociadoIdInicial` guarda el valor con el que
-  // se abrió el form (modo edición), para calcular el delta al
-  // guardar y hacer solo el update mínimo (asociar/desasociar).
-  String? _adelantoAsociadoId;
-  String? _adelantoAsociadoIdInicial;
+  // viven en `ADELANTOS_CHOFER`). El 2026-05-13 se agregó ASOCIAR un
+  // adelanto preexistente; el 2026-06-10 pasó a VARIOS (Santiago:
+  // "muchas veces los viajes son largos y se les da un adelanto más").
+  // `_adelantosAsociadosIds` es el set de doc ids tildados en la
+  // sección. `_adelantosAsociadosIdsInicial` guarda el set con el que
+  // se abrió el form (modo edición), para calcular el delta al guardar
+  // y hacer solo los updates mínimos (asociar agregados / desasociar
+  // quitados).
+  final Set<String> _adelantosAsociadosIds = {};
+  Set<String> _adelantosAsociadosIdsInicial = {};
 
   // Gastos: desde 2026-05-13 viven en cada `_TramoEditState`, no más
   // a nivel viaje. Cada `_TramoCard` tiene su propio `_SeccionGastos`.
@@ -150,7 +152,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
           ? null
           : _motivoCancelacionCtrl.text.trim();
       final fechaPostergadoA = _fechaPostergadoA;
-      final adelantoAsociadoId = _adelantoAsociadoId;
+      final adelantosAsociadosIds = _adelantosAsociadosIds.toList();
       final tramosViaje = _tramos
           .where((t) => t.tarifa != null)
           .map((t) => t.toTramoViaje())
@@ -168,7 +170,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
         estado: estado,
         motivoCancelacion: motivoCancelacion,
         fechaPostergadoA: fechaPostergadoA,
-        adelantoAsociadoId: adelantoAsociadoId,
+        adelantosAsociadosIds: adelantosAsociadosIds,
       ).catchError((_) {/* best-effort */});
     }
     _vehiculoCtrl.dispose();
@@ -216,7 +218,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
             ? null
             : _motivoCancelacionCtrl.text.trim(),
         fechaPostergadoA: _fechaPostergadoA,
-        adelantoAsociadoId: _adelantoAsociadoId,
+        adelantosAsociadosIds: _adelantosAsociadosIds.toList(),
       );
     } catch (_) {
       // Best-effort. Si falla, el operador no se entera — el
@@ -339,7 +341,9 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
     _estado = b.estado;
     _motivoCancelacionCtrl.text = b.motivoCancelacion ?? '';
     _fechaPostergadoA = b.fechaPostergadoA;
-    _adelantoAsociadoId = b.adelantoAsociadoId;
+    _adelantosAsociadosIds
+      ..clear()
+      ..addAll(b.adelantosAsociadosIds);
 
     // Performance: paralelizar lookups de tarifa al restaurar borrador
     // (auditoria 2026-05-17 — antes secuencial). Mismo patron que el
@@ -445,20 +449,20 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
         _tramos.add(_TramoEditState.vacio());
       }
 
-      // Hidratar el adelanto asociado. Si hay uno con
-      // `viaje_id == widget.viajeId`, lo seteamos como selección
-      // inicial del dropdown. Sin esto, en modo edición el dropdown
-      // arrancaría en "(sin adelanto)" aún si el viaje ya tenía uno
-      // asociado desde antes.
+      // Hidratar los adelantos asociados. Traemos TODOS los que tengan
+      // `viaje_id == widget.viajeId` y los tildamos. Guardamos el set
+      // inicial para calcular el delta al guardar. Sin esto, en modo
+      // edición la sección arrancaría vacía aunque el viaje ya tuviera
+      // adelantos asociados desde antes.
       try {
-        final adAsociado =
-            await AdelantosService.getPorViaje(widget.viajeId!);
-        if (adAsociado != null) {
-          _adelantoAsociadoId = adAsociado.id;
-          _adelantoAsociadoIdInicial = adAsociado.id;
-        }
+        final asociados =
+            await AdelantosService.getTodosPorViaje(widget.viajeId!);
+        _adelantosAsociadosIds
+          ..clear()
+          ..addAll(asociados.map((a) => a.id));
+        _adelantosAsociadosIdsInicial = _adelantosAsociadosIds.toSet();
       } catch (_) {
-        // No es fatal — el operador puede asociar uno nuevo igual.
+        // No es fatal — el operador puede asociar adelantos igual.
       }
 
       setState(() => _cargando = false);
@@ -830,39 +834,43 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
         });
       }
 
-      // Sincronizar asociación del adelanto. Lo hacemos DESPUÉS de
+      // Sincronizar asociación de adelantos. Lo hacemos DESPUÉS de
       // tener el `viajeId` confirmado (sirve tanto para alta como
-      // edición). Tres casos:
-      //   1. Cambió a otro adelanto: desasociar el anterior + asociar
-      //      el nuevo (2 writes).
-      //   2. Se eligió uno y antes no había: asociar (1 write).
-      //   3. Se sacó la asociación: desasociar el anterior (1 write).
-      // Si no cambió respecto del valor inicial, no se hace nada
-      // (idempotente).
-      if (_adelantoAsociadoId != _adelantoAsociadoIdInicial) {
+      // edición). Delta de sets respecto del estado inicial:
+      //   - aAsociar    = tildados ahora que antes no estaban →
+      //                   set `viaje_id = viajeId`.
+      //   - aDesasociar = estaban tildados al abrir y ahora no →
+      //                   limpiar `viaje_id` (quedan libres).
+      // Si no cambió nada, ambos sets son vacíos y no se hace ningún
+      // write (idempotente).
+      final aAsociar =
+          _adelantosAsociadosIds.difference(_adelantosAsociadosIdsInicial);
+      final aDesasociar =
+          _adelantosAsociadosIdsInicial.difference(_adelantosAsociadosIds);
+      if (aAsociar.isNotEmpty || aDesasociar.isNotEmpty) {
         try {
-          if (_adelantoAsociadoIdInicial != null) {
+          for (final id in aDesasociar) {
             await AdelantosService.setViajeAsociado(
-              adelantoId: _adelantoAsociadoIdInicial!,
+              adelantoId: id,
               viajeId: null,
               actualizadoPorDni: dniActual,
             );
           }
-          if (_adelantoAsociadoId != null) {
+          for (final id in aAsociar) {
             await AdelantosService.setViajeAsociado(
-              adelantoId: _adelantoAsociadoId!,
+              adelantoId: id,
               viajeId: viajeId,
               actualizadoPorDni: dniActual,
             );
           }
         } catch (e) {
-          // El viaje YA quedó guardado. Si falla la asociación del
-          // adelanto avisamos pero no rompemos el flujo — el operador
-          // puede reasociar entrando a Editar.
+          // El viaje YA quedó guardado. Si falla la asociación de
+          // algún adelanto avisamos pero no rompemos el flujo — el
+          // operador puede reasociar entrando a Editar.
           if (mounted) {
             AppFeedback.warningOn(
               messenger,
-              'Viaje guardado, pero falló asociar el adelanto: $e',
+              'Viaje guardado, pero falló asociar algún adelanto: $e',
             );
           }
         }
@@ -964,12 +972,12 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
               nombre: _choferNombre,
               onChanged: (dni, nombre, vehiculo, enganche) {
                 setState(() {
-                  // Si cambia el chofer, el adelanto previamente
-                  // seleccionado pertenece a OTRO chofer (los adelantos
-                  // viven por DNI). Lo limpiamos para que el operador
-                  // elija uno del chofer nuevo si corresponde.
+                  // Si cambia el chofer, los adelantos previamente
+                  // tildados pertenecen a OTRO chofer (los adelantos
+                  // viven por DNI). Los limpiamos para que el operador
+                  // elija los del chofer nuevo si corresponde.
                   if (dni != _choferDni) {
-                    _adelantoAsociadoId = null;
+                    _adelantosAsociadosIds.clear();
                   }
                   _choferDni = dni;
                   _choferNombre = nombre;
@@ -993,18 +1001,24 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
             ),
             const SizedBox(height: AppSpacing.md),
 
-            // 4. ADELANTO ASOCIADO (opcional). Si el operador ya
-            // creó un adelanto antes de armar el viaje (caso típico:
-            // le pagó al chofer en mano y después arma el viaje al
-            // que pertenece), lo elige acá. La sección de ALTA de
+            // 4. ADELANTOS ASOCIADOS (opcional). Si el operador ya
+            // creó adelantos antes de armar el viaje (caso típico:
+            // le pagó al chofer en mano una o varias veces a lo largo
+            // de un viaje largo), los tilda acá. La sección de ALTA de
             // adelantos sigue viviendo en `LogisticaAdelantosScreen`
             // — esto es solo ASOCIACIÓN.
-            _SeccionAdelantoAsociado(
+            _SeccionAdelantosAsociados(
               choferDni: _choferDni,
               viajeIdActual: widget.viajeId,
-              adelantoSeleccionadoId: _adelantoAsociadoId,
-              onChanged: (id) {
-                setState(() => _adelantoAsociadoId = id);
+              seleccionados: _adelantosAsociadosIds,
+              onToggle: (id, seleccionado) {
+                setState(() {
+                  if (seleccionado) {
+                    _adelantosAsociadosIds.add(id);
+                  } else {
+                    _adelantosAsociadosIds.remove(id);
+                  }
+                });
                 _programarGuardadoBorrador();
               },
             ),

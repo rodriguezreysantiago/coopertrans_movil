@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/app_logger.dart';
@@ -409,32 +410,58 @@ class AdelantosService {
     );
   }
 
-  /// Devuelve el adelanto asociado a un viaje (si existe). La hace el
-  /// form de viaje al cargar en modo edición para hidratar el
-  /// dropdown "ADELANTO ASOCIADO" con la selección actual.
-  /// Devuelve null si no hay ninguno (caso normal — la mayoría de
-  /// viajes no van a tener adelanto asociado).
+  /// Devuelve TODOS los adelantos asociados a un viaje, ordenados por
+  /// fecha ascendente (cronológico — el primer adelanto del viaje
+  /// arriba). Excluye soft-deleted por default: un adelanto eliminado
+  /// ya no es deuda válida y no debe contar como "asociado".
   ///
-  /// El modelo soporta a lo sumo UN adelanto por viaje desde la UI
-  /// (el dropdown es single-select). Si por alguna razón hay varios
-  /// docs con el mismo viaje_id (data corrupta), tomamos el primero.
-  static Future<AdelantoChofer?> getPorViaje(String viajeId) async {
-    if (viajeId.isEmpty) return null;
-    // Sin .limit(1): si por data corrupta hubiera más de un adelanto con el
-    // mismo viaje_id, tomamos el más reciente de forma DETERMINÍSTICA. Antes
-    // .limit(1) sin orderBy devolvía uno arbitrario (Firestore no garantiza
-    // orden sin orderBy) → el detalle del viaje podía mostrar un adelanto
-    // distinto entre recargas (audit 2026-06-04). El caso normal es 0 o 1 doc,
-    // así que traer todos los matches no tiene costo. Ordenamos client-side
-    // (where(==) + orderBy(otro campo) exigiría un índice compuesto).
+  /// Un viaje puede tener VARIOS adelantos desde 2026-06-10 (Santiago:
+  /// "muchas veces los viajes son largos y se les da un adelanto más").
+  /// La asociación vive en el lado del adelanto (`viaje_id`), así que
+  /// varios docs pueden apuntar al mismo viaje sin tope.
+  ///
+  /// Ordena client-side (`where(==)` + `orderBy(fecha)` exigiría un
+  /// índice compuesto y el set por viaje es chico).
+  static Future<List<AdelantoChofer>> getTodosPorViaje(
+    String viajeId, {
+    bool incluirEliminados = false,
+  }) async {
+    if (viajeId.isEmpty) return const [];
     final snap = await _col.where('viaje_id', isEqualTo: viajeId).get();
-    if (snap.docs.isEmpty) return null;
-    final adelantos = snap.docs.map((d) => AdelantoChofer.fromDoc(d)).toList()
+    return ordenarAdelantosDeViaje(
+      snap.docs.map((d) => AdelantoChofer.fromDoc(d)),
+      incluirEliminados: incluirEliminados,
+    );
+  }
+
+  /// Filtra (soft-deleted) y ordena (fecha ascendente, id como
+  /// desempate determinístico) los adelantos de un viaje. La parte
+  /// PURA de [getTodosPorViaje] — la consulta Firestore vive allá,
+  /// esta es la lógica de negocio (qué cuenta como asociado y en qué
+  /// orden). Visible para tests.
+  @visibleForTesting
+  static List<AdelantoChofer> ordenarAdelantosDeViaje(
+    Iterable<AdelantoChofer> adelantos, {
+    bool incluirEliminados = false,
+  }) {
+    return adelantos
+        .where((a) => incluirEliminados || !a.eliminado)
+        .toList()
       ..sort((a, b) {
-        final porFecha = b.fecha.compareTo(a.fecha);
+        final porFecha = a.fecha.compareTo(b.fecha);
         return porFecha != 0 ? porFecha : a.id.compareTo(b.id);
       });
-    return adelantos.first;
+  }
+
+  /// Devuelve el adelanto asociado a un viaje más reciente (si existe).
+  /// Helper de compat retro — desde 2026-06-10 un viaje puede tener
+  /// varios adelantos; usar [getTodosPorViaje] para la lista completa.
+  /// Se mantiene por si algún call-site puntual solo necesita uno.
+  static Future<AdelantoChofer?> getPorViaje(String viajeId) async {
+    final todos = await getTodosPorViaje(viajeId);
+    if (todos.isEmpty) return null;
+    // getTodosPorViaje viene asc por fecha; el "más reciente" es el último.
+    return todos.last;
   }
 
   /// Toggle del estado `pagado` de un adelanto. Si `pagado == true`,

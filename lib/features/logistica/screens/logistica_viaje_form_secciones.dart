@@ -11,7 +11,7 @@
 //     focusNode + optionsBuilder + onSelected) y el StreamBuilder de CHOFER.
 //   - `_SeccionUnidad` conserva los inputFormatters (patente + uppercase) y
 //     `maxLength: 7`.
-//   - `_SeccionAdelantoAsociado` conserva el StreamBuilder + filtro client-side.
+//   - `_SeccionAdelantosAsociados` conserva el StreamBuilder + filtro client-side.
 // Solo cambia el chrome a tokens (`context.colors`), bento y mono para plata.
 //
 // Componentes:
@@ -19,7 +19,7 @@
 //   - _SeccionEstado — dropdown del estado del viaje.
 //   - _SeccionChofer + _SeccionChoferState — autocomplete por nombre.
 //   - _SeccionUnidad + _UpperCaseFormatter — patentes tractor + enganche.
-//   - _SeccionAdelantoAsociado — dropdown para asociar adelanto preexistente.
+//   - _SeccionAdelantosAsociados — multi-select para asociar 1+ adelantos.
 
 part of 'logistica_viaje_form_screen.dart';
 
@@ -480,41 +480,49 @@ class _UpperCaseFormatter extends TextInputFormatter {
 // 2026-05-13. Los adelantos pasaron a ser entidad propia
 // (`ADELANTOS_CHOFER`) con su propia pantalla. El operador crea el
 // adelanto desde LOGÍSTICA → ADELANTOS y, opcionalmente, lo ASOCIA al
-// viaje desde la sección `_SeccionAdelantoAsociado` (dropdown).
+// viaje desde la sección `_SeccionAdelantosAsociados`.
 
-/// Dropdown para ASOCIAR un adelanto preexistente al viaje. Muestra:
-///   - "(sin adelanto asociado)" como opción default.
-///   - Cada adelanto del chofer seleccionado que esté libre (sin
-///     `viaje_id`) O que ya esté asociado a ESTE viaje (modo edición).
+/// Lista multi-select para ASOCIAR uno o varios adelantos preexistentes
+/// al viaje (Santiago 2026-06-10: "muchas veces los viajes son largos y
+/// se les da un adelanto más"). Antes era un dropdown single-select.
 ///
-/// Si todavía no se eligió chofer, se muestra un mensaje pidiendo
-/// que se seleccione uno primero — los adelantos viven por DNI, no
-/// tiene sentido listar.
+/// Muestra cada adelanto del chofer seleccionado que esté:
+///   - libre (sin `viaje_id`), O
+///   - ya asociado a ESTE viaje (modo edición — viene tildado).
 ///
-/// La sección NO permite crear adelantos nuevos. Si el operador
-/// quiere un adelanto que todavía no existe, lo crea desde
-/// `LogisticaAdelantosScreen` y vuelve a este form.
-class _SeccionAdelantoAsociado extends StatelessWidget {
+/// Los asociados a OTRO viaje se excluyen (no le robamos el adelanto a
+/// otro viaje sin querer) y los soft-deleted también.
+///
+/// Si todavía no se eligió chofer, pide elegir uno primero — los
+/// adelantos viven por DNI. La sección NO crea adelantos nuevos: si el
+/// operador necesita uno que no existe, lo crea desde
+/// `LogisticaAdelantosScreen` y vuelve.
+class _SeccionAdelantosAsociados extends StatelessWidget {
   final String? choferDni;
 
-  /// Si es edición, traemos los adelantos ya asociados a este viaje
-  /// además de los libres. Null en modo alta.
+  /// En edición, los adelantos ya asociados a este viaje aparecen
+  /// tildados además de los libres. Null en modo alta.
   final String? viajeIdActual;
-  final String? adelantoSeleccionadoId;
-  final ValueChanged<String?> onChanged;
 
-  const _SeccionAdelantoAsociado({
+  /// IDs actualmente seleccionados (tildados). El padre es dueño del
+  /// estado; esta sección solo notifica toggles.
+  final Set<String> seleccionados;
+
+  /// Notifica que el adelanto [id] pasó a [seleccionado] (o no).
+  final void Function(String id, bool seleccionado) onToggle;
+
+  const _SeccionAdelantosAsociados({
     required this.choferDni,
     required this.viajeIdActual,
-    required this.adelantoSeleccionadoId,
-    required this.onChanged,
+    required this.seleccionados,
+    required this.onToggle,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     return _SeccionCard(
-      titulo: 'ADELANTO ASOCIADO (OPCIONAL)',
+      titulo: 'ADELANTOS ASOCIADOS (OPCIONAL)',
       icono: Icons.payments_outlined,
       accentDot: c.warning,
       children: [
@@ -539,16 +547,19 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
                   child: LinearProgressIndicator(minHeight: 2),
                 );
               }
-              // Filtro client-side: adelantos sin viaje O ya
-              // asociados a ESTE viaje. Los asociados a otro viaje
-              // se excluyen — no queremos robarle el adelanto a otro
-              // viaje sin querer.
+              // Candidatos: adelantos NO eliminados que estén libres o
+              // ya asociados a ESTE viaje. Orden cronológico (más viejo
+              // arriba) para que el operador vea la secuencia de
+              // adelantos del viaje largo en el orden que se dieron.
               final candidatos = snap.data!
+                  .where((a) => !a.eliminado)
                   .where((a) =>
                       a.viajeId == null ||
                       a.viajeId!.isEmpty ||
                       a.viajeId == viajeIdActual)
-                  .toList();
+                  .toList()
+                ..sort((a, b) => a.fecha.compareTo(b.fecha));
+
               if (candidatos.isEmpty) {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -566,50 +577,95 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
                   ],
                 );
               }
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md, vertical: 2),
-                decoration: BoxDecoration(
-                  color: c.surface3,
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(color: c.border),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String?>(
-                    value: adelantoSeleccionadoId,
-                    isExpanded: true,
-                    isDense: true,
-                    dropdownColor: c.surface3,
-                    icon: Icon(Icons.expand_more, color: c.textMuted),
-                    style: AppType.body.copyWith(color: c.text),
-                    items: [
-                      DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text(
-                          '(sin adelanto asociado)',
-                          style: AppType.body.copyWith(color: c.textMuted),
+
+              // Total seleccionado (en vivo) — lo que se le va a
+              // descontar al chofer por estos adelantos.
+              final totalSel = candidatos
+                  .where((a) => seleccionados.contains(a.id))
+                  .fold<double>(0, (acc, a) => acc + a.monto);
+              final cantSel =
+                  candidatos.where((a) => seleccionados.contains(a.id)).length;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    cantSel == 0
+                        ? 'Tildá los adelantos que correspondan a este viaje.'
+                        : '$cantSel seleccionado${cantSel == 1 ? "" : "s"} · '
+                            '\$ ${AppFormatters.formatearMonto(totalSel)}',
+                    style: AppType.bodySm.copyWith(
+                      color: cantSel == 0 ? c.textMuted : c.warning,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  ...candidatos.map((a) {
+                    final tildado = seleccionados.contains(a.id);
+                    final fecha = AppFormatters.formatearFecha(a.fecha);
+                    final monto = AppFormatters.formatearMonto(a.monto);
+                    final medio = a.medioPago.etiqueta;
+                    final obs = a.observacion?.trim().isNotEmpty == true
+                        ? ' · ${a.observacion!.trim()}'
+                        : '';
+                    final esCuota = a.esCuota
+                        ? ' · cuota ${a.cuotaNumero}/${a.cuotasTotal}'
+                        : '';
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                      child: InkWell(
+                        onTap: () => onToggle(a.id, !tildado),
+                        borderRadius: BorderRadius.circular(AppRadius.lg),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.md,
+                            vertical: AppSpacing.sm,
+                          ),
+                          decoration: BoxDecoration(
+                            color: tildado ? c.surface3 : c.surface2,
+                            borderRadius: BorderRadius.circular(AppRadius.lg),
+                            border: Border.all(
+                              color: tildado ? c.warning : c.border,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                tildado
+                                    ? Icons.check_box
+                                    : Icons.check_box_outline_blank,
+                                size: 20,
+                                color: tildado ? c.warning : c.textMuted,
+                              ),
+                              const SizedBox(width: AppSpacing.sm),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '\$ $monto',
+                                      style: AppType.mono.copyWith(
+                                        color: c.text,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Text(
+                                      '$fecha · $medio$esCuota$obs',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppType.monoSm
+                                          .copyWith(color: c.textMuted),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                      ...candidatos.map((a) {
-                        final fecha = AppFormatters.formatearFecha(a.fecha);
-                        final monto = AppFormatters.formatearMonto(a.monto);
-                        final medio = a.medioPago.etiqueta;
-                        final obs = a.observacion?.trim().isNotEmpty == true
-                            ? ' · ${a.observacion!.trim()}'
-                            : '';
-                        return DropdownMenuItem<String?>(
-                          value: a.id,
-                          child: Text(
-                            '$fecha · \$ $monto · $medio$obs',
-                            overflow: TextOverflow.ellipsis,
-                            style: AppType.body.copyWith(color: c.text),
-                          ),
-                        );
-                      }),
-                    ],
-                    onChanged: onChanged,
-                  ),
-                ),
+                    );
+                  }),
+                ],
               );
             },
           ),

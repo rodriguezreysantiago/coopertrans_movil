@@ -43,7 +43,7 @@ class BorradoresViajeService {
   ///     + fecha postergado a (si aplican).
   ///   - lista completa de tramos (cada uno con tarifa + kg + fechas
   ///     + gastos). Reusa el `TramoViaje.toMap()` existente.
-  ///   - id del adelanto asociado (si lo eligió).
+  ///   - ids de los adelantos asociados (si tildó alguno).
   ///   - timestamp `actualizado_en` para mostrar cuándo fue el último
   ///     auto-save al user al ofrecer recuperar.
   static Future<void> guardar({
@@ -57,7 +57,7 @@ class BorradoresViajeService {
     required EstadoViaje estado,
     required String? motivoCancelacion,
     required DateTime? fechaPostergadoA,
-    required String? adelantoAsociadoId,
+    required List<String> adelantosAsociadosIds,
   }) async {
     if (operadorDni.isEmpty) {
       throw ArgumentError('operadorDni vacío.');
@@ -83,7 +83,7 @@ class BorradoresViajeService {
           ? null
           : Timestamp.fromDate(fechaPostergadoA),
       'tramos': tramos.map((t) => t.toMap()).toList(),
-      'adelanto_asociado_id': adelantoAsociadoId,
+      'adelantos_asociados_ids': adelantosAsociadosIds,
       'actualizado_en': FieldValue.serverTimestamp(),
     };
     final ref = _db.collection(_coleccion).doc(_docId(
@@ -144,7 +144,7 @@ class BorradorViaje {
   final String? motivoCancelacion;
   final DateTime? fechaPostergadoA;
   final List<TramoViaje> tramos;
-  final String? adelantoAsociadoId;
+  final List<String> adelantosAsociadosIds;
   final DateTime? actualizadoEn;
 
   const BorradorViaje({
@@ -156,7 +156,7 @@ class BorradorViaje {
     required this.motivoCancelacion,
     required this.fechaPostergadoA,
     required this.tramos,
-    required this.adelantoAsociadoId,
+    required this.adelantosAsociadosIds,
     required this.actualizadoEn,
   });
 
@@ -174,8 +174,25 @@ class BorradorViaje {
       motivoCancelacion: d['motivo_cancelacion']?.toString(),
       fechaPostergadoA: (d['fecha_postergado_a'] as Timestamp?)?.toDate(),
       tramos: tramos,
-      adelantoAsociadoId: d['adelanto_asociado_id']?.toString(),
+      adelantosAsociadosIds: _leerAdelantosIds(d),
       actualizadoEn: (d['actualizado_en'] as Timestamp?)?.toDate(),
     );
+  }
+
+  /// Lee la lista de adelantos asociados del borrador. Compat retro:
+  /// los borradores creados antes del 2026-06-10 guardaban un único
+  /// `adelanto_asociado_id` (string). Si está el array nuevo, lo
+  /// usamos; sino caemos al campo singular viejo (un borrador en vuelo
+  /// al momento del deploy sigue hidratando bien).
+  static List<String> _leerAdelantosIds(Map<String, dynamic> d) {
+    final lista = d['adelantos_asociados_ids'];
+    if (lista is List) {
+      return lista
+          .map((e) => e?.toString() ?? '')
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+    final viejo = d['adelanto_asociado_id']?.toString();
+    return (viejo != null && viejo.isNotEmpty) ? [viejo] : const [];
   }
 }

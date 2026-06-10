@@ -10,13 +10,14 @@
 //     de 5 por tramo, etc.),
 //   - las acciones (editar / borrar / reactivar / eliminar definitivo)
 //     con sus diálogos y services,
-//   - la lectura del adelanto asociado (`AdelantosService.getPorViaje`),
-//     ahora HOISTED al tope para alimentar el KPI strip + la card de
-//     detalle con una sola llamada.
+//   - la lectura de los adelantos asociados
+//     (`AdelantosService.getTodosPorViaje`), HOISTED al tope para
+//     alimentar el KPI strip + la card de detalle con una sola llamada.
+//     Un viaje puede tener VARIOS adelantos desde 2026-06-10.
 //
 // Layout Núcleo:
 //   ┌─ Hero: eyebrow VIAJE #id · estado (AppBadge) · chofer · unidad ─┐
-//   ├─ AppKpiStrip: km · Vecchi · chofer · adelanto · saldo ──────────┤
+//   ├─ AppKpiStrip: km · Vecchi · chofer · adelantos · saldo ─────────┤
 //   ├─ Acciones (editar/borrar/…) ───────────────────────────────────┤
 //   ├─ Asignación (bento, hairlines) ────────────────────────────────┤
 //   ├─ Tarifa + tramos (filas separadas por AppHairline) ────────────┤
@@ -65,13 +66,14 @@ class LogisticaViajeDetalleScreen extends StatefulWidget {
 
 class _LogisticaViajeDetalleScreenState
     extends State<LogisticaViajeDetalleScreen> {
-  // El adelanto asociado se lee UNA sola vez (el viajeId no cambia en esta
-  // pantalla). Antes el FutureBuilder vivía dentro del StreamBuilder del viaje
-  // y se re-disparaba en cada snapshot → lecturas de más + parpadeo del KPI
-  // "Adelanto" (audit 2026-06-04). La pantalla es read-only; al re-entrar,
-  // initState recrea el future.
-  late final Future<AdelantoChofer?> _adelantoFuture =
-      AdelantosService.getPorViaje(widget.viajeId);
+  // Los adelantos asociados se leen UNA sola vez (el viajeId no cambia en
+  // esta pantalla). Antes el FutureBuilder vivía dentro del StreamBuilder del
+  // viaje y se re-disparaba en cada snapshot → lecturas de más + parpadeo del
+  // KPI "Adelantos" (audit 2026-06-04). La pantalla es read-only; al
+  // re-entrar, initState recrea el future. Un viaje puede tener varios
+  // adelantos desde 2026-06-10.
+  late final Future<List<AdelantoChofer>> _adelantosFuture =
+      AdelantosService.getTodosPorViaje(widget.viajeId);
 
   @override
   Widget build(BuildContext context) {
@@ -98,12 +100,12 @@ class _LogisticaViajeDetalleScreenState
               subtitle: 'Puede haber sido eliminado definitivamente.',
             );
           }
-          // El adelanto asociado (cacheado en el State) se baja a quien lo
-          // necesite: KPI strip + card de detalle.
-          return FutureBuilder<AdelantoChofer?>(
-            future: _adelantoFuture,
+          // Los adelantos asociados (cacheados en el State) se bajan a
+          // quien los necesite: KPI strip + card de detalle.
+          return FutureBuilder<List<AdelantoChofer>>(
+            future: _adelantosFuture,
             builder: (fctx, fsnap) {
-              final adelanto = fsnap.data;
+              final adelantos = fsnap.data ?? const <AdelantoChofer>[];
               return SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.lg,
@@ -116,16 +118,16 @@ class _LogisticaViajeDetalleScreenState
                   children: [
                     _Hero(v: v),
                     const SizedBox(height: AppSpacing.lg),
-                    _KpiStripViaje(v: v, adelanto: adelanto),
+                    _KpiStripViaje(v: v, adelantos: adelantos),
                     const SizedBox(height: AppSpacing.mdDense),
                     // Acciones ARRIBA — Santiago 2026-05-14: que
                     // EDITAR/BORRAR estén accesibles sin scroll.
                     _BotoneraAcciones(v: v),
                     const SizedBox(height: AppSpacing.mdDense),
                     _SeccionAsignacion(v: v),
-                    if (adelanto != null) ...[
+                    if (adelantos.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.mdDense),
-                      _SeccionAdelantoAsociado(adelanto: adelanto),
+                      _SeccionAdelantosAsociados(adelantos: adelantos),
                     ],
                     const SizedBox(height: AppSpacing.mdDense),
                     _SeccionTramos(v: v),
@@ -319,8 +321,8 @@ class _EstadoBadge extends StatelessWidget {
 
 class _KpiStripViaje extends StatelessWidget {
   final Viaje v;
-  final AdelantoChofer? adelanto;
-  const _KpiStripViaje({required this.v, required this.adelanto});
+  final List<AdelantoChofer> adelantos;
+  const _KpiStripViaje({required this.v, required this.adelantos});
 
   @override
   Widget build(BuildContext context) {
@@ -333,6 +335,18 @@ class _KpiStripViaje extends StatelessWidget {
       0,
       (acc, t) => acc + (t.kgDescargados ?? t.kgCargados ?? 0),
     );
+
+    // Suma de todos los adelantos asociados (desde 2026-06-10 pueden ser
+    // varios). El delta entre el monto y el subtotal se descuenta en
+    // LIQUIDACIÓN sumando los adelantos del chofer en el rango.
+    final adelantoTotal =
+        adelantos.fold<double>(0, (acc, a) => acc + a.monto);
+    final hayAdelantos = adelantos.isNotEmpty;
+    // Etiqueta singular/plural según cuántos haya, con el conteo cuando
+    // son varios para que se note de un vistazo.
+    final labelAdelanto = adelantos.length > 1
+        ? 'Adelantos (${adelantos.length})'
+        : 'Adelanto';
 
     String monto(double m) => '\$ ${AppFormatters.formatearMonto(m)}';
 
@@ -363,10 +377,10 @@ class _KpiStripViaje extends StatelessWidget {
             accent: c.text,
           ),
           AppStat(
-            label: 'Adelanto',
-            value: adelanto == null ? '—' : monto(adelanto!.monto),
+            label: labelAdelanto,
+            value: hayAdelantos ? monto(adelantoTotal) : '—',
             valueStyle: AppType.h4,
-            accent: adelanto == null ? c.textMuted : c.warning,
+            accent: hayAdelantos ? c.warning : c.textMuted,
           ),
           AppStat(
             label: 'Saldo',
@@ -474,20 +488,66 @@ class _SeccionAsignacion extends StatelessWidget {
   }
 }
 
-/// Bloque del adelanto asociado al viaje (si hay). El dato lo provee el
-/// padre (hoisted future). Si no hay adelanto, el padre no monta este
-/// widget.
-class _SeccionAdelantoAsociado extends StatelessWidget {
-  final AdelantoChofer adelanto;
-  const _SeccionAdelantoAsociado({required this.adelanto});
+/// Bloque de los adelantos asociados al viaje (si hay). El dato lo
+/// provee el padre (hoisted future). Si no hay ninguno, el padre no
+/// monta este widget. Desde 2026-06-10 pueden ser varios — se listan
+/// uno debajo del otro separados por hairline, con un subtotal al pie
+/// cuando hay más de uno.
+class _SeccionAdelantosAsociados extends StatelessWidget {
+  final List<AdelantoChofer> adelantos;
+  const _SeccionAdelantosAsociados({required this.adelantos});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final a = adelanto;
+    final varios = adelantos.length > 1;
+    final total = adelantos.fold<double>(0, (acc, a) => acc + a.monto);
     return _Seccion(
-      titulo: 'ADELANTO ASOCIADO',
+      titulo: varios ? 'ADELANTOS ASOCIADOS' : 'ADELANTO ASOCIADO',
       accentDot: c.warning,
+      trailing: varios
+          ? Text(
+              '${adelantos.length} adelantos',
+              style: AppType.monoSm.copyWith(color: c.textMuted),
+            )
+          : null,
+      children: [
+        for (var i = 0; i < adelantos.length; i++) ...[
+          if (i > 0) ...[
+            const SizedBox(height: AppSpacing.md),
+            const AppHairline(),
+            const SizedBox(height: AppSpacing.md),
+          ],
+          _DetalleAdelanto(adelanto: adelantos[i]),
+        ],
+        if (varios) ...[
+          const SizedBox(height: AppSpacing.md),
+          const AppHairline(),
+          const SizedBox(height: AppSpacing.md),
+          _Linea(
+            label: 'Total adelantos',
+            valor: '\$ ${AppFormatters.formatearMonto(total)}',
+            highlight: true,
+            mono: true,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Detalle de un adelanto individual dentro de la sección. Mismas
+/// líneas que tenía la sección single — extraído para reusarlo por
+/// cada adelanto de la lista.
+class _DetalleAdelanto extends StatelessWidget {
+  final AdelantoChofer adelanto;
+  const _DetalleAdelanto({required this.adelanto});
+
+  @override
+  Widget build(BuildContext context) {
+    final a = adelanto;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _Linea(label: 'Fecha', valor: AppFormatters.formatearFecha(a.fecha)),
         _Linea(
@@ -497,6 +557,11 @@ class _SeccionAdelantoAsociado extends StatelessWidget {
           mono: true,
         ),
         _Linea(label: 'Medio de pago', valor: a.medioPago.etiqueta),
+        if (a.esCuota)
+          _Linea(
+            label: 'Cuota',
+            valor: '${a.cuotaNumero} de ${a.cuotasTotal}',
+          ),
         if (a.observacion != null && a.observacion!.trim().isNotEmpty)
           _Linea(label: 'Observación', valor: a.observacion!),
         if (a.numeroRecibo != null)
