@@ -131,8 +131,9 @@ class _LogisticaViajesListaScreenState
               final filtrados = _aplicarFiltros(visibles);
               return Column(
                 children: [
-                  // Hero: eyebrow + selector de mes + [Nuevo viaje]. El
-                  // conteo grande se quitó: vive en el KPI TOTAL de abajo.
+                  // Hero: eyebrow + selector de mes. El conteo grande y el
+                  // botón "Nuevo viaje" se quitaron (Santiago 2026-06-10):
+                  // el conteo vive en el KPI TOTAL y la acción en el FAB.
                   _Header(
                     mes: _mesSeleccionado,
                     onMesAnterior: () => setState(() {
@@ -145,7 +146,6 @@ class _LogisticaViajesListaScreenState
                       _mesSeleccionado =
                           m == 12 ? DateTime(y + 1, 1, 1) : DateTime(y, m + 1, 1);
                     }),
-                    onNuevo: _abrirNuevoViaje,
                   ),
                   // Buscador Núcleo. OJO: la búsqueda es GLOBAL (todos los
                   // meses) — al tipear, `_aplicarFiltros` ignora el mes.
@@ -270,63 +270,46 @@ class _Header extends StatelessWidget {
   final DateTime mes;
   final VoidCallback onMesAnterior;
   final VoidCallback onMesSiguiente;
-  final VoidCallback onNuevo;
   const _Header({
     required this.mes,
     required this.onMesAnterior,
     required this.onMesSiguiente,
-    required this.onNuevo,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    // Hero compacto: eyebrow + selector de mes (◀ MES ▶). El conteo y el
+    // botón "Nuevo viaje" se quitaron (Santiago 2026-06-10): el conteo
+    // está en el KPI TOTAL y la acción la da el FAB de abajo.
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          // Fila 1: eyebrow + selector de mes (◀ MES ▶).
-          Row(
-            children: [
-              const Expanded(child: AppEyebrow('Viajes · período')),
-              _FlechaMes(
-                icon: Icons.chevron_left,
-                tooltip: 'Mes anterior',
-                onTap: onMesAnterior,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              SizedBox(
-                width: 118,
-                child: Text(
-                  AppFormatters.formatearMes(mes).toUpperCase(),
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppType.label.copyWith(
-                      color: c.text, fontWeight: FontWeight.w700),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              _FlechaMes(
-                icon: Icons.chevron_right,
-                tooltip: 'Mes siguiente',
-                onTap: onMesSiguiente,
-              ),
-            ],
+          const Expanded(child: AppEyebrow('Viajes · período')),
+          _FlechaMes(
+            icon: Icons.chevron_left,
+            tooltip: 'Mes anterior',
+            onTap: onMesAnterior,
           ),
-          const SizedBox(height: AppSpacing.sm),
-          // Fila 2: acción primaria a la derecha. El conteo grande se
-          // quitó (Santiago 2026-06-10): repetía el KPI TOTAL de abajo.
-          Align(
-            alignment: Alignment.centerRight,
-            child: AppButton.primary(
-              label: 'Nuevo viaje',
-              icon: Icons.add,
-              size: AppButtonSize.sm,
-              onPressed: onNuevo,
+          const SizedBox(width: AppSpacing.sm),
+          SizedBox(
+            width: 118,
+            child: Text(
+              AppFormatters.formatearMes(mes).toUpperCase(),
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.label
+                  .copyWith(color: c.text, fontWeight: FontWeight.w700),
             ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          _FlechaMes(
+            icon: Icons.chevron_right,
+            tooltip: 'Mes siguiente',
+            onTap: onMesSiguiente,
           ),
         ],
       ),
