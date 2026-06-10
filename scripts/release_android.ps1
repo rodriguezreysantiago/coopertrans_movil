@@ -56,7 +56,8 @@ if (-not (Test-Path $keyProps)) {
     Write-Host "  storePassword=TU_PASSWORD" -ForegroundColor Yellow
     Write-Host "  keyPassword=TU_PASSWORD" -ForegroundColor Yellow
     Write-Host "  keyAlias=coopertrans_key" -ForegroundColor Yellow
-    Write-Host "  storeFile=C:/Users/Colo Logistica/keystores/coopertrans_movil.jks" -ForegroundColor Yellow
+    Write-Host "  storeFile=C:/Users/<TU_USUARIO>/keystores/coopertrans_movil.jks" -ForegroundColor Yellow
+    Write-Host "  (el path del keystore es por-PC: oficina=Colo Logistica, casa=santi)" -ForegroundColor Yellow
     exit 1
 }
 $keyContent = Get-Content $keyProps -Raw

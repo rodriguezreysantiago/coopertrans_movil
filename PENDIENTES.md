@@ -7,6 +7,54 @@ Convención: orden cronológico (los próximos arriba). Sacar el ítem cuando se
 
 ---
 
+## 🎯 VIGENTE — consolidado al 2026-06-10 (revisión total)
+
+Única sección a mirar para saber qué está abierto. El log cronológico de abajo
+es el historial (sus "PENDIENTE" viejos pueden estar resueltos — ante la duda,
+manda esta lista). Actualizar acá cuando algo se cierra o se abre.
+
+### Operativo / corto plazo
+- [ ] **macOS**: confirmar el estado del re-submit a Apple post-fix del
+  entitlement (rechazo 2026-06-06, fix hecho ese día — ver entrada).
+- [ ] **Play Store**: confirmar que el AAB de la serie vigente (1.2.24) esté
+  subido/aprobado.
+- [ ] **Windows**: PCs con versión instalada < 1.2.3 necesitan re-correr el
+  setup 1 vez (link estable de `cooper-trans.com.ar/app`) para que el update
+  in-app ande solo. También aplica el cambio a installer per-user (2026-06-10).
+- [ ] **"+build" visible**: Santiago dice ver `+10202` en "varios lugares";
+  código actual limpio — falta captura/pantalla exacta para confirmar si era
+  la versión pre-fix (entrada 2026-06-07).
+- [ ] **Validación visual pendiente**: Gomería (stock oculto + conteo a ciegas)
+  y módulo Vacaciones (Gantt + saldos; 3 proporcionales de 1er año a mano).
+- [ ] **Buzón de discrepancias**: revisar los reportes pendientes de choferes
+  (pantalla en hub admin; había ~5 al 2026-06-07).
+- [ ] **Vigilador v3**: monitorear los primeros resúmenes diarios a Molina
+  (v3 es la fuente oficial desde 2026-06-07) + release de las pantallas
+  nuevas de jornada (gráfico velocidad + selector rango, 2026-06-10).
+- [ ] **Alertas nuevas (2026-06-10, esta sesión)**: validar el primer episodio
+  real de (a) alerta Telegram de bot caído/QR (`botHealthWatchdog`) y
+  (b) aviso de salud del vigía cachatore (Cloudflare / claves.json).
+- [ ] **F.931 PDF liviano** (opcional, no es código — lo re-sube el admin).
+
+### Roadmap por ROI (sin fecha comprometida)
+- [ ] **P1 Sitrack — auto-poblar viajes desde geocercas** (ROI máximo del
+  módulo Logística; ver plan completo en entrada 2026-05-24).
+- [ ] **V1 Volvo — tablero Seguridad por chofer** (la data ya está en
+  `VOLVO_SCORES_DIARIOS`, falta solo UI).
+- [ ] **V2 Volvo — ralentí % por chofer/unidad** (combustible: ~$1,5M ARS/mes
+  por punto de ralentí).
+- [ ] **P3 Sitrack — DTCs históricos** para el parte de Emmanuel.
+- [ ] **Monitor de frescura Volvo** + fallback de mantenimiento por Sitrack +
+  decisión sobre las 16 suscripciones Volvo vencidas (hoy: quedan en Sitrack).
+- [ ] **ICM premios/castigos**: cuando Santiago defina el esquema (los cierres
+  inmutables semanal/mensual ya están). + mapa de calor (placeholder) +
+  decisión de retirar el CESVI propio (`recomputeIcmSemanalScheduled`) si
+  nadie lo consume.
+- [ ] **Volvo Driver/Tachograph/Messaging APIs**: feeds vacíos — requiere
+  gestión con Volvo Argentina (alta de 48 chofers + transmisión por unidad).
+
+---
+
 ## 📅 2026-06-07 (cont.) — Link estable de descarga Windows + Paso 0 vigilador v3
 
 ### Link de descarga Windows ESTABLE (commits `89f5dc7`, `a230b5c`)
