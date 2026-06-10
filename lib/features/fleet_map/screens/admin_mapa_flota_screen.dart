@@ -100,6 +100,16 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
 
   final _mapController = MapController();
 
+  /// Stream de posiciones CACHEADO. Crítico: antes se creaba inline en
+  /// `_buildBody()`, así que CADA setState (ej. seleccionar una unidad,
+  /// togglear satélite o colapsar el panel) generaba un stream nuevo → el
+  /// StreamBuilder se re-suscribía, volvía a `waiting` y RE-MONTABA todo el
+  /// subárbol, perdiendo el scroll de la lista lateral (Santiago 2026-06-10:
+  /// "selecciono una unidad y me vuelve al principio de la lista"). Cacheado,
+  /// el subárbol se preserva. Mismo patrón que la lista de Viajes
+  /// (auditoría 2026-05-30).
+  late final Stream<QuerySnapshot<Map<String, dynamic>>> _posicionesStream;
+
   /// flutter_map dispara `onMapReady` cuando el mapa terminó su primer layout
   /// y el TileLayer ya puede pedir tiles. Si encuadramos la cámara (fitCamera)
   /// ANTES de eso, el mapa mueve la vista pero NO carga los tiles → queda gris
@@ -120,6 +130,9 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
   @override
   void initState() {
     super.initState();
+    _posicionesStream = FirebaseFirestore.instance
+        .collection(AppCollections.sitrackPosiciones)
+        .snapshots();
     _cargarUltimaPosicion();
     // Excluir tanques + sus choferes (combustibles, otra área de Vecchi),
     // igual que el resto de la app. Fail-safe: si falla, no excluye a nadie.
@@ -267,9 +280,8 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
   }
 
   Widget _buildBody() {
-    final stream = FirebaseFirestore.instance
-        .collection(AppCollections.sitrackPosiciones)
-        .snapshots();
+    // Stream cacheado en initState (NO recrear acá — ver `_posicionesStream`).
+    final stream = _posicionesStream;
 
     // AppOfflineBanner: si el stream tarda en emitir el primer evento,
     // muestra "Conexión lenta" arriba sin tapar el contenido.
