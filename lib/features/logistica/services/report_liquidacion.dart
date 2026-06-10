@@ -47,6 +47,7 @@ class ReportLiquidacionService {
     required DateTime mes,
     String? empresaCuit,
     String? choferDniFiltro,
+    Set<String> padronDnis = const {},
   }) async {
     final messenger = ScaffoldMessenger.of(context);
 
@@ -72,6 +73,7 @@ class ReportLiquidacionService {
         empleados: empleados,
         mes: mes,
         provincias: provincias,
+        dnisPadron: padronDnis,
       );
       final excel = wb.excel;
 

@@ -237,6 +237,12 @@ class _LogisticaLiquidacionScreenState
                             mes: _mesSeleccionado,
                             empresaCuit: _empresaCuit,
                             choferDniFiltro: _choferDni,
+                            // Padrón = choferes que pasan el filtro actual
+                            // (chofer / empresa / o todos). Así aparecen
+                            // TODOS, con hoja vacía los sin actividad
+                            // (Santiago 2026-06-10). Mismo set que acota
+                            // los adelantos.
+                            padronDnis: dnisAdelantos,
                           ),
                         );
                       },

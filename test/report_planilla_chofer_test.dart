@@ -365,6 +365,66 @@ void main() {
     });
   });
 
+  group('construir — padrón completo', () {
+    test('un chofer del padrón sin actividad genera hoja vacía + dropdown',
+        () {
+      // PADRÓN con 3 choferes; solo 1 tiene un viaje. Los otros 2 deben
+      // tener hoja igual (pedido Santiago 2026-06-10: todos los choferes
+      // para cargar la especulación).
+      final wb = ReportPlanillaChofer.construir(
+        viajes: [
+          viajeDe(
+            id: 'V1',
+            dni: '111',
+            nombre: 'ACTIVO UNO',
+            tramos: [
+              TramoViaje(
+                id: 't',
+                tarifaId: 'T1',
+                tarifaSnapshot: snapTn(),
+                fechaCarga: DateTime(2026, 6, 2),
+                kgCargados: 30000,
+                kgDescargados: 30000,
+              ),
+            ],
+          ),
+        ],
+        adelantos: const [],
+        empleados: const {
+          '111': EmpleadoLiquidacion(
+              dni: '111', nombre: 'ACTIVO UNO', empresaCuit: null),
+          '222': EmpleadoLiquidacion(
+              dni: '222', nombre: 'SIN NADA DOS', empresaCuit: null),
+          '333': EmpleadoLiquidacion(
+              dni: '333', nombre: 'SIN NADA TRES', empresaCuit: null),
+        },
+        mes: DateTime(2026, 6, 1),
+        provincias: ResolverProvincias.vacio(),
+        dnisPadron: {'111', '222', '333'},
+      );
+      final wbDec = ex.Excel.decodeBytes(wb.excel.save()!);
+      // Las 3 hojas existen (aunque 2 estén vacías).
+      expect(wbDec.sheets.keys, contains('ACTIVO UNO'));
+      expect(wbDec.sheets.keys, contains('SIN NADA DOS'));
+      expect(wbDec.sheets.keys, contains('SIN NADA TRES'));
+      expect(wb.cantidadChoferes, 3);
+      // El dropdown (columna helper S de CONSULTA) lista a los 3.
+      final consulta = wbDec.sheets['CONSULTA']!;
+      final s = [
+        for (var i = 1; i <= 3; i++)
+          consulta
+              .cell(ex.CellIndex.indexByString('S$i'))
+              .value
+              .toString()
+      ];
+      expect(s, containsAll(['ACTIVO UNO', 'SIN NADA DOS', 'SIN NADA TRES']));
+      // La hoja vacía no tiene viajes ni adelantos en la grilla.
+      final vacia = wbDec.sheets['SIN NADA DOS']!;
+      expect(vacia.cell(ex.CellIndex.indexByString('A4')).value, isNull);
+      expect(vacia.cell(ex.CellIndex.indexByString('D4')).value, isNull);
+    });
+  });
+
   group('nombreHojaSeguro', () {
     test('saca caracteres inválidos para nombre de hoja', () {
       expect(

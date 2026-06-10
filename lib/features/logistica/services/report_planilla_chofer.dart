@@ -124,6 +124,7 @@ class ReportPlanillaChofer {
     required Map<String, EmpleadoLiquidacion> empleados,
     required DateTime mes,
     required ResolverProvincias provincias,
+    Set<String> dnisPadron = const {},
   }) {
     final excel = ex.Excel.createExcel();
     // CONSULTA arranca como la 1ª hoja (Sheet1 renombrada). Se llena
@@ -154,7 +155,14 @@ class ReportPlanillaChofer {
       return (deViaje ?? deAdelanto ?? 'DNI $dni').trim();
     }
 
+    // Universo de hojas: el PADRÓN completo (todos los choferes activos
+    // que pasan el filtro de empresa/chofer) ∪ los que tienen actividad.
+    // Pedido Santiago 2026-06-10: que aparezcan TODOS los choferes —
+    // los sin viajes/adelantos quedan con hoja vacía, lista para cargar
+    // la especulación de fin de mes (como el archivo viejo). La unión
+    // cubre el caso raro de un viaje con un DNI fuera del padrón.
     final dnis = <String>{
+      ...dnisPadron,
       ...viajesPorChofer.keys,
       ...adelantosPorChofer.keys,
     }.toList()
