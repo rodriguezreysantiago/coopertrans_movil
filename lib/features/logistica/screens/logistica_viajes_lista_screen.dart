@@ -17,21 +17,24 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Lista de viajes — entry point del módulo. REFACTOR NÚCLEO (jun 2026).
 ///
 /// Reescrita al layout del prototipo (`screens-desktop-modules.jsx :: Logistica`):
-/// hero con el conteo de viajes del MES en foco + selector de mes (◀ MES ▶)
-/// + [Nuevo viaje], AppKpiStrip con los counts por estado + total + ganancia
-/// choferes (todo del mes), buscador Núcleo, chips de filtro (estado /
-/// liquidación / borrados) y una **tabla** densa en desktop. En mobile se
-/// mantienen cards ricas (re-skineadas a tokens).
+/// hero con eyebrow + selector de mes (◀ MES ▶) + [Nuevo viaje], un strip de
+/// KPIs **que son los filtros** (PLANEADOS · EN CURSO · CONCLUIDOS · TOTAL ·
+/// GANANCIA CHOFERES, todo del mes), buscador Núcleo, un único toggle de
+/// eliminados y una **tabla** densa en desktop. En mobile se mantienen cards
+/// ricas (re-skineadas a tokens).
 ///
 /// **Vista mensual (Santiago 2026-06-10)**: la lista + KPIs se acotan al mes
-/// elegido (por fecha de referencia), así el conteo de arriba coincide con el
-/// total de abajo. El BUSCADOR es global: al tipear texto, busca en todos los
-/// meses (para encontrar un viaje sin saber cuándo fue).
+/// elegido (por fecha de referencia). El BUSCADOR es global: al tipear texto,
+/// busca en todos los meses (para encontrar un viaje sin saber cuándo fue).
+///
+/// **KPIs = filtros (Santiago 2026-06-10)**: tocar PLANEADOS/EN CURSO/
+/// CONCLUIDOS filtra la lista por ese estado; TOTAL limpia el filtro. El KPI
+/// activo queda resaltado. GANANCIA CHOFERES es informativo (no filtra). Se
+/// quitaron los chips Estado y Liquidación (redundantes con los KPIs / ya sin
+/// uso). Queda solo "Mostrar eliminados", que muestra SOLO los eliminados.
 ///
 /// La fila de tabla y la card abren el MISMO detalle (`adminLogisticaViajeDetalle`).
-/// Stream cacheado, filtros (estado / liquidado / búsqueda libre / borrados),
-/// sort (más viejo arriba), KPIs y navegación quedan INTACTOS — solo cambió
-/// la presentación.
+/// Stream cacheado; sort (más viejo arriba) y navegación quedan intactos.
 class LogisticaViajesListaScreen extends StatefulWidget {
   const LogisticaViajesListaScreen({super.key});
 
@@ -42,8 +45,13 @@ class LogisticaViajesListaScreen extends StatefulWidget {
 
 class _LogisticaViajesListaScreenState
     extends State<LogisticaViajesListaScreen> {
+  // Filtro por estado — ahora se maneja desde el strip de KPIs (tocar
+  // PLANEADOS/EN CURSO/CONCLUIDOS filtra; TOTAL = null = todos). El chip
+  // "Estado" y el menú quedaron obsoletos (Santiago 2026-06-10).
   EstadoViaje? _filtroEstado;
-  bool? _filtroLiquidado; // null = todos, true = solo liquidados, false = solo no
+  // Toggle papelera. Cuando está ON, la lista + KPIs muestran SOLO los
+  // viajes eliminados del mes (Santiago 2026-06-10). El filtro de
+  // liquidación se quitó por completo (ya no se usa).
   bool _verBorrados = false;
   // Mes en foco. La lista + KPIs se acotan a este mes por fecha de
   // referencia (Santiago 2026-06-10: que el conteo de arriba coincida
@@ -109,20 +117,24 @@ class _LogisticaViajesListaScreenState
               final todos = snap.data ?? const <Viaje>[];
               final cargando =
                   snap.connectionState == ConnectionState.waiting;
-              // Viajes del mes en foco (para hero + KPIs). La lista usa
-              // `_aplicarFiltros`, que acota al mes salvo que haya búsqueda.
-              final delMes = todos
+              // Conjunto visible según el modo papelera: normal = activos
+              // (el stream ya excluye inactivos); papelera = SOLO los
+              // eliminados (Santiago 2026-06-10). Todo lo de abajo —
+              // KPIs, lista, búsqueda— opera sobre este conjunto.
+              final visibles = _verBorrados
+                  ? todos.where((v) => !v.activo).toList()
+                  : todos;
+              // Viajes del MES en foco (alimentan el strip de KPIs).
+              final delMes = visibles
                   .where((v) => _esDelMes(v, _mesSeleccionado))
                   .toList();
-              final filtrados = _aplicarFiltros(todos);
+              final filtrados = _aplicarFiltros(visibles);
               return Column(
                 children: [
-                  // Hero: VIAJES · conteo del mes + selector de mes +
-                  // [Nuevo viaje].
+                  // Hero: eyebrow + selector de mes + [Nuevo viaje]. El
+                  // conteo grande se quitó: vive en el KPI TOTAL de abajo.
                   _Header(
                     mes: _mesSeleccionado,
-                    cantMes: delMes.length,
-                    hayDatos: todos.isNotEmpty,
                     onMesAnterior: () => setState(() {
                       final m = _mesSeleccionado.month, y = _mesSeleccionado.year;
                       _mesSeleccionado =
@@ -147,22 +159,23 @@ class _LogisticaViajesListaScreenState
                       setState(() => _busqueda = '');
                     },
                   ),
-                  // KPI strip por estado + total + ganancia choferes, sobre
-                  // los viajes DEL MES (coinciden con el conteo del hero).
-                  if (todos.isNotEmpty)
+                  // Strip de KPIs = filtros (Santiago 2026-06-10). Tocar
+                  // PLANEADOS/EN CURSO/CONCLUIDOS filtra; TOTAL limpia. En
+                  // papelera vacía no se muestra (gate sobre `visibles`).
+                  if (visibles.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(
                           AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
-                      child: _ResumenViajes(viajes: delMes),
+                      child: _StripFiltros(
+                        viajes: delMes,
+                        filtroEstado: _filtroEstado,
+                        esDesktop: esDesktop,
+                        onEstado: (e) => setState(() => _filtroEstado = e),
+                      ),
                     ),
-                  // Filtros (estado / liquidación / borrados).
+                  // Único filtro suelto: toggle papelera.
                   _BarraFiltros(
-                    estado: _filtroEstado,
-                    liquidado: _filtroLiquidado,
                     verBorrados: _verBorrados,
-                    onEstadoChanged: (v) => setState(() => _filtroEstado = v),
-                    onLiquidadoChanged: (v) =>
-                        setState(() => _filtroLiquidado = v),
                     onVerBorradosChanged: (v) => setState(() {
                       _verBorrados = v;
                       _streamViajes =
@@ -181,7 +194,8 @@ class _LogisticaViajesListaScreenState
                       cargando: cargando,
                       error: snap.hasError ? snap.error : null,
                       esDesktop: esDesktop,
-                      haDatos: todos.isNotEmpty,
+                      haDatos: visibles.isNotEmpty,
+                      modoPapelera: _verBorrados,
                       filtrados: filtrados,
                     ),
                   ),
@@ -207,9 +221,8 @@ class _LogisticaViajesListaScreenState
       // Acotar al mes en foco — SALVO que haya búsqueda (que es global,
       // para encontrar un viaje sin saber el mes).
       if (q.isEmpty && !_esDelMes(v, _mesSeleccionado)) return false;
+      // Filtro por estado (lo setea el strip de KPIs; null = TOTAL = todos).
       if (_filtroEstado != null && v.estado != _filtroEstado) return false;
-      if (_filtroLiquidado == true && !v.liquidado) return false;
-      if (_filtroLiquidado == false && v.liquidado) return false;
       // Búsqueda libre: matchea chofer (DNI+nombre), patente del
       // vehículo/enganche, y por cada tramo: empresa origen/destino,
       // ubicación origen/destino y producto. Si el query es vacio,
@@ -255,15 +268,11 @@ class _LogisticaViajesListaScreenState
 
 class _Header extends StatelessWidget {
   final DateTime mes;
-  final int cantMes;
-  final bool hayDatos;
   final VoidCallback onMesAnterior;
   final VoidCallback onMesSiguiente;
   final VoidCallback onNuevo;
   const _Header({
     required this.mes,
-    required this.cantMes,
-    required this.hayDatos,
     required this.onMesAnterior,
     required this.onMesSiguiente,
     required this.onNuevo,
@@ -307,45 +316,17 @@ class _Header extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          // Fila 2: conteo del mes + botón Nuevo viaje.
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      hayDatos ? '$cantMes' : '—',
-                      style: AppType.h2.copyWith(
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        'viajes',
-                        style: AppType.monoSm
-                            .copyWith(color: context.colors.textMuted),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppSpacing.md),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: AppButton.primary(
-                  label: 'Nuevo viaje',
-                  icon: Icons.add,
-                  size: AppButtonSize.sm,
-                  onPressed: onNuevo,
-                ),
-              ),
-            ],
+          const SizedBox(height: AppSpacing.sm),
+          // Fila 2: acción primaria a la derecha. El conteo grande se
+          // quitó (Santiago 2026-06-10): repetía el KPI TOTAL de abajo.
+          Align(
+            alignment: Alignment.centerRight,
+            child: AppButton.primary(
+              label: 'Nuevo viaje',
+              icon: Icons.add,
+              size: AppButtonSize.sm,
+              onPressed: onNuevo,
+            ),
           ),
         ],
       ),
@@ -422,16 +403,30 @@ class _Buscador extends StatelessWidget {
 }
 
 // =============================================================================
-// RESUMEN — AppKpiStrip por estado + total + pagado choferes
+// STRIP DE KPIs = FILTROS — PLANEADOS · EN CURSO · CONCLUIDOS · TOTAL · GANANCIA
 // =============================================================================
 
-/// KPIs del mes en foco: counts por estado + total + ganancia choferes.
-/// Recibe ya los viajes DEL MES (coinciden con el conteo del hero).
-/// En anchos chicos el AppKpiStrip puede apretarse, así que lo dejamos
-/// scrolleable horizontal: 5 stats en una fila densa.
-class _ResumenViajes extends StatelessWidget {
+/// Strip de KPIs del mes que ADEMÁS son el filtro por estado (Santiago
+/// 2026-06-10). Orden fijo: PLANEADOS · EN CURSO · CONCLUIDOS · TOTAL ·
+/// GANANCIA CHOFERES. Las 4 primeras son tappeables: tocar un estado
+/// filtra la lista; TOTAL limpia el filtro. La celda activa se resalta.
+/// GANANCIA es informativa (no filtra).
+///
+/// Estética calcada de `AppKpiStrip` (surface2 + border + hairlines), pero
+/// con celdas interactivas. En desktop las 5 celdas se reparten el ancho
+/// (Expanded); en mobile el strip scrollea horizontal para no apretar el
+/// monto de ganancia.
+class _StripFiltros extends StatelessWidget {
   final List<Viaje> viajes;
-  const _ResumenViajes({required this.viajes});
+  final EstadoViaje? filtroEstado;
+  final ValueChanged<EstadoViaje?> onEstado;
+  final bool esDesktop;
+  const _StripFiltros({
+    required this.viajes,
+    required this.filtroEstado,
+    required this.onEstado,
+    required this.esDesktop,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -448,51 +443,188 @@ class _ResumenViajes extends StatelessWidget {
           planeados++;
       }
       // "Ganancia choferes" = lo que se les paga por los viajes del mes
-      // (montoChoferRedondeado), sin depender del flag liquidado — que
-      // se quitó de Liquidación (Santiago 2026-06-10). Incluye los tres
-      // estados: es la ganancia total del mes.
+      // (montoChoferRedondeado), los tres estados.
       ganancia += v.montoChoferRedondeado;
     }
 
-    return AppKpiStrip(
-      stats: [
-        AppStat(label: 'Total', value: '${viajes.length}'),
-        AppStat(label: 'En curso', value: '$enCurso', accent: c.warning),
-        AppStat(label: 'Concluidos', value: '$concluidos', accent: c.success),
-        AppStat(label: 'Planeados', value: '$planeados', accent: c.info),
-        AppStat(
-          label: 'Ganancia choferes',
-          value: AppFormatters.formatearMonto(ganancia),
-          valueStyle: AppType.h4,
+    final celdas = <Widget>[
+      _CeldaKpi(
+        label: 'Planeados',
+        value: '$planeados',
+        accent: c.info,
+        seleccionado: filtroEstado == EstadoViaje.planeado,
+        esDesktop: esDesktop,
+        onTap: () => onEstado(EstadoViaje.planeado),
+      ),
+      _CeldaKpi(
+        label: 'En curso',
+        value: '$enCurso',
+        accent: c.warning,
+        seleccionado: filtroEstado == EstadoViaje.enCurso,
+        esDesktop: esDesktop,
+        onTap: () => onEstado(EstadoViaje.enCurso),
+      ),
+      _CeldaKpi(
+        label: 'Concluidos',
+        value: '$concluidos',
+        accent: c.success,
+        seleccionado: filtroEstado == EstadoViaje.concluido,
+        esDesktop: esDesktop,
+        onTap: () => onEstado(EstadoViaje.concluido),
+      ),
+      _CeldaKpi(
+        label: 'Total',
+        value: '${viajes.length}',
+        accent: c.text,
+        tintSeleccion: c.brand,
+        seleccionado: filtroEstado == null,
+        esDesktop: esDesktop,
+        onTap: () => onEstado(null),
+      ),
+      _CeldaKpi(
+        label: 'Ganancia choferes',
+        value: AppFormatters.formatearMonto(ganancia),
+        accent: c.text,
+        valueStyle: AppType.h4,
+        seleccionado: false,
+        esDesktop: esDesktop,
+        onTap: null,
+      ),
+    ];
+
+    Widget fila;
+    if (esDesktop) {
+      fila = IntrinsicHeight(
+        child: Row(
+          children: [
+            for (var i = 0; i < celdas.length; i++) ...[
+              Expanded(child: celdas[i]),
+              if (i < celdas.length - 1) Container(width: 1, color: c.border),
+            ],
+          ],
         ),
-      ],
+      );
+    } else {
+      fila = SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: IntrinsicHeight(
+          child: Row(
+            children: [
+              for (var i = 0; i < celdas.length; i++) ...[
+                celdas[i],
+                if (i < celdas.length - 1)
+                  Container(width: 1, color: c.border),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface2,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.border),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: fila,
+      ),
     );
   }
 }
 
+/// Una celda del strip. Tappeable si `onTap != null`. Resalta con un tinte
+/// suave cuando `seleccionado`. `accent` colorea el número; `tintSeleccion`
+/// el fondo activo (default: `accent`).
+class _CeldaKpi extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color accent;
+  final Color? tintSeleccion;
+  final bool seleccionado;
+  final bool esDesktop;
+  final VoidCallback? onTap;
+  final TextStyle? valueStyle;
+  const _CeldaKpi({
+    required this.label,
+    required this.value,
+    required this.accent,
+    required this.seleccionado,
+    required this.esDesktop,
+    required this.onTap,
+    this.tintSeleccion,
+    this.valueStyle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final tint = tintSeleccion ?? accent;
+    final contenido = Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: esDesktop ? 22 : 14,
+        vertical: esDesktop ? 18 : 14,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.eyebrow.copyWith(
+              color: seleccionado ? tint : c.textMuted,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: (valueStyle ?? AppType.h2).copyWith(
+              color: accent,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final celda = ConstrainedBox(
+      // En mobile (scroll) fijamos un mínimo para que sean tappeables;
+      // en desktop el Expanded del strip manda y el min queda en 0.
+      constraints: BoxConstraints(
+        minWidth: esDesktop ? 0 : (onTap == null ? 132 : 92),
+      ),
+      child: ColoredBox(
+        color: seleccionado
+            ? tint.withValues(alpha: 0.12)
+            : Colors.transparent,
+        child: contenido,
+      ),
+    );
+
+    if (onTap == null) return celda;
+    return InkWell(onTap: onTap, child: celda);
+  }
+}
+
 // =============================================================================
-// FILTROS — estado / liquidación / mostrar eliminados (pills Núcleo)
+// FILTRO — único toggle "Mostrar eliminados" (pill Núcleo)
 // =============================================================================
 
-// Sentinel para el menú "Todos" — permite distinguir "el user eligio
-// limpiar el filtro" de "el user dismisseo el menu sin elegir" (showMenu
-// devuelve null en ambos por default).
-const Object _kTodos = Object();
-
+/// El filtro por estado vive ahora en el strip de KPIs y el de liquidación
+/// se eliminó (Santiago 2026-06-10). Queda solo el toggle papelera: ON =
+/// la lista + KPIs muestran SOLO los viajes eliminados del mes (si los hay).
 class _BarraFiltros extends StatelessWidget {
-  final EstadoViaje? estado;
-  final bool? liquidado;
   final bool verBorrados;
-  final ValueChanged<EstadoViaje?> onEstadoChanged;
-  final ValueChanged<bool?> onLiquidadoChanged;
   final ValueChanged<bool> onVerBorradosChanged;
 
   const _BarraFiltros({
-    required this.estado,
-    required this.liquidado,
     required this.verBorrados,
-    required this.onEstadoChanged,
-    required this.onLiquidadoChanged,
     required this.onVerBorradosChanged,
   });
 
@@ -501,72 +633,17 @@ class _BarraFiltros extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          _ChipFiltro(
-            label: estado == null ? 'Estado' : estado!.etiqueta,
-            seleccionado: estado != null,
-            onTap: () => _abrirEstadoMenu(context),
-          ),
-          _ChipFiltro(
-            label: liquidado == null
-                ? 'Liquidación'
-                : (liquidado! ? 'Liquidados' : 'Sin liquidar'),
-            seleccionado: liquidado != null,
-            onTap: () => _abrirLiquidadoMenu(context),
-          ),
-          // Filtro "Mostrar eliminados". Default OFF — los borrados
-          // viven solo para auditoría. Mismo patrón visual que los otros
-          // chips, pero con tinte error cuando está activo.
-          _ChipFiltro(
-            label: 'Mostrar eliminados',
-            seleccionado: verBorrados,
-            colorActivo: AppColors.error,
-            icono: verBorrados ? Icons.visibility : Icons.visibility_off,
-            onTap: () => onVerBorradosChanged(!verBorrados),
-          ),
-        ],
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: _ChipFiltro(
+          label: 'Mostrar eliminados',
+          seleccionado: verBorrados,
+          colorActivo: AppColors.error,
+          icono: verBorrados ? Icons.visibility : Icons.visibility_off,
+          onTap: () => onVerBorradosChanged(!verBorrados),
+        ),
       ),
     );
-  }
-
-  Future<void> _abrirEstadoMenu(BuildContext ctx) async {
-    // Usamos `Object` con sentinel `_kTodos` para distinguir "el user
-    // eligio Todos (limpiar filtro)" vs "el user dismisseo con back/tap
-    // afuera (mantener filtro)". showMenu devuelve null para dismiss —
-    // si tambien usamos null para "Todos", no podemos diferenciar.
-    final res = await showMenu<Object>(
-      context: ctx,
-      position: const RelativeRect.fromLTRB(40, 120, 40, 0),
-      items: [
-        const PopupMenuItem(value: _kTodos, child: Text('Todos')),
-        ...EstadoViaje.values.map(
-          (e) => PopupMenuItem<Object>(value: e, child: Text(e.etiqueta)),
-        ),
-      ],
-    );
-    if (res == null) return; // dismiss → no toca el filtro actual
-    if (res == _kTodos) {
-      onEstadoChanged(null);
-    } else if (res is EstadoViaje) {
-      onEstadoChanged(res);
-    }
-  }
-
-  Future<void> _abrirLiquidadoMenu(BuildContext ctx) async {
-    final res = await showMenu<int>(
-      context: ctx,
-      position: const RelativeRect.fromLTRB(40, 120, 40, 0),
-      items: const [
-        PopupMenuItem(value: 0, child: Text('Todos')),
-        PopupMenuItem(value: 1, child: Text('Liquidados')),
-        PopupMenuItem(value: 2, child: Text('Sin liquidar')),
-      ],
-    );
-    if (res == null) return;
-    onLiquidadoChanged(res == 0 ? null : res == 1);
   }
 }
 
@@ -641,6 +718,7 @@ class _Cuerpo extends StatelessWidget {
   final Object? error;
   final bool esDesktop;
   final bool haDatos;
+  final bool modoPapelera;
   final List<Viaje> filtrados;
 
   const _Cuerpo({
@@ -648,6 +726,7 @@ class _Cuerpo extends StatelessWidget {
     required this.error,
     required this.esDesktop,
     required this.haDatos,
+    required this.modoPapelera,
     required this.filtrados,
   });
 
@@ -663,6 +742,15 @@ class _Cuerpo extends StatelessWidget {
       );
     }
     if (filtrados.isEmpty) {
+      // Modo papelera: copy propio (no es "sin coincidencias", es que no
+      // hay nada eliminado en el período).
+      if (modoPapelera) {
+        return const AppEmptyState(
+          icon: Icons.delete_outline,
+          title: 'Sin viajes eliminados',
+          subtitle: 'No hay viajes eliminados en el período seleccionado.',
+        );
+      }
       return AppEmptyState(
         icon: Icons.route_outlined,
         title: haDatos
