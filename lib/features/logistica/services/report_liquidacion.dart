@@ -104,7 +104,7 @@ class ReportLiquidacionService {
       bytes = xu.configurarConsultaYOcultarHojas(
         bytes,
         hojaConsulta: 'CONSULTA',
-        celdaDropdown: 'H1',
+        celdaDropdown: 'G1',
         cantidadChoferes: wb.cantidadChoferes,
         hojasAOcultar: wb.hojasChofer.toSet(),
       );

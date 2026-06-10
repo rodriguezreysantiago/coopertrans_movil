@@ -214,31 +214,39 @@ void main() {
       expect(hojas, contains('ALTAMIRANDA RAUL'));
     });
 
-    test('CONSULTA: dropdown en H1 + grilla espejada con INDIRECT', () {
+    // Layout rediseñado 2026-06-10: 15 columnas (A-O), una sola
+    // GANANCIA (N), dropdown en G1, pie compacto. nDatos uniforme =
+    // max(contenido)+margen con piso 6. Fixture: DIAZ tiene 4 filas de
+    // viaje → maxContenido 4 → nDatos 6 → filaDatosFin 9.
+
+    test('CONSULTA: dropdown en G1 + grilla espejada con INDIRECT', () {
       final s = relectura.sheets['CONSULTA']!;
-      // H1 arranca con el primer chofer (alfabético) para que el
+      // G1 arranca con el primer chofer (alfabético) para que el
       // INDIRECT resuelva al abrir.
-      expect(textoDe(s, 'H1'), 'ALTAMIRANDA RAUL');
-      // La grilla espeja la hoja del chofer elegido vía INDIRECT.
+      expect(textoDe(s, 'G1'), 'ALTAMIRANDA RAUL');
       final fa = formulaDe(s, 'A4');
       expect(fa, contains('INDIRECT'));
-      expect(fa, contains(r'$H$1'));
+      expect(fa, contains(r'$G$1'));
       // Columna helper S con los nombres EXACTOS de hoja (fuente del
       // dropdown), ordenados alfabéticamente.
       expect(textoDe(s, 'S1'), 'ALTAMIRANDA RAUL');
       expect(textoDe(s, 'S2'), 'DIAZ MARIO');
     });
 
-    test('header del cuaderno: mes, año y chofer', () {
+    test('header del cuaderno: MES y CHOFER', () {
       final s = relectura.sheets['DIAZ MARIO']!;
-      expect(textoDe(s, 'A1'), 'CORRESPONDE A MES');
-      expect(textoDe(s, 'C1'), 'MAYO');
-      expect(textoDe(s, 'E1'), 'AÑO');
-      expect(numeroDe(s, 'F1'), 2026);
-      expect(textoDe(s, 'H1'), 'DIAZ MARIO');
+      expect(textoDe(s, 'A1'), 'MES: MAYO 2026');
+      expect(textoDe(s, 'F1'), 'CHOFER:');
+      expect(textoDe(s, 'G1'), 'DIAZ MARIO');
+      // Súper-header de secciones + headers de columna clave.
+      expect(textoDe(s, 'A2'), 'ADELANTOS');
+      expect(textoDe(s, 'D2'), 'VIAJES');
+      expect(textoDe(s, 'N3'), 'GANANCIA');
+      expect(textoDe(s, 'O3'), 'GASTOS');
     });
 
-    test('fila de viaje TN: kg descargados, tarifa chofer y fórmulas', () {
+    test('fila de viaje TN: kg, tarifa y GANANCIA (col N, ya redondeada)',
+        () {
       final s = relectura.sheets['DIAZ MARIO']!;
       expect(textoDe(s, 'D4'), '02/05/2026');
       expect(textoDe(s, 'E4'), '291824');
@@ -248,27 +256,26 @@ void main() {
       expect(numeroDe(s, 'K4'), 34700); // descargados priorizan
       expect(numeroDe(s, 'L4'), 300); // dif = cargados − descargados
       expect(numeroDe(s, 'M4'), 58106); // base del cálculo del chofer
-      expect(formulaDe(s, 'O4'), '(K4*M4*18%)/1000');
-      expect(formulaDe(s, 'P4'), 'FLOOR(O4,5)');
-      expect(numeroDe(s, 'Q4'), 11200);
+      // Una sola columna GANANCIA con el FLOOR ya aplicado.
+      expect(formulaDe(s, 'N4'), 'FLOOR((K4*M4*18%)/1000,5)');
+      expect(numeroDe(s, 'O4'), 11200); // gastos
     });
 
     test('tramo en curso: kg cargados como estimado', () {
       final s = relectura.sheets['DIAZ MARIO']!;
       expect(numeroDe(s, 'K5'), 30000);
-      expect(formulaDe(s, 'O5'), '(K5*M5*18%)/1000');
+      expect(formulaDe(s, 'N5'), 'FLOOR((K5*M5*18%)/1000,5)');
     });
 
-    test('tramo con monto fijo: valor flat + FLOOR igual', () {
+    test('tramo con monto fijo: valor flat redondeado en N', () {
       final s = relectura.sheets['DIAZ MARIO']!;
-      expect(numeroDe(s, 'O6'), 100000);
-      expect(formulaDe(s, 'P6'), 'FLOOR(O6,5)');
+      expect(numeroDe(s, 'N6'), 100000);
     });
 
-    test('tramo por viaje: tarifa flat × pct sin kg', () {
+    test('tramo por viaje: FLOOR(tarifa × pct) sin kg', () {
       final s = relectura.sheets['DIAZ MARIO']!;
       expect(numeroDe(s, 'M7'), 200000);
-      expect(formulaDe(s, 'O7'), 'M7*18%');
+      expect(formulaDe(s, 'N7'), 'FLOOR(M7*18%,5)');
     });
 
     test('adelantos en columnas A-C en paralelo a los viajes', () {
@@ -281,35 +288,32 @@ void main() {
       expect(numeroDe(s, 'C5'), 150000);
     });
 
-    test('pie: cuentas de la planilla histórica con fórmulas vivas', () {
+    test('pie compacto: GANANCIA − ADELANTOS + GASTOS = NETO', () {
       final s = relectura.sheets['DIAZ MARIO']!;
-      // 4 filas de tramos y 2 adelantos → rige el mínimo de 12 filas
-      // de datos: rango 4..15.
-      final fBruto = filaConLabel(s, 'BRUTO');
-      expect(formulaDe(s, 'C$fBruto'), 'SUM(P4:P15)');
-      final fAdel = filaConLabel(s, 'ADELANTOS');
-      expect(formulaDe(s, 'C$fAdel'), 'SUM(C4:C15)');
-      final fNeto = filaConLabel(s, 'NETO');
-      expect(formulaDe(s, 'C$fNeto'), 'C$fBruto-C$fAdel');
-      final fGastos = filaConLabel(s, 'GASTOS');
-      expect(formulaDe(s, 'C$fGastos'), 'SUM(Q4:Q15)');
-      final fSubt = filaConLabel(s, 'SUB-TOTAL');
-      expect(formulaDe(s, 'C$fSubt'), 'C$fNeto+C$fGastos');
-      // Secciones manuales presentes.
-      filaConLabel(s, 'OTROS VIAJES');
-      filaConLabel(s, 'LIQUIDACION PARCIAL');
-      filaConLabel(s, 'DESCUENTOS');
+      // filaDatosFin = 9. Pie: fila aire 10, título 11, luego 12-15.
+      final fGan = filaConLabel(s, 'GANANCIA VIAJES');
+      expect(formulaDe(s, 'C$fGan'), 'SUM(N4:N9)');
+      final fAdel = filaConLabel(s, 'ADELANTOS (−)');
+      expect(formulaDe(s, 'C$fAdel'), 'SUM(C4:C9)');
+      final fGastos = filaConLabel(s, 'GASTOS (+)');
+      expect(formulaDe(s, 'C$fGastos'), 'SUM(O4:O9)');
+      final fNeto = filaConLabel(s, 'NETO A PAGAR');
+      expect(formulaDe(s, 'C$fNeto'), 'C$fGan-C$fAdel+C$fGastos');
+      // Sin las secciones vacías del viejo (OTROS VIAJES/DESCUENTOS).
+      filaConLabel(s, 'LIQUIDACIÓN');
     });
 
-    test('RESUMEN: fórmulas cross-sheet, FINAL y TOTAL', () {
+    test('RESUMEN: fórmulas cross-sheet (N=bruto, O=gastos), FINAL, TOTAL',
+        () {
       final s = relectura.sheets['RESUMEN']!;
       expect(textoDe(s, 'A2'), 'CHOFER');
       // Orden alfabético: ALTAMIRANDA primero.
       expect(textoDe(s, 'A3'), 'ALTAMIRANDA RAUL');
       expect(textoDe(s, 'B3'), '456');
-      expect(formulaDe(s, 'C3'), "SUM('ALTAMIRANDA RAUL'!P4:P15)");
+      expect(formulaDe(s, 'C3'), "SUM('ALTAMIRANDA RAUL'!N4:N9)");
       expect(textoDe(s, 'A4'), 'DIAZ MARIO');
-      expect(formulaDe(s, 'D4'), "SUM('DIAZ MARIO'!C4:C15)");
+      expect(formulaDe(s, 'D4'), "SUM('DIAZ MARIO'!C4:C9)");
+      expect(formulaDe(s, 'E4'), "SUM('DIAZ MARIO'!O4:O9)");
       expect(formulaDe(s, 'F4'), 'C4-D4+E4');
       // FACTURADO A EMPRESA: valor de la app (suma de montoVecchi).
       expect(numeroDe(s, 'G4'), 2082000 + 1800000);
