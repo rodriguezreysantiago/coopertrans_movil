@@ -58,9 +58,20 @@
          otras apps), la app entra en la whitelist de "background
          activity start" y el BootReceiver puede lanzar la MainActivity.
          No se otorga automáticamente al instalar — es permiso "especial"
-         que requiere ir a Settings una vez por tablet. -->
+         que requiere ir a Settings una vez por tablet.
+
+         WAKE_LOCK + REQUEST_IGNORE_BATTERY_OPTIMIZATIONS: la primera para
+         FLAG_KEEP_SCREEN_ON (pantalla siempre encendida cuando la tablet
+         está en modo Pantalla Fija — ver MainActivity); la segunda para
+         que el admin pueda otorgar a Coopertrans la exención de
+         optimización de batería. Sin la exención, Samsung One UI mete a
+         la app en Doze tras varios minutos sin uso y el BootReceiver
+         puede no recibir el broadcast después de un reinicio largo.
+         (Settings → Apps → Coopertrans → Batería → Sin restricciones). -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- GPS para el bot�n "Usar mi ubicaci�n" del picker de ubicaciones
          de log�stica. Solo cuando la app est� en uso (no background).
@@ -111,12 +122,35 @@
              2026-06-09) NO funcionaba en Samsung con Android 13/14 porque
              Knox bloquea apps de terceros como Home.
 
-             Setup en cada tablet nueva (sin ADB, sin device owner):
-               1. Instalar el APK.
-               2. Lanzar la app una vez (registra el BootReceiver).
-               3. Settings → Seguridad → Pantalla fija → ON + PIN.
-               4. Abrir Coopertrans → botón Recientes → fijar.
-               5. Listo: al apagar/prender, arranca en Coopertrans; el
+             directBootAware="true": necesario para que LOCKED_BOOT_COMPLETED
+             (Android N+, Direct Boot) le llegue al receiver ANTES de que
+             el usuario unlock la tablet. Sin esto, Android ignora ese
+             action y queda solo BOOT_COMPLETED, que llega DESPUÉS del
+             unlock (no apto si la tablet tiene PIN de pantalla — caso de
+             la tablet Gomería, que NO va a tener PIN para que arranque
+             sola). Marcarlo true es seguro: el receiver NO accede a
+             archivos cifrados (solo llama startActivity).
+
+             Setup completo en cada tablet nueva (sin ADB, sin device owner):
+               1. Instalar el APK (Play Store o descarga directa).
+               2. Lanzar la app UNA vez (Android 10+ bloquea broadcasts a
+                  apps en "stopped state" hasta que el usuario las abre).
+               3. Settings → Apps → Coopertrans → Permisos → Mostrar sobre
+                  otras apps → ON (CLAVE para startActivity desde el
+                  BootReceiver en Android 10+).
+               4. Settings → Apps → Coopertrans → Batería → Sin restricciones
+                  (en Samsung viene como "Optimizado" por defecto — eso
+                  hace que el BootReceiver no reciba el broadcast).
+               5. Settings → Display → Tiempo de espera → Nunca (o el máximo;
+                  la app también activa FLAG_KEEP_SCREEN_ON cuando está
+                  en Pantalla Fija, pero solo si la activity está en
+                  foreground — antes de eso depende del setting).
+               6. Settings → Lock screen → Tipo de bloqueo → Deslizar (sin
+                  PIN; si la tablet tiene PIN, no puede arrancar sola
+                  porque queda atrás del lockscreen).
+               7. Settings → Seguridad → Pantalla fija → ON + PIN.
+               8. Abrir Coopertrans → botón Recientes → fijar la app.
+               9. Listo: al apagar/prender, arranca en Coopertrans; el
                   operador no puede salir sin el PIN.
 
              Funciona en cualquier OEM (Samsung incluido).
@@ -124,7 +158,8 @@
         <receiver
             android:name=".BootReceiver"
             android:exported="true"
-            android:enabled="true">
+            android:enabled="true"
+            android:directBootAware="true">
             <intent-filter android:priority="999">
                 <action android:name="android.intent.action.BOOT_COMPLETED"/>
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED"/>
