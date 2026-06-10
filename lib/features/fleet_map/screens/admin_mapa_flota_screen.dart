@@ -536,9 +536,11 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
       return apellido.contains(f) || nombre.contains(f);
     }).toList();
 
-    // Conteo por estado sobre TODAS las unidades visibles (no las filtradas
-    // por búsqueda) para el hero del panel — patrón del prototipo (Flota).
-    var enMarcha = 0, detenidas = 0, sinSenal = 0;
+    // Conteo de "activas" (motor en marcha + reporte fresco ≤60 min) sobre
+    // TODAS las unidades visibles (no las filtradas por búsqueda), para el
+    // hero del panel. El breakdown En ruta/Detenidas/Sin señal se quitó
+    // (Santiago 2026-06-10) — quedó solo este número.
+    var activas = 0;
     for (final d in widget.docs) {
       final data = d.data();
       final ignition = data['ignition'] == true;
@@ -546,23 +548,18 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
       final minStale = reportTs == null
           ? null
           : widget.ahora.difference(reportTs).inMinutes;
-      if (minStale != null && minStale > 60) {
-        sinSenal++;
-      } else if (ignition) {
-        enMarcha++;
-      } else {
-        detenidas++;
-      }
+      final esStale = minStale != null && minStale > 60;
+      if (!esStale && ignition) activas++;
     }
     final total = widget.docs.length;
-    final activas = enMarcha; // "activas" = motor en marcha + reporte fresco.
 
     return Container(
       color: c.surface1,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Hero: eyebrow + hero number "activas / total" + breakdown.
+          // Hero: eyebrow + número "activas / total" (motor en marcha +
+          // reporte fresco, sobre el total con posición).
           Padding(
             padding: const EdgeInsets.fromLTRB(
                 AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.lg),
@@ -584,21 +581,6 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
                     ),
                     const SizedBox(width: 8),
                     Text('de $total', style: AppType.monoSm),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.mdDense),
-                Row(
-                  children: [
-                    _EstadoCajita(
-                        valor: enMarcha, label: 'En ruta', color: c.brand),
-                    const SizedBox(width: 4),
-                    _EstadoCajita(
-                        valor: detenidas,
-                        label: 'Detenidas',
-                        color: c.textMuted),
-                    const SizedBox(width: 4),
-                    _EstadoCajita(
-                        valor: sinSenal, label: 'Sin señal', color: c.warning),
                   ],
                 ),
               ],
@@ -873,53 +855,6 @@ class _ItemUnidad extends StatelessWidget {
               onAbrirMaps: onAbrirMaps,
             ),
         ],
-      ),
-    );
-  }
-}
-
-/// Cajita del breakdown por estado en el hero del panel de flota (prototipo
-/// Núcleo · Flota): número mono en color de estado + label corto, en una
-/// celda surface2 con border hairline.
-class _EstadoCajita extends StatelessWidget {
-  final int valor;
-  final String label;
-  final Color color;
-  const _EstadoCajita({
-    required this.valor,
-    required this.label,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        decoration: BoxDecoration(
-          color: c.surface2,
-          borderRadius: BorderRadius.circular(AppRadius.md),
-          border: Border.all(color: c.border),
-        ),
-        child: Column(
-          children: [
-            Text(
-              '$valor',
-              style: AppType.mono.copyWith(
-                color: color,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 1),
-            Text(
-              label.toUpperCase(),
-              style: AppType.monoSm.copyWith(fontSize: 8.5),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
       ),
     );
   }
