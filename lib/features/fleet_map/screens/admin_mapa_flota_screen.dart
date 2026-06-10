@@ -1492,18 +1492,6 @@ class _DetalleSheet extends StatelessWidget {
   }
 }
 
-/// Convierte heading en grados (0=N, 90=E, 180=S, 270=O) a sentido
-/// cardinal de 8 direcciones (N, NE, E, SE, S, SO, O, NO).
-String _rumboCardinal(double heading) {
-  const cardinales = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
-  // Normalizar a [0, 360) por si vienen valores fuera de rango.
-  final h = ((heading % 360) + 360) % 360;
-  // Cada cardinal cubre 45° centrado en su ángulo. +22.5 desplaza
-  // los bordes para que 0..22.5 sea N, 22.5..67.5 sea NE, etc.
-  final idx = ((h + 22.5) / 45).floor() % 8;
-  return cardinales[idx];
-}
-
 /// Contenido del detalle de una unidad — compartido entre el sheet
 /// (mobile/tablet) y el panel inline (desktop).
 ///
@@ -1544,10 +1532,7 @@ class _DetalleContenido extends StatelessWidget {
 
     final ignition = data['ignition'] == true;
     final speed = (data['speed'] as num?)?.toDouble();
-    final gpsSpeed = (data['gps_speed'] as num?)?.toDouble();
-    final headingRaw = (data['heading'] as num?)?.toDouble();
     final odometer = (data['odometer'] as num?)?.toDouble();
-    final hourmeter = (data['hourmeter'] as num?)?.toDouble();
     final reportTs = (data['report_date'] as Timestamp?)?.toDate();
     final ignitionTs = (data['ignition_date'] as Timestamp?)?.toDate();
     final lat = (data['lat'] as num?)?.toDouble();
@@ -1560,13 +1545,6 @@ class _DetalleContenido extends StatelessWidget {
     final driftTipo = (data['drift_tipo'] ?? '').toString();
     final asignacionDni = (data['asignacion_dni'] ?? '').toString();
     final asignacionNombre = (data['asignacion_nombre'] ?? '').toString();
-
-    // En movimiento: misma lógica que el marker (gps_speed > 5 km/h).
-    final speedEfectiva = gpsSpeed ?? speed;
-    final enMovimiento = ignition &&
-        speedEfectiva != null &&
-        speedEfectiva > 5 &&
-        headingRaw != null;
 
     final minStale =
         reportTs == null ? null : ahora.difference(reportTs).inMinutes;
@@ -1601,20 +1579,6 @@ class _DetalleContenido extends StatelessWidget {
       unit: odometer == null ? null : 'km',
       valueStyle: AppType.h4,
     );
-    final horStat = AppStat(
-      label: 'Horómetro',
-      value: hourmeter == null ? '—' : hourmeter.toStringAsFixed(1),
-      unit: hourmeter == null ? null : 'h',
-      valueStyle: AppType.h4,
-    );
-    final rumboStat = AppStat(
-      label: 'Rumbo',
-      value: enMovimiento ? _rumboCardinal(headingRaw) : '—',
-      unit: enMovimiento ? '${headingRaw.toStringAsFixed(0)}°' : null,
-      valueStyle: AppType.h4,
-      accent: enMovimiento ? c.brand : null,
-    );
-
     final timeline = _eventosTimeline(
       reportTs: reportTs,
       ignitionTs: ignitionTs,
@@ -1676,21 +1640,13 @@ class _DetalleContenido extends StatelessWidget {
 
         AppHairline(color: c.border),
 
-        // Grilla 2×2 de KPIs reales.
+        // Grilla de KPIs: Velocidad | Odómetro. (Horómetro y Rumbo se
+        // quitaron — Santiago 2026-06-10: ocupaban lugar sin aportar.)
         IntrinsicHeight(
           child: Row(
             children: [
               Expanded(child: _StatCell(stat: velStat, borderRight: true)),
               Expanded(child: _StatCell(stat: odoStat)),
-            ],
-          ),
-        ),
-        AppHairline(color: c.border),
-        IntrinsicHeight(
-          child: Row(
-            children: [
-              Expanded(child: _StatCell(stat: horStat, borderRight: true)),
-              Expanded(child: _StatCell(stat: rumboStat)),
             ],
           ),
         ),
