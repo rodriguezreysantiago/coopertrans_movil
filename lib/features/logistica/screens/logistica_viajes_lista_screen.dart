@@ -17,11 +17,16 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// Lista de viajes — entry point del módulo. REFACTOR NÚCLEO (jun 2026).
 ///
 /// Reescrita al layout del prototipo (`screens-desktop-modules.jsx :: Logistica`):
-/// hero con el conteo real de viajes del mes + [Nuevo viaje], AppKpiStrip con
-/// los counts por estado + total + pagado a choferes, buscador Núcleo,
-/// chips de filtro (estado / liquidación / borrados) y una **tabla** densa en
-/// desktop. En mobile se mantienen cards ricas (re-skineadas a tokens), que
-/// leen mejor en pantalla angosta que una tabla de 6 columnas.
+/// hero con el conteo de viajes del MES en foco + selector de mes (◀ MES ▶)
+/// + [Nuevo viaje], AppKpiStrip con los counts por estado + total + ganancia
+/// choferes (todo del mes), buscador Núcleo, chips de filtro (estado /
+/// liquidación / borrados) y una **tabla** densa en desktop. En mobile se
+/// mantienen cards ricas (re-skineadas a tokens).
+///
+/// **Vista mensual (Santiago 2026-06-10)**: la lista + KPIs se acotan al mes
+/// elegido (por fecha de referencia), así el conteo de arriba coincide con el
+/// total de abajo. El BUSCADOR es global: al tipear texto, busca en todos los
+/// meses (para encontrar un viaje sin saber cuándo fue).
 ///
 /// La fila de tabla y la card abren el MISMO detalle (`adminLogisticaViajeDetalle`).
 /// Stream cacheado, filtros (estado / liquidado / búsqueda libre / borrados),
@@ -40,6 +45,23 @@ class _LogisticaViajesListaScreenState
   EstadoViaje? _filtroEstado;
   bool? _filtroLiquidado; // null = todos, true = solo liquidados, false = solo no
   bool _verBorrados = false;
+  // Mes en foco. La lista + KPIs se acotan a este mes por fecha de
+  // referencia (Santiago 2026-06-10: que el conteo de arriba coincida
+  // con el de abajo). El BUSCADOR sigue global — al tipear texto, busca
+  // en todos los meses. Default: mes corriente (1ro a las 00:00 ART).
+  DateTime _mesSeleccionado = _primerDiaDeMesActual();
+
+  static DateTime _primerDiaDeMesActual() {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, 1);
+  }
+
+  /// `true` si la fecha de referencia del viaje (fecha de carga del 1er
+  /// tramo, o `creado_en` de fallback) cae en [mes].
+  static bool _esDelMes(Viaje v, DateTime mes) {
+    final f = v.fechaReferencia;
+    return f != null && f.year == mes.year && f.month == mes.month;
+  }
   // Texto de búsqueda libre (auditoria 2026-05-17). Matcha chofer,
   // patente, empresa origen/destino, ubicación origen/destino, producto.
   // Lo dispara el TextField de la barra superior — siempre lowercase.
@@ -87,15 +109,34 @@ class _LogisticaViajesListaScreenState
               final todos = snap.data ?? const <Viaje>[];
               final cargando =
                   snap.connectionState == ConnectionState.waiting;
+              // Viajes del mes en foco (para hero + KPIs). La lista usa
+              // `_aplicarFiltros`, que acota al mes salvo que haya búsqueda.
+              final delMes = todos
+                  .where((v) => _esDelMes(v, _mesSeleccionado))
+                  .toList();
               final filtrados = _aplicarFiltros(todos);
               return Column(
                 children: [
-                  // Hero: VIAJES · conteo del mes + [Nuevo viaje].
+                  // Hero: VIAJES · conteo del mes + selector de mes +
+                  // [Nuevo viaje].
                   _Header(
-                    viajes: todos,
+                    mes: _mesSeleccionado,
+                    cantMes: delMes.length,
+                    hayDatos: todos.isNotEmpty,
+                    onMesAnterior: () => setState(() {
+                      final m = _mesSeleccionado.month, y = _mesSeleccionado.year;
+                      _mesSeleccionado =
+                          m == 1 ? DateTime(y - 1, 12, 1) : DateTime(y, m - 1, 1);
+                    }),
+                    onMesSiguiente: () => setState(() {
+                      final m = _mesSeleccionado.month, y = _mesSeleccionado.year;
+                      _mesSeleccionado =
+                          m == 12 ? DateTime(y + 1, 1, 1) : DateTime(y, m + 1, 1);
+                    }),
                     onNuevo: _abrirNuevoViaje,
                   ),
-                  // Buscador Núcleo (misma lógica de búsqueda libre).
+                  // Buscador Núcleo. OJO: la búsqueda es GLOBAL (todos los
+                  // meses) — al tipear, `_aplicarFiltros` ignora el mes.
                   _Buscador(
                     controller: _busquedaCtrl,
                     tieneTexto: _busqueda.isNotEmpty,
@@ -106,13 +147,13 @@ class _LogisticaViajesListaScreenState
                       setState(() => _busqueda = '');
                     },
                   ),
-                  // KPI strip por estado + total + pagado choferes. Sobre TODOS
-                  // los viajes del stream (no los filtrados) para panorama estable.
+                  // KPI strip por estado + total + ganancia choferes, sobre
+                  // los viajes DEL MES (coinciden con el conteo del hero).
                   if (todos.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(
                           AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
-                      child: _ResumenViajes(viajes: todos),
+                      child: _ResumenViajes(viajes: delMes),
                     ),
                   // Filtros (estado / liquidación / borrados).
                   _BarraFiltros(
@@ -163,6 +204,9 @@ class _LogisticaViajesListaScreenState
   List<Viaje> _aplicarFiltros(List<Viaje> docs) {
     final q = _busqueda;
     final filtrados = docs.where((v) {
+      // Acotar al mes en foco — SALVO que haya búsqueda (que es global,
+      // para encontrar un viaje sin saber el mes).
+      if (q.isEmpty && !_esDelMes(v, _mesSeleccionado)) return false;
       if (_filtroEstado != null && v.estado != _filtroEstado) return false;
       if (_filtroLiquidado == true && !v.liquidado) return false;
       if (_filtroLiquidado == false && v.liquidado) return false;
@@ -206,45 +250,75 @@ class _LogisticaViajesListaScreenState
 }
 
 // =============================================================================
-// HEADER — eyebrow + hero (conteo del mes) + botón Nuevo viaje
+// HEADER — eyebrow + selector de mes + hero (conteo del mes) + Nuevo viaje
 // =============================================================================
 
 class _Header extends StatelessWidget {
-  final List<Viaje> viajes;
+  final DateTime mes;
+  final int cantMes;
+  final bool hayDatos;
+  final VoidCallback onMesAnterior;
+  final VoidCallback onMesSiguiente;
   final VoidCallback onNuevo;
-  const _Header({required this.viajes, required this.onNuevo});
+  const _Header({
+    required this.mes,
+    required this.cantMes,
+    required this.hayDatos,
+    required this.onMesAnterior,
+    required this.onMesSiguiente,
+    required this.onNuevo,
+  });
 
   @override
   Widget build(BuildContext context) {
-    // Conteo de viajes del mes corriente, por fecha de referencia. Si un viaje
-    // no tiene fecha, no entra en el conteo del mes (pero sí en la lista).
-    final ahora = DateTime.now();
-    var enElMes = 0;
-    for (final v in viajes) {
-      final f = v.fechaReferencia;
-      if (f != null && f.year == ahora.year && f.month == ahora.month) {
-        enElMes++;
-      }
-    }
-
+    final c = context.colors;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const AppEyebrow('Viajes'),
-                const SizedBox(height: 6),
-                Row(
+          // Fila 1: eyebrow + selector de mes (◀ MES ▶).
+          Row(
+            children: [
+              const Expanded(child: AppEyebrow('Viajes · período')),
+              _FlechaMes(
+                icon: Icons.chevron_left,
+                tooltip: 'Mes anterior',
+                onTap: onMesAnterior,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              SizedBox(
+                width: 118,
+                child: Text(
+                  AppFormatters.formatearMes(mes).toUpperCase(),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppType.label.copyWith(
+                      color: c.text, fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              _FlechaMes(
+                icon: Icons.chevron_right,
+                tooltip: 'Mes siguiente',
+                onTap: onMesSiguiente,
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          // Fila 2: conteo del mes + botón Nuevo viaje.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: Row(
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      viajes.isEmpty ? '—' : '$enElMes',
+                      hayDatos ? '$cantMes' : '—',
                       style: AppType.h2.copyWith(
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
@@ -253,27 +327,61 @@ class _Header extends StatelessWidget {
                     Padding(
                       padding: const EdgeInsets.only(bottom: 4),
                       child: Text(
-                        'en el mes',
+                        'viajes',
                         style: AppType.monoSm
                             .copyWith(color: context.colors.textMuted),
                       ),
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: AppButton.primary(
-              label: 'Nuevo viaje',
-              icon: Icons.add,
-              size: AppButtonSize.sm,
-              onPressed: onNuevo,
-            ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: AppButton.primary(
+                  label: 'Nuevo viaje',
+                  icon: Icons.add,
+                  size: AppButtonSize.sm,
+                  onPressed: onNuevo,
+                ),
+              ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Botón de flecha para navegar mes a mes — superficie tier-3 con borde.
+class _FlechaMes extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  const _FlechaMes({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: c.surface3,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: c.border),
+          ),
+          child: Icon(icon, size: 18, color: c.textSecondary),
+        ),
       ),
     );
   }
@@ -317,8 +425,8 @@ class _Buscador extends StatelessWidget {
 // RESUMEN — AppKpiStrip por estado + total + pagado choferes
 // =============================================================================
 
-/// KPIs del módulo: counts por estado + total + pagado a choferes. Sobre TODOS
-/// los viajes del stream (no los filtrados) para que el panorama sea estable.
+/// KPIs del mes en foco: counts por estado + total + ganancia choferes.
+/// Recibe ya los viajes DEL MES (coinciden con el conteo del hero).
 /// En anchos chicos el AppKpiStrip puede apretarse, así que lo dejamos
 /// scrolleable horizontal: 5 stats en una fila densa.
 class _ResumenViajes extends StatelessWidget {
@@ -329,7 +437,7 @@ class _ResumenViajes extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     var enCurso = 0, concluidos = 0, planeados = 0;
-    var pagado = 0.0;
+    var ganancia = 0.0;
     for (final v in viajes) {
       switch (v.estado) {
         case EstadoViaje.enCurso:
@@ -339,10 +447,11 @@ class _ResumenViajes extends StatelessWidget {
         case EstadoViaje.planeado:
           planeados++;
       }
-      // "Pagado choferes" = solo lo efectivamente liquidado. Sumar los
-      // viajes no liquidados infla el número con plata que todavía no se
-      // pagó (el KPI dice "pagado", no "a pagar").
-      if (v.liquidado) pagado += v.montoChoferRedondeado;
+      // "Ganancia choferes" = lo que se les paga por los viajes del mes
+      // (montoChoferRedondeado), sin depender del flag liquidado — que
+      // se quitó de Liquidación (Santiago 2026-06-10). Incluye los tres
+      // estados: es la ganancia total del mes.
+      ganancia += v.montoChoferRedondeado;
     }
 
     return AppKpiStrip(
@@ -352,8 +461,8 @@ class _ResumenViajes extends StatelessWidget {
         AppStat(label: 'Concluidos', value: '$concluidos', accent: c.success),
         AppStat(label: 'Planeados', value: '$planeados', accent: c.info),
         AppStat(
-          label: 'Pagado choferes',
-          value: AppFormatters.formatearMonto(pagado),
+          label: 'Ganancia choferes',
+          value: AppFormatters.formatearMonto(ganancia),
           valueStyle: AppType.h4,
         ),
       ],
