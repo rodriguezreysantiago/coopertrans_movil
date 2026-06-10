@@ -7,22 +7,35 @@ import '../../../shared/utils/formatters.dart';
 import '../../reports/services/excel_utils.dart' as xu;
 import '../../reports/services/report_save_helper.dart';
 import '../models/adelanto_chofer.dart';
+import '../models/tarifa_logistica.dart';
+import '../models/ubicacion_logistica.dart';
 import '../models/viaje.dart';
 import '../services/liquidacion_service.dart' show EmpleadoLiquidacion;
+import 'logistica_service.dart';
+import 'report_planilla_chofer.dart';
 
-/// Reporte Excel de liquidación. Lo dispara la pantalla
-/// `LogisticaLiquidacionScreen` con los viajes + adelantos ya
-/// filtrados en memoria (mes + empresa empleadora + chofer +
-/// estado liquidado). El service NO vuelve a consultar Firestore.
+/// Reporte Excel de liquidación — la "planilla de cuadernos" mensual.
+/// Lo dispara la pantalla `LogisticaLiquidacionScreen` con los viajes
+/// + adelantos ya filtrados en memoria (mes + empresa empleadora +
+/// chofer + estado liquidado).
 ///
-/// Output: 3 hojas
-///   1. RESUMEN     — una fila por chofer con totales y neto.
-///   2. VIAJES      — una fila por viaje con monto y comisión.
-///   3. ADELANTOS   — una fila por adelanto con medio de pago.
+/// Desde 2026-06-10 el archivo replica el formato histórico que
+/// administración usaba antes de la app (`VIAJES VC <MES>.xlsm`) —
+/// pedido Vecchi. Output:
+///   1. RESUMEN      — choferes × BRUTO/ADELANTOS/GASTOS/FINAL con
+///                     fórmulas vivas + DNI y FACTURADO A EMPRESA.
+///   2. Una hoja POR CHOFER en formato cuaderno (adelantos + viajes
+///                     en paralelo + bloque de liquidación al pie).
+///      → ver `ReportPlanillaChofer` para el layout y las fórmulas.
+///   3. VIAJES       — anexo: una fila por viaje con monto, estado,
+///                     liquidado y unidad (trazabilidad de la app).
+///   4. ADELANTOS    — anexo: una fila por adelanto con medio de
+///                     pago, recibo e impresión.
 ///
-/// Si el filtro está acotado a 1 chofer la hoja RESUMEN igual se
-/// genera (con 1 sola fila) para que el contador siempre lea de la
-/// misma estructura.
+/// Los catálogos de tarifas y ubicaciones se leen one-shot al generar
+/// (únicos reads de Firestore acá) para resolver las columnas PROV.
+/// del cuaderno — el snapshot del tramo no guarda provincia. Si esa
+/// lectura falla (sin red), el reporte sale igual con PROV. en blanco.
 class ReportLiquidacionService {
   ReportLiquidacionService._();
 
@@ -50,17 +63,19 @@ class ReportLiquidacionService {
 
     _notificarProgreso(messenger);
     try {
-      final excel = ex.Excel.createExcel();
-      // El excel arranca con una hoja "Sheet1" que renombramos a
-      // RESUMEN. Después agregamos VIAJES y ADELANTOS.
-      excel.rename('Sheet1', 'RESUMEN');
+      final provincias = await _cargarResolverProvincias();
 
-      _llenarHojaResumen(
-        excel,
+      // RESUMEN + hojas cuaderno (una por chofer).
+      final excel = ReportPlanillaChofer.construir(
         viajes: viajes,
         adelantos: adelantos,
         empleados: empleados,
+        mes: mes,
+        provincias: provincias,
       );
+
+      // Anexos tabulares al final (trazabilidad completa de la app:
+      // estado, liquidado, unidad, medio de pago, recibo).
       _llenarHojaViajes(
         excel,
         viajes: viajes,
@@ -76,13 +91,19 @@ class ReportLiquidacionService {
       if (bytesRaw == null || bytesRaw.isEmpty) {
         throw StateError('El archivo Excel se generó vacío.');
       }
-      final bytes = xu.aplicarAutoFilterAlXlsx(bytesRaw);
+      // AutoFilter SOLO en los anexos — las hojas cuaderno y el
+      // RESUMEN tienen headers merged y bloques de pie; un autofilter
+      // en A1 las rompe visualmente.
+      final bytes = xu.aplicarAutoFilterAlXlsx(
+        bytesRaw,
+        soloHojas: {'VIAJES', 'ADELANTOS'},
+      );
 
-      // Nombre: `Liquidacion_2026_05_HHmmss.xlsx` con sufijo chofer
-      // o empresa si filtró por alguno (para que se diferencien
-      // exports del mismo mes).
+      // Nombre: `Viajes_VC_MAYO_2026_<timestamp>.xlsx` (convención de
+      // la planilla histórica) con sufijo chofer o empresa si filtró
+      // por alguno (para que se diferencien exports del mismo mes).
       final mesStr =
-          '${mes.year.toString().padLeft(4, '0')}_${mes.month.toString().padLeft(2, '0')}';
+          AppFormatters.formatearMes(mes).toUpperCase().replaceAll(' ', '_');
       final sufijos = <String>[];
       if (choferDniFiltro != null) {
         final nombre = empleados[choferDniFiltro]?.nombre ?? choferDniFiltro;
@@ -92,7 +113,7 @@ class ReportLiquidacionService {
       }
       final sufijo = sufijos.isEmpty ? null : sufijos.join('_');
       final nombreArchivo = ReportSaveHelper.nombreUnico(
-        'Liquidacion_$mesStr',
+        'Viajes_VC_$mesStr',
         sufijoExtra: sufijo,
       );
 
@@ -101,7 +122,7 @@ class ReportLiquidacionService {
         nombreDefault: nombreArchivo,
         messenger: messenger,
         textoCompartir:
-            'Liquidación ${AppFormatters.formatearMes(mes)} — Coopertrans Móvil',
+            'Planilla de viajes ${AppFormatters.formatearMes(mes)} — Coopertrans Móvil',
       );
     } catch (e, s) {
       AppFeedback.errorTecnicoOn(
@@ -113,88 +134,28 @@ class ReportLiquidacionService {
     }
   }
 
-  // ===========================================================================
-  // HOJAS
-  // ===========================================================================
-
-  static void _llenarHojaResumen(
-    ex.Excel excel, {
-    required List<Viaje> viajes,
-    required List<AdelantoChofer> adelantos,
-    required Map<String, EmpleadoLiquidacion> empleados,
-  }) {
-    final hoja = excel['RESUMEN'];
-    final headers = [
-      'CHOFER',
-      'DNI',
-      'EMPRESA EMPLEADORA',
-      'VIAJES',
-      'ADELANTOS',
-      'FACTURADO A EMPRESA',
-      'COMISIÓN CHOFER',
-      'ADELANTOS ENTREGADOS',
-      'GASTOS REEMBOLSABLES',
-      'NETO A PAGAR',
-    ];
-    for (var i = 0; i < headers.length; i++) {
-      final cell = hoja.cell(
-          ex.CellIndex.indexByColumnRow(columnIndex: i, rowIndex: 0));
-      cell.value = ex.TextCellValue(headers[i]);
-      cell.cellStyle = ex.CellStyle(
-        bold: true,
-        backgroundColorHex: ex.ExcelColor.fromHexString('#2E7D32'),
-        fontColorHex: ex.ExcelColor.fromHexString('#FFFFFF'),
+  /// Lee tarifas + ubicaciones one-shot y arma el resolver de
+  /// provincias para las columnas PROV. del cuaderno. Sin red (o
+  /// cualquier error) → resolver vacío: el reporte sale igual, con
+  /// las provincias en blanco.
+  static Future<ResolverProvincias> _cargarResolverProvincias() async {
+    try {
+      final snaps = await Future.wait([
+        LogisticaService.tarifasCol.get(),
+        LogisticaService.ubicacionesCol.get(),
+      ]);
+      return ResolverProvincias(
+        tarifas: snaps[0].docs.map(TarifaLogistica.fromDoc).toList(),
+        ubicaciones: snaps[1].docs.map(UbicacionLogistica.fromDoc).toList(),
       );
+    } catch (_) {
+      return ResolverProvincias.vacio();
     }
-
-    // Agrupar por DNI. Unión de DNIs presentes en viajes y adelantos.
-    final viajesPorChofer = <String, List<Viaje>>{};
-    for (final v in viajes) {
-      viajesPorChofer.putIfAbsent(v.choferDni, () => []).add(v);
-    }
-    final adelantosPorChofer = <String, List<AdelantoChofer>>{};
-    for (final a in adelantos) {
-      adelantosPorChofer.putIfAbsent(a.choferDni, () => []).add(a);
-    }
-    final dnis = <String>{
-      ...viajesPorChofer.keys,
-      ...adelantosPorChofer.keys,
-    }.toList()
-      ..sort((a, b) {
-        final na = empleados[a]?.nombre ?? a;
-        final nb = empleados[b]?.nombre ?? b;
-        return na.compareTo(nb);
-      });
-
-    var row = 1;
-    for (final dni in dnis) {
-      final vs = viajesPorChofer[dni] ?? const <Viaje>[];
-      final ads = adelantosPorChofer[dni] ?? const <AdelantoChofer>[];
-      final emp = empleados[dni];
-      final nombre = emp?.nombre ?? 'DNI $dni';
-      final empresa = emp?.empresaCuit ?? '';
-      final facturado = vs.fold<double>(0, (a, v) => a + v.montoVecchi);
-      final chofer = vs.fold<double>(0, (a, v) => a + v.montoChoferRedondeado);
-      final adel = ads.fold<double>(0, (a, ad) => a + ad.monto);
-      final gastos = vs.fold<double>(0, (a, v) => a + v.gastosTotal);
-      final neto = chofer - adel + gastos;
-
-      _setText(hoja, 0, row, nombre);
-      _setText(hoja, 1, row, dni);
-      _setText(hoja, 2, row, empresa);
-      _setInt(hoja, 3, row, vs.length);
-      _setInt(hoja, 4, row, ads.length);
-      _setMonto(hoja, 5, row, facturado);
-      _setMonto(hoja, 6, row, chofer);
-      _setMonto(hoja, 7, row, adel);
-      _setMonto(hoja, 8, row, gastos);
-      _setMonto(hoja, 9, row, neto, bold: true);
-
-      row++;
-    }
-
-    xu.autoFitColumnas(hoja, headers.length, row);
   }
+
+  // ===========================================================================
+  // HOJAS ANEXO
+  // ===========================================================================
 
   static void _llenarHojaViajes(
     ex.Excel excel, {

@@ -31,18 +31,37 @@ const formatoARSinDecimales = ex.CustomNumericNumFormat(
 /// resultado: Excel activa los filtros automáticamente al abrir el
 /// archivo (sin tener que hacer Ctrl+Shift+L manual).
 ///
+/// Con [soloHojas] el parche aplica únicamente a las hojas con esos
+/// nombres (p. ej. los anexos tabulares de la planilla de viajes —
+/// las hojas cuaderno tienen headers merged en la fila 1 y un
+/// autofilter ahí queda roto visualmente). El mapeo nombre → archivo
+/// sale de `xl/workbook.xml` + `xl/_rels/workbook.xml.rels`; si por
+/// algún motivo no se puede resolver, NO se inyecta nada (mejor sin
+/// filtros que filtros en hojas con layout).
+///
 /// La librería `excel` 4.0.6 no expone API para AutoFilter (issue
 /// abierto en su repo hace 20+ meses). Migrar a syncfusion_flutter_xlsio
 /// requiere licencia comercial — Vecchi no califica para Community
 /// License (>10 empleados típicos en transporte). Solución: parche
 /// directo al XML.
-List<int> aplicarAutoFilterAlXlsx(List<int> bytes) {
+List<int> aplicarAutoFilterAlXlsx(List<int> bytes, {Set<String>? soloHojas}) {
   final archive = ZipDecoder().decodeBytes(bytes);
   final patron = RegExp(r'^xl/worksheets/sheet\d+\.xml$');
 
+  // null → todas las hojas (comportamiento histórico). Si hay filtro,
+  // resolvemos qué archivos sheetN.xml corresponden a esos nombres.
+  Set<String>? archivosPermitidos;
+  if (soloHojas != null) {
+    archivosPermitidos = _archivosDeHojas(archive, soloHojas);
+  }
+
   final out = Archive();
   for (final file in archive.files) {
-    if (file.isFile && patron.hasMatch(file.name)) {
+    final aplicar = file.isFile &&
+        patron.hasMatch(file.name) &&
+        (archivosPermitidos == null ||
+            archivosPermitidos.contains(file.name));
+    if (aplicar) {
       final content = utf8.decode(file.content as List<int>);
       final modified = _inyectarAutoFilter(content);
       final newBytes = utf8.encode(modified);
@@ -57,6 +76,64 @@ List<int> aplicarAutoFilterAlXlsx(List<int> bytes) {
   // se abre sin AutoFilter pero al menos no se rompe.
   return encoded ?? bytes;
 }
+
+/// Resuelve los paths `xl/worksheets/sheetN.xml` de las hojas cuyos
+/// nombres están en [nombres]. Dos pasos sobre los XML del paquete:
+///   1. `xl/workbook.xml`: `<sheet name="X" … r:id="rIdN"/>` → rId.
+///   2. `xl/_rels/workbook.xml.rels`: rId → `Target="worksheets/…"`.
+/// Si algo no matchea, la hoja simplemente no entra al set (y el
+/// caller no le inyecta autofilter).
+Set<String> _archivosDeHojas(Archive archive, Set<String> nombres) {
+  String? leer(String path) {
+    for (final f in archive.files) {
+      if (f.isFile && f.name == path) {
+        return utf8.decode(f.content as List<int>);
+      }
+    }
+    return null;
+  }
+
+  final workbook = leer('xl/workbook.xml');
+  final rels = leer('xl/_rels/workbook.xml.rels');
+  if (workbook == null || rels == null) return {};
+
+  // name → rId (los atributos pueden venir en cualquier orden, así que
+  // capturamos ambos por separado dentro del tag <sheet …/>).
+  final ridPorNombre = <String, String>{};
+  for (final m in RegExp(r'<sheet\b[^>]*/?>').allMatches(workbook)) {
+    final tag = m.group(0)!;
+    final name = RegExp(r'name="([^"]*)"').firstMatch(tag)?.group(1);
+    final rid = RegExp(r'r:id="([^"]*)"').firstMatch(tag)?.group(1);
+    if (name != null && rid != null) ridPorNombre[_unescapeXml(name)] = rid;
+  }
+
+  // rId → target normalizado a path absoluto dentro del zip.
+  final targetPorRid = <String, String>{};
+  for (final m in RegExp(r'<Relationship\b[^>]*/?>').allMatches(rels)) {
+    final tag = m.group(0)!;
+    final id = RegExp(r'Id="([^"]*)"').firstMatch(tag)?.group(1);
+    final target = RegExp(r'Target="([^"]*)"').firstMatch(tag)?.group(1);
+    if (id != null && target != null) {
+      targetPorRid[id] =
+          target.startsWith('/') ? target.substring(1) : 'xl/$target';
+    }
+  }
+
+  final out = <String>{};
+  for (final nombre in nombres) {
+    final rid = ridPorNombre[nombre];
+    final target = rid == null ? null : targetPorRid[rid];
+    if (target != null) out.add(target);
+  }
+  return out;
+}
+
+String _unescapeXml(String s) => s
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&apos;', "'")
+    .replaceAll('&amp;', '&');
 
 /// Inyecta `<autoFilter ref="A1:Z10000"/>` en el XML de un worksheet.
 /// El elemento debe ir DESPUÉS de `</sheetData>` (orden requerido por
