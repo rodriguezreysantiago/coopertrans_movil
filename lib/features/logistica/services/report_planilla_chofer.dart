@@ -55,12 +55,19 @@ class ReportPlanillaChofer {
   /// default operativo que `CalculosViaje.comisionChoferDefaultPct`).
   static const double _pctDefault = 18.0;
 
-  /// Mínimo de filas de la grilla + margen sobre el contenido real.
-  /// Bajos a propósito (Santiago 2026-06-10: "demasiado espacio
-  /// vacío") — una fila de aire alcanza; las fórmulas del pie cubren
-  /// el rango entero, así que agregar a mano sigue sumando.
+  /// Mínimo de filas de la grilla principal (viajes CONCLUIDOS +
+  /// adelantos) + margen. Bajos a propósito (Santiago 2026-06-10:
+  /// "demasiado espacio vacío") — las fórmulas del pie cubren el rango
+  /// entero, así que agregar a mano sigue sumando.
   static const int _minFilasDatos = 6;
   static const int _margenFilasDatos = 1;
+
+  /// Ídem para la sección OTROS VIAJES (EN_CURSO + PLANEADOS) — la
+  /// "especulación" de fin de mes (Santiago 2026-06-10: se cargan
+  /// viajes que se cree que se van a hacer, para que contabilidad
+  /// proyecte los pagos). Más chica porque suele tener pocos.
+  static const int _minFilasOtros = 3;
+  static const int _margenFilasOtros = 1;
 
   // ─── Estilos base (Cambria, como la planilla original) ───────────
 
@@ -153,19 +160,28 @@ class ReportPlanillaChofer {
     }.toList()
       ..sort((a, b) => nombreDe(a).compareTo(nombreDe(b)));
 
-    // Tamaño de grilla UNIFORME = el máximo contenido entre todos los
-    // choferes (filas de viaje vs adelantos) + margen, con un piso. Que
-    // todas las hojas tengan la misma cantidad de filas es lo que hace
-    // que el espejo INDIRECT de CONSULTA sea consistente.
-    var maxContenido = 0;
+    // Tamaños de grilla UNIFORMES entre todas las hojas — necesario
+    // para que el espejo INDIRECT de CONSULTA sea consistente (su pie
+    // nunca pisa el de otra hoja). Dos bloques:
+    //   - principal: viajes CONCLUIDOS vs adelantos (el que tenga más).
+    //   - otros: viajes EN_CURSO + PLANEADOS (la especulación).
+    var maxPrincipal = 0;
+    var maxOtros = 0;
     for (final dni in dnis) {
-      final nFilasViaje = (viajesPorChofer[dni] ?? const [])
+      final vs = viajesPorChofer[dni] ?? const <Viaje>[];
+      final filasConcluidos = vs
+          .where(_esConcluido)
+          .fold<int>(0, (s, v) => s + v.tramos.length);
+      final filasOtros = vs
+          .where((v) => !_esConcluido(v))
           .fold<int>(0, (s, v) => s + v.tramos.length);
       final nAdel = (adelantosPorChofer[dni] ?? const []).length;
-      maxContenido = math.max(maxContenido, math.max(nFilasViaje, nAdel));
+      maxPrincipal =
+          math.max(maxPrincipal, math.max(filasConcluidos, nAdel));
+      maxOtros = math.max(maxOtros, filasOtros);
     }
-    final nDatos =
-        math.max(_minFilasDatos, maxContenido + _margenFilasDatos);
+    final nDatos = math.max(_minFilasDatos, maxPrincipal + _margenFilasDatos);
+    final nOtros = math.max(_minFilasOtros, maxOtros + _margenFilasOtros);
 
     // ─── Hojas cuaderno (una por chofer) ────────────────────────────
     final usados = <String>{'RESUMEN', 'VIAJES', 'ADELANTOS', 'CONSULTA'};
@@ -187,6 +203,7 @@ class ReportPlanillaChofer {
         adelantos: ads,
         provincias: provincias,
         nDatos: nDatos,
+        nOtros: nOtros,
       );
       metas.add(meta);
     }
@@ -196,7 +213,8 @@ class ReportPlanillaChofer {
     // CONSULTA: dropdown + espejo del chofer elegido. Se llena al final
     // (necesita los nombres de hoja). El data validation y el ocultado
     // de hojas van por XML (caller → excel_utils).
-    _construirHojaConsulta(excel, metas: metas, mes: mes, nDatos: nDatos);
+    _construirHojaConsulta(
+        excel, metas: metas, mes: mes, nDatos: nDatos, nOtros: nOtros);
 
     return PlanillaWorkbook(
       excel: excel,
@@ -226,10 +244,13 @@ class ReportPlanillaChofer {
     final hoja = excel['RESUMEN'];
     final mesStr = AppFormatters.formatearMes(mes).toUpperCase();
 
-    hoja.merge(_ci(0, 0), _ci(6, 0));
-    _set(hoja, 0, 0, ex.TextCellValue('RESUMEN CHOFERES — $mesStr'),
+    _setMerged(hoja, 0, 0, 8, 0,
+        ex.TextCellValue('RESUMEN CHOFERES — $mesStr'),
         _estilo(bold: true, size: 12, borde: false));
 
+    // FINAL = firme (concluidos). OTROS VIAJES = especulación (en
+    // curso/planeados). TOTAL EST. = lo que se proyecta pagar si se
+    // concretan (Santiago 2026-06-10).
     const headers = [
       'CHOFER',
       'DNI',
@@ -237,6 +258,8 @@ class ReportPlanillaChofer {
       'ADELANTOS',
       'GASTOS',
       'FINAL',
+      'OTROS VIAJES',
+      'TOTAL EST.',
       'FACTURADO A EMPRESA',
     ];
     for (var c = 0; c < headers.length; c++) {
@@ -251,7 +274,7 @@ class ReportPlanillaChofer {
       final fin = m.filaDatosFin;
       _set(hoja, 0, r, ex.TextCellValue(m.nombreChofer), _estilo());
       _set(hoja, 1, r, ex.TextCellValue(m.dni), _estilo());
-      // BRUTO = ganancia (col N del cuaderno), GASTOS = col O.
+      // BRUTO = ganancia concluidos (col N), GASTOS = col O.
       _set(hoja, 2, r, ex.FormulaCellValue('SUM($ref!N4:N$fin)'),
           _estilo(monto: true));
       _set(hoja, 3, r, ex.FormulaCellValue('SUM($ref!C4:C$fin)'),
@@ -260,31 +283,34 @@ class ReportPlanillaChofer {
           _estilo(monto: true));
       _set(hoja, 5, r, ex.FormulaCellValue('C$f-D$f+E$f'),
           _estilo(bold: true, monto: true));
-      _set(hoja, 6, r, ex.DoubleCellValue(m.facturado),
+      // OTROS VIAJES = ganancia de en curso/planeados (especulación).
+      _set(hoja, 6, r,
+          ex.FormulaCellValue('SUM($ref!N${m.filaOtrosIni}:N${m.filaOtrosFin})'),
           _estilo(monto: true));
+      _set(hoja, 7, r, ex.FormulaCellValue('F$f+G$f'),
+          _estilo(bold: true, monto: true));
+      _set(hoja, 8, r, ex.DoubleCellValue(m.facturado), _estilo(monto: true));
       r++;
     }
 
-    // Fila TOTAL (solo si hay al menos un chofer — sin filas no hay
-    // rango válido para las fórmulas).
+    // Fila TOTAL (solo si hay al menos un chofer).
     if (metas.isNotEmpty) {
-      const primera = 3; // fila Excel de la primera fila de datos
-      final ultima = r; // r quedó en la fila TOTAL (0-based) = última de datos 1-based
+      const primera = 3;
+      final ultima = r; // r quedó en la fila TOTAL (1-based)
       _set(hoja, 0, r, ex.TextCellValue('TOTAL'),
           _estilo(bold: true, gris: true));
       _set(hoja, 1, r, ex.TextCellValue(''), _estilo(gris: true));
-      for (var c = 2; c <= 6; c++) {
+      for (var c = 2; c <= 8; c++) {
         final col = String.fromCharCode('A'.codeUnitAt(0) + c);
-        _set(
-            hoja,
-            c,
-            r,
+        _set(hoja, c, r,
             ex.FormulaCellValue('SUM($col$primera:$col$ultima)'),
             _estilo(bold: true, gris: true, monto: true));
       }
     }
 
-    const anchos = [26.0, 11.0, 13.0, 13.0, 11.0, 13.0, 20.0];
+    const anchos = [
+      26.0, 11.0, 13.0, 12.0, 11.0, 13.0, 13.0, 13.0, 18.0,
+    ];
     for (var c = 0; c < anchos.length; c++) {
       hoja.setColumnWidth(c, anchos[c]);
     }
@@ -304,6 +330,7 @@ class ReportPlanillaChofer {
     required List<AdelantoChofer> adelantos,
     required ResolverProvincias provincias,
     required int nDatos,
+    required int nOtros,
   }) {
     final hoja = excel[nombreHoja];
 
@@ -311,115 +338,56 @@ class ReportPlanillaChofer {
     // (fila 3) compartidos con CONSULTA.
     _dibujarEncabezado(hoja, mes: mes, chofer: ex.TextCellValue(nombreChofer));
 
-    // ─── Grilla de datos ────────────────────────────────────────────
-    // Una fila por TRAMO (la planilla vieja era single-tramo: una fila
-    // por viaje). Los adelantos van en paralelo en las columnas A-C.
-    // [nDatos] es UNIFORME entre todas las hojas (lo calcula `construir`
-    // como el máximo) — así CONSULTA espeja un tamaño de grilla
-    // consistente y su pie nunca pisa el de otra hoja.
-    final filas = <({Viaje v, TramoViaje t})>[
+    // ─── Separar por estado ─────────────────────────────────────────
+    // CONCLUIDOS arriba (lo firme); EN_CURSO + PLANEADOS abajo en OTROS
+    // VIAJES (la especulación de fin de mes). Una fila por TRAMO.
+    final concluidos = <({Viaje v, TramoViaje t})>[
       for (final v in viajes)
-        for (final t in v.tramos) (v: v, t: t),
+        if (_esConcluido(v))
+          for (final t in v.tramos) (v: v, t: t),
     ];
-    final filaDatosFin = 3 + nDatos; // última fila de datos (1-based)
+    final otros = <({Viaje v, TramoViaje t})>[
+      for (final v in viajes)
+        if (!_esConcluido(v))
+          for (final t in v.tramos) (v: v, t: t),
+    ];
 
-    final stCelda = _estilo();
-    final stMonto = _estilo(monto: true);
-    final stMontoBold = _estilo(bold: true, monto: true);
-    final stCentrado = _estilo(align: ex.HorizontalAlign.Center);
+    final filaDatosFin = 3 + nDatos; // última fila de la grilla principal
 
+    // ─── Grilla principal: concluidos (D-O) + adelantos (A-C) ───────
     var facturado = 0.0;
     for (var i = 0; i < nDatos; i++) {
-      final r = 3 + i; // 0-based; fila Excel = r + 1
-      final f = r + 1;
-
-      // ── Columnas A-C: adelanto i (si hay) ──
-      final ad = i < adelantos.length ? adelantos[i] : null;
-      _set(hoja, 0, r,
-          ad == null
-              ? null
-              : ex.TextCellValue(AppFormatters.formatearFecha(ad.fecha)),
-          stCentrado);
-      _set(hoja, 1, r,
-          ad?.numeroRecibo == null ? null : ex.IntCellValue(ad!.numeroRecibo!),
-          stCentrado);
-      _set(hoja, 2, r, ad == null ? null : ex.DoubleCellValue(ad.monto),
-          stMontoBold);
-
-      // ── Columnas D-O: tramo i (si hay) ──
-      final fila = i < filas.length ? filas[i] : null;
-      final t = fila?.t;
-      final snap = t?.tarifaSnapshot;
+      final r = 3 + i; // 0-based
+      _setFilaAdelanto(hoja, r, i < adelantos.length ? adelantos[i] : null);
+      final fila = i < concluidos.length ? concluidos[i] : null;
       if (fila != null && fila.t == fila.v.tramos.first) {
         facturado += fila.v.montoVecchi;
       }
-
-      _set(hoja, 3, r,
-          t?.fechaCarga == null
-              ? null
-              : ex.TextCellValue(AppFormatters.formatearFecha(t!.fechaCarga)),
-          stCentrado);
-      _set(hoja, 4, r,
-          (t?.remitoNumero?.trim().isNotEmpty ?? false)
-              ? ex.TextCellValue(t!.remitoNumero!.trim())
-              : null,
-          stCentrado);
-      final mercaderia = t?.producto ?? t?.descripcionCarga;
-      _set(hoja, 5, r,
-          mercaderia == null ? null : ex.TextCellValue(mercaderia), stCelda);
-      _set(hoja, 6, r,
-          snap == null
-              ? null
-              : ex.TextCellValue(stripParentesis(snap.origenEtiqueta)),
-          stCelda);
-      final provO = t == null ? '' : provincias.origenDe(t);
-      _set(hoja, 7, r, provO.isEmpty ? null : ex.TextCellValue(provO),
-          stCentrado);
-      _set(hoja, 8, r,
-          snap == null
-              ? null
-              : ex.TextCellValue(stripParentesis(snap.destinoEtiqueta)),
-          stCelda);
-      final provD = t == null ? '' : provincias.destinoDe(t);
-      _set(hoja, 9, r, provD.isEmpty ? null : ex.TextCellValue(provD),
-          stCentrado);
-
-      // KG: lo que usa el cálculo (descargados con prioridad, cargados
-      // como estimado en curso — misma regla que CalculosViaje).
-      final kg = _kgEfectivo(t);
-      _set(hoja, 10, r, kg == null ? null : ex.DoubleCellValue(kg), stMonto);
-      final dif = _difKg(t);
-      _set(hoja, 11, r, dif == null ? null : ex.DoubleCellValue(dif), stMonto);
-
-      // TARIFA (M): base del cálculo del chofer ($/TN o $/viaje).
-      _set(hoja, 12, r,
-          snap == null ? null : ex.DoubleCellValue(snap.tarifaChofer), stMonto);
-
-      // GANANCIA (N): lo que se le paga al chofer, YA redondeado a
-      // múltiplo de 5 (igual que CalculosViaje). Una sola columna — la
-      // planilla vieja tenía dos "G/VIAJE" (bruto + redondeado) que
-      // confundían. Fórmula viva salvo monto fijo (valor flat).
-      final pct = _pctDe(fila?.v);
-      final ex.CellValue? nValue;
-      if (snap == null) {
-        nValue = null; // fila vacía → limpia (sin "0")
-      } else if (snap.montoFijoChofer != null) {
-        nValue = ex.DoubleCellValue(_redondear5(snap.montoFijoChofer!));
-      } else if (snap.unidadTarifa == UnidadTarifa.porViaje) {
-        nValue = ex.FormulaCellValue('FLOOR(M$f*${_pctStr(pct)}%,5)');
-      } else {
-        nValue =
-            ex.FormulaCellValue('FLOOR((K$f*M$f*${_pctStr(pct)}%)/1000,5)');
-      }
-      _set(hoja, 13, r, nValue, stMontoBold);
-
-      // GASTOS (O): gastos del tramo.
-      final gastos = t?.gastosTotal ?? 0;
-      _set(hoja, 14, r, gastos == 0 ? null : ex.DoubleCellValue(gastos),
-          stMonto);
+      _setFilaViaje(hoja, r, fila, provincias);
     }
 
-    _bloquePie(hoja, filaDatosFin: filaDatosFin);
+    // ─── Sección OTROS VIAJES (EN CURSO / PLANEADOS) ────────────────
+    final filaOtrosTit = filaDatosFin + 2; // 1 fila de aire; 1-based
+    final filaOtrosIni = filaOtrosTit + 1;
+    final filaOtrosFin = filaOtrosTit + nOtros;
+    _setMerged(hoja, 0, filaOtrosTit - 1, 14, filaOtrosTit - 1,
+        ex.TextCellValue('OTROS VIAJES (EN CURSO / PLANEADOS)'),
+        _estilo(bold: true, gris: true, align: ex.HorizontalAlign.Center));
+    final stMontoBold = _estilo(bold: true, monto: true);
+    final stCentrado = _estilo(align: ex.HorizontalAlign.Center);
+    for (var i = 0; i < nOtros; i++) {
+      final r = filaOtrosIni - 1 + i; // 0-based
+      // A-C vacías (bordeadas) — los adelantos viven solo arriba.
+      _set(hoja, 0, r, null, stCentrado);
+      _set(hoja, 1, r, null, stCentrado);
+      _set(hoja, 2, r, null, stMontoBold);
+      _setFilaViaje(hoja, r, i < otros.length ? otros[i] : null, provincias);
+    }
+
+    _bloquePie(hoja,
+        filaDatosFin: filaDatosFin,
+        filaOtrosIni: filaOtrosIni,
+        filaOtrosFin: filaOtrosFin);
     _aplicarAnchos(hoja);
 
     return _MetaHojaChofer(
@@ -427,8 +395,104 @@ class ReportPlanillaChofer {
       nombreChofer: nombreChofer,
       nombreHoja: nombreHoja,
       filaDatosFin: filaDatosFin,
+      filaOtrosIni: filaOtrosIni,
+      filaOtrosFin: filaOtrosFin,
       facturado: facturado,
     );
+  }
+
+  /// `true` si el viaje cuenta como FIRME (concluido) → grilla
+  /// principal. El resto (en curso, planeado) va a OTROS VIAJES.
+  static bool _esConcluido(Viaje v) => v.estado == EstadoViaje.concluido;
+
+  /// Escribe el adelanto [ad] en las columnas A-C de la fila [r]
+  /// (0-based). Si es null, deja las celdas vacías pero bordeadas.
+  static void _setFilaAdelanto(ex.Sheet hoja, int r, AdelantoChofer? ad) {
+    final stCentrado = _estilo(align: ex.HorizontalAlign.Center);
+    _set(hoja, 0, r,
+        ad == null
+            ? null
+            : ex.TextCellValue(AppFormatters.formatearFecha(ad.fecha)),
+        stCentrado);
+    _set(hoja, 1, r,
+        ad?.numeroRecibo == null ? null : ex.IntCellValue(ad!.numeroRecibo!),
+        stCentrado);
+    _set(hoja, 2, r, ad == null ? null : ex.DoubleCellValue(ad.monto),
+        _estilo(bold: true, monto: true));
+  }
+
+  /// Escribe un viaje/tramo [fila] en las columnas D-O de la fila [r]
+  /// (0-based). Si es null, deja las celdas vacías pero bordeadas. La
+  /// GANANCIA (N) lleva el FLOOR ya aplicado (igual que CalculosViaje);
+  /// para EN_CURSO/PLANEADOS sin kg descargados usa los cargados como
+  /// estimado — justo lo que contabilidad quiere para especular.
+  static void _setFilaViaje(
+    ex.Sheet hoja,
+    int r,
+    ({Viaje v, TramoViaje t})? fila,
+    ResolverProvincias provincias,
+  ) {
+    final f = r + 1; // 1-based para fórmulas
+    final stCelda = _estilo();
+    final stMonto = _estilo(monto: true);
+    final stMontoBold = _estilo(bold: true, monto: true);
+    final stCentrado = _estilo(align: ex.HorizontalAlign.Center);
+    final t = fila?.t;
+    final snap = t?.tarifaSnapshot;
+
+    _set(hoja, 3, r,
+        t?.fechaCarga == null
+            ? null
+            : ex.TextCellValue(AppFormatters.formatearFecha(t!.fechaCarga)),
+        stCentrado);
+    _set(hoja, 4, r,
+        (t?.remitoNumero?.trim().isNotEmpty ?? false)
+            ? ex.TextCellValue(t!.remitoNumero!.trim())
+            : null,
+        stCentrado);
+    final mercaderia = t?.producto ?? t?.descripcionCarga;
+    _set(hoja, 5, r,
+        mercaderia == null ? null : ex.TextCellValue(mercaderia), stCelda);
+    _set(hoja, 6, r,
+        snap == null
+            ? null
+            : ex.TextCellValue(stripParentesis(snap.origenEtiqueta)),
+        stCelda);
+    final provO = t == null ? '' : provincias.origenDe(t);
+    _set(hoja, 7, r, provO.isEmpty ? null : ex.TextCellValue(provO),
+        stCentrado);
+    _set(hoja, 8, r,
+        snap == null
+            ? null
+            : ex.TextCellValue(stripParentesis(snap.destinoEtiqueta)),
+        stCelda);
+    final provD = t == null ? '' : provincias.destinoDe(t);
+    _set(hoja, 9, r, provD.isEmpty ? null : ex.TextCellValue(provD),
+        stCentrado);
+
+    final kg = _kgEfectivo(t);
+    _set(hoja, 10, r, kg == null ? null : ex.DoubleCellValue(kg), stMonto);
+    final dif = _difKg(t);
+    _set(hoja, 11, r, dif == null ? null : ex.DoubleCellValue(dif), stMonto);
+    _set(hoja, 12, r,
+        snap == null ? null : ex.DoubleCellValue(snap.tarifaChofer), stMonto);
+
+    final pct = _pctDe(fila?.v);
+    final ex.CellValue? nValue;
+    if (snap == null) {
+      nValue = null;
+    } else if (snap.montoFijoChofer != null) {
+      nValue = ex.DoubleCellValue(_redondear5(snap.montoFijoChofer!));
+    } else if (snap.unidadTarifa == UnidadTarifa.porViaje) {
+      nValue = ex.FormulaCellValue('FLOOR(M$f*${_pctStr(pct)}%,5)');
+    } else {
+      nValue = ex.FormulaCellValue('FLOOR((K$f*M$f*${_pctStr(pct)}%)/1000,5)');
+    }
+    _set(hoja, 13, r, nValue, stMontoBold);
+
+    final gastos = t?.gastosTotal ?? 0;
+    _set(hoja, 14, r, gastos == 0 ? null : ex.DoubleCellValue(gastos),
+        stMonto);
   }
 
   /// Encabezado común del cuaderno (filas 1-3), reutilizado por las
@@ -515,6 +579,7 @@ class ReportPlanillaChofer {
     required List<_MetaHojaChofer> metas,
     required DateTime mes,
     required int nDatos,
+    required int nOtros,
   }) {
     final hoja = excel['CONSULTA'];
 
@@ -529,22 +594,40 @@ class ReportPlanillaChofer {
     _dibujarEncabezado(hoja,
         mes: mes, chofer: ex.TextCellValue(metas.first.nombreHoja));
 
-    // ─── Grilla: espejo INDIRECT al chofer de G1 ────────────────────
-    // Cada celda: =IF(INDIRECT("'"&$G$1&"'!A4")=0,"",INDIRECT(...)).
-    // El IF(=0,"") deja en blanco las filas sin datos (INDIRECT de
-    // celda vacía devuelve 0); fechas (texto) y montos (>0) se muestran.
+    // Mismas posiciones que una hoja de chofer (el espejo apunta a las
+    // mismas celdas, así que la estructura debe coincidir).
     final filaDatosFin = 3 + nDatos;
-    for (var f = 4; f <= filaDatosFin; f++) {
-      for (var c = 1; c <= 15; c++) {
-        final ref = _refIndirect(_colLetra(c), f);
-        final formula = 'IF(INDIRECT($ref)=0,"",INDIRECT($ref))';
-        _set(hoja, c - 1, f - 1, ex.FormulaCellValue(formula),
-            _estiloColGrilla(c));
+    final filaOtrosTit = filaDatosFin + 2;
+    final filaOtrosIni = filaOtrosTit + 1;
+    final filaOtrosFin = filaOtrosTit + nOtros;
+
+    // ─── Grillas: espejo INDIRECT al chofer de G1 ───────────────────
+    // Cada celda: =IF(INDIRECT("'"&$G$1&"'!A4")=0,"",INDIRECT(...)).
+    // El IF(=0,"") deja en blanco lo vacío. Se espeja la grilla
+    // principal (concluidos) y la de OTROS VIAJES; el título de la
+    // sección es fijo.
+    void espejar(int fIni, int fFin) {
+      for (var f = fIni; f <= fFin; f++) {
+        for (var c = 1; c <= 15; c++) {
+          final ref = _refIndirect(_colLetra(c), f);
+          final formula = 'IF(INDIRECT($ref)=0,"",INDIRECT($ref))';
+          _set(hoja, c - 1, f - 1, ex.FormulaCellValue(formula),
+              _estiloColGrilla(c));
+        }
       }
     }
 
-    // Pie: recalcula sobre la grilla espejada (reusa _bloquePie).
-    _bloquePie(hoja, filaDatosFin: filaDatosFin);
+    espejar(4, filaDatosFin);
+    _setMerged(hoja, 0, filaOtrosTit - 1, 14, filaOtrosTit - 1,
+        ex.TextCellValue('OTROS VIAJES (EN CURSO / PLANEADOS)'),
+        _estilo(bold: true, gris: true, align: ex.HorizontalAlign.Center));
+    espejar(filaOtrosIni, filaOtrosFin);
+
+    // Pie: recalcula sobre las grillas espejadas (reusa _bloquePie).
+    _bloquePie(hoja,
+        filaDatosFin: filaDatosFin,
+        filaOtrosIni: filaOtrosIni,
+        filaOtrosFin: filaOtrosFin);
     _aplicarAnchos(hoja);
 
     // ─── Columna helper S: nombres EXACTOS de hoja para el dropdown ──
@@ -594,48 +677,55 @@ class ReportPlanillaChofer {
     }
   }
 
-  /// Pie del cuaderno — bloque de liquidación COMPACTO (rediseño
-  /// 2026-06-10, Santiago: el pie viejo tenía huecos y secciones
-  /// siempre vacías). Una tablita a la izquierda, bordes que cierran:
-  ///   GANANCIA VIAJES − ADELANTOS + GASTOS = NETO A PAGAR
-  /// con fórmulas vivas sobre la grilla. Fila vacía de separación
-  /// arriba para que respire.
-  static void _bloquePie(ex.Sheet hoja, {required int filaDatosFin}) {
-    final stLabel =
-        _estilo(bold: true, align: ex.HorizontalAlign.Left);
+  /// Pie del cuaderno — bloque de liquidación con la lógica del archivo
+  /// original (Santiago 2026-06-10): lo FIRME (concluidos) arriba, la
+  /// ESPECULACIÓN (otros viajes) abajo:
+  ///   GANANCIA VIAJES − ADELANTOS + GASTOS = NETO A PAGAR  (firme)
+  ///   NETO A PAGAR + OTROS VIAJES = TOTAL ESTIMADO         (proyección)
+  /// Tablita a la izquierda con bordes que cierran (_setMerged), fila
+  /// de aire arriba. Los importes de los CONCLUIDOS salen de la grilla
+  /// principal (filas 4..[filaDatosFin]); los de OTROS VIAJES de su
+  /// propia sección ([filaOtrosIni]..[filaOtrosFin]).
+  static void _bloquePie(
+    ex.Sheet hoja, {
+    required int filaDatosFin,
+    required int filaOtrosIni,
+    required int filaOtrosFin,
+  }) {
+    final stLabel = _estilo(bold: true);
     final stValor = _estilo(monto: true, align: ex.HorizontalAlign.Right);
     final stTituloGris =
         _estilo(bold: true, gris: true, align: ex.HorizontalAlign.Center);
-    final stLabelNeto = _estilo(bold: true, gris: true);
-    final stValorNeto =
-        _estilo(bold: true, gris: true, monto: true,
-            align: ex.HorizontalAlign.Right);
+    final stLabelDest = _estilo(bold: true, gris: true);
+    final stValorDest = _estilo(
+        bold: true, gris: true, monto: true, align: ex.HorizontalAlign.Right);
 
-    final r0 = filaDatosFin + 1; // 1 fila de aire después de la grilla
-    final fTit = r0 + 1; // título LIQUIDACIÓN
+    final fTit = filaOtrosFin + 2; // 1 fila de aire tras OTROS VIAJES
     final fGan = fTit + 1;
     final fAdel = fGan + 1;
     final fGastos = fAdel + 1;
     final fNeto = fGastos + 1;
+    final fOtros = fNeto + 1;
+    final fTotal = fOtros + 1;
 
-    // Título del bloque (sobre las 4 columnas de la tablita A:D).
     _setMerged(hoja, 0, fTit - 1, 3, fTit - 1,
         ex.TextCellValue('LIQUIDACIÓN'), stTituloGris);
 
-    // Cada renglón: label en A:B, valor en C:D. _setMerged cierra los
-    // bordes de ambos rangos.
-    void renglon(int f, String label, String formula,
-        {bool neto = false}) {
+    void renglon(int f, String label, String formula, {bool dest = false}) {
       _setMerged(hoja, 0, f - 1, 1, f - 1, ex.TextCellValue(label),
-          neto ? stLabelNeto : stLabel);
+          dest ? stLabelDest : stLabel);
       _setMerged(hoja, 2, f - 1, 3, f - 1, ex.FormulaCellValue(formula),
-          neto ? stValorNeto : stValor);
+          dest ? stValorDest : stValor);
     }
 
+    // Firme (concluidos).
     renglon(fGan, 'GANANCIA VIAJES', 'SUM(N4:N$filaDatosFin)');
     renglon(fAdel, 'ADELANTOS (−)', 'SUM(C4:C$filaDatosFin)');
     renglon(fGastos, 'GASTOS (+)', 'SUM(O4:O$filaDatosFin)');
-    renglon(fNeto, 'NETO A PAGAR', 'C$fGan-C$fAdel+C$fGastos', neto: true);
+    renglon(fNeto, 'NETO A PAGAR', 'C$fGan-C$fAdel+C$fGastos', dest: true);
+    // Especulación (en curso / planeados) + total proyectado.
+    renglon(fOtros, 'OTROS VIAJES (+)', 'SUM(N$filaOtrosIni:N$filaOtrosFin)');
+    renglon(fTotal, 'TOTAL ESTIMADO', 'C$fNeto+C$fOtros', dest: true);
   }
 
   // ===================================================================
@@ -776,9 +866,14 @@ class _MetaHojaChofer {
   final String nombreChofer;
   final String nombreHoja;
 
-  /// Última fila (1-based) de la grilla de datos — fin de los rangos
-  /// `SUM(P4:P{filaDatosFin})` etc.
+  /// Última fila (1-based) de la grilla principal (CONCLUIDOS) — fin de
+  /// los rangos `SUM(N4:N{filaDatosFin})` del firme.
   final int filaDatosFin;
+
+  /// Primera y última fila (1-based) de la sección OTROS VIAJES (la
+  /// especulación) — para `SUM(N{filaOtrosIni}:N{filaOtrosFin})`.
+  final int filaOtrosIni;
+  final int filaOtrosFin;
 
   /// Σ `montoVecchi` de los viajes del chofer (valor de la app — el
   /// cuaderno no tiene celda de facturación, así que va como número).
@@ -789,6 +884,8 @@ class _MetaHojaChofer {
     required this.nombreChofer,
     required this.nombreHoja,
     required this.filaDatosFin,
+    required this.filaOtrosIni,
+    required this.filaOtrosFin,
     required this.facturado,
   });
 }

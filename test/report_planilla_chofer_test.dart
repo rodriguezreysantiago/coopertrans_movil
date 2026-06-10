@@ -46,13 +46,14 @@ Viaje viajeDe({
   String nombre = 'DIAZ MARIO',
   double montoVecchi = 0,
   double pct = 18,
+  EstadoViaje estado = EstadoViaje.concluido,
 }) {
   return Viaje(
     id: id,
     tramos: tramos,
     choferDni: dni,
     choferNombre: nombre,
-    estado: EstadoViaje.concluido,
+    estado: estado,
     montoVecchi: montoVecchi,
     montoChofer: 0,
     montoChoferRedondeado: 0,
@@ -174,6 +175,24 @@ void main() {
           ),
         ],
       );
+      // V3 EN CURSO → va a la sección OTROS VIAJES (especulación), no a
+      // la grilla principal. Su facturado NO suma al RESUMEN (solo
+      // cuentan los concluidos).
+      final viaje3 = viajeDe(
+        id: 'V3',
+        estado: EstadoViaje.enCurso,
+        montoVecchi: 900000,
+        tramos: [
+          TramoViaje(
+            id: 't3',
+            tarifaId: 'T1',
+            tarifaSnapshot: snapTn(tarifaChofer: 60000),
+            producto: 'MAIZ',
+            fechaCarga: DateTime(2026, 5, 18),
+            kgCargados: 33000,
+          ),
+        ],
+      );
       final adelantos = [
         adelantoDe(
             id: 'A1',
@@ -190,7 +209,7 @@ void main() {
       ];
 
       final wb = ReportPlanillaChofer.construir(
-        viajes: [viaje1, viaje2],
+        viajes: [viaje1, viaje2, viaje3],
         adelantos: adelantos,
         empleados: const {
           '123': EmpleadoLiquidacion(
@@ -288,38 +307,54 @@ void main() {
       expect(numeroDe(s, 'C5'), 150000);
     });
 
-    test('pie compacto: GANANCIA − ADELANTOS + GASTOS = NETO', () {
+    test('separación: el viaje EN CURSO va a OTROS VIAJES, no arriba', () {
       final s = relectura.sheets['DIAZ MARIO']!;
-      // filaDatosFin = 9. Pie: fila aire 10, título 11, luego 12-15.
+      // Grilla principal (4..9) = solo CONCLUIDOS (4 tramos: V1 + V2x3).
+      // V3 (en curso, MAIZ) NO está arriba.
+      for (var f = 4; f <= 9; f++) {
+        expect(textoDe(s, 'F$f'), isNot('MAIZ'));
+      }
+      // Sección OTROS VIAJES: título en fila 11, datos desde 12.
+      expect(textoDe(s, 'A11'), 'OTROS VIAJES (EN CURSO / PLANEADOS)');
+      expect(textoDe(s, 'F12'), 'MAIZ'); // el en curso, abajo
+      expect(formulaDe(s, 'N12'), 'FLOOR((K12*M12*18%)/1000,5)');
+    });
+
+    test('pie: NETO firme (concluidos) + OTROS = TOTAL ESTIMADO', () {
+      final s = relectura.sheets['DIAZ MARIO']!;
+      // filaDatosFin=9; OTROS 12..14; pie desde 16.
       final fGan = filaConLabel(s, 'GANANCIA VIAJES');
-      expect(formulaDe(s, 'C$fGan'), 'SUM(N4:N9)');
+      expect(formulaDe(s, 'C$fGan'), 'SUM(N4:N9)'); // solo concluidos
       final fAdel = filaConLabel(s, 'ADELANTOS (−)');
       expect(formulaDe(s, 'C$fAdel'), 'SUM(C4:C9)');
       final fGastos = filaConLabel(s, 'GASTOS (+)');
       expect(formulaDe(s, 'C$fGastos'), 'SUM(O4:O9)');
       final fNeto = filaConLabel(s, 'NETO A PAGAR');
       expect(formulaDe(s, 'C$fNeto'), 'C$fGan-C$fAdel+C$fGastos');
-      // Sin las secciones vacías del viejo (OTROS VIAJES/DESCUENTOS).
-      filaConLabel(s, 'LIQUIDACIÓN');
+      // Especulación: ganancia de OTROS VIAJES (12..14).
+      final fOtros = filaConLabel(s, 'OTROS VIAJES (+)');
+      expect(formulaDe(s, 'C$fOtros'), 'SUM(N12:N14)');
+      final fTotal = filaConLabel(s, 'TOTAL ESTIMADO');
+      expect(formulaDe(s, 'C$fTotal'), 'C$fNeto+C$fOtros');
     });
 
-    test('RESUMEN: fórmulas cross-sheet (N=bruto, O=gastos), FINAL, TOTAL',
-        () {
+    test('RESUMEN: firme (FINAL) + especulación (OTROS / TOTAL EST.)', () {
       final s = relectura.sheets['RESUMEN']!;
       expect(textoDe(s, 'A2'), 'CHOFER');
-      // Orden alfabético: ALTAMIRANDA primero.
-      expect(textoDe(s, 'A3'), 'ALTAMIRANDA RAUL');
-      expect(textoDe(s, 'B3'), '456');
-      expect(formulaDe(s, 'C3'), "SUM('ALTAMIRANDA RAUL'!N4:N9)");
+      expect(textoDe(s, 'F2'), 'FINAL');
+      expect(textoDe(s, 'G2'), 'OTROS VIAJES');
+      expect(textoDe(s, 'H2'), 'TOTAL EST.');
+      // DIAZ en fila 4 (ALTAMIRANDA primero, alfabético).
       expect(textoDe(s, 'A4'), 'DIAZ MARIO');
-      expect(formulaDe(s, 'D4'), "SUM('DIAZ MARIO'!C4:C9)");
-      expect(formulaDe(s, 'E4'), "SUM('DIAZ MARIO'!O4:O9)");
-      expect(formulaDe(s, 'F4'), 'C4-D4+E4');
-      // FACTURADO A EMPRESA: valor de la app (suma de montoVecchi).
-      expect(numeroDe(s, 'G4'), 2082000 + 1800000);
+      expect(formulaDe(s, 'C4'), "SUM('DIAZ MARIO'!N4:N9)"); // bruto concluidos
+      expect(formulaDe(s, 'E4'), "SUM('DIAZ MARIO'!O4:O9)"); // gastos
+      expect(formulaDe(s, 'F4'), 'C4-D4+E4'); // FINAL firme
+      expect(formulaDe(s, 'G4'), "SUM('DIAZ MARIO'!N12:N14)"); // otros
+      expect(formulaDe(s, 'H4'), 'F4+G4'); // total estimado
+      // FACTURADO (col I ahora) = solo concluidos.
+      expect(numeroDe(s, 'I4'), 2082000 + 1800000);
       expect(textoDe(s, 'A5'), 'TOTAL');
-      expect(formulaDe(s, 'C5'), 'SUM(C3:C4)');
-      expect(formulaDe(s, 'G5'), 'SUM(G3:G4)');
+      expect(formulaDe(s, 'H5'), 'SUM(H3:H4)');
     });
 
     test('chofer solo con adelantos genera hoja igual', () {
