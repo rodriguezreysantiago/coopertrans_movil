@@ -88,16 +88,13 @@ function _construirCliente() {
     //   3. Restore fallo y no hay backup viable
     //
     // El log con prefijo `[CRITICAL_QR_PEDIDO]` permite filtrar
-    // facil en monitor_logs.ps1 + Sentry. Tambien registramos el
-    // evento en BOT_HEALTH/main para que se pueda detectar desde
-    // el watchdog Cloud Function (BOT_HEALTH watchdog ya manda
-    // WhatsApp a Santiago — aunque irònicamente eso no funciona si
-    // justamente el bot no puede mandar WhatsApp...).
-    //
-    // TODO Fase 3 24/7: integrar canal alternativo (email/SMS via
-    // Resend o Twilio) que dispare cuando setEstadoCliente cambia
-    // a AUTH_PENDIENTE. Asi Santiago se entera al toque sin depender
-    // del bot que justo pide QR.
+    // facil en monitor_logs.ps1 + Sentry. Ademas, el estado
+    // AUTH_PENDIENTE queda reflejado en BOT_HEALTH/main (heartbeat
+    // sigue latiendo) y el watchdog Cloud Function lo detecta y
+    // avisa a Santiago por TELEGRAM — canal fuera de banda que no
+    // depende del propio bot, que justo en este estado no puede
+    // mandar WhatsApp. (Resuelto 2026-06-10, era el TODO "Fase 3
+    // 24/7"; ver functions/src/bot_alerta_externa.ts.)
     log.error(
       '[CRITICAL_QR_PEDIDO] El bot esta pidiendo QR. La operacion ' +
       '24/7 quedo INTERRUMPIDA hasta que alguien escanee desde el ' +

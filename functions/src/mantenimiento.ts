@@ -15,13 +15,29 @@
 
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import {
+  DocumentData,
+  DocumentReference,
+  FieldValue,
+  Timestamp,
+} from "firebase-admin/firestore";
 import { v1 as firestoreAdminV1 } from "@google-cloud/firestore";
 
 import { db, BANNER_TESTING } from "./setup";
 import { adquirirLockTick } from "./index";
 import * as jornadasV2 from "./jornadas_v2";
 import { expiraEnMin, primerNombre } from "./helpers";
+import {
+  construirMensajeAlerta,
+  enviarTelegram,
+  evaluarAlertaExterna,
+  incidenteDesdeDoc,
+  incidenteHaciaDoc,
+  sonIncidentesIguales,
+  telegramBotToken,
+  telegramChatId,
+  UMBRAL_STALE_MIN,
+} from "./bot_alerta_externa";
 
 // ============================================================================
 // backupFirestoreScheduled — backup automático semanal de Firestore
@@ -240,13 +256,19 @@ export const backupFirestoreScheduled = onSchedule(
 // resumen consolidado lo manda `resumenBotDiario` al día siguiente a
 // las 8 AM.
 //
+// **Cambio 2026-06-10**: se suma la ALERTA EXTERNA por Telegram (módulo
+// `bot_alerta_externa.ts`). El aviso de "bot caído" no puede viajar por el
+// propio bot caído — Telegram es el canal fuera de banda. Detecta además el
+// caso "bot vivo pero sesión WhatsApp rota" (AUTH_PENDIENTE/AUTH_FALLO/
+// no-LISTO sostenido), que el chequeo por heartbeat solo no veía. Con
+// anti-spam (re-aviso 60 min / 6 h) y aviso de recuperación. La lógica de
+// BOT_EVENTOS de abajo queda intacta (sigue alimentando el resumen diario).
+//
 // Esta function corre cada 15 min, compara `ultimoHeartbeat` con ahora.
-// Si la diferencia es > UMBRAL_STALE_MIN, escribe evento `caida`.
-// Idempotencia: solo registra UNA vez por episodio (flag
-// `notificadoCaida` en BOT_HEALTH). Cuando el bot vuelve, escribe evento
-// `recuperado` con la duración total y limpia la flag.
-
-const BOT_HEALTH_STALE_UMBRAL_MIN = 10;
+// Si la diferencia es > UMBRAL_STALE_MIN (importado de bot_alerta_externa),
+// escribe evento `caida`. Idempotencia: solo registra UNA vez por episodio
+// (flag `notificadoCaida` en BOT_HEALTH). Cuando el bot vuelve, escribe
+// evento `recuperado` con la duración total y limpia la flag.
 
 export const botHealthWatchdog = onSchedule(
   {
@@ -254,6 +276,7 @@ export const botHealthWatchdog = onSchedule(
     timeZone: "America/Argentina/Buenos_Aires",
     timeoutSeconds: 60,
     memory: "256MiB",
+    secrets: [telegramBotToken, telegramChatId],
   },
   async () => {
     const ref = db.collection("BOT_HEALTH").doc("main");
@@ -273,7 +296,17 @@ export const botHealthWatchdog = onSchedule(
     const yaNotificado = data.notificadoCaida === true;
     const pcId = (data.pcId ?? "desconocida").toString();
 
-    if (minDesdeHb <= BOT_HEALTH_STALE_UMBRAL_MIN) {
+    // ── Alerta externa (Telegram) ─────────────────────────────────────
+    // Corre ANTES de la lógica de BOT_EVENTOS porque esa rama tiene
+    // returns tempranos. Es una capa independiente: si falla, el registro
+    // histórico de abajo tiene que correr igual.
+    try {
+      await procesarAlertaExterna(ref, data, pcId, ultimoHb);
+    } catch (e) {
+      logger.error("[botHealthWatchdog] alerta externa falló", { error: String(e) });
+    }
+
+    if (minDesdeHb <= UMBRAL_STALE_MIN) {
       // Bot vivo.
       if (yaNotificado) {
         // Volvió de una caída — registrar evento `recuperado` con la
@@ -334,6 +367,73 @@ export const botHealthWatchdog = onSchedule(
     });
   }
 );
+
+/**
+ * Capa de alerta externa del watchdog: evalúa el incidente (lógica pura en
+ * bot_alerta_externa.ts), manda el Telegram si corresponde y persiste el
+ * estado en BOT_HEALTH/main.alertaExterna.
+ *
+ * Si el POST a Telegram falla, NO se persiste el avance del incidente: el
+ * próximo tick (15 min) vuelve a evaluar lo mismo y reintenta el aviso.
+ * Solo se conserva el tracking `noListoDesde` para no perder la medición
+ * del estado sostenido.
+ */
+async function procesarAlertaExterna(
+  ref: DocumentReference,
+  data: DocumentData,
+  pcId: string,
+  ultimoHb: Timestamp,
+): Promise<void> {
+  const ahoraMs = Date.now();
+  const estadoCliente = (data.estadoCliente ?? "DESCONOCIDO").toString();
+  const previo = incidenteDesdeDoc(data.alertaExterna);
+
+  const res = evaluarAlertaExterna({
+    ahoraMs,
+    ultimoHeartbeatMs: ultimoHb.toMillis(),
+    estadoCliente,
+    incidente: previo,
+  });
+
+  let aPersistir = res.incidente;
+  if (res.avisar && res.clase) {
+    // En la recuperación el incidente resultante viene vacío: el contexto
+    // del mensaje (motivo/desde) sale del incidente previo.
+    const esRecuperacion = res.clase === "recuperacion";
+    const texto = construirMensajeAlerta({
+      clase: res.clase,
+      motivo: (esRecuperacion ? previo.motivo : res.incidente.motivo) ?? "bot_caido",
+      estadoCliente,
+      pcId,
+      ahoraMs,
+      ultimoHeartbeatMs: ultimoHb.toMillis(),
+      desdeMs: esRecuperacion ? previo.desdeMs : res.incidente.desdeMs,
+      avisosEnviados: res.incidente.avisosEnviados,
+    });
+    const enviado = await enviarTelegram(
+      telegramBotToken.value(),
+      telegramChatId.value(),
+      texto,
+    );
+    if (enviado) {
+      logger.info("[botHealthWatchdog] aviso Telegram enviado", {
+        clase: res.clase,
+        motivo: esRecuperacion ? previo.motivo : res.incidente.motivo,
+        estadoCliente,
+      });
+    } else {
+      // Reintento natural el próximo tick: no avanzar el incidente.
+      aPersistir = { ...previo, noListoDesdeMs: res.incidente.noListoDesdeMs };
+      logger.warn("[botHealthWatchdog] aviso Telegram NO salió, se reintenta el próximo tick", {
+        clase: res.clase,
+      });
+    }
+  }
+
+  if (!sonIncidentesIguales(previo, aPersistir)) {
+    await ref.update({ alertaExterna: incidenteHaciaDoc(aPersistir) });
+  }
+}
 
 // ============================================================================
 // vigiladorJornadaChofer — vigilador de jornada (v2 refactor 2026-05-15)
