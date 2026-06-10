@@ -187,6 +187,13 @@ class AppCollections {
   /// para "dónde está cada tractor ahora".
   static const String sitrackPosiciones = 'SITRACK_POSICIONES';
 
+  /// Eventos discretos de Sitrack (append-only, un doc por evento). La
+  /// popula `sitrackEventosPoller` cada 5 min desde `/files/reports`. Cada
+  /// doc tiene `asset_id` (= patente), `latitude`/`longitude`, `report_date`,
+  /// `speed`/`heading`/`event_name`. Es la base histórica de posiciones —
+  /// la usa el RECORRIDO de una unidad en el mapa de flota. TTL 90 días.
+  static const String sitrackEventos = 'SITRACK_EVENTOS';
+
   /// Registro temporal inmutable de asignaciones chofer↔vehículo.
   /// Cada doc: `{vehiculo_id, chofer_dni, desde, hasta, ...}`. La
   /// asignación activa tiene `hasta == null`. Permite responder

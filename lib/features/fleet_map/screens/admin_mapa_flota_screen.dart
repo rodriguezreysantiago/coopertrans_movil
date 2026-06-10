@@ -15,6 +15,8 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/constants/map_constants.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
+import '../models/punto_recorrido.dart';
+import '../services/recorrido_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
@@ -86,6 +88,14 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
   /// Patente seleccionada (resalta su marker + centra el mapa + despliega
   /// su card en la lista lateral). null = ninguna.
   String? _seleccionada;
+
+  // ── Recorrido histórico de UNA unidad (Santiago 2026-06-10) ──────────
+  // Al elegir 24h/48h/rango en el dropdown de la unidad, consultamos
+  // SITRACK_EVENTOS (vía RecorridoService) y dibujamos la trayectoria como
+  // polyline en el mapa. Estado vive acá (lo dibuja `_Mapa`, lo dispara la
+  // sección del acordeón). Solo un recorrido a la vez.
+  List<PuntoRecorrido>? _recorrido;
+  String? _recorridoPatente;
 
   /// Auto-fit al primer render con docs. Después de la primera vez, no
   /// volvemos a tocar la cámara automáticamente — el admin pan/zoom y
@@ -226,10 +236,77 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
     final data = doc.data();
     final lat = (data['lat'] as num?)?.toDouble();
     final lng = (data['lng'] as num?)?.toDouble();
-    setState(() => _seleccionada = doc.id);
+    setState(() {
+      _seleccionada = doc.id;
+      // Al cambiar de unidad, limpiamos el recorrido de la anterior (es de
+      // otra patente — no tiene sentido dejarlo encima).
+      if (_recorridoPatente != null && _recorridoPatente != doc.id) {
+        _limpiarRecorridoState();
+      }
+    });
     if (lat != null && lng != null) {
       _mapController.move(LatLng(lat, lng), 14);
     }
+  }
+
+  /// Nula los campos del recorrido (sin setState — llamar dentro de uno).
+  void _limpiarRecorridoState() {
+    _recorrido = null;
+    _recorridoPatente = null;
+  }
+
+  /// Quita el recorrido del mapa (botón "Quitar" de la sección).
+  void _limpiarRecorrido() => setState(_limpiarRecorridoState);
+
+  /// Carga el recorrido de [patente] en `[desde, hasta)` desde SITRACK_EVENTOS
+  /// y lo dibuja en el mapa, encuadrando la cámara al trayecto. Devuelve la
+  /// cantidad de puntos (la sección lo usa para el feedback), o -1 si falló.
+  /// Maneja el caso del índice todavía en construcción con un mensaje claro.
+  Future<int> _cargarRecorrido(
+      String patente, DateTime desde, DateTime hasta) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final pts = await RecorridoService.obtener(
+          patente: patente, desde: desde, hasta: hasta);
+      if (!mounted) return -1;
+      setState(() {
+        _recorrido = pts;
+        _recorridoPatente = patente;
+      });
+      if (pts.length >= 2) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _ajustarVistaAlRecorrido(pts);
+        });
+      } else if (pts.length == 1) {
+        _mapController.move(LatLng(pts.first.lat, pts.first.lng), 14);
+      }
+      return pts.length;
+    } catch (e) {
+      if (!mounted) return -1;
+      // failed-precondition = el índice (asset_id, report_date) todavía no
+      // terminó de construirse (recién deployado).
+      final faltaIndice =
+          e is FirebaseException && e.code == 'failed-precondition';
+      messenger.showSnackBar(SnackBar(
+        content: Text(faltaIndice
+            ? 'El índice del recorrido se está creando. Probá de nuevo en '
+                'unos minutos.'
+            : 'No se pudo cargar el recorrido. Probá de nuevo.'),
+      ));
+      return -1;
+    }
+  }
+
+  /// Encuadra la cámara al bounding box del recorrido (margen 60px).
+  void _ajustarVistaAlRecorrido(List<PuntoRecorrido> pts) {
+    final puntos = pts.map((p) => LatLng(p.lat, p.lng)).toList();
+    if (puntos.length < 2) return;
+    _mapController.fitCamera(
+      CameraFit.bounds(
+        bounds: LatLngBounds.fromPoints(puntos),
+        padding: const EdgeInsets.all(60),
+      ),
+    );
   }
 
   /// Abre el panel de unidades como bottom sheet (mobile, donde no entra el
@@ -256,6 +333,11 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
           // (acordeón). Centramos el mapa detrás por si después cierra.
           onSeleccionar: _seleccionarUnidad,
           onAbrirMaps: _abrirMapsDesdePanel,
+          recorrido: _RecorridoUI(
+            patenteActiva: _recorridoPatente,
+            onVer: _cargarRecorrido,
+            onLimpiar: _limpiarRecorrido,
+          ),
         ),
       ),
     );
@@ -364,6 +446,12 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
               final w = constraints.maxWidth;
               final panelFijo = w >= 720;
 
+              final recorridoUI = _RecorridoUI(
+                patenteActiva: _recorridoPatente,
+                onVer: _cargarRecorrido,
+                onLimpiar: _limpiarRecorrido,
+              );
+
               final mapa = _Mapa(
                 controller: _mapController,
                 centroInicial: _centroInicial,
@@ -372,6 +460,7 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
                 ahora: ahora,
                 satelital: _satelital,
                 seleccionada: _seleccionada,
+                recorrido: _recorrido,
                 onToggleSatelital: () =>
                     setState(() => _satelital = !_satelital),
                 // Con sidebar visible (≥720), el tap en un marker selecciona
@@ -398,6 +487,7 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
                       seleccionada: _seleccionada,
                       onSeleccionar: _seleccionarUnidad,
                       onAbrirMaps: _abrirMapsDesdePanel,
+                      recorrido: recorridoUI,
                     ),
                   ),
                   AppHairline(vertical: true, color: c.border),
@@ -442,12 +532,17 @@ class _PanelUnidades extends StatefulWidget {
       onSeleccionar;
   final Future<void> Function(double lat, double lng) onAbrirMaps;
 
+  /// Controlador del recorrido histórico (lo usa la sección dentro de cada
+  /// card desplegada).
+  final _RecorridoUI recorrido;
+
   const _PanelUnidades({
     required this.docs,
     required this.ahora,
     required this.seleccionada,
     required this.onSeleccionar,
     required this.onAbrirMaps,
+    required this.recorrido,
   });
 
   @override
@@ -672,6 +767,7 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
                         expandida: expandida,
                         onTap: () => _onTapItem(d),
                         onAbrirMaps: widget.onAbrirMaps,
+                        recorrido: widget.recorrido,
                       );
                     },
                   ),
@@ -693,6 +789,7 @@ class _ItemUnidad extends StatelessWidget {
   final bool expandida;
   final VoidCallback onTap;
   final Future<void> Function(double lat, double lng) onAbrirMaps;
+  final _RecorridoUI recorrido;
 
   const _ItemUnidad({
     super.key,
@@ -701,6 +798,7 @@ class _ItemUnidad extends StatelessWidget {
     required this.expandida,
     required this.onTap,
     required this.onAbrirMaps,
+    required this.recorrido,
   });
 
   @override
@@ -853,6 +951,7 @@ class _ItemUnidad extends StatelessWidget {
               ahora: ahora,
               enLista: true,
               onAbrirMaps: onAbrirMaps,
+              recorrido: recorrido,
             ),
         ],
       ),
@@ -872,6 +971,10 @@ class _Mapa extends StatelessWidget {
   final DateTime ahora;
   final bool satelital;
   final String? seleccionada;
+
+  /// Puntos del recorrido histórico a dibujar como polyline (null = ninguno).
+  final List<PuntoRecorrido>? recorrido;
+
   final VoidCallback onToggleSatelital;
   final ValueChanged<QueryDocumentSnapshot<Map<String, dynamic>>> onMarkerTap;
   final VoidCallback onFitFlota;
@@ -893,6 +996,7 @@ class _Mapa extends StatelessWidget {
     required this.ahora,
     required this.satelital,
     required this.seleccionada,
+    this.recorrido,
     required this.onToggleSatelital,
     required this.onMarkerTap,
     required this.onFitFlota,
@@ -957,6 +1061,19 @@ class _Mapa extends StatelessWidget {
                 userAgentPackageName: MapConstants.userAgent,
                 panBuffer: 2,
               ),
+            // Recorrido histórico (polyline) — sobre los tiles y DEBAJO de
+            // los markers de unidades, que quedan visibles encima.
+            if (recorrido != null && recorrido!.length >= 2)
+              PolylineLayer(
+                polylines: [
+                  Polyline(
+                    points:
+                        recorrido!.map((p) => LatLng(p.lat, p.lng)).toList(),
+                    color: c.brand,
+                    strokeWidth: 4,
+                  ),
+                ],
+              ),
             // Agrupamos pins muy cerca (radio chico de 25px) para evitar
             // superposición en el mismo predio. A zoom alto se separan.
             MarkerClusterLayerWidget(
@@ -993,6 +1110,27 @@ class _Mapa extends StatelessWidget {
                 },
               ),
             ),
+            // Extremos del recorrido (inicio verde / fin rojo), encima de todo.
+            if (recorrido != null && recorrido!.isNotEmpty)
+              MarkerLayer(
+                markers: [
+                  Marker(
+                    point: LatLng(recorrido!.first.lat, recorrido!.first.lng),
+                    width: 64,
+                    height: 40,
+                    alignment: const Alignment(0, -0.6),
+                    child: const _MarkerExtremo(esInicio: true),
+                  ),
+                  if (recorrido!.length >= 2)
+                    Marker(
+                      point: LatLng(recorrido!.last.lat, recorrido!.last.lng),
+                      width: 64,
+                      height: 40,
+                      alignment: const Alignment(0, -0.6),
+                      child: const _MarkerExtremo(esInicio: false),
+                    ),
+                ],
+              ),
             RichAttributionWidget(
               attributions: [
                 TextSourceAttribution(usarSatelite
@@ -1386,12 +1524,18 @@ class _DetalleContenido extends StatelessWidget {
 
   final Future<void> Function(double lat, double lng) onAbrirMaps;
 
+  /// Controlador del recorrido histórico. Solo lo pasa el acordeón de la
+  /// lista (`enLista`); el sheet de tap-marker lo deja null (no muestra la
+  /// sección, porque el mapa quedaría tapado por el sheet).
+  final _RecorridoUI? recorrido;
+
   const _DetalleContenido({
     required this.patente,
     required this.data,
     required this.ahora,
     required this.enLista,
     required this.onAbrirMaps,
+    this.recorrido,
   });
 
   @override
@@ -1624,6 +1768,10 @@ class _DetalleContenido extends StatelessWidget {
               ),
             ),
 
+        // Recorrido histórico (solo en el acordeón de la lista): botones
+        // 24h/48h + rango personalizado; dibuja la trayectoria en el mapa.
+        if (recorrido != null)
+          _SeccionRecorrido(patente: patente, ctrl: recorrido!),
         const SizedBox(height: AppSpacing.lg),
         // Acciones.
         Padding(
@@ -1766,6 +1914,339 @@ class _BadgeIgnicion extends StatelessWidget {
 
 extension _StringIfEmpty on String {
   String ifEmpty(String fallback) => isEmpty ? fallback : this;
+}
+
+// =============================================================================
+// RECORRIDO HISTÓRICO — controlador + sección del acordeón + markers extremo
+// =============================================================================
+
+/// Bundle que baja por la cadena panel→item→detalle hasta `_SeccionRecorrido`.
+/// `patenteActiva` = la unidad cuyo recorrido está dibujado en el mapa AHORA
+/// (fuente de verdad del screen), para que la sección sepa mostrar "Quitar".
+class _RecorridoUI {
+  final String? patenteActiva;
+
+  /// Carga + dibuja el recorrido. Devuelve la cantidad de puntos (o -1 si
+  /// falló) para que la sección dé feedback sin depender del rebuild del
+  /// screen (clave en el sheet mobile, que no se reconstruye con setState).
+  final Future<int> Function(String patente, DateTime desde, DateTime hasta)
+      onVer;
+  final VoidCallback onLimpiar;
+
+  const _RecorridoUI({
+    required this.patenteActiva,
+    required this.onVer,
+    required this.onLimpiar,
+  });
+}
+
+/// Sección "RECORRIDO" dentro del acordeón de una unidad: accesos rápidos
+/// 24h/48h + rango personalizado (fecha+hora desde/hasta) que disparan el
+/// dibujo de la trayectoria en el mapa. Estado de carga LOCAL (anda también
+/// dentro del sheet mobile).
+class _SeccionRecorrido extends StatefulWidget {
+  final String patente;
+  final _RecorridoUI ctrl;
+  const _SeccionRecorrido({required this.patente, required this.ctrl});
+
+  @override
+  State<_SeccionRecorrido> createState() => _SeccionRecorridoState();
+}
+
+class _SeccionRecorridoState extends State<_SeccionRecorrido> {
+  bool _modoRango = false;
+  DateTime? _desde;
+  DateTime? _hasta;
+  bool _cargando = false;
+  int? _ultimoConteo; // resultado del último pedido (null = no pidió)
+
+  bool get _activo => widget.ctrl.patenteActiva == widget.patente;
+
+  Future<void> _pedir(DateTime desde, DateTime hasta) async {
+    setState(() => _cargando = true);
+    final n = await widget.ctrl.onVer(widget.patente, desde, hasta);
+    if (!mounted) return;
+    setState(() {
+      _cargando = false;
+      if (n >= 0) _ultimoConteo = n;
+    });
+  }
+
+  void _rapido(int horas) {
+    final ahora = DateTime.now();
+    _pedir(ahora.subtract(Duration(hours: horas)), ahora);
+  }
+
+  Future<void> _elegir({required bool esDesde}) async {
+    final base = (esDesde ? _desde : _hasta) ?? DateTime.now();
+    final fecha = await showDatePicker(
+      context: context,
+      initialDate: base,
+      firstDate: DateTime(2026, 5, 13), // arranque del histórico Sitrack
+      lastDate: DateTime.now(),
+    );
+    if (fecha == null || !mounted) return;
+    final hora = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(base),
+    );
+    if (!mounted) return;
+    final dt = DateTime(
+        fecha.year, fecha.month, fecha.day, hora?.hour ?? 0, hora?.minute ?? 0);
+    setState(() {
+      if (esDesde) {
+        _desde = dt;
+      } else {
+        _hasta = dt;
+      }
+    });
+  }
+
+  void _verRango() {
+    final d = _desde, h = _hasta;
+    final messenger = ScaffoldMessenger.of(context);
+    if (d == null || h == null) {
+      messenger.showSnackBar(const SnackBar(
+          content: Text('Elegí fecha/hora de inicio y de fin.')));
+      return;
+    }
+    if (!h.isAfter(d)) {
+      messenger.showSnackBar(const SnackBar(
+          content:
+              Text('La fecha de fin tiene que ser posterior al inicio.')));
+      return;
+    }
+    _pedir(d, h);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppHairline(color: c.border),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+              AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.sm),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const AppEyebrow('Recorrido'),
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _BotonRango(label: 'Últimas 24 h', onTap: () => _rapido(24)),
+                  _BotonRango(label: 'Últimas 48 h', onTap: () => _rapido(48)),
+                  _BotonRango(
+                    label: 'Rango…',
+                    activo: _modoRango,
+                    onTap: () => setState(() => _modoRango = !_modoRango),
+                  ),
+                ],
+              ),
+              if (_modoRango) ...[
+                const SizedBox(height: AppSpacing.sm),
+                _CampoFechaHora(
+                  label: 'Desde',
+                  valor: _desde,
+                  onTap: () => _elegir(esDesde: true),
+                ),
+                const SizedBox(height: 6),
+                _CampoFechaHora(
+                  label: 'Hasta',
+                  valor: _hasta,
+                  onTap: () => _elegir(esDesde: false),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                AppButton.primary(
+                  label: 'Ver recorrido',
+                  icon: Icons.timeline,
+                  size: AppButtonSize.sm,
+                  onPressed: _verRango,
+                ),
+              ],
+              const SizedBox(height: AppSpacing.sm),
+              if (_cargando)
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: c.brand),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Text('Buscando movimientos…',
+                        style:
+                            AppType.monoSm.copyWith(color: c.textSecondary)),
+                  ],
+                )
+              else if (_ultimoConteo != null || _activo) ...[
+                Text(
+                  _ultimoConteo == null
+                      ? 'Recorrido en el mapa.'
+                      : _ultimoConteo == 0
+                          ? 'Sin movimientos en ese rango.'
+                          : '$_ultimoConteo puntos en el mapa.',
+                  style: AppType.monoSm.copyWith(color: c.textSecondary),
+                ),
+                if (_activo) ...[
+                  const SizedBox(height: 6),
+                  _BotonRango(
+                    label: 'Quitar del mapa',
+                    icono: Icons.close,
+                    onTap: () {
+                      widget.ctrl.onLimpiar();
+                      setState(() => _ultimoConteo = null);
+                    },
+                  ),
+                ],
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Pill chico de rango (24h/48h/rango/quitar). Mismo lenguaje que los chips
+/// del resto: inactivo = borde; activo = tinte brand.
+class _BotonRango extends StatelessWidget {
+  final String label;
+  final IconData? icono;
+  final bool activo;
+  final VoidCallback onTap;
+  const _BotonRango({
+    required this.label,
+    required this.onTap,
+    this.icono,
+    this.activo = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final fg = activo ? c.brand : c.textSecondary;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.full),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: activo ? c.brand.withValues(alpha: 0.16) : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.full),
+          border: Border.all(
+              color: activo ? c.brand.withValues(alpha: 0.5) : c.borderStrong),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icono != null) ...[
+              Icon(icono, size: 13, color: fg),
+              const SizedBox(width: 4),
+            ],
+            Text(label,
+                style: AppType.label
+                    .copyWith(color: fg, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Campo tappeable "Desde/Hasta: <fecha hora>" que abre date + time picker.
+class _CampoFechaHora extends StatelessWidget {
+  final String label;
+  final DateTime? valor;
+  final VoidCallback onTap;
+  const _CampoFechaHora({
+    required this.label,
+    required this.valor,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: c.surface2,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: c.border),
+        ),
+        child: Row(
+          children: [
+            Text('$label:', style: AppType.label.copyWith(color: c.textMuted)),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                valor == null
+                    ? 'Elegir…'
+                    : AppFormatters.formatearFechaHoraCorta(valor),
+                style: AppType.mono
+                    .copyWith(color: valor == null ? c.textMuted : c.text),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Icon(Icons.event, size: 15, color: c.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Marker de extremo del recorrido: dot (inicio verde / fin rojo) + pill.
+class _MarkerExtremo extends StatelessWidget {
+  final bool esInicio;
+  const _MarkerExtremo({required this.esInicio});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final color = esInicio ? c.success : c.error;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(color: c.text, width: 2),
+            boxShadow: [
+              BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 5),
+            ],
+          ),
+        ),
+        const SizedBox(height: 2),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+          decoration: BoxDecoration(
+            color: c.bg.withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            border: Border.all(color: color.withValues(alpha: 0.6)),
+          ),
+          child: Text(
+            esInicio ? 'Inicio' : 'Fin',
+            style: AppType.monoSm.copyWith(
+                color: c.text, fontSize: 9, fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// Bloque de telemetría Volvo Connect (combustible / AdBlue / autonomía)

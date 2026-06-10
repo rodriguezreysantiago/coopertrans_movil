@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "SITRACK_EVENTOS",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "asset_id", "order": "ASCENDING" },
+        { "fieldPath": "report_date", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "VOLVO_SCORES_DIARIOS",
       "queryScope": "COLLECTION",
       "fields": [
