@@ -189,7 +189,7 @@ void main() {
             monto: 50000),
       ];
 
-      final excel = ReportPlanillaChofer.construir(
+      final wb = ReportPlanillaChofer.construir(
         viajes: [viaje1, viaje2],
         adelantos: adelantos,
         empleados: const {
@@ -201,16 +201,32 @@ void main() {
         mes: DateTime(2026, 5, 1),
         provincias: ResolverProvincias.vacio(),
       );
-      final bytes = excel.save();
+      final bytes = wb.excel.save();
       expect(bytes, isNotNull);
       relectura = ex.Excel.decodeBytes(bytes!);
     });
 
-    test('estructura de hojas: RESUMEN primero + una por chofer', () {
+    test('estructura de hojas: CONSULTA primero + una por chofer', () {
       final hojas = relectura.sheets.keys.toList();
-      expect(hojas.first, 'RESUMEN');
+      expect(hojas.first, 'CONSULTA'); // hoja de dropdown va primera
+      expect(hojas, contains('RESUMEN'));
       expect(hojas, contains('DIAZ MARIO'));
       expect(hojas, contains('ALTAMIRANDA RAUL'));
+    });
+
+    test('CONSULTA: dropdown en H1 + grilla espejada con INDIRECT', () {
+      final s = relectura.sheets['CONSULTA']!;
+      // H1 arranca con el primer chofer (alfabético) para que el
+      // INDIRECT resuelva al abrir.
+      expect(textoDe(s, 'H1'), 'ALTAMIRANDA RAUL');
+      // La grilla espeja la hoja del chofer elegido vía INDIRECT.
+      final fa = formulaDe(s, 'A4');
+      expect(fa, contains('INDIRECT'));
+      expect(fa, contains(r'$H$1'));
+      // Columna helper S con los nombres EXACTOS de hoja (fuente del
+      // dropdown), ordenados alfabéticamente.
+      expect(textoDe(s, 'S1'), 'ALTAMIRANDA RAUL');
+      expect(textoDe(s, 'S2'), 'DIAZ MARIO');
     });
 
     test('header del cuaderno: mes, año y chofer', () {
@@ -415,13 +431,32 @@ void main() {
       expect(ResolverProvincias.abreviarProvincia('La Pampa'), 'LA PAMPA');
     });
 
-    test('vacía → vacía; desconocida → recortada a 8', () {
+    test('saca el prefijo "Provincia de/del" (bug export 2026-06-10)', () {
+      // Las ubicaciones cargan la provincia inconsistente; antes esto
+      // daba el feo "Provinci" (recorte crudo a 8). Ahora resuelve bien.
+      expect(ResolverProvincias.abreviarProvincia('Provincia de Buenos Aires'),
+          'BS.AS');
+      expect(
+          ResolverProvincias.abreviarProvincia('Provincia del Neuquén'), 'NQN');
+      expect(ResolverProvincias.abreviarProvincia('PROVINCIA DE SANTA FE'),
+          'STA FE');
+      expect(ResolverProvincias.abreviarProvincia('Provincia de La Pampa'),
+          'LA PAMPA');
+      expect(
+          ResolverProvincias.abreviarProvincia('Provincia de Río Negro'),
+          'RIO NEG.');
+    });
+
+    test('vacía → vacía; desconocida → title-case (no el crudo "Provinci")',
+        () {
       expect(ResolverProvincias.abreviarProvincia(''), '');
       expect(ResolverProvincias.abreviarProvincia('  '), '');
-      expect(
-        ResolverProvincias.abreviarProvincia('Provincia Inventada Larga'),
-        'Provinci',
-      );
+      // Desconocida real: title-case recortado a 10, legible — nunca el
+      // "Provinci" crudo del bug.
+      final r = ResolverProvincias.abreviarProvincia('Algarrobistán');
+      expect(r, isNot('Provinci'));
+      expect(r.length, lessThanOrEqualTo(10));
+      expect(r, 'Algarrobis');
     });
   });
 
@@ -468,6 +503,107 @@ void main() {
         soloHojas: {'NO_EXISTE'},
       );
       expect(contarAutoFilters(bytes), 0);
+    });
+  });
+
+  group('configurarConsultaYOcultarHojas', () {
+    List<int> workbookConConsulta() {
+      final wb = ex.Excel.createExcel();
+      wb.rename('Sheet1', 'CONSULTA');
+      for (final nombre in ['CONSULTA', 'CHOFER A', 'CHOFER B', 'RESUMEN']) {
+        wb[nombre]
+            .cell(ex.CellIndex.indexByString('A1'))
+            .value = ex.TextCellValue('x');
+      }
+      return wb.save()!;
+    }
+
+    String workbookXml(List<int> bytes) {
+      final archive = ZipDecoder().decodeBytes(bytes);
+      for (final f in archive.files) {
+        if (f.isFile && f.name == 'xl/workbook.xml') {
+          return utf8.decode(f.content as List<int>);
+        }
+      }
+      fail('no se encontró xl/workbook.xml');
+    }
+
+    int contarDataValidations(List<int> bytes) {
+      final archive = ZipDecoder().decodeBytes(bytes);
+      var total = 0;
+      for (final f in archive.files) {
+        if (f.isFile &&
+            RegExp(r'^xl/worksheets/sheet\d+\.xml$').hasMatch(f.name)) {
+          final xml = utf8.decode(f.content as List<int>);
+          if (xml.contains('<dataValidations')) total++;
+        }
+      }
+      return total;
+    }
+
+    test('oculta las hojas pedidas y deja visibles CONSULTA + RESUMEN', () {
+      final bytes = xu.configurarConsultaYOcultarHojas(
+        workbookConConsulta(),
+        hojaConsulta: 'CONSULTA',
+        celdaDropdown: 'H1',
+        cantidadChoferes: 2,
+        hojasAOcultar: {'CHOFER A', 'CHOFER B'},
+      );
+      final xml = workbookXml(bytes);
+      // Las dos de chofer ocultas...
+      expect(
+        RegExp(r'<sheet state="hidden" name="CHOFER A"').hasMatch(xml),
+        isTrue,
+      );
+      expect(
+        RegExp(r'<sheet state="hidden" name="CHOFER B"').hasMatch(xml),
+        isTrue,
+      );
+      // ...CONSULTA y RESUMEN NO.
+      expect(
+        RegExp(r'<sheet state="hidden" name="CONSULTA"').hasMatch(xml),
+        isFalse,
+      );
+      expect(
+        RegExp(r'<sheet state="hidden" name="RESUMEN"').hasMatch(xml),
+        isFalse,
+      );
+    });
+
+    test('agrega la data validation (dropdown) solo en CONSULTA', () {
+      final bytes = xu.configurarConsultaYOcultarHojas(
+        workbookConConsulta(),
+        hojaConsulta: 'CONSULTA',
+        celdaDropdown: 'H1',
+        cantidadChoferes: 2,
+        hojasAOcultar: {'CHOFER A', 'CHOFER B'},
+      );
+      // Exactamente 1 hoja con dataValidations.
+      expect(contarDataValidations(bytes), 1);
+      // Con el rango correcto S1:S{N} y la celda H1.
+      final archive = ZipDecoder().decodeBytes(bytes);
+      final consultaFile = archive.files.firstWhere(
+        (f) =>
+            f.isFile &&
+            RegExp(r'^xl/worksheets/sheet\d+\.xml$').hasMatch(f.name) &&
+            utf8.decode(f.content as List<int>).contains('<dataValidations'),
+      );
+      final xml = utf8.decode(consultaFile.content as List<int>);
+      expect(xml, contains('sqref="H1"'));
+      expect(xml, contains(r'<formula1>$S$1:$S$2</formula1>'));
+      expect(xml, contains('type="list"'));
+    });
+
+    test('cantidadChoferes 0 → no toca nada (defensivo)', () {
+      final original = workbookConConsulta();
+      final bytes = xu.configurarConsultaYOcultarHojas(
+        original,
+        hojaConsulta: 'CONSULTA',
+        celdaDropdown: 'H1',
+        cantidadChoferes: 0,
+        hojasAOcultar: {'CHOFER A'},
+      );
+      expect(bytes, original);
     });
   });
 }

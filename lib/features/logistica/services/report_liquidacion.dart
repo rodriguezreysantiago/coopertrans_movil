@@ -65,14 +65,15 @@ class ReportLiquidacionService {
     try {
       final provincias = await _cargarResolverProvincias();
 
-      // RESUMEN + hojas cuaderno (una por chofer).
-      final excel = ReportPlanillaChofer.construir(
+      // CONSULTA (dropdown) + hojas cuaderno (una por chofer) + RESUMEN.
+      final wb = ReportPlanillaChofer.construir(
         viajes: viajes,
         adelantos: adelantos,
         empleados: empleados,
         mes: mes,
         provincias: provincias,
       );
+      final excel = wb.excel;
 
       // Anexos tabulares al final (trazabilidad completa de la app:
       // estado, liquidado, unidad, medio de pago, recibo).
@@ -94,9 +95,18 @@ class ReportLiquidacionService {
       // AutoFilter SOLO en los anexos — las hojas cuaderno y el
       // RESUMEN tienen headers merged y bloques de pie; un autofilter
       // en A1 las rompe visualmente.
-      final bytes = xu.aplicarAutoFilterAlXlsx(
+      var bytes = xu.aplicarAutoFilterAlXlsx(
         bytesRaw,
         soloHojas: {'VIAJES', 'ADELANTOS'},
+      );
+      // Dropdown de chofer en CONSULTA + ocultar las hojas por chofer
+      // (quedan como fuente de datos del espejo INDIRECT + RESUMEN).
+      bytes = xu.configurarConsultaYOcultarHojas(
+        bytes,
+        hojaConsulta: 'CONSULTA',
+        celdaDropdown: 'H1',
+        cantidadChoferes: wb.cantidadChoferes,
+        hojasAOcultar: wb.hojasChofer.toSet(),
       );
 
       // Nombre: `Viajes_VC_MAYO_2026_<timestamp>.xlsx` (convención de

@@ -135,6 +135,92 @@ String _unescapeXml(String s) => s
     .replaceAll('&apos;', "'")
     .replaceAll('&amp;', '&');
 
+/// Configura la hoja CONSULTA de la planilla de viajes y oculta las
+/// hojas por chofer, en una sola pasada sobre el .xlsx (ZIP). Dos
+/// cambios que la lib `excel` 4.0.6 no expone:
+///   1. **Data validation** tipo lista en [celdaDropdown] de
+///      [hojaConsulta], con la lista de choferes en `S1:S{N}` (la
+///      columna helper que arma `ReportPlanillaChofer`). Esto crea el
+///      menú desplegable para elegir chofer.
+///   2. **Ocultar** las [hojasAOcultar] (las 44 por chofer) → quedan
+///      como fuente de datos del RESUMEN y del espejo INDIRECT de
+///      CONSULTA, sin ensuciar la barra de pestañas.
+///
+/// Si algo no se puede resolver (XML inesperado), devuelve los bytes
+/// sin ese cambio — mejor un archivo sin dropdown que uno corrupto.
+List<int> configurarConsultaYOcultarHojas(
+  List<int> bytes, {
+  required String hojaConsulta,
+  required String celdaDropdown,
+  required int cantidadChoferes,
+  required Set<String> hojasAOcultar,
+}) {
+  if (cantidadChoferes <= 0) return bytes;
+  final archive = ZipDecoder().decodeBytes(bytes);
+  final archivosConsulta = _archivosDeHojas(archive, {hojaConsulta});
+
+  final out = Archive();
+  for (final file in archive.files) {
+    if (file.isFile && file.name == 'xl/workbook.xml') {
+      final xml = utf8.decode(file.content as List<int>);
+      final mod = _ocultarHojasEnWorkbook(xml, hojasAOcultar);
+      final nb = utf8.encode(mod);
+      out.addFile(ArchiveFile(file.name, nb.length, nb));
+    } else if (file.isFile && archivosConsulta.contains(file.name)) {
+      final xml = utf8.decode(file.content as List<int>);
+      final mod = _inyectarDataValidation(
+        xml,
+        celda: celdaDropdown,
+        rango: '\$S\$1:\$S\$$cantidadChoferes',
+      );
+      final nb = utf8.encode(mod);
+      out.addFile(ArchiveFile(file.name, nb.length, nb));
+    } else {
+      out.addFile(file);
+    }
+  }
+  final encoded = ZipEncoder().encode(out);
+  return encoded ?? bytes;
+}
+
+/// Pone `state="hidden"` en cada `<sheet name="X" …/>` de workbook.xml
+/// cuyo nombre esté en [nombres]. La lib `excel` ya emite
+/// `state="visible"` en cada sheet, así que REEMPLAZAMOS ese atributo
+/// (no alcanza con insertarlo: quedaría duplicado y se ignora).
+String _ocultarHojasEnWorkbook(String xml, Set<String> nombres) {
+  return xml.replaceAllMapped(RegExp(r'<sheet\b[^>]*/>'), (m) {
+    final tag = m.group(0)!;
+    final name = RegExp(r'name="([^"]*)"').firstMatch(tag)?.group(1);
+    if (name == null || !nombres.contains(_unescapeXml(name))) return tag;
+    if (tag.contains('state=')) {
+      return tag.replaceFirst(RegExp(r'state="[^"]*"'), 'state="hidden"');
+    }
+    return tag.replaceFirst('<sheet', '<sheet state="hidden"');
+  });
+}
+
+/// Inyecta una data validation tipo lista en [celda], con la fuente en
+/// [rango] (mismo-hoja, sin comillas → es un rango de celdas). Va
+/// DESPUÉS de `</mergeCells>` (orden OOXML: mergeCells < dataValidations
+/// < pageMargins); si la hoja no tuviera merges, después de
+/// `</sheetData>`. Idempotente.
+String _inyectarDataValidation(
+  String xml, {
+  required String celda,
+  required String rango,
+}) {
+  if (xml.contains('<dataValidations')) return xml;
+  final dv = '<dataValidations count="1">'
+      '<dataValidation type="list" allowBlank="1" showInputMessage="1" '
+      'showErrorMessage="1" sqref="$celda">'
+      '<formula1>$rango</formula1>'
+      '</dataValidation></dataValidations>';
+  if (xml.contains('</mergeCells>')) {
+    return xml.replaceFirst('</mergeCells>', '</mergeCells>$dv');
+  }
+  return xml.replaceFirst('</sheetData>', '</sheetData>$dv');
+}
+
 /// Inyecta `<autoFilter ref="A1:Z10000"/>` en el XML de un worksheet.
 /// El elemento debe ir DESPUÉS de `</sheetData>` (orden requerido por
 /// el spec OOXML — sino Excel rechaza el archivo como corrupto).

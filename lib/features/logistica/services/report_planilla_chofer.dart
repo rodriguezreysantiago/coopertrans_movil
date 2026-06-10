@@ -100,12 +100,18 @@ class ReportPlanillaChofer {
   // API
   // ===================================================================
 
-  /// Construye el workbook con RESUMEN + una hoja por chofer. Devuelve
-  /// el `Excel` listo para que el caller agregue hojas anexo y guarde.
+  /// Construye el workbook completo. Devuelve el `Excel` + la lista de
+  /// nombres de hoja por chofer (para que el caller las oculte por XML
+  /// y arme el rango del dropdown de CONSULTA).
+  ///
+  /// Estructura (orden de pestañas): CONSULTA, [44 hojas chofer],
+  /// RESUMEN, + los anexos que agrega el caller. Las hojas de chofer
+  /// se ocultan post-save; quedan como fuente de datos del RESUMEN y
+  /// del espejo INDIRECT de CONSULTA.
   ///
   /// [viajes] y [adelantos] vienen YA filtrados por la pantalla
   /// (mes + empresa empleadora + chofer + estado liquidación).
-  static ex.Excel construir({
+  static PlanillaWorkbook construir({
     required List<Viaje> viajes,
     required List<AdelantoChofer> adelantos,
     required Map<String, EmpleadoLiquidacion> empleados,
@@ -113,7 +119,9 @@ class ReportPlanillaChofer {
     required ResolverProvincias provincias,
   }) {
     final excel = ex.Excel.createExcel();
-    excel.rename('Sheet1', 'RESUMEN');
+    // CONSULTA arranca como la 1ª hoja (Sheet1 renombrada). Se llena
+    // al final, cuando ya tenemos los nombres de hoja de cada chofer.
+    excel.rename('Sheet1', 'CONSULTA');
 
     // ─── Agrupar por chofer (unión de DNIs en viajes y adelantos) ───
     final viajesPorChofer = <String, List<Viaje>>{};
@@ -169,7 +177,17 @@ class ReportPlanillaChofer {
     }
 
     _llenarResumen(excel, mes: mes, metas: metas);
-    return excel;
+
+    // CONSULTA: dropdown + espejo del chofer elegido. Se llena al final
+    // (necesita los nombres de hoja). El data validation y el ocultado
+    // de hojas van por XML (caller → excel_utils).
+    _construirHojaConsulta(excel, metas: metas, mes: mes);
+
+    return PlanillaWorkbook(
+      excel: excel,
+      hojasChofer: metas.map((m) => m.nombreHoja).toList(),
+      cantidadChoferes: metas.length,
+    );
   }
 
   static int _compararViajes(Viaje a, Viaje b) {
@@ -459,6 +477,155 @@ class ReportPlanillaChofer {
     );
   }
 
+  // ===================================================================
+  // HOJA CONSULTA (dropdown + espejo INDIRECT)
+  // ===================================================================
+
+  /// Columna helper (0-based) donde van los nombres EXACTOS de hoja
+  /// que alimentan el dropdown. Va a la derecha del cuaderno (Q=16) y
+  /// se oculta por XML. El data validation referencia `S1:S{N}`.
+  static const int _colListaChoferes = 18; // S
+
+  /// Construye la hoja CONSULTA: un dropdown en H1 para elegir chofer
+  /// y, debajo, su cuaderno completo ESPEJADO con fórmulas INDIRECT a
+  /// la hoja del chofer elegido. Así administración no va hoja por hoja
+  /// (pedido Santiago 2026-06-10) — las hojas por chofer quedan
+  /// ocultas como fuente de datos.
+  ///
+  /// La grilla (A4:Q15) espeja celda a celda; el pie (BRUTO/ADELANTOS/
+  /// …) se RECALCULA sobre la propia grilla espejada reusando
+  /// [_bloquePie], así los totales cuadran sin más INDIRECT. El nombre
+  /// del chofer (H1) es el único dato "vivo": lo elige el dropdown y
+  /// todas las fórmulas INDIRECT lo referencian con `$H$1`.
+  static void _construirHojaConsulta(
+    ex.Excel excel, {
+    required List<_MetaHojaChofer> metas,
+    required DateTime mes,
+  }) {
+    final hoja = excel['CONSULTA'];
+
+    if (metas.isEmpty) {
+      _set(hoja, 0, 0, ex.TextCellValue('Sin datos para el período.'),
+          _estilo(bold: true, size: 12, borde: false));
+      return;
+    }
+
+    final mesNombre =
+        AppFormatters.formatearMes(mes).split(' ').first.toUpperCase();
+    final st1 = _estilo(bold: true, size: 12, borde: false);
+
+    // ─── Fila 1: header con el dropdown en H1 ───────────────────────
+    hoja.merge(_ci(0, 0), _ci(1, 0));
+    _set(hoja, 0, 0, ex.TextCellValue('CORRESPONDE A MES'), st1);
+    hoja.merge(_ci(2, 0), _ci(3, 0));
+    _set(hoja, 2, 0, ex.TextCellValue(mesNombre),
+        _estilo(bold: true, size: 12, borde: false,
+            align: ex.HorizontalAlign.Center));
+    _set(hoja, 4, 0, ex.TextCellValue('AÑO'), st1);
+    _set(hoja, 5, 0, ex.IntCellValue(mes.year), st1);
+    _set(hoja, 6, 0, ex.TextCellValue('CHOFER'), st1);
+    // H1 = celda del dropdown. Valor inicial = primer chofer (para que
+    // el INDIRECT resuelva al abrir). El data validation lo agrega el
+    // caller por XML. Resaltada (gris + borde) para que se note que es
+    // editable.
+    hoja.merge(_ci(7, 0), _ci(16, 0));
+    _set(hoja, 7, 0, ex.TextCellValue(metas.first.nombreHoja),
+        _estilo(bold: true, size: 12, gris: true,
+            align: ex.HorizontalAlign.Center));
+
+    // ─── Fila 3: headers de columna (idénticos al cuaderno) ─────────
+    const headers = [
+      'FECHA', 'N° RECIBO', r'$',
+      'FECHA', 'RTO/CP', 'MERCADE.', 'ORIGEN', 'PROV.', 'DESTINO',
+      'PROV.', 'KG', 'DIF /KG', 'TARIFA', '', 'G/VIAJE', 'G/VIAJE',
+      'GASTOS',
+    ];
+    final stHeader =
+        _estilo(bold: true, gris: true, align: ex.HorizontalAlign.Center);
+    for (var c = 0; c < headers.length; c++) {
+      _set(hoja, c, 2, ex.TextCellValue(headers[c]), stHeader);
+    }
+
+    // ─── Grilla A4:Q15: espejo INDIRECT al chofer de H1 ─────────────
+    // Cada celda: =IF(INDIRECT("'"&$H$1&"'!A4")=0,"",INDIRECT(...)).
+    // El IF(=0,"") deja en blanco las filas sin datos (INDIRECT de
+    // celda vacía devuelve 0); las fechas (texto) y montos (>0) se
+    // muestran. 12 filas de grilla (4..15), 17 columnas (A..Q).
+    const filaDatosFin = 15;
+    for (var f = 4; f <= filaDatosFin; f++) {
+      for (var c = 1; c <= 17; c++) {
+        final ref = _refIndirect(_colLetra(c), f);
+        final formula = 'IF(INDIRECT($ref)=0,"",INDIRECT($ref))';
+        _set(hoja, c - 1, f - 1, ex.FormulaCellValue(formula),
+            _estiloColGrilla(c));
+      }
+    }
+
+    // ─── Pie: recalcula sobre la grilla espejada (reusa _bloquePie) ──
+    _bloquePie(hoja, filaDatosFin: filaDatosFin);
+
+    // ─── Anchos (mismos que el cuaderno) ────────────────────────────
+    const anchos = [
+      11.0, 9.0, 10.0,
+      11.0, 9.5, 10.0, 16.0, 6.5, 16.0, 6.5,
+      7.5, 7.0, 6.0, 2.0, 11.0, 11.0, 9.0,
+    ];
+    for (var c = 0; c < anchos.length; c++) {
+      hoja.setColumnWidth(c, anchos[c]);
+    }
+
+    // ─── Columna helper S: nombres EXACTOS de hoja para el dropdown ──
+    // Se oculta por XML. El data validation referencia S1:S{N}. Usar
+    // los nombres de HOJA (no el nombre del RESUMEN) garantiza que el
+    // INDIRECT resuelva aunque el nombre se haya saneado/recortado.
+    for (var i = 0; i < metas.length; i++) {
+      _set(hoja, _colListaChoferes, i, ex.TextCellValue(metas[i].nombreHoja),
+          _estilo(borde: false));
+    }
+    // Ancho 0 → la columna helper queda invisible sin necesidad de
+    // inyectar `hidden` en el XML. El dropdown la referencia igual (lee
+    // los valores, no importa el ancho).
+    hoja.setColumnWidth(_colListaChoferes, 0);
+  }
+
+  /// Letra de columna Excel para un índice 1-based (1→A … 17→Q). Solo
+  /// cubre A-Z (suficiente para el cuaderno de 17 columnas).
+  static String _colLetra(int col1based) =>
+      String.fromCharCode('A'.codeUnitAt(0) + col1based - 1);
+
+  /// Construye la referencia interna de INDIRECT a la celda
+  /// `<colLetra><fila>` de la hoja nombrada en `$H$1`:
+  ///   "'"&$H$1&"'!A4"
+  /// (comillas simples porque los nombres de hoja llevan espacios).
+  static String _refIndirect(String colLetra, int fila) =>
+      '"\'"&\$H\$1&"\'!$colLetra$fila"';
+
+  /// Estilo de cada columna de la grilla del cuaderno (1-based), igual
+  /// que en [_llenarHojaChofer]: centrado para fechas/recibo/provincia,
+  /// monto para importes, bold para los acumulables del chofer.
+  static ex.CellStyle _estiloColGrilla(int c) {
+    switch (c) {
+      case 3: // C monto adelanto
+      case 16: // P redondeado
+        return _estilo(bold: true, monto: true);
+      case 11: // K kg
+      case 12: // L dif
+      case 13: // M tarifa
+      case 15: // O g/viaje
+      case 17: // Q gastos
+        return _estilo(monto: true);
+      case 1: // A fecha adelanto
+      case 2: // B recibo
+      case 4: // D fecha viaje
+      case 5: // E remito
+      case 8: // H prov origen
+      case 10: // J prov destino
+        return _estilo(align: ex.HorizontalAlign.Center);
+      default: // F G I N — texto
+        return _estilo();
+    }
+  }
+
   /// Pie del cuaderno: OTROS VIAJES + LIQUIDACION PARCIAL con las
   /// mismas cuentas de la planilla histórica (fórmulas vivas):
   ///   BRUTO − ADELANTOS = NETO; NETO + GASTOS = SUB-TOTAL;
@@ -641,6 +808,25 @@ class ReportPlanillaChofer {
   }
 }
 
+/// Resultado de [ReportPlanillaChofer.construir]: el workbook + la
+/// metadata que el caller necesita para el post-procesado XML (ocultar
+/// las hojas de chofer y armar el dropdown de CONSULTA).
+class PlanillaWorkbook {
+  final ex.Excel excel;
+
+  /// Nombres EXACTOS de las hojas por chofer (a ocultar por XML).
+  final List<String> hojasChofer;
+
+  /// Cantidad de choferes = filas de la lista del dropdown (`S1:S{N}`).
+  final int cantidadChoferes;
+
+  const PlanillaWorkbook({
+    required this.excel,
+    required this.hojasChofer,
+    required this.cantidadChoferes,
+  });
+}
+
 /// Metadata de una hoja cuaderno ya generada — la necesita el RESUMEN
 /// para armar las fórmulas cross-sheet con los rangos correctos.
 class _MetaHojaChofer {
@@ -728,53 +914,92 @@ class ResolverProvincias {
       s.toUpperCase().replaceAll(RegExp(r'\s+'), ' ').trim();
 
   /// Abreviatura de provincia argentina al estilo de la planilla
-  /// histórica. Provincia desconocida o vacía → tal cual (recortada a
-  /// 8 chars para no romper la columna angosta).
+  /// histórica. Robusto a la data sucia de la app: las ubicaciones
+  /// cargan la provincia de formas inconsistentes ("Buenos Aires",
+  /// "Provincia de Buenos Aires", "Provincia del Neuquén", …). Saca el
+  /// prefijo "Provincia de/del/de la" antes de buscar, y si aún así no
+  /// matchea, intenta por contención de un nombre conocido. Provincia
+  /// desconocida → title-case recortado (no el crudo con prefijo, que
+  /// daba el feo "Provinci" — bug detectado en el export 2026-06-10).
   static String abreviarProvincia(String provincia) {
     final p = provincia.trim();
     if (p.isEmpty) return '';
-    final clave = _normalizar(p)
-        .replaceAll('Á', 'A')
-        .replaceAll('É', 'E')
-        .replaceAll('Í', 'I')
-        .replaceAll('Ó', 'O')
-        .replaceAll('Ú', 'U');
-    const abrevs = <String, String>{
-      'BUENOS AIRES': 'BS.AS',
-      'PROVINCIA DE BUENOS AIRES': 'BS.AS',
-      'BS AS': 'BS.AS',
-      'BS.AS': 'BS.AS',
-      'BSAS': 'BS.AS',
-      'CABA': 'CABA',
-      'CIUDAD AUTONOMA DE BUENOS AIRES': 'CABA',
-      'CAPITAL FEDERAL': 'CABA',
-      'SANTA FE': 'STA FE',
-      'CORDOBA': 'CBA',
-      'LA PAMPA': 'LA PAMPA',
-      'RIO NEGRO': 'RIO NEG.',
-      'NEUQUEN': 'NQN',
-      'CHUBUT': 'CHUBUT',
-      'MENDOZA': 'MZA',
-      'SAN LUIS': 'S.LUIS',
-      'SAN JUAN': 'S.JUAN',
-      'ENTRE RIOS': 'E.RIOS',
-      'CORRIENTES': 'CTES',
-      'MISIONES': 'MNES',
-      'CHACO': 'CHACO',
-      'FORMOSA': 'FSA',
-      'SANTIAGO DEL ESTERO': 'SGO EST.',
-      'TUCUMAN': 'TUC',
-      'SALTA': 'SALTA',
-      'JUJUY': 'JUJUY',
-      'CATAMARCA': 'CATA',
-      'LA RIOJA': 'LA RIOJA',
-      'SANTA CRUZ': 'STA CRUZ',
-      'TIERRA DEL FUEGO': 'T.FUEGO',
-    };
-    final abrev = abrevs[clave];
+    var clave = _sinAcentos(_normalizar(p));
+    // Sacar SOLO el prefijo "PROVINCIA DEL / DE " — NUNCA "DE LA",
+    // porque "La Pampa" y "La Rioja" llevan el "La" como parte del
+    // nombre ("Provincia de La Pampa" → "LA PAMPA", no "PAMPA"). "DEL"
+    // antes que "DE " para no dejar la "L" colgada.
+    clave = clave
+        .replaceFirst(RegExp(r'^PROVINCIA DEL '), '')
+        .replaceFirst(RegExp(r'^PROVINCIA DE '), '')
+        .trim();
+
+    final abrev = _abrevsProvincia[clave];
     if (abrev != null) return abrev;
-    return p.length > 8 ? p.substring(0, 8).trim() : p;
+
+    // Red de seguridad: si la clave CONTIENE el nombre de una provincia
+    // conocida (variantes raras tipo "NQN - NEUQUEN"), usar esa. Solo
+    // nombres ≥ 5 chars para no disparar falsos positivos.
+    for (final e in _abrevsProvincia.entries) {
+      if (e.key.length >= 5 && clave.contains(e.key)) return e.value;
+    }
+
+    // Desconocida: title-case del nombre YA limpio (sin prefijo),
+    // recortado a 10 — legible, no el "Provinci" crudo.
+    final base = clave.isEmpty ? _sinAcentos(_normalizar(p)) : clave;
+    final titled = _titleCase(base);
+    return titled.length > 10 ? titled.substring(0, 10).trim() : titled;
   }
+
+  static String _sinAcentos(String s) => s
+      .replaceAll('Á', 'A')
+      .replaceAll('É', 'E')
+      .replaceAll('Í', 'I')
+      .replaceAll('Ó', 'O')
+      .replaceAll('Ú', 'U')
+      .replaceAll('Ü', 'U');
+
+  static String _titleCase(String s) => s
+      .split(' ')
+      .where((w) => w.isNotEmpty)
+      .map((w) => w[0].toUpperCase() + w.substring(1).toLowerCase())
+      .join(' ');
+
+  /// Diccionario de abreviaturas. Las claves son nombres de provincia
+  /// YA normalizados (upper, sin acentos) y SIN el prefijo "Provincia
+  /// de" (que [abreviarProvincia] saca antes de buscar).
+  static const Map<String, String> _abrevsProvincia = {
+    'BUENOS AIRES': 'BS.AS',
+    'BS AS': 'BS.AS',
+    'BS.AS': 'BS.AS',
+    'BSAS': 'BS.AS',
+    'CABA': 'CABA',
+    'CIUDAD AUTONOMA DE BUENOS AIRES': 'CABA',
+    'CIUDAD DE BUENOS AIRES': 'CABA',
+    'CAPITAL FEDERAL': 'CABA',
+    'SANTA FE': 'STA FE',
+    'CORDOBA': 'CBA',
+    'LA PAMPA': 'LA PAMPA',
+    'RIO NEGRO': 'RIO NEG.',
+    'NEUQUEN': 'NQN',
+    'CHUBUT': 'CHUBUT',
+    'MENDOZA': 'MZA',
+    'SAN LUIS': 'S.LUIS',
+    'SAN JUAN': 'S.JUAN',
+    'ENTRE RIOS': 'E.RIOS',
+    'CORRIENTES': 'CTES',
+    'MISIONES': 'MNES',
+    'CHACO': 'CHACO',
+    'FORMOSA': 'FSA',
+    'SANTIAGO DEL ESTERO': 'SGO EST.',
+    'TUCUMAN': 'TUC',
+    'SALTA': 'SALTA',
+    'JUJUY': 'JUJUY',
+    'CATAMARCA': 'CATA',
+    'LA RIOJA': 'LA RIOJA',
+    'SANTA CRUZ': 'STA CRUZ',
+    'TIERRA DEL FUEGO': 'T.FUEGO',
+  };
 }
 
 extension<T> on Iterable<T> {
