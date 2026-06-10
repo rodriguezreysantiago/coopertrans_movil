@@ -12,7 +12,7 @@ Colecciones (ver lib/core/constants/app_constants.dart → AppCollections):
                                   ← SOLO lo escribe el bot (latido)
 """
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from firebase_admin import firestore
 
@@ -85,15 +85,24 @@ def leer_config_nube() -> dict:
     }
 
 
-def escribir_estado_bot(modo: str, total: int, pendientes: int):
-    """Latido del bot — la app lo usa para saber si está vivo y qué hace."""
+def escribir_estado_bot(modo: str, total: int, pendientes: int,
+                        salud: dict = None):
+    """Latido del bot — la app lo usa para saber si está vivo y qué hace.
+
+    `salud` (opcional, 2026-06-10): señales técnicas del vigía
+    {scanner_ok, fallos_scanner, hilos_huerfanos, sin_vigilar}. Se escribe
+    la key completa en cada latido, así un problema resuelto desaparece del
+    doc en ≤LATIDO_SEG (la UI hoy no lo muestra; queda disponible)."""
     db = choferes._db()
-    db.collection(COL_ESTADO).document(DOC_ESTADO).set({
+    doc = {
         "modo": modo,
         "total": total,
         "pendientes": pendientes,
         "ultimo_tick_en": firestore.SERVER_TIMESTAMP,
-    }, merge=True)
+    }
+    if salud is not None:
+        doc["salud"] = salud
+    db.collection(COL_ESTADO).document(DOC_ESTADO).set(doc, merge=True)
 
 
 def escribir_estado_chofer(dni: str, estado: str, hora=None, detalle=None,
@@ -266,19 +275,53 @@ def _telefono_de(db, dni):
     return tel if tel and tel != "-" else None
 
 
-def encolar_whatsapp(telefono, mensaje):
-    """Encola un mensaje para que lo mande el bot (mismo formato que las CF)."""
+def encolar_whatsapp(telefono, mensaje, origen="cachatore", expira_min=None):
+    """Encola un mensaje para que lo mande el bot (mismo formato que las CF).
+
+    `expira_min` (opcional): TTL en minutos — el consumer del bot descarta el
+    doc si lo levanta después de `expira_en` (mismo patrón que los avisos
+    time-sensitive de las CF, fix 2026-05-18). Para avisos de salud: un
+    "Cloudflare me bloquea" entregado horas tarde confunde más que ayuda."""
     if not telefono:
         return
     db = choferes._db()
-    db.collection(COL_COLA).add({
+    doc = {
         "telefono": telefono,
         "mensaje": mensaje,
         "estado": "PENDIENTE",
         "encolado_en": firestore.SERVER_TIMESTAMP,
         "enviado_en": None,
-        "origen": "cachatore",
-    })
+        "origen": origen,
+    }
+    if expira_min:
+        doc["expira_en"] = datetime.now(timezone.utc) + timedelta(minutes=expira_min)
+    db.collection(COL_COLA).add(doc)
+
+
+# Salud técnica del vigía → mismo destinatario que la regla 'mantenimientoBot'
+# del catálogo M5 ("Bot WhatsApp: caídas, recuperaciones, salud") = Santiago.
+# Overrideable desde la app vía META/destinatarios_notificacion.
+SALUD_FALLBACK_DNI = "35244439"
+
+
+def avisar_salud_vigia(mensaje: str) -> bool:
+    """Aviso técnico de salud del vigía (Cloudflare bloqueando el login,
+    claves.json roto, etc) al responsable del sistema.
+
+    Va por COLA_WHATSAPP → bot de WhatsApp de la dedicada: iTurnos/Cloudflare
+    son independientes del bot, así que este canal funciona justo cuando el
+    vigía está bloqueado. (Si el caído fuera el BOT de WhatsApp, esa pata la
+    cubre la alerta Telegram de botHealthWatchdog — defensa en capas.)
+
+    TTL 60 min: si el bot no lo entregó en 1 h, el re-aviso del episodio
+    genera uno fresco (no entregar quejas viejas). Devuelve True si encoló."""
+    db = choferes._db()
+    dni = destinatarios.obtener_destinatario("mantenimientoBot", SALUD_FALLBACK_DNI)
+    tel = _telefono_de(db, dni)
+    if not tel:
+        return False
+    encolar_whatsapp(tel, mensaje, origen="cachatore_salud", expira_min=60)
+    return True
 
 
 def avisar_turno(chofer_dni, chofer_nombre, cuando, evento):

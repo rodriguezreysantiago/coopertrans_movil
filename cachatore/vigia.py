@@ -83,6 +83,16 @@ BUSQUEDA_LOG_SEG = 30       # cada cuánto LOGUEAR la búsqueda latente (reserva
                             # "parecía colgado" (Santiago 2026-05-22). Misma idea
                             # que el log de reagendar, pero a nivel ciclo.
 BACKOFF_MAX_SEG = 120       # tope del backoff cuando el scanner no puede loguear
+FALLOS_SCANNER_AVISO = 12   # fallos seguidos de login (~15-20 min con backoff)
+                            # → escalar por WhatsApp a Santiago. Antes el bloqueo
+                            # de Cloudflare se quedaba en el log para siempre y
+                            # nadie se enteraba (riesgo: día de drop perdido).
+FALLOS_SCANNER_REAVISO = 30  # re-aviso cada N fallos más (~1 h a backoff 120 s)
+CICLOS_SIN_VIGILADOS_AVISO = 12  # ciclos seguidos con objetivos cargados pero 0
+                            # en vigilancia (~1 min) → avisar (claves.json roto/
+                            # faltante, sin patente, excluidos). Sostenido para
+                            # no avisar por el transitorio de un alta/baja.
+HUERFANOS_UMBRAL_LOG = 8    # workers huérfanos VIVOS para escalar el log a ERROR
 MAX_REFRESH_POR_CICLO = 2    # cuántos mis_turnos refrescar por ciclo (no bloquear)
 MAX_CHEQUEOS_POR_CICLO = 3   # cuántos chequeos one-shot procesar por ciclo (no
                              # bloquear el latente: cada chequeo es 1 login +
@@ -370,12 +380,12 @@ def _avisar_turno(t, evento: str, cuando):
         log("LOG", t.nombre, f"no pude encolar aviso WhatsApp: {e}")
 
 
-def _heartbeat(modo: str, targets: dict):
+def _heartbeat(modo: str, targets: dict, salud: dict = None):
     if not _ESCRIBIR_ESTADO:
         return
     pendientes = sum(1 for t in targets.values() if not t.tiene_turno)
     try:
-        nube.escribir_estado_bot(modo, len(targets), pendientes)
+        nube.escribir_estado_bot(modo, len(targets), pendientes, salud=salud)
     except Exception as e:
         log("LOG", "sistema", f"no pude escribir latido: {e}")
 
@@ -513,6 +523,21 @@ def _nombre_item(x) -> str:
     return str(x)
 
 
+# Registro de workers huérfanos (join expirado pero el hilo sigue vivo).
+# No se pueden matar (threads Python); el daño está acotado porque TODAS las
+# requests tienen timeout 20 s (iturnos.IturnosClient) — un huérfano muere
+# solo en segundos/minutos. Esto es VISIBILIDAD: contador purgado en cada
+# uso, va al latido (`salud.hilos_huerfanos`) y escala el log a ERROR si se
+# acumulan (señal de que algo cuelga sistemáticamente).
+_huerfanos = []
+
+
+def hilos_huerfanos_vivos() -> int:
+    """Cuántos workers huérfanos siguen vivos AHORA (purga los muertos)."""
+    _huerfanos[:] = [h for h in _huerfanos if h.is_alive()]
+    return len(_huerfanos)
+
+
 # timeout default por ENCIMA del peor caso de un worker (login = LOGIN_REINTENTOS
 # intentos con sleeps + GET/POST, puede pasar los 60 s). Sin esto, con el viejo
 # 30 s un login lento se daba por "colgado" y el hilo (daemon) seguía vivo
@@ -532,9 +557,15 @@ def _en_paralelo(items, func, max_hilos=10, timeout=90):
             # seguimos. Antes era SILENCIOSO; lo logueamos para tener visibilidad
             # (NO matamos el hilo: es daemon y cambiar eso es arriesgado).
             if h.is_alive():
+                _huerfanos.append(h)
                 log("LOG", _nombre_item(x),
                     f"worker sigue corriendo tras {timeout}s (no terminó en "
                     f"el join; sigue en segundo plano)")
+    vivos = hilos_huerfanos_vivos()
+    if vivos >= HUERFANOS_UMBRAL_LOG:
+        log("ERROR", "sistema",
+            f"{vivos} workers huérfanos vivos a la vez — algo está colgando "
+            f"las requests (¿iTurnos lentísimo / red?); mirar el log de arriba")
 
 
 # ---- estado (mis_turnos) --------------------------------------------------
@@ -976,6 +1007,10 @@ def main():
     ultimo_latido = 0.0       # último latido escrito (para throttlear el heartbeat)
     ultimo_latido_log = time.time()  # último latido LOGUEADO (visible en la ventana)
     fallos_scanner = 0        # logins fallidos seguidos del scanner (para backoff)
+    scanner_avisado = False   # ¿ya escalé este episodio de bloqueo por WhatsApp?
+    scanner_caido_desde = 0.0  # inicio del episodio de bloqueo (para el mensaje)
+    ciclos_sin_vigilados = 0  # ciclos seguidos con objetivos pero 0 vigilados
+    vigilados_avisado = False  # ¿ya avisé este episodio de "ninguno vigilable"?
     reconciliado = False      # limpieza one-shot de turnos viejos de no-vigilados
 
     while True:
@@ -999,6 +1034,40 @@ def main():
                     reconciliado = True
                 except Exception as e:
                     log("LOG", "sistema", f"no pude reconciliar turnos viejos: {e}")
+
+            # 1.c) salud (2026-06-10): hay objetivos cargados pero NINGUNO pudo
+            #      entrar en vigilancia → el vigía está ciego mientras el
+            #      operador cree que busca. Causas: claves.json roto/faltante
+            #      (todos sin credenciales), sin patente, excluidos. El detalle
+            #      por chofer ya lo muestra la pantalla Cachatore (estado
+            #      sin_credenciales/sin_patente); esto escala el caso TOTAL.
+            #      Sostenido N ciclos para no avisar por transitorios de
+            #      alta/baja. Se recupera solo (sincronizar reintenta cada 8 s).
+            deseados_n = len(cfg.get("choferes") or []) if cfg else 0
+            if deseados_n > 0 and not targets:
+                ciclos_sin_vigilados += 1
+            else:
+                ciclos_sin_vigilados = 0
+                vigilados_avisado = False
+            if (ciclos_sin_vigilados >= CICLOS_SIN_VIGILADOS_AVISO
+                    and not vigilados_avisado and _ESCRIBIR_ESTADO):
+                try:
+                    if nube.avisar_salud_vigia(
+                            f"🔑 *Vigía de turnos YPF*: hay {deseados_n} "
+                            f"chofer(es) cargado(s) para vigilar pero NINGUNO "
+                            f"pudo entrar en vigilancia (sin credenciales "
+                            f"—¿claves.json roto o faltante en la dedicada?—, "
+                            f"sin patente, o excluidos). Hasta arreglarlo no "
+                            f"estoy buscando turnos. El motivo por chofer está "
+                            f"en la pantalla Cachatore de la app."
+                            f"\n\n_Coopertrans Móvil_"):
+                        vigilados_avisado = True
+                        log("ERROR", "sistema",
+                            "0 vigilados con objetivos cargados — aviso de "
+                            "salud encolado (WhatsApp)")
+                except Exception as e:
+                    log("LOG", "sistema",
+                        f"no pude encolar el aviso de salud: {e}")
 
             # 2) re-traer unidad/mail de los vigilados (refleja reasignaciones)
             if targets and time.time() - ultimo_datos > REFRESH_DATOS_SEG:
@@ -1153,20 +1222,70 @@ def main():
                                  for t in targets.values())
             usa_scanner = hay_pendientes and modo == "latente"
             if usa_scanner and not _scanner["logueado"]:
+                if fallos_scanner == 0:
+                    scanner_caido_desde = time.time()
                 fallos_scanner += 1
                 espera = min(espera * (2 ** min(fallos_scanner, 5)), BACKOFF_MAX_SEG)
                 if fallos_scanner == 1 or fallos_scanner % 5 == 0:
                     log("LOG", "scanner",
                         f"sin login (¿Cloudflare?), backoff a {espera:.0f}s "
                         f"(fallo {fallos_scanner})")
+                # ESCALAR a humano (2026-06-10): N fallos seguidos ≈ 15-20 min
+                # sin poder leer la agenda CON choferes esperando turno. Antes
+                # el bloqueo quedaba en el log para siempre — en un día de drop
+                # eso era turnos perdidos sin que nadie se entere. 1 aviso por
+                # episodio + re-aviso ~cada hora mientras siga. El aviso viaja
+                # por COLA_WHATSAPP (el bot es independiente de iTurnos/
+                # Cloudflare; si el caído fuera el bot, esa pata la cubre la
+                # alerta Telegram del botHealthWatchdog).
+                debe_avisar = (
+                    (fallos_scanner >= FALLOS_SCANNER_AVISO and not scanner_avisado)
+                    or (scanner_avisado
+                        and fallos_scanner % FALLOS_SCANNER_REAVISO == 0))
+                if debe_avisar and _ESCRIBIR_ESTADO:
+                    mins = int((time.time() - scanner_caido_desde) / 60)
+                    n_pend = sum(1 for t in targets.values() if not t.tiene_turno)
+                    try:
+                        if nube.avisar_salud_vigia(
+                                f"⚠️ *Vigía de turnos YPF*: hace ~{mins} min que "
+                                f"no puedo entrar a iTurnos (¿Cloudflare "
+                                f"bloqueando?). Hay {n_pend} chofer(es) esperando "
+                                f"turno y no estoy pudiendo mirar la agenda. "
+                                f"Sigo reintentando con espera progresiva."
+                                f"\n\n_Coopertrans Móvil_"):
+                            scanner_avisado = True
+                            log("ERROR", "scanner",
+                                "bloqueo sostenido — aviso de salud encolado "
+                                "(WhatsApp)")
+                    except Exception as e:
+                        log("LOG", "scanner",
+                            f"no pude encolar el aviso de salud: {e}")
             else:
+                if scanner_avisado and _ESCRIBIR_ESTADO:
+                    mins = int((time.time() - scanner_caido_desde) / 60)
+                    try:
+                        nube.avisar_salud_vigia(
+                            f"✅ *Vigía de turnos YPF*: volví a entrar a iTurnos "
+                            f"después de ~{mins} min bloqueado. Sigo buscando "
+                            f"turnos normalmente.\n\n_Coopertrans Móvil_")
+                    except Exception as e:
+                        log("LOG", "scanner",
+                            f"no pude encolar el aviso de recuperación: {e}")
+                scanner_avisado = False
                 fallos_scanner = 0
 
             # 5) latido THROTTLED: ~cada LATIDO_SEG o al cambiar de modo. La UI
             #    considera vivo si latió hace <120 s, así que no escribimos cada
-            #    ciclo (eran ~17k writes/día solo para el latido).
+            #    ciclo (eran ~17k writes/día solo para el latido). `salud` =
+            #    señales técnicas (2026-06-10) — la UI hoy no las muestra, pero
+            #    quedan en CACHATORE_ESTADO/bot para diagnóstico/futuro.
             if cambio_modo or time.time() - ultimo_latido >= LATIDO_SEG:
-                _heartbeat(modo, targets)
+                _heartbeat(modo, targets, salud={
+                    "scanner_ok": fallos_scanner == 0,
+                    "fallos_scanner": fallos_scanner,
+                    "hilos_huerfanos": hilos_huerfanos_vivos(),
+                    "sin_vigilar": max(0, deseados_n - len(targets)),
+                })
                 ultimo_latido = time.time()
 
             # 5.b) latido VISIBLE en el log (throttled ~cada LATIDO_LOG_SEG): para

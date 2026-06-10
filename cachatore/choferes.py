@@ -75,11 +75,22 @@ def _where(ref, campo, op, valor):
 
 def _cargar_claves() -> dict:
     """claves.json: {"_comun": "claveParaTodos", "<dni>": "claveEspecifica"}.
-    Si la clave es la misma para todos, alcanza con "_comun"."""
+    Si la clave es la misma para todos, alcanza con "_comun".
+
+    Tolerante a archivo CORRUPTO (JSON invalido / encoding roto): devuelve {}
+    con un error bien visible en el log. Antes json.load lanzaba y el error
+    subia disfrazado de "error releyendo Firestore" (misleading: el problema
+    es un archivo local). Sin claves nadie tiene credenciales -> el vigia lo
+    detecta ("ninguno pudo entrar en vigilancia") y avisa por WhatsApp."""
     if not os.path.exists(_CLAVES):
         return {}
-    with open(_CLAVES, encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(_CLAVES, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[choferes] ERROR: {_CLAVES} ilegible ({e}) — ningun chofer "
+              f"tiene credenciales hasta arreglar ese archivo")
+        return {}
 
 
 def _patentes_vigentes(db) -> dict:
