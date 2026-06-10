@@ -2422,6 +2422,11 @@ function _systemPrompt(persona) {
     '  contestar el seguimiento necesitás volver a usar una herramienta, usala.',
     '- La gente escribe informal: apellidos sueltos, apodos, sin tildes, con',
     '  errores de tipeo. Interpretá la INTENCIÓN; no exijas que escriban bien.',
+    '- Si te piden que los llames de otra forma (un apodo o nombre corto, ej.',
+    '  "llamame Rodo, no Carlos"), usá ese nombre durante la charla. Pero NO',
+    '  digas que lo "agendaste", "guardaste" o "anotaste" — no tenés forma de',
+    '  recordarlo para la próxima vez. Reconocelo natural ("dale, Rodo") sin',
+    '  prometer que queda guardado.',
     '- NUNCA inventes datos. Para vencimientos, unidades, turnos, etc., USÁ las',
     '  herramientas. Si una herramienta no trae el dato, o no tenés una para',
     '  eso, decilo claramente; no adivines fechas, nombres ni patentes.',
@@ -2747,8 +2752,9 @@ async function _conversarRobusto(provider, db, system, historial, userText, pers
   // `provider` lo mantenemos por compat de la firma — siempre es 'gemini'
   // ahora (ver `_provider()`). El argumento queda para diagnosticar a futuro.
   const args = [db, system, historial, userText, persona];
+  let r;
   try {
-    return await _conversarGemini(...args);
+    r = await _conversarGemini(...args);
   } catch (e) {
     if (!_esCuota(e)) throw e;
     log.warn(
@@ -2756,8 +2762,29 @@ async function _conversarRobusto(provider, db, system, historial, userText, pers
         `reintento en ${RETRY_429_MS}ms`
     );
     await _sleep(RETRY_429_MS);
-    return _conversarGemini(...args);
+    r = await _conversarGemini(...args);
   }
+  // Retry ante "vacío inexplicable": Gemini a veces termina con finishReason
+  // STOP pero sin texto ni function call (`sin_texto`) — bug errático del
+  // modelo, no de cuota. La MISMA consulta suele andar al reintentar (caso
+  // real frecuente, auditoría 2026-06-10: "horas de manejo de hoy", "dame la
+  // jornada de X" caían a "no pude procesar"). Reintentamos UNA vez, SOLO si
+  // NO hubo tool de ACCIÓN: las read-only son idempotentes, pero reintentar
+  // una escritura la duplicaría — de ahí el guard `huboToolDeAccion`.
+  if (r && r.error === 'sin_texto' && !r.huboToolDeAccion &&
+      (!r.texto || !String(r.texto).trim())) {
+    log.warn('[agente] respuesta vacía (sin_texto); reintento único');
+    try {
+      const r2 = await _conversarGemini(...args);
+      if (r2 && r2.texto && String(r2.texto).trim()) return r2;
+      return r2 || r;
+    } catch (e) {
+      log.warn(
+        `[agente] reintento sin_texto falló: ${String(e.message).slice(0, 80)}`
+      );
+    }
+  }
+  return r;
 }
 
 // ───────────────────────── logging ─────────────────────────
