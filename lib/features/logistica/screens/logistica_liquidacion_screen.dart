@@ -193,9 +193,16 @@ class _LogisticaLiquidacionScreenState
                     if (!viajesSnap.hasData) {
                       return const AppLoadingState();
                     }
-                    var viajes = viajesSnap.data!;
+                    // `viajesTodos` = todos los del mes (+ empresa/chofer del
+                    // stream). El filtro liquidado/no-liquidado se aplica SOLO
+                    // a la vista (tabla + KPIs + bulk). El EXPORT de la
+                    // planilla mensual usa `viajesTodos` — trae siempre todos
+                    // (Santiago 2026-06-10: evita exportar incompleto sin
+                    // querer por tener un chip de estado puesto).
+                    final viajesTodos = viajesSnap.data!;
+                    var viajes = viajesTodos;
                     if (_filtroLiquidado != null) {
-                      viajes = viajes
+                      viajes = viajesTodos
                           .where((v) => v.liquidado == _filtroLiquidado)
                           .toList();
                     }
@@ -231,7 +238,11 @@ class _LogisticaLiquidacionScreenState
                           onExportarExcel: () =>
                               ReportLiquidacionService.generar(
                             context: context,
-                            viajes: viajes,
+                            // La planilla mensual trae SIEMPRE todos los
+                            // viajes del mes, sin importar el chip de
+                            // estado de liquidación (que solo filtra la
+                            // vista). Respeta empresa/chofer.
+                            viajes: viajesTodos,
                             adelantos: adelantos,
                             empleados: empleados,
                             mes: _mesSeleccionado,
