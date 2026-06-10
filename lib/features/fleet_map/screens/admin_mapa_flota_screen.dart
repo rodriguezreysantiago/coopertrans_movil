@@ -72,8 +72,12 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
   LatLng _centroInicial = _centroFallback;
   double _zoomInicial = _zoomFallback;
 
-  /// Vista satelital (Mapbox) vs callejera (Carto). Default callejera.
-  bool _satelital = false;
+  /// Vista satelital (Mapbox satellite-streets) vs callejera (Carto).
+  /// **Default SATELITAL** (Santiago 2026-06-10): el mapa abre en satélite
+  /// — se identifican silos/galpones/accesos físicos. El toggle del mapa
+  /// vuelve a la vista callejera. Requiere token Mapbox (embebido en
+  /// `MapConstants`); sin token, `_Mapa` cae a callejero igual.
+  bool _satelital = true;
 
   /// Set de excluidos (tanques + sus choferes + testers). Carga async en
   /// initState. Mientras es null no se excluye a nadie (fail-safe).
@@ -82,6 +86,12 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
   /// Patente seleccionada desde el panel lateral (resalta su marker +
   /// centra el mapa). null = ninguna.
   String? _seleccionada;
+
+  /// Panel de detalle (columna derecha, desktop ≥1024) colapsado para
+  /// ganar ancho de mapa (Santiago 2026-06-10). Lo togglea un botón del
+  /// mapa. En memoria (no persiste), default visible; al elegir una
+  /// unidad se reabre solo.
+  bool _detalleColapsado = false;
 
   /// Auto-fit al primer render con docs. Después de la primera vez, no
   /// volvemos a tocar la cámara automáticamente — el admin pan/zoom y
@@ -209,7 +219,12 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
     final data = doc.data();
     final lat = (data['lat'] as num?)?.toDouble();
     final lng = (data['lng'] as num?)?.toDouble();
-    setState(() => _seleccionada = doc.id);
+    setState(() {
+      _seleccionada = doc.id;
+      // Si el admin eligió una unidad, quiere verla: reabrimos el panel
+      // aunque lo hubiera colapsado.
+      _detalleColapsado = false;
+    });
     if (lat != null && lng != null) {
       _mapController.move(LatLng(lat, lng), 14);
     }
@@ -366,6 +381,13 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
                 onAbrirPanel: panelFijo
                     ? null
                     : () => _abrirPanelMobile(visibles, ahora),
+                // Toggle del panel de detalle: solo aplica en desktop ≥1024
+                // (donde el panel es inline). Null en tablet/mobile.
+                onToggleDetalle: detalleFijo
+                    ? () => setState(
+                        () => _detalleColapsado = !_detalleColapsado)
+                    : null,
+                detalleColapsado: _detalleColapsado,
               );
 
               if (!panelFijo) return mapa;
@@ -384,7 +406,10 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
                   ),
                   AppHairline(vertical: true, color: c.border),
                   Expanded(child: mapa),
-                  if (detalleFijo) ...[
+                  // Panel de detalle inline: solo desktop ≥1024 y si NO está
+                  // colapsado (botón del mapa). Colapsado → el mapa se
+                  // expande a todo el ancho restante.
+                  if (detalleFijo && !_detalleColapsado) ...[
                     AppHairline(vertical: true, color: c.border),
                     SizedBox(
                       width: 340,
@@ -933,6 +958,12 @@ class _Mapa extends StatelessWidget {
   /// unidades (mobile). En desktop el panel es fijo y esto es null.
   final VoidCallback? onAbrirPanel;
 
+  /// Toggle del panel de detalle (columna derecha, desktop ≥1024). Si es
+  /// null, no se muestra el botón (no aplica en tablet/mobile, donde el
+  /// detalle abre como sheet). `detalleColapsado` elige ícono/label.
+  final VoidCallback? onToggleDetalle;
+  final bool detalleColapsado;
+
   const _Mapa({
     required this.controller,
     required this.centroInicial,
@@ -947,6 +978,8 @@ class _Mapa extends StatelessWidget {
     required this.onPosicionCambiada,
     required this.onMapaListo,
     required this.onAbrirPanel,
+    required this.onToggleDetalle,
+    required this.detalleColapsado,
   });
 
   @override
@@ -1063,14 +1096,33 @@ class _Mapa extends StatelessWidget {
             ),
           ),
 
-        // Toggle satélite / mapa (arriba-derecha).
+        // Controles arriba-derecha: [ocultar/mostrar detalle] + satélite.
         Positioned(
           top: AppSpacing.md,
           right: AppSpacing.md,
-          child: _BotonMapa(
-            icono: satelital ? Icons.map_outlined : Icons.satellite_alt,
-            label: satelital ? 'Mapa' : 'Satélite',
-            onTap: onToggleSatelital,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Toggle del panel de detalle (solo desktop ≥1024). Colapsa
+              // el panel derecho para ver el mapa más grande, o lo reabre
+              // (Santiago 2026-06-10).
+              if (onToggleDetalle != null) ...[
+                _BotonMapa(
+                  icono: detalleColapsado
+                      ? Icons.chevron_left
+                      : Icons.chevron_right,
+                  label: detalleColapsado ? 'Detalle' : 'Ocultar',
+                  onTap: onToggleDetalle!,
+                ),
+                const SizedBox(width: AppSpacing.xs),
+              ],
+              // Toggle satélite / mapa.
+              _BotonMapa(
+                icono: satelital ? Icons.map_outlined : Icons.satellite_alt,
+                label: satelital ? 'Mapa' : 'Satélite',
+                onTap: onToggleSatelital,
+              ),
+            ],
           ),
         ),
 
