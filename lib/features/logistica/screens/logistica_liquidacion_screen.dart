@@ -5,7 +5,7 @@
 // SOLO PRESENTACIÓN. Se preserva intacto:
 //   - los streams (`LiquidacionService.streamEmpleadosCache`,
 //     `streamViajesEnRango`, `AdelantosService.streamAdelantosEnRango`),
-//   - los filtros (mes / empresa empleadora / chofer / estado liquidación),
+//   - los filtros (mes / empresa empleadora / chofer),
 //   - TODAS las agregaciones financieras (facturado = ∑ montoVecchi,
 //     ganancia chofer = ∑ montoChoferRedondeado, adelantos, gastos, neto =
 //     chofer − adelantos + gastos), por chofer y por viaje,
@@ -83,11 +83,10 @@ class _LogisticaLiquidacionScreenState
   /// DNI de chofer filtrado. `null` = todos los choferes de la empresa.
   String? _choferDni;
 
-  /// Filtro adicional: mostrar solo viajes liquidados / no liquidados / todos.
-  /// Default `false` = solo no liquidados (los que el operador tiene que
-  /// procesar). El operador puede toggle a "todos" o "solo liquidados"
-  /// para revisar histórico.
-  bool? _filtroLiquidado = false;
+  // El filtro liquidado/no-liquidado se removió el 2026-06-10 (Santiago):
+  // a fin de mes se liquidan todos igual, así que filtrar por ese estado
+  // solo agregaba ruido. La pantalla muestra SIEMPRE todos los viajes del
+  // mes, separados por su estado operativo (concluido / en curso / planeado).
 
   @override
   void initState() {
@@ -164,7 +163,6 @@ class _LogisticaLiquidacionScreenState
                 mes: _mesSeleccionado,
                 empresaCuit: _empresaCuit,
                 choferDni: _choferDni,
-                filtroLiquidado: _filtroLiquidado,
                 empleados: choferesFiltrados,
                 onMesChanged: (m) => setState(() => _mesSeleccionado = m),
                 onEmpresaChanged: (cuit) => setState(() {
@@ -174,8 +172,6 @@ class _LogisticaLiquidacionScreenState
                   _choferDni = null;
                 }),
                 onChoferChanged: (dni) => setState(() => _choferDni = dni),
-                onLiquidadoChanged: (v) =>
-                    setState(() => _filtroLiquidado = v),
               ),
               Expanded(
                 child: StreamBuilder<List<Viaje>>(
@@ -194,19 +190,11 @@ class _LogisticaLiquidacionScreenState
                     if (!viajesSnap.hasData) {
                       return const AppLoadingState();
                     }
-                    // `viajesTodos` = todos los del mes (+ empresa/chofer del
-                    // stream). El filtro liquidado/no-liquidado se aplica SOLO
-                    // a la vista (tabla + KPIs + bulk). El EXPORT de la
-                    // planilla mensual usa `viajesTodos` — trae siempre todos
-                    // (Santiago 2026-06-10: evita exportar incompleto sin
-                    // querer por tener un chip de estado puesto).
-                    final viajesTodos = viajesSnap.data!;
-                    var viajes = viajesTodos;
-                    if (_filtroLiquidado != null) {
-                      viajes = viajesTodos
-                          .where((v) => v.liquidado == _filtroLiquidado)
-                          .toList();
-                    }
+                    // Todos los viajes del mes (+ empresa/chofer del
+                    // stream). Sin filtro de liquidado: la pantalla y el
+                    // export muestran SIEMPRE todo, separado por estado
+                    // operativo (concluido / en curso / planeado).
+                    final viajes = viajesSnap.data!;
                     // Stream paralelo de adelantos en el mismo rango,
                     // filtrados por los mismos DNIs (empresa+chofer).
                     // Los adelantos NO viven en el viaje desde el
@@ -246,10 +234,8 @@ class _LogisticaLiquidacionScreenState
                               ReportLiquidacionService.generar(
                             context: context,
                             // La planilla mensual trae SIEMPRE todos los
-                            // viajes del mes, sin importar el chip de
-                            // estado de liquidación (que solo filtra la
-                            // vista). Respeta empresa/chofer.
-                            viajes: viajesTodos,
+                            // viajes del mes. Respeta empresa/chofer.
+                            viajes: viajes,
                             adelantos: adelantos,
                             empleados: empleados,
                             mes: _mesSeleccionado,
@@ -324,23 +310,19 @@ class _BarraFiltros extends StatelessWidget {
   final DateTime mes;
   final String? empresaCuit;
   final String? choferDni;
-  final bool? filtroLiquidado;
   final Map<String, EmpleadoLiquidacion> empleados;
   final ValueChanged<DateTime> onMesChanged;
   final ValueChanged<String?> onEmpresaChanged;
   final ValueChanged<String?> onChoferChanged;
-  final ValueChanged<bool?> onLiquidadoChanged;
 
   const _BarraFiltros({
     required this.mes,
     required this.empresaCuit,
     required this.choferDni,
-    required this.filtroLiquidado,
     required this.empleados,
     required this.onMesChanged,
     required this.onEmpresaChanged,
     required this.onChoferChanged,
-    required this.onLiquidadoChanged,
   });
 
   @override
@@ -432,29 +414,6 @@ class _BarraFiltros extends StatelessWidget {
               ),
             ],
             onChanged: onChoferChanged,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          // Pills de estado de liquidación (mismo look que viajes lista).
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _PillEstado(
-                label: 'Sin liquidar',
-                seleccionado: filtroLiquidado == false,
-                onTap: () => onLiquidadoChanged(false),
-              ),
-              _PillEstado(
-                label: 'Liquidados',
-                seleccionado: filtroLiquidado == true,
-                onTap: () => onLiquidadoChanged(true),
-              ),
-              _PillEstado(
-                label: 'Todos',
-                seleccionado: filtroLiquidado == null,
-                onTap: () => onLiquidadoChanged(null),
-              ),
-            ],
           ),
         ],
       ),
@@ -556,49 +515,8 @@ class _DropdownNucleo<T> extends StatelessWidget {
   }
 }
 
-/// Pill seleccionable de estado de liquidación (look del prototipo
-/// Núcleo, igual que en viajes lista). Activo = tinte brand.
-class _PillEstado extends StatelessWidget {
-  final String label;
-  final bool seleccionado;
-  final VoidCallback onTap;
-  const _PillEstado({
-    required this.label,
-    required this.seleccionado,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final fg = seleccionado ? c.brand : c.textSecondary;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: seleccionado
-              ? c.brand.withValues(alpha: 0.16)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: seleccionado
-                ? c.brand.withValues(alpha: 0.5)
-                : c.borderStrong,
-          ),
-        ),
-        child: Text(
-          label,
-          style: AppType.label.copyWith(color: fg, fontWeight: FontWeight.w600),
-        ),
-      ),
-    );
-  }
-}
-
 // ============================================================================
-// CONTENIDO (KPIs + tabla por chofer / lista de viajes)
+// CONTENIDO (KPIs + tabla por chofer / cuaderno del chofer)
 // ============================================================================
 
 class _Contenido extends StatelessWidget {
@@ -631,7 +549,7 @@ class _Contenido extends StatelessWidget {
       return const AppEmptyState(
         icon: Icons.inbox_outlined,
         title: 'Sin viajes ni adelantos en el período',
-        subtitle: 'Probá cambiar mes / empresa / chofer / estado liquidación.',
+        subtitle: 'Probá cambiar mes / empresa / chofer.',
       );
     }
     // Totales separando FIRME (concluidos) de ESPECULACIÓN (en
