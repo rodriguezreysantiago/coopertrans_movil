@@ -5,7 +5,7 @@
 // SOLO PRESENTACIÓN. Se preserva intacto:
 //   - los streams (`LiquidacionService.streamEmpleadosCache`,
 //     `streamViajesEnRango`, `AdelantosService.streamAdelantosEnRango`),
-//   - los filtros (mes / empresa empleadora / chofer),
+//   - los filtros (mes / chofer),
 //   - TODAS las agregaciones financieras (facturado = ∑ montoVecchi,
 //     ganancia chofer = ∑ montoChoferRedondeado, adelantos, gastos, neto =
 //     chofer − adelantos + gastos), por chofer y por viaje,
@@ -42,20 +42,19 @@ import '../services/liquidacion_service.dart';
 import '../utils/liquidacion_totales.dart';
 
 /// Pantalla LIQUIDACIÓN — agregaciones financieras de los viajes
-/// del mes filtrados por **empresa empleadora del chofer** (no por
-/// cliente del flete) + chofer opcional.
+/// del mes, con la visión de la planilla (firme/especulación) y
+/// filtro opcional por chofer.
 ///
 /// Reemplaza la acción "Marcar liquidado" individual del detalle de
-/// viaje (eliminada 2026-05-11). El operador trabaja por mes/empresa:
-/// ve los KPIs agregados (facturación, adelantos, gastos, neto), la
-/// tabla por chofer con sus números, y puede marcar todo como
-/// liquidado en bulk con un botón.
+/// viaje (eliminada 2026-05-11). El operador trabaja por mes: ve los
+/// KPIs agregados (firme + estimado), la tabla por chofer con sus
+/// números, y puede marcar los concluidos como liquidados en bulk.
+///
+/// **Filtros (Santiago 2026-06-10)**: solo mes + chofer. Se quitaron
+/// el de empresa empleadora y el de estado de liquidación — agregaban
+/// ruido (a fin de mes se liquidan todos los viajes igual).
 ///
 /// **Decisiones operativas (Vecchi 2026-05-11)**:
-///   - El filtro de empresa va por la empresa empleadora del chofer,
-///     NO por la empresa cliente del flete. Cada chofer pertenece a
-///     una razón social (Vecchi Ariel SRL o Sucesión Vecchi Carlos)
-///     y la liquidación se hace separada por razón social.
 ///   - El mes se calcula por `fecha_carga` del viaje (la fecha real
 ///     del evento), no por `creado_en`.
 ///   - "Facturación a empresa" = ∑ `montoVecchi` (lo que cobra la
@@ -77,10 +76,7 @@ class _LogisticaLiquidacionScreenState
   /// Mes filtrado. Default = mes actual (1ro del mes a las 00:00 ART).
   late DateTime _mesSeleccionado;
 
-  /// CUIT de empresa empleadora filtrada. `null` = todas.
-  String? _empresaCuit;
-
-  /// DNI de chofer filtrado. `null` = todos los choferes de la empresa.
+  /// DNI de chofer filtrado. `null` = todos los choferes.
   String? _choferDni;
 
   // El filtro liquidado/no-liquidado se removió el 2026-06-10 (Santiago):
@@ -130,47 +126,25 @@ class _LogisticaLiquidacionScreenState
           if (!empSnap.hasData) return const AppLoadingState();
           final empleados = empSnap.data!;
 
-          // Choferes que pasan el filtro de empresa (si está aplicado).
-          final choferesFiltrados = _empresaCuit == null
-              ? empleados
-              : Map.fromEntries(
-                  empleados.entries.where(
-                    (e) => e.value.empresaCuit == _empresaCuit,
-                  ),
-                );
-
-          // Si hay chofer seleccionado, filtrar viajes solo a ese DNI.
-          // Si no, pasar todos los DNIs de la empresa filtrada (o null
-          // si tampoco hay empresa seleccionada → todos los choferes).
-          final dnisFiltro = _choferDni != null
-              ? {_choferDni!}
-              : (_empresaCuit != null
-                  ? choferesFiltrados.keys.toSet()
-                  : null);
-          // ADELANTOS: aun SIN filtro de empresa/chofer hay que acotar al
-          // padrón de choferes válidos. Desde 2026-05-15 los adelantos son
-          // para todo el personal (no solo choferes); si dejáramos
-          // `choferDnis: null` se colarían adelantos de administrativos y de
-          // tanqueros/testers excluidos → inflaban el neto global y armaban
-          // filas fantasma en la tabla por chofer y el Excel (bug audit
-          // 2026-06-04). `empleados` ya viene filtrado a ROL=CHOFER + ACTIVO
-          // + sin excluidos, así que es el universo correcto.
+          // Si hay chofer seleccionado, filtrar viajes solo a ese DNI;
+          // sino, todos los choferes (null = sin filtro de chofer).
+          final dnisFiltro = _choferDni != null ? {_choferDni!} : null;
+          // ADELANTOS: aun SIN filtro de chofer hay que acotar al padrón
+          // de choferes válidos. Desde 2026-05-15 los adelantos son para
+          // todo el personal; si dejáramos `choferDnis: null` se colarían
+          // adelantos de administrativos y tanqueros/testers excluidos →
+          // inflaban el neto y armaban filas fantasma (bug audit
+          // 2026-06-04). `empleados` ya viene filtrado a ROL=CHOFER +
+          // ACTIVO + sin excluidos, así que es el universo correcto.
           final dnisAdelantos = dnisFiltro ?? empleados.keys.toSet();
 
           return Column(
             children: [
               _BarraFiltros(
                 mes: _mesSeleccionado,
-                empresaCuit: _empresaCuit,
                 choferDni: _choferDni,
-                empleados: choferesFiltrados,
+                empleados: empleados,
                 onMesChanged: (m) => setState(() => _mesSeleccionado = m),
-                onEmpresaChanged: (cuit) => setState(() {
-                  _empresaCuit = cuit;
-                  // Si cambia la empresa, resetear chofer (puede no
-                  // pertenecer a la nueva empresa).
-                  _choferDni = null;
-                }),
                 onChoferChanged: (dni) => setState(() => _choferDni = dni),
               ),
               Expanded(
@@ -234,15 +208,13 @@ class _LogisticaLiquidacionScreenState
                               ReportLiquidacionService.generar(
                             context: context,
                             // La planilla mensual trae SIEMPRE todos los
-                            // viajes del mes. Respeta empresa/chofer.
+                            // viajes del mes. Respeta el filtro de chofer.
                             viajes: viajes,
                             adelantos: adelantos,
                             empleados: empleados,
                             mes: _mesSeleccionado,
-                            empresaCuit: _empresaCuit,
                             choferDniFiltro: _choferDni,
-                            // Padrón = choferes que pasan el filtro actual
-                            // (chofer / empresa / o todos). Así aparecen
+                            // Padrón = chofer filtrado o todos. Así aparecen
                             // TODOS, con hoja vacía los sin actividad
                             // (Santiago 2026-06-10). Mismo set que acota
                             // los adelantos.
@@ -308,20 +280,16 @@ class _LogisticaLiquidacionScreenState
 
 class _BarraFiltros extends StatelessWidget {
   final DateTime mes;
-  final String? empresaCuit;
   final String? choferDni;
   final Map<String, EmpleadoLiquidacion> empleados;
   final ValueChanged<DateTime> onMesChanged;
-  final ValueChanged<String?> onEmpresaChanged;
   final ValueChanged<String?> onChoferChanged;
 
   const _BarraFiltros({
     required this.mes,
-    required this.empresaCuit,
     required this.choferDni,
     required this.empleados,
     required this.onMesChanged,
-    required this.onEmpresaChanged,
     required this.onChoferChanged,
   });
 
@@ -377,25 +345,7 @@ class _BarraFiltros extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          // Empresa empleadora + chofer (dropdowns Núcleo).
-          _DropdownNucleo<String?>(
-            label: 'Empresa empleadora',
-            value: empresaCuit,
-            items: [
-              const DropdownMenuItem<String?>(
-                value: null,
-                child: Text('Todas', overflow: TextOverflow.ellipsis),
-              ),
-              ...AppEmpresasEmpleadoras.catalogo.map(
-                (e) => DropdownMenuItem<String?>(
-                  value: e.cuit,
-                  child: Text(e.nombre, overflow: TextOverflow.ellipsis),
-                ),
-              ),
-            ],
-            onChanged: onEmpresaChanged,
-          ),
-          const SizedBox(height: AppSpacing.sm),
+          // Filtro de chofer (dropdown Núcleo).
           _DropdownNucleo<String?>(
             label: 'Chofer',
             value: choferDni,
