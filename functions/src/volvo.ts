@@ -43,6 +43,7 @@ import {
   buscarAsignacionEnFecha,
   adquirirLockTick,
   fetchWithTimeout,
+  fetchConReintentos,
   esErrorTransient,
   obtenerDestinatarioDni,
   SEG_HIGIENE_DESTINATARIO_DNI,
@@ -412,13 +413,15 @@ export const volvoAlertasPoller = onSchedule(
 
         let res: Response;
         try {
-          res = await fetchWithTimeout(url, {
+          // 1 reintento por página (audit 2026-06-10): los AbortError
+          // transient de Volvo perdían el tick entero (cursor sin avanzar).
+          res = await fetchConReintentos(url, {
             method: "GET",
             headers: {
               "Authorization": authHeader,
               "Accept": ACCEPT_ALERTS,
             },
-          });
+          }, { tag: "volvoAlertasPoller" });
         } catch (e) {
           // Auditoria 2026-05-24: 69 de 80 errors/7d eran AbortError
           // transient del API Volvo. Downgradeamos a WARN si es
@@ -1406,10 +1409,11 @@ export const volvoScoresPoller = onSchedule(
 
         let res: Response;
         try {
-          res = await fetchWithTimeout(url, {
+          // Cron diario con timeout 120s: 2 reintentos entran holgados.
+          res = await fetchConReintentos(url, {
             method: "GET",
             headers: { Authorization: authHeader, Accept: ACCEPT_SCORES },
-          });
+          }, { tag: "volvoScoresPoller", intentos: 3, esperaBaseMs: 5_000 });
         } catch (e) {
           const transient = esErrorTransient(e);
           const log = transient ? logger.warn : logger.error;

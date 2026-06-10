@@ -25,16 +25,19 @@ import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db, BANNER_TESTING } from "./setup";
+// Import directo de "./comun" (no "./index", que re-exporta este módulo —
+// la dependencia circular index↔resumenes era frágil; audit 2026-06-10).
 import {
   adquirirIdempotenciaDiaria,
   buscarAsignacionEnFecha,
   cargarAsignacionesPorPatentes,
+  liberarLockConReintentos,
   MANTENIMIENTO_DESTINATARIO_DNI,
   obtenerDestinatarioDni,
   SEG_HIGIENE_DESTINATARIO_DNI,
   TIPOS_PELIGROSOS_SITRACK,
   TTL_RESUMEN_DIARIO_MIN,
-} from "./index";
+} from "./comun";
 import { expiraEnMin, formatFechaArg, formatHoraArg, primerNombre } from "./helpers";
 import * as jornadasV3Batch from "./jornadas_v3_batch";
 import { cargarExcluidos } from "./excluidos";
@@ -271,10 +274,9 @@ export const resumenBotDiario = onSchedule(
       if (!exitoCron) {
         // Liberar el lock para que el proximo run intente de nuevo.
         // Sin esto, una falla a mitad-cron dejaba el lock tomado y el
-        // resumen no se reenviaba hasta el dia siguiente.
-        await histRef.delete().catch(() => {
-          logger.warn("[resumenBotDiario] no pude liberar lock tras fallo");
-        });
+        // resumen no se reenviaba hasta el dia siguiente. Con reintentos
+        // (2026-06-10): un delete fallado transient dejaba el mismo agujero.
+        await liberarLockConReintentos(histRef, "resumenBotDiario");
       }
     }
   }
@@ -548,11 +550,7 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
       exitoCron = true;
     } finally {
       if (!exitoCron) {
-        await histRef.delete().catch(() => {
-          logger.warn(
-            "[resumenDriftsAsignacionesDiario] no pude liberar lock tras fallo",
-          );
-        });
+        await liberarLockConReintentos(histRef, "resumenDriftsAsignacionesDiario");
       }
     }
   }
@@ -607,11 +605,7 @@ export const resumenExcesosJornadaDiario = onSchedule(
       exitoCron = true;
     } finally {
       if (!exitoCron) {
-        await histRef.delete().catch(() => {
-          logger.warn(
-            "[resumenExcesosJornadaDiario] no pude liberar lock tras fallo",
-          );
-        });
+        await liberarLockConReintentos(histRef, "resumenExcesosJornadaDiario");
       }
     }
   }
@@ -1098,11 +1092,7 @@ export const resumenConductaManejoDiario = onSchedule(
     exitoCron = true;
     } finally {
       if (!exitoCron) {
-        await histRefIdem.delete().catch(() => {
-          logger.warn(
-            "[resumenConductaManejoDiario] no pude liberar lock tras fallo",
-          );
-        });
+        await liberarLockConReintentos(histRefIdem, "resumenConductaManejoDiario");
       }
     }
   }

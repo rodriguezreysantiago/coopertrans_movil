@@ -29,6 +29,7 @@ import * as bcrypt from "bcryptjs";
 import * as crypto from "crypto";
 
 import { db, auth, MAX_INTENTOS_FALLIDOS, BLOQUEO_DURACION_MS } from "./setup";
+import { hashId } from "./comun";
 
 // ============================================================================
 // loginConDni
@@ -1059,19 +1060,10 @@ export function sha256Hex(text: string): string {
   return crypto.createHash("sha256").update(text, "utf8").digest("hex");
 }
 
-/**
- * Hash corto y estable de un DNI para incluir en logs y como clave en
- * LOGIN_ATTEMPTS sin exponer el DNI real. NO criptográficamente seguro
- * contra enumeración (el dominio de DNIs es chico, ~10^8) — solo para
- * correlación de logs y para que el path de Firestore no contenga PII.
- */
-export function hashId(text: string): string {
-  return crypto
-    .createHash("sha256")
-    .update(text, "utf8")
-    .digest("hex")
-    .slice(0, 8);
-}
+// `hashId` (hash corto de DNI para logs/claves sin PII) se movió a comun.ts
+// (2026-06-10): lo usan módulos no-auth (sitrack.ts) y el import via
+// "./index" creaba dependencia circular. Acá se importa arriba; lib/index
+// lo sigue exportando vía `export * from "./comun"` (tests intactos).
 
 // ============================================================================
 // Rate limiting (LOGIN_ATTEMPTS)

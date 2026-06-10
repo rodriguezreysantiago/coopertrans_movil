@@ -24,7 +24,7 @@ import {
 import { v1 as firestoreAdminV1 } from "@google-cloud/firestore";
 
 import { db, BANNER_TESTING } from "./setup";
-import { adquirirLockTick } from "./index";
+import { adquirirLockTick } from "./comun";
 import * as jornadasV2 from "./jornadas_v2";
 import { expiraEnMin, primerNombre } from "./helpers";
 import {

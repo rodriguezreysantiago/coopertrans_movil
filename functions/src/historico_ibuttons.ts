@@ -29,7 +29,7 @@ import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
-import { adquirirLockTick } from "./index";
+import { adquirirLockTick } from "./comun";
 
 /** Si entre 2 eventos del mismo (patente, dni) hay menos de este gap,
  *  los consideramos parte del mismo tramo continuo. Si hay más, abrimos

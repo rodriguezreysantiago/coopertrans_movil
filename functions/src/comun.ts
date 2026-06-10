@@ -26,8 +26,13 @@
  * para evitar el ciclo index↔módulo.
  */
 
+import * as crypto from "crypto";
 import * as logger from "firebase-functions/logger";
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import {
+  DocumentReference,
+  FieldValue,
+  Timestamp,
+} from "firebase-admin/firestore";
 
 import { db } from "./setup";
 
@@ -386,4 +391,101 @@ export function esErrorTransient(e: unknown): boolean {
   // node-fetch / undici a veces anidan la causa real adentro.
   if (err.cause) return esErrorTransient(err.cause);
   return false;
+}
+
+/**
+ * `fetchWithTimeout` + reintentos, para POLLERS (crons): reintenta errores
+ * de red/timeout y 5xx del API; NO reintenta 4xx (credencial vencida o bug —
+ * reintentar no lo arregla y enmascara el problema). Centraliza el patrón
+ * que ya usaban telemetria.ts y volvo_estado.ts a mano; los pollers de
+ * Volvo/Sitrack no lo tenían y un glitch transient perdía el tick entero
+ * (audit 2026-06-10).
+ *
+ * Default 2 intentos (1 reintento) con espera corta: los pollers corren con
+ * `timeoutSeconds` 60-120 — el peor caso por request es
+ * intentos×20s (timeout fetch) + esperas, y tiene que entrar en el budget
+ * de la function. Subir `intentos` solo en crons diarios holgados.
+ */
+export async function fetchConReintentos(
+  url: string,
+  init: RequestInit = {},
+  opts: { intentos?: number; esperaBaseMs?: number; tag?: string } = {},
+): Promise<Response> {
+  const max = Math.max(1, opts.intentos ?? 2);
+  const esperaBase = opts.esperaBaseMs ?? 3_000;
+  const tag = opts.tag ?? "fetchConReintentos";
+  let ultimoError: unknown = null;
+  for (let intento = 1; intento <= max; intento++) {
+    try {
+      const res = await fetchWithTimeout(url, init);
+      if (res.status >= 500 && intento < max) {
+        logger.warn(`[${tag}] HTTP ${res.status} del API, reintento`, {
+          intento,
+          de: max,
+        });
+        await new Promise((r) => setTimeout(r, esperaBase * intento));
+        continue;
+      }
+      return res;
+    } catch (e) {
+      ultimoError = e;
+      if (intento >= max) break;
+      logger.warn(`[${tag}] fetch falló, reintento`, {
+        intento,
+        de: max,
+        error: (e as Error).message,
+        transient: esErrorTransient(e),
+      });
+      await new Promise((r) => setTimeout(r, esperaBase * intento));
+    }
+  }
+  throw ultimoError ?? new Error(`[${tag}] fetch agotó los reintentos`);
+}
+
+/**
+ * Borra un doc de lock con reintentos. Para los `finally` que liberan locks
+ * de idempotencia (resúmenes diarios): con el viejo `delete().catch(noop)`,
+ * un fallo transient del delete dejaba el lock tomado y el resumen del día
+ * NO se reintentaba (se perdía hasta el día siguiente). Con 3 intentos la
+ * ventana de ese escenario queda despreciable. Devuelve `true` si liberó.
+ */
+export async function liberarLockConReintentos(
+  ref: DocumentReference,
+  tag: string,
+  intentos = 3,
+): Promise<boolean> {
+  for (let intento = 1; intento <= intentos; intento++) {
+    try {
+      await ref.delete();
+      return true;
+    } catch (e) {
+      if (intento >= intentos) {
+        logger.error(`[${tag}] no pude liberar el lock tras ${intentos} intentos — ` +
+          "el resumen de hoy NO va a reintentarse", {
+          error: (e as Error).message,
+        });
+        return false;
+      }
+      await new Promise((r) => setTimeout(r, 1_000 * intento));
+    }
+  }
+  return false;
+}
+
+/**
+ * Hash corto y estable de un DNI para incluir en logs y como clave en
+ * LOGIN_ATTEMPTS sin exponer el DNI real. NO criptográficamente seguro
+ * contra enumeración (el dominio de DNIs es chico, ~10^8) — solo para
+ * correlación de logs y para que el path de Firestore no contenga PII.
+ *
+ * Vivía en auth.ts; movido acá (2026-06-10) porque lo usan módulos no-auth
+ * (sitrack.ts) y el import desde "./index" creaba dependencia circular
+ * index↔sitrack. Sigue exportado desde lib/index via `export * from comun`.
+ */
+export function hashId(text: string): string {
+  return crypto
+    .createHash("sha256")
+    .update(text, "utf8")
+    .digest("hex")
+    .slice(0, 8);
 }

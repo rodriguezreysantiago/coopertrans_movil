@@ -25,7 +25,7 @@ import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
-import { adquirirLockTick } from "./index";
+import { adquirirLockTick } from "./comun";
 
 // NOTA: reentradas espurias (la misma unidad sale y vuelve en <2 min,
 // típico cuando pierde GPS por un túnel o da una vuelta) actualmente

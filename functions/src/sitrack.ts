@@ -17,7 +17,14 @@ import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db, BANNER_TESTING } from "./setup";
-import { adquirirLockTick, esErrorTransient, fetchWithTimeout, hashId } from "./index";
+// Import directo de "./comun" (no "./index"): index re-exporta este módulo,
+// importar de index creaba dependencia circular index↔sitrack (frágil).
+import {
+  adquirirLockTick,
+  esErrorTransient,
+  fetchConReintentos,
+  hashId,
+} from "./comun";
 import { expiraEnMin, primerNombre, rrPick } from "./helpers";
 
 const sitrackUsername = defineSecret("SITRACK_USERNAME");
@@ -140,13 +147,16 @@ export const sitrackPosicionPoller = onSchedule(
       const url = `${SITRACK_BASE_AR}/v2/report`;
       let res: Response;
       try {
-        res = await fetchWithTimeout(url, {
+        // 1 reintento (audit 2026-06-10): antes un glitch transient perdía el
+        // tick entero. OJO con el budget: timeoutSeconds=60 de esta function
+        // vs peor caso 2×20s de fetch + 3s de espera.
+        res = await fetchConReintentos(url, {
           method: "GET",
           headers: {
             "Authorization": authHeader,
             "Accept": "application/json",
           },
-        });
+        }, { tag: "sitrackPosicionPoller" });
       } catch (e) {
         const transient = esErrorTransient(e);
         const log = transient ? logger.warn : logger.error;
@@ -534,13 +544,15 @@ export const sitrackEventosPoller = onSchedule(
       let res: Response;
       let bodyText = "";
       try {
-        res = await fetchWithTimeout(url, {
+        // 1 reintento. Seguro acá: si una request muere a mitad de lectura,
+        // Sitrack reenvía el bloque entero en la próxima (doc /files/reports).
+        res = await fetchConReintentos(url, {
           method: "GET",
           headers: {
             Authorization: authHeader,
             Accept: "application/json",
           },
-        });
+        }, { tag: "sitrackEventosPoller" });
         // /files/reports devuelve text/plain (probablemente NDJSON o
         // array JSON). Leer todo el body antes de cerrar la conexión —
         // la doc Sitrack es explícita: si cerramos antes de leer todos

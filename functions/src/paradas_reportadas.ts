@@ -28,7 +28,7 @@ import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
-import { adquirirLockTick } from "./index";
+import { adquirirLockTick } from "./comun";
 
 // ── Tipos puros ──────────────────────────────────────────────────────────────
 
