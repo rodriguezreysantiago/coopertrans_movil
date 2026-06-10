@@ -822,7 +822,7 @@ class _DniResolver extends StatelessWidget {
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('EMPLEADOS')
+          .collection(AppCollections.empleados)
           .doc(dni)
           .snapshots(),
       builder: (ctx, snap) {
@@ -1199,7 +1199,7 @@ class _ToggleKillSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('BOT_CONTROL')
+          .collection(AppCollections.botControl)
           .doc('main')
           .snapshots(),
       builder: (ctx, snap) {
@@ -1316,7 +1316,7 @@ class _ToggleKillSwitch extends StatelessWidget {
 
     try {
       await FirebaseFirestore.instance
-          .collection('BOT_CONTROL')
+          .collection(AppCollections.botControl)
           .doc('main')
           .set(
         {

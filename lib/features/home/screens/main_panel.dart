@@ -256,7 +256,9 @@ class _GreetingCardState extends State<_GreetingCard> {
       if (apodo.isEmpty) return;
       setState(() => _apodoResuelto = apodo);
       unawaited(PrefsService.setApodo(apodo));
-    } catch (_) {}
+    } catch (_) {
+      // Cosmético: si Firestore falla, el saludo cae al nombre sin apodo.
+    }
   }
 
   String _saludoHora() {

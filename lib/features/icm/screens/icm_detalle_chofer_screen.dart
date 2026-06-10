@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
@@ -65,7 +66,8 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
     ]);
     // Nombre desde EMPLEADOS (por si el doc oficial trae el nombre Sitrack
     // distinto / vacío).
-    final empSnap = await db.collection('EMPLEADOS').doc(dni).get();
+    final empSnap =
+        await db.collection(AppCollections.empleados).doc(dni).get();
     final nombreEmp = (empSnap.data()?['NOMBRE'] ?? '').toString().trim();
     return _DetalleData(
       actual: _buscar(periodos[0], dni),

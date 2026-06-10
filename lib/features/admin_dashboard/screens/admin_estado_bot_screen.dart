@@ -111,7 +111,7 @@ class _AdminEstadoBotScreenState extends State<AdminEstadoBotScreen> {
       ],
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('BOT_HEALTH')
+            .collection(AppCollections.botHealth)
             .doc('main')
             .snapshots(),
         builder: (ctx, snap) {
@@ -158,7 +158,7 @@ class AdminReglasNotificacionScreen extends StatelessWidget {
       title: 'Reglas de notificación',
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
-            .collection('BOT_HEALTH')
+            .collection(AppCollections.botHealth)
             .doc('main')
             .snapshots(),
         builder: (ctx, snap) {

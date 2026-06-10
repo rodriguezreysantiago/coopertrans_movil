@@ -546,6 +546,9 @@ class _FilaEditable extends StatelessWidget {
         );
       },
     );
+    // Controller local del bottom sheet: soltarlo acá (sin esto, cada
+    // apertura del buscador dejaba un TextEditingController sin dispose).
+    ctrl.dispose();
     if (elegido == null) return;
     onChange(elegido.dni);
   }

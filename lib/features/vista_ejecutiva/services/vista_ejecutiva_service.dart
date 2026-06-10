@@ -19,6 +19,8 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../../core/constants/app_constants.dart';
+
 /// Snapshot completo de KPIs para el panel de inicio del admin (antigua
 /// Vista Ejecutiva). Se carga 1 vez y se renderiza en pantalla; refresh
 /// manual pull-to-refresh.
@@ -303,7 +305,8 @@ class VistaEjecutivaService {
     FirebaseFirestore db,
   ) async {
     try {
-      final snap = await db.collection('STATS').doc('dashboard').get();
+      final snap =
+          await db.collection(AppCollections.stats).doc('dashboard').get();
       return snap.data() ?? const {};
     } catch (_) {
       return const {};

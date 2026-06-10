@@ -43,6 +43,7 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../constants/app_constants.dart';
 import 'app_logger.dart';
 
 /// Conjunto de DNIs y patentes excluidas de la operativa del día a día.
@@ -105,7 +106,7 @@ class ExcluidosService {
     try {
       // ─── 1. Patentes TANQUE ──────────────────────────────────────
       final tanquesSnap = await db
-          .collection('VEHICULOS')
+          .collection(AppCollections.vehiculos)
           .where('TIPO', isEqualTo: 'TANQUE')
           .limit(100)
           .get();
@@ -116,7 +117,7 @@ class ExcluidosService {
       // ─── 2. EMPLEADOS — testers + tanqueros ──────────────────────
       // Sin filtro de rol — Apple Reviewer es ADMIN.
       final empSnap =
-          await db.collection('EMPLEADOS').limit(1000).get();
+          await db.collection(AppCollections.empleados).limit(1000).get();
       final dnis = <String>{};
       final tractoresExcluidos = <String>{};
       for (final d in empSnap.docs) {

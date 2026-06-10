@@ -174,12 +174,16 @@ class _ReportesDiscrepanciaScreenState
         );
       },
     );
+    // El controller es local del dialog: capturar el texto y soltarlo acá
+    // (sin esto, cada revisión dejaba un TextEditingController sin dispose).
+    final nota = notaCtrl.text;
+    notaCtrl.dispose();
     if (veredicto == null || !mounted) return;
     try {
       await _svc.marcarRevisado(
         id: r.id,
         veredicto: veredicto,
-        nota: notaCtrl.text,
+        nota: nota,
         revisorDni: PrefsService.dni,
         revisorNombre: PrefsService.nombre,
       );

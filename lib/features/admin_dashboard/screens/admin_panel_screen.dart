@@ -54,11 +54,11 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   void initState() {
     super.initState();
     _statsStream = FirebaseFirestore.instance
-        .collection('STATS')
+        .collection(AppCollections.stats)
         .doc('dashboard')
         .snapshots();
     _revisionesPendientesStream = FirebaseFirestore.instance
-        .collection('REVISIONES')
+        .collection(AppCollections.revisiones)
         .where('estado', isEqualTo: 'PENDIENTE')
         .snapshots();
     if (_verKpisRicos) _cargarKpisRicos();
@@ -775,7 +775,9 @@ class _SaludoState extends State<_Saludo> {
       if (apodo.isEmpty) return;
       setState(() => _apodoResuelto = apodo);
       unawaited(PrefsService.setApodo(apodo));
-    } catch (_) {}
+    } catch (_) {
+      // Cosmético: si Firestore falla, el saludo cae al nombre sin apodo.
+    }
   }
 
   String _saludoHora() {

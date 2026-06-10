@@ -272,6 +272,21 @@ class AppCollections {
   /// dentro de transactions de servicios específicos.
   static const String meta = 'META';
 
+  /// Salud del bot de WhatsApp. Doc único `main`: heartbeat (~60 s),
+  /// estadoCliente, contadores de cola, reglas de notificación. Lo escribe
+  /// el bot (whatsapp-bot/src/health.js); lo leen la pantalla "Estado del
+  /// Bot" y la CF `botHealthWatchdog`.
+  static const String botHealth = 'BOT_HEALTH';
+
+  /// Órdenes remotas para el bot de WhatsApp (pausar avisos, forzar cron,
+  /// etc.) que la app escribe y el bot consume.
+  static const String botControl = 'BOT_CONTROL';
+
+  /// Agregados precalculados del dashboard (doc `dashboard`). Los escribe
+  /// la CF `recomputeDashboardStats` (cron diario); el panel admin los lee
+  /// para no contar colecciones enteras en el cliente.
+  static const String stats = 'STATS';
+
   /// Scores diarios de eco-driving (Volvo Group Scores API v2.0.2).
   /// La popula la scheduled function `volvoScoresPoller` (1x por día
   /// a las 04:00 ART). DocId: `{patente}_{YYYY-MM-DD}` para vehículos,

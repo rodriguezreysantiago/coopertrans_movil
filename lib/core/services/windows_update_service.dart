@@ -219,7 +219,10 @@ class WindowsUpdateService {
       debugPrint('[WinUpdate] error descargando: $e');
       try {
         await tmpDir?.delete(recursive: true);
-      } catch (_) {}
+      } catch (_) {
+        // Best-effort: limpiar el temp tras un error de descarga. Si falla,
+        // el SO lo purga solo — no agrega señal loguearlo.
+      }
       return WinUpdateResult.errorDescarga;
     } finally {
       // Reset siempre que NO hayamos hecho exit(0).
