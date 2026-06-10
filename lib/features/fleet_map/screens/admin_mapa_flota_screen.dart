@@ -31,14 +31,14 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 /// `/v2/report` de Sitrack. El doc id es la patente, así que no
 /// historizamos — es snapshot.
 ///
-/// UX (refactor Núcleo · jun 2026):
-/// - Desktop (≥1024px): 3 columnas — sidebar de unidades (320) │ mapa │
-///   panel de detalle de la seleccionada (340). El tap en un marker o en
-///   la lista selecciona la unidad y el panel derecho se actualiza en
-///   vivo (StreamBuilder del doc).
-/// - Tablet (720–1024px): sidebar (320) + mapa; el detalle abre como sheet.
-/// - Mobile (<720px): mapa full + botón para abrir la lista (sheet) +
-///   detalle como sheet.
+/// UX (refactor Núcleo · jun 2026; detalle-en-acordeón Santiago 2026-06-10):
+/// - Desktop/Tablet (≥720px): 2 columnas — sidebar de unidades (320) │ mapa.
+///   El detalle de la unidad NO vive en un panel aparte: al tocar una
+///   unidad (en la lista o su marker) la card se DESPLIEGA como acordeón
+///   con todo su detalle adentro (`_ItemUnidad` → `_DetalleContenido` en
+///   modo `enLista`). Una sola abierta a la vez. Así el mapa gana ancho.
+/// - Mobile (<720px): mapa full + botón para abrir la lista (sheet, con la
+///   misma card desplegable). Tap en un marker abre el detalle como sheet.
 ///
 /// Marker por tractor coloreado según ignición (verde si motor ON,
 /// gris si OFF), frescura del último reporte (rojo si > 1h) y drift
@@ -83,15 +83,9 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
   /// initState. Mientras es null no se excluye a nadie (fail-safe).
   ExcluidosSet? _excluidos;
 
-  /// Patente seleccionada desde el panel lateral (resalta su marker +
-  /// centra el mapa). null = ninguna.
+  /// Patente seleccionada (resalta su marker + centra el mapa + despliega
+  /// su card en la lista lateral). null = ninguna.
   String? _seleccionada;
-
-  /// Panel de detalle (columna derecha, desktop ≥1024) colapsado para
-  /// ganar ancho de mapa (Santiago 2026-06-10). Lo togglea un botón del
-  /// mapa. En memoria (no persiste), default visible; al elegir una
-  /// unidad se reabre solo.
-  bool _detalleColapsado = false;
 
   /// Auto-fit al primer render con docs. Después de la primera vez, no
   /// volvemos a tocar la cámara automáticamente — el admin pan/zoom y
@@ -232,12 +226,7 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
     final data = doc.data();
     final lat = (data['lat'] as num?)?.toDouble();
     final lng = (data['lng'] as num?)?.toDouble();
-    setState(() {
-      _seleccionada = doc.id;
-      // Si el admin eligió una unidad, quiere verla: reabrimos el panel
-      // aunque lo hubiera colapsado.
-      _detalleColapsado = false;
-    });
+    setState(() => _seleccionada = doc.id);
     if (lat != null && lng != null) {
       _mapController.move(LatLng(lat, lng), 14);
     }
@@ -263,10 +252,10 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
           docs: docs,
           ahora: ahora,
           seleccionada: _seleccionada,
-          onSeleccionar: (doc) {
-            Navigator.of(context).pop();
-            _seleccionarUnidad(doc);
-          },
+          // No cerramos el sheet: la card se despliega inline acá mismo
+          // (acordeón). Centramos el mapa detrás por si después cierra.
+          onSeleccionar: _seleccionarUnidad,
+          onAbrirMaps: _abrirMapsDesdePanel,
         ),
       ),
     );
@@ -363,16 +352,17 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
             }
           }
 
-          // Layout responsive:
-          // - ≥1024: sidebar (320) + mapa + detalle (340). El detalle vive
-          //   inline y reacciona a la selección.
-          // - 720–1024: sidebar (320) + mapa; detalle como sheet.
-          // - <720: mapa full + botón "Unidades" (sheet) + detalle sheet.
+          // Layout responsive (Santiago 2026-06-10: el detalle dejó de ser
+          // un panel derecho fijo y pasó a vivir DENTRO de la card de la
+          // unidad, como acordeón — ver `_ItemUnidad`):
+          // - ≥720: sidebar de unidades (320) + mapa. Tocar una unidad la
+          //   despliega en la lista. Sin panel derecho.
+          // - <720: mapa full + botón "Unidades" (sheet con la misma lista
+          //   desplegable). Tap en marker abre el detalle como sheet.
           return LayoutBuilder(
             builder: (lbCtx, constraints) {
               final w = constraints.maxWidth;
               final panelFijo = w >= 720;
-              final detalleFijo = w >= 1024;
 
               final mapa = _Mapa(
                 controller: _mapController,
@@ -384,22 +374,15 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
                 seleccionada: _seleccionada,
                 onToggleSatelital: () =>
                     setState(() => _satelital = !_satelital),
-                // Con panel de detalle inline el tap selecciona (el panel
-                // derecho se actualiza). Sin panel inline, abre el sheet.
-                onMarkerTap: detalleFijo ? _seleccionarUnidad : _abrirDetalle,
+                // Con sidebar visible (≥720), el tap en un marker selecciona
+                // y despliega la card en la lista. En mobile, abre el sheet.
+                onMarkerTap: panelFijo ? _seleccionarUnidad : _abrirDetalle,
                 onFitFlota: () => _ajustarVistaATodaLaFlota(visibles),
                 onPosicionCambiada: _persistirPosicion,
                 onMapaListo: _onMapaListo,
                 onAbrirPanel: panelFijo
                     ? null
                     : () => _abrirPanelMobile(visibles, ahora),
-                // Toggle del panel de detalle: solo aplica en desktop ≥1024
-                // (donde el panel es inline). Null en tablet/mobile.
-                onToggleDetalle: detalleFijo
-                    ? () => setState(
-                        () => _detalleColapsado = !_detalleColapsado)
-                    : null,
-                detalleColapsado: _detalleColapsado,
               );
 
               if (!panelFijo) return mapa;
@@ -414,24 +397,11 @@ class _AdminMapaFlotaScreenState extends State<AdminMapaFlotaScreen> {
                       ahora: ahora,
                       seleccionada: _seleccionada,
                       onSeleccionar: _seleccionarUnidad,
+                      onAbrirMaps: _abrirMapsDesdePanel,
                     ),
                   ),
                   AppHairline(vertical: true, color: c.border),
                   Expanded(child: mapa),
-                  // Panel de detalle inline: solo desktop ≥1024 y si NO está
-                  // colapsado (botón del mapa). Colapsado → el mapa se
-                  // expande a todo el ancho restante.
-                  if (detalleFijo && !_detalleColapsado) ...[
-                    AppHairline(vertical: true, color: c.border),
-                    SizedBox(
-                      width: 340,
-                      child: _PanelDetalle(
-                        patente: _seleccionada,
-                        ahora: ahora,
-                        onAbrirMaps: _abrirMapsDesdePanel,
-                      ),
-                    ),
-                  ],
                 ],
               );
             },
@@ -470,12 +440,14 @@ class _PanelUnidades extends StatefulWidget {
   final String? seleccionada;
   final ValueChanged<QueryDocumentSnapshot<Map<String, dynamic>>>
       onSeleccionar;
+  final Future<void> Function(double lat, double lng) onAbrirMaps;
 
   const _PanelUnidades({
     required this.docs,
     required this.ahora,
     required this.seleccionada,
     required this.onSeleccionar,
+    required this.onAbrirMaps,
   });
 
   @override
@@ -486,10 +458,66 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
   final _ctrl = TextEditingController();
   String _filtro = '';
 
+  /// Patente desplegada (acordeón). Estado LOCAL del panel — así la
+  /// instancia del sheet mobile maneja su propia expansión. Se inicializa
+  /// y se sincroniza con `widget.seleccionada` (ej. al tocar un marker).
+  String? _expandida;
+
+  final _scroll = ScrollController();
+
+  /// Key de la card desplegada — para traerla a la vista al expandir.
+  final _keyExpandida = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _expandida = widget.seleccionada;
+  }
+
+  @override
+  void didUpdateWidget(_PanelUnidades old) {
+    super.didUpdateWidget(old);
+    // Selección externa (tap en un marker del mapa) → desplegar esa card
+    // y traerla a la vista.
+    if (widget.seleccionada != old.seleccionada &&
+        widget.seleccionada != null) {
+      _expandida = widget.seleccionada;
+      _focarExpandida();
+    }
+  }
+
   @override
   void dispose() {
     _ctrl.dispose();
+    _scroll.dispose();
     super.dispose();
+  }
+
+  /// Toca una card: toggle del acordeón. Al expandir, selecciona (centra el
+  /// mapa + resalta el marker) y la trae a la vista; al colapsar solo cierra.
+  void _onTapItem(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final expandir = _expandida != doc.id;
+    setState(() => _expandida = expandir ? doc.id : null);
+    if (expandir) {
+      widget.onSeleccionar(doc);
+      _focarExpandida();
+    }
+  }
+
+  /// Lleva la card desplegada cerca del tope de la lista (si está construida
+  /// en el viewport; si está lejos, no scrollea — degradación silenciosa).
+  void _focarExpandida() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _keyExpandida.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.02,
+          duration: const Duration(milliseconds: 260),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
   }
 
   @override
@@ -643,6 +671,7 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
                             : 'No hay unidades en este estado.',
                   )
                 : ListView.separated(
+                    controller: _scroll,
                     padding:
                         const EdgeInsets.symmetric(vertical: AppSpacing.xs),
                     itemCount: filtrados.length,
@@ -653,11 +682,14 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
                     ),
                     itemBuilder: (ctx, i) {
                       final d = filtrados[i];
+                      final expandida = d.id == _expandida;
                       return _ItemUnidad(
+                        key: expandida ? _keyExpandida : null,
                         doc: d,
                         ahora: widget.ahora,
-                        seleccionada: d.id == widget.seleccionada,
-                        onTap: () => widget.onSeleccionar(d),
+                        expandida: expandida,
+                        onTap: () => _onTapItem(d),
+                        onAbrirMaps: widget.onAbrirMaps,
                       );
                     },
                   ),
@@ -668,19 +700,25 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
   }
 }
 
-/// Un item del panel: AppDot semántico (motor/frescura/drift) + patente
-/// (mono) + AppBadge sm de estado + chofer + velocidad a la derecha.
+/// Un item del panel — AHORA ACORDEÓN (Santiago 2026-06-10): la fila
+/// resumen (AppDot + patente + AppBadge de estado + chofer + velocidad +
+/// chevron) es tappeable; al desplegarse muestra DEBAJO el detalle completo
+/// (`_DetalleContenido` en modo `enLista`). El detalle reemplazó al panel
+/// derecho fijo. Solo una card abierta a la vez.
 class _ItemUnidad extends StatelessWidget {
   final QueryDocumentSnapshot<Map<String, dynamic>> doc;
   final DateTime ahora;
-  final bool seleccionada;
+  final bool expandida;
   final VoidCallback onTap;
+  final Future<void> Function(double lat, double lng) onAbrirMaps;
 
   const _ItemUnidad({
+    super.key,
     required this.doc,
     required this.ahora,
-    required this.seleccionada,
+    required this.expandida,
     required this.onTap,
+    required this.onAbrirMaps,
   });
 
   @override
@@ -725,18 +763,10 @@ class _ItemUnidad extends StatelessWidget {
       estadoLabel = 'IDLE';
     }
 
-    return InkWell(
+    // Fila resumen tappeable (el detalle se despliega DEBAJO al expandir).
+    final fila = InkWell(
       onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: seleccionada ? c.surface2 : null,
-          border: Border(
-            left: BorderSide(
-              color: seleccionada ? c.brand : Colors.transparent,
-              width: 2,
-            ),
-          ),
-        ),
+      child: Padding(
         padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.lg, vertical: AppSpacing.md),
         child: Row(
@@ -744,7 +774,7 @@ class _ItemUnidad extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.only(top: 3),
-              child: AppDot(color, size: 8, glow: seleccionada),
+              child: AppDot(color, size: 8, glow: expandida),
             ),
             const SizedBox(width: AppSpacing.sm),
             Expanded(
@@ -802,8 +832,47 @@ class _ItemUnidad extends StatelessWidget {
                       style: AppType.monoSm.copyWith(fontSize: 9)),
               ],
             ),
+            const SizedBox(width: AppSpacing.sm),
+            // Chevron de acordeón.
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Icon(
+                expandida ? Icons.expand_less : Icons.expand_more,
+                size: 18,
+                color: c.textMuted,
+              ),
+            ),
           ],
         ),
+      ),
+    );
+
+    return Container(
+      decoration: BoxDecoration(
+        color: expandida ? c.surface2 : null,
+        border: Border(
+          left: BorderSide(
+            color: expandida ? c.brand : Colors.transparent,
+            width: 2,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          fila,
+          // Detalle desplegado: reusa `_DetalleContenido` sin encabezado
+          // (la fila de arriba ya muestra patente/chofer/estado) ni botón
+          // Cerrar; el scroll lo maneja el ListView del panel.
+          if (expandida)
+            _DetalleContenido(
+              patente: doc.id,
+              data: data,
+              ahora: ahora,
+              enLista: true,
+              onAbrirMaps: onAbrirMaps,
+            ),
+        ],
       ),
     );
   }
@@ -881,12 +950,6 @@ class _Mapa extends StatelessWidget {
   /// unidades (mobile). En desktop el panel es fijo y esto es null.
   final VoidCallback? onAbrirPanel;
 
-  /// Toggle del panel de detalle (columna derecha, desktop ≥1024). Si es
-  /// null, no se muestra el botón (no aplica en tablet/mobile, donde el
-  /// detalle abre como sheet). `detalleColapsado` elige ícono/label.
-  final VoidCallback? onToggleDetalle;
-  final bool detalleColapsado;
-
   const _Mapa({
     required this.controller,
     required this.centroInicial,
@@ -901,8 +964,6 @@ class _Mapa extends StatelessWidget {
     required this.onPosicionCambiada,
     required this.onMapaListo,
     required this.onAbrirPanel,
-    required this.onToggleDetalle,
-    required this.detalleColapsado,
   });
 
   @override
@@ -1019,33 +1080,14 @@ class _Mapa extends StatelessWidget {
             ),
           ),
 
-        // Controles arriba-derecha: [ocultar/mostrar detalle] + satélite.
+        // Toggle satélite / mapa (arriba-derecha).
         Positioned(
           top: AppSpacing.md,
           right: AppSpacing.md,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Toggle del panel de detalle (solo desktop ≥1024). Colapsa
-              // el panel derecho para ver el mapa más grande, o lo reabre
-              // (Santiago 2026-06-10).
-              if (onToggleDetalle != null) ...[
-                _BotonMapa(
-                  icono: detalleColapsado
-                      ? Icons.chevron_left
-                      : Icons.chevron_right,
-                  label: detalleColapsado ? 'Detalle' : 'Ocultar',
-                  onTap: onToggleDetalle!,
-                ),
-                const SizedBox(width: AppSpacing.xs),
-              ],
-              // Toggle satélite / mapa.
-              _BotonMapa(
-                icono: satelital ? Icons.map_outlined : Icons.satellite_alt,
-                label: satelital ? 'Mapa' : 'Satélite',
-                onTap: onToggleSatelital,
-              ),
-            ],
+          child: _BotonMapa(
+            icono: satelital ? Icons.map_outlined : Icons.satellite_alt,
+            label: satelital ? 'Mapa' : 'Satélite',
+            onTap: onToggleSatelital,
           ),
         ),
 
@@ -1302,68 +1344,6 @@ class _BotonMapa extends StatelessWidget {
 }
 
 // =============================================================================
-// PANEL DE DETALLE INLINE (desktop ≥1024) — columna derecha
-// =============================================================================
-
-/// Panel derecho fijo (desktop) que muestra el detalle de la unidad
-/// seleccionada. Si no hay ninguna seleccionada, muestra un empty state
-/// invitando a elegir una. Cuando hay selección, escucha el doc en vivo
-/// con el mismo stream que `_DetalleSheet`.
-class _PanelDetalle extends StatelessWidget {
-  final String? patente;
-  final DateTime ahora;
-  final Future<void> Function(double lat, double lng) onAbrirMaps;
-
-  const _PanelDetalle({
-    required this.patente,
-    required this.ahora,
-    required this.onAbrirMaps,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final p = patente;
-    if (p == null) {
-      return Container(
-        color: c.surface1,
-        child: const AppEmptyState(
-          icon: Icons.touch_app_outlined,
-          title: 'Sin unidad seleccionada',
-          subtitle: 'Tocá un marker o una unidad de la lista para ver su '
-              'detalle en vivo.',
-        ),
-      );
-    }
-    return Container(
-      color: c.surface1,
-      child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection(AppCollections.sitrackPosiciones)
-            .doc(p)
-            .snapshots(),
-        builder: (ctx, snap) {
-          final data = snap.data?.data();
-          if (data == null) {
-            return const Padding(
-              padding: EdgeInsets.only(top: AppSpacing.lg),
-              child: AppSkeletonList(count: 4, conAvatar: false),
-            );
-          }
-          return _DetalleContenido(
-            patente: p,
-            data: data,
-            ahora: ahora,
-            embedded: true,
-            onAbrirMaps: onAbrirMaps,
-          );
-        },
-      ),
-    );
-  }
-}
-
-// =============================================================================
 // SHEET DE DETALLE (mobile / tablet)
 // =============================================================================
 
@@ -1405,7 +1385,7 @@ class _DetalleSheet extends StatelessWidget {
           patente: patente,
           data: data,
           ahora: DateTime.now(),
-          embedded: false,
+          enLista: false,
           onAbrirMaps: (lat, lng) => abrirMaps(context, lat, lng),
         );
       },
@@ -1463,9 +1443,11 @@ class _DetalleContenido extends StatelessWidget {
   final Map<String, dynamic> data;
   final DateTime ahora;
 
-  /// `true` cuando se renderiza como panel inline (sin handle de sheet,
-  /// sin radius superior, scrolleable a alto completo). `false` = sheet.
-  final bool embedded;
+  /// `true` cuando se renderiza DENTRO de la card de la lista (acordeón):
+  /// sin encabezado de patente/chofer (la card ya lo muestra), sin botón
+  /// Cerrar y SIN wrapper de scroll (lo scrollea el ListView del panel).
+  /// `false` = sheet (mobile/tablet) con handle + encabezado + Cerrar.
+  final bool enLista;
 
   final Future<void> Function(double lat, double lng) onAbrirMaps;
 
@@ -1473,7 +1455,7 @@ class _DetalleContenido extends StatelessWidget {
     required this.patente,
     required this.data,
     required this.ahora,
-    required this.embedded,
+    required this.enLista,
     required this.onAbrirMaps,
   });
 
@@ -1566,37 +1548,39 @@ class _DetalleContenido extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Encabezado: eyebrow + patente + chofer/modelo + badge de estado.
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-              AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.lg),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Expanded(child: AppEyebrow('Seleccionada')),
-                  _BadgeIgnicion(on: ignition),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                patente,
-                style: AppType.h3.copyWith(color: c.text),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                choferTexto,
-                style: AppType.mono.copyWith(color: c.textSecondary),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+        // Encabezado (solo en el sheet — en la lista la card de arriba ya
+        // muestra patente/chofer/estado, sería redundante).
+        if (!enLista)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+                AppSpacing.xl, AppSpacing.lg, AppSpacing.xl, AppSpacing.lg),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Expanded(child: AppEyebrow('Seleccionada')),
+                    _BadgeIgnicion(on: ignition),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  patente,
+                  style: AppType.h3.copyWith(color: c.text),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  choferTexto,
+                  style: AppType.mono.copyWith(color: c.textSecondary),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
-        ),
 
         if (driftTipo.isNotEmpty)
           Padding(
@@ -1712,7 +1696,7 @@ class _DetalleContenido extends StatelessWidget {
               AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.xl),
           child: Row(
             children: [
-              if (!embedded)
+              if (!enLista)
                 Expanded(
                   child: AppButton.ghost(
                     label: 'Cerrar',
@@ -1721,7 +1705,7 @@ class _DetalleContenido extends StatelessWidget {
                   ),
                 ),
               if (lat != null && lng != null) ...[
-                if (!embedded) const SizedBox(width: AppSpacing.md),
+                if (!enLista) const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: AppButton(
                     label: 'Ver en Maps',
@@ -1737,9 +1721,10 @@ class _DetalleContenido extends StatelessWidget {
       ],
     );
 
-    if (embedded) {
-      // Panel inline (columna derecha desktop): scrolleable a alto completo.
-      return SingleChildScrollView(child: cuerpo);
+    if (enLista) {
+      // Dentro de la card del ListView (acordeón): devolvemos el cuerpo
+      // crudo; el scroll lo maneja la lista del panel.
+      return cuerpo;
     }
 
     // Sheet mobile/tablet: cristal con handle + radius superior + border
