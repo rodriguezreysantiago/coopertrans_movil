@@ -332,6 +332,27 @@ flutter run -d windows
 
 El bot corre como **servicio NSSM en una PC con Windows** (PC oficina, modelo actual desde 2026-05-10; PC casa lo tiene instalado en standby como backup). El proceso se llama `CoopertransMovilBot`.
 
+### Cómo te enterás: alerta por Telegram (desde 2026-06-10)
+
+La Cloud Function `botHealthWatchdog` (corre en GCP cada 15 min, independiente
+de la PC) avisa al **Telegram de Santiago** (bot `@Coopertrans_Bot`) cuando:
+
+- 🔴 **Bot caído**: sin heartbeat > 10 min (PC apagada, NSSM muerto, sin internet).
+- 🔴 **Sesión WhatsApp rota**: el bot está vivo pero el cliente quedó en
+  `AUTH_PENDIENTE`/`AUTH_FALLO` (pide QR — inmediato) o lleva > 30 min sin
+  llegar a `LISTO` (Chromium trabado / no reconecta).
+- 🟢 **Recuperado**: cuando vuelve a `LISTO`, con la duración del incidente.
+
+Anti-spam: re-aviso a los 60 min y después cada 6 h. Si te llega la alerta,
+seguí los pasos de abajo según el caso (caído → restart limpio; QR → receta
+"Si el restart no alcanza", paso 4-5).
+
+Setup/código: `functions/src/bot_alerta_externa.ts` (header con el detalle).
+Secrets en Secret Manager: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`. Si hay
+que cambiar el destinatario: actualizar el secret `TELEGRAM_CHAT_ID` (el
+chat_id sale de `https://api.telegram.org/bot<TOKEN>/getUpdates` después de
+escribirle al bot) y redeployar `functions:botHealthWatchdog`.
+
 ### Verificar si el bot está corriendo
 
 ```powershell
