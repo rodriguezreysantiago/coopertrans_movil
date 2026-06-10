@@ -470,31 +470,14 @@ class _PanelUnidades extends StatefulWidget {
   State<_PanelUnidades> createState() => _PanelUnidadesState();
 }
 
-/// Filtro de estado de la lista lateral (chips Todas | Ruta | Idle).
-enum _FiltroEstado { todas, ruta, idle }
-
 class _PanelUnidadesState extends State<_PanelUnidades> {
   final _ctrl = TextEditingController();
   String _filtro = '';
-  _FiltroEstado _estado = _FiltroEstado.todas;
 
   @override
   void dispose() {
     _ctrl.dispose();
     super.dispose();
-  }
-
-  /// Clasifica una unidad en el estado mostrado en la lista, con la misma
-  /// regla que el conteo del hero y el color del marker (stale gana sobre
-  /// ignición). "Ruta" = motor ON y reporte fresco; "Idle" = el resto
-  /// (detenida / sin señal).
-  bool _esEnRuta(Map<String, dynamic> data) {
-    final ignition = data['ignition'] == true;
-    final reportTs = (data['report_date'] as Timestamp?)?.toDate();
-    final minStale =
-        reportTs == null ? null : widget.ahora.difference(reportTs).inMinutes;
-    if (minStale != null && minStale > 60) return false;
-    return ignition;
   }
 
   @override
@@ -504,13 +487,7 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
     // Filtro client-side por patente o chofer (la lista ya está en memoria).
     final f = _filtro.trim().toUpperCase();
     final filtrados = widget.docs.where((d) {
-      // Filtro por estado (chips).
-      if (_estado != _FiltroEstado.todas) {
-        final enRuta = _esEnRuta(d.data());
-        if (_estado == _FiltroEstado.ruta && !enRuta) return false;
-        if (_estado == _FiltroEstado.idle && enRuta) return false;
-      }
-      // Filtro por texto.
+      // Filtro por texto (patente o chofer).
       if (f.isEmpty) return true;
       if (d.id.toUpperCase().contains(f)) return true;
       final data = d.data();
@@ -591,7 +568,7 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
           // Buscador por patente o chofer.
           Padding(
             padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.sm),
+                AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.md),
             child: SizedBox(
               height: 38,
               child: TextField(
@@ -637,32 +614,6 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
                 ),
                 onChanged: (v) => setState(() => _filtro = v),
               ),
-            ),
-          ),
-          // Chips de filtro por estado: Todas | Ruta | Idle.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.xl, 0, AppSpacing.xl, AppSpacing.md),
-            child: Row(
-              children: [
-                _ChipEstado(
-                  label: 'Todas',
-                  activo: _estado == _FiltroEstado.todas,
-                  onTap: () => setState(() => _estado = _FiltroEstado.todas),
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                _ChipEstado(
-                  label: 'Ruta',
-                  activo: _estado == _FiltroEstado.ruta,
-                  onTap: () => setState(() => _estado = _FiltroEstado.ruta),
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                _ChipEstado(
-                  label: 'Idle',
-                  activo: _estado == _FiltroEstado.idle,
-                  onTap: () => setState(() => _estado = _FiltroEstado.idle),
-                ),
-              ],
             ),
           ),
           const AppHairline(),
@@ -887,46 +838,6 @@ class _EstadoCajita extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Chip de filtro de estado de la lista (pill estilo Núcleo: activo =
-/// relleno con `text` sobre `bg`; inactivo = borde hairline).
-class _ChipEstado extends StatelessWidget {
-  final String label;
-  final bool activo;
-  final VoidCallback onTap;
-  const _ChipEstado({
-    required this.label,
-    required this.activo,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: activo ? c.text : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppRadius.full),
-            border: activo ? null : Border.all(color: c.border),
-          ),
-          child: Text(
-            label,
-            style: AppType.label.copyWith(
-              color: activo ? c.bg : c.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
         ),
       ),
     );
