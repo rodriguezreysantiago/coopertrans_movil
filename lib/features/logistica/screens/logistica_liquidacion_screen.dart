@@ -2,23 +2,21 @@
 //
 // REFACTOR NÚCLEO · jun 2026 — liquidación de choferes en lenguaje bento.
 //
-// SOLO PRESENTACIÓN. Se preserva intacto:
-//   - los streams (`LiquidacionService.streamEmpleadosCache`,
-//     `streamViajesEnRango`, `AdelantosService.streamAdelantosEnRango`),
-//   - los filtros (mes / chofer),
-//   - TODAS las agregaciones financieras (facturado = ∑ montoVecchi,
-//     ganancia chofer = ∑ montoChoferRedondeado, adelantos, gastos, neto =
-//     chofer − adelantos + gastos), por chofer y por viaje,
-//   - la acción `marcarLiquidadosBulk` con su confirm + feedback,
-//   - la exportación a Excel (`ReportLiquidacionService.generar`),
-//   - la navegación al detalle del viaje.
+// Visión PLANILLA (Santiago 2026-06-10): separa lo FIRME (concluidos)
+// de la ESPECULACIÓN (en curso/planeados), igual que el cuaderno Excel.
+//   - streams: `LiquidacionService.streamEmpleadosCache` /
+//     `streamViajesEnRango`, `AdelantosService.streamAdelantosEnRango`.
+//   - filtros: mes + chofer (se quitaron empresa y estado de liquidación).
+//   - cálculos: `LiquidacionTotales` (neto firme + total estimado).
+//   - exportación a Excel (`ReportLiquidacionService.generar`).
+//   - navegación al detalle del viaje.
 //
-// Layout Núcleo:
-//   ┌─ Filtros: hero del mes (◀ MES ▶) + empresa + chofer + pills estado ─┐
-//   ├─ AppKpiStrip: facturado · ganancia chofer · adelantos · gastos · neto ┤
-//   ├─ Acciones (liquidar bulk / exportar Excel) ────────────────────────┤
-//   ├─ POR CHOFER (cards bento, hairlines, montos en mono) ──────────────┤
-//   └─ ó VIAJES + ADELANTOS del chofer (si hay chofer filtrado) ─────────┘
+// Layout:
+//   ┌─ Filtros: hero del mes (◀ MES ▶) + chofer ─────────────────────────┐
+//   ├─ KPIs: facturado · neto firme · total estimado + desglose ─────────┤
+//   ├─ Exportar Excel ───────────────────────────────────────────────────┤
+//   ├─ POR CHOFER (cards tappeables con neto firme + estimado) ──────────┤
+//   └─ ó CUADERNO del chofer: concluidos / otros viajes / adelantos ─────┘
 //
 // Reglas duras: tokens (context.colors), montos en AppType.mono, embedded
 // (sin fondo full-screen propio), faltante → "—", sin overflow.
@@ -27,11 +25,9 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/excluidos_service.dart';
-import '../../../core/services/prefs_service.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
-import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../models/adelanto_chofer.dart';
@@ -45,14 +41,16 @@ import '../utils/liquidacion_totales.dart';
 /// del mes, con la visión de la planilla (firme/especulación) y
 /// filtro opcional por chofer.
 ///
-/// Reemplaza la acción "Marcar liquidado" individual del detalle de
-/// viaje (eliminada 2026-05-11). El operador trabaja por mes: ve los
-/// KPIs agregados (firme + estimado), la tabla por chofer con sus
-/// números, y puede marcar los concluidos como liquidados en bulk.
+/// El operador trabaja por mes: ve los KPIs agregados (firme +
+/// estimado), la tabla por chofer con sus números, y el cuaderno de
+/// cada chofer (concluidos / otros viajes / adelantos).
 ///
 /// **Filtros (Santiago 2026-06-10)**: solo mes + chofer. Se quitaron
-/// el de empresa empleadora y el de estado de liquidación — agregaban
-/// ruido (a fin de mes se liquidan todos los viajes igual).
+/// el de empresa empleadora y el de estado de liquidación. También se
+/// quitó el botón "marcar como liquidados" y los indicadores de
+/// pendiente/liquidado — a fin de mes se liquidan todos igual, así que
+/// no aportaban (el flag `liquidado` sigue existiendo en el modelo y
+/// en el detalle del viaje / Excel, solo se sacó de esta pantalla).
 ///
 /// **Decisiones operativas (Vecchi 2026-05-11)**:
 ///   - El mes se calcula por `fecha_carga` del viaje (la fecha real
@@ -203,7 +201,6 @@ class _LogisticaLiquidacionScreenState
                               setState(() => _choferDni = dni),
                           onVolverTodos: () =>
                               setState(() => _choferDni = null),
-                          onLiquidarBulk: () => _liquidarBulk(context, viajes),
                           onExportarExcel: () =>
                               ReportLiquidacionService.generar(
                             context: context,
@@ -232,50 +229,10 @@ class _LogisticaLiquidacionScreenState
       ),
     );
   }
-
-  Future<void> _liquidarBulk(BuildContext ctx, List<Viaje> viajes) async {
-    // Solo CONCLUIDOS pendientes — los en curso/planeados son
-    // especulación, no se liquidan hasta que terminen.
-    final aLiquidar = viajes
-        .where((v) => v.estado == EstadoViaje.concluido && !v.liquidado)
-        .toList();
-    if (aLiquidar.isEmpty) {
-      AppFeedback.info(ctx, 'No hay viajes concluidos pendientes de liquidar.');
-      return;
-    }
-    // Capturar messenger ANTES del await (BuildContext puede dejar de
-    // estar montado después del confirm dialog si el user navega).
-    final messenger = ScaffoldMessenger.of(ctx);
-    final confirmar = await AppConfirmDialog.show(
-      ctx,
-      title: 'Liquidar ${aLiquidar.length} viaje(s)',
-      message:
-          'Vas a marcar como LIQUIDADOS ${aLiquidar.length} viaje(s) del '
-          'mes ${AppFormatters.formatearMes(_mesSeleccionado)}. Esto significa '
-          'que se le pagaron las comisiones a los choferes. ¿Confirmás?',
-      confirmLabel: 'Liquidar',
-    );
-    if (confirmar != true) return;
-    final dni = PrefsService.dni;
-    try {
-      final n = await LiquidacionService.marcarLiquidadosBulk(
-        viajeIds: aLiquidar.map((v) => v.id).toList(),
-        liquidadoPorDni: dni,
-      );
-      AppFeedback.successOn(messenger, '$n viaje(s) marcado(s) como liquidado(s).');
-    } catch (e, s) {
-      AppFeedback.errorTecnicoOn(
-        messenger,
-        usuario: 'No se pudieron liquidar todos los viajes. Probá de nuevo.',
-        tecnico: e,
-        stack: s,
-      );
-    }
-  }
 }
 
 // ============================================================================
-// BARRA DE FILTROS (mes + empresa + chofer + liquidado) — Núcleo
+// BARRA DE FILTROS (mes + chofer) — Núcleo
 // ============================================================================
 
 class _BarraFiltros extends StatelessWidget {
@@ -476,7 +433,6 @@ class _Contenido extends StatelessWidget {
   final String? choferDniFiltro;
   final ValueChanged<String> onChoferTap;
   final VoidCallback onVolverTodos;
-  final VoidCallback onLiquidarBulk;
   final VoidCallback onExportarExcel;
 
   const _Contenido({
@@ -486,7 +442,6 @@ class _Contenido extends StatelessWidget {
     required this.choferDniFiltro,
     required this.onChoferTap,
     required this.onVolverTodos,
-    required this.onLiquidarBulk,
     required this.onExportarExcel,
   });
 
@@ -512,15 +467,6 @@ class _Contenido extends StatelessWidget {
       children: [
         _SeccionKPIs(tot: tot),
         const SizedBox(height: AppSpacing.lg),
-        if (tot.pendientes > 0) ...[
-          AppButton.primary(
-            label: 'Marcar ${tot.pendientes} viaje(s) como liquidados',
-            icon: Icons.check_circle_outline,
-            full: true,
-            onPressed: onLiquidarBulk,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-        ],
         // Exportar la planilla mensual (formato cuaderno) a Excel.
         AppButton.secondary(
           label: 'Exportar a Excel',
@@ -861,14 +807,6 @@ class _CardChofer extends StatelessWidget {
                   ),
                 ),
               ),
-              if (tot.pendientes > 0) ...[
-                const SizedBox(width: AppSpacing.sm),
-                AppBadge(
-                  text: '${tot.pendientes} pend.',
-                  color: c.warning,
-                  size: AppBadgeSize.sm,
-                ),
-              ],
               const SizedBox(width: AppSpacing.xs),
               Icon(Icons.chevron_right, size: 18, color: c.textMuted),
             ],
@@ -1083,10 +1021,6 @@ class _ViajeFilaCompactaState extends State<_ViajeFilaCompacta> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                if (v.estado == EstadoViaje.concluido && !v.liquidado) ...[
-                  const SizedBox(width: AppSpacing.sm),
-                  AppDot(c.warning, size: 6),
-                ],
               ],
             ),
           ),
@@ -1099,25 +1033,11 @@ class _ViajeFilaCompactaState extends State<_ViajeFilaCompacta> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    AppBadge(
-                      text: v.estado.etiqueta,
-                      color: v.estado == EstadoViaje.concluido
-                          ? c.success
-                          : c.info,
-                      size: AppBadgeSize.sm,
-                    ),
-                    if (v.estado == EstadoViaje.concluido) ...[
-                      const SizedBox(width: AppSpacing.xs),
-                      AppBadge(
-                        text: v.liquidado ? 'Liquidado' : 'Pendiente',
-                        color: v.liquidado ? c.success : c.warning,
-                        size: AppBadgeSize.sm,
-                        dot: !v.liquidado,
-                      ),
-                    ],
-                  ],
+                // Estado operativo (concluido / en curso / planeado).
+                AppBadge(
+                  text: v.estado.etiqueta,
+                  color: v.estado == EstadoViaje.concluido ? c.success : c.info,
+                  size: AppBadgeSize.sm,
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 _LineaMonto(label: 'Facturado', valor: v.montoVecchi),
