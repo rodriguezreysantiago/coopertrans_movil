@@ -48,8 +48,19 @@
          encerrado dentro de la app y la tablet siempre arranca con
          Coopertrans. Pedido Santiago 2026-06-09: Samsung One UI bloquea
          "app como Default Home", así que vamos por este camino que
-         funciona en cualquier OEM sin ADB ni device owner. -->
+         funciona en cualquier OEM sin ADB ni device owner.
+
+         SYSTEM_ALERT_WINDOW ("Mostrar sobre otras apps") es CLAVE para
+         tablets Samsung: desde Android 10+, una app NO puede llamar
+         startActivity() desde background sin restricciones, y eso
+         bloquea al BootReceiver. Con este permiso activado manualmente
+         por el admin (Settings → Apps → Coopertrans → Mostrar sobre
+         otras apps), la app entra en la whitelist de "background
+         activity start" y el BootReceiver puede lanzar la MainActivity.
+         No se otorga automáticamente al instalar — es permiso "especial"
+         que requiere ir a Settings una vez por tablet. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- GPS para el bot�n "Usar mi ubicaci�n" del picker de ubicaciones
          de log�stica. Solo cuando la app est� en uso (no background).
