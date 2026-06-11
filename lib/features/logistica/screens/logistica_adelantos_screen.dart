@@ -422,9 +422,9 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
 ///   - Mismo día   → "13-05-2026"
 /// Chip tappeable para filtrar la lista de adelantos por un empleado
 /// específico (Santiago 2026-05-19: "ver cuántos adelantos tuvo en el
-/// lapso seleccionado"). Si no hay filtro, muestra "Empleado: TODOS"
-/// y al tocar abre dialog con buscador. Si hay filtro, muestra el
-/// nombre + botón × para limpiar.
+/// lapso seleccionado"). Si no hay filtro, muestra "Buscador" (con lupa)
+/// y al tocar abre el dialog con buscador. Si hay filtro, muestra el
+/// nombre del empleado + botón × para limpiar.
 class _ChipFiltroEmpleado extends StatelessWidget {
   final String? empleadoDni;
   final String? empleadoNombre;
@@ -446,7 +446,7 @@ class _ChipFiltroEmpleado extends StatelessWidget {
         ? (empleadoNombre?.trim().isNotEmpty == true
             ? empleadoNombre!.toUpperCase()
             : 'DNI $empleadoDni')
-        : 'Empleado: todos';
+        : 'Buscador';
     final accent = c.brand;
     final fg = hayFiltro ? accent : c.textSecondary;
     return InkWell(
@@ -476,8 +476,7 @@ class _ChipFiltroEmpleado extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(hayFiltro ? Icons.person : Icons.people_outline,
-                size: 14, color: fg),
+            Icon(Icons.search, size: 14, color: fg),
             const SizedBox(width: 6),
             Text(
               label,
