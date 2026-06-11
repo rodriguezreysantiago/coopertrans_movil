@@ -30,8 +30,8 @@ part 'admin_personal_lista_widgets.dart';
 /// Pantalla de Gestión de Personal — REFACTOR NÚCLEO (jun 2026).
 ///
 /// Reescrita al layout del prototipo (`screens-desktop-core.jsx :: Personal`):
-/// encabezado `PERSONAL · n empleados` + `AppKpiStrip` (activos · choferes ·
-/// supervisores · gomería · admin) + chips de filtro por rol + lista densa
+/// encabezado `PERSONAL · n empleados` + strip de CARDS-FILTRO por grupo de
+/// roles (TODOS · CHOFERES · PLANTA · ADMINISTRACIÓN) + lista densa
 /// (`_FilaPersona`) en una superficie `AppCard(tier:1)` por fila, con
 /// `AppHairline` implícita entre filas (borde de cards adyacentes).
 ///
@@ -41,9 +41,9 @@ part 'admin_personal_lista_widgets.dart';
 /// `_visible()` (activo/excluido/rol), filtro de búsqueda de `AppListPage`,
 /// toggles de inactivos/excluidos, FAB "Nuevo" y navegación quedan intactos.
 ///
-/// El KpiStrip es el resumen at-a-glance; los `AppFilterChip` siguen siendo el
-/// mecanismo INTERACTIVO de filtro por rol (`_rolFiltro` / `onRol`), arreglado
-/// recientemente — no tocar esa lógica.
+/// Las CARDS del strip son ahora el filtro INTERACTIVO, agrupando roles
+/// (Santiago 2026-06-10): tocar una acota la lista; la activa se resalta.
+/// Reemplazaron a los chips por rol y a la card no-interactiva ACTIVOS.
 class AdminPersonalListaScreen extends StatefulWidget {
   const AdminPersonalListaScreen({super.key});
 
@@ -64,8 +64,9 @@ class _AdminPersonalListaScreenState
   /// AppBar permite verlos para auditoría/mantenimiento de esos perfiles.
   bool _mostrarExcluidos = false;
 
-  /// Filtro por rol activo (null = todos). Lo setean los chips del hero.
-  String? _rolFiltro;
+  /// Grupo de roles en foco (null = todos). Lo setean las cards-filtro del
+  /// hero (Santiago 2026-06-10: reemplazaron los chips por rol).
+  _GrupoPersonal? _grupoFiltro;
 
   /// Set de DNIs excluidos (cacheado por `ExcluidosService`). Null hasta
   /// que termine la carga inicial — si quedó null cuando el filter corre,
@@ -95,8 +96,9 @@ class _AdminPersonalListaScreenState
         ExcluidosService.esExcluido(_excluidos, dni: dni)) {
       return false;
     }
-    if (_rolFiltro != null &&
-        AppRoles.normalizar(data['ROL']?.toString()) != _rolFiltro) {
+    if (_grupoFiltro != null &&
+        !_grupoFiltro!.roles
+            .contains(AppRoles.normalizar(data['ROL']?.toString()))) {
       return false;
     }
     return true;
@@ -151,8 +153,8 @@ class _AdminPersonalListaScreenState
               excluidos: _excluidos,
               mostrarExcluidos: _mostrarExcluidos,
               mostrarInactivos: _mostrarInactivos,
-              rolFiltro: _rolFiltro,
-              onRol: (r) => setState(() => _rolFiltro = r),
+              grupoFiltro: _grupoFiltro,
+              onGrupo: (g) => setState(() => _grupoFiltro = g),
               onToggleInactivos: () =>
                   setState(() => _mostrarInactivos = !_mostrarInactivos),
             ),
@@ -186,16 +188,31 @@ class _AdminPersonalListaScreenState
 }
 
 // =============================================================================
-// HERO + CHIPS DE FILTRO POR ROL
+// HERO + CARDS-FILTRO POR GRUPO DE ROLES
 // =============================================================================
+
+/// Grupos de filtro de Personal (Santiago 2026-06-10): las cards de arriba
+/// AGRUPAN roles y SON el filtro (reemplazan los chips por rol). TODOS = sin
+/// filtro; CHOFERES = CHOFER; PLANTA = los operativos sin vehículo (planta,
+/// taller, gomería, seguridad e higiene); ADMINISTRACIÓN = supervisores +
+/// admin. Los 6 roles quedan cubiertos sin solaparse (suma = total).
+enum _GrupoPersonal {
+  choferes('Choferes', {AppRoles.chofer}),
+  planta('Planta', {AppRoles.planta, AppRoles.gomeria, AppRoles.segHigiene}),
+  administracion('Administración', {AppRoles.supervisor, AppRoles.admin});
+
+  const _GrupoPersonal(this.label, this.roles);
+  final String label;
+  final Set<String> roles;
+}
 
 class _HeroYChips extends StatelessWidget {
   final List<QueryDocumentSnapshot> docs;
   final ExcluidosSet? excluidos;
   final bool mostrarExcluidos;
   final bool mostrarInactivos;
-  final String? rolFiltro;
-  final ValueChanged<String?> onRol;
+  final _GrupoPersonal? grupoFiltro;
+  final ValueChanged<_GrupoPersonal?> onGrupo;
   final VoidCallback onToggleInactivos;
 
   const _HeroYChips({
@@ -203,39 +220,31 @@ class _HeroYChips extends StatelessWidget {
     required this.excluidos,
     required this.mostrarExcluidos,
     required this.mostrarInactivos,
-    required this.rolFiltro,
-    required this.onRol,
+    required this.grupoFiltro,
+    required this.onGrupo,
     required this.onToggleInactivos,
   });
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
+    final esDesktop = AppBreakpoints.isDesktopOrLarger(context);
 
-    // Un solo barrido sobre los docs aplicando los filtros de VISIBILIDAD
-    // (excluidos + inactivos) — los mismos que `_visible`, salvo el rol (el
-    // strip y los chips muestran TODOS los roles, sin importar el filtro de
-    // rol activo). Todo se deriva de la base: cero números hardcodeados.
-    var totalVisibles = 0; // empleados que entran a la lista (sin filtro rol)
-    var activos = 0; // de esos, los que están ACTIVO != false
-    final porRol = <String, int>{}; // por rol, solo entre los activos
+    // Un barrido sobre los docs con los filtros de VISIBILIDAD (excluidos +
+    // inactivos) — los mismos que `_visible` salvo el de grupo (las cards
+    // muestran el conteo de TODOS los grupos). Cero números hardcodeados.
+    var totalVisibles = 0;
+    final porRol = <String, int>{};
     for (final d in docs) {
       final data = d.data() as Map<String, dynamic>;
       if (!mostrarExcluidos &&
           ExcluidosService.esExcluido(excluidos, dni: d.id)) {
         continue;
       }
-      final esActivo = AppActivo.esActivo(data);
-      if (!mostrarInactivos && !esActivo) continue;
+      if (!mostrarInactivos && !AppActivo.esActivo(data)) continue;
       totalVisibles++;
-      if (!esActivo) continue;
-      activos++;
       final rol = AppRoles.normalizar(data['ROL']?.toString());
       porRol[rol] = (porRol[rol] ?? 0) + 1;
     }
-    // Chips: orden estable por frecuencia (igual que antes).
-    final roles = porRol.keys.toList()
-      ..sort((a, b) => porRol[b]!.compareTo(porRol[a]!));
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -275,54 +284,149 @@ class _HeroYChips extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          // KPIs at-a-glance: activos · choferes · supervisores · gomería ·
-          // admin. Resumen no interactivo; el filtro vive en los chips.
-          AppKpiStrip(
-            stats: [
-              AppStat(label: 'Activos', value: '$activos'),
-              AppStat(
-                label: 'Choferes',
-                value: '${porRol[AppRoles.chofer] ?? 0}',
-              ),
-              AppStat(
-                label: 'Supervisores',
-                value: '${porRol[AppRoles.supervisor] ?? 0}',
-              ),
-              AppStat(
-                label: 'Gomería',
-                value: '${porRol[AppRoles.gomeria] ?? 0}',
-              ),
-              AppStat(
-                label: 'Admin',
-                value: '${porRol[AppRoles.admin] ?? 0}',
-                accent: c.brand,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          // Chips INTERACTIVOS de filtro por rol (mecanismo recién arreglado).
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              AppFilterChip(
-                label: 'Todos',
-                count: activos,
-                activo: rolFiltro == null,
-                onTap: () => onRol(null),
-              ),
-              for (final r in roles)
-                AppFilterChip(
-                  label: _rolLabel(r),
-                  count: porRol[r] ?? 0,
-                  activo: rolFiltro == r,
-                  onTap: () => onRol(r),
-                ),
-            ],
+          // Cards-filtro por GRUPO de roles (Santiago 2026-06-10): TODOS ·
+          // CHOFERES · PLANTA · ADMINISTRACIÓN. Tocar una filtra la lista; la
+          // activa se resalta. Reemplazan al strip no-interactivo + los chips
+          // por rol (y se quitó ACTIVOS, redundante con el conteo del hero).
+          _StripGrupos(
+            esDesktop: esDesktop,
+            grupoFiltro: grupoFiltro,
+            onGrupo: onGrupo,
+            total: totalVisibles,
+            porRol: porRol,
           ),
         ],
       ),
     );
+  }
+}
+
+/// Strip de cards-filtro por grupo de roles. Estética calcada de `AppKpiStrip`
+/// (surface2 + border + hairlines) pero con celdas tappeables. Desktop: las
+/// celdas reparten el ancho (Expanded); mobile: scroll horizontal.
+class _StripGrupos extends StatelessWidget {
+  final bool esDesktop;
+  final _GrupoPersonal? grupoFiltro;
+  final ValueChanged<_GrupoPersonal?> onGrupo;
+  final int total;
+  final Map<String, int> porRol;
+  const _StripGrupos({
+    required this.esDesktop,
+    required this.grupoFiltro,
+    required this.onGrupo,
+    required this.total,
+    required this.porRol,
+  });
+
+  int _count(_GrupoPersonal g) =>
+      g.roles.fold(0, (s, r) => s + (porRol[r] ?? 0));
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final celdas = <Widget>[
+      _CeldaGrupo(
+        label: 'Todos',
+        valor: total,
+        seleccionado: grupoFiltro == null,
+        esDesktop: esDesktop,
+        onTap: () => onGrupo(null),
+      ),
+      for (final g in _GrupoPersonal.values)
+        _CeldaGrupo(
+          label: g.label,
+          valor: _count(g),
+          seleccionado: grupoFiltro == g,
+          esDesktop: esDesktop,
+          onTap: () => onGrupo(g),
+        ),
+    ];
+    final fila = IntrinsicHeight(
+      child: Row(
+        children: [
+          for (var i = 0; i < celdas.length; i++) ...[
+            if (esDesktop) Expanded(child: celdas[i]) else celdas[i],
+            if (i < celdas.length - 1) Container(width: 1, color: c.border),
+          ],
+        ],
+      ),
+    );
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface2,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.border),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: esDesktop
+            ? fila
+            : SingleChildScrollView(
+                scrollDirection: Axis.horizontal, child: fila),
+      ),
+    );
+  }
+}
+
+/// Una celda del strip de grupos. Tappeable; resalta con tinte brand cuando
+/// es el grupo en foco. En mobile fija un mínimo para que sea tappeable.
+class _CeldaGrupo extends StatelessWidget {
+  final String label;
+  final int valor;
+  final bool seleccionado;
+  final bool esDesktop;
+  final VoidCallback onTap;
+  const _CeldaGrupo({
+    required this.label,
+    required this.valor,
+    required this.seleccionado,
+    required this.esDesktop,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final contenido = Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: esDesktop ? 22 : 14,
+        vertical: esDesktop ? 18 : 14,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.eyebrow.copyWith(
+              color: seleccionado ? c.brand : c.textMuted,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '$valor',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.h2.copyWith(
+              color: c.text,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+    final celda = ConstrainedBox(
+      constraints: BoxConstraints(minWidth: esDesktop ? 0 : 118),
+      child: ColoredBox(
+        color: seleccionado
+            ? c.brand.withValues(alpha: 0.12)
+            : Colors.transparent,
+        child: contenido,
+      ),
+    );
+    return InkWell(onTap: onTap, child: celda);
   }
 }
 
