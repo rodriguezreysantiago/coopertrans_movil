@@ -2171,7 +2171,9 @@ class _HintUltimosAdelantos extends StatelessWidget {
           Text('Últimos ${items!.length} adelantos del empleado',
               style: AppType.eyebrow.copyWith(color: c.textSecondary)),
           const SizedBox(height: 4),
-          for (final a in items!)
+          // De los 3 más recientes, los mostramos del MÁS VIEJO arriba al más
+          // nuevo abajo (Santiago 2026-06-11; mismo criterio que la lista).
+          for (final a in items!.reversed)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 1),
               child: Row(
