@@ -42,12 +42,9 @@ class AdminVehiculosListaScreen extends StatefulWidget {
 
 class _AdminVehiculosListaScreenState
     extends State<AdminVehiculosListaScreen> {
-  /// Por default ocultos los tanques de combustibles líquidos y los
-  /// tractores asignados a sus choferes. Toggle del AppBar (escudo) los
-  /// muestra para auditoría/mantenimiento.
-  bool _mostrarExcluidos = false;
-
-  /// Set de patentes excluidas (cacheado). Null mientras carga.
+  /// Set de patentes excluidas (tanques de combustibles + tractores de
+  /// tanqueros). Esas unidades van a la card INACTIVOS, no a la operativa
+  /// (Santiago 2026-06-10, igual que Personal). Null mientras carga.
   ExcluidosSet? _excluidos;
 
   /// Card-filtro en foco (Santiago 2026-06-10: las cards SON el filtro,
@@ -82,46 +79,27 @@ class _AdminVehiculosListaScreenState
         ...AppTiposVehiculo.enganches.where((t) => t != 'ACOPLADO'),
       ];
 
-  /// IDs de las cards-filtro, en orden: LIBRES · tipos · INACTIVOS.
-  static List<String> get _cards =>
-      [_kCardLibres, ..._tipos, _kCardInactivos];
+  /// IDs de las cards-filtro, en orden: LIBRES · tipos · INACTIVOS. Se excluye
+  /// TANQUE: todos los tanques son combustibles (excluidos) → van a INACTIVOS,
+  /// así que una card TANQUES quedaría siempre en 0 (Santiago 2026-06-10).
+  static List<String> get _cards => [
+        _kCardLibres,
+        ..._tipos.where((t) => t != 'TANQUE'),
+        _kCardInactivos,
+      ];
 
-  /// ¿La unidad entra a la lista? Pasa el escudo de excluidos y coincide con
-  /// la card seleccionada.
+  /// ¿La unidad entra a la lista? Coincide con la card seleccionada (los
+  /// excluidos cuentan como "baja" → solo entran en la card INACTIVOS).
   bool _visible(Map<String, dynamic> data, String patente) {
-    if (!_mostrarExcluidos &&
-        ExcluidosService.esExcluido(_excluidos, patente: patente)) {
-      return false;
-    }
-    return _coincideCard(_cardSeleccionada, data);
+    final esExcluido =
+        ExcluidosService.esExcluido(_excluidos, patente: patente);
+    return _coincideCard(_cardSeleccionada, data, esExcluido);
   }
 
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
       title: 'Gestión de Flota',
-      actions: [
-        // Toggle "mostrar excluidos" (tanques combustibles + tractores de
-        // tanqueros). Por default OFF para que la flota operativa no se
-        // mezcle con las unidades que no controlamos. (El toggle de inactivos
-        // se quitó: ahora vive en la card INACTIVOS — Santiago 2026-06-10.)
-        if ((_excluidos?.patentes.isNotEmpty ?? false))
-          IconButton(
-            tooltip: _mostrarExcluidos
-                ? 'Ocultar tanques de combustibles'
-                : 'Mostrar tanques de combustibles',
-            icon: Icon(
-              _mostrarExcluidos
-                  ? Icons.shield_moon_outlined
-                  : Icons.shield_outlined,
-              color: _mostrarExcluidos
-                  ? AppColors.warning
-                  : AppColors.textSecondary,
-            ),
-            onPressed: () =>
-                setState(() => _mostrarExcluidos = !_mostrarExcluidos),
-          ),
-      ],
       // Solo quien puede crear vehículos ve el FAB "Nuevo" (ADMIN/SUPERVISOR).
       floatingActionButton:
           Capabilities.can(PrefsService.rol, Capability.crearVehiculo)
@@ -147,7 +125,6 @@ class _AdminVehiculosListaScreenState
             cards: _cards,
             seleccionada: _cardSeleccionada,
             onCard: (id) => setState(() => _cardSeleccionada = id),
-            mostrarExcluidos: _mostrarExcluidos,
             excluidos: _excluidos,
           ),
           Expanded(
@@ -173,10 +150,14 @@ const String _kCardInactivos = 'INACTIVOS';
 /// ¿El doc coincide con la card [id]? Facetas NO exclusivas: LIBRES = activa +
 /// ESTADO LIBRE (cualquier tipo); INACTIVOS = baja; un tipo = activa + ese
 /// TIPO. (Un tractor libre coincide con LIBRES y con TRACTOR.)
-bool _coincideCard(String id, Map<String, dynamic> data) {
+bool _coincideCard(String id, Map<String, dynamic> data, bool esExcluido) {
   final activa = AppActivo.esActivo(data);
-  if (id == _kCardInactivos) return !activa;
-  if (!activa) return false; // las demás cards solo muestran activas
+  // "Baja u oculto": inactivos + excluidos (tanques de combustibles +
+  // tractores de tanqueros) van JUNTOS a la card INACTIVOS y NO a la
+  // operativa (Santiago 2026-06-10, igual que Gestión de Personal).
+  final esBaja = !activa || esExcluido;
+  if (id == _kCardInactivos) return esBaja;
+  if (esBaja) return false;
   if (id == _kCardLibres) {
     return (data['ESTADO'] ?? 'LIBRE').toString().toUpperCase() == 'LIBRE';
   }
@@ -200,7 +181,6 @@ class _HeroFlota extends StatelessWidget {
   final List<String> cards;
   final String seleccionada;
   final ValueChanged<String> onCard;
-  final bool mostrarExcluidos;
   final ExcluidosSet? excluidos;
 
   const _HeroFlota({
@@ -208,7 +188,6 @@ class _HeroFlota extends StatelessWidget {
     required this.cards,
     required this.seleccionada,
     required this.onCard,
-    required this.mostrarExcluidos,
     required this.excluidos,
   });
 
@@ -219,17 +198,17 @@ class _HeroFlota extends StatelessWidget {
       stream: stream,
       builder: (ctx, snap) {
         final docs = snap.data?.docs ?? const [];
-        // Conteo por card sobre toda la flota (respetando el escudo). Las
-        // facetas se solapan: un tractor libre cuenta en LIBRES y TRACTORES.
+        // Conteo por card sobre toda la flota. Los excluidos (tanques +
+        // tractores de tanqueros) cuentan en INACTIVOS, no en la operativa.
+        // Las facetas operativas se solapan (un tractor libre cuenta en
+        // LIBRES y TRACTORES).
         final counts = <String, int>{};
         for (final d in docs) {
-          if (!mostrarExcluidos &&
-              ExcluidosService.esExcluido(excluidos, patente: d.id)) {
-            continue;
-          }
           final data = d.data() as Map<String, dynamic>;
+          final esExcluido =
+              ExcluidosService.esExcluido(excluidos, patente: d.id);
           for (final id in cards) {
-            if (_coincideCard(id, data)) {
+            if (_coincideCard(id, data, esExcluido)) {
               counts[id] = (counts[id] ?? 0) + 1;
             }
           }
