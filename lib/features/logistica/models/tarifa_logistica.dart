@@ -56,29 +56,158 @@ enum UnidadTarifa {
   String get sufijoMonto => codigo == 'TN' ? '/TN' : '/viaje';
 }
 
-/// Una versión de los IMPORTES de una tarifa, vigente a partir de [desde].
+/// Una versión de la TARIFA REAL (lo que Vecchi le factura al cliente),
+/// vigente a partir de [desde]. Línea de tiempo INDEPENDIENTE de la del
+/// chofer (2026-06-11, pedido Santiago): la real y la chofer se negocian
+/// por separado y cambian en fechas distintas. El dador (informativo) viaja
+/// con la real por ser del lado ingreso.
 ///
-/// Versionado de tarifas (2026-06, pedido Santiago): cubre SOLO los
-/// importes. La ruta, el dador, las empresas, el producto y la unidad son
-/// identidad de la tarifa — si cambian, es otra tarifa, no una versión.
-/// Cada cambio de precio registra una vigencia nueva con la fecha desde la
-/// que rige; la anterior queda en el historial. El precio que se le aplica
-/// a un viaje se resuelve por la FECHA DE CARGA del tramo (ver
-/// [TarifaLogistica.vigenteEn]).
-class TarifaVigencia {
-  /// Fecha desde la que rige esta versión. SIEMPRE normalizada a día
-  /// (medianoche local, sin hora) para comparar de forma estable contra
-  /// la fecha de carga del tramo sin que la zona horaria corra el límite
-  /// un día (la carga la pone el operador en hora local AR).
+/// El precio que se le aplica a un viaje se resuelve por la FECHA DE CARGA
+/// del tramo (ver [TarifaLogistica.vigenteEn]).
+class VigenciaReal {
+  /// Fecha desde la que rige. SIEMPRE normalizada a día (medianoche local)
+  /// para comparar de forma estable contra la fecha de carga sin que la zona
+  /// horaria corra el límite un día.
   final DateTime desde;
+  final double tarifaReal;
+
+  /// Comisión del dador (informativa, no entra a ningún cálculo). Variable
+  /// por carga. Mutuamente excluyente con [montoFijoDador].
+  final double? porcentajeComisionDador;
+  final double? montoFijoDador;
+
+  /// Auditoría — client-time (`serverTimestamp()` no se permite dentro de
+  /// elementos de un array).
+  final DateTime? registradoEn;
+  final String? registradoPorDni;
+
+  VigenciaReal({
+    required DateTime desde,
+    required this.tarifaReal,
+    this.porcentajeComisionDador,
+    this.montoFijoDador,
+    this.registradoEn,
+    this.registradoPorDni,
+  }) : desde = DateTime(desde.year, desde.month, desde.day);
+
+  factory VigenciaReal.fromMap(Map<String, dynamic> d) {
+    return VigenciaReal(
+      desde: (d['desde'] as Timestamp?)?.toDate() ?? DateTime(2000),
+      tarifaReal: (d['tarifa_real'] as num?)?.toDouble() ?? 0,
+      porcentajeComisionDador:
+          (d['porcentaje_comision_dador'] as num?)?.toDouble(),
+      montoFijoDador: (d['monto_fijo_dador'] as num?)?.toDouble(),
+      registradoEn: (d['registrado_en'] as Timestamp?)?.toDate(),
+      registradoPorDni: d['registrado_por_dni']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'desde': Timestamp.fromDate(desde),
+      'tarifa_real': tarifaReal,
+      if (porcentajeComisionDador != null)
+        'porcentaje_comision_dador': porcentajeComisionDador,
+      if (montoFijoDador != null) 'monto_fijo_dador': montoFijoDador,
+      if (registradoEn != null)
+        'registrado_en': Timestamp.fromDate(registradoEn!),
+      if (registradoPorDni != null) 'registrado_por_dni': registradoPorDni,
+    };
+  }
+}
+
+/// Una versión del PAGO AL CHOFER (la base con la que se calcula lo que se
+/// le paga), vigente a partir de [desde]. Línea de tiempo INDEPENDIENTE de
+/// la real. El lado chofer tiene DOS modos mutuamente excluyentes: por unidad
+/// ([tarifaChofer] × TN × 18%) o monto fijo por viaje ([montoFijoChofer]).
+class VigenciaChofer {
+  final DateTime desde;
+  final double tarifaChofer;
+
+  /// Monto fijo por viaje (override del 18%). Si != null, el chofer cobra
+  /// este flat y [tarifaChofer] se ignora.
+  final double? montoFijoChofer;
+
+  final DateTime? registradoEn;
+  final String? registradoPorDni;
+
+  VigenciaChofer({
+    required DateTime desde,
+    required this.tarifaChofer,
+    this.montoFijoChofer,
+    this.registradoEn,
+    this.registradoPorDni,
+  }) : desde = DateTime(desde.year, desde.month, desde.day);
+
+  factory VigenciaChofer.fromMap(Map<String, dynamic> d) {
+    return VigenciaChofer(
+      desde: (d['desde'] as Timestamp?)?.toDate() ?? DateTime(2000),
+      tarifaChofer: (d['tarifa_chofer'] as num?)?.toDouble() ?? 0,
+      montoFijoChofer: (d['monto_fijo_chofer'] as num?)?.toDouble(),
+      registradoEn: (d['registrado_en'] as Timestamp?)?.toDate(),
+      registradoPorDni: d['registrado_por_dni']?.toString(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'desde': Timestamp.fromDate(desde),
+      'tarifa_chofer': tarifaChofer,
+      if (montoFijoChofer != null) 'monto_fijo_chofer': montoFijoChofer,
+      if (registradoEn != null)
+        'registrado_en': Timestamp.fromDate(registradoEn!),
+      if (registradoPorDni != null) 'registrado_por_dni': registradoPorDni,
+    };
+  }
+}
+
+/// Los importes vigentes en una fecha dada — el resultado de componer la
+/// VigenciaReal vigente + la VigenciaChofer vigente (ver
+/// [TarifaLogistica.vigenteEn]). Reemplaza al `TarifaVigencia` único como
+/// tipo de retorno: como real y chofer tienen líneas independientes, NO hay
+/// un único `desde` — expone [desdeReal] y [desdeChofer] por separado.
+///
+/// Tiene los mismos getters de importe que el `TarifaVigencia` viejo
+/// (`tarifaReal`/`tarifaChofer`/`montoFijoChofer`/`porcentajeComisionDador`/
+/// `montoFijoDador`), por eso los consumidores que solo leen importes
+/// (snapshot del viaje, mapa, lista, recálculo) no cambian.
+class ImportesVigentes {
   final double tarifaReal;
   final double tarifaChofer;
   final double? montoFijoChofer;
   final double? porcentajeComisionDador;
   final double? montoFijoDador;
 
-  /// Auditoría — cuándo y quién registró esta vigencia. Es client-time:
-  /// `serverTimestamp()` no se permite dentro de elementos de un array.
+  /// Fecha desde la que rige la real / la chofer vigente. Las usa la UI de
+  /// "Precio y vigencia"; el resto de los consumidores solo lee importes.
+  final DateTime desdeReal;
+  final DateTime desdeChofer;
+
+  const ImportesVigentes({
+    required this.tarifaReal,
+    required this.tarifaChofer,
+    this.montoFijoChofer,
+    this.porcentajeComisionDador,
+    this.montoFijoDador,
+    required this.desdeReal,
+    required this.desdeChofer,
+  });
+}
+
+/// Una versión COMBINADA (real + chofer juntos en una fecha). Es el formato
+/// de versionado VIEJO (2026-06, una sola línea de tiempo) que sigue VIVO en
+/// producción: las apps publicadas antes del 2026-06-11 solo entienden el
+/// array `vigencias`. Se conserva para (a) parsear tarifas guardadas con ese
+/// formato (migración perezosa) y (b) DERIVAR un `vigencias` combinado fiel
+/// al guardar, para que esas apps viejas sigan resolviendo el precio bien
+/// (ver [TarifaLogistica.vigenciasCombinadas]).
+class TarifaVigencia {
+  final DateTime desde;
+  final double tarifaReal;
+  final double tarifaChofer;
+  final double? montoFijoChofer;
+  final double? porcentajeComisionDador;
+  final double? montoFijoDador;
   final DateTime? registradoEn;
   final String? registradoPorDni;
 
@@ -130,13 +259,19 @@ class TarifaVigencia {
 ///   - `tarifaReal`: lo que cobra Vecchi al cliente final.
 ///   - `tarifaChofer`: lo que se le paga al chofer que conduce.
 ///
-/// **Versionado por vigencia** (2026-06): el historial de precios vive en
-/// [vigencias] (lista ordenada por `desde`). Los campos planos
-/// (`tarifaReal`, `tarifaChofer`, etc.) son un cache del precio vigente HOY
-/// al último write — la UI usa [vigenteEn] (no los planos) para mostrar el
-/// precio correcto, y los viajes snapshotean la versión que regía en su
-/// fecha de carga. Tarifas creadas antes del versionado sintetizan 1
-/// vigencia desde los campos planos (migración perezosa en [fromMap]).
+/// **Versionado por DOS vigencias independientes** (2026-06-11): el historial
+/// de la real vive en [vigenciasReal] y el del chofer en [vigenciasChofer]
+/// (cada una ordenada por `desde`). Se versionan por separado porque se
+/// negocian y cambian en fechas distintas. Los campos planos (`tarifaReal`,
+/// `tarifaChofer`, etc.) son un cache del precio vigente HOY al último write
+/// — la UI usa [vigenteEn] (no los planos) para mostrar el precio correcto, y
+/// los viajes snapshotean la versión que regía en su fecha de carga.
+///
+/// Migración perezosa en [fromMap]: tarifas con el formato viejo de UNA línea
+/// (`vigencias` combinado, EN PRODUCCIÓN) se descomponen en las dos; tarifas
+/// pre-versionado (sin nada) sintetizan 1 de cada desde los planos. [toMap]
+/// escribe las dos líneas + un `vigencias` combinado derivado para compat con
+/// apps viejas.
 class TarifaLogistica {
   final String id;
   final TipoCargaLogistica tipoCarga;
@@ -151,7 +286,8 @@ class TarifaLogistica {
 
   /// Porcentaje del flete que se lleva el dador (0–100). Variable por
   /// carga (decisión Vecchi 2026-05-07: depende de la calidad de la
-  /// carga, no es fijo por dador).
+  /// carga, no es fijo por dador). Cache del vigente hoy — versionado en
+  /// [vigenciasReal].
   final double? porcentajeComisionDador;
 
   /// Monto FIJO por viaje del dador, alternativa al
@@ -229,7 +365,8 @@ class TarifaLogistica {
   /// Monto fijo POR VIAJE para el chofer, alternativa al cálculo
   /// `tarifaChofer × TN × 18%`. Si no es null, ese monto se paga al
   /// chofer FLAT, sin importar cuántas TN cargue y sin aplicar la
-  /// comisión del 18%.
+  /// comisión del 18%. Cache del vigente hoy — versionado en
+  /// [vigenciasChofer].
   ///
   /// Pedido Santiago 2026-05-19: "hay veces que les asignamos viajes
   /// cortos que se les paga un poco más que el 18%". El operador puede
@@ -253,11 +390,15 @@ class TarifaLogistica {
   final DateTime? creadoEn;
   final String? creadoPor;
 
-  /// Historial de precios, ordenado ascendente por `desde`. Invariante:
-  /// `fromMap` garantiza ≥1 (sintetiza desde los campos planos si el doc
-  /// no la trae). Construcción directa puede dejarla vacía — [vigenteEn]
-  /// es defensivo ante ese caso.
-  final List<TarifaVigencia> vigencias;
+  /// Historial de precios de la TARIFA REAL, ordenado ascendente por `desde`.
+  /// Invariante: `fromMap` garantiza ≥1 (sintetiza desde los campos planos si
+  /// el doc no la trae). Construcción directa puede dejarla vacía —
+  /// [vigenteEn] es defensivo ante ese caso.
+  final List<VigenciaReal> vigenciasReal;
+
+  /// Historial de precios del PAGO AL CHOFER, ordenado ascendente por
+  /// `desde`. Independiente de [vigenciasReal].
+  final List<VigenciaChofer> vigenciasChofer;
 
   const TarifaLogistica({
     required this.id,
@@ -285,7 +426,8 @@ class TarifaLogistica {
     this.notas,
     this.creadoEn,
     this.creadoPor,
-    this.vigencias = const [],
+    this.vigenciasReal = const [],
+    this.vigenciasChofer = const [],
   });
 
   /// Diferencia bruta entre tarifa real y tarifa chofer (aproximación
@@ -293,41 +435,107 @@ class TarifaLogistica {
   /// dador). El margen real se calcula en el módulo de viajes.
   double get diferenciaBruta => tarifaReal - tarifaChofer;
 
-  /// Importes vigentes en [fecha] (típicamente la fecha de carga del
-  /// tramo). Devuelve la vigencia con `desde` más reciente que sea
-  /// <= [fecha]. Si [fecha] es anterior a la primera vigencia, devuelve la
-  /// primera (un viaje cargado antes del primer precio conocido usa el más
-  /// viejo). Defensivo: nunca null; si no hubiera vigencias, cae a una
-  /// sintetizada de los campos planos. Robusto a desorden de la lista.
-  TarifaVigencia vigenteEn(DateTime fecha) {
+  /// Importes vigentes en [fecha] (típicamente la fecha de carga del tramo).
+  /// Compone la VigenciaReal vigente + la VigenciaChofer vigente: cada lado
+  /// se resuelve de forma independiente (puede haber subido la real el 1/3 y
+  /// la chofer el 10/3). Defensivo: nunca null; sin vigencias cae a los campos
+  /// planos. Robusto a desorden de las listas.
+  ImportesVigentes vigenteEn(DateTime fecha) {
+    final r = _realVigenteEn(fecha);
+    final ch = _choferVigenteEn(fecha);
+    return ImportesVigentes(
+      tarifaReal: r.tarifaReal,
+      porcentajeComisionDador: r.porcentajeComisionDador,
+      montoFijoDador: r.montoFijoDador,
+      tarifaChofer: ch.tarifaChofer,
+      montoFijoChofer: ch.montoFijoChofer,
+      desdeReal: r.desde,
+      desdeChofer: ch.desde,
+    );
+  }
+
+  /// VigenciaReal vigente en [fecha]. Defensivo: lista vacía → sintetiza de
+  /// los planos. Ver [_elegirVigente] para la lógica de selección.
+  VigenciaReal _realVigenteEn(DateTime fecha) {
     final f = DateTime(fecha.year, fecha.month, fecha.day);
-    if (vigencias.isEmpty) {
-      return TarifaVigencia(
-        desde: DateTime(2000),
-        tarifaReal: tarifaReal,
-        tarifaChofer: tarifaChofer,
-        montoFijoChofer: montoFijoChofer,
-        porcentajeComisionDador: porcentajeComisionDador,
-        montoFijoDador: montoFijoDador,
-      );
-    }
-    TarifaVigencia? elegida;
-    for (final v in vigencias) {
-      if (!v.desde.isAfter(f) &&
-          (elegida == null || v.desde.isAfter(elegida.desde))) {
+    final v = _elegirVigente(vigenciasReal, f, (e) => e.desde);
+    return v ??
+        VigenciaReal(
+          desde: DateTime(2000),
+          tarifaReal: tarifaReal,
+          porcentajeComisionDador: porcentajeComisionDador,
+          montoFijoDador: montoFijoDador,
+        );
+  }
+
+  /// VigenciaChofer vigente en [fecha]. Defensivo: lista vacía → sintetiza de
+  /// los planos.
+  VigenciaChofer _choferVigenteEn(DateTime fecha) {
+    final f = DateTime(fecha.year, fecha.month, fecha.day);
+    final v = _elegirVigente(vigenciasChofer, f, (e) => e.desde);
+    return v ??
+        VigenciaChofer(
+          desde: DateTime(2000),
+          tarifaChofer: tarifaChofer,
+          montoFijoChofer: montoFijoChofer,
+        );
+  }
+
+  /// Elige de [lista] el elemento con `desde` (vía [desdeDe]) más reciente que
+  /// sea <= [f]. Si [f] es anterior a todos, devuelve el de `desde` más
+  /// temprano (un viaje cargado antes del primer precio conocido usa el más
+  /// viejo). Robusto a desorden. `null` solo si la lista está vacía.
+  static T? _elegirVigente<T>(
+    List<T> lista,
+    DateTime f,
+    DateTime Function(T) desdeDe,
+  ) {
+    if (lista.isEmpty) return null;
+    T? elegida;
+    for (final v in lista) {
+      final d = desdeDe(v);
+      if (!d.isAfter(f) &&
+          (elegida == null || d.isAfter(desdeDe(elegida)))) {
         elegida = v;
       }
     }
     if (elegida != null) return elegida;
-    // fecha anterior a todas las vigencias → la más temprana.
-    var primera = vigencias.first;
-    for (final v in vigencias) {
-      if (v.desde.isBefore(primera.desde)) primera = v;
+    var primera = lista.first;
+    for (final v in lista) {
+      if (desdeDe(v).isBefore(desdeDe(primera))) primera = v;
     }
     return primera;
   }
 
+  /// Deriva la línea COMBINADA (real + chofer juntos por fecha) a partir de
+  /// las dos líneas independientes. Para cada punto de quiebre (unión
+  /// deduplicada de los `desde` de ambas listas) compone real-vigente +
+  /// chofer-vigente en esa fecha. Reproduce EXACTO lo que el `vigenteEn` de
+  /// una app vieja resolvería para cualquier fecha → se persiste como
+  /// `vigencias` para compat (ver [toMap]).
+  List<TarifaVigencia> vigenciasCombinadas() {
+    final fechas = <DateTime>{
+      ...vigenciasReal.map((v) => v.desde),
+      ...vigenciasChofer.map((v) => v.desde),
+    }.toList()
+      ..sort();
+    if (fechas.isEmpty) return const [];
+    return fechas.map((f) {
+      final r = _realVigenteEn(f);
+      final ch = _choferVigenteEn(f);
+      return TarifaVigencia(
+        desde: f,
+        tarifaReal: r.tarifaReal,
+        tarifaChofer: ch.tarifaChofer,
+        montoFijoChofer: ch.montoFijoChofer,
+        porcentajeComisionDador: r.porcentajeComisionDador,
+        montoFijoDador: r.montoFijoDador,
+      );
+    }).toList();
+  }
+
   factory TarifaLogistica.fromMap(String id, Map<String, dynamic> d) {
+    final (vReal, vChofer) = _parsearVigencias(d);
     return TarifaLogistica(
       id: id,
       tipoCarga: TipoCargaLogistica.fromCodigo(d['tipo_carga']?.toString()),
@@ -361,36 +569,96 @@ class TarifaLogistica {
           : (d['notas'] as String).trim(),
       creadoEn: (d['creado_en'] as Timestamp?)?.toDate(),
       creadoPor: d['creado_por']?.toString(),
-      vigencias: _parsearVigencias(d),
+      vigenciasReal: vReal,
+      vigenciasChofer: vChofer,
     );
   }
 
-  /// Parsea [vigencias] del doc ordenadas asc por `desde`. Si el doc no las
-  /// trae (tarifa anterior al versionado 2026-06), sintetiza UNA desde los
-  /// campos planos — migración perezosa, sin script.
-  static List<TarifaVigencia> _parsearVigencias(Map<String, dynamic> d) {
-    final raw = d['vigencias'] as List?;
-    if (raw != null && raw.isNotEmpty) {
-      return raw
-          .map((v) =>
-              TarifaVigencia.fromMap(Map<String, dynamic>.from(v as Map)))
+  /// Parsea las dos líneas de vigencia del doc. Prioridad **(a) > (b) > (c)**:
+  ///   (a) formato NUEVO (`vigencias_real` y/o `vigencias_chofer`) → directo
+  ///       (si falta una de las dos, se sintetiza de los planos).
+  ///   (b) formato VIEJO combinado (`vigencias`, EN PRODUCCIÓN) → se descompone
+  ///       cada entrada en una VigenciaReal (real + dador) y una VigenciaChofer
+  ///       (chofer + monto fijo), con el mismo `desde`.
+  ///   (c) pre-versionado (sin nada) → sintetiza 1 de cada desde los planos.
+  static (List<VigenciaReal>, List<VigenciaChofer>) _parsearVigencias(
+    Map<String, dynamic> d,
+  ) {
+    final rawReal = d['vigencias_real'] as List?;
+    final rawChofer = d['vigencias_chofer'] as List?;
+    final hayReal = rawReal != null && rawReal.isNotEmpty;
+    final hayChofer = rawChofer != null && rawChofer.isNotEmpty;
+    if (hayReal || hayChofer) {
+      // (a) — formato nuevo. La lista ausente (no debería pasar) se sintetiza.
+      final real = hayReal
+          ? (rawReal
+              .map((v) => VigenciaReal.fromMap(Map<String, dynamic>.from(v as Map)))
+              .toList()
+            ..sort((a, b) => a.desde.compareTo(b.desde)))
+          : [_realSinteticaDePlanos(d)];
+      final chofer = hayChofer
+          ? (rawChofer
+              .map((v) =>
+                  VigenciaChofer.fromMap(Map<String, dynamic>.from(v as Map)))
+              .toList()
+            ..sort((a, b) => a.desde.compareTo(b.desde)))
+          : [_choferSinteticaDePlanos(d)];
+      return (real, chofer);
+    }
+    final rawComb = d['vigencias'] as List?;
+    if (rawComb != null && rawComb.isNotEmpty) {
+      // (b) — formato viejo combinado: descomponer en las dos líneas.
+      final comb = rawComb
+          .map((v) => TarifaVigencia.fromMap(Map<String, dynamic>.from(v as Map)))
           .toList()
         ..sort((a, b) => a.desde.compareTo(b.desde));
+      final real = comb
+          .map((v) => VigenciaReal(
+                desde: v.desde,
+                tarifaReal: v.tarifaReal,
+                porcentajeComisionDador: v.porcentajeComisionDador,
+                montoFijoDador: v.montoFijoDador,
+                registradoEn: v.registradoEn,
+                registradoPorDni: v.registradoPorDni,
+              ))
+          .toList();
+      final chofer = comb
+          .map((v) => VigenciaChofer(
+                desde: v.desde,
+                tarifaChofer: v.tarifaChofer,
+                montoFijoChofer: v.montoFijoChofer,
+                registradoEn: v.registradoEn,
+                registradoPorDni: v.registradoPorDni,
+              ))
+          .toList();
+      return (real, chofer);
     }
+    // (c) — pre-versionado: sintetizar 1 de cada desde los planos.
+    return ([_realSinteticaDePlanos(d)], [_choferSinteticaDePlanos(d)]);
+  }
+
+  static VigenciaReal _realSinteticaDePlanos(Map<String, dynamic> d) {
     final desde = (d['vigente_desde'] as Timestamp?)?.toDate() ??
         (d['creado_en'] as Timestamp?)?.toDate() ??
         DateTime(2000);
-    return [
-      TarifaVigencia(
-        desde: desde,
-        tarifaReal: (d['tarifa_real'] as num?)?.toDouble() ?? 0,
-        tarifaChofer: (d['tarifa_chofer'] as num?)?.toDouble() ?? 0,
-        montoFijoChofer: (d['monto_fijo_chofer'] as num?)?.toDouble(),
-        porcentajeComisionDador:
-            (d['porcentaje_comision_dador'] as num?)?.toDouble(),
-        montoFijoDador: (d['monto_fijo_dador'] as num?)?.toDouble(),
-      ),
-    ];
+    return VigenciaReal(
+      desde: desde,
+      tarifaReal: (d['tarifa_real'] as num?)?.toDouble() ?? 0,
+      porcentajeComisionDador:
+          (d['porcentaje_comision_dador'] as num?)?.toDouble(),
+      montoFijoDador: (d['monto_fijo_dador'] as num?)?.toDouble(),
+    );
+  }
+
+  static VigenciaChofer _choferSinteticaDePlanos(Map<String, dynamic> d) {
+    final desde = (d['vigente_desde'] as Timestamp?)?.toDate() ??
+        (d['creado_en'] as Timestamp?)?.toDate() ??
+        DateTime(2000);
+    return VigenciaChofer(
+      desde: desde,
+      tarifaChofer: (d['tarifa_chofer'] as num?)?.toDouble() ?? 0,
+      montoFijoChofer: (d['monto_fijo_chofer'] as num?)?.toDouble(),
+    );
   }
 
   factory TarifaLogistica.fromDoc(
@@ -423,8 +691,15 @@ class TarifaLogistica {
       'activa': activa,
       if (notas != null) 'notas': notas,
       if (creadoPor != null) 'creado_por': creadoPor,
-      if (vigencias.isNotEmpty)
-        'vigencias': vigencias.map((v) => v.toMap()).toList(),
+      // Dos líneas independientes (fuente de verdad).
+      if (vigenciasReal.isNotEmpty)
+        'vigencias_real': vigenciasReal.map((v) => v.toMap()).toList(),
+      if (vigenciasChofer.isNotEmpty)
+        'vigencias_chofer': vigenciasChofer.map((v) => v.toMap()).toList(),
+      // Combinado derivado: compat con apps viejas (en producción) que solo
+      // entienden `vigencias`. Reproduce el precio por fecha fielmente.
+      if (vigenciasReal.isNotEmpty || vigenciasChofer.isNotEmpty)
+        'vigencias': vigenciasCombinadas().map((v) => v.toMap()).toList(),
     };
   }
 }

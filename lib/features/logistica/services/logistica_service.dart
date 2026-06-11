@@ -437,10 +437,9 @@ class LogisticaService {
     if (tarifaReal < 0 || tarifaChofer < 0) {
       throw ArgumentError('Las tarifas no pueden ser negativas.');
     }
-    if (tarifaReal > 0 && tarifaChofer > 0 && tarifaChofer > tarifaReal) {
-      throw ArgumentError(
-          'La tarifa del chofer no puede superar la tarifa real.');
-    }
+    // NO se valida "chofer ≤ real" (quitado 2026-06-11, pedido Santiago): hay
+    // tarifas bajas que se complementan con otras altas, donde el chofer cobra
+    // más que la real es legítimo. El form muestra un aviso suave no bloqueante.
     if (porcentajeComisionDador != null) {
       if (porcentajeComisionDador < 0 || porcentajeComisionDador > 100) {
         throw ArgumentError(
@@ -455,11 +454,27 @@ class LogisticaService {
           'El monto fijo del chofer debe ser mayor a 0 (dejá vacío para usar el 18%).');
     }
 
-    // Primera vigencia del historial de precios — los importes del alta,
-    // vigentes desde hoy. (`serverTimestamp()` no se permite dentro de un
-    // array, así que `desde`/`registradoEn` van con client-time.)
+    // Primeras vigencias del historial — los importes del alta, vigentes desde
+    // hoy, en las DOS líneas (real + chofer). (`serverTimestamp()` no se
+    // permite dentro de un array, así que `desde`/`registradoEn` van con
+    // client-time.) El `vigencias` combinado es el derivado para apps viejas.
     final ahora = DateTime.now();
-    final vigenciaInicial = TarifaVigencia(
+    final vigRealInicial = VigenciaReal(
+      desde: ahora,
+      tarifaReal: tarifaReal,
+      porcentajeComisionDador: porcentajeComisionDador,
+      montoFijoDador: montoFijoDador,
+      registradoEn: ahora,
+      registradoPorDni: PrefsService.dni,
+    );
+    final vigChoferInicial = VigenciaChofer(
+      desde: ahora,
+      tarifaChofer: tarifaChofer,
+      montoFijoChofer: montoFijoChofer,
+      registradoEn: ahora,
+      registradoPorDni: PrefsService.dni,
+    );
+    final vigCombinadaInicial = TarifaVigencia(
       desde: ahora,
       tarifaReal: tarifaReal,
       tarifaChofer: tarifaChofer,
@@ -494,7 +509,9 @@ class LogisticaService {
       'activa': true,
       if (notas != null && notas.trim().isNotEmpty) 'notas': notas.trim(),
       'vigente_desde': FieldValue.serverTimestamp(),
-      'vigencias': [vigenciaInicial.toMap()],
+      'vigencias_real': [vigRealInicial.toMap()],
+      'vigencias_chofer': [vigChoferInicial.toMap()],
+      'vigencias': [vigCombinadaInicial.toMap()],
       'creado_en': FieldValue.serverTimestamp(),
       'creado_por': PrefsService.dni,
     });
@@ -507,36 +524,23 @@ class LogisticaService {
     await tarifasCol.doc(id).update(cambios);
   }
 
-  /// Registra un NUEVO PRECIO (vigencia) para una tarifa existente, vigente
-  /// desde [desde]. No borra las versiones anteriores — quedan en el
-  /// historial. Si ya hay una vigencia el MISMO día, la reemplaza (corrige
-  /// un precio cargado mal). Recomputa los campos planos = precio vigente
-  /// HOY (cache para listas + app vieja). Luego dispara el recálculo
-  /// automático de los viajes NO liquidados que usan la tarifa (cada tramo
-  /// por su fecha de carga) y devuelve cuántos viajes se recalcularon.
-  ///
-  /// Solo versiona IMPORTES; la ruta/dador/etc. se editan con
-  /// [actualizarTarifa]. La vigencia se escribe ANTES del recálculo: si el
-  /// recálculo se interrumpe, re-llamar a este método (o a
-  /// `ViajesService.recalcularViajesNoLiquidadosConTarifa`) lo completa —
-  /// es idempotente.
-  static Future<int> registrarNuevoPrecio({
+  /// Registra una nueva vigencia de la TARIFA REAL (lo que cobra Vecchi),
+  /// vigente desde [desde]. No borra las anteriores — quedan en el historial.
+  /// Si ya hay una vigencia real el MISMO día, la reemplaza (corrige un precio
+  /// cargado mal). Recomputa los planos (cache) y dispara el recálculo de los
+  /// viajes NO liquidados (cada tramo por su fecha de carga). El dador
+  /// (informativo) viaja con la real. Idempotente. Devuelve cuántos viajes se
+  /// recalcularon.
+  static Future<int> registrarNuevoPrecioReal({
     required String id,
     required DateTime desde,
     required double tarifaReal,
-    required double tarifaChofer,
-    double? montoFijoChofer,
     double? porcentajeComisionDador,
     double? montoFijoDador,
   }) async {
     if (id.isEmpty) throw ArgumentError('id de tarifa vacío.');
-    // Validaciones (espejo de crearTarifa).
-    if (tarifaReal < 0 || tarifaChofer < 0) {
-      throw ArgumentError('Las tarifas no pueden ser negativas.');
-    }
-    if (tarifaReal > 0 && tarifaChofer > 0 && tarifaChofer > tarifaReal) {
-      throw ArgumentError(
-          'La tarifa del chofer no puede superar la tarifa real.');
+    if (tarifaReal < 0) {
+      throw ArgumentError('La tarifa no puede ser negativa.');
     }
     if (porcentajeComisionDador != null &&
         (porcentajeComisionDador < 0 || porcentajeComisionDador > 100)) {
@@ -545,6 +549,54 @@ class LogisticaService {
     }
     if (montoFijoDador != null && montoFijoDador <= 0) {
       throw ArgumentError('El monto fijo del dador debe ser mayor a 0.');
+    }
+
+    final snap = await tarifasCol.doc(id).get();
+    if (!snap.exists) throw StateError('La tarifa no existe.');
+    final previa = TarifaLogistica.fromMap(snap.id, snap.data()!);
+
+    final ahora = DateTime.now();
+    final nueva = VigenciaReal(
+      desde: desde, // el constructor normaliza a día
+      tarifaReal: tarifaReal,
+      porcentajeComisionDador: porcentajeComisionDador,
+      montoFijoDador: montoFijoDador,
+      registradoEn: ahora,
+      registradoPorDni: PrefsService.dni,
+    );
+    final listaReal = [
+      ...previa.vigenciasReal.where((v) => !_mismoDia(v.desde, nueva.desde)),
+      nueva,
+    ]..sort((a, b) => a.desde.compareTo(b.desde));
+
+    final actualizada = await _persistirVigencias(
+      id: id,
+      data: snap.data()!,
+      vigenciasReal: listaReal,
+      vigenciasChofer: previa.vigenciasChofer,
+    );
+
+    return ViajesService.recalcularRealNoLiquidados(
+      actualizada,
+      porDni: PrefsService.dni,
+    );
+  }
+
+  /// Registra una nueva vigencia del PAGO AL CHOFER, vigente desde [desde].
+  /// Línea independiente de la real. Si es RETROACTIVA, recalcula los viajes
+  /// no liquidados que la toquen (revierte la decisión 2026-06-04; pisa el
+  /// override manual — decisión Santiago 2026-06-11). [montoFijoChofer] no
+  /// null → el chofer cobra ese monto fijo por viaje (la `tarifaChofer` se
+  /// ignora). Idempotente. Devuelve cuántos viajes se recalcularon.
+  static Future<int> registrarNuevoPrecioChofer({
+    required String id,
+    required DateTime desde,
+    required double tarifaChofer,
+    double? montoFijoChofer,
+  }) async {
+    if (id.isEmpty) throw ArgumentError('id de tarifa vacío.');
+    if (tarifaChofer < 0) {
+      throw ArgumentError('La tarifa no puede ser negativa.');
     }
     if (montoFijoChofer != null && montoFijoChofer <= 0) {
       throw ArgumentError('El monto fijo del chofer debe ser mayor a 0.');
@@ -555,48 +607,68 @@ class LogisticaService {
     final previa = TarifaLogistica.fromMap(snap.id, snap.data()!);
 
     final ahora = DateTime.now();
-    final nueva = TarifaVigencia(
+    final nueva = VigenciaChofer(
       desde: desde, // el constructor normaliza a día
-      tarifaReal: tarifaReal,
       tarifaChofer: tarifaChofer,
       montoFijoChofer: montoFijoChofer,
-      porcentajeComisionDador: porcentajeComisionDador,
-      montoFijoDador: montoFijoDador,
       registradoEn: ahora,
       registradoPorDni: PrefsService.dni,
     );
-    // Reemplazar la vigencia del mismo día (corrige typo) + agregar la
-    // nueva, ordenadas asc.
-    final lista = [
-      ...previa.vigencias.where((v) => !_mismoDia(v.desde, nueva.desde)),
+    final listaChofer = [
+      ...previa.vigenciasChofer.where((v) => !_mismoDia(v.desde, nueva.desde)),
       nueva,
     ]..sort((a, b) => a.desde.compareTo(b.desde));
-    final vigenciasMap = lista.map((v) => v.toMap()).toList();
 
-    // Tarifa con las vigencias nuevas (reusa vigenteEn para los planos).
+    final actualizada = await _persistirVigencias(
+      id: id,
+      data: snap.data()!,
+      vigenciasReal: previa.vigenciasReal,
+      vigenciasChofer: listaChofer,
+    );
+
+    return ViajesService.recalcularChoferNoLiquidados(
+      actualizada,
+      porDni: PrefsService.dni,
+    );
+  }
+
+  /// Persiste las DOS líneas de vigencia + el `vigencias` combinado DERIVADO
+  /// (compat con apps viejas en producción, que solo entienden ese array) +
+  /// los campos planos = precio vigente HOY (cache para listas + app vieja).
+  /// Reconstruye la tarifa forzando el formato nuevo (también migra una que
+  /// venía en formato viejo). Devuelve la tarifa actualizada para disparar el
+  /// recálculo sobre ella.
+  static Future<TarifaLogistica> _persistirVigencias({
+    required String id,
+    required Map<String, dynamic> data,
+    required List<VigenciaReal> vigenciasReal,
+    required List<VigenciaChofer> vigenciasChofer,
+  }) async {
+    final realMap = vigenciasReal.map((v) => v.toMap()).toList();
+    final choferMap = vigenciasChofer.map((v) => v.toMap()).toList();
     final actualizada = TarifaLogistica.fromMap(id, {
-      ...snap.data()!,
-      'vigencias': vigenciasMap,
+      ...data,
+      'vigencias_real': realMap,
+      'vigencias_chofer': choferMap,
     });
-    final hoy = actualizada.vigenteEn(ahora);
-
+    final hoy = actualizada.vigenteEn(DateTime.now());
+    // vigente_desde plano = el cambio vigente más reciente (real o chofer).
+    final vigenteDesde = hoy.desdeReal.isAfter(hoy.desdeChofer)
+        ? hoy.desdeReal
+        : hoy.desdeChofer;
     await tarifasCol.doc(id).update({
-      'vigencias': vigenciasMap,
-      // Campos planos = precio vigente hoy (cache: listas + app vieja).
+      'vigencias_real': realMap,
+      'vigencias_chofer': choferMap,
+      'vigencias':
+          actualizada.vigenciasCombinadas().map((v) => v.toMap()).toList(),
       'tarifa_real': hoy.tarifaReal,
       'tarifa_chofer': hoy.tarifaChofer,
       'monto_fijo_chofer': hoy.montoFijoChofer,
       'porcentaje_comision_dador': hoy.porcentajeComisionDador,
       'monto_fijo_dador': hoy.montoFijoDador,
-      'vigente_desde': Timestamp.fromDate(hoy.desde),
+      'vigente_desde': Timestamp.fromDate(vigenteDesde),
     });
-
-    // Recálculo automático de viajes no liquidados (cada tramo por su
-    // fecha de carga). Idempotente.
-    return ViajesService.recalcularViajesNoLiquidadosConTarifa(
-      actualizada,
-      porDni: PrefsService.dni,
-    );
+    return actualizada;
   }
 
   static bool _mismoDia(DateTime a, DateTime b) =>

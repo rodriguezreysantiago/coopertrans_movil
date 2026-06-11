@@ -391,68 +391,112 @@ class ViajesService {
 
   /// Recalcula la TARIFA REAL de los viajes ACTIVOS y NO liquidados que usan
   /// [tarifa] en algún tramo, re-resolviéndola por la FECHA DE CARGA del
-  /// tramo (la versión que regía esa fecha). **SOLO toca la tarifa real**: la
-  /// tarifa/monto fijo del chofer y la comisión del dador del viaje se
-  /// preservan (decisión Santiago 2026-06-04 — el pago al chofer de un viaje
-  /// ya cargado no cambia ante un aumento posterior; el historial de
-  /// vigencias igual registra los cambios de la chofer). Los viajes
-  /// liquidados NUNCA se tocan, y los tramos cuya real no cambió se saltean
-  /// (la cuenta refleja solo cambios reales, sin writes de gusto).
+  /// tramo (la versión que regía esa fecha). **SOLO toca la tarifa real**
+  /// (`conTarifaReal` preserva el pago al chofer y la comisión del dador del
+  /// viaje). Lo dispara `LogisticaService.registrarNuevoPrecioReal`.
   /// Idempotente. Devuelve cuántos viajes se actualizaron.
-  ///
-  /// Lo dispara `LogisticaService.registrarNuevoPrecio` tras registrar una
-  /// vigencia. Client-side + WriteBatch (NO runTransaction — bug Windows),
-  /// en lotes de 500 (límite de Firestore).
-  static Future<int> recalcularViajesNoLiquidadosConTarifa(
+  static Future<int> recalcularRealNoLiquidados(
     TarifaLogistica tarifa, {
     required String porDni,
-  }) async {
-    if (tarifa.id.isEmpty) return 0;
+  }) {
     final ahora = DateTime.now();
-    // Helper local: recalcula los tramos de ESTA tarifa de un viaje por su
-    // fecha de carga. Re-resuelve SOLO la tarifa real (`conTarifaReal`
-    // preserva chofer + monto fijo chofer + comisión del dador). Devuelve los
-    // tramos nuevos y si hubo algún cambio. Idempotente: si la real ya
-    // coincide, no marca cambio.
-    (List<TramoViaje>, bool) recalcularTramos(Viaje v) {
-      var cambio = false;
-      final nuevos = v.tramos.map((t) {
-        if (t.tarifaId != tarifa.id) return t;
+    return _recalcularViajesConTarifa(
+      tarifa,
+      porDni: porDni,
+      // SOLO la tarifa real; salta el tramo si ya coincide (idempotencia).
+      recalcularTramo: (t) {
         final vig = tarifa.vigenteEn(t.fechaCarga ?? ahora);
-        if (vig.tarifaReal == t.tarifaSnapshot.tarifaReal) return t;
-        cambio = true;
+        if (vig.tarifaReal == t.tarifaSnapshot.tarifaReal) return null;
         return t.copyWith(
           tarifaSnapshot: t.tarifaSnapshot.conTarifaReal(vig.tarifaReal),
         );
+      },
+    );
+  }
+
+  /// Recalcula el PAGO AL CHOFER (tarifaChofer + montoFijoChofer) de los
+  /// viajes ACTIVOS y NO liquidados que usan [tarifa], re-resolviéndolo por la
+  /// FECHA DE CARGA del tramo. **SOLO toca el lado del chofer**
+  /// (`conTarifaChofer` preserva la real y el dador del viaje). Revierte la
+  /// decisión 2026-06-04: ahora una vigencia chofer retroactiva SÍ recalcula
+  /// los viajes ya cargados (no liquidados) y PISA el override manual
+  /// (decisión Santiago 2026-06-11). Lo dispara
+  /// `LogisticaService.registrarNuevoPrecioChofer`. Idempotente.
+  static Future<int> recalcularChoferNoLiquidados(
+    TarifaLogistica tarifa, {
+    required String porDni,
+  }) {
+    final ahora = DateTime.now();
+    return _recalcularViajesConTarifa(
+      tarifa,
+      porDni: porDni,
+      recalcularTramo: (t) {
+        final vig = tarifa.vigenteEn(t.fechaCarga ?? ahora);
+        final snap = t.tarifaSnapshot;
+        // Comparar el PAR: un cambio de MODO (por unidad ↔ monto fijo) con la
+        // misma tarifaChofer también es un cambio y hay que aplicarlo.
+        if (vig.tarifaChofer == snap.tarifaChofer &&
+            vig.montoFijoChofer == snap.montoFijoChofer) {
+          return null;
+        }
+        return t.copyWith(
+          tarifaSnapshot: snap.conTarifaChofer(
+            tarifaChofer: vig.tarifaChofer,
+            montoFijoChofer: vig.montoFijoChofer,
+          ),
+        );
+      },
+    );
+  }
+
+  /// Andamiaje común del recálculo masivo por cambio de precio. [recalcularTramo]
+  /// decide, para cada tramo que usa [tarifa], el tramo NUEVO (o `null` si ese
+  /// tramo no cambia → idempotencia). Lo usan [recalcularRealNoLiquidados] (solo
+  /// la real) y [recalcularChoferNoLiquidados] (solo el pago al chofer); cada uno
+  /// toca SU lado y preserva el otro.
+  ///
+  /// Scan client-side de viajes `activo==true` (los tramos son un array de
+  /// objetos → no se puede query "tiene tramo con tarifaId X"). Filtra por
+  /// `liquidado` (NO por estado: un CONCLUIDO no liquidado SÍ se recalcula; los
+  /// liquidados NUNCA se tocan). RE-LEE cada doc justo antes del WriteBatch
+  /// (anti lost-update, patrón de `marcarLiquidadosBulk`) en lotes de 500 (NO
+  /// runTransaction — bug Windows). Si un lote falla, la vigencia ya quedó en la
+  /// tarifa → re-correr es idempotente y completa lo que faltó.
+  static Future<int> _recalcularViajesConTarifa(
+    TarifaLogistica tarifa, {
+    required String porDni,
+    required TramoViaje? Function(TramoViaje tramo) recalcularTramo,
+  }) async {
+    if (tarifa.id.isEmpty) return 0;
+
+    // Aplica recalcularTramo a los tramos de ESTA tarifa; devuelve los tramos
+    // nuevos y si hubo algún cambio.
+    (List<TramoViaje>, bool) recalcular(Viaje v) {
+      var cambio = false;
+      final nuevos = v.tramos.map((t) {
+        if (t.tarifaId != tarifa.id) return t;
+        final nuevo = recalcularTramo(t);
+        if (nuevo == null) return t;
+        cambio = true;
+        return nuevo;
       }).toList();
       return (nuevos, cambio);
     }
 
-    // 1) Scan inicial → ids de viajes CANDIDATOS (un tramo de esta tarifa cuya
-    //    real cambia). No podemos query "tiene tramo con tarifaId X" (los
-    //    tramos son un array de objetos), por eso el scan client-side.
+    // 1) Scan inicial → ids de viajes CANDIDATOS.
     final snap = await _col.where('activo', isEqualTo: true).get();
     final candidatos = <String>[];
     for (final doc in snap.docs) {
       final data = doc.data();
-      // Los viajes ya liquidados NO se tocan (ya se le pagó al chofer).
-      // Filtramos por `liquidado`, NO por estado: un CONCLUIDO todavía
-      // no liquidado SÍ se recalcula.
       if (data['liquidado'] == true) continue;
       final v = Viaje.fromMap(doc.id, data);
       if (!v.tramos.any((t) => t.tarifaId == tarifa.id)) continue;
-      final (_, cambia) = recalcularTramos(v);
+      final (_, cambia) = recalcular(v);
       if (cambia) candidatos.add(doc.id);
     }
     if (candidatos.isEmpty) return 0;
 
-    // 2) Por cada candidato, RE-LEER el doc JUSTO antes del batch (guarda
-    //    anti lost-update, patrón de `marcarLiquidadosBulk`): recalculamos
-    //    sobre el estado MÁS RECIENTE del viaje, no sobre el del scan inicial.
-    //    Así una edición concurrente (kg descargados, otro tramo, multi-PC) no
-    //    se pisa con datos viejos. WriteBatch en lotes de 500 (límite
-    //    Firestore). Si un lote falla, la vigencia ya quedó en la tarifa →
-    //    re-correr el método es idempotente y completa lo que faltó.
+    // 2) Re-lectura por doc + WriteBatch en lotes de 500.
     var actualizados = 0;
     for (var i = 0; i < candidatos.length; i += 500) {
       final chunk = candidatos.skip(i).take(500).toList();
@@ -468,7 +512,7 @@ class ViajesService {
           continue;
         }
         final v = Viaje.fromMap(fresh.id, data);
-        final (nuevosTramos, cambio) = recalcularTramos(v);
+        final (nuevosTramos, cambio) = recalcular(v);
         if (!cambio) continue; // ya estaba al día (idempotencia)
         batch.update(
           _col.doc(id),

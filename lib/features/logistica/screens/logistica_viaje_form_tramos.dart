@@ -169,9 +169,10 @@ class _TramoEditState {
     if (_snapshotOriginal != null && tarifa!.id == _tarifaIdOriginal) {
       // EDITANDO un viaje sin cambiar la tarifa: preservamos del snapshot
       // original la tarifa/monto fijo del chofer, la comisión del dador y la
-      // ruta — solo re-resolvemos la TARIFA REAL por la fecha de carga
-      // (Santiago 2026-06-04: el pago al chofer de un viaje ya cargado no
-      // cambia ante un aumento posterior).
+      // ruta — solo re-resolvemos la TARIFA REAL por la fecha de carga. El
+      // pago al chofer NO se re-resuelve en el form; si cambió su vigencia, el
+      // recálculo masivo (registrarNuevoPrecioChofer, 2026-06-11) ya lo dejó
+      // al día sobre los viajes no liquidados.
       base = _snapshotOriginal!.conTarifaReal(vig.tarifaReal);
     } else {
       // Alta, o el operador eligió OTRA tarifa: el snapshot toma TODOS los

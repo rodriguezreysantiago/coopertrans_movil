@@ -493,6 +493,13 @@ class _LogisticaTarifaFormScreenState extends State<LogisticaTarifaFormScreen> {
                     etiqueta: 'Tarifa chofer (lo que se le paga)',
                     color: c.info,
                   ),
+                // Aviso suave no bloqueante: el chofer cobra más que la real
+                // (solo aplica al modo por unidad, no al monto fijo por viaje).
+                if (!_modoMontoFijoChofer)
+                  _AvisoChoferSuperaReal(
+                    realCtrl: _tarifaRealCtrl,
+                    choferCtrl: _tarifaChoferCtrl,
+                  ),
               ],
             )
           else if (_tarifaCargada != null)
@@ -662,14 +669,10 @@ class _LogisticaTarifaFormScreenState extends State<LogisticaTarifaFormScreen> {
       setState(() => _error = 'Las tarifas no pueden ser negativas.');
       return;
     }
-    // La validación "chofer no puede superar real" solo cuando AMBOS están
-    // definidos (ambos > 0). Si alguno es 0 (por definir), no hay nada que
-    // comparar.
-    if (tarifaReal > 0 && tarifaChofer > 0 && tarifaChofer > tarifaReal) {
-      setState(() =>
-          _error = 'La tarifa del chofer no puede superar la tarifa real.');
-      return;
-    }
+    // Ya NO se bloquea "chofer > real" (2026-06-11, pedido Santiago): es
+    // legítimo (tarifas bajas que se complementan con altas). El form muestra
+    // un aviso suave no bloqueante (_AvisoChoferSuperaReal) en la sección de
+    // tarifas; acá no frenamos el guardado.
     // Si el operador eligió "monto fijo por viaje", parseamos y validamos.
     // Si está vacío o = 0, error — sino la tarifa quedaría ambigua entre
     // "modo monto fijo" y "no se cargó nada".
@@ -1553,9 +1556,11 @@ class _SelectorProducto extends StatelessWidget {
 }
 
 // =============================================================================
-// PRECIO Y VIGENCIA (solo edición) — precio vigente hoy + "Registrar nuevo
-// precio" (con fecha) + historial de cambios. Reemplaza a la sección "Tarifas"
-// editable: el precio se versiona, no se pisa (pedido Santiago 2026-06).
+// PRECIO Y VIGENCIA (solo edición) — DOS líneas independientes: TARIFA REAL
+// (Vecchi) y PAGO AL CHOFER, cada una con su precio vigente, su botón para
+// registrar un precio nuevo con fecha propia, y su historial. Separadas a
+// pedido de Santiago (2026-06-11): real y chofer se negocian por separado y
+// cambian en fechas distintas.
 // =============================================================================
 
 String _fmtFechaDDMMAAAA(DateTime d) => '${d.day.toString().padLeft(2, '0')}-'
@@ -1575,160 +1580,235 @@ class _SeccionPrecioVigencia extends StatelessWidget {
     required this.onRegistrado,
   });
 
+  Future<void> _abrirSheet(BuildContext context, Widget sheet) async {
+    final n = await showModalBottomSheet<int>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.colors.surface1,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
+      ),
+      builder: (_) => sheet,
+    );
+    if (n != null) onRegistrado(n);
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final hoy = tarifa.vigenteEn(DateTime.now());
     final sufijo = tarifa.unidadTarifa.sufijoMonto;
-    final historial = tarifa.vigencias.reversed.toList(); // más reciente arriba
-    return _Seccion(
-      numero: 5,
-      titulo: 'Precio y vigencia',
-      accentDot: c.success,
+
+    return Column(
       children: [
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(AppSpacing.md),
-          decoration: BoxDecoration(
-            color: c.surface1,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(color: c.border),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const AppEyebrow('Precio vigente hoy'),
-              const SizedBox(height: AppSpacing.xs),
-              Text(
-                'Vecchi: \$${AppFormatters.formatearMonto(hoy.tarifaReal)}$sufijo',
-                style: AppType.mono
-                    .copyWith(color: c.success, fontWeight: FontWeight.w600),
-              ),
-              Text(
-                hoy.montoFijoChofer != null
-                    ? 'Chofer: \$${AppFormatters.formatearMonto(hoy.montoFijoChofer!)}/viaje (fijo)'
-                    : 'Chofer: \$${AppFormatters.formatearMonto(hoy.tarifaChofer)}$sufijo',
-                style: AppType.mono
-                    .copyWith(color: c.info, fontWeight: FontWeight.w600),
-              ),
-              if (tipoCarga == TipoCargaLogistica.terceros) ...[
-                const SizedBox(height: 2),
-                Text(
-                  hoy.montoFijoDador != null
-                      ? 'Dador: \$${AppFormatters.formatearMonto(hoy.montoFijoDador!)}/viaje'
-                      : hoy.porcentajeComisionDador != null
-                          ? 'Dador: ${hoy.porcentajeComisionDador!.toStringAsFixed(1)}%'
-                          : 'Dador: —',
-                  style: AppType.monoSm.copyWith(color: c.textMuted),
-                ),
-              ],
-              const SizedBox(height: 2),
-              Text(
-                'Desde el ${_fmtFechaDDMMAAAA(hoy.desde)}',
-                style: AppType.monoSm.copyWith(color: c.textMuted),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        AppButton.primary(
-          label: 'Registrar nuevo precio',
-          icon: Icons.add,
-          expand: true,
-          onPressed: () async {
-            final n = await showModalBottomSheet<int>(
-              context: context,
-              isScrollControlled: true,
-              backgroundColor: c.surface1,
-              shape: const RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.vertical(top: Radius.circular(AppRadius.xxl)),
-              ),
-              builder: (_) => _SheetNuevoPrecio(
-                tarifaId: tarifa.id,
-                tipoCarga: tipoCarga,
-                vigenteActual: hoy,
-              ),
-            );
-            if (n != null) onRegistrado(n);
-          },
-        ),
-        const SizedBox(height: AppSpacing.lg),
-        const AppEyebrow('Historial de precios'),
-        const SizedBox(height: AppSpacing.sm),
-        ...historial.map((v) {
-          final esVigente = identical(v, hoy);
-          return Container(
-            margin: const EdgeInsets.only(bottom: AppSpacing.xs),
-            padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-            decoration: BoxDecoration(
-              color: c.surface2,
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              border: Border.all(
-                color: esVigente ? c.success.withValues(alpha: 0.5) : c.border,
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        // ─── TARIFA REAL (Vecchi) ──────────────────────────────────────────
+        _Seccion(
+          numero: 5,
+          titulo: 'Tarifa real (Vecchi)',
+          accentDot: c.success,
+          children: [
+            _BoxInfo(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Desde ${_fmtFechaDDMMAAAA(v.desde)}',
-                        style: AppType.bodySm.copyWith(
-                            color: c.text, fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    if (esVigente)
-                      Text('VIGENTE',
-                          style: AppType.monoSm.copyWith(
-                              color: c.success, fontWeight: FontWeight.w700)),
-                  ],
-                ),
-                const SizedBox(height: 2),
+                const AppEyebrow('Precio vigente hoy'),
+                const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'Vecchi \$${AppFormatters.formatearMonto(v.tarifaReal)}$sufijo  ·  '
-                  '${v.montoFijoChofer != null ? "Chofer \$${AppFormatters.formatearMonto(v.montoFijoChofer!)}/viaje" : "Chofer \$${AppFormatters.formatearMonto(v.tarifaChofer)}$sufijo"}',
-                  style: AppType.monoSm.copyWith(color: c.textSecondary),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  'Vecchi: \$${AppFormatters.formatearMonto(hoy.tarifaReal)}$sufijo',
+                  style: AppType.mono
+                      .copyWith(color: c.success, fontWeight: FontWeight.w600),
                 ),
+                if (tipoCarga == TipoCargaLogistica.terceros) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    hoy.montoFijoDador != null
+                        ? 'Dador: \$${AppFormatters.formatearMonto(hoy.montoFijoDador!)}/viaje'
+                        : hoy.porcentajeComisionDador != null
+                            ? 'Dador: ${hoy.porcentajeComisionDador!.toStringAsFixed(1)}%'
+                            : 'Dador: —',
+                    style: AppType.monoSm.copyWith(color: c.textMuted),
+                  ),
+                ],
+                const SizedBox(height: 2),
+                Text('Desde el ${_fmtFechaDDMMAAAA(hoy.desdeReal)}',
+                    style: AppType.monoSm.copyWith(color: c.textMuted)),
               ],
             ),
-          );
-        }),
+            const SizedBox(height: AppSpacing.md),
+            AppButton.primary(
+              label: 'Registrar nueva tarifa real',
+              icon: Icons.add,
+              expand: true,
+              onPressed: () => _abrirSheet(
+                context,
+                _SheetNuevoPrecioReal(
+                  tarifaId: tarifa.id,
+                  tipoCarga: tipoCarga,
+                  vigente: hoy,
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            const AppEyebrow('Historial — tarifa real'),
+            const SizedBox(height: AppSpacing.sm),
+            ...tarifa.vigenciasReal.reversed.map(
+              (v) => _FilaHistorial(
+                desde: v.desde,
+                detalle:
+                    'Vecchi \$${AppFormatters.formatearMonto(v.tarifaReal)}$sufijo',
+                esVigente: v.desde == hoy.desdeReal,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.mdDense),
+        // ─── PAGO AL CHOFER ────────────────────────────────────────────────
+        _Seccion(
+          titulo: 'Pago al chofer',
+          accentDot: c.info,
+          children: [
+            _BoxInfo(
+              children: [
+                const AppEyebrow('Pago vigente hoy'),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  hoy.montoFijoChofer != null
+                      ? 'Chofer: \$${AppFormatters.formatearMonto(hoy.montoFijoChofer!)}/viaje (fijo)'
+                      : 'Chofer: \$${AppFormatters.formatearMonto(hoy.tarifaChofer)}$sufijo',
+                  style: AppType.mono
+                      .copyWith(color: c.info, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 2),
+                Text('Desde el ${_fmtFechaDDMMAAAA(hoy.desdeChofer)}',
+                    style: AppType.monoSm.copyWith(color: c.textMuted)),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppButton.primary(
+              label: 'Registrar nuevo pago al chofer',
+              icon: Icons.add,
+              expand: true,
+              onPressed: () => _abrirSheet(
+                context,
+                _SheetNuevoPrecioChofer(tarifaId: tarifa.id, vigente: hoy),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            const AppEyebrow('Historial — pago al chofer'),
+            const SizedBox(height: AppSpacing.sm),
+            ...tarifa.vigenciasChofer.reversed.map(
+              (v) => _FilaHistorial(
+                desde: v.desde,
+                detalle: v.montoFijoChofer != null
+                    ? 'Chofer \$${AppFormatters.formatearMonto(v.montoFijoChofer!)}/viaje'
+                    : 'Chofer \$${AppFormatters.formatearMonto(v.tarifaChofer)}$sufijo',
+                esVigente: v.desde == hoy.desdeChofer,
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
 }
 
-/// Bottom sheet para registrar un nuevo precio (vigencia) de una tarifa.
-/// Precarga los campos con el precio vigente. Al confirmar llama a
-/// `LogisticaService.registrarNuevoPrecio` y devuelve (pop) la cantidad de
-/// viajes recalculados.
-class _SheetNuevoPrecio extends StatefulWidget {
-  final String tarifaId;
-  final TipoCargaLogistica tipoCarga;
-  final TarifaVigencia vigenteActual;
-  const _SheetNuevoPrecio({
-    required this.tarifaId,
-    required this.tipoCarga,
-    required this.vigenteActual,
+/// Caja informativa (surface1 + borde) reusada por los "precio vigente hoy".
+class _BoxInfo extends StatelessWidget {
+  final List<Widget> children;
+  const _BoxInfo({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: c.surface1,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        border: Border.all(color: c.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+}
+
+/// Una fila del historial de precios (real o chofer). [detalle] es el texto
+/// del importe; [esVigente] resalta la versión que rige hoy.
+class _FilaHistorial extends StatelessWidget {
+  final DateTime desde;
+  final String detalle;
+  final bool esVigente;
+  const _FilaHistorial({
+    required this.desde,
+    required this.detalle,
+    required this.esVigente,
   });
 
   @override
-  State<_SheetNuevoPrecio> createState() => _SheetNuevoPrecioState();
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      margin: const EdgeInsets.only(bottom: AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: c.surface2,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(
+          color: esVigente ? c.success.withValues(alpha: 0.5) : c.border,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('Desde ${_fmtFechaDDMMAAAA(desde)}',
+                    style: AppType.bodySm
+                        .copyWith(color: c.text, fontWeight: FontWeight.w600)),
+              ),
+              if (esVigente)
+                Text('VIGENTE',
+                    style: AppType.monoSm.copyWith(
+                        color: c.success, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(detalle,
+              style: AppType.monoSm.copyWith(color: c.textSecondary),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
 }
 
-class _SheetNuevoPrecioState extends State<_SheetNuevoPrecio> {
+/// Bottom sheet para registrar una nueva vigencia de la TARIFA REAL (lo que
+/// cobra Vecchi). Precarga con el precio vigente. Devuelve (pop) la cantidad
+/// de viajes recalculados.
+class _SheetNuevoPrecioReal extends StatefulWidget {
+  final String tarifaId;
+  final TipoCargaLogistica tipoCarga;
+  final ImportesVigentes vigente;
+  const _SheetNuevoPrecioReal({
+    required this.tarifaId,
+    required this.tipoCarga,
+    required this.vigente,
+  });
+
+  @override
+  State<_SheetNuevoPrecioReal> createState() => _SheetNuevoPrecioRealState();
+}
+
+class _SheetNuevoPrecioRealState extends State<_SheetNuevoPrecioReal> {
   late final TextEditingController _realCtrl;
-  late final TextEditingController _choferCtrl;
-  late final TextEditingController _montoFijoChoferCtrl;
   late final TextEditingController _comisionCtrl;
   late final TextEditingController _montoFijoDadorCtrl;
-  late bool _modoMontoFijoChofer;
   late bool _modoMontoFijoDador;
   DateTime _fecha = DateTime.now();
   bool _guardando = false;
@@ -1737,19 +1817,10 @@ class _SheetNuevoPrecioState extends State<_SheetNuevoPrecio> {
   @override
   void initState() {
     super.initState();
-    final v = widget.vigenteActual;
+    final v = widget.vigente;
     _realCtrl = TextEditingController(
         text:
             v.tarifaReal > 0 ? AppFormatters.formatearMonto(v.tarifaReal) : '');
-    _choferCtrl = TextEditingController(
-        text: v.tarifaChofer > 0
-            ? AppFormatters.formatearMonto(v.tarifaChofer)
-            : '');
-    _modoMontoFijoChofer = v.montoFijoChofer != null;
-    _montoFijoChoferCtrl = TextEditingController(
-        text: v.montoFijoChofer != null
-            ? AppFormatters.formatearMonto(v.montoFijoChofer!)
-            : '');
     _modoMontoFijoDador = v.montoFijoDador != null;
     _comisionCtrl = TextEditingController(
         text: v.porcentajeComisionDador != null
@@ -1764,39 +1835,19 @@ class _SheetNuevoPrecioState extends State<_SheetNuevoPrecio> {
   @override
   void dispose() {
     _realCtrl.dispose();
-    _choferCtrl.dispose();
-    _montoFijoChoferCtrl.dispose();
     _comisionCtrl.dispose();
     _montoFijoDadorCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _pickFecha() async {
-    final hoy = DateTime.now();
-    final d = await showDatePicker(
-      context: context,
-      initialDate: _fecha,
-      firstDate: DateTime(hoy.year - 2),
-      lastDate: DateTime(hoy.year + 2),
-      helpText: 'Vigente desde',
-    );
-    if (d != null) setState(() => _fecha = d);
+    final nueva = await _elegirFechaVigencia(context, _fecha);
+    if (nueva != null) setState(() => _fecha = nueva);
   }
 
   Future<void> _guardar() async {
     setState(() => _error = null);
     final real = AppFormatters.parsearMonto(_realCtrl.text) ?? 0;
-    final chofer = _modoMontoFijoChofer
-        ? 0.0
-        : (AppFormatters.parsearMonto(_choferCtrl.text) ?? 0);
-    double? montoFijoChofer;
-    if (_modoMontoFijoChofer) {
-      montoFijoChofer = AppFormatters.parsearMonto(_montoFijoChoferCtrl.text);
-      if (montoFijoChofer == null || montoFijoChofer <= 0) {
-        setState(() => _error = 'Cargá el monto fijo del chofer (mayor a 0).');
-        return;
-      }
-    }
     double? comision;
     double? montoFijoDador;
     if (widget.tipoCarga == TipoCargaLogistica.terceros) {
@@ -1817,12 +1868,10 @@ class _SheetNuevoPrecioState extends State<_SheetNuevoPrecio> {
     }
     setState(() => _guardando = true);
     try {
-      final n = await LogisticaService.registrarNuevoPrecio(
+      final n = await LogisticaService.registrarNuevoPrecioReal(
         id: widget.tarifaId,
         desde: _fecha,
         tarifaReal: real,
-        tarifaChofer: chofer,
-        montoFijoChofer: montoFijoChofer,
         porcentajeComisionDador: comision,
         montoFijoDador: montoFijoDador,
       );
@@ -1848,61 +1897,17 @@ class _SheetNuevoPrecioState extends State<_SheetNuevoPrecio> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: c.border,
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                ),
-              ),
-            ),
-            const AppEyebrow('Registrar nuevo precio'),
+            const _SheetHandle(),
+            const AppEyebrow('Nueva tarifa real (Vecchi)'),
             const SizedBox(height: AppSpacing.sm),
             Text(
-              'No borra el precio anterior — queda en el historial. Al subir '
-              'la tarifa real, los viajes no liquidados se recalculan según su '
-              'fecha de carga. El pago al chofer de viajes ya cargados NO '
-              'cambia (el cambio igual queda registrado en el historial).',
+              'No borra el precio anterior — queda en el historial. Si la '
+              'fecha es anterior a hoy, la tarifa real de los viajes no '
+              'liquidados con carga en ese rango se recalcula.',
               style: AppType.bodySm.copyWith(color: c.textMuted),
             ),
             const SizedBox(height: AppSpacing.lg),
-            InkWell(
-              onTap: _pickFecha,
-              borderRadius: BorderRadius.circular(AppRadius.lg),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md, vertical: AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: c.surface2,
-                  borderRadius: BorderRadius.circular(AppRadius.lg),
-                  border: Border.all(color: c.border),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.event, size: 18, color: c.textMuted),
-                    const SizedBox(width: AppSpacing.md),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const AppEyebrow('Vigente desde'),
-                          const SizedBox(height: 2),
-                          Text(
-                            _fmtFechaDDMMAAAA(_fecha),
-                            style: AppType.body.copyWith(
-                                color: c.text, fontWeight: FontWeight.w600),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.edit_outlined, size: 16, color: c.textMuted),
-                  ],
-                ),
-              ),
-            ),
+            _SelectorFecha(fecha: _fecha, onTap: _pickFecha),
             const SizedBox(height: AppSpacing.md),
             TextField(
               controller: _realCtrl,
@@ -1913,40 +1918,6 @@ class _SheetNuevoPrecioState extends State<_SheetNuevoPrecio> {
                   .copyWith(color: c.text, fontWeight: FontWeight.w600),
               decoration: _inputDecoration(context,
                   labelText: 'Tarifa real (lo que cobra Vecchi)',
-                  prefixText: '\$ '),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            const AppEyebrow('Pago al chofer'),
-            const SizedBox(height: AppSpacing.sm),
-            Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: [
-                _PillSelector(
-                  label: '18% sobre tarifa chofer',
-                  seleccionado: !_modoMontoFijoChofer,
-                  onTap: () => setState(() => _modoMontoFijoChofer = false),
-                ),
-                _PillSelector(
-                  label: 'Monto fijo por viaje',
-                  seleccionado: _modoMontoFijoChofer,
-                  onTap: () => setState(() => _modoMontoFijoChofer = true),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.md),
-            TextField(
-              controller:
-                  _modoMontoFijoChofer ? _montoFijoChoferCtrl : _choferCtrl,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [AppFormatters.inputMilesDecimal],
-              style: AppType.mono
-                  .copyWith(color: c.text, fontWeight: FontWeight.w600),
-              decoration: _inputDecoration(context,
-                  labelText: _modoMontoFijoChofer
-                      ? 'Monto fijo al chofer (por viaje)'
-                      : 'Tarifa chofer (lo que se le paga)',
                   prefixText: '\$ '),
             ),
             if (widget.tipoCarga == TipoCargaLogistica.terceros) ...[
@@ -2002,30 +1973,353 @@ class _SheetNuevoPrecioState extends State<_SheetNuevoPrecio> {
               Text(_error!, style: AppType.bodySm.copyWith(color: c.error)),
             ],
             const SizedBox(height: AppSpacing.lg),
-            Row(
+            _AccionesSheet(guardando: _guardando, onGuardar: _guardar),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom sheet para registrar una nueva vigencia del PAGO AL CHOFER. Toggle
+/// 18%/monto fijo + fecha. Aviso suave si el pago por unidad supera la tarifa
+/// real vigente. Devuelve (pop) la cantidad de viajes recalculados.
+class _SheetNuevoPrecioChofer extends StatefulWidget {
+  final String tarifaId;
+  final ImportesVigentes vigente;
+  const _SheetNuevoPrecioChofer({
+    required this.tarifaId,
+    required this.vigente,
+  });
+
+  @override
+  State<_SheetNuevoPrecioChofer> createState() =>
+      _SheetNuevoPrecioChoferState();
+}
+
+class _SheetNuevoPrecioChoferState extends State<_SheetNuevoPrecioChofer> {
+  late final TextEditingController _choferCtrl;
+  late final TextEditingController _montoFijoChoferCtrl;
+  late bool _modoMontoFijoChofer;
+  DateTime _fecha = DateTime.now();
+  bool _guardando = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final v = widget.vigente;
+    _choferCtrl = TextEditingController(
+        text: v.tarifaChofer > 0
+            ? AppFormatters.formatearMonto(v.tarifaChofer)
+            : '');
+    _modoMontoFijoChofer = v.montoFijoChofer != null;
+    _montoFijoChoferCtrl = TextEditingController(
+        text: v.montoFijoChofer != null
+            ? AppFormatters.formatearMonto(v.montoFijoChofer!)
+            : '');
+  }
+
+  @override
+  void dispose() {
+    _choferCtrl.dispose();
+    _montoFijoChoferCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickFecha() async {
+    final nueva = await _elegirFechaVigencia(context, _fecha);
+    if (nueva != null) setState(() => _fecha = nueva);
+  }
+
+  Future<void> _guardar() async {
+    setState(() => _error = null);
+    final chofer = _modoMontoFijoChofer
+        ? 0.0
+        : (AppFormatters.parsearMonto(_choferCtrl.text) ?? 0);
+    double? montoFijoChofer;
+    if (_modoMontoFijoChofer) {
+      montoFijoChofer = AppFormatters.parsearMonto(_montoFijoChoferCtrl.text);
+      if (montoFijoChofer == null || montoFijoChofer <= 0) {
+        setState(() => _error = 'Cargá el monto fijo del chofer (mayor a 0).');
+        return;
+      }
+    }
+    setState(() => _guardando = true);
+    try {
+      final n = await LogisticaService.registrarNuevoPrecioChofer(
+        id: widget.tarifaId,
+        desde: _fecha,
+        tarifaChofer: chofer,
+        montoFijoChofer: montoFijoChofer,
+      );
+      if (mounted) Navigator.pop(context, n);
+    } catch (e) {
+      setState(() {
+        _guardando = false;
+        _error = e.toString().replaceFirst(RegExp(r'^[A-Z][a-z]+: '), '');
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final media = MediaQuery.of(context);
+    return Padding(
+      padding: EdgeInsets.only(bottom: media.viewInsets.bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const _SheetHandle(),
+            const AppEyebrow('Nuevo pago al chofer'),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'No borra el pago anterior — queda en el historial. Si la fecha '
+              'es anterior a hoy, los viajes no liquidados con carga en ese '
+              'rango se recalculan con el nuevo pago (pisa el ajuste manual).',
+              style: AppType.bodySm.copyWith(color: c.textMuted),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            _SelectorFecha(fecha: _fecha, onTap: _pickFecha),
+            const SizedBox(height: AppSpacing.md),
+            const AppEyebrow('Modo de pago'),
+            const SizedBox(height: AppSpacing.sm),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
               children: [
-                Expanded(
-                  child: AppButton.secondary(
-                    label: 'Cancelar',
-                    expand: true,
-                    onPressed: _guardando ? null : () => Navigator.pop(context),
-                  ),
+                _PillSelector(
+                  label: '18% sobre tarifa chofer',
+                  seleccionado: !_modoMontoFijoChofer,
+                  onTap: () => setState(() => _modoMontoFijoChofer = false),
                 ),
-                const SizedBox(width: AppSpacing.md),
-                Expanded(
-                  flex: 2,
-                  child: AppButton.primary(
-                    label: 'Registrar precio',
-                    icon: Icons.check,
-                    expand: true,
-                    isLoading: _guardando,
-                    onPressed: _guardando ? null : _guardar,
-                  ),
+                _PillSelector(
+                  label: 'Monto fijo por viaje',
+                  seleccionado: _modoMontoFijoChofer,
+                  onTap: () => setState(() => _modoMontoFijoChofer = true),
                 ),
               ],
             ),
+            const SizedBox(height: AppSpacing.md),
+            TextField(
+              controller:
+                  _modoMontoFijoChofer ? _montoFijoChoferCtrl : _choferCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [AppFormatters.inputMilesDecimal],
+              style: AppType.mono
+                  .copyWith(color: c.text, fontWeight: FontWeight.w600),
+              decoration: _inputDecoration(context,
+                  labelText: _modoMontoFijoChofer
+                      ? 'Monto fijo al chofer (por viaje)'
+                      : 'Tarifa chofer (lo que se le paga)',
+                  prefixText: '\$ '),
+            ),
+            // Aviso suave (no bloquea): el pago por unidad supera la real
+            // vigente. No aplica al monto fijo (distinta unidad).
+            if (!_modoMontoFijoChofer)
+              ListenableBuilder(
+                listenable: _choferCtrl,
+                builder: (context, _) {
+                  final chofer =
+                      AppFormatters.parsearMonto(_choferCtrl.text) ?? 0;
+                  final real = widget.vigente.tarifaReal;
+                  if (real <= 0 || chofer <= 0 || chofer <= real) {
+                    return const SizedBox.shrink();
+                  }
+                  return const Padding(
+                    padding: EdgeInsets.only(top: AppSpacing.md),
+                    child: _BannerAvisoAmarillo(
+                      texto: 'El pago al chofer supera la tarifa real vigente. '
+                          'Si es a propósito, está OK.',
+                    ),
+                  );
+                },
+              ),
+            if (_error != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              Text(_error!, style: AppType.bodySm.copyWith(color: c.error)),
+            ],
+            const SizedBox(height: AppSpacing.lg),
+            _AccionesSheet(guardando: _guardando, onGuardar: _guardar),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Date picker "Vigente desde" común a los dos sheets de precio.
+Future<DateTime?> _elegirFechaVigencia(
+    BuildContext context, DateTime actual) {
+  final hoy = DateTime.now();
+  return showDatePicker(
+    context: context,
+    initialDate: actual,
+    firstDate: DateTime(hoy.year - 2),
+    lastDate: DateTime(hoy.year + 2),
+    helpText: 'Vigente desde',
+  );
+}
+
+/// Barrita (handle) de los bottom sheets de precio.
+class _SheetHandle extends StatelessWidget {
+  const _SheetHandle();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        width: 40,
+        height: 4,
+        margin: const EdgeInsets.only(bottom: AppSpacing.md),
+        decoration: BoxDecoration(
+          color: context.colors.border,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+        ),
+      ),
+    );
+  }
+}
+
+/// Card tappeable "Vigente desde DD-MM-AAAA" reusada por los sheets de precio.
+class _SelectorFecha extends StatelessWidget {
+  final DateTime fecha;
+  final VoidCallback onTap;
+  const _SelectorFecha({required this.fecha, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md, vertical: AppSpacing.md),
+        decoration: BoxDecoration(
+          color: c.surface2,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(color: c.border),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.event, size: 18, color: c.textMuted),
+            const SizedBox(width: AppSpacing.md),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const AppEyebrow('Vigente desde'),
+                  const SizedBox(height: 2),
+                  Text(_fmtFechaDDMMAAAA(fecha),
+                      style: AppType.body
+                          .copyWith(color: c.text, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+            Icon(Icons.edit_outlined, size: 16, color: c.textMuted),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Botonera Cancelar / Registrar de los sheets de precio.
+class _AccionesSheet extends StatelessWidget {
+  final bool guardando;
+  final VoidCallback onGuardar;
+  const _AccionesSheet({required this.guardando, required this.onGuardar});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: AppButton.secondary(
+            label: 'Cancelar',
+            expand: true,
+            onPressed: guardando ? null : () => Navigator.pop(context),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.md),
+        Expanded(
+          flex: 2,
+          child: AppButton.primary(
+            label: 'Registrar precio',
+            icon: Icons.check,
+            expand: true,
+            isLoading: guardando,
+            onPressed: guardando ? null : onGuardar,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Aviso suave (NO bloquea) del form de ALTA: el chofer cobra más que la real.
+/// Reactivo a ambos campos. Solo aplica al modo por unidad.
+class _AvisoChoferSuperaReal extends StatelessWidget {
+  final TextEditingController realCtrl;
+  final TextEditingController choferCtrl;
+  const _AvisoChoferSuperaReal({
+    required this.realCtrl,
+    required this.choferCtrl,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Listenable.merge([realCtrl, choferCtrl]),
+      builder: (context, _) {
+        final real = AppFormatters.parsearMonto(realCtrl.text) ?? 0;
+        final chofer = AppFormatters.parsearMonto(choferCtrl.text) ?? 0;
+        if (real <= 0 || chofer <= 0 || chofer <= real) {
+          return const SizedBox.shrink();
+        }
+        return const Padding(
+          padding: EdgeInsets.only(top: AppSpacing.md),
+          child: _BannerAvisoAmarillo(
+            texto: 'El pago al chofer supera la tarifa real. Si es a propósito '
+                '(una tarifa baja que se complementa con otra alta), está OK.',
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Banner amarillo de aviso no bloqueante.
+class _BannerAvisoAmarillo extends StatelessWidget {
+  final String texto;
+  const _BannerAvisoAmarillo({required this.texto});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: c.warningSoft,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: c.warning.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 18, color: c.warning),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(texto, style: AppType.bodySm.copyWith(color: c.warning)),
+          ),
+        ],
       ),
     );
   }

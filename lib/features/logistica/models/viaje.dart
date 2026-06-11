@@ -191,6 +191,40 @@ class TarifaSnapshot {
     );
   }
 
+  /// Copia el snapshot cambiando SOLO el lado del CHOFER (tarifaChofer +
+  /// montoFijoChofer). Preserva tarifaReal + dador + ruta + empresas +
+  /// producto + unidad. Espejo de [conTarifaReal] para el recálculo
+  /// retroactivo del PAGO AL CHOFER (2026-06-11, pedido Santiago): al
+  /// registrar una vigencia chofer con fecha pasada, los viajes no liquidados
+  /// re-resuelven su pago por la fecha de carga del tramo. Revierte la
+  /// decisión 2026-06-04 (que NUNCA tocaba la chofer); ahora el override
+  /// manual también se pisa con la tarifa vigente (decisión Santiago).
+  ///
+  /// Setea AMBOS campos del lado chofer explícitamente — son modos
+  /// excluyentes (por unidad vs monto fijo), así que pasar el par evita que
+  /// quede un `montoFijoChofer` viejo cuando la nueva vigencia es por unidad,
+  /// o al revés (snapshot incoherente que `CalculosViaje` malinterpretaría).
+  TarifaSnapshot conTarifaChofer({
+    required double tarifaChofer,
+    required double? montoFijoChofer,
+  }) {
+    return TarifaSnapshot(
+      origenEtiqueta: origenEtiqueta,
+      destinoEtiqueta: destinoEtiqueta,
+      empresaOrigenNombre: empresaOrigenNombre,
+      empresaDestinoNombre: empresaDestinoNombre,
+      dadorNombre: dadorNombre,
+      porcentajeComisionDador: porcentajeComisionDador,
+      montoFijoDador: montoFijoDador,
+      unidadTarifa: unidadTarifa,
+      tarifaReal: tarifaReal,
+      tarifaChofer: tarifaChofer,
+      montoFijoChofer: montoFijoChofer,
+      producto: producto,
+      empresaOrigenId: empresaOrigenId,
+    );
+  }
+
   /// Sentinel para distinguir "no cambiar" de "explícitamente null"
   /// en copyWith (sin esto no se puede setear el override a null para
   /// volver al cálculo por porcentaje).
