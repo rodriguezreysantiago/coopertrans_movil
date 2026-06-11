@@ -2509,6 +2509,8 @@ function _systemPrompt(persona) {
   ];
 
   if (persona.rol !== 'CHOFER' && _toolsDelRol(persona.rol).length > 0) {
+    const apodo =
+      (persona.data && String(persona.data.APODO || '').trim()) || '';
     const nombre =
       persona.nombre ||
       (persona.rol === 'ADMIN' ? 'el administrador'
@@ -2522,7 +2524,8 @@ function _systemPrompt(persona) {
       .map((c) => `- ${FRASE_POR_CAPABILITY[c]}`);
     return [
       'Sos el asistente por WhatsApp de Coopertrans Móvil (empresa de',
-      `transporte Vecchi). Le respondés a ${nombre} (rol ${persona.rol}).`,
+      `transporte Vecchi). Le respondés a ${nombre} (rol ${persona.rol}).` +
+        (apodo ? ` Llamalo "${apodo}" (es el apodo que usa).` : ''),
       `Hoy es ${_hoyIso()} (zona horaria de Argentina).`,
       '',
       'PODÉS, con las herramientas:',
