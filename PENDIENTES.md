@@ -55,6 +55,28 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ---
 
+## 📅 2026-06-11 — Adelantos: cards-filtro + sin buscador + hint de últimos 3
+
+Sesión corta de UX sobre el menú **Adelantos** (`logistica_adelantos_screen`),
+validada en vivo en Windows. Todo en main + pusheado.
+
+- **Cards-filtro** (`8854fd0`): los KPIs del header (PENDIENTES · PAGADOS · ELIMINADOS ·
+  TODOS) ahora SON el filtro, reemplazan los 4 pills de vista. Conteos GLOBALES sobre la
+  base facetada (rango/empleado), cada card con su $ abajo. Se quitó el hero "$ X
+  pendiente" (repetía la card PENDIENTES). El stream trae SIEMPRE los eliminados para que
+  esa card cuente en vivo. 5° menú con el patrón (ver `feedback_cards_filtro_admin`).
+- **Sin buscador de texto** (`ad9e9cd`): se sacó el AppInput "Buscar por chofer,
+  observación…" — el filtro de Empleado ya cubre buscar por persona.
+- **"Empleado: todos" → "Buscador" con lupa** (`4ee6190`): renombrado + `Icons.search` en
+  vez del ícono de personas (sigue abriendo el selector de empleado).
+- **Hint de últimos adelantos en el alta** (`0402fb2` → `18e742d`): al crear un adelanto,
+  tras elegir el empleado se muestran sus **3 últimos adelantos NO eliminados** (fecha +
+  importe, del más viejo arriba) arriba del campo Monto, para ver cuánto lleva y decidir.
+  `AdelantosService.getUltimosDelChofer(dni, cantidad)` = one-shot por igualdad simple
+  (SIN orderBy → sin índice compuesto), filtra eliminados, ordena y recorta client-side.
+
+---
+
 ## 📅 2026-06-11 — Export de reportes Excel funcionando en web (/sistema/)
 
 Cerrado el pendiente que dejó el hotfix web del 2026-06-10: exportar un reporte Excel
