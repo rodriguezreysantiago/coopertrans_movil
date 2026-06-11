@@ -3003,10 +3003,11 @@ async function _alertarSinSaldo(db, fs) {
     await db.collection(fs.COLECCION).add({
       telefono: tel,
       mensaje:
-        '⚠️ *El asistente de WhatsApp se quedó sin saldo/cuota de Gemini.*\n\n' +
-        'Las consultas de los empleados al bot NO se están respondiendo (les ' +
-        'sale un "probá más tarde"). Recargá el saldo o revisá la facturación ' +
-        'de Gemini para reactivar el asistente.\n\n_Bot-On — Coopertrans Móvil_',
+        '⚠️ *El asistente de WhatsApp está topando la cuota de Gemini.*\n\n' +
+        'Algunas consultas de los empleados no se están respondiendo (les sale ' +
+        '"probá más tarde"). Suele ser el límite POR MINUTO (transitorio, se ' +
+        'normaliza solo). Si persiste varias horas, revisá la facturación/cuota ' +
+        'de Gemini.\n\n_Bot-On — Coopertrans Móvil_',
       estado: fs.ESTADO.pendiente,
       encolado_en: admin.firestore.FieldValue.serverTimestamp(),
       expira_en: admin.firestore.Timestamp.fromMillis(Date.now() + 24 * 60 * 60 * 1000),
@@ -3023,7 +3024,7 @@ async function _alertarSinSaldo(db, fs) {
     await ref.set(
       { avisado_en: admin.firestore.FieldValue.serverTimestamp() },
       { merge: true });
-    log.warn('[agente] Gemini sin saldo/cuota → alerta encolada al admin.');
+    log.warn('[agente] Gemini topó cuota → alerta encolada al admin.');
   } catch (e) {
     log.warn(`[agente] no pude encolar alerta sin-saldo: ${e.message}`);
   }
@@ -3111,9 +3112,19 @@ async function responder({ texto, persona, telefono, audio }, fs) {
       'no repitas el mismo texto. No menciones esta nota.]'
     : userText;
 
+  // Presupuesto de latencia GLOBAL (no solo por-fetch): el loop + los retries
+  // (sin_texto, 429) podían encadenarse a varios minutos para UNA consulta y
+  // bloquear el slot del handler. Si se agota, cae al fallback. Una acción que
+  // ya escribió queda hecha (el dedup/huboToolDeAccion evitan repetirla).
+  const PRESUPUESTO_MS = parseInt(
+    process.env.AGENTE_PRESUPUESTO_MS || '75000', 10);
   try {
-    const r = await _conversarRobusto(
-      provider, db, system, historial, userTextParaLLM, persona);
+    const r = await Promise.race([
+      _conversarRobusto(
+        provider, db, system, historial, userTextParaLLM, persona),
+      new Promise((_, rej) => setTimeout(
+        () => rej(new Error('presupuesto de latencia agotado')), PRESUPUESTO_MS)),
+    ]);
 
     if (!r.texto || !String(r.texto).trim()) {
       log.warn(`[agente] sin respuesta (${r.error || 'vacío'}) rol=${persona.rol}`);

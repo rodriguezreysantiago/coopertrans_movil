@@ -783,8 +783,29 @@ async function procesarSiguiente() {
           wa_message_id: waMessageId || null,
         });
       }
-      await batch.commit();
-      log.info(`  ${docsAgrupados.length} doc(s) marcados como agrupados`);
+      // Reintento del commit (P2.4): si falla, los agrupados quedan PENDIENTE y
+      // se reenviarían sueltos (el dedup por texto no los cubre: su texto es el
+      // individual, no el combinado). Un retry corto reduce mucho esa ventana.
+      // (El fix atómico —batch único con el doc principal— queda pendiente:
+      // requiere refactor de marcarEnviado/espejado al histórico.)
+      let commitOk = false;
+      for (let i = 0; i < 3 && !commitOk; i++) {
+        try {
+          await batch.commit();
+          commitOk = true;
+        } catch (e) {
+          log.warn(`marcar agrupados falló (intento ${i + 1}/3): ${e.message}`);
+          if (i < 2) await new Promise((r) => setTimeout(r, 500 * (i + 1)));
+        }
+      }
+      if (commitOk) {
+        log.info(`  ${docsAgrupados.length} doc(s) marcados como agrupados`);
+      } else {
+        log.error(`No pude marcar ${docsAgrupados.length} docs agrupados — ` +
+          `pueden reenviarse sueltos. docId=${docId}`);
+        health.registrarError('agrupados_no_marcados',
+          `${docId}: ${docsAgrupados.length}`);
+      }
     }
 
     // Pasar el `origen` del doc para que el contador por categoría se

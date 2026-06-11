@@ -550,7 +550,15 @@ function crearHandler(fs, wa) {
         _aprenderLid(db, persona.dni, fromLid);
       }
       if (!persona) {
-        log.debug(`Mensaje de número no registrado ${fromNumber}, ignoro.`);
+        // @lid no resuelto = posible regresión de identidad (un chofer real que
+        // no matchea) → log.info para verlo en prod. @c.us desconocido = spam de
+        // extraños → debug. (mejora 2026-06-11.)
+        if (tipoChat === 'lid') {
+          log.info(`@lid no resuelto (${fromLid || ''}); no atiendo — ` +
+            'revisar si es un chofer real con teléfono mal cargado.');
+        } else {
+          log.debug(`Mensaje de número no registrado ${fromNumber}, ignoro.`);
+        }
         return;
       }
 

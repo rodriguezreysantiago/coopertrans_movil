@@ -685,13 +685,26 @@ async function _runOnce(fs, forzar = false) {
           try {
             // Chequear estado actual antes de decidir.
             const existing = await colaRef.get();
-            if (existing.exists && existing.data().estado === fs.ESTADO.enviado) {
+            const exData = existing.exists ? existing.data() : null;
+            // Backoff de ERROR (P3.3): no regenerar cada hora un resumen que
+            // falla de forma NO transitoria (ej. destinatario sin WhatsApp).
+            // Reintentamos recién tras una ventana, en vez de spamear el día.
+            const errMs = exData && exData.error_en && exData.error_en.toMillis
+              ? exData.error_en.toMillis() : 0;
+            const enBackoffError = exData &&
+              exData.estado === fs.ESTADO.error &&
+              (Date.now() - errMs) < 4 * 60 * 60 * 1000;
+            if (exData && exData.estado === fs.ESTADO.enviado) {
               log.debug(
                 `Service diario ya ENTREGADO hoy a ${dniDestinatarioService}, skip.`
               );
+            } else if (enBackoffError) {
+              log.debug(
+                `Service diario en ERROR reciente a ${dniDestinatarioService}, espero backoff.`
+              );
             } else {
-              // No existe, o PENDIENTE, o ERROR. En cualquier caso
-              // sobreescribimos con datos frescos del cron actual.
+              // No existe, o PENDIENTE, o ERROR viejo. Sobreescribimos con datos
+              // frescos del cron actual.
               const apodoDest = aviso.resolverNombreSaludo(empDest.data);
               const mensajeService = avisoService.buildResumenDiario({
                 destinatarioNombre: apodoDest,
@@ -828,9 +841,21 @@ async function _runOnce(fs, forzar = false) {
           // Pre-chequeo: si ya fue ENVIADO hoy, skip antes de calcular
           // items (evita 3 queries pesadas EMPLEADOS+VEHICULOS+EMPRESAS).
           const existingV = await colaRefV.get();
-          if (existingV.exists && existingV.data().estado === fs.ESTADO.enviado) {
+          const exDataV = existingV.exists ? existingV.data() : null;
+          // Backoff de ERROR (P3.3): igual que service_diario — no regenerar
+          // cada hora un resumen que falla de forma NO transitoria.
+          const errMsV = exDataV && exDataV.error_en && exDataV.error_en.toMillis
+            ? exDataV.error_en.toMillis() : 0;
+          const enBackoffErrorV = exDataV &&
+            exDataV.estado === fs.ESTADO.error &&
+            (Date.now() - errMsV) < 4 * 60 * 60 * 1000;
+          if (exDataV && exDataV.estado === fs.ESTADO.enviado) {
             log.debug(
               `Vencimientos próximos ya ENTREGADO hoy a ${dniDocumentacion}, skip.`
+            );
+          } else if (enBackoffErrorV) {
+            log.debug(
+              `Vencimientos próximos en ERROR reciente a ${dniDocumentacion}, espero backoff.`
             );
           } else {
             // Etiquetas de los 4 docs por empresa — réplica de
