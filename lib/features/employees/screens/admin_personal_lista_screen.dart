@@ -57,10 +57,6 @@ class _AdminPersonalListaScreenState
   // Stream cacheado para evitar lecturas duplicadas al buscar/refrescar.
   late final Stream<QuerySnapshot> _empleadosStream;
 
-  /// Por default los 3 tanqueros + 2 testers están ocultos. Toggle del
-  /// AppBar permite verlos para auditoría/mantenimiento de esos perfiles.
-  bool _mostrarExcluidos = false;
-
   /// Grupo de roles en foco (null = todos). Lo setean las cards-filtro del
   /// hero (Santiago 2026-06-10: reemplazaron los chips por rol).
   _GrupoPersonal? _grupoFiltro;
@@ -88,17 +84,16 @@ class _AdminPersonalListaScreenState
   /// Compartido entre el conteo del hero y el filtro de la lista para que
   /// los números coincidan con lo que se ve.
   bool _visible(Map<String, dynamic> data, String dni) {
-    if (!_mostrarExcluidos &&
-        ExcluidosService.esExcluido(_excluidos, dni: dni)) {
-      return false;
-    }
     final esActivo = AppActivo.esActivo(data);
-    // La card INACTIVOS muestra SOLO las bajas (cualquier rol). El resto de
-    // las cards (incl. TODOS) muestra solo ACTIVOS — los inactivos no entran.
+    final esExcluido = ExcluidosService.esExcluido(_excluidos, dni: dni);
+    // "Baja u oculto": inactivos + tanqueros/testers. Todos van JUNTOS a la
+    // card INACTIVOS y NO suman al total ni a las cards de rol (Santiago
+    // 2026-06-10: la card de inactivos absorbió el viejo toggle de excluidos).
+    final esBaja = !esActivo || esExcluido;
     if (_grupoFiltro != null && _grupoFiltro!.soloInactivos) {
-      return !esActivo;
+      return esBaja;
     }
-    if (!esActivo) return false;
+    if (esBaja) return false;
     if (_grupoFiltro != null &&
         !_grupoFiltro!.roles
             .contains(AppRoles.normalizar(data['ROL']?.toString()))) {
@@ -112,24 +107,6 @@ class _AdminPersonalListaScreenState
     final esDesktop = AppBreakpoints.isDesktopOrLarger(context);
     return AppScaffold(
       title: 'Gestión de Personal',
-      actions: [
-        if ((_excluidos?.dnis.isNotEmpty ?? false))
-          IconButton(
-            tooltip: _mostrarExcluidos
-                ? 'Ocultar tanqueros y testers'
-                : 'Mostrar tanqueros y testers',
-            icon: Icon(
-              _mostrarExcluidos
-                  ? Icons.shield_moon_outlined
-                  : Icons.shield_outlined,
-              color: _mostrarExcluidos
-                  ? AppColors.warning
-                  : AppColors.textSecondary,
-            ),
-            onPressed: () =>
-                setState(() => _mostrarExcluidos = !_mostrarExcluidos),
-          ),
-      ],
       floatingActionButton:
           Capabilities.can(PrefsService.rol, Capability.crearEmpleado)
               ? FloatingActionButton.extended(
@@ -154,7 +131,6 @@ class _AdminPersonalListaScreenState
             builder: (ctx, snap) => _HeroYChips(
               docs: snap.data?.docs ?? const [],
               excluidos: _excluidos,
-              mostrarExcluidos: _mostrarExcluidos,
               grupoFiltro: _grupoFiltro,
               onGrupo: (g) => setState(() => _grupoFiltro = g),
             ),
@@ -200,8 +176,9 @@ enum _GrupoPersonal {
   choferes('Choferes', {AppRoles.chofer}),
   planta('Planta', {AppRoles.planta, AppRoles.gomeria, AppRoles.segHigiene}),
   administracion('Administración', {AppRoles.supervisor, AppRoles.admin}),
-  // INACTIVOS no es un rol: muestra las bajas (cualquier rol) y NO suma al
-  // total. Reemplaza al viejo toggle de inactivos (Santiago 2026-06-10).
+  // INACTIVOS no es un rol: junta las BAJAS + ocultos (inactivos + tanqueros
+  // + testers) y NO suma al total. Absorbió el viejo toggle de inactivos y el
+  // de excluidos del AppBar (Santiago 2026-06-10).
   inactivos('Inactivos', {}, soloInactivos: true);
 
   const _GrupoPersonal(this.label, this.roles, {this.soloInactivos = false});
@@ -213,14 +190,12 @@ enum _GrupoPersonal {
 class _HeroYChips extends StatelessWidget {
   final List<QueryDocumentSnapshot> docs;
   final ExcluidosSet? excluidos;
-  final bool mostrarExcluidos;
   final _GrupoPersonal? grupoFiltro;
   final ValueChanged<_GrupoPersonal?> onGrupo;
 
   const _HeroYChips({
     required this.docs,
     required this.excluidos,
-    required this.mostrarExcluidos,
     required this.grupoFiltro,
     required this.onGrupo,
   });
@@ -229,19 +204,16 @@ class _HeroYChips extends StatelessWidget {
   Widget build(BuildContext context) {
     final esDesktop = AppBreakpoints.isDesktopOrLarger(context);
 
-    // Un barrido: ACTIVOS por rol (alimentan TODOS/CHOFERES/PLANTA/
-    // ADMINISTRACIÓN) e INACTIVOS aparte (su card, que NO suma al total).
-    // Respeta el ocultado de excluidos (tanqueros/testers).
+    // Operativos (activos y NO excluidos) por rol → alimentan TODOS/CHOFERES/
+    // PLANTA/ADMINISTRACIÓN. Las bajas u ocultos (inactivos + tanqueros +
+    // testers) van JUNTOS a la card INACTIVOS y NO suman al total.
     var totalActivos = 0;
     var inactivos = 0;
     final porRol = <String, int>{};
     for (final d in docs) {
       final data = d.data() as Map<String, dynamic>;
-      if (!mostrarExcluidos &&
-          ExcluidosService.esExcluido(excluidos, dni: d.id)) {
-        continue;
-      }
-      if (AppActivo.esActivo(data)) {
+      final esExcluido = ExcluidosService.esExcluido(excluidos, dni: d.id);
+      if (AppActivo.esActivo(data) && !esExcluido) {
         totalActivos++;
         final rol = AppRoles.normalizar(data['ROL']?.toString());
         porRol[rol] = (porRol[rol] ?? 0) + 1;
