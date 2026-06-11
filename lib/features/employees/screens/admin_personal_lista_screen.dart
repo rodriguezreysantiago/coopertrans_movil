@@ -57,9 +57,6 @@ class _AdminPersonalListaScreenState
   // Stream cacheado para evitar lecturas duplicadas al buscar/refrescar.
   late final Stream<QuerySnapshot> _empleadosStream;
 
-  /// Por default solo activos. Toggle del AppBar lo invierte.
-  bool _mostrarInactivos = false;
-
   /// Por default los 3 tanqueros + 2 testers están ocultos. Toggle del
   /// AppBar permite verlos para auditoría/mantenimiento de esos perfiles.
   bool _mostrarExcluidos = false;
@@ -91,11 +88,17 @@ class _AdminPersonalListaScreenState
   /// Compartido entre el conteo del hero y el filtro de la lista para que
   /// los números coincidan con lo que se ve.
   bool _visible(Map<String, dynamic> data, String dni) {
-    if (!_mostrarInactivos && !AppActivo.esActivo(data)) return false;
     if (!_mostrarExcluidos &&
         ExcluidosService.esExcluido(_excluidos, dni: dni)) {
       return false;
     }
+    final esActivo = AppActivo.esActivo(data);
+    // La card INACTIVOS muestra SOLO las bajas (cualquier rol). El resto de
+    // las cards (incl. TODOS) muestra solo ACTIVOS — los inactivos no entran.
+    if (_grupoFiltro != null && _grupoFiltro!.soloInactivos) {
+      return !esActivo;
+    }
+    if (!esActivo) return false;
     if (_grupoFiltro != null &&
         !_grupoFiltro!.roles
             .contains(AppRoles.normalizar(data['ROL']?.toString()))) {
@@ -152,11 +155,8 @@ class _AdminPersonalListaScreenState
               docs: snap.data?.docs ?? const [],
               excluidos: _excluidos,
               mostrarExcluidos: _mostrarExcluidos,
-              mostrarInactivos: _mostrarInactivos,
               grupoFiltro: _grupoFiltro,
               onGrupo: (g) => setState(() => _grupoFiltro = g),
-              onToggleInactivos: () =>
-                  setState(() => _mostrarInactivos = !_mostrarInactivos),
             ),
           ),
           Expanded(
@@ -199,40 +199,41 @@ class _AdminPersonalListaScreenState
 enum _GrupoPersonal {
   choferes('Choferes', {AppRoles.chofer}),
   planta('Planta', {AppRoles.planta, AppRoles.gomeria, AppRoles.segHigiene}),
-  administracion('Administración', {AppRoles.supervisor, AppRoles.admin});
+  administracion('Administración', {AppRoles.supervisor, AppRoles.admin}),
+  // INACTIVOS no es un rol: muestra las bajas (cualquier rol) y NO suma al
+  // total. Reemplaza al viejo toggle de inactivos (Santiago 2026-06-10).
+  inactivos('Inactivos', {}, soloInactivos: true);
 
-  const _GrupoPersonal(this.label, this.roles);
+  const _GrupoPersonal(this.label, this.roles, {this.soloInactivos = false});
   final String label;
   final Set<String> roles;
+  final bool soloInactivos;
 }
 
 class _HeroYChips extends StatelessWidget {
   final List<QueryDocumentSnapshot> docs;
   final ExcluidosSet? excluidos;
   final bool mostrarExcluidos;
-  final bool mostrarInactivos;
   final _GrupoPersonal? grupoFiltro;
   final ValueChanged<_GrupoPersonal?> onGrupo;
-  final VoidCallback onToggleInactivos;
 
   const _HeroYChips({
     required this.docs,
     required this.excluidos,
     required this.mostrarExcluidos,
-    required this.mostrarInactivos,
     required this.grupoFiltro,
     required this.onGrupo,
-    required this.onToggleInactivos,
   });
 
   @override
   Widget build(BuildContext context) {
     final esDesktop = AppBreakpoints.isDesktopOrLarger(context);
 
-    // Un barrido sobre los docs con los filtros de VISIBILIDAD (excluidos +
-    // inactivos) — los mismos que `_visible` salvo el de grupo (las cards
-    // muestran el conteo de TODOS los grupos). Cero números hardcodeados.
-    var totalVisibles = 0;
+    // Un barrido: ACTIVOS por rol (alimentan TODOS/CHOFERES/PLANTA/
+    // ADMINISTRACIÓN) e INACTIVOS aparte (su card, que NO suma al total).
+    // Respeta el ocultado de excluidos (tanqueros/testers).
+    var totalActivos = 0;
+    var inactivos = 0;
     final porRol = <String, int>{};
     for (final d in docs) {
       final data = d.data() as Map<String, dynamic>;
@@ -240,10 +241,13 @@ class _HeroYChips extends StatelessWidget {
           ExcluidosService.esExcluido(excluidos, dni: d.id)) {
         continue;
       }
-      if (!mostrarInactivos && !AppActivo.esActivo(data)) continue;
-      totalVisibles++;
-      final rol = AppRoles.normalizar(data['ROL']?.toString());
-      porRol[rol] = (porRol[rol] ?? 0) + 1;
+      if (AppActivo.esActivo(data)) {
+        totalActivos++;
+        final rol = AppRoles.normalizar(data['ROL']?.toString());
+        porRol[rol] = (porRol[rol] ?? 0) + 1;
+      } else {
+        inactivos++;
+      }
     }
 
     return Padding(
@@ -252,47 +256,36 @@ class _HeroYChips extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Encabezado: "PERSONAL · n empleados" + toggle inactivos.
-          Row(
-            children: [
-              const Expanded(child: AppEyebrow('Personal')),
-              _ToggleInactivos(
-                activo: mostrarInactivos,
-                onTap: onToggleInactivos,
-              ),
-            ],
-          ),
+          const AppEyebrow('Personal'),
           const SizedBox(height: 6),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
             children: [
               Text(
-                docs.isEmpty ? '—' : '$totalVisibles',
+                docs.isEmpty ? '—' : '$totalActivos',
                 style: AppType.h2.copyWith(
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
               const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  mostrarInactivos ? 'empleados (incl. inactivos)' : 'empleados',
-                  style: AppType.monoSm,
-                ),
+              const Padding(
+                padding: EdgeInsets.only(bottom: 4),
+                child: Text('empleados', style: AppType.monoSm),
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.md),
-          // Cards-filtro por GRUPO de roles (Santiago 2026-06-10): TODOS ·
-          // CHOFERES · PLANTA · ADMINISTRACIÓN. Tocar una filtra la lista; la
-          // activa se resalta. Reemplazan al strip no-interactivo + los chips
-          // por rol (y se quitó ACTIVOS, redundante con el conteo del hero).
+          // Cards-filtro: TODOS · CHOFERES · PLANTA · ADMINISTRACIÓN ·
+          // INACTIVOS (Santiago 2026-06-10). Tocar una filtra; la activa se
+          // resalta. INACTIVOS muestra solo las bajas y NO suma al total
+          // (reemplaza al viejo toggle de inactivos del header).
           _StripGrupos(
             esDesktop: esDesktop,
             grupoFiltro: grupoFiltro,
             onGrupo: onGrupo,
-            total: totalVisibles,
+            total: totalActivos,
+            inactivos: inactivos,
             porRol: porRol,
           ),
         ],
@@ -309,17 +302,20 @@ class _StripGrupos extends StatelessWidget {
   final _GrupoPersonal? grupoFiltro;
   final ValueChanged<_GrupoPersonal?> onGrupo;
   final int total;
+  final int inactivos;
   final Map<String, int> porRol;
   const _StripGrupos({
     required this.esDesktop,
     required this.grupoFiltro,
     required this.onGrupo,
     required this.total,
+    required this.inactivos,
     required this.porRol,
   });
 
-  int _count(_GrupoPersonal g) =>
-      g.roles.fold(0, (s, r) => s + (porRol[r] ?? 0));
+  int _count(_GrupoPersonal g) => g.soloInactivos
+      ? inactivos
+      : g.roles.fold(0, (s, r) => s + (porRol[r] ?? 0));
 
   @override
   Widget build(BuildContext context) {
@@ -427,50 +423,6 @@ class _CeldaGrupo extends StatelessWidget {
       ),
     );
     return InkWell(onTap: onTap, child: celda);
-  }
-}
-
-/// Toggle compacto "Mostrar inactivos" en estilo Núcleo (pill con borde),
-/// reemplaza al `FilterChip` Material del header viejo.
-class _ToggleInactivos extends StatelessWidget {
-  final bool activo;
-  final VoidCallback onTap;
-  const _ToggleInactivos({required this.activo, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final color = activo ? c.warning : c.textMuted;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: activo ? c.warningSoft : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: activo ? color : c.border),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              activo ? Icons.visibility : Icons.visibility_off,
-              size: 14,
-              color: color,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              'Inactivos',
-              style: AppType.label.copyWith(
-                color: activo ? color : c.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
