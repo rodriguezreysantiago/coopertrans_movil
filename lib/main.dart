@@ -298,6 +298,10 @@ void main() async {
           //     ListTile sueltos.
           //   - mouse_tracker assert PointerAdded/Removed → race de mouse
           //     tracking en Windows (FLUTTER-2K).
+          //   - "Attempted to send a key down event when no keys are in
+          //     keysPressed" (raw_keyboard.dart) → estado del teclado
+          //     desincronizado tras un Alt+Tab en Windows mientras la app
+          //     arranca (/splash). 100% framework, 0 usuarios (FLUTTER-V).
           if (texto.contains('a renderflex overflowed') ||
               texto.contains('boxconstraints forces an infinite') ||
               texto.contains('a borderradius can only be given') ||
@@ -305,6 +309,7 @@ void main() async {
               texto.contains(
                   'listtile background color or ink splashes may be invisible') ||
               texto.contains('mouse_tracker.dart') ||
+              texto.contains('attempted to send a key down event') ||
               (errType.contains('assertionerror') &&
                   (texto.contains('pointeraddedevent') ||
                       texto.contains('pointerremovedevent')))) {
