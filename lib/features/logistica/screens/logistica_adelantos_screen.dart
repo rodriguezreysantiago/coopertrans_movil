@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/excluidos_service.dart';
 import '../../../core/services/prefs_service.dart';
+import '../../../core/theme/app_breakpoints.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../shared/constants/app_colors.dart';
@@ -105,20 +106,6 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
     _buscarCtrl.dispose();
     _buscarFocus.dispose();
     super.dispose();
-  }
-
-  /// Etiqueta corta para los pills de vista.
-  static String _etiquetaVista(_VistaAdelantos v) {
-    switch (v) {
-      case _VistaAdelantos.pendientes:
-        return 'Pendientes';
-      case _VistaAdelantos.pagados:
-        return 'Pagados';
-      case _VistaAdelantos.eliminados:
-        return 'Eliminados';
-      case _VistaAdelantos.todos:
-        return 'Todos';
-    }
   }
 
   /// IDs de adelantos PENDIENTES deseleccionados para el resumen.
@@ -255,30 +242,6 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
               ],
             ),
           ),
-          // Toggle de vista — 4 opciones mutuamente exclusivas
-          // (Santiago 2026-05-19): pendientes (default), pagados,
-          // eliminados, todos. Reemplaza al FilterChip "Mostrar
-          // eliminados" anterior. Pills Núcleo, scrolleables en angosto.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final v in _VistaAdelantos.values) ...[
-                    _PillVista(
-                      label: _etiquetaVista(v),
-                      seleccionada: _vista == v,
-                      onTap: () => setState(() => _vista = v),
-                    ),
-                    if (v != _VistaAdelantos.values.last)
-                      const SizedBox(width: 8),
-                  ],
-                ],
-              ),
-            ),
-          ),
           Expanded(
             child: StreamBuilder<List<AdelantoChofer>>(
               // Si el operador filtro por rango de fechas, usamos el
@@ -293,10 +256,10 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                           ? DateTime(_fechaHasta!.year, _fechaHasta!.month,
                               _fechaHasta!.day + 1)
                           : DateTime.now().add(const Duration(days: 1)),
-                      // Optimización query: solo traemos eliminados
-                      // si la vista activa los va a mostrar.
-                      incluirEliminados: _vista == _VistaAdelantos.eliminados ||
-                          _vista == _VistaAdelantos.todos,
+                      // Traemos SIEMPRE los eliminados: la card-filtro
+                      // ELIMINADOS muestra su conteo en vivo (no solo cuando
+                      // está activa). El volumen de adelantos es chico.
+                      incluirEliminados: true,
                     )
                   : AdelantosService.streamAdelantos(),
               builder: (ctx, snap) {
@@ -317,70 +280,74 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                     subtitle: 'Tocá "NUEVO ADELANTO" para registrar el primero.',
                   );
                 }
-                final filtrados = _aplicarFiltro(items);
-                if (filtrados.isEmpty) {
-                  return const AppEmptyState(
-                    icon: Icons.search_off,
-                    title: 'Sin resultados',
-                    subtitle:
-                        'Ningún adelanto coincide con los filtros actuales. '
-                        'Probá cambiar el rango de fechas o el texto.',
-                  );
-                }
-                // Barra de selección + imprimir. Desde Santiago
-                // 2026-05-19: TODOS los adelantos del rango son
-                // seleccionables (pendientes, pagados, eliminados).
-                // El PDF muestra columna ESTADO para distinguirlos.
+                // Facetas (fecha/empleado/texto/excluidos) → base con TODOS
+                // los estados. Las cards-filtro cuentan sobre esta base; la
+                // card activa (`_vista`) filtra lo que se muestra. Mismo
+                // patrón que el resto de los menús: los KPIs SON el filtro.
+                final base = _aplicarFacetas(items);
+                final filtrados = base.where(_pasaVista).toList();
                 final seleccionables =
                     filtrados.where(_seleccionable).toList();
-                final seleccionados = seleccionables
-                    .where(_seleccionado)
-                    .toList();
+                final seleccionados =
+                    seleccionables.where(_seleccionado).toList();
                 return Column(
                   children: [
-                    // Resumen Núcleo: hero del total pendiente + AppKpiStrip
-                    // (pendiente / pagado / cantidad) sobre lo VISIBLE
-                    // (filtrado), no sobre el stream crudo — así refleja lo
-                    // que el operador está mirando.
+                    // Cards-filtro (PENDIENTES · PAGADOS · ELIMINADOS · TODOS):
+                    // tocar una filtra; los conteos son GLOBALES sobre la base
+                    // facetada. Siempre visible, para poder cambiar de card aun
+                    // con la vista vacía.
                     Padding(
                       padding: const EdgeInsets.fromLTRB(
                           AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.md),
                       child: _ResumenAdelantos(
-                        adelantos: filtrados,
+                        base: base,
+                        vista: _vista,
+                        onCard: (v) => setState(() => _vista = v),
                         empleadoNombre: _empleadoFiltroDni == null
                             ? null
                             : (_empleadoFiltroNombre ??
                                 'DNI $_empleadoFiltroDni'),
                       ),
                     ),
-                    _BarraSeleccion(
-                      totalPendientes: seleccionables.length,
-                      totalSeleccionados: seleccionados.length,
-                      onSeleccionarTodos: () =>
-                          setState(() => _deseleccionados.clear()),
-                      onDeseleccionarTodos: () => setState(() =>
-                          _deseleccionados.addAll(
-                              seleccionables.map((a) => a.id))),
-                      onImprimir: seleccionados.isEmpty
-                          ? null
-                          : () => _imprimirResumen(seleccionados),
-                    ),
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(
-                            AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, 90),
-                        itemCount: filtrados.length,
-                        itemBuilder: (_, i) {
-                          final a = filtrados[i];
-                          return _CardAdelanto(
-                            adelanto: a,
-                            seleccionado: _seleccionado(a),
-                            onToggleSeleccion: () => _toggleSeleccion(a),
-                            onTogglePagado: () => _togglePagado(a),
-                          );
-                        },
+                    if (filtrados.isEmpty)
+                      const Expanded(
+                        child: AppEmptyState(
+                          icon: Icons.search_off,
+                          title: 'Sin adelantos en esta vista',
+                          subtitle:
+                              'Probá otra card, o cambiá el rango / el texto.',
+                        ),
+                      )
+                    else ...[
+                      _BarraSeleccion(
+                        totalPendientes: seleccionables.length,
+                        totalSeleccionados: seleccionados.length,
+                        onSeleccionarTodos: () =>
+                            setState(() => _deseleccionados.clear()),
+                        onDeseleccionarTodos: () => setState(() =>
+                            _deseleccionados
+                                .addAll(seleccionables.map((a) => a.id))),
+                        onImprimir: seleccionados.isEmpty
+                            ? null
+                            : () => _imprimirResumen(seleccionados),
                       ),
-                    ),
+                      Expanded(
+                        child: ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(
+                              AppSpacing.lg, AppSpacing.xs, AppSpacing.lg, 90),
+                          itemCount: filtrados.length,
+                          itemBuilder: (_, i) {
+                            final a = filtrados[i];
+                            return _CardAdelanto(
+                              adelanto: a,
+                              seleccionado: _seleccionado(a),
+                              onToggleSeleccion: () => _toggleSeleccion(a),
+                              onTogglePagado: () => _togglePagado(a),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ],
                 );
               },
@@ -392,39 +359,20 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
     );
   }
 
-  /// Aplica los 3 filtros activos: texto (token-based), fecha desde
-  /// y fecha hasta. El stream ya viene ordenado por fecha desc desde
-  /// el service.
-  List<AdelantoChofer> _aplicarFiltro(List<AdelantoChofer> items) {
+  /// Aplica las FACETAS (texto, fecha desde/hasta, empleado, excluidos) —
+  /// todo MENOS el estado/vista. Las cards-filtro cuentan sobre esta base y
+  /// `_pasaVista` aplica la card activa encima. El stream viene ordenado por
+  /// fecha desc; lo reordenamos ascendente (más viejo primero).
+  List<AdelantoChofer> _aplicarFacetas(List<AdelantoChofer> items) {
     Iterable<AdelantoChofer> it = items;
-    // Filtro de vista (Santiago 2026-05-19): el toggle de 4 opciones
-    // reemplaza al "Mostrar eliminados" anterior.
-    switch (_vista) {
-      case _VistaAdelantos.pendientes:
-        it = it.where((a) => !a.eliminado && !a.pagado);
-        break;
-      case _VistaAdelantos.pagados:
-        it = it.where((a) => !a.eliminado && a.pagado);
-        break;
-      case _VistaAdelantos.eliminados:
-        it = it.where((a) => a.eliminado);
-        break;
-      case _VistaAdelantos.todos:
-        // Sin filtro adicional — muestra todo.
-        break;
-    }
     // Excluir adelantos de testers + tanqueros (Santiago 2026-05-18).
-    // Si en histórico quedó algún adelanto asociado a esos DNIs (ej
-    // de antes de que existiera el filtro), no aparece en el listado
-    // operativo. El registro queda en la base para auditoría.
     if (_excluidos != null) {
       it = it.where((a) => !ExcluidosService.esExcluido(
             _excluidos,
             dni: a.choferDni,
           ));
     }
-    // Filtro por empleado específico (Santiago 2026-05-19): permite
-    // ver solo los adelantos del DNI seleccionado en el rango.
+    // Filtro por empleado específico (Santiago 2026-05-19).
     if (_empleadoFiltroDni != null && _empleadoFiltroDni!.isNotEmpty) {
       it = it.where((a) => a.choferDni == _empleadoFiltroDni);
     }
@@ -434,14 +382,13 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
           _fechaDesde!.year, _fechaDesde!.month, _fechaDesde!.day);
       it = it.where((a) => !a.fecha.isBefore(desde));
     }
-    // Fecha hasta (inclusive — comparamos contra el inicio del día
-    // siguiente para incluir todo el día "hasta").
+    // Fecha hasta (inclusive — inicio del día siguiente).
     if (_fechaHasta != null) {
       final finDelDia = DateTime(_fechaHasta!.year, _fechaHasta!.month,
           _fechaHasta!.day + 1);
       it = it.where((a) => a.fecha.isBefore(finDelDia));
     }
-    // Texto.
+    // Texto (token-based).
     final q = _filtro.trim().toLowerCase();
     if (q.isNotEmpty) {
       final tokens = q.split(RegExp(r'\s+')).where((t) => t.isNotEmpty);
@@ -458,13 +405,25 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
         return true;
       });
     }
-    // Orden: más viejo primero (ascendente por fecha). Pedido
-    // Santiago 2026-05-14: facilita ver primero los pendientes
-    // antiguos que esperan pago. El service entrega descendente
-    // por convención general; lo invertimos solo para esta pantalla.
+    // Orden: más viejo primero (Santiago 2026-05-14 — primero los
+    // pendientes antiguos que esperan pago).
     final list = it.toList();
     list.sort((a, b) => a.fecha.compareTo(b.fecha));
     return list;
+  }
+
+  /// Predicado de la card-filtro activa (`_vista`) sobre la base facetada.
+  bool _pasaVista(AdelantoChofer a) {
+    switch (_vista) {
+      case _VistaAdelantos.pendientes:
+        return !a.eliminado && !a.pagado;
+      case _VistaAdelantos.pagados:
+        return !a.eliminado && a.pagado;
+      case _VistaAdelantos.eliminados:
+        return a.eliminado;
+      case _VistaAdelantos.todos:
+        return true;
+    }
   }
 
   Future<void> _abrirAlta(BuildContext context) async {
@@ -856,144 +815,216 @@ class _BotonRangoFechas extends StatelessWidget {
   }
 }
 
-/// Pill de vista (PENDIENTES / PAGADOS / ELIMINADOS / TODOS) estilo
-/// Núcleo. Activo = tinte brand; inactivo = transparente con borde.
-class _PillVista extends StatelessWidget {
+/// Header del listado: eyebrow ("Adelantos · EMPLEADO" si hay filtro) + el
+/// strip de CARDS-FILTRO (PENDIENTES · PAGADOS · ELIMINADOS · TODOS).
+/// Reemplazó al hero "$ X pendiente" (repetía la card PENDIENTES) + el
+/// AppKpiStrip no-interactivo + los pills de vista.
+///
+/// Conteos GLOBALES sobre la base facetada (fecha/empleado/texto), NO sobre
+/// la card activa — así se ve cuántos hay en cada estado. Los eliminados no
+/// suman a los montos en plata (no son plata real) pero sí al conteo.
+class _ResumenAdelantos extends StatelessWidget {
+  /// Base facetada con TODOS los estados (para los conteos de las cards).
+  final List<AdelantoChofer> base;
+  final _VistaAdelantos vista;
+  final ValueChanged<_VistaAdelantos> onCard;
+  final String? empleadoNombre;
+
+  const _ResumenAdelantos({
+    required this.base,
+    required this.vista,
+    required this.onCard,
+    required this.empleadoNombre,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final esDesktop = AppBreakpoints.isDesktopOrLarger(context);
+    final eyebrowTxt = empleadoNombre == null
+        ? 'Adelantos'
+        : 'Adelantos · ${empleadoNombre!.toUpperCase()}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppEyebrow(eyebrowTxt),
+        const SizedBox(height: AppSpacing.sm),
+        _StripCardsAdelantos(
+          esDesktop: esDesktop,
+          base: base,
+          vista: vista,
+          onCard: onCard,
+        ),
+      ],
+    );
+  }
+}
+
+/// Strip de cards-filtro de Adelantos (estética AppKpiStrip pero tappeable).
+/// Cada celda lleva el conteo (h2) + el monto en plata abajo, con el color
+/// del estado. La activa se resalta con tinte brand. Desktop: Expanded;
+/// mobile: scroll horizontal.
+class _StripCardsAdelantos extends StatelessWidget {
+  final bool esDesktop;
+  final List<AdelantoChofer> base;
+  final _VistaAdelantos vista;
+  final ValueChanged<_VistaAdelantos> onCard;
+  const _StripCardsAdelantos({
+    required this.esDesktop,
+    required this.base,
+    required this.vista,
+    required this.onCard,
+  });
+
+  static double _suma(Iterable<AdelantoChofer> l) =>
+      l.fold<double>(0, (acc, a) => acc + a.monto);
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final pendientes = base.where((a) => !a.eliminado && !a.pagado).toList();
+    final pagados = base.where((a) => !a.eliminado && a.pagado).toList();
+    final eliminados = base.where((a) => a.eliminado).toList();
+    final activos = base.where((a) => !a.eliminado);
+    String money(double v) => '\$ ${AppFormatters.formatearMonto(v)}';
+
+    final celdas = <Widget>[
+      _CeldaCardAdelanto(
+        label: 'Pendientes',
+        valor: pendientes.length,
+        delta: money(_suma(pendientes)),
+        accent: pendientes.isEmpty ? null : c.warning,
+        seleccionado: vista == _VistaAdelantos.pendientes,
+        esDesktop: esDesktop,
+        onTap: () => onCard(_VistaAdelantos.pendientes),
+      ),
+      _CeldaCardAdelanto(
+        label: 'Pagados',
+        valor: pagados.length,
+        delta: money(_suma(pagados)),
+        accent: pagados.isEmpty ? null : c.success,
+        seleccionado: vista == _VistaAdelantos.pagados,
+        esDesktop: esDesktop,
+        onTap: () => onCard(_VistaAdelantos.pagados),
+      ),
+      _CeldaCardAdelanto(
+        label: 'Eliminados',
+        valor: eliminados.length,
+        delta: eliminados.isEmpty ? null : money(_suma(eliminados)),
+        accent: eliminados.isEmpty ? null : c.error,
+        seleccionado: vista == _VistaAdelantos.eliminados,
+        esDesktop: esDesktop,
+        onTap: () => onCard(_VistaAdelantos.eliminados),
+      ),
+      _CeldaCardAdelanto(
+        label: 'Todos',
+        valor: base.length,
+        delta: money(_suma(activos)),
+        accent: null,
+        seleccionado: vista == _VistaAdelantos.todos,
+        esDesktop: esDesktop,
+        onTap: () => onCard(_VistaAdelantos.todos),
+      ),
+    ];
+    final fila = IntrinsicHeight(
+      child: Row(
+        children: [
+          for (var i = 0; i < celdas.length; i++) ...[
+            if (esDesktop) Expanded(child: celdas[i]) else celdas[i],
+            if (i < celdas.length - 1) Container(width: 1, color: c.border),
+          ],
+        ],
+      ),
+    );
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface2,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.border),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: esDesktop
+            ? fila
+            : SingleChildScrollView(
+                scrollDirection: Axis.horizontal, child: fila),
+      ),
+    );
+  }
+}
+
+/// Una celda del strip de Adelantos. Tappeable; resalta con tinte brand
+/// cuando es la card activa. El número lleva el color del estado (`accent`)
+/// y el monto en plata abajo (mismo color; atenuado si la card está vacía).
+class _CeldaCardAdelanto extends StatelessWidget {
   final String label;
-  final bool seleccionada;
+  final int valor;
+  final String? delta;
+  final Color? accent;
+  final bool seleccionado;
+  final bool esDesktop;
   final VoidCallback onTap;
-  const _PillVista({
+  const _CeldaCardAdelanto({
     required this.label,
-    required this.seleccionada,
+    required this.valor,
+    required this.delta,
+    required this.accent,
+    required this.seleccionado,
+    required this.esDesktop,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final fg = seleccionada ? c.brand : c.textSecondary;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(999),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: seleccionada
-              ? c.brand.withValues(alpha: 0.16)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: seleccionada
-                ? c.brand.withValues(alpha: 0.5)
-                : c.borderStrong,
-          ),
-        ),
-        child: Text(
-          label,
-          style: AppType.label.copyWith(color: fg, fontWeight: FontWeight.w600),
-        ),
+    final contenido = Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: esDesktop ? 16 : 14,
+        vertical: esDesktop ? 16 : 14,
       ),
-    );
-  }
-}
-
-/// Resumen Núcleo del listado: hero del total PENDIENTE (lo que falta
-/// pagar) + AppKpiStrip (pendiente · pagado · cantidad), todo sobre los
-/// adelantos VISIBLES (la lista filtrada). Si hay un empleado filtrado
-/// se muestra su nombre en el eyebrow ("ADELANTOS · PEREZ JUAN").
-///
-/// Los eliminados se excluyen de los montos en plata (no son plata real)
-/// pero igual cuentan en "registros" por transparencia.
-class _ResumenAdelantos extends StatelessWidget {
-  final List<AdelantoChofer> adelantos;
-  final String? empleadoNombre;
-
-  const _ResumenAdelantos({
-    required this.adelantos,
-    required this.empleadoNombre,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = context.colors;
-    final activos = adelantos.where((a) => !a.eliminado).toList();
-    final pendientes = activos.where((a) => !a.pagado).toList();
-    final entregados = activos.where((a) => a.pagado).toList();
-    final totalPendiente =
-        pendientes.fold<double>(0, (acc, a) => acc + a.monto);
-    final totalEntregado =
-        entregados.fold<double>(0, (acc, a) => acc + a.monto);
-
-    final eyebrowTxt = empleadoNombre == null
-        ? 'Adelantos'
-        : 'Adelantos · ${empleadoNombre!.toUpperCase()}';
-
-    return AppCard(
-      tier: 2,
-      padding: const EdgeInsets.all(AppSpacing.xl),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Expanded(child: AppEyebrow(eyebrowTxt)),
-              Text(
-                '${adelantos.length} en lista',
-                style: AppType.monoSm.copyWith(color: c.textMuted),
-              ),
-            ],
+          Text(
+            label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.eyebrow.copyWith(
+              color: seleccionado ? c.brand : c.textMuted,
+            ),
           ),
           const SizedBox(height: 6),
-          // Hero: total pendiente (lo que falta pagar — caso operativo).
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                '\$ ${AppFormatters.formatearMonto(totalPendiente)}',
-                style: AppType.h3.copyWith(
-                  color: c.text,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  'pendiente',
-                  style: AppType.monoSm.copyWith(color: c.textMuted),
-                ),
-              ),
-            ],
+          Text(
+            '$valor',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.h2.copyWith(
+              color: accent ?? c.text,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
-          const SizedBox(height: AppSpacing.md),
-          AppKpiStrip(
-            stats: [
-              AppStat(
-                label: 'Pendiente',
-                value: '${pendientes.length}',
-                accent: c.warning,
-                delta: '\$ ${AppFormatters.formatearMonto(totalPendiente)}',
-                deltaColor: c.warning,
-              ),
-              AppStat(
-                label: 'Pagado',
-                value: '${entregados.length}',
-                accent: c.success,
-                delta: '\$ ${AppFormatters.formatearMonto(totalEntregado)}',
-                deltaColor: c.success,
-              ),
-              AppStat(
-                label: 'Registros',
-                value: '${adelantos.length}',
-              ),
-            ],
-          ),
+          if (delta != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              delta!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppType.monoSm.copyWith(color: accent ?? c.textMuted),
+            ),
+          ],
         ],
       ),
     );
+    final celda = ConstrainedBox(
+      constraints: BoxConstraints(minWidth: esDesktop ? 0 : 120),
+      child: ColoredBox(
+        color: seleccionado
+            ? c.brand.withValues(alpha: 0.12)
+            : Colors.transparent,
+        child: contenido,
+      ),
+    );
+    return InkWell(onTap: onTap, child: celda);
   }
 }
 
