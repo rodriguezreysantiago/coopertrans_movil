@@ -1443,6 +1443,10 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
   final _obsCtrl = TextEditingController();
   String? _choferDni;
   String? _choferNombre;
+
+  /// Últimos adelantos NO eliminados del chofer elegido (hint para decidir
+  /// el monto). null = sin cargar / cargando; [] = sin previos.
+  List<AdelantoChofer>? _ultimosDelChofer;
   DateTime _fecha = DateTime.now();
   // Default = efectivo (Santiago 2026-05-13). La mayoría de los
   // adelantos se entregan en mano.
@@ -1475,6 +1479,22 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
       _montoCtrl.text = AppFormatters.formatearMonto(a.monto);
       _obsCtrl.text = a.observacion ?? '';
       _medioPago = a.medioPago;
+      _cargarUltimos(a.choferDni);
+    }
+  }
+
+  /// Carga los últimos 3 adelantos NO eliminados del chofer para el hint.
+  /// Tolerante a errores (si falla, muestra "sin previos" en vez de romper).
+  Future<void> _cargarUltimos(String dni) async {
+    try {
+      final l = await AdelantosService.getUltimosDelChofer(dni, cantidad: 3);
+      if (mounted && _choferDni == dni) {
+        setState(() => _ultimosDelChofer = l);
+      }
+    } catch (_) {
+      if (mounted && _choferDni == dni) {
+        setState(() => _ultimosDelChofer = const []);
+      }
     }
   }
 
@@ -1521,7 +1541,9 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                     setState(() {
                       _choferDni = elegido.dni;
                       _choferNombre = elegido.nombre;
+                      _ultimosDelChofer = null;
                     });
+                    await _cargarUltimos(elegido.dni);
                   }
                 },
                 child: InputDecorator(
@@ -1559,6 +1581,12 @@ class _AdelantoFormDialogState extends State<_AdelantoFormDialog> {
                 ),
               ),
               const SizedBox(height: AppSpacing.md),
+              // ─── Últimos adelantos del chofer (hint para decidir el monto).
+              // Los 3 más recientes NO eliminados — Santiago 2026-06-11.
+              if (_choferDni != null) ...[
+                _HintUltimosAdelantos(items: _ultimosDelChofer),
+                const SizedBox(height: AppSpacing.md),
+              ],
               // ─── Monto ───
               TextField(
                 controller: _montoCtrl,
@@ -2096,6 +2124,82 @@ class _PreviewCuotas extends StatelessWidget {
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Hint en el form de alta: los últimos adelantos NO eliminados del chofer
+/// elegido, para que el operador vea cuánto lleva y decida el monto nuevo
+/// (Santiago 2026-06-11). `items` null = cargando; vacío = sin previos.
+class _HintUltimosAdelantos extends StatelessWidget {
+  final List<AdelantoChofer>? items;
+  const _HintUltimosAdelantos({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    if (items == null) {
+      return Row(
+        children: [
+          const SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Text('Buscando adelantos previos…',
+              style: AppType.label.copyWith(color: c.textMuted)),
+        ],
+      );
+    }
+    if (items!.isEmpty) {
+      return Text('Sin adelantos previos de este empleado.',
+          style: AppType.label.copyWith(color: c.textMuted));
+    }
+    final total = items!.fold<double>(0, (acc, a) => acc + a.monto);
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: AppColors.info.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.info.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Últimos ${items!.length} adelantos del empleado',
+              style: AppType.eyebrow.copyWith(color: c.textSecondary)),
+          const SizedBox(height: 4),
+          for (final a in items!)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 1),
+              child: Row(
+                children: [
+                  Text(AppFormatters.formatearFecha(a.fecha),
+                      style: AppType.monoSm.copyWith(color: c.textMuted)),
+                  const SizedBox(width: 6),
+                  Text(a.pagado ? 'pagado' : 'pendiente',
+                      style: AppType.eyebrow.copyWith(
+                          color: a.pagado ? c.success : c.warning)),
+                  const Spacer(),
+                  Text('\$ ${AppFormatters.formatearMonto(a.monto)}',
+                      style: AppType.bodySm.copyWith(
+                          color: c.text, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ),
+          const Divider(height: 10),
+          Row(
+            children: [
+              Text('Suma de estos',
+                  style: AppType.eyebrow.copyWith(color: c.textMuted)),
+              const Spacer(),
+              Text('\$ ${AppFormatters.formatearMonto(total)}',
+                  style: AppType.monoSm.copyWith(color: c.textSecondary)),
+            ],
+          ),
         ],
       ),
     );

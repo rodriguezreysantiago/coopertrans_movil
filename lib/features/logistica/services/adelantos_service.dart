@@ -54,6 +54,23 @@ class AdelantosService {
         );
   }
 
+  /// Los últimos [cantidad] adelantos NO eliminados de un chofer, más
+  /// reciente primero. One-shot para el hint del form de alta. Query por
+  /// igualdad simple (SIN orderBy) → NO necesita índice compuesto; ordena y
+  /// recorta client-side (un chofer tiene pocos adelantos).
+  static Future<List<AdelantoChofer>> getUltimosDelChofer(
+    String dni, {
+    int cantidad = 3,
+  }) async {
+    final snap = await _col.where('chofer_dni', isEqualTo: dni).get();
+    final list = snap.docs
+        .map((d) => AdelantoChofer.fromMap(d.id, d.data()))
+        .where((a) => !a.eliminado)
+        .toList()
+      ..sort((a, b) => b.fecha.compareTo(a.fecha));
+    return list.take(cantidad).toList();
+  }
+
   /// One-shot get de adelantos en un rango de fechas. Lo usa la
   /// pantalla LIQUIDACIÓN para sumar los adelantos del chofer en el
   /// mes elegido. Requiere índice compuesto
