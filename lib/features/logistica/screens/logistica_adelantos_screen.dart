@@ -60,15 +60,6 @@ class LogisticaAdelantosScreen extends StatefulWidget {
 }
 
 class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
-  String _filtro = '';
-
-  /// Controller del buscador Núcleo (AppInput). Lo necesitamos para
-  /// poder limpiarlo desde el trailing "Limpiar".
-  final TextEditingController _buscarCtrl = TextEditingController();
-
-  /// FocusNode del campo de búsqueda — Ctrl+F lo enfoca.
-  final FocusNode _buscarFocus = FocusNode();
-
   /// Filtros de fecha (desde/hasta, inclusive). Si null, no aplica.
   /// El operador suele querer "los adelantos de este mes" o "del último
   /// pago de sueldo hasta hoy" — el rango lo arma con 2 date pickers.
@@ -99,13 +90,6 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
     ExcluidosService.cargar().then((s) {
       if (mounted) setState(() => _excluidos = s);
     });
-  }
-
-  @override
-  void dispose() {
-    _buscarCtrl.dispose();
-    _buscarFocus.dispose();
-    super.dispose();
   }
 
   /// IDs de adelantos PENDIENTES deseleccionados para el resumen.
@@ -170,41 +154,19 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
           label: const Text('NUEVO ADELANTO'),
         ),
       ),
-      // Atajos desktop (Santiago 2026-05-13): Ctrl+N nuevo adelanto,
-      // Ctrl+F enfoca el buscador. Wrappeamos el body completo así
-      // los atajos disparan aún si el operador está scroleando o el
-      // foco está en una card.
+      // Atajo desktop: Ctrl+N nuevo adelanto. (El buscador de texto se sacó
+      // 2026-06-11 — el filtro de "Empleado" ya cubre buscar por persona.)
       body: KeyboardShortcutsScope(
         onNuevo: () => _abrirAlta(context),
-        buscarFocusNode: _buscarFocus,
         child: Column(
         children: [
-          // Buscador Núcleo (misma lógica de búsqueda token-based).
+          // ─── Rango de fechas + filtro de empleado (pills Núcleo) ─
+          // El rango abre `showDateRangePicker` (1 calendario, 2 puntas);
+          // el chip de empleado abre el dialog con buscador (filtra por
+          // persona — reemplaza al buscador de texto que estaba arriba).
           Padding(
             padding: const EdgeInsets.fromLTRB(
                 AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
-            child: AppInput(
-              controller: _buscarCtrl,
-              focusNode: _buscarFocus,
-              hint: 'Buscar por chofer, observación…',
-              icon: Icons.search,
-              onChanged: (v) => setState(() => _filtro = v),
-              trailingAction: _filtro.isEmpty ? null : 'Limpiar',
-              onTrailingTap: _filtro.isEmpty
-                  ? null
-                  : () {
-                      _buscarCtrl.clear();
-                      setState(() => _filtro = '');
-                    },
-            ),
-          ),
-          // ─── Rango de fechas + filtro de empleado (pills Núcleo) ─
-          // El rango abre `showDateRangePicker` (1 calendario, 2 puntas);
-          // el chip de empleado abre el dialog con buscador. Misma lógica
-          // de filtro que antes — solo cambió el look a tokens.
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-                AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.sm),
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -315,7 +277,7 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
                           icon: Icons.search_off,
                           title: 'Sin adelantos en esta vista',
                           subtitle:
-                              'Probá otra card, o cambiá el rango / el texto.',
+                              'Probá otra card, o cambiá el rango o el empleado.',
                         ),
                       )
                     else ...[
@@ -387,23 +349,6 @@ class _LogisticaAdelantosScreenState extends State<LogisticaAdelantosScreen> {
       final finDelDia = DateTime(_fechaHasta!.year, _fechaHasta!.month,
           _fechaHasta!.day + 1);
       it = it.where((a) => a.fecha.isBefore(finDelDia));
-    }
-    // Texto (token-based).
-    final q = _filtro.trim().toLowerCase();
-    if (q.isNotEmpty) {
-      final tokens = q.split(RegExp(r'\s+')).where((t) => t.isNotEmpty);
-      it = it.where((a) {
-        final hay = [
-          a.choferNombre ?? '',
-          a.choferDni,
-          a.observacion ?? '',
-          if (a.numeroRecibo != null) 'recibo n${a.numeroRecibo}',
-        ].join(' ').toLowerCase();
-        for (final t in tokens) {
-          if (!hay.contains(t)) return false;
-        }
-        return true;
-      });
     }
     // Orden: más viejo primero (Santiago 2026-05-14 — primero los
     // pendientes antiguos que esperan pago).
