@@ -42,7 +42,12 @@ class _ListaFlota extends StatelessWidget {
             .toUpperCase();
         return hay.contains(q);
       },
-      itemBuilder: (ctx, doc) => _VehiculoCard(doc: doc),
+      itemBuilder: (ctx, doc) => _VehiculoCard(
+        doc: doc,
+        // En LIBRES / INACTIVOS la lista mezcla tipos → mostramos el badge
+        // de tipo en cada card para ubicar la unidad de un vistazo.
+        mostrarTipo: cardId == _kCardLibres || cardId == _kCardInactivos,
+      ),
     );
   }
 }
@@ -57,7 +62,13 @@ class _ListaFlota extends StatelessWidget {
 
 class _VehiculoCard extends StatelessWidget {
   final QueryDocumentSnapshot doc;
-  const _VehiculoCard({required this.doc});
+
+  /// `true` cuando el filtro mezcla tipos (LIBRES / INACTIVOS): muestra un
+  /// badge con el tipo (Tractor/Batea/…) para identificar la unidad de un
+  /// vistazo (Santiago 2026-06-10).
+  final bool mostrarTipo;
+
+  const _VehiculoCard({required this.doc, this.mostrarTipo = false});
 
   @override
   Widget build(BuildContext context) {
@@ -134,6 +145,16 @@ class _VehiculoCard extends StatelessWidget {
                           dot: true,
                           size: AppBadgeSize.sm,
                         ),
+                        // Tipo (solo en LIBRES/INACTIVOS, donde se mezclan):
+                        // ayuda a ubicar la unidad sin abrir el detalle.
+                        if (mostrarTipo) ...[
+                          const SizedBox(width: AppSpacing.xs),
+                          AppBadge(
+                            text: _tipoLabel(tipo),
+                            color: c.textSecondary,
+                            size: AppBadgeSize.sm,
+                          ),
+                        ],
                         const Spacer(),
                         if (state.loading)
                           SizedBox(
@@ -241,6 +262,14 @@ String _estadoLabel(String estado) {
   final e = estado.trim();
   if (e.isEmpty) return '—';
   return e[0].toUpperCase() + e.substring(1).toLowerCase();
+}
+
+/// Etiqueta singular capitalizada del tipo para el badge de la card
+/// (TRACTOR → Tractor, BATEA → Batea). '—' si viene vacío.
+String _tipoLabel(String tipo) {
+  final t = tipo.trim();
+  if (t.isEmpty) return '—';
+  return t[0].toUpperCase() + t.substring(1).toLowerCase();
 }
 
 /// Abre el detalle (bottom sheet) de un vehículo desde cualquier parte
