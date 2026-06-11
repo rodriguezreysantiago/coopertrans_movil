@@ -26,8 +26,14 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   la versión pre-fix (entrada 2026-06-07).
 - [ ] **Validación visual pendiente**: Gomería (stock oculto + conteo a ciegas)
   y módulo Vacaciones (Gantt + saldos; 3 proporcionales de 1er año a mano).
-- [ ] **Buzón de discrepancias**: revisar los reportes pendientes de choferes
-  (pantalla en hub admin; había ~5 al 2026-06-07).
+- [ ] **Buzón de discrepancias** — REVISADO 2026-06-11, 6 pendientes con veredicto
+  (cruzados contra v3 + GPS): CAROLA ×2 (CIERTO — GPS confirma 26 min parado
+  18:51-19:17, se cierra con el v3 de mañana), ALTAMIRANDA (esperar v3), FERNANDEZ
+  (no es bug — admite el exceso, criterio), GODOY (falso positivo: descanso
+  nocturno, cerrar), GONZALEZ (pausa 12 min bajo umbral, cerrar). **Falta**: que
+  Santiago los cierre en "Reportes de choferes", o re-correr
+  `cerrar_reportes_resueltos_por_v3.js --aplicar` MAÑANA (con el v3 del 11/6
+  armado) → cierra CAROLA/ALTAMIRANDA solos + dispara su devolución por WhatsApp.
 - [ ] **Vigilador v3**: monitorear los primeros resúmenes diarios a Molina
   (v3 es la fuente oficial desde 2026-06-07) + release de las pantallas
   nuevas de jornada (gráfico velocidad + selector rango, 2026-06-10).
@@ -52,6 +58,56 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   nadie lo consume.
 - [ ] **Volvo Driver/Tachograph/Messaging APIs**: feeds vacíos — requiere
   gestión con Volvo Argentina (alta de 48 chofers + transmisión por unidad).
+
+---
+
+## 📅 2026-06-11 (cont.) — Tarifas real/chofer + Sentry + hardening del bot + auditoría del agente + devolución de reclamos
+
+Sesión larga (todo en main + pusheado). La app Flutter **espera release**; el bot y
+las Cloud Functions **YA en prod** (auto-update de la dedicada + `firebase deploy`).
+
+### Tarifas — vigencia real y de chofer INDEPENDIENTES (`bbcc69c`, `7103377`)
+Editar una tarifa separa la **tarifa real** y la **de chofer** en dos timelines de
+vigencia propios: cada una se edita y fecha por separado; si la vigencia es anterior
+a hoy, **recalcula los viajes NO liquidados** que la tocan (real y chofer, simétrico).
+**Quitado el bloqueo** chofer ≤ real (muchas tarifas bajas se complementan con otras
+altas) → ahora es warning suave, no rechazo. UI: dos sub-bloques real/chofer + dos
+sheets de registrar precio; sacado el botón duplicado "Nueva tarifa"; el chip
+"Activas" es un **toggle Activas↔Inactivas**. ⚠️ SUPERA la nota "ratio chofer ≤ real".
+
+### Sentry (`2e8a200`)
+`beforeSend` filtra el assert de `raw_keyboard` (Alt+Tab en Windows, FLUTTER-V) —
+ruido, no bug. El SIGABRT del robot de Google se silenció en el dashboard.
+
+### Bot WhatsApp — auditoría profunda + hardening (`c187e3e`, `a306cd3`, `6193678`, `c962452`, `e80fb10`)
+4 ejes, verificado a mano contra el código (el bot ya estaba MUY endurecido):
+- **PLATA (adelantos)**: confirmación stateful real (hash {dni,monto,fecha,medio},
+  no solo prompt) + dedup de writes por turno + tope $5M (`AGENTE_TOPE_ADELANTO`,
+  CONFIRMADO dejarlo) + redondeo. Las 3 tools de escritura sumadas a
+  `TOOLS_DE_ACCION` (el retry sin_texto las duplicaba).
+- **IDENTIDAD cross-user**: `_aprenderLid` solo en match estricto + unicidad; match
+  laxo AR ambiguo → null; descarte "Bot-On" acotado a firma + ventana.
+- **RESILIENCIA**: heartbeat HONESTO (probe `client.getState()` en cada latido → no
+  miente "LISTO" con browser zombi); `health.iniciar` antes de `wa.inicializar` (sin
+  ventana de doble-bot); reintento transitorio del claim anti-doble-bot.
+- **P3 + tests**: exclusiones con warn al truncar, `/forzar-cron` fuera de horario,
+  backoff de crons en ERROR, audio sin data. Suite bot 262 → 299.
+
+### Agente — auditoría de TODOS los chats (`AGENTE_CONVERSACIONES`, 30 días)
+- 🎯 **Causa raíz del `sin_texto`** (`ec7b742`): el **thinking de gemini-2.5-flash**
+  (ON por defecto) devuelve candidato VACÍO al decidir una tool — medido 40/40 vacío
+  → 0/40 con `thinkingBudget:0`. Apagado en el loop + la transcripción (tapó la fuga
+  "SILENT THOUGHTS"). Era el patrón de fallo VIGENTE (jornada/turnos). Los 429/503
+  del audit eran TODOS pre-8/6 (Groq + Gemini sin pago) → ya cerrados. Memoria
+  `feedback_gemini_thinking_off.md`.
+- **CUIL en `info_chofer`** (lo pedía Errazu) + **paradas "ahora"** sin pedir HH:MM
+  cuando el chofer avisa que para en el momento (`e694789`).
+- **Fix del script del buzón** (`181b9ad`): cruza los auto-generados por la fecha de
+  la PARADA, no la de creación (miraba el día equivocado).
+- **Devolución al chofer** (`ef16e68`, CF `onReporteDiscrepanciaRevisado` DEPLOYADA):
+  al resolver su reclamo recibe un WhatsApp citando el mismo + el resultado. Disparo
+  automático, solo reclamos directos, idempotente. El agente guarda el `detalle` en
+  1ra persona. Detalle en `project_alertas_y_resumenes_whatsapp.md`.
 
 ---
 
