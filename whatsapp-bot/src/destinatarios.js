@@ -83,7 +83,13 @@ function invalidarCache() {
   _cacheExpiraMs = 0;
 }
 
+/** Solo para tests: inyecta un db mock (evita admin.firestore() real). */
+function _setDbParaTests(db) {
+  _db = db;
+}
+
 module.exports = {
   obtenerDestinatario,
   invalidarCache,
+  _setDbParaTests,
 };
