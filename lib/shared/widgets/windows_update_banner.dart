@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../core/services/windows_update_service.dart';
@@ -19,7 +20,10 @@ class WindowsUpdateOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (!Platform.isWindows) return const SizedBox.shrink();
+    // `kIsWeb` PRIMERO: este overlay se monta SIEMPRE (MaterialApp.builder,
+    // todas las plataformas) y en web `Platform.isWindows` (dart:io) lanza
+    // UnsupportedError en build → rompía el arranque web. `kIsWeb` corta antes.
+    if (kIsWeb || !Platform.isWindows) return const SizedBox.shrink();
     return ValueListenableBuilder<WinUpdateInfo?>(
       valueListenable: WindowsUpdateService.instance.actualizacionDisponible,
       builder: (context, info, _) {

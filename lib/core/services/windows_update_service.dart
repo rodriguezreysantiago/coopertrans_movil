@@ -56,7 +56,12 @@ class WindowsUpdateService {
   /// Arranca el chequeo en background. Idempotente. No-op fuera de Windows o si
   /// la app corre desde el build dir (dev). Fire-and-forget: NO bloquea arranque.
   void iniciar() {
-    if (_iniciado || !Platform.isWindows) return;
+    // `kIsWeb` PRIMERO: en web `Platform.isWindows` (dart:io) lanza
+    // UnsupportedError, y como esto se llama fire-and-forget (sin try/catch)
+    // antes de runApp en main(), el throw se escapaba y la app web quedaba
+    // colgada en la pantalla de carga (regresión desde que entró el updater,
+    // jun 2026). El `||` corta antes de tocar Platform.
+    if (_iniciado || kIsWeb || !Platform.isWindows) return;
     if (!_esInstalacionReal(Platform.resolvedExecutable)) return;
     _iniciado = true;
     Future<void>.delayed(const Duration(seconds: 4), _chequear);
@@ -66,7 +71,7 @@ class WindowsUpdateService {
   Future<void> chequearAhora() => _chequear();
 
   Future<void> _chequear() async {
-    if (!Platform.isWindows) return;
+    if (kIsWeb || !Platform.isWindows) return;
     try {
       final dio = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 10),
@@ -141,7 +146,7 @@ class WindowsUpdateService {
     required WinUpdateInfo info,
     VoidCallback? onListoParaReiniciar,
   }) async {
-    if (!Platform.isWindows) return WinUpdateResult.errorOtro;
+    if (kIsWeb || !Platform.isWindows) return WinUpdateResult.errorOtro;
 
     // Race-guard: ignorar el segundo click si ya estamos descargando.
     if (_instalando) return WinUpdateResult.yaEnCurso;
