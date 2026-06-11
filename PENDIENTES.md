@@ -55,6 +55,66 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ---
 
+## 📅 2026-06-10 — Sesión UI: cards-filtro en 4 menús + Mapa recorrido/acordeón + agente apodos + 2 bugs Windows
+
+Sesión larga de UX (todo en main + pusheado). La app Flutter **espera el release**
+que larga Santiago; el bot (agente) ya está VIVO por auto-update.
+
+### Cards-filtro en las listas admin (mismo gesto en los 4 menús)
+Los KPIs del header dejaron de ser decorativos: **las cards SON el filtro**.
+Tocás una → filtra la lista, la activa se resalta; se quitaron los chips viejos
+y el número grande del hero (repetía la card TOTAL/equivalente). Convención
+nueva en memoria `feedback_cards_filtro_admin.md`. Replicado en:
+- **Viajes** (`logistica_viajes_lista_screen`): PLANEADOS·EN CURSO·CONCLUIDOS·
+  TOTAL·GANANCIA CHOFERES + vista mensual (selector ◀MES▶). Sacado el botón
+  "Nuevo viaje" (queda el FAB). Detalle en `project_modulo_logistica.md`.
+- **Personal** (`admin_personal_lista_*`): TODOS·CHOFERES·PLANTA·ADMINISTRACIÓN·
+  INACTIVOS. PLANTA agrupa planta/gomería/taller/seg-higiene; INACTIVOS junta
+  inactivos+tanqueros+testers (sin sumar al total). Fix "Ficha del chofer"→
+  "Ficha del empleado".
+- **Flota** (`admin_vehiculos_lista_*`): TRACTORES·BATEAS·TOLVAS·BIVUELCOS·
+  TANQUES·LIBRES·INACTIVOS (default TRACTORES). LIBRES = cualquier tipo sin
+  asignar (badge de tipo en la card); INACTIVOS junta tanques+inactivos+
+  excluidos. Extintores SOLO en tractores (los enganches no llevan → ya no
+  dicen "sin datos").
+- **Mantenimiento** (`admin_mantenimiento_*`): TODOS·VENCIDOS·URGENTES·
+  A PROGRAMAR·AL DÍA·SIN DATOS (default TODOS; A PROGRAMAR = programar+falta-
+  poco). Conteos globales; número con color de urgencia.
+
+### Mapa de flota — acordeón + recorrido histórico (detalle en `project_modulo_mapa_flota.md`)
+Satélite por defecto; detalle de unidad como **acordeón en la card** (se eliminó
+el panel derecho); hero "ACTIVAS n de total" (sin las 3 cajitas ni chips);
+**recorrido histórico** 24h/48h/rango dibujado como polyline (fuente
+`SITRACK_EVENTOS`, índice compuesto `(asset_id, report_date)` deployado). Fix del
+scroll que saltaba al seleccionar (stream `SITRACK_POSICIONES` cacheado en
+`initState`, ya no inline en build).
+
+### Agente WhatsApp (vivo por auto-update; detalle en `project_agente_whatsapp.md`)
+Retry ante el bug errático `sin_texto` de Gemini (1 reintento si no hubo tool de
+acción); tool real `guardar_apodo` (escribe `EMPLEADOS/{dni}.APODO`, el mismo
+campo de la ficha) + saludo por apodo en TODOS los roles. Suite bot 265/265.
+
+### Admin shell
+Sacado el botón redundante "Volver al menú principal" (exit_to_app) del AppBar —
+la flecha de atrás de la izquierda ya cumple esa función.
+
+### 2 bugs cazados en recorrida `flutter run -d windows --debug` (commit `7031dc9`)
+Cosméticos/debug-only (no rompían nada), arreglados + **verificados en vivo**
+(2do run 100% limpio mientras Santiago recorría):
+- **Assertion de ListTile en los sheets de detalle**: el contenido iba pegado al
+  Container con color de fondo sin un Material en el medio → "ListTile background
+  color or ink splashes may be invisible". `app_detail_sheet.dart` ahora envuelve
+  el contenido del caller en `Material(transparency)` → arregla TODAS las fichas.
+- **Overflow 1px del buscador del Mapa**: TextField clavado en `SizedBox(height:
+  38)` cuando el InputDecorator mide ~39px → "RenderFlex overflowed by 1.00
+  pixels", re-disparado en cada tick del stream de posiciones. Subido a 40.
+La recorrida completa salió **limpia**: sin crashes, sin errores de datos, sin
+índices faltantes (el recorrido del mapa funcionó). El resto de los warnings del
+log eran ruido conocido (firestore non-platform-thread en Windows + un Volvo 404
+de un VIN sin alta).
+
+---
+
 ## 📅 2026-06-07 (cont.) — Link estable de descarga Windows + Paso 0 vigilador v3
 
 ### Link de descarga Windows ESTABLE (commits `89f5dc7`, `a230b5c`)
