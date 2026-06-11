@@ -192,7 +192,20 @@ async function main() {
   for (const d of docs) {
     const r = d.data();
     const creadoMs = r.creado_en?.toMillis?.() ?? Date.now();
-    const fechaArt = fechaArtIso(new Date(creadoMs));
+    let fechaArt = fechaArtIso(new Date(creadoMs));
+    // Los reportes auto-generados (origen=parada_reportada_auto) se crean el día
+    // DESPUÉS de la parada — el cron de cruce corre 07:00 sobre las paradas de la
+    // noche anterior. Buscar v3 por la fecha de CREACIÓN miraría el día equivocado
+    // (ej. parada del 08-06 → reporte creado 09-06 → buscaba v3 del 09); usamos la
+    // fecha real de la PARADA (PARADAS_REPORTADAS/{parada_id}). Fix 2026-06-11.
+    if (r.origen === 'parada_reportada_auto' && r.parada_id) {
+      try {
+        const pSnap = await db.collection('PARADAS_REPORTADAS').doc(r.parada_id).get();
+        const pd = pSnap.exists ? pSnap.data() : null;
+        if (pd?.fecha) fechaArt = pd.fecha;
+        else if (pd?.inicio_ms) fechaArt = fechaArtIso(new Date(pd.inicio_ms));
+      } catch (_) { /* si falla la lectura de la parada, queda la fecha de creación */ }
+    }
     console.log(`━━━ ${d.id} ━━━`);
     console.log(`Chofer:  ${r.chofer_nombre || '?'} (DNI ${r.chofer_dni || '?'})`);
     console.log(`Creado:  ${hhmmFecha(new Date(creadoMs))}`);
@@ -233,8 +246,8 @@ async function main() {
     await db.collection('REPORTES_DISCREPANCIA').doc(c.id).update({
       estado: 'revisado',
       nota_revision:
-        `Cerrado automático 2026-06-08: el registro v3 (a posteriori) ya ` +
-        `refleja la(s) pausa(s) reclamada(s). Detalle v3: ${c.nota}.`,
+        `Cerrado automático ${fechaArtIso(new Date())}: el registro v3 (a ` +
+        `posteriori) ya refleja la(s) pausa(s) reclamada(s). Detalle v3: ${c.nota}.`,
       revisado_por: 'BOT_AUTO_V3',
       revisado_en: admin.firestore.FieldValue.serverTimestamp(),
     });
