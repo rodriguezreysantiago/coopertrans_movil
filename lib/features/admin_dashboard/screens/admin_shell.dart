@@ -341,11 +341,9 @@ class _AdminShellState extends State<AdminShell> {
             tooltip: 'Búsqueda rápida (Ctrl+K)',
             onPressed: () => CommandPalette.show(context),
           ),
-          IconButton(
-            icon: const Icon(Icons.exit_to_app),
-            tooltip: 'Volver al menú principal',
-            onPressed: () => Navigator.of(context).pop(),
-          ),
+          // (Se quitó el botón "Volver al menú principal" — Santiago
+          // 2026-06-10: era redundante con la flecha de atrás del AppBar,
+          // que hace el mismo Navigator.pop() para salir del shell.)
         ],
       ),
       body: CommandPaletteShortcut(
