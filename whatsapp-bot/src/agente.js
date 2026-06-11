@@ -34,6 +34,26 @@ const GEMINI_API_BASE =
   'https://generativelanguage.googleapis.com/v1beta/models';
 const MODELO_GEMINI = process.env.AGENTE_MODELO_GEMINI || 'gemini-2.5-flash';
 
+// Presupuesto de "thinking" de Gemini 2.5. CAUSA RAÍZ del `sin_texto`: con el
+// thinking dinámico (ON por defecto en gemini-2.5-flash), ante una consulta que
+// requiere DECIDIR una herramienta (ej. "cuántas horas voy manejando" → mi_jornada)
+// el modelo devuelve un candidato VACÍO con finishReason=STOP — sin texto y sin
+// functionCall — de forma DETERMINÍSTICA para ciertos fraseos. El retry desde
+// cero no lo salva (re-corre el mismo input roto). Medido en la auditoría
+// 2026-06-11: "cuántas horas voy manejando" 40/40 vacío con thinking ON → 0/40
+// con thinkingBudget:0 (y latencia algo menor). Por eso lo APAGAMOS (0). El bot
+// llama tools y redacta respuestas cortas: el thinking no aportaba calidad acá.
+//   -1 → no enviar thinkingConfig (deja el default dinámico del modelo).
+//    0 → thinking apagado (default, el fix).
+//   >0 → presupuesto fijo de tokens de pensamiento.
+const THINKING_BUDGET = parseInt(process.env.AGENTE_THINKING_BUDGET || '0', 10);
+/** Fragmento a spreadear dentro de generationConfig (vacío si budget < 0). */
+function _thinkingCfg() {
+  return THINKING_BUDGET >= 0
+    ? { thinkingConfig: { thinkingBudget: THINKING_BUDGET } }
+    : {};
+}
+
 const MAX_TOKENS = 1024;
 const TIMEOUT_MS = parseInt(process.env.AGENTE_TIMEOUT_MS || '30000', 10);
 const MAX_TOOL_ITERS = 4;
@@ -2714,7 +2734,11 @@ async function _transcribirAudio(audio) {
         },
       ],
     }],
-    generationConfig: { maxOutputTokens: 512 },
+    // thinkingBudget:0 también acá: sin thinking, la transcripción no filtra el
+    // razonamiento interno del modelo como si fuera lo dicho (caso real
+    // 2026-06-11: un audio devolvió "SILENT THOUGHTS: The user wants a
+    // word-for-word transcription..." en vez del texto). Y baja la latencia.
+    generationConfig: { maxOutputTokens: 512, ..._thinkingCfg() },
   };
   const resp = await _fetchJson(url, headers, body);
   const parts =
@@ -2739,7 +2763,7 @@ async function _conversarGemini(db, system, historial, userText, persona) {
   const base = {
     systemInstruction: { parts: [{ text: system }] },
     tools: _toolsGemini(persona.rol),
-    generationConfig: { maxOutputTokens: MAX_TOKENS },
+    generationConfig: { maxOutputTokens: MAX_TOKENS, ..._thinkingCfg() },
   };
   const contents = [
     ...historial.map((t) => ({

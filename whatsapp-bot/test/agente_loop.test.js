@@ -93,3 +93,25 @@ describe('agente._conversarRobusto — el retry sin_texto NO duplica una acción
     assert.ok(r.huboToolDeAccion, 'registrar_parada está en TOOLS_DE_ACCION → marca huboToolDeAccion');
   });
 });
+
+describe('agente._conversarGemini — thinkingConfig en el request (regresión sin_texto 2026-06-11)', () => {
+  test('el body a Gemini apaga el thinking (thinkingBudget=0)', async () => {
+    // Por qué este test: con el thinking ON (default de gemini-2.5-flash) el
+    // modelo devuelve candidato VACÍO ante consultas que requieren decidir una
+    // tool (jornada/turnos) — medido 40/40 vacío. Si un refactor borra el
+    // thinkingConfig del body, el bot vuelve a fallar al 100% en esas consultas
+    // SIN romper ningún otro test. Este lo detecta.
+    const bodies = [];
+    global.fetch = async (_url, opts) => {
+      bodies.push(JSON.parse(opts.body));
+      return { ok: true, async json() { return txtResp('hola'); }, async text() { return ''; } };
+    };
+    await agente._conversarGemini(dbMockCaptura(), 'sys', [], 'hola', CHOFER);
+    assert.ok(bodies.length >= 1, 'debió llamar a Gemini al menos una vez');
+    assert.deepStrictEqual(
+      bodies[0].generationConfig && bodies[0].generationConfig.thinkingConfig,
+      { thinkingBudget: 0 },
+      'el thinking debe ir apagado (budget 0) — si esto falla, vuelve el sin_texto en jornada/turnos'
+    );
+  });
+});
