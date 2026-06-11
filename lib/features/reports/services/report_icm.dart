@@ -16,7 +16,6 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as ex;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' as intl;
 
@@ -33,12 +32,6 @@ class ReportIcmService {
 
   static Future<void> mostrarOpcionesYGenerar(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
-
-    if (kIsWeb) {
-      AppFeedback.warningOn(messenger,
-          'Los reportes Excel solo están disponibles en Windows y Android.');
-      return;
-    }
 
     final offset = await _mostrarDialogoMes(context);
     if (offset == null || !context.mounted) return;

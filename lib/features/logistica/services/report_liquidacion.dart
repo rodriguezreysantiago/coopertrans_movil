@@ -1,5 +1,4 @@
 import 'package:excel/excel.dart' as ex;
-import 'package:flutter/foundation.dart' show kIsWeb, visibleForTesting;
 import 'package:flutter/material.dart';
 
 import '../../../shared/utils/app_feedback.dart';
@@ -51,11 +50,6 @@ class ReportLiquidacionService {
   }) async {
     final messenger = ScaffoldMessenger.of(context);
 
-    if (kIsWeb) {
-      AppFeedback.warningOn(messenger,
-          'Los reportes Excel solo están disponibles en Windows, Android e iOS.');
-      return;
-    }
     if (viajes.isEmpty && adelantos.isEmpty) {
       AppFeedback.warningOn(messenger,
           'No hay datos para exportar en el período seleccionado.');

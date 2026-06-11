@@ -52,6 +52,13 @@ dependencies:
   archive: ^3.6.1
   # `csv` se removió (2026-04-28): los reportes exportan solo Excel.
   intl: ^0.20.2
+  # `web` para disparar la descarga del .xlsx en el build web (/sistema/):
+  # Blob + `<a download>` vía package:web + dart:js_interop. SOLO entra al
+  # build web (import condicional en reports/services/web_download.dart); en
+  # móvil/desktop el guardado sigue por File/Process/SharePlus. Ya venía
+  # transitive — lo promovemos a explícito (mismo 1.1.x del lock) para poder
+  # importarlo sin disparar el lint depend_on_referenced_packages.
+  web: ^1.1.0
 
   # ================= GRÁFICOS =================
   # Para los gráficos del módulo ICM (línea histórica, barras por tipo,

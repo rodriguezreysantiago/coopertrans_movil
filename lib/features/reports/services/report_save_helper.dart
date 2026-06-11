@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../shared/utils/app_feedback.dart';
+import 'web_download.dart';
 
 /// Helper compartido para guardar y abrir reportes Excel desde la app.
 ///
@@ -41,6 +42,10 @@ class ReportSaveHelper {
   /// Guarda el `.xlsx` en disco y lo abre / comparte según la plataforma.
   ///
   /// Comportamiento:
+  /// - **Web** (`/sistema/`): dispara una descarga del navegador (Blob +
+  ///   `<a download>`) vía [descargarBytesEnNavegador]. NO toca disco ni
+  ///   Excel — todo lo de abajo es dart:io (`File`/`Process`/
+  ///   `getTemporaryDirectory`) y tira `UnsupportedError` en web.
   /// - **Windows**: muestra `FilePicker.platform.saveFile()` con el
   ///   nombre default. Si el usuario elige path, guarda ahí y abre con
   ///   la app default (Excel). Si cancela, devuelve false (no escribe
@@ -63,6 +68,18 @@ class ReportSaveHelper {
       // List<int>).
       final bytesU8 =
           bytes is Uint8List ? bytes : Uint8List.fromList(bytes);
+
+      // `kIsWeb` PRIMERO: en web NO hay disco, ni Excel, ni SharePlus nativo,
+      // y todo lo de abajo (File/Process/getTemporaryDirectory de dart:io)
+      // tira UnsupportedError. Disparamos una descarga del navegador con los
+      // bytes del .xlsx. Mismo principio que el fix del updater Windows
+      // (commit 8d58b85): guardar con kIsWeb antes de tocar cualquier
+      // API de dart:io.
+      if (kIsWeb) {
+        descargarBytesEnNavegador(bytesU8, nombreDefault);
+        AppFeedback.successOn(messenger, 'Descargando: $nombreDefault');
+        return true;
+      }
 
       if (Platform.isWindows) {
         // Diálogo nativo de Windows. Devuelve null si el usuario cancela.

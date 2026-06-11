@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as ex;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -86,12 +85,6 @@ class ReportConsumoService {
     List<dynamic> cacheVolvo,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
-
-    if (kIsWeb) {
-      AppFeedback.warningOn(messenger,
-          'Los reportes Excel solo están disponibles en Windows y Android.');
-      return;
-    }
 
     // ============= 1) Rango de fechas (default: mes en curso) =============
     final hoy = DateTime.now();

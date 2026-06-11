@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:excel/excel.dart' as ex;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -35,12 +34,6 @@ class ReportFlotaService {
     List<dynamic> cacheVolvo,
   ) async {
     final messenger = ScaffoldMessenger.of(context);
-
-    if (kIsWeb) {
-      AppFeedback.warningOn(messenger,
-          'Los reportes Excel solo están disponibles en Windows y Android.');
-      return;
-    }
 
     // Confirmación rápida — sin checkboxes (las columnas son fijas y
     // todas relevantes). El admin solo confirma "GENERAR".

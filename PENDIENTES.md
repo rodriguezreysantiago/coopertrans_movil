@@ -55,6 +55,38 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ---
 
+## 📅 2026-06-11 — Export de reportes Excel funcionando en web (/sistema/)
+
+Cerrado el pendiente que dejó el hotfix web del 2026-06-10: exportar un reporte Excel
+desde `cooper-trans.com.ar/sistema/` tiraba `UnsupportedError` — mismo patrón
+`Platform.isWindows` (dart:io) sin `kIsWeb` del hotfix, pero **on-demand** (en el click
+de exportar) en vez de en el arranque. Hasta ahora los 5 reports cortaban en web con un
+stopgap ("los reportes Excel solo están disponibles en Windows y Android"); ahora
+descargan de verdad.
+
+**Fix** (todo en main):
+- `ReportSaveHelper.guardarYAbrir`: rama `if (kIsWeb)` PRIMERO → descarga del navegador
+  con los bytes del .xlsx, ANTES de cualquier `File`/`Process.run`/`getTemporaryDirectory`
+  (todos dart:io, todos tiran en web).
+- Descarga web real (Blob + `<a download>` + `revokeObjectURL`) en
+  `reports/services/web_download_web.dart` con `package:web` + `dart:js_interop`. Import
+  condicional `web_download.dart` (`export ..._web.dart if (dart.library.io) ..._stub.dart`)
+  — mismo truco que `core/window/desktop_window.dart`, así `package:web` NUNCA entra al
+  build móvil/desktop (ahí el guardado sigue por File/Process/SharePlus). `web` promovida
+  de transitive a directa en pubspec (1.1.x) para no disparar `depend_on_referenced_packages`.
+- Sacado el stopgap `if (kIsWeb) { warning; return; }` de los 5 reports que usan el helper:
+  flota, icm, consumo, checklist (reports/) + liquidación (logistica/). `report_adelantos`
+  NO usa el helper (imprime PDF vía PdfPrinter) → fuera de scope.
+
+**Verificado**: `flutter analyze` 0 issues · `flutter build web --release --base-href
+/sistema/ --pwa-strategy=none` (PowerShell, NO git-bash) OK con `<base href="/sistema/">`
+correcto · boot en preview headless limpio (Firebase conecta, prefs migran, 0 errores/
+warnings de consola; el canvas no pinta en el headless = quirk canvaskit conocido, no bug).
+El **click real de descarga** necesita login admin + data → lo prueba Santiago en
+`/sistema/` tras el próximo deploy FTP (deploy web = acción de release, la larga él).
+
+---
+
 ## 📅 2026-06-10 — Sesión UI: cards-filtro en 4 menús + Mapa recorrido/acordeón + agente apodos + 2 bugs Windows
 
 Sesión larga de UX (todo en main + pusheado). La app Flutter **espera el release**
@@ -124,10 +156,12 @@ Windows (~2026-06-06); se notó al deployar 1.2.25. Fix: `kIsWeb` primero. Rebui
 carga OK**. Diagnóstico: `curl` a los assets (todos 200, descartó 404/FTP incompleto) +
 el `Uncaught Error` de la consola que mandó Santiago. Regla + detalle en memoria
 `project_web_institucional.md`.
-- [ ] **PENDIENTE**: `lib/features/reports/services/report_save_helper.dart:67` tiene el
-  MISMO patrón (`Platform.isWindows` sin `kIsWeb`) → exportar un reporte desde la web
-  falla. On-demand (no arranque). Requiere implementar la descarga web real (Blob/anchor),
-  no solo el guard. (Chip de tarea spawneado.)
+- [x] **RESUELTO (2026-06-11)**: `report_save_helper.dart` ahora dispara una descarga del
+  navegador (Blob + `<a download>`) en web vía import condicional (`web_download.dart` →
+  `_web`/`_stub`, discriminador `dart.library.io`). El branch `kIsWeb` corta ANTES de
+  tocar File/Process/getTemporaryDirectory. Se sacó el stopgap "solo Windows/Android" de
+  los 5 reports que lo usan (flota, icm, consumo, checklist, liquidación). Detalle abajo
+  (sección 2026-06-11).
 
 ---
 

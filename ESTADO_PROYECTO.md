@@ -161,7 +161,7 @@ coopertrans_movil/
 - **NUNCA** tocar `Platform.is*` ni `dart:io` (`File`, `Process`, `getTemporaryDirectory`) sin guardar con `kIsWeb` **primero** — en web lanzan `UnsupportedError`. Es CRÍTICO en el arranque (`main()` antes de `runApp`, fire-and-forget) y en widgets siempre montados: el throw cuelga la web en "Cargando" sin error visible (solo en la consola del browser). Caso real: **/sistema/ caído 2026-06-10, fix `8d58b85`** (`WindowsUpdateService.iniciar()` + `WindowsUpdateOverlay`).
 - Para código desktop-only que corre al arranque: import condicional con stub web (ver `core/window/`) o `if (kIsWeb) return;` al tope del método.
 - Build web: `flutter build web --release --base-href /sistema/ --pwa-strategy=none` **desde PowerShell** (git-bash mangea el `/sistema/`).
-- ⚠️ **Deuda conocida**: `lib/features/reports/services/report_save_helper.dart` (export Excel) todavía NO es web-safe (usa `Platform.isWindows` sin guard). Ver memoria `project_web_institucional` (Gotcha web).
+- **Guardar/descargar un archivo en web**: NO uses `File`/`Process`/`getTemporaryDirectory`. Descargá con Blob + `<a download>` vía un helper de import condicional con stub no-web. Referencia: `reports/services/web_download.dart` (`_web` con `package:web`+`dart:js_interop`, `_stub` para móvil/desktop) usado por `ReportSaveHelper.guardarYAbrir` (rama `kIsWeb` primero). Los 5 reports Excel (flota/icm/consumo/checklist/liquidación) ya exportan en web por descarga (2026-06-11).
 
 ### Logging y auditoría
 - **Errores**: `AppLogger.recordError(error, stack, reason: ..., fatal: false)`. En mobile va a Crashlytics; en desktop solo `debugPrint`.
