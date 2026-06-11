@@ -144,7 +144,7 @@ coopertrans_movil/
 ### Centralizaciones (sumar tipos nuevos solo en estas listas)
 - **Tipos de vehículo**: `AppTiposVehiculo` en `app_constants.dart`.
 - **Vencimientos por tipo**: `AppVencimientos.tractor` y `.enganche` en `vencimientos_config.dart`.
-- **Roles**: `ADMIN` y `USUARIO` (no "CHOFER").
+- **Roles**: 6 roles reales — `CHOFER` / `PLANTA` / `GOMERIA` / `SEG_HIGIENE` / `SUPERVISOR` / `ADMIN` (`AppRoles` + gating fino por capability en `capabilities.dart`). El viejo `ADMIN`/`USUARIO` quedó OBSOLETO. Ver memoria `project_rbac_roles`.
 - **Rutas**: `AppRoutes` en `app_constants.dart`, no hardcodear strings.
 - **Colores semánticos**: `AppColors.success/error/warning/info/...`. **NO** hardcodear `Colors.greenAccent`. Para colores del tema usar `Theme.of(context)`.
 
@@ -155,6 +155,13 @@ coopertrans_movil/
 - **Confirmaciones**: `AppConfirmDialog.show(...)` con `destructive: true` para acciones de riesgo.
 - **Inputs numéricos**: agregar `DigitOnlyFormatter` en `inputFormatters` además de `keyboardType` (cubre paste y desktop).
 - **Búsqueda**: `Ctrl+K` (Cmd+K en Mac) abre `CommandPalette`. Para abrir detalles desde otros features usar `abrirDetalleChofer(context, dni)` o `abrirDetalleVehiculo(context, patente, data)`.
+- **Listas admin = cards-filtro**: en las pantallas de lista del panel admin, los KPIs del header **SON** el filtro (tappeables), no chips aparte ni número-hero redundante. Tocar una card filtra; "TODOS"/equivalente limpia. Aplicado en Viajes, Personal, Flota y Mantenimiento (2026-06-10). Patrón completo en la memoria `feedback_cards_filtro_admin`.
+
+### Cross-platform (OJO: la app corre también en WEB — `/sistema/`)
+- **NUNCA** tocar `Platform.is*` ni `dart:io` (`File`, `Process`, `getTemporaryDirectory`) sin guardar con `kIsWeb` **primero** — en web lanzan `UnsupportedError`. Es CRÍTICO en el arranque (`main()` antes de `runApp`, fire-and-forget) y en widgets siempre montados: el throw cuelga la web en "Cargando" sin error visible (solo en la consola del browser). Caso real: **/sistema/ caído 2026-06-10, fix `8d58b85`** (`WindowsUpdateService.iniciar()` + `WindowsUpdateOverlay`).
+- Para código desktop-only que corre al arranque: import condicional con stub web (ver `core/window/`) o `if (kIsWeb) return;` al tope del método.
+- Build web: `flutter build web --release --base-href /sistema/ --pwa-strategy=none` **desde PowerShell** (git-bash mangea el `/sistema/`).
+- ⚠️ **Deuda conocida**: `lib/features/reports/services/report_save_helper.dart` (export Excel) todavía NO es web-safe (usa `Platform.isWindows` sin guard). Ver memoria `project_web_institucional` (Gotcha web).
 
 ### Logging y auditoría
 - **Errores**: `AppLogger.recordError(error, stack, reason: ..., fatal: false)`. En mobile va a Crashlytics; en desktop solo `debugPrint`.
@@ -175,7 +182,7 @@ coopertrans_movil/
 | Bot WhatsApp en Node.js separado, no Twilio | Se monta en un servidor del cliente con `whatsapp-web.js`. Costo cero, pero requiere mantener una sesión QR escaneada y un proceso vivo |
 | Click-to-Chat (`wa.me`) para avisos manuales del admin | Complementa al bot: cuando el admin quiere mandar algo puntual sin pasar por la cola |
 | `StorageService` con `Uint8List` + `putData` | `dart:io.File` no funciona en Web. El refactor hace los uploads cross-platform |
-| Reportes Excel con guard de `kIsWeb` | El package `excel` toca `dart:io` para guardar; en Web mostraría error. Se muestra snackbar |
+| Reportes Excel con guard de `kIsWeb` | El package `excel` toca `dart:io` para guardar; en Web mostraría error. **OJO 2026-06-10**: `report_save_helper.dart` todavía usa `Platform.isWindows` SIN guard → export web roto (pendiente; ver §4 Cross-platform) |
 | OCR opcional con propiedad `soportado` | ML Kit solo Android/iOS. En Web/Windows el botón "Detectar fecha" se oculta |
 | Campo "Preocupacional" tanto en UI como en Firestore | Migración completa hecha el 2026-04-28 vía `scripts/migrar_psicofisico_a_preocupacional.py` |
 
