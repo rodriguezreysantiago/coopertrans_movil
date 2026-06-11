@@ -185,12 +185,19 @@ class _VehiculoCard extends StatelessWidget {
                             label: 'RTO', fecha: data['VENCIMIENTO_RTO']),
                         _MiniVencimiento(
                             label: 'Seguro', fecha: data['VENCIMIENTO_SEGURO']),
-                        _MiniVencimiento(
-                            label: 'Ext. cabina',
-                            fecha: data['VENCIMIENTO_EXTINTOR_CABINA']),
-                        _MiniVencimiento(
-                            label: 'Ext. exterior',
-                            fecha: data['VENCIMIENTO_EXTINTOR_EXTERIOR']),
+                        // Los extintores (cabina + exterior) son del TRACTOR
+                        // con cabina; los enganches NO llevan (Santiago
+                        // 2026-06-10). En ellos "Sin fecha" daba a entender
+                        // que faltaba cargarlos. Misma regla que el detalle
+                        // (AppVencimientos.forTipo: enganche = RTO + Seguro).
+                        if (esTractor) ...[
+                          _MiniVencimiento(
+                              label: 'Ext. cabina',
+                              fecha: data['VENCIMIENTO_EXTINTOR_CABINA']),
+                          _MiniVencimiento(
+                              label: 'Ext. exterior',
+                              fecha: data['VENCIMIENTO_EXTINTOR_EXTERIOR']),
+                        ],
                       ],
                     ),
                   ],
