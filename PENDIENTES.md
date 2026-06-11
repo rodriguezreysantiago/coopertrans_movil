@@ -113,6 +113,22 @@ La recorrida completa salió **limpia**: sin crashes, sin errores de datos, sin
 log eran ruido conocido (firestore non-platform-thread en Windows + un Volvo 404
 de un VIN sin alta).
 
+### 🔴 Hotfix web /sistema/ — `Platform.isWindows` sin `kIsWeb` (commit `8d58b85`)
+Más tarde Santiago reportó `cooper-trans.com.ar/sistema/` en "Cargando" eterno (web
+1.2.25). Dos accesos a `Platform.isWindows` (dart:io) sin guard de `kIsWeb` →
+`UnsupportedError` en el browser, antes de `runApp`: `WindowsUpdateService.iniciar()`
+(fire-and-forget en main, sin try/catch — el throw escapaba y runApp nunca corría) +
+`WindowsUpdateOverlay.build()` (siempre montado). Web roto en silencio desde el updater
+Windows (~2026-06-06); se notó al deployar 1.2.25. Fix: `kIsWeb` primero. Rebuild web
+(PowerShell, NO git-bash — mangle de `/sistema/`) + redeploy FTP → **verificado en vivo,
+carga OK**. Diagnóstico: `curl` a los assets (todos 200, descartó 404/FTP incompleto) +
+el `Uncaught Error` de la consola que mandó Santiago. Regla + detalle en memoria
+`project_web_institucional.md`.
+- [ ] **PENDIENTE**: `lib/features/reports/services/report_save_helper.dart:67` tiene el
+  MISMO patrón (`Platform.isWindows` sin `kIsWeb`) → exportar un reporte desde la web
+  falla. On-demand (no arranque). Requiere implementar la descarga web real (Blob/anchor),
+  no solo el guard. (Chip de tarea spawneado.)
+
 ---
 
 ## 📅 2026-06-07 (cont.) — Link estable de descarga Windows + Paso 0 vigilador v3
