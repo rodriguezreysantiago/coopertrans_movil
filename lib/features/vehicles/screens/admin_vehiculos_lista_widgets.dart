@@ -8,78 +8,35 @@
 part of 'admin_vehiculos_lista_screen.dart';
 
 // =============================================================================
-// LISTA POR TIPO (un AppListPage por tab)
+// LISTA DE FLOTA (un AppListPage filtrado por la card seleccionada)
 // =============================================================================
 
-class _ListaPorTipo extends StatefulWidget {
-  final String tipo;
-  final bool mostrarInactivos;
-  final bool mostrarExcluidos;
-  final ExcluidosSet? excluidos;
-  const _ListaPorTipo({
-    required this.tipo,
-    required this.mostrarInactivos,
-    required this.mostrarExcluidos,
-    required this.excluidos,
+/// Lista de unidades. El stream es FIJO (toda la flota, creado en el screen);
+/// el filtro lo da el callback `visible` (escudo + card). Al cambiar de card,
+/// el screen reconstruye con un `visible` nuevo y AppListPage re-filtra el
+/// MISMO snapshot — sin re-suscribir (mismo patrón que Gestión de Personal,
+/// que ya hace stream-fijo + filtro client-side y anda).
+class _ListaFlota extends StatelessWidget {
+  final Stream<QuerySnapshot> stream;
+  final String cardId;
+  final bool Function(Map<String, dynamic> data, String patente) visible;
+  const _ListaFlota({
+    required this.stream,
+    required this.cardId,
+    required this.visible,
   });
-
-  @override
-  State<_ListaPorTipo> createState() => _ListaPorTipoState();
-}
-
-class _ListaPorTipoState extends State<_ListaPorTipo> {
-  // Stream PROPIO de la lista por tipo — NO el broadcast cacheado de
-  // `VehiculoProvider.getVehiculosPorTipo`.
-  //
-  // Bug 2026-06-04 (tocar un chip de tipo no cambiaba la lista): ese stream
-  // está cacheado y compartido, y CADA chip lo mantiene vivo para su
-  // contador. Al cambiar de tipo, la lista se re-suscribía a un broadcast
-  // que YA había emitido su snapshot — y los broadcast streams NO replamean
-  // el último evento a un suscriptor nuevo. La lista quedaba sin recibir
-  // datos del tipo nuevo. Acá la lista crea su PROPIO `snapshots()` por tipo
-  // (recreado al cambiar el tipo), así Firestore le entrega el snapshot
-  // inicial al instante. Mismo espíritu que Gestión de Personal (un stream
-  // estable propio del listado).
-  late Stream<QuerySnapshot> _stream;
-
-  @override
-  void initState() {
-    super.initState();
-    _stream = _crearStream();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ListaPorTipo old) {
-    super.didUpdateWidget(old);
-    if (old.tipo != widget.tipo) {
-      _stream = _crearStream();
-    }
-  }
-
-  Stream<QuerySnapshot> _crearStream() => FirebaseFirestore.instance
-      .collection(AppCollections.vehiculos)
-      .where('TIPO', isEqualTo: widget.tipo)
-      .snapshots();
 
   @override
   Widget build(BuildContext context) {
     return AppListPage(
-      stream: _stream,
+      stream: stream,
       searchHint: 'Buscar patente, marca, modelo o VIN...',
-      emptyTitle: 'Sin ${_pluralPretty(widget.tipo)} cargados',
-      emptySubtitle: 'Tocá el botón + para agregar uno',
+      emptyTitle: 'Sin ${_cardLabel(cardId).toLowerCase()}',
+      emptySubtitle: 'No hay unidades en este filtro.',
       emptyIcon: Icons.local_shipping_outlined,
       filter: (doc, q) {
         final data = doc.data() as Map<String, dynamic>;
-        if (!widget.mostrarInactivos && !AppActivo.esActivo(data)) {
-          return false;
-        }
-        // Excluidos: tanques combustibles + tractores asignados a
-        // tanqueros. La patente es el `doc.id`.
-        if (!widget.mostrarExcluidos &&
-            ExcluidosService.esExcluido(widget.excluidos, patente: doc.id)) {
-          return false;
-        }
+        if (!visible(data, doc.id)) return false;
         final hay = '${doc.id} ${data['MARCA'] ?? ''} '
                 '${data['MODELO'] ?? ''} ${data['VIN'] ?? ''}'
             .toUpperCase();
@@ -87,10 +44,6 @@ class _ListaPorTipoState extends State<_ListaPorTipo> {
       },
       itemBuilder: (ctx, doc) => _VehiculoCard(doc: doc),
     );
-  }
-
-  String _pluralPretty(String tipo) {
-    return AppTiposVehiculo.pluralMinusculas[tipo] ?? tipo.toLowerCase();
   }
 }
 
