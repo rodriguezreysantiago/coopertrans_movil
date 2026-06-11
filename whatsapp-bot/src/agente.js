@@ -3189,6 +3189,8 @@ module.exports = {
   _guardarHistorial,
   _esRepetidoDeUltimo,
   _getEmpleadosDocs,
+  _conversarGemini,
+  _conversarRobusto,
   _resetRateLimit: () => _rlPorClave.clear(),
   _resetHistorial: () => _histPorClave.clear(),
 };

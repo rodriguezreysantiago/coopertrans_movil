@@ -1231,5 +1231,6 @@ module.exports = {
   _esAdmin,
   _adminWhitelist,
   _construirTextoJornadaChofer,
+  _resolverChoferPorTelefono,
   MIN_DIGITOS_PARA_MATCH,
 };
