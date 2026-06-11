@@ -687,7 +687,11 @@ class _PanelUnidadesState extends State<_PanelUnidades> {
             padding: const EdgeInsets.fromLTRB(
                 AppSpacing.xl, AppSpacing.md, AppSpacing.xl, AppSpacing.md),
             child: SizedBox(
-              height: 38,
+              // 40, no 38: el InputDecorator (isDense + ícono + borde) mide
+              // ~39px, así que con 38 desbordaba 1px abajo ("RenderFlex
+              // overflowed by 1.00 pixels") y como el panel se reconstruye en
+              // cada tick del stream de posiciones, se re-disparaba en ráfaga.
+              height: 40,
               child: TextField(
                 controller: _ctrl,
                 textCapitalization: TextCapitalization.characters,

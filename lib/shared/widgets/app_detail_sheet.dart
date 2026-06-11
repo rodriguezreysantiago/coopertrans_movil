@@ -106,8 +106,20 @@ class AppDetailSheet {
                 ),
               ),
               const Divider(color: Colors.white10, height: 1),
-              // Contenido scrollable proveído por el caller
-              Expanded(child: builder(sheetCtx, scrollCtl)),
+              // Contenido scrollable proveído por el caller. Va envuelto en un
+              // Material(transparency) porque el contenido casi siempre trae
+              // ListTiles (fichas de empleado/vehículo): el ListTile pinta su
+              // fondo e ink splash sobre el Material ancestro más cercano, y
+              // sin este en el medio lo haría sobre el Container con color de
+              // arriba → Flutter dispara "ListTile background color or ink
+              // splashes may be invisible". `transparency` aporta el ancestro
+              // sin pintar nada, así el color del sheet se ve igual.
+              Expanded(
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: builder(sheetCtx, scrollCtl),
+                ),
+              ),
             ],
           ),
         ),
