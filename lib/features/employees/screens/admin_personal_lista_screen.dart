@@ -30,8 +30,8 @@ part 'admin_personal_lista_widgets.dart';
 /// Pantalla de Gestión de Personal — REFACTOR NÚCLEO (jun 2026).
 ///
 /// Reescrita al layout del prototipo (`screens-desktop-core.jsx :: Personal`):
-/// encabezado `PERSONAL · n empleados` + strip de CARDS-FILTRO por grupo de
-/// roles (TODOS · CHOFERES · PLANTA · ADMINISTRACIÓN) + lista densa
+/// encabezado `PERSONAL` + strip de CARDS-FILTRO por grupo de roles
+/// (TODOS · CHOFERES · PLANTA · ADMINISTRACIÓN · INACTIVOS) + lista densa
 /// (`_FilaPersona`) en una superficie `AppCard(tier:1)` por fila, con
 /// `AppHairline` implícita entre filas (borde de cards adyacentes).
 ///
@@ -229,24 +229,6 @@ class _HeroYChips extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const AppEyebrow('Personal'),
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                docs.isEmpty ? '—' : '$totalActivos',
-                style: AppType.h2.copyWith(
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 4),
-                child: Text('empleados', style: AppType.monoSm),
-              ),
-            ],
-          ),
           const SizedBox(height: AppSpacing.md),
           // Cards-filtro: TODOS · CHOFERES · PLANTA · ADMINISTRACIÓN ·
           // INACTIVOS (Santiago 2026-06-10). Tocar una filtra; la activa se
