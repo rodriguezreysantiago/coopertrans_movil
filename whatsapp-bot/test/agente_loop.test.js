@@ -115,3 +115,30 @@ describe('agente._conversarGemini — thinkingConfig en el request (regresión s
     );
   });
 });
+
+describe('registrar_parada_reportada — "ahora" sin HH:MM (UX, auditoría 2026-06-11)', () => {
+  // El chofer avisa "estoy parando" sin hora → antes el bot repreguntaba el
+  // HH:MM 2-3 veces (caso Dietrich). Con ahora:true el sistema pone la hora.
+  test('ahora:true sin hora_inicio → registra con la hora actual (no repregunta)', async () => {
+    const db = dbMockCaptura();
+    const r = await agente._ejecutarTool(db, 'registrar_parada_reportada', CHOFER, { ahora: true });
+    assert.strictEqual(r.ok, true, 'no debe pedir la hora si es ahora');
+    assert.strictEqual(parad(db).length, 1);
+    assert.match(parad(db)[0].data.inicio_label, /^\d{2}:\d{2}$/, 'inicio_label = HH:MM actual');
+    assert.ok(parad(db)[0].data.inicio_ms, 'tiene inicio_ms del momento');
+  });
+
+  test('sin hora_inicio y sin ahora → ok:false (NO inventa una hora)', async () => {
+    const db = dbMockCaptura();
+    const r = await agente._ejecutarTool(db, 'registrar_parada_reportada', CHOFER, {});
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(parad(db).length, 0, 'sin hora ni ahora no escribe nada');
+  });
+
+  test('hora_inicio explícita gana sobre ahora:true (la hora del chofer es más precisa)', async () => {
+    const db = dbMockCaptura();
+    const r = await agente._ejecutarTool(db, 'registrar_parada_reportada', CHOFER, { hora_inicio: '08:15', ahora: true });
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(parad(db)[0].data.inicio_label, '08:15');
+  });
+});

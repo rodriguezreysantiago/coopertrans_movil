@@ -400,13 +400,17 @@ const TOOLS_CHOFER = [
       'AVISA en el momento); la otra es REACTIVA (el chofer reclama un dato ' +
       'que ya está mal en el sistema). Después de anotarla, confirmale corto: ' +
       '"Listo, anoté tu parada a las HH:MM". Si solo dio la hora de inicio, ' +
-      'cuando arranque podés pedirle que te avise.',
+      'cuando arranque podés pedirle que te avise. Si el chofer avisa que para/' +
+      'arranca AHORA sin decir la hora ("estoy parando", "recién paré", "ya ' +
+      'arranco", "ahí estaciono"), NO le pidas el HH:MM: llamá la tool con ' +
+      'ahora:true y el sistema le pone la hora actual.',
     params: {
       hora_inicio: {
         type: 'string',
         description:
           'Hora en que paró, formato HH:MM o H:MM (24h). Aceptá "11:40", ' +
-          '"9.05", "1140". Si el chofer escribió "11.40" pasalo a "11:40".',
+          '"9.05", "1140". Si el chofer escribió "11.40" pasalo a "11:40". ' +
+          'Omitila SOLO si usás ahora:true (parada en este preciso momento).',
       },
       hora_fin: {
         type: 'string',
@@ -419,6 +423,14 @@ const TOOLS_CHOFER = [
         description:
           'Opcional. Motivo breve si el chofer lo dijo: "almorzar", "baño", ' +
           '"carga", "espera", "descanso", etc. Una palabra/2-3 a lo sumo.',
+      },
+      ahora: {
+        type: 'boolean',
+        description:
+          'true si el chofer avisa que para/arranca EN ESTE MOMENTO sin dar la ' +
+          'hora ("estoy parando", "recién paré", "ya arranco"). El sistema usa ' +
+          'la hora actual. Si dio una hora explícita, NO uses ahora (esa es más ' +
+          'precisa).',
       },
     },
   },
@@ -485,8 +497,9 @@ const TOOLS_GESTION_VENC = [
     name: 'info_chofer',
     description:
       'Datos generales de un chofer (por nombre o apellido): rol, si está ' +
-      'activo, teléfono, unidad y enganche asignados, y vencimiento de la ' +
-      'licencia. Usala cuando pregunten los datos de un chofer.',
+      'activo, CUIL, teléfono, unidad y enganche asignados, y vencimiento de ' +
+      'la licencia. Usala cuando pregunten los datos de un chofer (incluido el ' +
+      'CUIL para cargar en otros sistemas).',
     params: {
       query: { type: 'string', description: 'Nombre o apellido del chofer.' },
     },
@@ -1609,6 +1622,11 @@ async function _toolInfoChofer(db, args) {
   return {
     nombre: data.NOMBRE || r.dni,
     dni: r.dni,
+    // CUIL: lo piden los supervisores para cargas en sistemas externos (pedido
+    // reiterado de Errazu, auditoría 2026-06-11). info_chofer NO está disponible
+    // para el rol CHOFER (solo gestión: SUPERVISOR/ADMIN), así que exponerlo acá
+    // no filtra el CUIL de un chofer a otro.
+    cuil: data.CUIL || null,
     rol: data.ROL || null,
     activo: data.ACTIVO !== false,
     telefono: data.TELEFONO || null,
@@ -2215,6 +2233,22 @@ function _epochArtParaHoraHoy(hora, referenciaMs = Date.now()) {
   return Number.isFinite(ms) ? ms : null;
 }
 
+/** Hora ACTUAL ART como {h, min, label} — para registrar una parada que el
+ *  chofer avisa que ocurre AHORA, sin obligarlo a tipear el HH:MM. */
+function _horaArtAhora(referenciaMs = Date.now()) {
+  const partes = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'America/Argentina/Buenos_Aires',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(new Date(referenciaMs));
+  const val = (t) => parseInt((partes.find((p) => p.type === t) || {}).value, 10);
+  const h = val('hour');
+  const min = val('minute');
+  return {
+    h, min,
+    label: `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`,
+  };
+}
+
 /**
  * Tool registrar_parada_reportada — el chofer avisa una hora puntual de
  * parada/arranque y queda en PARADAS_REPORTADAS para cruzar después con
@@ -2222,16 +2256,30 @@ function _epochArtParaHoraHoy(hora, referenciaMs = Date.now()) {
  * automático con v3 + escalado al admin si v3 NO la ve queda para Fase 2.
  */
 async function _toolRegistrarParadaReportada(db, persona, args) {
-  const inicio = _parsearHoraChofer(args && args.hora_inicio);
-  if (!inicio) {
-    return { ok: false, error: 'Falta la hora de la parada (formato HH:MM).' };
+  const ahoraMs = Date.now();
+  // "ahora": el chofer avisa que para/arranca en este momento sin dar la hora
+  // ("estoy parando", "recién paré", "ya arranco"). Usamos el reloj del servidor
+  // (ART) en vez de exigirle el HH:MM — antes el bot repreguntaba la hora 2-3
+  // veces (caso Dietrich, auditoría 2026-06-11). Si dio una hora_inicio
+  // explícita, esa manda (más precisa que "ahora").
+  const pedirAhora = args && (args.ahora === true || args.ahora === 'true');
+  let inicio = _parsearHoraChofer(args && args.hora_inicio);
+  let inicioMs;
+  if (inicio) {
+    inicioMs = _epochArtParaHoraHoy(inicio, ahoraMs);
+  } else if (pedirAhora) {
+    inicio = _horaArtAhora(ahoraMs);
+    inicioMs = ahoraMs;
+  } else {
+    return {
+      ok: false,
+      error: 'Falta la hora de la parada (HH:MM), o pasá ahora:true si para/arranca en este momento.',
+    };
   }
   const fin = args && args.hora_fin ? _parsearHoraChofer(args.hora_fin) : null;
   const motivo = args && args.motivo
     ? String(args.motivo).slice(0, 120).trim() || null
     : null;
-  const ahoraMs = Date.now();
-  const inicioMs = _epochArtParaHoraHoy(inicio, ahoraMs);
   const finMs = fin ? _epochArtParaHoraHoy(fin, ahoraMs) : null;
   // Si dio inicio y fin, durSeg directo. Si solo inicio, lo dejamos null
   // (es una parada "en curso"); cuando avise el arranque se cierra.
@@ -2661,8 +2709,12 @@ function _systemPrompt(persona) {
     '- Cuando el chofer AVISA una hora puntual de parada o arranque ("ya pare',
     '  hora 11:40", "pause 15:50", "salí 14:40", "arranque 12:05", "voy al',
     '  baño", "voy a almorzar"), llamá a registrar_parada_reportada CON LA',
-    '  HORA EN MANO — NO contestes solo "Listo" sin anotarla. Si el mensaje',
-    '  tiene una hora y arranca/cierra/pausa una parada, esa tool va. Después',
+    '  HORA EN MANO — NO contestes solo "Listo" sin anotarla. Si AVISA que para',
+    '  o arranca AHORA sin decir la hora ("estoy parando", "recién paré", "ya',
+    '  arranco"), NO le repreguntes el HH:MM una y otra vez: llamá la tool con',
+    '  ahora:true (el sistema le pone la hora actual) y confirmale la hora que',
+    '  quedó. Si el mensaje tiene una hora y arranca/cierra/pausa una parada,',
+    '  esa tool va. Después',
     '  confirmale corto y natural con el mensaje sugerido que devuelve la',
     '  tool. Esta tool es PROACTIVA — la usás CUANDO te avisa la parada,',
     '  antes de que el sistema la pierda. NO la confundas con reportar_',
