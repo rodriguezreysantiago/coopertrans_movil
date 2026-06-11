@@ -142,13 +142,25 @@ async function _resolverChofer(db, fromNumber, fromLid = null) {
   }
 
   // Pasada 2: LAXO (#3) — forma canónica AR, reconcilia el "9" móvil que
-  // WhatsApp NO entrega (542915115568) vs el TELEFONO cargado con-9.
+  // WhatsApp NO entrega (542915115568) vs el TELEFONO cargado con-9. Si DOS
+  // choferes canonizan igual (uno con 9, otro sin) → AMBIGUO: devolvemos null
+  // (P1.2 — antes devolvía el primero arbitrario = cross-user). El match laxo
+  // único se marca `_via:'tel-laxo'` para que el aprendizaje de LID NO se
+  // dispare con él (solo con el estricto de la Pasada 1).
+  const laxos = [];
   for (const { dni, data } of _cacheEmpleados) {
     const tel = String(data.TELEFONO || '').replace(/\D+/g, '');
     if (!tel) continue;
     if (telefonoCanonicalAr(fromDigits) === telefonoCanonicalAr(tel)) {
-      return { dni, data, _via: 'tel' };
+      laxos.push({ dni, data });
     }
+  }
+  if (laxos.length === 1) return { ...laxos[0], _via: 'tel-laxo' };
+  if (laxos.length > 1) {
+    log.warn(
+      `[identidad] match laxo AMBIGUO para ${fromDigits}: ` +
+        `dnis=${laxos.map((l) => l.dni).join(',')} — no resuelvo`
+    );
   }
   return null;
 }
@@ -422,7 +434,14 @@ function crearHandler(fs, wa) {
       // vinculadas (ej. tras cambiar el dispositivo del bot, mismo número).
       // Sin esto el bot procesaba su propio aviso como entrante y le
       // AUTO-RESPONDÍA el acuse al chofer (2x mensajes + señal de bot → baneo).
-      const tieneFirmaBot = String(msg.body || '').includes('Bot-On');
+      // La firma "Bot-On" descarta como saliente propio, EXCEPTO si el mensaje
+      // es un REENVÍO (P1.3): un chofer que reenvía un aviso del bot con su
+      // pregunta NO es un reflejo propio — antes se perdía sin acuse. El reflejo
+      // real del saliente propio no viene forwarded, y el reciente ya lo cubre
+      // esTextoPropio (arriba). El copy-paste exacto sin reenviar es un borde
+      // aceptado (raro; el chofer puede reescribir).
+      const tieneFirmaBot =
+        String(msg.body || '').includes('Bot-On') && msg.isForwarded !== true;
       // Refuerzo por NÚMERO del bot (BOT_PHONE): si el mensaje viene de nuestro
       // propio número, es saliente propio aunque fromMe/id mientan. Cubre los
       // que NO llevan la firma (acuses, respuestas del agente). 2026-06-04.
@@ -586,6 +605,16 @@ function crearHandler(fs, wa) {
                 return;
               }
               audio = { data: media.data, mimetype: media.mimetype || 'audio/ogg' };
+            } else {
+              // El audio no se pudo bajar (download falló / sin data): avisar
+              // explícito en vez de caer al acuse genérico, que haría creer al
+              // chofer que su audio se procesó (P3.4). Simétrico con el tope.
+              log.info('Audio de ' +
+                etiquetaAgente(fromNumber, persona.rol, persona.dni) +
+                ' sin data (download falló)');
+              await wa.responder(msg,
+                'No pude escuchar tu audio. Mandámelo de nuevo o escribímelo, por favor.');
+              return;
             }
           }
           if (!esAudio || audio) {
@@ -829,6 +858,20 @@ async function _aprenderLid(db, dni, fromLid) {
   const lidNorm = String(fromLid || '').replace(/\D+/g, '');
   if (!dni || !lidNorm) return;
   try {
+    // Unicidad (P1.1): un LID pertenece a UNA sola persona. Si ya está
+    // memorizado en OTRO dni, NO lo reasignamos — sería atribución cruzada
+    // PERSISTENTE (la Pasada 0 `porLid` gana sobre todo, y queda en Firestore).
+    // Logueamos el conflicto para revisar el TELEFONO/WA_LID a mano.
+    await asegurarCacheEmpleados(db);
+    const yaEn = _buscarPorLid(lidNorm, _rosterConId || []);
+    if (yaEn && String(yaEn.dni) !== String(dni)) {
+      log.warn(
+        `[lid-learning] CONFLICTO: lid ${lidNorm} ya es del DNI ${yaEn.dni}; ` +
+          `NO lo reasigno a ${dni} (revisar TELEFONO/WA_LID)`
+      );
+      return;
+    }
+    if (yaEn) return; // ya aprendido en este dni — idempotente, nada que hacer
     await db.collection('EMPLEADOS').doc(String(dni)).set(
       { WA_LID: lidNorm },
       { merge: true }
@@ -860,11 +903,20 @@ function _buscarEmpleadoEn(telefono, lista) {
     }
   }
   // Pasada 2: match LAXO — reconcilia el "9" móvil AR (mismo motivo que
-  // _resolverChofer match #3). Solo corre si ningún exacto en la pasada 1.
+  // _resolverChofer match #3). Si DOS empleados canonizan igual → AMBIGUO: null
+  // (P1.2). El único match laxo se marca `_matchLaxo` para no aprender LID con él.
+  const laxos = [];
   for (const item of lista) {
     const tel = String(item.data.TELEFONO || '').replace(/\D+/g, '');
     if (!tel) continue;
-    if (telefonoCanonicalAr(digits) === telefonoCanonicalAr(tel)) return item;
+    if (telefonoCanonicalAr(digits) === telefonoCanonicalAr(tel)) laxos.push(item);
+  }
+  if (laxos.length === 1) return { ...laxos[0], _matchLaxo: true };
+  if (laxos.length > 1) {
+    log.warn(
+      `[identidad] match laxo AMBIGUO (gestion) para ${digits}: ` +
+        `dnis=${laxos.map((l) => l.dni).join(',')} — no resuelvo`
+    );
   }
   return null;
 }
@@ -917,7 +969,7 @@ async function _resolverPersonaAgente(db, fromNumber, chofer, fromLid = null) {
       dni: emp.dni,
       nombre: emp.data.NOMBRE,
       data: emp.data,
-      _via: 'tel',
+      _via: emp._matchLaxo ? 'tel-laxo' : 'tel',
     };
   }
   return null;

@@ -847,7 +847,16 @@ const _TOOLS_GESTION = [
 // ejecutó en la conversación y el modelo igual devolvió sin texto, NO se
 // dispara el fallback "por vacío" (re-conversar repetiría el efecto: doble
 // objetivo / doble confirmación). Las de SOLO LECTURA sí se pueden reintentar.
-const TOOLS_DE_ACCION = new Set(['poner_a_buscar_turno', 'crear_adelanto']);
+const TOOLS_DE_ACCION = new Set([
+  'poner_a_buscar_turno',
+  'crear_adelanto',
+  // Estas TAMBIÉN escriben con .doc()/.add() (ID autogenerado) → NO son
+  // idempotentes. Sin incluirlas, el retry `sin_texto` de _conversarRobusto
+  // las re-ejecutaba y duplicaba el doc / el WhatsApp al encargado (P0.1).
+  'registrar_parada_reportada',
+  'reportar_discrepancia',
+  'pedir_llamada_a_oficina',
+]);
 
 function _toolsDelRol(rol) {
   if (rol === 'CHOFER') return [...TOOLS_CHOFER, ...TOOLS_COMUNES];
@@ -1142,6 +1151,21 @@ function _fechaAdelanto(raw) {
   return { date, label: _fmtFechaAr(date) };
 }
 
+// ── crear_adelanto: confirmación STATEFUL + tope de cordura (P0.2 / P0.3) ──
+// El paso 1 (sin confirmar) registra acá un hash {dni,monto,fecha,medio}; el
+// paso 2 (confirmado) EXIGE ese hash vigente. Así un `confirmado:true` que el
+// modelo ponga sin haber pasado por el resumen (alucinación o inyección del
+// texto del usuario) se rechaza server-side — la confirmación deja de ser
+// "solo prompt". Stateful en memoria del proceso (el flujo de 2 pasos ocurre
+// en la misma sesión del bot); si el proceso reinicia entre pasos, el admin
+// reconfirma (TTL corto). El hash incluye el DNI resuelto → ata al empleado.
+const _adelantosPendientes = new Map(); // adminKey → { hash, ts }
+const _ADELANTO_PEND_TTL_MS = 10 * 60 * 1000;
+const _TOPE_ADELANTO = parseInt(process.env.AGENTE_TOPE_ADELANTO || '5000000', 10);
+function _hashAdelanto(dni, monto, fechaLabel, medio) {
+  return `${dni}|${monto}|${fechaLabel}|${medio}`;
+}
+
 /**
  * Registra un adelanto de dinero a un empleado. Tool de ACCIÓN (escribe en
  * ADELANTOS_CHOFER) en DOS PASOS: la 1ra llamada (sin `confirmado`) resuelve el
@@ -1153,9 +1177,21 @@ async function _toolCrearAdelanto(db, persona, args) {
   const nombreQuery = String((args && args.empleado) || '').trim();
   if (!nombreQuery) return { ok: false, error: 'Indicá a qué empleado.' };
 
-  const monto = _parsearMonto(args && args.monto);
-  if (monto == null || monto <= 0) {
+  const montoRaw = _parsearMonto(args && args.monto);
+  if (montoRaw == null || montoRaw <= 0) {
     return { ok: false, error: 'El monto tiene que ser un número mayor a 0.' };
+  }
+  // Redondeo a 2 decimales (anti-drift) + tope de cordura: un adelanto enorme
+  // es casi siempre un cero de más en una transcripción de audio (P0.3). El
+  // tope es configurable por env; si es legítimo, se carga desde la app.
+  const monto = Math.round(montoRaw * 100) / 100;
+  if (monto > _TOPE_ADELANTO) {
+    return {
+      ok: false,
+      error: `$${monto.toLocaleString('es-AR')} es un monto inusualmente alto ` +
+        'para un adelanto. Si de verdad es ese número, cargalo desde la app de ' +
+        'Adelantos (por seguridad no lo registro por acá).',
+    };
   }
 
   const medioPago = _normalizarMedioPago(args && args.medio_pago);
@@ -1182,8 +1218,14 @@ async function _toolCrearAdelanto(db, persona, args) {
   const montoFmt = `$${monto.toLocaleString('es-AR')}`;
   const medioLabel = medioPago === 'TRANSFERENCIA' ? 'transferencia' : 'efectivo';
 
-  // PASO 1 — sin confirmar: devolver resumen, NO escribir.
+  // Hash de la operación EXACTA (incluye el DNI ya resuelto → ata al empleado:
+  // si el paso 2 re-resuelve a otro DNI, el hash no coincide y se rechaza).
+  const adminKey = String(persona.dni || persona.telefono || 'sin_dni');
+  const hash = _hashAdelanto(r.dni, monto, fechaInfo.label, medioPago);
+
+  // PASO 1 — sin confirmar: registrar el pendiente y devolver el resumen.
   if (args.confirmado !== true) {
+    _adelantosPendientes.set(adminKey, { hash, ts: Date.now() });
     return {
       ok: false,
       requiere_confirmacion: true,
@@ -1200,7 +1242,24 @@ async function _toolCrearAdelanto(db, persona, args) {
     };
   }
 
-  // PASO 2 — confirmado: escribir el adelanto (mismo contrato que la app).
+  // PASO 2 — confirmado: EXIGIR un pendiente vigente con el MISMO hash (P0.2).
+  // Si no existe (el modelo puso confirmado:true sin pasar por el resumen, o
+  // cambió monto/empleado/fecha entre pasos) → rechazar, NO escribir plata.
+  const pend = _adelantosPendientes.get(adminKey);
+  if (!pend || pend.hash !== hash ||
+      (Date.now() - pend.ts) > _ADELANTO_PEND_TTL_MS) {
+    _adelantosPendientes.delete(adminKey);
+    return {
+      ok: false,
+      requiere_confirmacion: true,
+      error: 'Antes de registrar necesito mostrarte el resumen y que lo ' +
+        'confirmes. Decime de nuevo el adelanto (empleado, monto y fecha) y te ' +
+        'lo paso para confirmar.',
+    };
+  }
+  _adelantosPendientes.delete(adminKey); // consumido (one-shot)
+
+  // PASO 2 — escribir el adelanto (mismo contrato que la app).
   try {
     const ref = db.collection('ADELANTOS_CHOFER').doc();
     const data = {
@@ -2694,6 +2753,10 @@ async function _conversarGemini(db, system, historial, userText, persona) {
   // escritura. Lo devolvemos en el resultado para que _conversarRobusto NO
   // re-converse "por vacío" y repita el write (doble objetivo Cachatore).
   let huboToolDeAccion = false;
+  // Dedup de escrituras DENTRO del turno: si el modelo emite la MISMA acción
+  // (name+args) dos veces, la 2da devuelve el resultado de la 1ra sin volver a
+  // escribir (P0.4: evita doble adelanto/aviso por una repetición del modelo).
+  const _accionesHechas = new Map();
 
   for (let iter = 0; iter < MAX_TOOL_ITERS; iter++) {
     // En la última iteración desactivamos las tools (mode NONE): el modelo
@@ -2732,7 +2795,16 @@ async function _conversarGemini(db, system, historial, userText, persona) {
         const fc = p.functionCall;
         toolsUsadas.push(fc.name);
         let resultado;
-        if (ejecutadas >= MAX_TOOLS_POR_ITER) {
+        const esAccion = TOOLS_DE_ACCION.has(fc.name);
+        // Clave de dedup por turno: solo para acciones de escritura.
+        const dedupKey = esAccion
+          ? `${fc.name}:${JSON.stringify(fc.args || {})}`
+          : null;
+        if (dedupKey && _accionesHechas.has(dedupKey)) {
+          // Misma acción ya ejecutada con éxito en este turno → NO re-escribir;
+          // devolver el resultado anterior (P0.4: anti doble adelanto/aviso).
+          resultado = _accionesHechas.get(dedupKey);
+        } else if (ejecutadas >= MAX_TOOLS_POR_ITER) {
           resultado = { error: 'Demasiadas consultas en un solo paso; pedímelas de a una.' };
         } else {
           ejecutadas++;
@@ -2743,8 +2815,9 @@ async function _conversarGemini(db, system, historial, userText, persona) {
             // crear_adelanto con requiere_confirmacion) devuelven ok:false → NO
             // marcan, así el fallback "por vacío" puede re-conversar sin duplicar
             // nada (esos paths son idempotentes: solo leen).
-            if (TOOLS_DE_ACCION.has(fc.name) && resultado && resultado.ok === true) {
+            if (esAccion && resultado && resultado.ok === true) {
               huboToolDeAccion = true;
+              if (dedupKey) _accionesHechas.set(dedupKey, resultado);
             }
           } catch (e) {
             resultado = { error: e.message };

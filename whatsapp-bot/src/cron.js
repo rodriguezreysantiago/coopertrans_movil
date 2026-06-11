@@ -240,14 +240,17 @@ function stop() {
   }
 }
 
-async function _runOnce(fs) {
+async function _runOnce(fs, forzar = false) {
   if (_running) {
     log.warn('Cron previo todavía corriendo, salto este ciclo.');
     return;
   }
-  if (!enHorarioHabil()) {
+  // El gate de horario aplica al scheduler automático, NO a una corrida forzada
+  // por el admin (/forzar-cron): antes, /forzar-cron un finde devolvía
+  // "Encolados: 0" como si no hubiera nada, cuando en realidad ni corría (P3.2).
+  if (!forzar && !enHorarioHabil()) {
     log.debug('Cron salta — fuera de horario hábil.');
-    return;
+    return { skipped: 'horario' };
   }
   _running = true;
 
@@ -1072,7 +1075,7 @@ async function forzarRunOnce(fs) {
     log.info('forzarRunOnce: ya hay un ciclo en progreso, salteo.');
     return { skipped: true };
   }
-  return _runOnce(fs);
+  return _runOnce(fs, true); // forzar: saltea el gate de horario (acción del admin)
 }
 
 /**

@@ -79,6 +79,9 @@ async function cargarExcluidos(db) {
       .where('TIPO', '==', 'TANQUE')
       .limit(100)
       .get();
+    if (tanquesSnap.size >= 100) {
+      log.warn('[excluidos] VEHICULOS TANQUE alcanzó el cap de 100; revisar (P3.1).');
+    }
     const patentesTanque = new Set();
     for (const d of tanquesSnap.docs) {
       patentesTanque.add(d.id.toUpperCase());
@@ -87,6 +90,13 @@ async function cargarExcluidos(db) {
     // ─── 2. Iterar EMPLEADOS — testers + choferes tanque ──────────
     // SIN filtro de rol (Apple Reviewer es ADMIN). Costo trivial.
     const empSnap = await db.collection('EMPLEADOS').limit(1000).get();
+    if (empSnap.size >= 1000) {
+      // Cap alcanzado: hay empleados sin evaluar contra exclusiones → un
+      // tanquero/tester fuera del corte podría recibir avisos (fail-open, P3.1).
+      // Hoy Vecchi está lejos del cap, pero avisamos para no fallar en silencio.
+      log.warn('[excluidos] EMPLEADOS alcanzó el cap de 1000; algunos no se ' +
+        'evaluaron contra exclusiones. Paginar o subir el límite.');
+    }
     const dnis = new Set();
     const tractoresExcluidos = new Set();
     let testersDetectados = 0;

@@ -1003,8 +1003,13 @@ describe('agente._ejecutarTool — crear_adelanto (acción de plata)', () => {
     assert.strictEqual(db._escrituras.length, 0);
   });
 
-  test('paso 2 (confirmado) escribe el doc con el contrato de la app', async () => {
+  test('paso 2 (confirmado, tras el paso 1) escribe el doc con el contrato de la app', async () => {
     const db = dbMockAdel({ empleados: EMPS });
+    // La confirmación es STATEFUL (P0.2): el paso 1 registra el pendiente y el
+    // paso 2 lo consume. Sin el paso 1, el confirmado:true se rechaza.
+    await agente._ejecutarTool(db, 'crear_adelanto', ADMIN, {
+      empleado: 'dietrich', monto: 150000, observacion: 'sueldo junio',
+    });
     const r = await agente._ejecutarTool(db, 'crear_adelanto', ADMIN, {
       empleado: 'dietrich', monto: 150000, confirmado: true, observacion: 'sueldo junio',
     });
@@ -1058,12 +1063,35 @@ describe('agente._ejecutarTool — crear_adelanto (acción de plata)', () => {
 
   test('medio transferencia + monto string "150.000" se interpretan bien', async () => {
     const db = dbMockAdel({ empleados: EMPS });
-    const r = await agente._ejecutarTool(db, 'crear_adelanto', ADMIN, {
-      empleado: 'dietrich', monto: '150.000', medio_pago: 'transferencia', confirmado: true,
-    });
+    const a = { empleado: 'dietrich', monto: '150.000', medio_pago: 'transferencia' };
+    await agente._ejecutarTool(db, 'crear_adelanto', ADMIN, a); // paso 1
+    const r = await agente._ejecutarTool(
+      db, 'crear_adelanto', ADMIN, { ...a, confirmado: true });
     assert.strictEqual(r.ok, true);
     assert.strictEqual(db._escrituras[0].data.monto, 150000);
     assert.strictEqual(db._escrituras[0].data.medio_pago, 'TRANSFERENCIA');
+  });
+
+  test('confirmado:true SIN el paso 1 previo → rechaza, no escribe (P0.2)', async () => {
+    const db = dbMockAdel({ empleados: EMPS });
+    // Admin con dni propio para no chocar con pendientes de otros tests.
+    const adminSolo = { rol: 'ADMIN', dni: '99000111', data: {} };
+    const r = await agente._ejecutarTool(db, 'crear_adelanto', adminSolo, {
+      empleado: 'dietrich', monto: 150000, confirmado: true,
+    });
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(r.requiere_confirmacion, true);
+    assert.strictEqual(db._escrituras.length, 0);
+  });
+
+  test('monto por encima del tope → rechaza, no escribe (P0.3)', async () => {
+    const db = dbMockAdel({ empleados: EMPS });
+    const r = await agente._ejecutarTool(db, 'crear_adelanto', ADMIN, {
+      empleado: 'dietrich', monto: 99000000, confirmado: true,
+    });
+    assert.strictEqual(r.ok, false);
+    assert.match(r.error, /alto|app/i);
+    assert.strictEqual(db._escrituras.length, 0);
   });
 
   test('empleado vacío → error, no escribe', async () => {
