@@ -786,8 +786,11 @@ async function procesarSiguiente() {
       // Reintento del commit (P2.4): si falla, los agrupados quedan PENDIENTE y
       // se reenviarían sueltos (el dedup por texto no los cubre: su texto es el
       // individual, no el combinado). Un retry corto reduce mucho esa ventana.
-      // (El fix atómico —batch único con el doc principal— queda pendiente:
-      // requiere refactor de marcarEnviado/espejado al histórico.)
+      // NOTA: el "fix atómico" —batch único principal+agrupados— se EVALUÓ y se
+      // DESCARTÓ (2026-06-11): como el envío a WhatsApp NO es atómico con el
+      // marcado, juntarlos haría que un commit fallido reenvíe el COMBINADO
+      // (resumen duplicado) en vez del evento suelto redundante de hoy — peor.
+      // El retry es la mitigación correcta para este trade-off inherente.
       let commitOk = false;
       for (let i = 0; i < 3 && !commitOk; i++) {
         try {
