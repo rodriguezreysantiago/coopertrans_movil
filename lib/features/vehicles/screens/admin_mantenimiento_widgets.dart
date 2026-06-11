@@ -66,19 +66,33 @@ _ResolucionServiceDistance _resolverServiceDistance(
 // HEADER NÚCLEO · eyebrow + hero + KpiStrip + chips de filtro + buscador
 // =============================================================================
 
-/// Encabezado del tablero, estilo Personal/Flota: `AppEyebrow`
-/// ("MANTENIMIENTO") + número hero (total de la flota) + `AppKpiStrip`
-/// con el desglose por urgencia (vencidos · urgentes · programar · OK) +
-/// fila de `AppFilterChip` para filtrar por estado + buscador `AppInput`.
-///
-/// Los contadores son GLOBALES (sobre toda la flota visible), no sobre el
-/// resultado filtrado — así el admin ve cuántos hay en cada estado aunque
-/// tenga un filtro activo. La lógica de toggle vive en el State del screen.
+/// Cards-filtro del tablero de Mantenimiento (Santiago 2026-06-10). Cada una
+/// agrupa 0+ estados de urgencia (`estados == null` = TODOS). A PROGRAMAR
+/// junta `programar` + `atencion` (falta poco), igual que la card del tablero
+/// viejo. Reemplazan al KpiStrip no-interactivo + los chips por estado.
+enum _CardMant {
+  todos('Todos', null),
+  vencidos('Vencidos', {MantenimientoEstado.vencido}),
+  urgentes('Urgentes', {MantenimientoEstado.urgente}),
+  aProgramar('A programar',
+      {MantenimientoEstado.programar, MantenimientoEstado.atencion}),
+  alDia('Al día', {MantenimientoEstado.ok}),
+  sinDatos('Sin datos', {MantenimientoEstado.sinDato});
+
+  const _CardMant(this.label, this.estados);
+  final String label;
+  final Set<MantenimientoEstado>? estados;
+}
+
+/// Encabezado del tablero: `AppEyebrow` ("MANTENIMIENTO") + strip de CARDS-
+/// FILTRO por estado + buscador. Los conteos son GLOBALES (sobre toda la flota
+/// visible), no sobre el resultado filtrado. Se quitó el número del hero, que
+/// repetía la card TODOS.
 class _HeaderMantenimiento extends StatelessWidget {
   final int total;
   final _Resumen resumen;
-  final MantenimientoEstado? filtroActivo;
-  final ValueChanged<MantenimientoEstado> onSeleccionar;
+  final _CardMant cardActiva;
+  final ValueChanged<_CardMant> onCard;
   final TextEditingController searchCtl;
   final bool tieneTexto;
   final VoidCallback onLimpiar;
@@ -86,8 +100,8 @@ class _HeaderMantenimiento extends StatelessWidget {
   const _HeaderMantenimiento({
     required this.total,
     required this.resumen,
-    required this.filtroActivo,
-    required this.onSeleccionar,
+    required this.cardActiva,
+    required this.onCard,
     required this.searchCtl,
     required this.tieneTexto,
     required this.onLimpiar,
@@ -95,9 +109,7 @@ class _HeaderMantenimiento extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final c = context.colors;
-    final atencion = resumen.programar + resumen.atencion;
-
+    final esDesktop = AppBreakpoints.isDesktopOrLarger(context);
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
@@ -105,110 +117,16 @@ class _HeaderMantenimiento extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const AppEyebrow('MANTENIMIENTO'),
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                '$total',
-                style: AppType.h2.copyWith(
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 4),
-                child: Text('tractores', style: AppType.monoSm),
-              ),
-            ],
-          ),
           const SizedBox(height: AppSpacing.md),
-          // KPIs por urgencia. "Vencidos" y "Urgentes" se tintan cuando hay
-          // alguno (la señal crítica del tablero). "A programar" agrupa
-          // programar + falta-poco. "OK" en verde si todos al día.
-          AppKpiStrip(
-            stats: [
-              AppStat(
-                label: 'Vencidos',
-                value: '${resumen.vencidos}',
-                accent: resumen.vencidos > 0 ? c.error : null,
-              ),
-              AppStat(
-                label: 'Urgentes',
-                value: '${resumen.urgentes}',
-                accent: resumen.urgentes > 0 ? c.warning : null,
-              ),
-              AppStat(
-                label: 'A programar',
-                value: '$atencion',
-              ),
-              AppStat(
-                label: 'Al día',
-                value: '${resumen.ok}',
-                accent: resumen.ok > 0 ? c.success : null,
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.md),
-          // Chips de filtro por estado. El contador de cada chip es el
-          // conteo global de ese estado. Tap toggle (mismo estado limpia).
-          // Scroll horizontal: con 6 estados no entran en mobile.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _ChipEstado(
-                  label: 'Vencidos',
-                  count: resumen.vencidos,
-                  estado: MantenimientoEstado.vencido,
-                  activo: filtroActivo == MantenimientoEstado.vencido,
-                  onTap: onSeleccionar,
-                ),
-                const SizedBox(width: 6),
-                _ChipEstado(
-                  label: 'Urgentes',
-                  count: resumen.urgentes,
-                  estado: MantenimientoEstado.urgente,
-                  activo: filtroActivo == MantenimientoEstado.urgente,
-                  onTap: onSeleccionar,
-                ),
-                const SizedBox(width: 6),
-                _ChipEstado(
-                  label: 'Programar',
-                  count: resumen.programar,
-                  estado: MantenimientoEstado.programar,
-                  activo: filtroActivo == MantenimientoEstado.programar,
-                  onTap: onSeleccionar,
-                ),
-                const SizedBox(width: 6),
-                _ChipEstado(
-                  label: 'Falta poco',
-                  count: resumen.atencion,
-                  estado: MantenimientoEstado.atencion,
-                  activo: filtroActivo == MantenimientoEstado.atencion,
-                  onTap: onSeleccionar,
-                ),
-                const SizedBox(width: 6),
-                _ChipEstado(
-                  label: 'Al día',
-                  count: resumen.ok,
-                  estado: MantenimientoEstado.ok,
-                  activo: filtroActivo == MantenimientoEstado.ok,
-                  onTap: onSeleccionar,
-                ),
-                if (resumen.sinDato > 0) ...[
-                  const SizedBox(width: 6),
-                  _ChipEstado(
-                    label: 'Sin datos',
-                    count: resumen.sinDato,
-                    estado: MantenimientoEstado.sinDato,
-                    activo: filtroActivo == MantenimientoEstado.sinDato,
-                    onTap: onSeleccionar,
-                  ),
-                ],
-              ],
-            ),
+          // Cards-filtro por estado: TODOS · VENCIDOS · URGENTES · A PROGRAMAR
+          // (programar + falta poco) · AL DÍA · SIN DATOS. Tocar una filtra; la
+          // activa se resalta. Default TODOS (ves toda la flota).
+          _StripCardsMant(
+            esDesktop: esDesktop,
+            total: total,
+            resumen: resumen,
+            cardActiva: cardActiva,
+            onCard: onCard,
           ),
           const SizedBox(height: AppSpacing.md),
           AppInput(
@@ -225,31 +143,160 @@ class _HeaderMantenimiento extends StatelessWidget {
   }
 }
 
-/// Chip de filtro por estado de mantenimiento. Envuelve `AppFilterChip`
-/// (look Núcleo) y traduce su `onTap` al estado de este chip.
-class _ChipEstado extends StatelessWidget {
-  final String label;
-  final int count;
-  final MantenimientoEstado estado;
-  final bool activo;
-  final ValueChanged<MantenimientoEstado> onTap;
+/// Strip de cards-filtro de Mantenimiento (estética AppKpiStrip pero
+/// tappeable). El número de cada card lleva el color de su urgencia
+/// (vencidos rojo, urgentes ámbar, al día verde). Desktop: Expanded; mobile:
+/// scroll horizontal.
+class _StripCardsMant extends StatelessWidget {
+  final bool esDesktop;
+  final int total;
+  final _Resumen resumen;
+  final _CardMant cardActiva;
+  final ValueChanged<_CardMant> onCard;
+  const _StripCardsMant({
+    required this.esDesktop,
+    required this.total,
+    required this.resumen,
+    required this.cardActiva,
+    required this.onCard,
+  });
 
-  const _ChipEstado({
+  int _count(_CardMant card) {
+    switch (card) {
+      case _CardMant.todos:
+        return total;
+      case _CardMant.vencidos:
+        return resumen.vencidos;
+      case _CardMant.urgentes:
+        return resumen.urgentes;
+      case _CardMant.aProgramar:
+        return resumen.programar + resumen.atencion;
+      case _CardMant.alDia:
+        return resumen.ok;
+      case _CardMant.sinDatos:
+        return resumen.sinDato;
+    }
+  }
+
+  /// Color del número según la urgencia (solo si hay alguno). El resto neutro.
+  Color? _accent(_CardMant card, AppColorsExt c) {
+    if (_count(card) == 0) return null;
+    switch (card) {
+      case _CardMant.vencidos:
+        return c.error;
+      case _CardMant.urgentes:
+        return c.warning;
+      case _CardMant.alDia:
+        return c.success;
+      case _CardMant.todos:
+      case _CardMant.aProgramar:
+      case _CardMant.sinDatos:
+        return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final celdas = [
+      for (final card in _CardMant.values)
+        _CeldaCardMant(
+          label: card.label,
+          valor: _count(card),
+          accent: _accent(card, c),
+          seleccionado: cardActiva == card,
+          esDesktop: esDesktop,
+          onTap: () => onCard(card),
+        ),
+    ];
+    final fila = IntrinsicHeight(
+      child: Row(
+        children: [
+          for (var i = 0; i < celdas.length; i++) ...[
+            if (esDesktop) Expanded(child: celdas[i]) else celdas[i],
+            if (i < celdas.length - 1) Container(width: 1, color: c.border),
+          ],
+        ],
+      ),
+    );
+    return Container(
+      decoration: BoxDecoration(
+        color: c.surface2,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: c.border),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: esDesktop
+            ? fila
+            : SingleChildScrollView(
+                scrollDirection: Axis.horizontal, child: fila),
+      ),
+    );
+  }
+}
+
+/// Una celda del strip de Mantenimiento. Tappeable; resalta con tinte brand
+/// cuando es la card en foco. El número lleva el color de urgencia (`accent`).
+class _CeldaCardMant extends StatelessWidget {
+  final String label;
+  final int valor;
+  final Color? accent;
+  final bool seleccionado;
+  final bool esDesktop;
+  final VoidCallback onTap;
+  const _CeldaCardMant({
     required this.label,
-    required this.count,
-    required this.estado,
-    required this.activo,
+    required this.valor,
+    required this.accent,
+    required this.seleccionado,
+    required this.esDesktop,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return AppFilterChip(
-      label: label,
-      count: count,
-      activo: activo,
-      onTap: () => onTap(estado),
+    final c = context.colors;
+    final contenido = Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: esDesktop ? 18 : 14,
+        vertical: esDesktop ? 18 : 14,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label.toUpperCase(),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.eyebrow.copyWith(
+              color: seleccionado ? c.brand : c.textMuted,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '$valor',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppType.h2.copyWith(
+              color: accent ?? c.text,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
     );
+    final celda = ConstrainedBox(
+      constraints: BoxConstraints(minWidth: esDesktop ? 0 : 110),
+      child: ColoredBox(
+        color: seleccionado
+            ? c.brand.withValues(alpha: 0.12)
+            : Colors.transparent,
+        child: contenido,
+      ),
+    );
+    return InkWell(onTap: onTap, child: celda);
   }
 }
 

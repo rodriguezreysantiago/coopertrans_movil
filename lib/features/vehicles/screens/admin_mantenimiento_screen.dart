@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/theme/app_breakpoints.dart';
 import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/formatters.dart';
 import '../../../shared/widgets/app_widgets.dart';
@@ -46,9 +47,9 @@ class _AdminMantenimientoScreenState extends State<AdminMantenimientoScreen> {
   final TextEditingController _searchCtl = TextEditingController();
   String _query = '';
 
-  /// Filtro por estado de mantenimiento. null = sin filtro (mostrar todos).
-  /// Lo setean/limpian los chips de _BarraResumen via tap toggle.
-  MantenimientoEstado? _filtroEstado;
+  /// Card-filtro en foco (Santiago 2026-06-10: las cards SON el filtro,
+  /// reemplazaron los chips por estado). Default TODOS.
+  _CardMant _cardMant = _CardMant.todos;
 
   @override
   void initState() {
@@ -98,18 +99,17 @@ class _AdminMantenimientoScreenState extends State<AdminMantenimientoScreen> {
           }).toList();
 
           // Sort alfabético por patente (doc.id). Más predecible para el
-          // admin que ya conoce las patentes de memoria. Los chips del
-          // resumen siguen mostrando el conteo por urgencia, así que la
-          // info crítica (cuántos vencidos hay) sigue visible arriba.
+          // admin que ya conoce las patentes de memoria. Las cards-filtro del
+          // header siguen mostrando el conteo por urgencia, así que la info
+          // crítica (cuántos vencidos hay) sigue visible arriba.
           final sorted = [...docs]
             ..sort((a, b) => a.id.compareTo(b.id));
 
           // Filtros encadenados: primero por search (patente/marca/modelo),
-          // despues por estado seleccionado en los chips. _filtroEstado
-          // null = no filtra. El header sigue mostrando los conteos
-          // GLOBALES (calculados sobre `sorted`) para que el admin sepa
-          // cuantos hay en cada estado aunque tenga otro filtro activo y
-          // pueda saltar de uno a otro.
+          // despues por la card-filtro en foco (`_cardMant`). TODOS no filtra.
+          // El header sigue mostrando los conteos GLOBALES (calculados sobre
+          // `sorted`) para que el admin sepa cuantos hay en cada estado aunque
+          // tenga otra card activa y pueda saltar de una a otra.
           final filtrados = sorted.where((doc) {
             if (_query.isEmpty) return true;
             final data = doc.data() as Map<String, dynamic>;
@@ -119,11 +119,11 @@ class _AdminMantenimientoScreenState extends State<AdminMantenimientoScreen> {
                 .toUpperCase();
             return hay.contains(_query);
           }).where((doc) {
-            if (_filtroEstado == null) return true;
+            final estados = _cardMant.estados;
+            if (estados == null) return true; // TODOS
             final d = doc.data() as Map<String, dynamic>;
             final servicio = _resolverServiceDistance(d);
-            return AppMantenimiento.clasificar(servicio.km) ==
-                _filtroEstado;
+            return estados.contains(AppMantenimiento.clasificar(servicio.km));
           }).toList();
 
           // Resumen agregado: cuántos vencidos / urgentes / etc.
@@ -147,14 +147,8 @@ class _AdminMantenimientoScreenState extends State<AdminMantenimientoScreen> {
                 child: _HeaderMantenimiento(
                   total: sorted.length,
                   resumen: resumen,
-                  filtroActivo: _filtroEstado,
-                  onSeleccionar: (estado) {
-                    setState(() {
-                      // Tap mismo estado = limpiar; tap distinto = cambia.
-                      _filtroEstado =
-                          (_filtroEstado == estado) ? null : estado;
-                    });
-                  },
+                  cardActiva: _cardMant,
+                  onCard: (card) => setState(() => _cardMant = card),
                   searchCtl: _searchCtl,
                   tieneTexto: _query.isNotEmpty,
                   onLimpiar: () => _searchCtl.clear(),
