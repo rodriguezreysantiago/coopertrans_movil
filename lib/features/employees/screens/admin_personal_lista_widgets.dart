@@ -31,7 +31,7 @@ class _DetalleChofer extends StatelessWidget {
   static Future<void> abrir(BuildContext context, String dni) {
     return AppDetailSheet.show(
       context: context,
-      title: 'Ficha del chofer',
+      title: 'Ficha del empleado',
       icon: Icons.badge,
       builder: (sheetCtx, scrollCtl) =>
           _DetalleChofer(dni: dni, scrollController: scrollCtl),

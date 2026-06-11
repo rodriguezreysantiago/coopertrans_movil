@@ -136,7 +136,7 @@ class _AdminPersonalListaScreenState
                       builder: (_) => const AdminPersonalFormScreen(),
                     ),
                   ),
-                  tooltip: 'Agregar nuevo chofer',
+                  tooltip: 'Agregar empleado',
                   icon: const Icon(Icons.person_add_alt_1),
                   label: const Text('Nuevo'),
                 )
@@ -163,7 +163,7 @@ class _AdminPersonalListaScreenState
             child: AppListPage(
               stream: _empleadosStream,
               searchHint: 'Buscar por nombre, tractor o enganche...',
-              emptyTitle: 'Sin choferes cargados',
+              emptyTitle: 'Sin personal cargado',
               emptySubtitle: 'Tocá el botón + para agregar uno',
               emptyIcon: Icons.badge_outlined,
               padding: const EdgeInsets.fromLTRB(
