@@ -79,14 +79,13 @@ class _AdminVehiculosListaScreenState
         ...AppTiposVehiculo.enganches.where((t) => t != 'ACOPLADO'),
       ];
 
-  /// IDs de las cards-filtro, en orden (Santiago 2026-06-10): los tipos ·
-  /// LIBRES · INACTIVOS. Se excluye TANQUE: todos los tanques son combustibles
-  /// (excluidos) → van a INACTIVOS, así que una card TANQUES quedaría en 0.
-  static List<String> get _cards => [
-        ..._tipos.where((t) => t != 'TANQUE'),
-        _kCardLibres,
-        _kCardInactivos,
-      ];
+  /// IDs de las cards-filtro, en orden (Santiago 2026-06-10): los tipos
+  /// (TRACTORES·BATEAS·TOLVAS·BIVUELCOS·TANQUES) · LIBRES · INACTIVOS. Hoy
+  /// TANQUES muestra 0 — todos los tanques son combustibles (excluidos) y
+  /// viven en INACTIVOS — pero la card queda para cuando se agregue algún
+  /// tanque que SÍ controlemos.
+  static List<String> get _cards =>
+      [..._tipos, _kCardLibres, _kCardInactivos];
 
   /// ¿La unidad entra a la lista? Coincide con la card seleccionada (los
   /// excluidos cuentan como "baja" → solo entran en la card INACTIVOS).
