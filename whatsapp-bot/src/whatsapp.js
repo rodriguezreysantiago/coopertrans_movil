@@ -791,6 +791,27 @@ async function obtenerTelefonoDeLid(lid) {
   }
 }
 
+/**
+ * Probe ACTIVO de liveness del cliente (P2.1): valida que el browser de
+ * Puppeteer esté realmente vivo, no solo que el último evento dijera LISTO.
+ * `client.getState()` toca la página real; si el browser murió sin emitir
+ * `disconnected`, tira o se cuelga → con timeout corto devolvemos false. Lo usa
+ * el heartbeat para no reportar "LISTO" sobre una sesión zombi (bot fantasma).
+ */
+async function estaVivo(timeoutMs = 5000) {
+  if (!client || !listo) return false;
+  try {
+    const estado = await Promise.race([
+      client.getState(),
+      new Promise((_, rej) =>
+        setTimeout(() => rej(new Error('probe timeout')), timeoutMs)),
+    ]);
+    return estado === 'CONNECTED';
+  } catch (e) {
+    return false;
+  }
+}
+
 module.exports = {
   inicializar,
   tieneWhatsApp,
@@ -799,6 +820,7 @@ module.exports = {
   responder,
   esMensajePropio,
   esTextoPropio,
+  estaVivo,
   obtenerTelefonoDeLid,
   destroy,
   // Exportados para tests del cerrojo por contenido (fix 1, 2026-06-06).

@@ -1028,75 +1028,101 @@ async function _verificarNoHayOtraInstancia(db) {
   const ref = db.collection('BOT_HEALTH').doc('main');
   let abortInfo = null;
 
-  try {
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
+  // El check+claim se REINTENTA ante errores TRANSITORIOS de Firestore
+  // (UNAVAILABLE / DEADLINE_EXCEEDED / red): justo cuando la red está flaka es
+  // cuando el lock anti-doble-bot más se necesita, y antes se caía a "arrancar
+  // igual" al PRIMER error (P2.3). Recién tras agotar los reintentos se arranca
+  // best-effort, con log de ERROR. OTRA_INSTANCIA_VIVA NO se reintenta (es una
+  // respuesta válida del check, no una falla).
+  const MAX_REINTENTOS_CLAIM = 3;
+  let ultimoError = null;
+  for (let intento = 1; intento <= MAX_REINTENTOS_CLAIM; intento++) {
+    ultimoError = null;
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
 
-      if (snap.exists) {
-        const data = snap.data();
-        const ultimoHb = data.ultimoHeartbeat;
-        const otroPcId = data.pcId || 'desconocida';
-        if (ultimoHb) {
-          const ultimoMs = typeof ultimoHb.toMillis === 'function'
-            ? ultimoHb.toMillis()
-            : new Date(ultimoHb).getTime();
-          const segDesdeUltimo = Math.round((Date.now() - ultimoMs) / 1000);
-          const fresco = segDesdeUltimo <= UMBRAL_HEARTBEAT_FRESCO_SEG;
-          if (fresco && otroPcId !== PC_ID) {
-            // Heartbeat fresco de OTRA PC — la otra está viva. Vamos
-            // a abortar después de salir de la transacción (no
-            // queremos process.exit dentro de una tx).
-            abortInfo = { otroPcId, segDesdeUltimo };
-            // Lanzamos error para abortar la tx (no queremos escribir).
-            throw new Error('OTRA_INSTANCIA_VIVA');
+        if (snap.exists) {
+          const data = snap.data();
+          const ultimoHb = data.ultimoHeartbeat;
+          const otroPcId = data.pcId || 'desconocida';
+          if (ultimoHb) {
+            const ultimoMs = typeof ultimoHb.toMillis === 'function'
+              ? ultimoHb.toMillis()
+              : new Date(ultimoHb).getTime();
+            const segDesdeUltimo = Math.round((Date.now() - ultimoMs) / 1000);
+            const fresco = segDesdeUltimo <= UMBRAL_HEARTBEAT_FRESCO_SEG;
+            if (fresco && otroPcId !== PC_ID) {
+              // Heartbeat fresco de OTRA PC — la otra está viva. Abortamos
+              // después de salir de la tx (no `process.exit` dentro de una tx).
+              abortInfo = { otroPcId, segDesdeUltimo };
+              throw new Error('OTRA_INSTANCIA_VIVA');
+            }
           }
         }
-      }
 
-      // Llegamos acá si: no había doc, no había heartbeat, el heartbeat
-      // estaba viejo (otra PC muerta), o el heartbeat era nuestro
-      // (somos nosotros reiniciado). En todos los casos, claimeamos el
-      // lock escribiendo nuestro pcId con un heartbeat fresco. Si dos
-      // PCs llegan acá simultáneamente, Firestore detecta conflicto en
-      // commit y reintenta — la perdedora va a ver el heartbeat de la
-      // ganadora y entrar al branch de abort.
-      tx.set(
-        ref,
-        {
-          pcId: PC_ID,
-          ultimoHeartbeat: admin.firestore.FieldValue.serverTimestamp(),
-          estadoCliente: 'INICIANDO',
-          ultimoStartup: admin.firestore.FieldValue.serverTimestamp(),
-        },
-        { merge: true }
-      );
-    });
-  } catch (e) {
-    if (abortInfo) {
-      // Branch de abort: hay otra PC viva. Mostramos mensaje claro y
-      // exit(1). NSSM se va a quedar quieto (NO reinicia indefinidamente
-      // porque el exit es deliberado, no por crash).
-      log.error(
-        `\nABORTANDO: el bot YA esta corriendo en otra PC.\n\n` +
-        `  PC remota:        ${abortInfo.otroPcId}\n` +
-        `  Mi PC:            ${PC_ID}\n` +
-        `  Ultimo heartbeat: hace ${abortInfo.segDesdeUltimo}s\n` +
-        `  Umbral:           ${UMBRAL_HEARTBEAT_FRESCO_SEG}s\n\n` +
-        `Para evitar que dos bots procesen la misma cola y dupliquen ` +
-        `mensajes (riesgo de baneo de WhatsApp), no arranco.\n\n` +
-        `Soluciones:\n` +
-        `  1. Detener el bot en "${abortInfo.otroPcId}" (recomendado).\n` +
-        `  2. Si sabes que esa PC esta muerta y el heartbeat es residual, ` +
-        `seteá FORCE_START=true en .env y reintentá.\n`
-      );
-      process.exit(1);
+        // Llegamos acá si: no había doc/heartbeat, el heartbeat estaba viejo
+        // (otra PC muerta), o era nuestro (reinicio). Claimeamos el lock con
+        // nuestro pcId + heartbeat fresco. Si dos PCs llegan a la vez, Firestore
+        // detecta conflicto en commit y la perdedora ve el heartbeat ganador y
+        // entra al branch de abort.
+        tx.set(
+          ref,
+          {
+            pcId: PC_ID,
+            ultimoHeartbeat: admin.firestore.FieldValue.serverTimestamp(),
+            estadoCliente: 'INICIANDO',
+            ultimoStartup: admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+      });
+      break; // claim OK
+    } catch (e) {
+      if (abortInfo) break; // otra instancia viva — respuesta válida, no reintentar
+      ultimoError = e;
+      const code = e && e.code;
+      const transitorio = code === 14 || code === 4 ||
+        /UNAVAILABLE|DEADLINE_EXCEEDED|ECONNRESET|ETIMEDOUT|socket|network/i
+          .test(String((e && e.message) || ''));
+      if (intento < MAX_REINTENTOS_CLAIM && transitorio) {
+        const backoff = 1000 * intento;
+        log.warn(
+          `Check de instancia falló (transitorio ${intento}/${MAX_REINTENTOS_CLAIM}): ` +
+          `${e.message}. Reintento en ${backoff}ms`
+        );
+        await new Promise((r) => setTimeout(r, backoff));
+        continue;
+      }
+      break; // no transitorio, o sin más reintentos
     }
-    // Otro error de transacción (red, rules, conflicto irrecuperable) —
-    // arrancamos igual. Mejor un bot arrancando con riesgo bajo de
-    // duplicado que un bot bloqueado por una falla intermitente.
-    log.warn(
-      `Error en transacción de check de instancia: ${e.message}. ` +
-      `Arrancando igual (best-effort).`
+  }
+
+  if (abortInfo) {
+    // Branch de abort: hay otra PC viva. Mostramos mensaje claro y exit(1).
+    // NSSM se queda quieto (el exit es deliberado, no un crash).
+    log.error(
+      `\nABORTANDO: el bot YA esta corriendo en otra PC.\n\n` +
+      `  PC remota:        ${abortInfo.otroPcId}\n` +
+      `  Mi PC:            ${PC_ID}\n` +
+      `  Ultimo heartbeat: hace ${abortInfo.segDesdeUltimo}s\n` +
+      `  Umbral:           ${UMBRAL_HEARTBEAT_FRESCO_SEG}s\n\n` +
+      `Para evitar que dos bots procesen la misma cola y dupliquen ` +
+      `mensajes (riesgo de baneo de WhatsApp), no arranco.\n\n` +
+      `Soluciones:\n` +
+      `  1. Detener el bot en "${abortInfo.otroPcId}" (recomendado).\n` +
+      `  2. Si sabes que esa PC esta muerta y el heartbeat es residual, ` +
+      `seteá FORCE_START=true en .env y reintentá.\n`
+    );
+    process.exit(1);
+  }
+  if (ultimoError) {
+    // Tras agotar los reintentos seguimos sin poder leer/claimar → arrancamos
+    // best-effort (mejor un bot con riesgo bajo de duplicado que cero bots por
+    // una falla intermitente), pero lo logueamos como ERROR (antes era WARN).
+    log.error(
+      `Check de instancia falló tras ${MAX_REINTENTOS_CLAIM} intentos: ` +
+      `${ultimoError.message}. Arrancando igual (best-effort).`
     );
   }
 }
@@ -1184,6 +1210,14 @@ async function main() {
     }
   }
 
+  // Heartbeat ANTES de conectar WhatsApp (P2.2): la fase de conexión puede
+  // colgarse (watchdog READY / espera de QR, hasta minutos) y sin latido propio
+  // el heartbeat INICIANDO de la transacción anti-doble-bot se vuelve stale →
+  // ventana de doble-bot. El estado real (INICIANDO/AUTH_PENDIENTE) ya lo
+  // refleja el heartbeat; el probe de liveness solo corre con estado LISTO, así
+  // que durante el arranque no interfiere.
+  health.iniciar(db, fs, wa);
+
   log.info('Conectando a WhatsApp Web — esto puede demorar 10-30s...');
   await wa.inicializar();
 
@@ -1191,8 +1225,6 @@ async function main() {
 
   // Inicializar lectura del kill-switch BOT_CONTROL/main.
   control.inicializar(db);
-
-  health.iniciar(db, fs, wa);
 
   cron.start(fs);
 

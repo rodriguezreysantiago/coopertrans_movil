@@ -492,9 +492,28 @@ async function escribirHeartbeat() {
     ? new Date(_state.ultimoCicloCron.getTime() + cronIntervaloMin * 60 * 1000)
     : null;
 
+  // Probe REAL de liveness (P2.1): si el cliente dice LISTO pero el browser
+  // está zombi (murió sin emitir `disconnected`), el heartbeat mentiría "vivo"
+  // para siempre y el watchdog externo nunca dispararía. Verificamos contra el
+  // cliente real con el `_wa` ya inyectado; si el probe falla, reportamos
+  // DESCONECTADO para que el watchdog/app lo vean. El probe nunca tumba el
+  // heartbeat (su error se traga).
+  let estadoClienteReportado = _state.estadoCliente;
+  if (estadoClienteReportado === 'LISTO' && _wa &&
+      typeof _wa.estaVivo === 'function') {
+    try {
+      const vivo = await _wa.estaVivo();
+      if (!vivo) {
+        estadoClienteReportado = 'DESCONECTADO';
+        log.warn('[health] probe de liveness FALLO con estado LISTO → ' +
+          'reporto DESCONECTADO (posible browser zombi)');
+      }
+    } catch (_) { /* el probe no debe tumbar el heartbeat */ }
+  }
+
   const doc = {
     ultimoHeartbeat: admin.firestore.FieldValue.serverTimestamp(),
-    estadoCliente: _state.estadoCliente,
+    estadoCliente: estadoClienteReportado,
 
     // Identificador de la PC que esta corriendo el bot. Lo lee
     // index.js al arrancar para detectar el caso "ya hay otra PC con
