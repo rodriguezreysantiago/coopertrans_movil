@@ -79,12 +79,12 @@ class _AdminVehiculosListaScreenState
         ...AppTiposVehiculo.enganches.where((t) => t != 'ACOPLADO'),
       ];
 
-  /// IDs de las cards-filtro, en orden: LIBRES · tipos · INACTIVOS. Se excluye
-  /// TANQUE: todos los tanques son combustibles (excluidos) → van a INACTIVOS,
-  /// así que una card TANQUES quedaría siempre en 0 (Santiago 2026-06-10).
+  /// IDs de las cards-filtro, en orden (Santiago 2026-06-10): los tipos ·
+  /// LIBRES · INACTIVOS. Se excluye TANQUE: todos los tanques son combustibles
+  /// (excluidos) → van a INACTIVOS, así que una card TANQUES quedaría en 0.
   static List<String> get _cards => [
-        _kCardLibres,
         ..._tipos.where((t) => t != 'TANQUE'),
+        _kCardLibres,
         _kCardInactivos,
       ];
 
