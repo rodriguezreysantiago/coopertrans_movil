@@ -113,7 +113,7 @@ class _LogisticaMapaTarifasScreenState
               u.id: u,
           };
           return StreamBuilder<List<TarifaLogistica>>(
-            stream: LogisticaService.streamTarifas(soloActivas: true),
+            stream: LogisticaService.streamTarifas(activa: true),
             builder: (ctx, tarSnap) {
               // Errores primero — un stream caído muestra mensaje explícito.
               if (tarSnap.hasError) {

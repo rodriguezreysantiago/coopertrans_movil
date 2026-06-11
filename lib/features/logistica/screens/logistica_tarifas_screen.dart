@@ -4,16 +4,17 @@
 //
 // SOLO PRESENTACIÓN. Se preserva intacto:
 //   - los dos streams (`LogisticaService.streamUbicaciones` para resolver
-//     coords + `LogisticaService.streamTarifas(soloActivas:)`),
-//   - el filtro token-based (`_aplicarFiltro`), el toggle `_soloActivas`,
+//     coords + `LogisticaService.streamTarifas(activa:)`),
+//   - el filtro token-based (`_aplicarFiltro`), el toggle `_verActivas`
+//     (Activas ↔ Inactivas),
 //   - la distancia geodésica/OSRM por card (`_DistanciaTexto`),
 //   - la eliminación con su diálogo + `LogisticaService.eliminarTarifa`
 //     (que chequea viajes en curso y devuelve StateError accionable),
 //   - la navegación al form (alta / edición por `tarifaId`),
 //   - los atajos de teclado (`KeyboardShortcutsScope`).
 //
-// Layout Núcleo: hero (eyebrow TARIFAS + conteo) + [Nueva tarifa], buscador
-// Núcleo (AppInput), chip "Activas", y cards re-skineadas a tokens: tipo +
+// Layout Núcleo: hero (eyebrow TARIFAS + conteo), buscador Núcleo (AppInput),
+// chip toggle Activas/Inactivas, y cards re-skineadas a tokens: tipo +
 // flete (badges), ruta origen → destino, y los 3 montos (real / chofer /
 // bruto) en mono dentro de un strip con hairlines. Plata en c.text + mono;
 // color semántico solo en dots/badges.
@@ -47,7 +48,7 @@ class LogisticaTarifasScreen extends StatefulWidget {
 
 class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
   String _filtro = '';
-  bool _soloActivas = true;
+  bool _verActivas = true;
   final FocusNode _buscarFocus = FocusNode();
   late final TextEditingController _buscarCtrl;
 
@@ -94,7 +95,7 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
             };
             return StreamBuilder<List<TarifaLogistica>>(
               stream: LogisticaService.streamTarifas(
-                soloActivas: _soloActivas,
+                activa: _verActivas,
               ),
               builder: (ctx, snap) {
                 final cargando =
@@ -103,24 +104,26 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
                 final filtradas = _aplicarFiltro(all, _filtro);
                 return Column(
                   children: [
-                    _Header(total: all.length, onNueva: _abrirNueva),
+                    _Header(total: all.length),
                     _BarraFiltros(
                       controller: _buscarCtrl,
                       buscarFocus: _buscarFocus,
                       tieneTexto: _filtro.isNotEmpty,
-                      soloActivas: _soloActivas,
+                      verActivas: _verActivas,
                       onCambioFiltro: (v) => setState(() => _filtro = v.trim()),
                       onLimpiar: () {
                         _buscarCtrl.clear();
                         setState(() => _filtro = '');
                       },
-                      onCambioActivas: (v) => setState(() => _soloActivas = v),
+                      onToggleActivas: () =>
+                          setState(() => _verActivas = !_verActivas),
                     ),
                     Expanded(
                       child: _Cuerpo(
                         cargando: cargando,
                         error: snap.hasError ? snap.error : null,
                         haDatos: all.isNotEmpty,
+                        verActivas: _verActivas,
                         filtradas: filtradas,
                         ubicacionesPorId: ubicacionesPorId,
                       ),
@@ -168,56 +171,41 @@ class _LogisticaTarifasScreenState extends State<LogisticaTarifasScreen> {
 
 class _Header extends StatelessWidget {
   final int total;
-  final VoidCallback onNueva;
-  const _Header({required this.total, required this.onNueva});
+  const _Header({required this.total});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
+    // Sin botón "Nueva tarifa" en el header (2026-06-11): la acción la da el
+    // FAB de abajo + Ctrl+N, igual que la lista de Viajes (evita el doble
+    // botón). Header = eyebrow + conteo.
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           AppSpacing.lg, AppSpacing.md, AppSpacing.lg, AppSpacing.sm),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const AppEyebrow('Tarifas'),
-                const SizedBox(height: 6),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      total == 0 ? '—' : '$total',
-                      style: AppType.h2.copyWith(
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        total == 1 ? 'ruta' : 'rutas',
-                        style: AppType.monoSm.copyWith(color: c.textMuted),
-                      ),
-                    ),
-                  ],
+          const AppEyebrow('Tarifas'),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                total == 0 ? '—' : '$total',
+                style: AppType.h2.copyWith(
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: AppButton.primary(
-              label: 'Nueva tarifa',
-              icon: Icons.add,
-              size: AppButtonSize.sm,
-              onPressed: onNueva,
-            ),
+              ),
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  total == 1 ? 'ruta' : 'rutas',
+                  style: AppType.monoSm.copyWith(color: c.textMuted),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -233,19 +221,19 @@ class _BarraFiltros extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode buscarFocus;
   final bool tieneTexto;
-  final bool soloActivas;
+  final bool verActivas;
   final ValueChanged<String> onCambioFiltro;
   final VoidCallback onLimpiar;
-  final ValueChanged<bool> onCambioActivas;
+  final VoidCallback onToggleActivas;
 
   const _BarraFiltros({
     required this.controller,
     required this.buscarFocus,
     required this.tieneTexto,
-    required this.soloActivas,
+    required this.verActivas,
     required this.onCambioFiltro,
     required this.onLimpiar,
-    required this.onCambioActivas,
+    required this.onToggleActivas,
   });
 
   @override
@@ -268,8 +256,8 @@ class _BarraFiltros extends StatelessWidget {
           Row(
             children: [
               _ChipActivas(
-                soloActivas: soloActivas,
-                onTap: () => onCambioActivas(!soloActivas),
+                verActivas: verActivas,
+                onTap: onToggleActivas,
               ),
             ],
           ),
@@ -279,42 +267,40 @@ class _BarraFiltros extends StatelessWidget {
   }
 }
 
-/// Pill toggle "Activas" estilo Núcleo. Activo: tinte success + borde.
+/// Toggle de estado Activas ↔ Inactivas. Default "Activas" (verde): muestra
+/// las activas. Al tocarlo pasa a "Inactivas" (naranja) y muestra SOLO las
+/// dadas de baja. Siempre se ve como chip activo/clickeable — cambia color,
+/// ícono y label, no hay estado "apagado".
 class _ChipActivas extends StatelessWidget {
-  final bool soloActivas;
+  final bool verActivas;
   final VoidCallback onTap;
-  const _ChipActivas({required this.soloActivas, required this.onTap});
+  const _ChipActivas({required this.verActivas, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
-    final fg = soloActivas ? c.success : c.textSecondary;
+    final fg = verActivas ? c.success : c.warning;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppRadius.full),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: soloActivas
-              ? c.success.withValues(alpha: 0.16)
-              : Colors.transparent,
+          color: fg.withValues(alpha: 0.16),
           borderRadius: BorderRadius.circular(AppRadius.full),
-          border: Border.all(
-            color:
-                soloActivas ? c.success.withValues(alpha: 0.5) : c.borderStrong,
-          ),
+          border: Border.all(color: fg.withValues(alpha: 0.5)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              soloActivas ? Icons.check_circle_outline : Icons.circle_outlined,
+              verActivas ? Icons.check_circle_outline : Icons.block,
               size: 14,
               color: fg,
             ),
             const SizedBox(width: 6),
             Text(
-              'Activas',
+              verActivas ? 'Activas' : 'Inactivas',
               style: AppType.label.copyWith(
                 color: fg,
                 fontWeight: FontWeight.w600,
@@ -335,6 +321,7 @@ class _Cuerpo extends StatelessWidget {
   final bool cargando;
   final Object? error;
   final bool haDatos;
+  final bool verActivas;
   final List<TarifaLogistica> filtradas;
   final Map<String, UbicacionLogistica> ubicacionesPorId;
 
@@ -342,6 +329,7 @@ class _Cuerpo extends StatelessWidget {
     required this.cargando,
     required this.error,
     required this.haDatos,
+    required this.verActivas,
     required this.filtradas,
     required this.ubicacionesPorId,
   });
@@ -358,12 +346,24 @@ class _Cuerpo extends StatelessWidget {
       );
     }
     if (filtradas.isEmpty) {
+      // haDatos = hay tarifas en el estado elegido. Con datos pero filtradas
+      // vacío = el buscador no matcheó. Sin datos = depende del modo.
+      final String title;
+      final String subtitle;
+      if (haDatos) {
+        title = 'Sin coincidencias';
+        subtitle = 'Probá con otro texto o limpiá el filtro.';
+      } else if (!verActivas) {
+        title = 'No hay tarifas inactivas';
+        subtitle = 'Las tarifas que des de baja aparecen acá.';
+      } else {
+        title = 'Sin tarifas cargadas';
+        subtitle = 'Tocá NUEVA TARIFA para armar la primera.';
+      }
       return AppEmptyState(
         icon: Icons.price_change_outlined,
-        title: haDatos ? 'Sin coincidencias' : 'Sin tarifas cargadas',
-        subtitle: haDatos
-            ? 'Probá con otro texto o limpiá el filtro.'
-            : 'Tocá NUEVA TARIFA para armar la primera.',
+        title: title,
+        subtitle: subtitle,
       );
     }
     return ListView.builder(

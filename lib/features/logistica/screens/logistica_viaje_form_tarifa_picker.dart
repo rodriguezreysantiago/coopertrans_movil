@@ -147,7 +147,7 @@ class _TarifaPickerSheetState extends State<_TarifaPickerSheet> {
             // Lista de tarifas filtrada.
             Expanded(
               child: StreamBuilder<List<TarifaLogistica>>(
-                stream: LogisticaService.streamTarifas(soloActivas: true),
+                stream: LogisticaService.streamTarifas(activa: true),
                 builder: (ctx, snap) {
                   if (snap.hasError) {
                     return AppErrorState(

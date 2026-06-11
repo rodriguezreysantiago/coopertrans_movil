@@ -385,14 +385,16 @@ class LogisticaService {
   static CollectionReference<Map<String, dynamic>> get tarifasCol =>
       _db.collection(AppCollections.tarifasLogistica);
 
-  /// Stream de tarifas. Por default ordenadas por `creado_en desc` (las
-  /// nuevas arriba). Filtros opcionales para listado / búsqueda futura.
+  /// Stream de tarifas ordenadas por `creado_en desc` (las nuevas arriba).
+  /// [activa] filtra por estado: `true` solo activas, `false` solo inactivas,
+  /// `null` todas. El mismo índice compuesto (activa, creado_en) cubre ambos
+  /// valores de igualdad, así que filtrar inactivas no agrega índice nuevo.
   static Stream<List<TarifaLogistica>> streamTarifas({
-    bool soloActivas = false,
+    bool? activa,
   }) {
     Query<Map<String, dynamic>> q =
         tarifasCol.orderBy('creado_en', descending: true);
-    if (soloActivas) q = q.where('activa', isEqualTo: true);
+    if (activa != null) q = q.where('activa', isEqualTo: activa);
     return q.snapshots().map(
           (s) => s.docs.map(TarifaLogistica.fromDoc).toList(),
         );
