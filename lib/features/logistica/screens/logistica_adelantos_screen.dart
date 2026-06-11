@@ -2158,7 +2158,6 @@ class _HintUltimosAdelantos extends StatelessWidget {
       return Text('Sin adelantos previos de este empleado.',
           style: AppType.label.copyWith(color: c.textMuted));
     }
-    final total = items!.fold<double>(0, (acc, a) => acc + a.monto);
     return Container(
       padding: const EdgeInsets.all(AppSpacing.sm),
       decoration: BoxDecoration(
@@ -2179,10 +2178,6 @@ class _HintUltimosAdelantos extends StatelessWidget {
                 children: [
                   Text(AppFormatters.formatearFecha(a.fecha),
                       style: AppType.monoSm.copyWith(color: c.textMuted)),
-                  const SizedBox(width: 6),
-                  Text(a.pagado ? 'pagado' : 'pendiente',
-                      style: AppType.eyebrow.copyWith(
-                          color: a.pagado ? c.success : c.warning)),
                   const Spacer(),
                   Text('\$ ${AppFormatters.formatearMonto(a.monto)}',
                       style: AppType.bodySm.copyWith(
@@ -2190,16 +2185,6 @@ class _HintUltimosAdelantos extends StatelessWidget {
                 ],
               ),
             ),
-          const Divider(height: 10),
-          Row(
-            children: [
-              Text('Suma de estos',
-                  style: AppType.eyebrow.copyWith(color: c.textMuted)),
-              const Spacer(),
-              Text('\$ ${AppFormatters.formatearMonto(total)}',
-                  style: AppType.monoSm.copyWith(color: c.textSecondary)),
-            ],
-          ),
         ],
       ),
     );
