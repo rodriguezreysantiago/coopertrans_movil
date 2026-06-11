@@ -1,7 +1,7 @@
 name: coopertrans_movil
 description: "Coopertrans Móvil — gestión de flota."
 publish_to: 'none'
-version: 1.2.25+10225
+version: 1.2.26+10226
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
