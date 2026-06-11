@@ -744,6 +744,23 @@ const TOOLS_COMUNES = [
       },
     },
   },
+  {
+    name: 'guardar_apodo',
+    description:
+      'Guarda/actualiza el APODO de la persona que te escribe (cómo prefiere ' +
+      'que la llamen) en su ficha de personal. Usala cuando te piden que los ' +
+      'llames de otra forma ("llamame Rodo", "decime Coco", "mi nombre es X"). ' +
+      'Es SOLO para el apodo del que te escribe — nunca para cambiar el de otra ' +
+      'persona. Queda guardado y se usa para saludarlo de ahí en adelante.',
+    params: {
+      apodo: {
+        type: 'string',
+        description:
+          'Cómo quiere que lo llamen, un nombre corto (ej. "Rodo"). Sin ' +
+          'apellidos ni frases largas.',
+      },
+    },
+  },
 ];
 
 // El agente expone, por rol, las MISMAS áreas que el rol puede usar en la app.
@@ -2187,6 +2204,50 @@ async function _toolRegistrarParadaReportada(db, persona, args) {
   }
 }
 
+/**
+ * Tool `guardar_apodo` — la persona que escribe define cómo prefiere que la
+ * llamen; se persiste en `EMPLEADOS/{dni}.APODO`, el MISMO campo que edita la
+ * ficha de personal (admin_personal_*) y que usan los saludos del bot/app
+ * (`resolverNombreSaludo`). Privacidad: el DNI sale del contexto (identidad
+ * del remitente), no de lo que escriba → nadie cambia el apodo de otro.
+ *
+ * Idempotente (set/merge sobre un doc fijo) → a propósito NO está en
+ * TOOLS_DE_ACCION: si tras guardarlo el modelo vuelve vacío, el retry puede
+ * re-guardar el mismo apodo sin efecto duplicado.
+ */
+async function _toolGuardarApodo(db, persona, args) {
+  if (!persona || !persona.dni) {
+    return { ok: false, error: 'No tengo tu ficha para guardar el apodo.' };
+  }
+  // Un apodo es un nombre corto: colapsamos espacios, sin saltos de línea,
+  // tope defensivo. Si queda vacío, repreguntamos.
+  const apodo = String((args && args.apodo) || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40);
+  if (!apodo) {
+    return { ok: false, error: 'No entendí qué apodo querés. Decímelo de nuevo.' };
+  }
+  try {
+    await db
+      .collection('EMPLEADOS')
+      .doc(persona.dni)
+      .set({ APODO: apodo }, { merge: true });
+    // Reflejarlo en el contexto vivo para que el agente ya lo use en esta
+    // misma charla (el próximo mensaje lo relee de la ficha igual).
+    if (persona.data) persona.data.APODO = apodo;
+    return {
+      ok: true,
+      apodo,
+      mensaje: `Listo, de ahora en más te llamo ${apodo}.`,
+      nota: 'Confirmale corto y natural usando el apodo. Ya quedó guardado en ' +
+        'su ficha; usalo para saludarlo de acá en adelante.',
+    };
+  } catch (e) {
+    return { ok: false, error: `No pude guardar el apodo: ${e.message}` };
+  }
+}
+
 async function _toolReportarDiscrepancia(db, persona, args) {
   const detalle = String((args && args.detalle) || '').trim();
   if (!detalle) {
@@ -2398,6 +2459,8 @@ async function _ejecutarTool(db, nombre, persona, args) {
       return await _toolListarEmpleadosPorRol(db, args);
     case 'contacto_oficina':
       return await _toolContactoOficina(db, args);
+    case 'guardar_apodo':
+      return await _toolGuardarApodo(db, persona, args);
     case 'pedir_llamada_a_oficina':
       return await _toolPedirLlamadaAOficina(db, persona, args);
     case 'registrar_parada_reportada':
@@ -2422,11 +2485,11 @@ function _systemPrompt(persona) {
     '  contestar el seguimiento necesitás volver a usar una herramienta, usala.',
     '- La gente escribe informal: apellidos sueltos, apodos, sin tildes, con',
     '  errores de tipeo. Interpretá la INTENCIÓN; no exijas que escriban bien.',
-    '- Si te piden que los llames de otra forma (un apodo o nombre corto, ej.',
-    '  "llamame Rodo, no Carlos"), usá ese nombre durante la charla. Pero NO',
-    '  digas que lo "agendaste", "guardaste" o "anotaste" — no tenés forma de',
-    '  recordarlo para la próxima vez. Reconocelo natural ("dale, Rodo") sin',
-    '  prometer que queda guardado.',
+    '- Si te piden que te dirijas a ellos de otra forma (un apodo o nombre',
+    '  corto, ej. "llamame Rodo, no Carlos", "decime Coco"), guardalo con',
+    '  guardar_apodo y confirmá corto ("dale, de ahora en más te llamo Rodo").',
+    '  Es SOLO para el apodo del que te escribe (no el de otro). Usalo en la',
+    '  charla y de ahí en más.',
     '- NUNCA inventes datos. Para vencimientos, unidades, turnos, etc., USÁ las',
     '  herramientas. Si una herramienta no trae el dato, o no tenés una para',
     '  eso, decilo claramente; no adivines fechas, nombres ni patentes.',
@@ -2489,10 +2552,12 @@ function _systemPrompt(persona) {
   }
 
   const nombre = (persona.data && persona.data.NOMBRE) || 'el chofer';
+  const apodo = (persona.data && String(persona.data.APODO || '').trim()) || '';
   return [
     'Sos el asistente por WhatsApp de Coopertrans Móvil, la app de la',
     'empresa de transporte Vecchi. Le respondés a un CHOFER de la empresa.',
-    `Estás hablando con: ${nombre} (DNI ${persona.dni}).`,
+    `Estás hablando con: ${nombre} (DNI ${persona.dni}).` +
+      (apodo ? ` Llamalo "${apodo}" (es el apodo que pidió que usemos).` : ''),
     `Hoy es ${_hoyIso()} (zona horaria de Argentina).`,
     '',
     'REGLAS:',

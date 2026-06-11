@@ -216,11 +216,12 @@ describe('agente — tools por rol y conversores', () => {
     );
     // Tools de chofer con parámetros: contacto_oficina (area), reportar_
     // discrepancia (tema/detalle), registrar_parada_reportada (hora_inicio/
-    // hora_fin/motivo), pedir_llamada_a_oficina (area/motivo). El resto es
-    // self-service sin args.
+    // hora_fin/motivo), pedir_llamada_a_oficina (area/motivo), guardar_apodo
+    // (apodo). El resto es self-service sin args.
     const CON_PARAMS = new Set([
       'contacto_oficina', 'reportar_discrepancia',
       'registrar_parada_reportada', 'pedir_llamada_a_oficina',
+      'guardar_apodo',
     ]);
     for (const d of g[0].functionDeclarations) {
       if (CON_PARAMS.has(d.name)) {
@@ -336,6 +337,57 @@ describe('agente._ejecutarTool — contra Firestore mockeado', () => {
       )
     );
     assert.ok(r.papeles_de_la_unidad.some((p) => p.papel === 'RTO'));
+  });
+
+  // Mock mínimo que captura el .set() (el dbMock global solo lee).
+  function dbConWrites(writes) {
+    return {
+      collection(col) {
+        return {
+          doc(id) {
+            return {
+              async set(data, opts) { writes.push({ col, id, data, opts }); },
+            };
+          },
+        };
+      },
+    };
+  }
+
+  test('guardar_apodo: persiste APODO (trim) en la ficha del que escribe', async () => {
+    const writes = [];
+    const persona = {
+      rol: 'CHOFER', dni: '30111222', data: { NOMBRE: 'CAROLA CARLOS RODOLFO' },
+    };
+    const r = await agente._ejecutarTool(
+      dbConWrites(writes), 'guardar_apodo', persona, { apodo: '  Rodo ' });
+    assert.strictEqual(r.ok, true);
+    assert.strictEqual(r.apodo, 'Rodo');
+    assert.strictEqual(writes.length, 1);
+    assert.strictEqual(writes[0].col, 'EMPLEADOS');
+    assert.strictEqual(writes[0].id, '30111222');
+    assert.deepStrictEqual(writes[0].data, { APODO: 'Rodo' });
+    assert.strictEqual(writes[0].opts.merge, true);
+    // Lo refleja en el contexto vivo para usarlo ya en la misma charla.
+    assert.strictEqual(persona.data.APODO, 'Rodo');
+  });
+
+  test('guardar_apodo: apodo vacío → ok:false sin escribir', async () => {
+    const writes = [];
+    const persona = { rol: 'CHOFER', dni: '1', data: {} };
+    const r = await agente._ejecutarTool(
+      dbConWrites(writes), 'guardar_apodo', persona, { apodo: '   ' });
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(writes.length, 0);
+  });
+
+  test('guardar_apodo: sin dni en el contexto → ok:false', async () => {
+    const writes = [];
+    const persona = { rol: 'ADMIN', dni: null, data: {} };
+    const r = await agente._ejecutarTool(
+      dbConWrites(writes), 'guardar_apodo', persona, { apodo: 'Jefe' });
+    assert.strictEqual(r.ok, false);
+    assert.strictEqual(writes.length, 0);
   });
 
   test('mi_unidad (chofer): tractor + enganche', async () => {
