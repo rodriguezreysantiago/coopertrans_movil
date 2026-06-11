@@ -245,6 +245,10 @@ async function main() {
   for (const c of cerrar) {
     await db.collection('REPORTES_DISCREPANCIA').doc(c.id).update({
       estado: 'revisado',
+      // v3 confirma la pausa reclamada → el reclamo era CIERTO. Setear el
+      // veredicto (además de cerrar) dispara la devolución por WhatsApp al
+      // chofer (CF onReporteDiscrepanciaRevisado) para los reclamos directos.
+      veredicto: 'cierto',
       nota_revision:
         `Cerrado automático ${fechaArtIso(new Date())}: el registro v3 (a ` +
         `posteriori) ya refleja la(s) pausa(s) reclamada(s). Detalle v3: ${c.nota}.`,

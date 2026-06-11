@@ -455,8 +455,12 @@ const TOOLS_CHOFER = [
       detalle: {
         type: 'string',
         description:
-          'Lo que dice el chofer en sus palabras (ej. "salió 6:45 de Deraux y la ' +
-          'jornada no lo registró"). Incluí la fecha/hora que menciona si la da.',
+          'El reclamo en PRIMERA persona, con las palabras del chofer, como si ' +
+          'lo dijera él (ej. "salí 6:45 de Deraux y la jornada no me lo registró", ' +
+          '"estuve parado 20 min y me sigue contando manejo"). NO lo pases a ' +
+          'tercera persona ("el chofer dice que..."): este texto se le reenvía ' +
+          'TAL CUAL al chofer como devolución cuando la oficina lo revisa. Incluí ' +
+          'la fecha/hora que menciona si la da.',
       },
     },
   },

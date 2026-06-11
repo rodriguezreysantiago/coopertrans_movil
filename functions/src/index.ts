@@ -56,3 +56,7 @@ export * from "./jornadas_v3_batch";
 // pausas que v3 detectó. Si v3 confirma → marca la parada confirmada_v3. Si no
 // → escala a REPORTES_DISCREPANCIA para que la oficina revise. Corre 07:00 ART.
 export * from "./paradas_reportadas";
+// Devolución por WhatsApp al chofer cuando su reclamo (REPORTES_DISCREPANCIA) se
+// marca revisado con veredicto: cita el reclamo + el resultado. Trigger onUpdate,
+// idempotente. Solo reclamos directos (no los auto-generados de paradas).
+export * from "./reportes_discrepancia";
