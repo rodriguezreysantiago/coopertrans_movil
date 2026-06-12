@@ -1,4 +1,4 @@
-# Auditoría pre-decommission del proyecto Firebase legacy
+﻿# Auditoría pre-decommission del proyecto Firebase legacy
 # `logisticaapp-e539a` (migrado a `coopertrans-movil` el 2026-05-02).
 #
 # Recorre el repo buscando referencias residuales al proyecto viejo:

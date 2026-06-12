@@ -1,4 +1,4 @@
-# Muestra los logs del bot en vivo (tail -f style).
+﻿# Muestra los logs del bot en vivo (tail -f style).
 #
 # Pensado para correr en la PC dedicada al bot, donde no hay otra
 # actividad y conviene tener una ventana siempre visible con el flujo

@@ -1,4 +1,4 @@
-# Muestra los logs del vigia (cachatore - turnos YPF) en vivo (tail -f con
+﻿# Muestra los logs del vigia (cachatore - turnos YPF) en vivo (tail -f con
 # colores), igual que monitor_logs.ps1 del bot de WhatsApp. Pensado para la PC
 # dedicada: se abre solo al login (ver instalar_monitor_logs_vigia.ps1) y queda
 # como ventana siempre visible.

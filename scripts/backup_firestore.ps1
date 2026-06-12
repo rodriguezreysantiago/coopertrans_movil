@@ -1,4 +1,4 @@
-# Backup de Firestore via gcloud firestore export.
+﻿# Backup de Firestore via gcloud firestore export.
 #
 # Genera un export completo de Firestore a un bucket GCS. Esto es la
 # linea de defensa basica para disaster recovery: si algo se rompe en
