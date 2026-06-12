@@ -61,6 +61,39 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ---
 
+## 📅 2026-06-11 (cont. 2) — KM en tarifas + KM/fecha de descarga en el Excel de liquidación
+
+Sesión de UX/reportes (todo en main + pusheado). La app Flutter **espera release**.
+Santiago **probó el export real en Windows y lo aprobó**.
+
+### KM del recorrido por tarifa (`d46bc48`)
+Cada tarifa lleva ahora `km` (entero, opcional) = distancia del tramo origen→destino. Es
+**identidad de la RUTA, NO se versiona** con el precio (un cambio de tarifa no cambia la
+distancia → va plano, fuera de las vigencias). Input en el form de alta/edición (sección
+Modalidad, formato AR de miles); en la card de la lista de tarifas el km manual es
+**autoritativo** y reemplaza la distancia estimada por coords (geodésica/OSRM); sin km
+cargado cae al estimado. `fromMap`/`toMap` + guard en `crearTarifa`. +4 tests round-trip.
+⚠️ SUPERA la nota "Versiona SOLO importes": km es identidad NUEVA persistida, pero fuera
+de las vigencias.
+
+### KM del tramo + fecha de descarga en el Excel (`932ae93`; reorden `f4450da`)
+El export de Liquidación incorpora **km de cada tramo** y **fecha de descarga** en las dos vistas:
+- **Cuaderno por chofer** (una fila por tramo, + espejo CONSULTA): columnas **F. DESC** y **KM**
+  intercaladas entre PROV. destino (J) y los kg. Eso **corrió las columnas con fórmula** →
+  ahora **KG=M, DIF.KG=N, TARIFA=O, GANANCIA=P, GASTOS=Q** (antes N/O). **D3 pasó a F. CARGA**.
+  Se reescribieron TODAS las fórmulas vivas (el FLOOR de ganancia refiere `kg=M` y `tarifa=O`;
+  el pie `SUM ganancia P`/`SUM gastos Q`; el RESUMEN cross-sheet P/Q).
+- **Anexo VIAJES** (una fila por viaje): **FECHA DESCARGA** (del último tramo) + **KM** (suma de
+  los tramos; un tramo sin km se omite, no cuenta 0).
+- **Resolución del km**: `ResolverProvincias` (que ya carga el catálogo de tarifas para las
+  provincias) mapea ahora `tarifaId → km` (`kmDe`). Resuelve **retroactivamente** — viajes viejos
+  toman el km apenas se carga en su tarifa (mientras la tarifa exista). `llenarHojaViajes`
+  quedó `@visibleForTesting`.
+- **Verificado en Excel (COM)**: abre/cierra sin reparación; **NETO idéntico** al layout previo
+  (la plata no cambió al reordenar). Tests anclados a celdas actualizados; suite report_planilla verde.
+
+---
+
 ## 📅 2026-06-11 (cont.) — Tarifas real/chofer + Sentry + hardening del bot + auditoría del agente + devolución de reclamos
 
 Sesión larga (todo en main + pusheado). La app Flutter **espera release**; el bot y
