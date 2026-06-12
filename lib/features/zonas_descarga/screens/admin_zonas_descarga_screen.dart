@@ -616,11 +616,18 @@ class _ZonaFormState extends State<_ZonaForm> {
     }
   }
 
+  /// Normaliza los "menos" tipográficos (U+2212 −, U+2013 –, U+2014 —) que
+  /// traen Google Maps / Wikipedia al copiar coordenadas: `double.tryParse`
+  /// solo acepta el guión ASCII y descartaba esos vértices EN SILENCIO —
+  /// polígonos guardados con vértices faltantes (auditoría 2026-06-12).
+  static String _normalizarMenos(String s) =>
+      s.replaceAll(RegExp(r'[−–—]'), '-');
+
   /// Parsea líneas "lat, lng" (separadores: coma, espacio o tab).
   /// Tolera "−38.35274, −68.71163" y formatos con/sin signos.
   List<LatLngPunto> _parsearVertices(String texto) {
     final out = <LatLngPunto>[];
-    for (final ln in texto.split('\n')) {
+    for (final ln in _normalizarMenos(texto).split('\n')) {
       final t = ln.trim();
       if (t.isEmpty) continue;
       // Reemplazar separadores y dividir
@@ -632,6 +639,25 @@ class _ZonaFormState extends State<_ZonaForm> {
       if (lat != null && lng != null) out.add(LatLngPunto(lat, lng));
     }
     return out;
+  }
+
+  /// Cantidad de líneas no vacías que NO se pudieron leer como coordenada.
+  /// Lo usa el validator para avisar en vez de descartar en silencio (el
+  /// operador creía guardar la geocerca completa y le faltaban vértices).
+  int _lineasNoParseadas(String texto) {
+    var malas = 0;
+    for (final ln in _normalizarMenos(texto).split('\n')) {
+      final t = ln.trim();
+      if (t.isEmpty) continue;
+      final partes =
+          t.replaceAll(RegExp(r'[,;\s]+'), ' ').split(' ').where((s) => s.isNotEmpty).toList();
+      if (partes.length < 2 ||
+          double.tryParse(partes[0]) == null ||
+          double.tryParse(partes[1]) == null) {
+        malas++;
+      }
+    }
+    return malas;
   }
 
   @override
@@ -822,6 +848,11 @@ class _ZonaFormState extends State<_ZonaForm> {
                   validator: (v) {
                     final pts = _parsearVertices(v ?? '');
                     if (pts.length < 3) return 'Mínimo 3 puntos';
+                    final malas = _lineasNoParseadas(v ?? '');
+                    if (malas > 0) {
+                      return '$malas línea(s) no se pudieron leer como '
+                          'coordenada — revisá el formato';
+                    }
                     return null;
                   },
                 ),

@@ -23,14 +23,21 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   export del próximo domingo); fix telemetría #5 (fecha Timestamp/String — consumo
   mensual y labels del gráfico vuelven a aparecer, retroactivo sin migración) y fix
   gomería #6 (montar() resuelve solo la base del semáforo desde KM_ACTUAL) — ambos
-  esperan release de la app, +10 tests. **Abierto**: correr
-  `node scripts/backfill_km_montajes.js` (dry-run y después `--commit`) para reparar
-  la base de los montajes EXISTENTES con la telemetría del día del montaje;
-  credenciales Sitrack siguen en el historial público (no se pueden rotar — riesgo
-  aceptado; evaluar purga de los 3 docs igual); política de privacidad (#7); y los
-  media/baja del reporte. El plan estratégico en 4 fases vive
-  en el reporte (Fase 2 = features de ROI directo: rentabilidad por tarifa, robo de
-  gasoil, viajes sin facturar, detention YPF, informe ejecutivo mensual).
+  esperan release de la app, +10 tests. También hecho (2026-06-12, tarde): política
+  de privacidad #7 reescrita y PUBLICADA (MD + privacidad.html deployado — declara
+  Sitrack/jornadas/iButton/agente IA + retenciones + permiso de ubicación opcional);
+  hardening del cierre de reclamos DEPLOYADO (kill-switch fail-open + idempotencia
+  diaria + timeout 540s/512MiB); `.limit(2000)` + aviso de truncado en el mapa Volvo;
+  unicode minus normalizado en vértices de geocercas + validator que avisa líneas no
+  parseadas. **Abierto**: correr `node scripts/backfill_km_montajes.js --commit`
+  (el dry-run ya validó: 510 candidatos, 500 resueltos con telemetría del mismo día,
+  10 sin dato — la escritura solo llena nulls, no pisa nada); credenciales Sitrack
+  siguen en el historial público (no se pueden rotar — riesgo aceptado; evaluar purga
+  de los 3 docs igual); y los media/baja restantes del reporte (#8 viaje duplicado,
+  #13 null-safety jornada_dia, #15 chunking zonas, READMEs). El plan estratégico en
+  4 fases vive en el reporte (Fase 2 = features de ROI directo: rentabilidad por
+  tarifa, robo de gasoil, viajes sin facturar, detention YPF, informe ejecutivo
+  mensual).
 - [ ] **macOS**: confirmar el estado del re-submit a Apple post-fix del
   entitlement (rechazo 2026-06-06, fix hecho ese día — ver entrada).
 - [ ] **Play Store**: confirmar que el AAB de la serie vigente (1.2.24) esté

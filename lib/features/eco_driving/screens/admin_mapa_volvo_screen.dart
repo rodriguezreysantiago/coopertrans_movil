@@ -39,6 +39,12 @@ import '../../../shared/widgets/app_widgets.dart';
 import '../utils/etiquetas_alerta_volvo.dart';
 import '../widgets/evento_volvo_detalle_sheet.dart';
 
+/// Tope de eventos que el mapa descarga por apertura (los más recientes
+/// del rango elegido). Cubre con holgura el volumen real (~50-200
+/// alertas/día → 90 días ≈ 18K docs sin cap) sin dejar que el stream
+/// crezca sin límite con la colección.
+const int _kMaxEventosMapa = 2000;
+
 /// Pantalla "Mapa Volvo" — visualización geográfica de eventos del
 /// Vehicle Alerts API sobre OpenStreetMap.
 ///
@@ -110,11 +116,18 @@ class _AdminMapaVolvoScreenState extends State<AdminMapaVolvoScreen> {
         ),
       ],
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        // limit: VOLVO_ALERTAS crece sin tope práctico (TTL 12 meses) —
+        // sin cap, abrir el rango de 90 días descargaba la colección
+        // entera al cliente en cada apertura (decenas de miles de reads,
+        // auditoría 2026-06-12). Con orderBy desc el limit se queda con
+        // los MÁS RECIENTES; la toolbar avisa cuando el resultado quedó
+        // truncado.
         stream: FirebaseFirestore.instance
             .collection(AppCollections.volvoAlertas)
             .where('creado_en',
                 isGreaterThanOrEqualTo: Timestamp.fromDate(_desde))
             .orderBy('creado_en', descending: true)
+            .limit(_kMaxEventosMapa)
             .snapshots(),
         builder: (ctx, snap) {
           if (snap.connectionState == ConnectionState.waiting) {
@@ -365,6 +378,7 @@ class _Toolbar extends StatelessWidget {
                 child: Text(
                   '$visibles de $conGps eventos georref. '
                   '(${sinGps > 0 ? "$sinGps sin GPS · " : ""}rango $rangoDias d)'
+                  '${totalEventos >= _kMaxEventosMapa ? " · mostrando los últimos $_kMaxEventosMapa" : ""}'
                   '${rutaActiva ? " · ruta activa" : ""}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,

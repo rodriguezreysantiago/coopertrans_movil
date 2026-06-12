@@ -29,6 +29,10 @@ import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
+import {
+  adquirirIdempotenciaDiaria,
+  liberarLockConReintentos,
+} from "./comun";
 
 // ── Constantes de criterio ───────────────────────────────────────────────────
 const TOL_HORA_MS = 20 * 60 * 1000; // ±20 min: pausa v3 "cerca" de la hora reclamada
@@ -214,8 +218,18 @@ async function cierreActivo(): Promise<boolean> {
     const snap = await db.collection("META").doc("config_cierre_reportes").get();
     // Activo por default; SOLO se apaga con el kill-switch explícito activo:false.
     return !(snap.exists && snap.data()?.activo === false);
-  } catch {
-    return false; // si no se puede leer el flag, no arriesgamos esta corrida
+  } catch (e) {
+    // Un error de LECTURA del flag no es el kill-switch. La semántica
+    // declarada arriba ("sin ese doc — o con activo:true — corre normal")
+    // equipara ausencia con activo; un error transitorio de Firestore no
+    // debe apagar la corrida en silencio: el log de APAGADO era
+    // indistinguible del kill-switch real y los reclamos del día quedaban
+    // pendientes sin que nadie se entere (auditoría 2026-06-12).
+    logger.warn(
+      "[cierreReportesJornada] error leyendo el kill-switch — asumo ACTIVO",
+      e
+    );
+    return true;
   }
 }
 
@@ -275,77 +289,113 @@ async function eventosGpsDelDia(dni: string, fechaArt: string): Promise<GpsEvent
 }
 
 export const cerrarReportesJornadaDiario = onSchedule(
-  { schedule: "0 8 * * *", timeZone: TZ },
+  {
+    schedule: "0 8 * * *",
+    timeZone: TZ,
+    // Hace N reads SERIALES por reclamo (REGISTRO_JORNADAS + un día entero
+    // de SITRACK_EVENTOS): con ~20 reclamos pendientes supera fácil los
+    // 60s/256MB default (auditoría 2026-06-12). Mismos valores que el cron
+    // hermano cruzarParadasReportadasV3Diario.
+    timeoutSeconds: 540,
+    memory: "512MiB",
+  },
   async () => {
     const activo = await cierreActivo();
     const modo = activo ? "ACTIVO" : "APAGADO";
-    const snap = await db
-      .collection("REPORTES_DISCREPANCIA")
-      .where("estado", "==", "pendiente")
-      .get();
-    const pendientes = snap.docs.filter((d) => {
-      const r = d.data();
-      // Solo reclamos DIRECTOS de jornada (los auto de paradas tienen detalle
-      // técnico y se manejan aparte; los otros temas no se cruzan con v3).
-      return r.tema === "jornada" && r.origen !== "parada_reportada_auto";
-    });
-    logger.info(
-      `[cierreReportesJornada] ${modo} · ${pendientes.length} reclamos de jornada pendientes`
-    );
 
-    let cerrados = 0;
-    let manual = 0;
-    let sinV3 = 0;
-    for (const doc of pendientes) {
-      const r = doc.data();
-      const dni = String(r.chofer_dni ?? "");
-      const reporteMs = (r.creado_en as Timestamp)?.toMillis?.() ?? Date.now();
-      const fechaArt = fechaArtIso(r.creado_en as Timestamp);
-      if (!dni) continue;
+    // Idempotencia diaria (mismo patrón que los 4 crons de resúmenes): un
+    // double-trigger de Cloud Scheduler no debe procesar los reclamos dos
+    // veces. Solo se toma el lock en modo ACTIVO — el dry-run (kill-switch
+    // apagado) no escribe nada, puede correr n veces y NO debe "consumir"
+    // el día (permite re-disparo manual el mismo día tras re-activar).
+    const histRef = db
+      .collection("AVISOS_AUTOMATICOS_HISTORICO")
+      .doc(`cierre_reportes_${fechaArtIso(undefined)}`);
+    if (
+      activo &&
+      !(await adquirirIdempotenciaDiaria(histRef, "cierre_reportes_jornada"))
+    ) {
+      logger.info("[cierreReportesJornada] ya corrió hoy, skip");
+      return;
+    }
 
-      const pausasV3 = await pausasV3DelDia(dni, fechaArt);
-      if (pausasV3.length === 0) {
-        // No hay turno v3 de ese día todavía (reclamo de hoy, v3 se arma mañana)
-        // o el chofer no tuvo jornada. Lo dejamos para el próximo cron.
-        sinV3++;
-        continue;
-      }
-      const eventosGps = await eventosGpsDelDia(dni, fechaArt);
-      const decision = decidirCierre({
-        detalle: String(r.detalle ?? ""),
-        fechaArt,
-        reporteMs,
-        pausasV3,
-        eventosGps,
+    // Si la corrida falla a mitad, liberamos el lock para que un retry del
+    // scheduler (o un disparo manual) pueda completar los reclamos del día.
+    let exitoCron = false;
+    try {
+      const snap = await db
+        .collection("REPORTES_DISCREPANCIA")
+        .where("estado", "==", "pendiente")
+        .get();
+      const pendientes = snap.docs.filter((d) => {
+        const r = d.data();
+        // Solo reclamos DIRECTOS de jornada (los auto de paradas tienen detalle
+        // técnico y se manejan aparte; los otros temas no se cruzan con v3).
+        return r.tema === "jornada" && r.origen !== "parada_reportada_auto";
       });
+      logger.info(
+        `[cierreReportesJornada] ${modo} · ${pendientes.length} reclamos de jornada pendientes`
+      );
 
-      if (!decision) {
-        manual++;
+      let cerrados = 0;
+      let manual = 0;
+      let sinV3 = 0;
+      for (const doc of pendientes) {
+        const r = doc.data();
+        const dni = String(r.chofer_dni ?? "");
+        const reporteMs = (r.creado_en as Timestamp)?.toMillis?.() ?? Date.now();
+        const fechaArt = fechaArtIso(r.creado_en as Timestamp);
+        if (!dni) continue;
+
+        const pausasV3 = await pausasV3DelDia(dni, fechaArt);
+        if (pausasV3.length === 0) {
+          // No hay turno v3 de ese día todavía (reclamo de hoy, v3 se arma mañana)
+          // o el chofer no tuvo jornada. Lo dejamos para el próximo cron.
+          sinV3++;
+          continue;
+        }
+        const eventosGps = await eventosGpsDelDia(dni, fechaArt);
+        const decision = decidirCierre({
+          detalle: String(r.detalle ?? ""),
+          fechaArt,
+          reporteMs,
+          pausasV3,
+          eventosGps,
+        });
+
+        if (!decision) {
+          manual++;
+          logger.info(
+            `[cierreReportesJornada] ${modo} MANUAL ${r.chofer_nombre ?? dni}: ` +
+            `"${String(r.detalle ?? "").slice(0, 60)}" → sin evidencia clara, queda pendiente`
+          );
+          continue;
+        }
         logger.info(
-          `[cierreReportesJornada] ${modo} MANUAL ${r.chofer_nombre ?? dni}: ` +
-          `"${String(r.detalle ?? "").slice(0, 60)}" → sin evidencia clara, queda pendiente`
+          `[cierreReportesJornada] ${modo} ${decision.veredicto.toUpperCase()} ` +
+          `${r.chofer_nombre ?? dni}: ${decision.nota}`
         );
-        continue;
+        cerrados++;
+        if (!activo) continue; // dry-run: no escribe ni dispara devolución
+
+        await doc.ref.update({
+          estado: "revisado",
+          veredicto: decision.veredicto,
+          nota_revision: decision.nota,
+          revisado_por_dni: "BOT_AUTO_V3",
+          revisado_por_nombre: "Cierre automático (cron jornada)",
+          revisado_en: FieldValue.serverTimestamp(),
+        });
       }
       logger.info(
-        `[cierreReportesJornada] ${modo} ${decision.veredicto.toUpperCase()} ` +
-        `${r.chofer_nombre ?? dni}: ${decision.nota}`
+        `[cierreReportesJornada] ${modo} fin · cerrados=${cerrados} ` +
+        `manual=${manual} sin-v3=${sinV3}`
       );
-      cerrados++;
-      if (!activo) continue; // dry-run: no escribe ni dispara devolución
-
-      await doc.ref.update({
-        estado: "revisado",
-        veredicto: decision.veredicto,
-        nota_revision: decision.nota,
-        revisado_por_dni: "BOT_AUTO_V3",
-        revisado_por_nombre: "Cierre automático (cron jornada)",
-        revisado_en: FieldValue.serverTimestamp(),
-      });
+      exitoCron = true;
+    } finally {
+      if (activo && !exitoCron) {
+        await liberarLockConReintentos(histRef, "cerrarReportesJornadaDiario");
+      }
     }
-    logger.info(
-      `[cierreReportesJornada] ${modo} fin · cerrados=${cerrados} ` +
-      `manual=${manual} sin-v3=${sinV3}`
-    );
   }
 );
