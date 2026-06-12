@@ -1445,6 +1445,19 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ========================================================================
+    // META/config_cierre_reportes — kill-switch del cierre automático de
+    // reclamos de jornada (CF cerrarReportesJornadaDiario, 08:00). 2026-06-11
+    // ========================================================================
+    // Doc `config_cierre_reportes` con `activo: bool`. La CF lo lee en cada
+    // corrida (default ACTIVO si no existe) y escribe los cierres con Admin SDK
+    // (bypassa estas rules). El admin lo prende/apaga desde "Estado del Bot" —
+    // solo cambia el comportamiento del cron, no toca datos. El supervisor lo VE.
+    match /META/config_cierre_reportes {
+      allow read: if isAdminOrSupervisor();
+      allow write: if isAdmin();
+    }
+
     match /META/{doc=**} {
       allow read, write: if false;
     }

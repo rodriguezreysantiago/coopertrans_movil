@@ -59,6 +59,11 @@ class _DashboardBot extends StatelessWidget {
         // Reclamos que dejan los choferes por el bot ("ese dato no coincide").
         // No tocan el dato — se validan contra la telemetría desde acá.
         const _TileAbrirReportes(),
+        const SizedBox(height: AppSpacing.md),
+        // Kill-switch del cierre automático de esos reclamos (CF
+        // cerrarReportesJornadaDiario, 08:00 ART). ON = cruza vs v3+GPS, cierra
+        // y le contesta al chofer solo; OFF = quedan pendientes para revisión.
+        const _CardCierreReclamos(),
         const SizedBox(height: AppSpacing.xl),
       ],
     );
@@ -1337,6 +1342,180 @@ class _ToggleKillSwitch extends StatelessWidget {
       AppFeedback.errorTecnicoOn(
         messenger,
         usuario: 'No se pudo actualizar el control del bot. Probá de nuevo.',
+        tecnico: e,
+        stack: s,
+      );
+    }
+  }
+}
+
+// =============================================================================
+// KILL-SWITCH — Cierre automático de reclamos de jornada
+// =============================================================================
+
+/// Toggle (solo ADMIN) que prende/apaga el cron `cerrarReportesJornadaDiario`
+/// (Cloud Function, 08:00 ART): cruza los reclamos de jornada contra el registro
+/// v3 + el GPS y los cierra solos, contestándole al chofer (le dio la razón / el
+/// GPS lo desmiente). Escribe `META/config_cierre_reportes.activo`; la CF lo lee
+/// en cada corrida, sin cache.
+///
+/// Semántica: ON = cierra + contesta automático. OFF = los reclamos quedan
+/// pendientes para revisión manual. Default (sin doc) = ON, igual que la CF
+/// (solo se apaga con `activo:false` explícito).
+class _CardCierreReclamos extends StatelessWidget {
+  const _CardCierreReclamos();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection(AppCollections.meta)
+          .doc('config_cierre_reportes')
+          .snapshots(),
+      builder: (ctx, snap) {
+        final data = snap.data?.data() as Map<String, dynamic>?;
+        // Default ACTIVO (igual que la CF): OFF solo si activo==false explícito.
+        final activo = !(data != null && data['activo'] == false);
+        return AppCard(
+          padding: const EdgeInsets.all(AppSpacing.lg - 2),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.fact_check_outlined,
+                      color: c.textSecondary, size: 20),
+                  const SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Text(
+                      'Cierre automático de reclamos',
+                      style: AppType.label.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.md - 2),
+              Container(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md, AppSpacing.sm, AppSpacing.sm, AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: c.surface3,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(
+                      color: activo
+                          ? c.border
+                          : c.warning.withValues(alpha: 0.45)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      activo ? Icons.autorenew : Icons.pan_tool_outlined,
+                      color: activo ? c.success : c.warning,
+                      size: 20,
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            activo ? 'Automático (8:00)' : 'Manual',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppType.label.copyWith(
+                              color: activo ? c.text : c.warning,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            activo
+                                ? 'Cada mañana cruza los reclamos de jornada '
+                                    'con el GPS, los cierra y le contesta al '
+                                    'chofer.'
+                                : 'Los reclamos quedan pendientes para que los '
+                                    'revises a mano.',
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style:
+                                AppType.label.copyWith(color: c.textSecondary),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Switch(
+                      value: activo,
+                      activeThumbColor: c.success,
+                      onChanged: (nuevo) => _confirmar(context, nuevo),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// Confirma antes de cambiar (afecta lo que reciben los choferes).
+  Future<void> _confirmar(BuildContext context, bool nuevoValor) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final accion = nuevoValor ? 'ACTIVAR' : 'DESACTIVAR';
+    final detalle = nuevoValor
+        ? 'Cada mañana a las 8:00 el sistema va a cerrar los reclamos de '
+            'jornada que pueda validar con el GPS y le va a contestar al '
+            'chofer automáticamente.'
+        : 'Se apaga el cierre automático. Los reclamos van a quedar pendientes '
+            'para que los revises y cierres a mano.';
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        title: Text('$accion cierre automático'),
+        content: Text(detalle),
+        actions: [
+          AppButton.ghost(
+            label: 'Cancelar',
+            onPressed: () => Navigator.pop(dCtx, false),
+          ),
+          AppButton(
+            label: accion,
+            onPressed: () => Navigator.pop(dCtx, true),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    try {
+      await FirebaseFirestore.instance
+          .collection(AppCollections.meta)
+          .doc('config_cierre_reportes')
+          .set(
+        {
+          'activo': nuevoValor,
+          'actualizado_en': FieldValue.serverTimestamp(),
+          'actualizado_por': PrefsService.dni,
+          'actualizado_por_nombre': PrefsService.nombre,
+        },
+        SetOptions(merge: true),
+      );
+      AppFeedback.successOn(
+        messenger,
+        nuevoValor
+            ? 'Cierre automático activado.'
+            : 'Cierre automático desactivado.',
+      );
+    } catch (e, s) {
+      AppFeedback.errorTecnicoOn(
+        messenger,
+        usuario: 'No se pudo cambiar la configuración. Probá de nuevo.',
         tecnico: e,
         stack: s,
       );
