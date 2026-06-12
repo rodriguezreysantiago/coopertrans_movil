@@ -20,10 +20,15 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   + 3 tests de regresión — espera release de la app); regla AGENTE_CONVERSACIONES +
   TTL `expira_en` (rules + indexes DEPLOYADOS — dashboard del agente funciona de nuevo);
   backup completado con 16 colecciones faltantes (function DEPLOYADA — verificar el
-  export del próximo domingo). **Abierto**: credenciales Sitrack siguen en el historial
-  público (no se pueden rotar — riesgo aceptado; evaluar purga de los 3 docs igual),
-  fecha Timestamp/String en telemetría (#5), kmUnidadAlMontar de gomería (#6), política
-  de privacidad (#7), y los media/baja del reporte. El plan estratégico en 4 fases vive
+  export del próximo domingo); fix telemetría #5 (fecha Timestamp/String — consumo
+  mensual y labels del gráfico vuelven a aparecer, retroactivo sin migración) y fix
+  gomería #6 (montar() resuelve solo la base del semáforo desde KM_ACTUAL) — ambos
+  esperan release de la app, +10 tests. **Abierto**: correr
+  `node scripts/backfill_km_montajes.js` (dry-run y después `--commit`) para reparar
+  la base de los montajes EXISTENTES con la telemetría del día del montaje;
+  credenciales Sitrack siguen en el historial público (no se pueden rotar — riesgo
+  aceptado; evaluar purga de los 3 docs igual); política de privacidad (#7); y los
+  media/baja del reporte. El plan estratégico en 4 fases vive
   en el reporte (Fase 2 = features de ROI directo: rentabilidad por tarifa, robo de
   gasoil, viajes sin facturar, detention YPF, informe ejecutivo mensual).
 - [ ] **macOS**: confirmar el estado del re-submit a Apple post-fix del
