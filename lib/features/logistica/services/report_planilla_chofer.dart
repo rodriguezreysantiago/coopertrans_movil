@@ -282,18 +282,19 @@ class ReportPlanillaChofer {
       final fin = m.filaDatosFin;
       _set(hoja, 0, r, ex.TextCellValue(m.nombreChofer), _estilo());
       _set(hoja, 1, r, ex.TextCellValue(m.dni), _estilo());
-      // BRUTO = ganancia concluidos (col N), GASTOS = col O.
-      _set(hoja, 2, r, ex.FormulaCellValue('SUM($ref!N4:N$fin)'),
+      // BRUTO = ganancia concluidos (col P), GASTOS = col Q (tras intercalar
+      // F.DESC/KM en el cuaderno).
+      _set(hoja, 2, r, ex.FormulaCellValue('SUM($ref!P4:P$fin)'),
           _estilo(monto: true));
       _set(hoja, 3, r, ex.FormulaCellValue('SUM($ref!C4:C$fin)'),
           _estilo(monto: true));
-      _set(hoja, 4, r, ex.FormulaCellValue('SUM($ref!O4:O$fin)'),
+      _set(hoja, 4, r, ex.FormulaCellValue('SUM($ref!Q4:Q$fin)'),
           _estilo(monto: true));
       _set(hoja, 5, r, ex.FormulaCellValue('C$f-D$f+E$f'),
           _estilo(bold: true, monto: true));
       // OTROS VIAJES = ganancia de en curso/planeados (especulación).
       _set(hoja, 6, r,
-          ex.FormulaCellValue('SUM($ref!N${m.filaOtrosIni}:N${m.filaOtrosFin})'),
+          ex.FormulaCellValue('SUM($ref!P${m.filaOtrosIni}:P${m.filaOtrosFin})'),
           _estilo(monto: true));
       _set(hoja, 7, r, ex.FormulaCellValue('F$f+G$f'),
           _estilo(bold: true, monto: true));
@@ -478,13 +479,32 @@ class ReportPlanillaChofer {
     _set(hoja, 9, r, provD.isEmpty ? null : ex.TextCellValue(provD),
         stCentrado);
 
+    // K-L (pedido Santiago 2026-06-11): fecha de descarga + km del tramo,
+    // intercalados entre PROV. destino (J) y los kg (M). La fecha sale del
+    // tramo; el km, de la tarifa del catálogo por tarifaId.
+    _set(
+        hoja,
+        10,
+        r,
+        t?.fechaDescarga == null
+            ? null
+            : ex.TextCellValue(AppFormatters.formatearFecha(t!.fechaDescarga!)),
+        stCentrado);
+    final km = t == null ? null : provincias.kmDe(t);
+    _set(hoja, 11, r, km == null ? null : ex.IntCellValue(km), stCentrado);
+
+    // M-N: kg efectivo + diferencia de kg.
     final kg = _kgEfectivo(t);
-    _set(hoja, 10, r, kg == null ? null : ex.DoubleCellValue(kg), stMonto);
+    _set(hoja, 12, r, kg == null ? null : ex.DoubleCellValue(kg), stMonto);
     final dif = _difKg(t);
-    _set(hoja, 11, r, dif == null ? null : ex.DoubleCellValue(dif), stMonto);
-    _set(hoja, 12, r,
+    _set(hoja, 13, r, dif == null ? null : ex.DoubleCellValue(dif), stMonto);
+
+    // O: tarifa chofer (base del cálculo del chofer).
+    _set(hoja, 14, r,
         snap == null ? null : ex.DoubleCellValue(snap.tarifaChofer), stMonto);
 
+    // P: GANANCIA (FLOOR ya aplicado). La fórmula referencia kg en M y la
+    // tarifa chofer en O (las columnas nuevas tras intercalar F.DESC/KM).
     final pct = _pctDe(fila?.v);
     final ex.CellValue? nValue;
     if (snap == null) {
@@ -492,29 +512,16 @@ class ReportPlanillaChofer {
     } else if (snap.montoFijoChofer != null) {
       nValue = ex.DoubleCellValue(_redondear5(snap.montoFijoChofer!));
     } else if (snap.unidadTarifa == UnidadTarifa.porViaje) {
-      nValue = ex.FormulaCellValue('FLOOR(M$f*${_pctStr(pct)}%,5)');
+      nValue = ex.FormulaCellValue('FLOOR(O$f*${_pctStr(pct)}%,5)');
     } else {
-      nValue = ex.FormulaCellValue('FLOOR((K$f*M$f*${_pctStr(pct)}%)/1000,5)');
+      nValue = ex.FormulaCellValue('FLOOR((M$f*O$f*${_pctStr(pct)}%)/1000,5)');
     }
-    _set(hoja, 13, r, nValue, stMontoBold);
+    _set(hoja, 15, r, nValue, stMontoBold);
 
+    // Q: gastos del tramo.
     final gastos = t?.gastosTotal ?? 0;
-    _set(hoja, 14, r, gastos == 0 ? null : ex.DoubleCellValue(gastos),
+    _set(hoja, 16, r, gastos == 0 ? null : ex.DoubleCellValue(gastos),
         stMonto);
-
-    // P-Q (agregado 2026-06-11): km del tramo (de la tarifa del catálogo,
-    // por tarifaId) + fecha de descarga del tramo. Van al final para no
-    // mover las columnas con fórmula (N/O).
-    final km = t == null ? null : provincias.kmDe(t);
-    _set(hoja, 15, r, km == null ? null : ex.IntCellValue(km), stCentrado);
-    _set(
-        hoja,
-        16,
-        r,
-        t?.fechaDescarga == null
-            ? null
-            : ex.TextCellValue(AppFormatters.formatearFecha(t!.fechaDescarga!)),
-        stCentrado);
   }
 
   /// Encabezado común del cuaderno (filas 1-3), reutilizado por las
@@ -550,15 +557,16 @@ class ReportPlanillaChofer {
     }
   }
 
-  /// Headers de las 17 columnas del cuaderno (A..Q). KM y F. DESC se
-  /// agregaron al FINAL (P-Q) a propósito: así GANANCIA (N) y GASTOS (O)
-  /// no se corren y todas las fórmulas vivas del pie/RESUMEN/CONSULTA
-  /// (ancladas a esas letras) siguen intactas. Pedido Santiago 2026-06-11.
+  /// Headers de las 17 columnas del cuaderno (A..Q). F. DESC y KM van
+  /// intercalados entre PROV. destino (J) y KG (ahora M) — pedido Santiago
+  /// 2026-06-11. Eso corre las columnas con fórmula: KG=M, DIF.KG=N,
+  /// TARIFA=O, GANANCIA=P, GASTOS=Q (las fórmulas del pie/RESUMEN/cálculo
+  /// se ajustaron a esas letras nuevas).
   static const List<String> _headersColumna = [
     'FECHA', 'RECIBO', 'IMPORTE', // A-C adelantos
-    'FECHA', 'REMITO', 'MERCADERÍA', 'ORIGEN', 'PROV.', 'DESTINO',
-    'PROV.', 'KG', 'DIF. KG', 'TARIFA', 'GANANCIA', 'GASTOS', // D-O viaje
-    'KM', 'F. DESC', // P-Q km del tramo + fecha de descarga
+    'F. CARGA', 'REMITO', 'MERCADERÍA', 'ORIGEN', 'PROV.', 'DESTINO',
+    'PROV.', 'F. DESC', 'KM', // D-L: ruta + descarga + km
+    'KG', 'DIF. KG', 'TARIFA', 'GANANCIA', 'GASTOS', // M-Q
   ];
 
   /// Anchos de las 15 columnas (parejos, sin la separadora rara del
@@ -566,9 +574,9 @@ class ReportPlanillaChofer {
   static void _aplicarAnchos(ex.Sheet hoja) {
     const anchos = [
       11.0, 9.0, 12.0, // A-C adelantos
-      11.0, 10.0, 15.0, 18.0, 8.0, 18.0, 8.0, // D-J
-      9.0, 8.0, 11.0, 12.0, 10.0, // K-O
-      8.0, 11.0, // P-Q km + fecha descarga
+      11.0, 10.0, 15.0, 18.0, 8.0, 18.0, 8.0, // D-J f.carga..prov destino
+      11.0, 8.0, // K-L f. desc + km
+      9.0, 8.0, 11.0, 12.0, 10.0, // M-Q kg, dif kg, tarifa, ganancia, gastos
     ];
     for (var c = 0; c < anchos.length; c++) {
       hoja.setColumnWidth(c, anchos[c]);
@@ -685,21 +693,21 @@ class ReportPlanillaChofer {
   static ex.CellStyle _estiloColGrilla(int c) {
     switch (c) {
       case 3: // C importe adelanto
-      case 14: // N ganancia
+      case 16: // P ganancia
         return _estilo(bold: true, monto: true);
-      case 11: // K kg
-      case 12: // L dif kg
-      case 13: // M tarifa
-      case 15: // O gastos
+      case 13: // M kg
+      case 14: // N dif kg
+      case 15: // O tarifa
+      case 17: // Q gastos
         return _estilo(monto: true);
       case 1: // A fecha adelanto
       case 2: // B recibo
-      case 4: // D fecha viaje
+      case 4: // D fecha carga
       case 5: // E remito
       case 8: // H prov origen
       case 10: // J prov destino
-      case 16: // P km del tramo
-      case 17: // Q fecha de descarga
+      case 11: // K fecha de descarga
+      case 12: // L km del tramo
         return _estilo(align: ex.HorizontalAlign.Center);
       default: // F G I — texto
         return _estilo();
@@ -747,13 +755,14 @@ class ReportPlanillaChofer {
           dest ? stValorDest : stValor);
     }
 
-    // Firme (concluidos).
-    renglon(fGan, 'GANANCIA VIAJES', 'SUM(N4:N$filaDatosFin)');
+    // Firme (concluidos). GANANCIA = col P, GASTOS = col Q (tras intercalar
+    // F.DESC/KM); ADELANTOS sigue en C.
+    renglon(fGan, 'GANANCIA VIAJES', 'SUM(P4:P$filaDatosFin)');
     renglon(fAdel, 'ADELANTOS (−)', 'SUM(C4:C$filaDatosFin)');
-    renglon(fGastos, 'GASTOS (+)', 'SUM(O4:O$filaDatosFin)');
+    renglon(fGastos, 'GASTOS (+)', 'SUM(Q4:Q$filaDatosFin)');
     renglon(fNeto, 'NETO A PAGAR', 'C$fGan-C$fAdel+C$fGastos', dest: true);
     // Especulación (en curso / planeados) + total proyectado.
-    renglon(fOtros, 'OTROS VIAJES (+)', 'SUM(N$filaOtrosIni:N$filaOtrosFin)');
+    renglon(fOtros, 'OTROS VIAJES (+)', 'SUM(P$filaOtrosIni:P$filaOtrosFin)');
     renglon(fTotal, 'TOTAL ESTIMADO', 'C$fNeto+C$fOtros', dest: true);
   }
 

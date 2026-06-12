@@ -261,41 +261,44 @@ void main() {
       // Súper-header de secciones + headers de columna clave.
       expect(textoDe(s, 'A2'), 'ADELANTOS');
       expect(textoDe(s, 'D2'), 'VIAJES');
-      expect(textoDe(s, 'N3'), 'GANANCIA');
-      expect(textoDe(s, 'O3'), 'GASTOS');
+      expect(textoDe(s, 'D3'), 'F. CARGA'); // renombrada (vs F. DESC)
+      // Tras intercalar F.DESC/KM, las columnas con fórmula se corren.
+      expect(textoDe(s, 'O3'), 'TARIFA');
+      expect(textoDe(s, 'P3'), 'GANANCIA');
+      expect(textoDe(s, 'Q3'), 'GASTOS');
     });
 
-    test('fila de viaje TN: kg, tarifa y GANANCIA (col N, ya redondeada)',
+    test('fila de viaje TN: kg, tarifa y GANANCIA (col P, ya redondeada)',
         () {
       final s = relectura.sheets['DIAZ MARIO']!;
-      expect(textoDe(s, 'D4'), '02/05/2026');
+      expect(textoDe(s, 'D4'), '02/05/2026'); // f. carga
       expect(textoDe(s, 'E4'), '291824');
       expect(textoDe(s, 'F4'), 'UREA');
       expect(textoDe(s, 'G4'), 'B.BLANCA'); // sin paréntesis de localidad
       expect(textoDe(s, 'I4'), 'NECOCHEA');
-      expect(numeroDe(s, 'K4'), 34700); // descargados priorizan
-      expect(numeroDe(s, 'L4'), 300); // dif = cargados − descargados
-      expect(numeroDe(s, 'M4'), 58106); // base del cálculo del chofer
-      // Una sola columna GANANCIA con el FLOOR ya aplicado.
-      expect(formulaDe(s, 'N4'), 'FLOOR((K4*M4*18%)/1000,5)');
-      expect(numeroDe(s, 'O4'), 11200); // gastos
+      expect(numeroDe(s, 'M4'), 34700); // kg (descargados priorizan)
+      expect(numeroDe(s, 'N4'), 300); // dif = cargados − descargados
+      expect(numeroDe(s, 'O4'), 58106); // tarifa chofer = base del cálculo
+      // GANANCIA en P con el FLOOR ya aplicado; refiere kg=M y tarifa=O.
+      expect(formulaDe(s, 'P4'), 'FLOOR((M4*O4*18%)/1000,5)');
+      expect(numeroDe(s, 'Q4'), 11200); // gastos
     });
 
     test('tramo en curso: kg cargados como estimado', () {
       final s = relectura.sheets['DIAZ MARIO']!;
-      expect(numeroDe(s, 'K5'), 30000);
-      expect(formulaDe(s, 'N5'), 'FLOOR((K5*M5*18%)/1000,5)');
+      expect(numeroDe(s, 'M5'), 30000);
+      expect(formulaDe(s, 'P5'), 'FLOOR((M5*O5*18%)/1000,5)');
     });
 
-    test('tramo con monto fijo: valor flat redondeado en N', () {
+    test('tramo con monto fijo: valor flat redondeado en P', () {
       final s = relectura.sheets['DIAZ MARIO']!;
-      expect(numeroDe(s, 'N6'), 100000);
+      expect(numeroDe(s, 'P6'), 100000);
     });
 
     test('tramo por viaje: FLOOR(tarifa × pct) sin kg', () {
       final s = relectura.sheets['DIAZ MARIO']!;
-      expect(numeroDe(s, 'M7'), 200000);
-      expect(formulaDe(s, 'N7'), 'FLOOR(M7*18%,5)');
+      expect(numeroDe(s, 'O7'), 200000); // tarifa chofer
+      expect(formulaDe(s, 'P7'), 'FLOOR(O7*18%,5)');
     });
 
     test('adelantos en columnas A-C en paralelo a los viajes', () {
@@ -318,23 +321,23 @@ void main() {
       // Sección OTROS VIAJES: título en fila 11, datos desde 12.
       expect(textoDe(s, 'A11'), 'OTROS VIAJES (EN CURSO / PLANEADOS)');
       expect(textoDe(s, 'F12'), 'MAIZ'); // el en curso, abajo
-      expect(formulaDe(s, 'N12'), 'FLOOR((K12*M12*18%)/1000,5)');
+      expect(formulaDe(s, 'P12'), 'FLOOR((M12*O12*18%)/1000,5)');
     });
 
     test('pie: NETO firme (concluidos) + OTROS = TOTAL ESTIMADO', () {
       final s = relectura.sheets['DIAZ MARIO']!;
       // filaDatosFin=9; OTROS 12..14; pie desde 16.
       final fGan = filaConLabel(s, 'GANANCIA VIAJES');
-      expect(formulaDe(s, 'C$fGan'), 'SUM(N4:N9)'); // solo concluidos
+      expect(formulaDe(s, 'C$fGan'), 'SUM(P4:P9)'); // solo concluidos (GANANCIA=P)
       final fAdel = filaConLabel(s, 'ADELANTOS (−)');
       expect(formulaDe(s, 'C$fAdel'), 'SUM(C4:C9)');
       final fGastos = filaConLabel(s, 'GASTOS (+)');
-      expect(formulaDe(s, 'C$fGastos'), 'SUM(O4:O9)');
+      expect(formulaDe(s, 'C$fGastos'), 'SUM(Q4:Q9)'); // GASTOS=Q
       final fNeto = filaConLabel(s, 'NETO A PAGAR');
       expect(formulaDe(s, 'C$fNeto'), 'C$fGan-C$fAdel+C$fGastos');
       // Especulación: ganancia de OTROS VIAJES (12..14).
       final fOtros = filaConLabel(s, 'OTROS VIAJES (+)');
-      expect(formulaDe(s, 'C$fOtros'), 'SUM(N12:N14)');
+      expect(formulaDe(s, 'C$fOtros'), 'SUM(P12:P14)');
       final fTotal = filaConLabel(s, 'TOTAL ESTIMADO');
       expect(formulaDe(s, 'C$fTotal'), 'C$fNeto+C$fOtros');
     });
@@ -347,10 +350,10 @@ void main() {
       expect(textoDe(s, 'H2'), 'TOTAL EST.');
       // DIAZ en fila 4 (ALTAMIRANDA primero, alfabético).
       expect(textoDe(s, 'A4'), 'DIAZ MARIO');
-      expect(formulaDe(s, 'C4'), "SUM('DIAZ MARIO'!N4:N9)"); // bruto concluidos
-      expect(formulaDe(s, 'E4'), "SUM('DIAZ MARIO'!O4:O9)"); // gastos
+      expect(formulaDe(s, 'C4'), "SUM('DIAZ MARIO'!P4:P9)"); // bruto concluidos (P)
+      expect(formulaDe(s, 'E4'), "SUM('DIAZ MARIO'!Q4:Q9)"); // gastos (Q)
       expect(formulaDe(s, 'F4'), 'C4-D4+E4'); // FINAL firme
-      expect(formulaDe(s, 'G4'), "SUM('DIAZ MARIO'!N12:N14)"); // otros
+      expect(formulaDe(s, 'G4'), "SUM('DIAZ MARIO'!P12:P14)"); // otros (P)
       expect(formulaDe(s, 'H4'), 'F4+G4'); // total estimado
       // FACTURADO (col I ahora) = solo concluidos.
       expect(numeroDe(s, 'I4'), 2082000 + 1800000);
@@ -426,8 +429,8 @@ void main() {
     });
   });
 
-  group('cuaderno: KM + fecha de descarga (columnas P-Q)', () {
-    test('header P/Q + km del tramo y fecha de descarga, sin mover N/O', () {
+  group('cuaderno: KM + fecha de descarga (columnas K-L intercaladas)', () {
+    test('F. DESC en K y KM en L; las columnas con fórmula se corren', () {
       final ubic = [
         UbicacionLogistica.fromMap(
             'U1', {'nombre': 'B.BLANCA', 'provincia': 'Buenos Aires'}),
@@ -464,15 +467,15 @@ void main() {
         provincias: ResolverProvincias(tarifas: tarifas, ubicaciones: ubic),
       );
       final s = ex.Excel.decodeBytes(wb.excel.save()!).sheets['DIAZ MARIO']!;
-      // Columnas nuevas al final (P-Q).
-      expect(textoDe(s, 'P3'), 'KM');
-      expect(textoDe(s, 'Q3'), 'F. DESC');
-      expect(numeroDe(s, 'P4'), 540); // km del tramo (de la tarifa)
-      expect(textoDe(s, 'Q4'), '04/05/2026'); // fecha de descarga del tramo
-      // Las columnas con fórmula NO se movieron (siguen en N/O).
-      expect(textoDe(s, 'N3'), 'GANANCIA');
-      expect(textoDe(s, 'O3'), 'GASTOS');
-      expect(formulaDe(s, 'N4'), 'FLOOR((K4*M4*18%)/1000,5)');
+      // F. DESC y KM intercaladas entre PROV. destino (J) y KG (M).
+      expect(textoDe(s, 'K3'), 'F. DESC');
+      expect(textoDe(s, 'L3'), 'KM');
+      expect(textoDe(s, 'K4'), '04/05/2026'); // fecha de descarga del tramo
+      expect(numeroDe(s, 'L4'), 540); // km del tramo (de la tarifa)
+      // Las columnas con fórmula se corrieron: GANANCIA=P, GASTOS=Q.
+      expect(textoDe(s, 'P3'), 'GANANCIA');
+      expect(textoDe(s, 'Q3'), 'GASTOS');
+      expect(formulaDe(s, 'P4'), 'FLOOR((M4*O4*18%)/1000,5)');
     });
   });
 
