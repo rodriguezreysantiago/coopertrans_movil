@@ -17,11 +17,11 @@
 // patrón "extract module + export * from".
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
+import { onScheduleConLatido } from "./comun";
 
 // ============================================================================
 // asignarNumeroReciboAdelanto — número correlativo atómico
@@ -193,7 +193,8 @@ export const asignarNumeroReciboAdelanto = onCall(
 //
 // Idempotente: re-correr no rompe. Si Firestore esta caido, falla y
 // el cron del dia siguiente reintenta.
-export const purgarColaWhatsappAntigua = onSchedule(
+export const purgarColaWhatsappAntigua = onScheduleConLatido(
+  "purgarColaWhatsappAntigua",
   {
     schedule: "0 4 * * *", // 4 AM todos los dias (ART)
     timeZone: "America/Argentina/Buenos_Aires",

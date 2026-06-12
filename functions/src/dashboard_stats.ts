@@ -27,11 +27,11 @@
 // CAMBIAR EL OTRO. Tests E2E manualmente: cargar empleado nuevo, esperar
 // ≤5 min, verificar que choferes_activos sube en el dashboard.
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { FieldValue } from "firebase-admin/firestore";
 
 import { db } from "./setup";
+import { onScheduleConLatido } from "./comun";
 import { cargarExcluidos } from "./excluidos";
 
 const DASHBOARD_STATS_SCHEMA_VERSION = 1;
@@ -270,7 +270,8 @@ async function _statsRecomputeDashboard(): Promise<DashboardCounters & { docs_le
  *
  * Costo: 3 reads × ~177 docs cada 30 min ≈ ~25k reads/mes (antes ~150k).
  */
-export const recomputeDashboardStats = onSchedule(
+export const recomputeDashboardStats = onScheduleConLatido(
+  "recomputeDashboardStats",
   {
     schedule: "every 30 minutes",
     timeZone: "America/Argentina/Buenos_Aires",

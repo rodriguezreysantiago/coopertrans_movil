@@ -498,6 +498,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // CRON_HEALTH — latido de los crons de Cloud Functions (2026-06-12).
+    // Cada onSchedule registra su último OK/error vía Admin SDK
+    // (comun.ts:latidoCron) y cronWatchdog los vigila. Lectura habilitada
+    // para una futura card "salud de procesos" en el panel admin.
+    match /CRON_HEALTH/{doc} {
+      allow read: if isAdminOrSupervisor();
+      allow write: if false;
+    }
+
     // BOT_EVENTOS — log de caídas/recuperaciones del bot (2026-05-08).
     // Lo popula `botHealthWatchdog` (Admin SDK). El cron `resumenBotDiario`
     // lo lee y arma resumen WhatsApp. Si en el futuro queremos mostrar

@@ -14,6 +14,16 @@ es el historial (sus "PENDIENTE" viejos pueden estar resueltos — ante la duda,
 manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ### Operativo / corto plazo
+- [ ] **CRON DE LOS CRONS (Fase 1 del plan — ACTIVO desde 2026-06-12)**: los 24
+  onSchedule registran latido en `CRON_HEALTH/{id}` (wrapper `onScheduleConLatido`
+  en comun.ts) y `cronWatchdog` (cada 3 h, `cron_health.ts`) avisa por Telegram +
+  WhatsApp (key `mantenimientoBot`) si un cron está muerto (tolerancia por
+  cadencia: pollers 3 h, diarios 26 h, backup 8 días) o su última corrida falló.
+  Anti-spam 24 h por cron; silencio = OK. **Seguimiento**: validar el primer
+  episodio real (o forzar uno pausando un cron en Cloud Scheduler). Al crear un
+  cron nuevo: wrapper + entrada en `REGISTRO_CRONES` (hay test que lo exige).
+  Rentabilidad por tarifa y alerta de robo de gasoil quedaron PENDIENTES a pedido
+  de Santiago (2026-06-12).
 - [ ] **AUDITORÍA TOTAL 2026-06-12** (`docs/auditorias/2026-06-12_reporte.md` + anexo):
   7 bugs ALTA confirmados adversarialmente. **Hecho el 2026-06-12**: Push Protection +
   Secret Scanning activados en GitHub; fix comisión $0 en recálculo (`viajes_service.dart`

@@ -21,7 +21,6 @@
  */
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onDocumentCreated } from "firebase-functions/v2/firestore";
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
@@ -47,6 +46,7 @@ import {
   esErrorTransient,
   obtenerDestinatarioDni,
   SEG_HIGIENE_DESTINATARIO_DNI,
+  onScheduleConLatido,
 } from "./comun";
 import { estaCanalPausado } from "./canales_pausados";
 
@@ -345,7 +345,8 @@ interface AlertsApiResponse {
   };
 }
 
-export const volvoAlertasPoller = onSchedule(
+export const volvoAlertasPoller = onScheduleConLatido(
+  "volvoAlertasPoller",
   {
     schedule: "every 5 minutes",
     timeZone: "America/Argentina/Buenos_Aires",
@@ -1349,7 +1350,8 @@ interface ScoresApiResponse {
 
 const SCORES_MAX_PAGES_PER_RUN = 10;
 
-export const volvoScoresPoller = onSchedule(
+export const volvoScoresPoller = onScheduleConLatido(
+  "volvoScoresPoller",
   {
     schedule: "0 4 * * *",
     timeZone: "America/Argentina/Buenos_Aires",

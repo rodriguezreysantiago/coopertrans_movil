@@ -13,7 +13,6 @@
 // vigilador son thin (delegan a jornadas_v2.ts) — están acá porque
 // "vigilancia operativa" cae en la misma categoría de mantenimiento.
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import {
   DocumentData,
@@ -24,7 +23,9 @@ import {
 import { v1 as firestoreAdminV1 } from "@google-cloud/firestore";
 
 import { db, BANNER_TESTING } from "./setup";
-import { adquirirLockTick } from "./comun";
+import { adquirirLockTick,
+  onScheduleConLatido,
+} from "./comun";
 import * as jornadasV2 from "./jornadas_v2";
 import { expiraEnMin, primerNombre } from "./helpers";
 import {
@@ -80,7 +81,8 @@ import {
 //
 // Restauración (cuando un day pasa lo peor): ver RUNBOOK sección
 // "Disaster recovery — restaurar Firestore desde backup".
-export const backupFirestoreScheduled = onSchedule(
+export const backupFirestoreScheduled = onScheduleConLatido(
+  "backupFirestoreScheduled",
   {
     schedule: "0 6 * * 0",
     timeZone: "America/Argentina/Buenos_Aires",
@@ -296,7 +298,8 @@ export const backupFirestoreScheduled = onSchedule(
 // (flag `notificadoCaida` en BOT_HEALTH). Cuando el bot vuelve, escribe
 // evento `recuperado` con la duración total y limpia la flag.
 
-export const botHealthWatchdog = onSchedule(
+export const botHealthWatchdog = onScheduleConLatido(
+  "botHealthWatchdog",
   {
     schedule: "*/15 * * * *",
     timeZone: "America/Argentina/Buenos_Aires",
@@ -485,7 +488,8 @@ async function procesarAlertaExterna(
 // Cada jornada lógica es 1 doc con docId `{dni}_{ts_inicio_ms}`. La
 // jornada se cierra (set `jornada_fin_ts`) cuando llega 8 hs detenido.
 
-export const vigiladorJornadaChofer = onSchedule(
+export const vigiladorJornadaChofer = onScheduleConLatido(
+  "vigiladorJornadaChofer",
   {
     schedule: "every 5 minutes",
     timeZone: "America/Argentina/Buenos_Aires",
@@ -529,7 +533,8 @@ export const vigiladorJornadaChofer = onSchedule(
  * el doc — este cron nunca lo ve. Eso es OK: ambos paths terminan en
  * el mismo estado (mensaje encolado + doc borrado).
  */
-export const procesarSilenciadosExpirados = onSchedule(
+export const procesarSilenciadosExpirados = onScheduleConLatido(
+  "procesarSilenciadosExpirados",
   {
     schedule: "every 10 minutes",
     timeZone: "America/Argentina/Buenos_Aires",

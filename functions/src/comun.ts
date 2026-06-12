@@ -29,6 +29,10 @@
 import * as crypto from "crypto";
 import * as logger from "firebase-functions/logger";
 import {
+  ScheduleOptions,
+  onSchedule,
+} from "firebase-functions/v2/scheduler";
+import {
   DocumentReference,
   FieldValue,
   Timestamp,
@@ -488,4 +492,65 @@ export function hashId(text: string): string {
     .update(text, "utf8")
     .digest("hex")
     .slice(0, 8);
+}
+
+// ============================================================================
+// CRON_HEALTH — latido de los crons (auditoría 2026-06-12)
+// ============================================================================
+// Los ~24 onSchedule corrían a ciegas: si Cloud Scheduler dejaba de
+// disparar uno (o venía fallando), nadie se enteraba hasta notar la falta
+// de datos días después. Cada cron registra acá su último OK / último
+// error; `cronWatchdog` (cron_health.ts) compara contra la cadencia
+// esperada y avisa por Telegram + WhatsApp.
+
+/** Registra el resultado de una corrida en CRON_HEALTH/{id}. JAMÁS tira:
+ *  el latido es observabilidad, no puede romper el cron que lo emite. */
+export async function latidoCron(
+  id: string,
+  ok: boolean,
+  detalle?: string,
+): Promise<void> {
+  try {
+    const data: Record<string, unknown> = ok ?
+      { ultimo_ok: FieldValue.serverTimestamp() } :
+      {
+        ultimo_error: FieldValue.serverTimestamp(),
+        ultimo_error_detalle: (detalle ?? "").slice(0, 500),
+      };
+    await db.collection("CRON_HEALTH").doc(id).set(data, { merge: true });
+  } catch (e) {
+    logger.warn(`[latidoCron] no se pudo registrar el latido de ${id}`, {
+      error: (e as Error).message,
+    });
+  }
+}
+
+/** Envuelve el handler de un onSchedule para que registre latido al
+ *  terminar (OK) o al tirar (error, re-lanzado para que GCP lo cuente).
+ *  Uso: `onSchedule(opts, conLatido("miCron", async () => {...}))`. */
+export function conLatido(
+  id: string,
+  fn: () => Promise<void>,
+): () => Promise<void> {
+  return async () => {
+    try {
+      await fn();
+      await latidoCron(id, true);
+    } catch (e) {
+      await latidoCron(id, false, (e as Error).message);
+      throw e;
+    }
+  };
+}
+
+/** Azúcar para registrar el latido sin tocar el cuerpo del cron:
+ *  `export const x = onScheduleConLatido("x", opts, async () => {...})`.
+ *  El id DEBE coincidir con el nombre exportado y estar en
+ *  REGISTRO_CRONES (cron_health.ts) para que el watchdog lo vigile. */
+export function onScheduleConLatido(
+  id: string,
+  opts: ScheduleOptions,
+  handler: () => Promise<void>,
+) {
+  return onSchedule(opts, conLatido(id, handler));
 }

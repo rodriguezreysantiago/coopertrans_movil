@@ -24,11 +24,11 @@
 // días había que rearmarlos desde SITRACK_EVENTOS — esta CF.
 
 import { onCall } from "firebase-functions/v2/https";
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
+import { onScheduleConLatido } from "./comun";
 import { ZonaConfig, unidadEnZona } from "./zonas_descarga";
 
 /** Si entre 2 eventos consecutivos de la misma (patente × zona) hay un
@@ -439,7 +439,8 @@ export const backfillHistoricoDescargas = onCall(
 // `scripts/backfill_descargas.js --dias 1`. El cron en vivo sigue para la
 // COLA en tiempo real; este completa el HISTÓRICO. 04:30 ART da margen para
 // que el día anterior haya cerrado y todos sus eventos estén persistidos.
-export const backfillDescargasDiario = onSchedule(
+export const backfillDescargasDiario = onScheduleConLatido(
+  "backfillDescargasDiario",
   {
     schedule: "30 4 * * *",
     timeZone: "America/Argentina/Buenos_Aires",

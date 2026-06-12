@@ -65,3 +65,7 @@ export * from "./reportes_discrepancia";
 // que el GPS desmiente les contesta con la evidencia. Flag
 // META/config_cierre_reportes.activo (default dry-run). Ver cierre_reportes_jornada.ts.
 export * from "./cierre_reportes_jornada";
+// Cron de los crons (cada 3 h): compara el latido de CRON_HEALTH de los 24
+// onSchedule contra su cadencia esperada y avisa por Telegram + WhatsApp si
+// alguno está muerto o viene fallando. Ver cron_health.ts.
+export * from "./cron_health";

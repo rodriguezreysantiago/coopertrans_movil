@@ -20,12 +20,13 @@
 // Cron cada 5 min (mismo ritmo que SITRACK_POSICIONES, sino la cola
 // quedaría más vieja que el dato fuente).
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
-import { adquirirLockTick } from "./comun";
+import { adquirirLockTick,
+  onScheduleConLatido,
+} from "./comun";
 
 // NOTA: reentradas espurias (la misma unidad sale y vuelve en <2 min,
 // típico cuando pierde GPS por un túnel o da una vuelta) actualmente
@@ -100,7 +101,8 @@ export function unidadEnZona(
 
 // ─── Cron principal ──────────────────────────────────────────────
 
-export const zonaDescargaPoller = onSchedule(
+export const zonaDescargaPoller = onScheduleConLatido(
+  "zonaDescargaPoller",
   {
     schedule: "every 5 minutes",
     timeZone: "America/Argentina/Buenos_Aires",

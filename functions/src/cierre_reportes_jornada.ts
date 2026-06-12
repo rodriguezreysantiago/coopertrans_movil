@@ -24,7 +24,6 @@
 // El objetivo: contestarle a TODOS los reclamos (tuvieran razón o no) para cerrar
 // el loop y desincentivar reclamos inventados.
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
@@ -32,6 +31,7 @@ import { db } from "./setup";
 import {
   adquirirIdempotenciaDiaria,
   liberarLockConReintentos,
+  onScheduleConLatido,
 } from "./comun";
 
 // ── Constantes de criterio ───────────────────────────────────────────────────
@@ -288,7 +288,8 @@ async function eventosGpsDelDia(dni: string, fechaArt: string): Promise<GpsEvent
   return out;
 }
 
-export const cerrarReportesJornadaDiario = onSchedule(
+export const cerrarReportesJornadaDiario = onScheduleConLatido(
+  "cerrarReportesJornadaDiario",
   {
     schedule: "0 8 * * *",
     timeZone: TZ,

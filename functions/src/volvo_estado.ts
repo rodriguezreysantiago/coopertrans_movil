@@ -21,12 +21,13 @@
  * verificar la estructura real de la flota Vecchi post-deploy.
  */
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { FieldValue } from "firebase-admin/firestore";
 
 import { db } from "./setup";
-import { adquirirLockTick, fetchWithTimeout } from "./comun";
+import { adquirirLockTick, fetchWithTimeout,
+  onScheduleConLatido,
+} from "./comun";
 import {
   volvoUsername,
   volvoPassword,
@@ -247,7 +248,8 @@ async function fetchStatuses(
 }
 
 // ─── poller ──────────────────────────────────────────────────────────────────
-export const estadoVolvoPoller = onSchedule(
+export const estadoVolvoPoller = onScheduleConLatido(
+  "estadoVolvoPoller",
   {
     schedule: "every 5 minutes",
     timeZone: "America/Argentina/Buenos_Aires",

@@ -11,12 +11,13 @@
  * desde index con `export * from "./telemetria"`.
  */
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
-import { fetchWithTimeout } from "./comun";
+import { fetchWithTimeout,
+  onScheduleConLatido,
+} from "./comun";
 import {
   volvoUsername,
   volvoPassword,
@@ -46,7 +47,8 @@ import {
 // ante fallos puntuales sin generar costos significativos (4 calls
 // Volvo + 4 batch writes por día).
 
-export const telemetriaSnapshotScheduled = onSchedule(
+export const telemetriaSnapshotScheduled = onScheduleConLatido(
+  "telemetriaSnapshotScheduled",
   {
     schedule: "every 6 hours",
     timeZone: "America/Argentina/Buenos_Aires",

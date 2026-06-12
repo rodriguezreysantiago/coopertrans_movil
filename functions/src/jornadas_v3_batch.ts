@@ -25,13 +25,14 @@
 // NO toca el v2 (vigilador en vivo → JORNADAS) ni el histórico
 // (jornada_historico → VOLVO_JORNADAS_HISTORICO). Colección propia, en paralelo.
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
-import { adquirirLockTick } from "./comun";
+import { adquirirLockTick,
+  onScheduleConLatido,
+} from "./comun";
 import { expiraEnMin, primerNombre } from "./helpers";
 import { cargarExcluidos } from "./excluidos";
 import {
@@ -369,7 +370,8 @@ function medianocheArt(diasAtras: number): Date {
  * para completar turnos que cruzan medianoche; persiste solo los que INICIARON
  * ayer (filtro inicioMin/Max) → sin fragmentos del turno de hoy.
  */
-export const registrarJornadasV3Diario = onSchedule(
+export const registrarJornadasV3Diario = onScheduleConLatido(
+  "registrarJornadasV3Diario",
   {
     schedule: "45 6 * * *",
     timeZone: "America/Argentina/Buenos_Aires",

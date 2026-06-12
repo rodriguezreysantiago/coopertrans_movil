@@ -11,7 +11,6 @@
 //     eventos discretos drainable) → SITRACK_EVENTOS/{reportId}.
 //     1400+ tipos de evento del catálogo Sitrack.
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
@@ -24,6 +23,7 @@ import {
   esErrorTransient,
   fetchConReintentos,
   hashId,
+  onScheduleConLatido,
 } from "./comun";
 import { expiraEnMin, primerNombre, rrPick } from "./helpers";
 
@@ -118,7 +118,8 @@ interface SitrackReportItem {
   trailerName?: string;
 }
 
-export const sitrackPosicionPoller = onSchedule(
+export const sitrackPosicionPoller = onScheduleConLatido(
+  "sitrackPosicionPoller",
   {
     schedule: "every 5 minutes",
     timeZone: "America/Argentina/Buenos_Aires",
@@ -514,7 +515,8 @@ interface SitrackEventoItem extends SitrackReportItem {
   backupBatteryChargePercentage?: number;
 }
 
-export const sitrackEventosPoller = onSchedule(
+export const sitrackEventosPoller = onScheduleConLatido(
+  "sitrackEventosPoller",
   {
     schedule: "every 5 minutes",
     timeZone: "America/Argentina/Buenos_Aires",

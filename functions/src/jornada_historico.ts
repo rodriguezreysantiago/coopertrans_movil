@@ -24,13 +24,14 @@
 //
 // El módulo "Jornada" del hub ICM lee directamente de esta colección.
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
-import { adquirirLockTick } from "./comun";
+import { adquirirLockTick,
+  onScheduleConLatido,
+} from "./comun";
 import {
   UMBRAL_MOVIMIENTO_KMH,
   PAUSA_BLOQUE_SEGUNDOS,
@@ -405,7 +406,8 @@ export async function procesarDia(
 // Cron diario — procesa ayer (06:30 ART, 30 min después del cron iButtons)
 // ============================================================================
 
-export const reconstruirJornadasDiario = onSchedule(
+export const reconstruirJornadasDiario = onScheduleConLatido(
+  "reconstruirJornadasDiario",
   {
     schedule: "30 6 * * *",
     timeZone: "America/Argentina/Buenos_Aires",

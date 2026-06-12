@@ -23,13 +23,14 @@
 // Desde/hasta = primer y último evento del tramo continuo. Si el iButton
 // vuelve a aparecer en la misma patente >30 min después, es un tramo nuevo.
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
-import { adquirirLockTick } from "./comun";
+import { adquirirLockTick,
+  onScheduleConLatido,
+} from "./comun";
 
 /** Si entre 2 eventos del mismo (patente, dni) hay menos de este gap,
  *  los consideramos parte del mismo tramo continuo. Si hay más, abrimos
@@ -169,7 +170,8 @@ async function procesarRango(
 // Cron diario — procesa ayer
 // ============================================================================
 
-export const reconstruirHistoricoIButtonsDiario = onSchedule(
+export const reconstruirHistoricoIButtonsDiario = onScheduleConLatido(
+  "reconstruirHistoricoIButtonsDiario",
   {
     schedule: "0 6 * * *",
     timeZone: "America/Argentina/Buenos_Aires",

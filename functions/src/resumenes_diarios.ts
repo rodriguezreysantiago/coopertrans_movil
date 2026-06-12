@@ -20,7 +20,6 @@
 //   - Lock liberable en `finally` si la encolada falla (auditoria
 //     2026-05-18) — sino el resumen del día NO se reintenta.
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
@@ -37,6 +36,7 @@ import {
   SEG_HIGIENE_DESTINATARIO_DNI,
   TIPOS_PELIGROSOS_SITRACK,
   TTL_RESUMEN_DIARIO_MIN,
+  onScheduleConLatido,
 } from "./comun";
 import { expiraEnMin, formatFechaArg, formatHoraArg, primerNombre } from "./helpers";
 import * as jornadasV3Batch from "./jornadas_v3_batch";
@@ -150,7 +150,8 @@ export function construirResumenBot(
   return { mensaje, totalCaidas, totalRecuperaciones, minutosCaidoTotal };
 }
 
-export const resumenBotDiario = onSchedule(
+export const resumenBotDiario = onScheduleConLatido(
+  "resumenBotDiario",
   {
     schedule: "0 8 * * *",
     timeZone: "America/Argentina/Buenos_Aires",
@@ -393,7 +394,8 @@ export function construirMensajeDrifts(
   );
 }
 
-export const resumenDriftsAsignacionesDiario = onSchedule(
+export const resumenDriftsAsignacionesDiario = onScheduleConLatido(
+  "resumenDriftsAsignacionesDiario",
   {
     // 8:00 AM ART todos los días — Vecchi prefiere los resúmenes a la
     // mañana siguiente (con el bot ya arrancado y el admin en la
@@ -569,7 +571,8 @@ export const resumenDriftsAsignacionesDiario = onSchedule(
 // dispara la function exportada. Mismo destinatario que antes
 // (Molina, DNI 34730329 vía env var ALERTAS_SEG_HIGIENE_DESTINATARIO_DNI).
 
-export const resumenExcesosJornadaDiario = onSchedule(
+export const resumenExcesosJornadaDiario = onScheduleConLatido(
+  "resumenExcesosJornadaDiario",
   {
     schedule: "0 8 * * *",
     timeZone: "America/Argentina/Buenos_Aires",
@@ -753,7 +756,8 @@ export function construirMensajeConducta(
   return mensaje;
 }
 
-export const resumenConductaManejoDiario = onSchedule(
+export const resumenConductaManejoDiario = onScheduleConLatido(
+  "resumenConductaManejoDiario",
   {
     schedule: "0 8 * * *",
     timeZone: "America/Argentina/Buenos_Aires",

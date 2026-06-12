@@ -15,7 +15,6 @@
 // advertencia persistente (un YELLOW que no se arregla) se repite cada día —
 // es un recordatorio. Si Emmanuel lo quiere "sólo cuando cambia", se ajusta.
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
@@ -25,6 +24,7 @@ import {
   MANTENIMIENTO_VEHICULOS_DNI,
   obtenerDestinatarioDni,
   TTL_RESUMEN_DIARIO_MIN,
+  onScheduleConLatido,
 } from "./comun";
 import { estaCanalPausado } from "./canales_pausados";
 import { expiraEnMin, formatFechaArg, primerNombre } from "./helpers";
@@ -242,7 +242,8 @@ export function construirParteMantenimiento(
   );
 }
 
-export const resumenMantenimientoVehiculosDiario = onSchedule(
+export const resumenMantenimientoVehiculosDiario = onScheduleConLatido(
+  "resumenMantenimientoVehiculosDiario",
   {
     schedule: "0 8 * * *",
     timeZone: "America/Argentina/Buenos_Aires",

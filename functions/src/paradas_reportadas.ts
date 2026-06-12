@@ -22,13 +22,14 @@
 // LÓGICA PURA en `cruzarParadasConJornadas` para testear sin Firestore — mismo
 // patrón ganador que `evaluarTickJornada` y `reconstruirJornadas`.
 
-import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
-import { adquirirLockTick } from "./comun";
+import { adquirirLockTick,
+  onScheduleConLatido,
+} from "./comun";
 
 // ── Tipos puros ──────────────────────────────────────────────────────────────
 
@@ -343,7 +344,8 @@ function ayerArt(ahora: Date = new Date()): string {
  * pendientes hasta AYER inclusive — las de HOY se dejan (v3 aún no las
  * escribió). Idempotente.
  */
-export const cruzarParadasReportadasV3Diario = onSchedule(
+export const cruzarParadasReportadasV3Diario = onScheduleConLatido(
+  "cruzarParadasReportadasV3Diario",
   {
     schedule: "0 7 * * *",
     timeZone: "America/Argentina/Buenos_Aires",
