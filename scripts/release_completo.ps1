@@ -302,20 +302,35 @@ if (-not $SkipLocalUpdate) {
     # 3) Lanzar el launcher. Detecta nueva versión, baja zip,
     # extrae, lanza la app. El launcher usa Start-Process (no
     # bloqueante), así que volvemos al script casi de inmediato.
-    $launcher = 'C:\Program Files\CoopertransMovil\launcher.ps1'
-    if (Test-Path $launcher) {
-        Write-Host "  Lanzando launcher (descarga la versión nueva en background)..." -ForegroundColor DarkGray
+    # Detectamos el esquema de instalación de ESTA PC:
+    #  a) LEGACY launcher: instalación vieja en Program Files + launcher.ps1
+    #     (+ VERSION.txt en ProgramData). El launcher baja el zip y relanza.
+    #  b) INSTALADOR .exe (Inno → %LocalAppData%\CoopertransMovil, SIN launcher):
+    #     la app se actualiza sola con el updater in-app (WindowsUpdateService)
+    #     al abrirse. Solo hay que relanzarla para que re-chequee el GitHub
+    #     Release y muestre el banner de actualización.
+    $launcherLegacy = 'C:\Program Files\CoopertransMovil\launcher.ps1'
+    $exeInstalador  = Join-Path $env:LOCALAPPDATA 'CoopertransMovil\coopertrans_movil.exe'
+
+    if (Test-Path $launcherLegacy) {
+        Write-Host "  Lanzando launcher legacy (descarga la versión nueva en background)..." -ForegroundColor DarkGray
         Start-Process powershell -ArgumentList @(
             '-NoProfile',
             '-ExecutionPolicy', 'Bypass',
             '-WindowStyle', 'Minimized',
-            '-File', $launcher
+            '-File', $launcherLegacy
         )
         Write-Host "  OK launcher iniciado." -ForegroundColor Green
-    } else {
-        Write-Host "  AVISO: no encuentro $launcher" -ForegroundColor Yellow
-        Write-Host "  La app no se va a actualizar automáticamente en esta PC." -ForegroundColor Yellow
-        Write-Host "  Si nunca instalaste el .exe del instalador acá, eso es esperado." -ForegroundColor DarkGray
+    }
+    elseif (Test-Path $exeInstalador) {
+        Write-Host "  Instalación por .exe detectada (LocalAppData)." -ForegroundColor DarkGray
+        Write-Host "  Relanzando la app — el updater in-app baja la versión nueva al abrir..." -ForegroundColor DarkGray
+        Start-Process -FilePath $exeInstalador
+        Write-Host "  OK app relanzada (se actualiza sola con el banner in-app)." -ForegroundColor Green
+    }
+    else {
+        Write-Host "  La app no está instalada en esta PC — nada que actualizar local." -ForegroundColor DarkGray
+        Write-Host "  (Esperado si esta PC es solo de build/release.)" -ForegroundColor DarkGray
     }
 }
 
