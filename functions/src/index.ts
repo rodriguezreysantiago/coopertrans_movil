@@ -60,3 +60,8 @@ export * from "./paradas_reportadas";
 // marca revisado con veredicto: cita el reclamo + el resultado. Trigger onUpdate,
 // idempotente. Solo reclamos directos (no los auto-generados de paradas).
 export * from "./reportes_discrepancia";
+// Cierre automático de reclamos de jornada (cron 08:00 ART): cruza los pendientes
+// contra v3 + GPS crudo y setea el veredicto (que dispara la devolución). A los
+// que el GPS desmiente les contesta con la evidencia. Flag
+// META/config_cierre_reportes.activo (default dry-run). Ver cierre_reportes_jornada.ts.
+export * from "./cierre_reportes_jornada";
