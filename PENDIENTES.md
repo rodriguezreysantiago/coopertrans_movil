@@ -14,6 +14,15 @@ es el historial (sus "PENDIENTE" viejos pueden estar resueltos — ante la duda,
 manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ### Operativo / corto plazo
+- [ ] **AUDITORÍA TOTAL 2026-06-12** (`docs/auditorias/2026-06-12_reporte.md` + anexo):
+  7 bugs ALTA confirmados adversarialmente. Los 2 urgentes: **credenciales Sitrack en el
+  repo público** (rotar la contraseña expuesta en el portal + purgar docs + Push Protection) y
+  **recálculo de tarifas puede dejar pago chofer en $0** (`viajes_service.dart:531`,
+  fix one-liner). Después: regla AGENTE_CONVERSACIONES, backup sin 5 colecciones,
+  fecha Timestamp/String en telemetría, kmUnidadAlMontar de gomería, política de
+  privacidad. El reporte trae plan estratégico en 4 fases (Fase 2 = features de ROI
+  directo: rentabilidad por tarifa, robo de gasoil, viajes sin facturar, detention YPF,
+  informe ejecutivo mensual).
 - [ ] **macOS**: confirmar el estado del re-submit a Apple post-fix del
   entitlement (rechazo 2026-06-06, fix hecho ese día — ver entrada).
 - [ ] **Play Store**: confirmar que el AAB de la serie vigente (1.2.24) esté
