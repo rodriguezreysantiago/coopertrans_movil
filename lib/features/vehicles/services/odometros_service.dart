@@ -38,7 +38,9 @@ class OdometroDia {
   double get litros100km =>
       deltaKm > 0 ? (deltaLitros * 100.0 / deltaKm) : 0.0;
 
-  factory OdometroDia._fromDoc(
+  /// Visible (sin `_`) para poder testearlo con `fake_cloud_firestore`;
+  /// fuera de tests solo lo usa [OdometrosService].
+  factory OdometroDia.fromDoc(
       DocumentSnapshot<Map<String, dynamic>> doc,
       {required int deltaKm, required double deltaLitros}) {
     final m = doc.data() ?? const <String, dynamic>{};
@@ -47,13 +49,40 @@ class OdometroDia {
     if (ts is Timestamp) leidoEn = ts.toDate();
     return OdometroDia(
       patente: (m['patente'] as String?) ?? '',
-      fecha: (m['fecha'] as String?) ?? '',
+      fecha: _parsearFecha(m['fecha'], doc.id),
       kmAcumulado: ((m['km'] as num?) ?? 0).toDouble(),
       litrosAcumulados: ((m['litros_acumulados'] as num?) ?? 0).toDouble(),
       leidoEn: leidoEn,
       deltaKm: deltaKm,
       deltaLitros: deltaLitros,
     );
+  }
+
+  /// El campo `fecha` lo escriben AMBOS writers (CF `telemetriaSnapshot`
+  /// y `guardarSnapshotsDiarios`) como **Timestamp**, pero este modelo
+  /// lo consume como String 'YYYY-MM-DD' — el cast `as String?` viejo
+  /// devolvía null SIEMPRE y la tabla de consumo mensual + los labels
+  /// del gráfico quedaban vacíos (auditoría 2026-06-12).
+  ///
+  /// Orden de resolución:
+  ///  1. String → passthrough (defensivo, por si un writer futuro graba
+  ///     el texto directamente).
+  ///  2. Doc ID `{patente}_{YYYY-MM-DD}` → la fecha del ID es la
+  ///     autoritativa: ambos writers la arman con el formatter ART, así
+  ///     que no depende de la TZ del device.
+  ///  3. Timestamp → formatear en hora local (último recurso; correcto
+  ///     en AR porque la CF guarda medianoche ART = 03:00 UTC).
+  static String _parsearFecha(Object? raw, String docId) {
+    if (raw is String) return raw;
+    final m = RegExp(r'\d{4}-\d{2}-\d{2}$').firstMatch(docId);
+    if (m != null) return m.group(0)!;
+    if (raw is Timestamp) {
+      final d = raw.toDate();
+      final mm = d.month.toString().padLeft(2, '0');
+      final dd = d.day.toString().padLeft(2, '0');
+      return '${d.year}-$mm-$dd';
+    }
+    return '';
   }
 }
 
@@ -95,12 +124,12 @@ class OdometrosService {
       final lAyer = ((ayer['litros_acumulados'] as num?) ?? 0).toDouble();
       final dKm = kmHoy >= kmAyer ? (kmHoy - kmAyer).round() : 0;
       final dL = lHoy >= lAyer ? (lHoy - lAyer) : 0.0;
-      out.add(OdometroDia._fromDoc(docs[i], deltaKm: dKm, deltaLitros: dL));
+      out.add(OdometroDia.fromDoc(docs[i], deltaKm: dKm, deltaLitros: dL));
     }
     // Para no perder el día más viejo del rango pedido, lo agregamos
     // con delta 0 (sin día anterior para comparar).
     final ult = docs.last;
-    out.add(OdometroDia._fromDoc(ult, deltaKm: 0, deltaLitros: 0));
+    out.add(OdometroDia.fromDoc(ult, deltaKm: 0, deltaLitros: 0));
     // Si pedimos N+1 y devuelve N+1, recortamos a N (el extra era solo
     // para calcular el delta del primero).
     if (out.length > dias) out.removeRange(dias, out.length);

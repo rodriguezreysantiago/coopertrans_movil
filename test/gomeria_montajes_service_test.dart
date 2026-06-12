@@ -654,4 +654,93 @@ void main() {
       expect(km['ENG1_IZQ_EXT'], null);
     });
   });
+
+  // ─── Regresión auditoría 2026-06-12: base del semáforo al montar ───
+  //
+  // La pantalla nueva de gomería llamaba a montar() SIN kmUnidadAlMontar
+  // → km_unidad_al_montar quedaba null en Firestore y el semáforo de
+  // desgaste mostraba "sin datos" PARA SIEMPRE en esos tractores (no hay
+  // backfill aguas abajo). El fix: montar() resuelve la base solo desde
+  // VEHICULOS/{id}.KM_ACTUAL cuando el caller no la pasa y la unidad es
+  // un tractor.
+  group('montar — auto-resolución de kmUnidadAlMontar (regresión semáforo)', () {
+    Future<String> montarTracSinKm() => service.montar(
+          unidadId: 'AB123CD',
+          unidadTipo: TipoUnidadCubierta.tractor,
+          posicion: 'TRAC1_IZQ_EXT',
+          modeloId: 'm1',
+          modeloEtiqueta: 'Bridgestone R268 — Tracción',
+          tipoUso: TipoUsoCubierta.traccion,
+          vida: 1,
+          kmVidaEstimada: 80000,
+          // SIN kmUnidadAlMontar — como llama la pantalla v2.
+          supervisorDni: '1',
+        );
+
+    test('tractor sin km del caller → toma KM_ACTUAL de VEHICULOS', () async {
+      await comprar5();
+      await fake
+          .collection('VEHICULOS')
+          .doc('AB123CD')
+          .set({'KM_ACTUAL': 523450});
+      await montarTracSinKm();
+      final m = (await service.streamMontajesActivosPorUnidad('AB123CD').first)
+          .single;
+      expect(m.kmUnidadAlMontar, 523450,
+          reason: 'la base del semáforo debe quedar persistida al montar');
+    });
+
+    test('el km explícito del caller tiene prioridad sobre KM_ACTUAL', () async {
+      await comprar5();
+      await fake
+          .collection('VEHICULOS')
+          .doc('AB123CD')
+          .set({'KM_ACTUAL': 523450});
+      await montarTrac('TRAC1_IZQ_EXT'); // pasa kmUnidadAlMontar: 100000
+      final m = (await service.streamMontajesActivosPorUnidad('AB123CD').first)
+          .single;
+      expect(m.kmUnidadAlMontar, 100000);
+    });
+
+    test('tractor sin doc VEHICULOS → monta igual con base null', () async {
+      await comprar5();
+      final id = await montarTracSinKm(); // no debe explotar
+      expect(id, isNotEmpty);
+      final m = (await service.streamMontajesActivosPorUnidad('AB123CD').first)
+          .single;
+      expect(m.kmUnidadAlMontar, isNull);
+    });
+
+    test('KM_ACTUAL en 0 (sin dato real) → base null, no 0', () async {
+      await comprar5();
+      await fake.collection('VEHICULOS').doc('AB123CD').set({'KM_ACTUAL': 0});
+      await montarTracSinKm();
+      final m = (await service.streamMontajesActivosPorUnidad('AB123CD').first)
+          .single;
+      expect(m.kmUnidadAlMontar, isNull,
+          reason: 'base 0 falsa inflaría el desgaste con el odómetro entero');
+    });
+
+    test('enganche → no intenta odómetro propio: base queda null', () async {
+      await service.comprar(
+          modeloId: 'arr',
+          modeloEtiqueta: 'X arrastre',
+          cantidad: 1,
+          supervisorDni: '1');
+      await service.montar(
+        unidadId: 'ENG999',
+        unidadTipo: TipoUnidadCubierta.enganche,
+        posicion: 'ENG1_IZQ_EXT',
+        modeloId: 'arr',
+        modeloEtiqueta: 'X arrastre',
+        tipoUso: TipoUsoCubierta.arrastre,
+        vida: 1,
+        kmVidaEstimada: 60000,
+        supervisorDni: '1',
+      );
+      final m = (await service.streamMontajesActivosPorUnidad('ENG999').first)
+          .single;
+      expect(m.kmUnidadAlMontar, isNull);
+    });
+  });
 }

@@ -336,6 +336,20 @@ class MontajesService {
       throw MontajeException(
           'No hay stock de "$modeloEtiqueta" (vida $vida) en el depósito.');
     }
+    // 3b) Base del semáforo de desgaste: el odómetro del tractor AL MONTAR
+    //     (kmRecorrido = KM_ACTUAL − esta base). Si el caller no lo pasa,
+    //     lo resolvemos acá para que ningún flujo de alta quede sin base —
+    //     la pantalla nueva no lo pasaba y el semáforo quedaba "sin datos"
+    //     PARA SIEMPRE en esos montajes (auditoría 2026-06-12). Enganches:
+    //     sin odómetro propio → queda null y `_kmEnganche` calcula robusto.
+    //     Best-effort: si la lectura falla (sin red en la tablet), se monta
+    //     igual — el montaje no puede depender de un dato decorativo.
+    if (kmUnidadAlMontar == null &&
+        unidadTipo == TipoUnidadCubierta.tractor) {
+      try {
+        kmUnidadAlMontar = await _kmActualTractor(unidadId);
+      } catch (_) {/* sin red: montar igual, el semáforo queda sin base */}
+    }
     // 4) Posición libre: el lock NO debe existir. Si existe, verificamos que
     //    de verdad haya un montaje activo en esa unidad+posición. Si el lock
     //    está HUÉRFANO (quedó de un retirar/rotar cuyo `delete` best-effort
