@@ -73,10 +73,11 @@ class ReportLiquidacionService {
 
       // Anexos tabulares al final (trazabilidad completa de la app:
       // estado, liquidado, unidad, medio de pago, recibo).
-      _llenarHojaViajes(
+      llenarHojaViajes(
         excel,
         viajes: viajes,
         empleados: empleados,
+        provincias: provincias,
       );
       _llenarHojaAdelantos(
         excel,
@@ -163,20 +164,28 @@ class ReportLiquidacionService {
   // HOJAS ANEXO
   // ===========================================================================
 
-  static void _llenarHojaViajes(
+  /// Anexo VIAJES — una fila por viaje. Desde 2026-06-11 incluye la FECHA
+  /// DESCARGA (del último tramo) y los KM (suma de los tramos, resueltos por
+  /// la tarifa del catálogo). `@visibleForTesting` para poder verificar el
+  /// layout sin Firestore ni BuildContext.
+  @visibleForTesting
+  static void llenarHojaViajes(
     ex.Excel excel, {
     required List<Viaje> viajes,
     required Map<String, EmpleadoLiquidacion> empleados,
+    required ResolverProvincias provincias,
   }) {
     final hoja = excel['VIAJES'];
     final headers = [
       'FECHA',
+      'FECHA DESCARGA',
       'CHOFER',
       'DNI',
       'TRACTOR',
       'ENGANCHE',
       'TRAMOS',
       'RUTA',
+      'KM',
       'KG DESCARGADOS',
       'FACTURADO',
       'COMISIÓN CHOFER',
@@ -211,33 +220,55 @@ class ReportLiquidacionService {
       final fecha = v.fechaReferencia;
       final fechaStr =
           fecha == null ? '' : AppFormatters.formatearFecha(fecha);
+      // Fecha de descarga del viaje = la del último tramo (v.fechaDescarga).
+      final fechaDescStr = v.fechaDescarga == null
+          ? ''
+          : AppFormatters.formatearFecha(v.fechaDescarga!);
       final nombre = v.choferNombre ?? empleados[v.choferDni]?.nombre ?? '';
       final kgDescTotal = v.tramos.fold<double>(
         0,
         (acc, t) => acc + (t.kgDescargados ?? 0),
       );
+      final kmTotal = _kmTotalViaje(v, provincias);
 
       _setText(hoja, 0, row, fechaStr);
-      _setText(hoja, 1, row, nombre);
-      _setText(hoja, 2, row, v.choferDni);
-      _setText(hoja, 3, row, v.vehiculoId ?? '');
-      _setText(hoja, 4, row, v.engancheId ?? '');
-      _setInt(hoja, 5, row, v.cantidadTramos);
-      _setText(hoja, 6, row, v.rutaEtiqueta);
-      if (kgDescTotal > 0) {
-        _setInt(hoja, 7, row, kgDescTotal.round());
+      _setText(hoja, 1, row, fechaDescStr);
+      _setText(hoja, 2, row, nombre);
+      _setText(hoja, 3, row, v.choferDni);
+      _setText(hoja, 4, row, v.vehiculoId ?? '');
+      _setText(hoja, 5, row, v.engancheId ?? '');
+      _setInt(hoja, 6, row, v.cantidadTramos);
+      _setText(hoja, 7, row, v.rutaEtiqueta);
+      if (kmTotal != null) {
+        _setInt(hoja, 8, row, kmTotal);
       }
-      _setMonto(hoja, 8, row, v.montoVecchi);
-      _setMonto(hoja, 9, row, v.montoChofer);
-      _setMonto(hoja, 10, row, v.montoChoferRedondeado);
-      _setMonto(hoja, 11, row, v.gastosTotal);
-      _setText(hoja, 12, row, v.liquidado ? 'SÍ' : 'NO');
-      _setText(hoja, 13, row, v.estado.etiqueta);
+      if (kgDescTotal > 0) {
+        _setInt(hoja, 9, row, kgDescTotal.round());
+      }
+      _setMonto(hoja, 10, row, v.montoVecchi);
+      _setMonto(hoja, 11, row, v.montoChofer);
+      _setMonto(hoja, 12, row, v.montoChoferRedondeado);
+      _setMonto(hoja, 13, row, v.gastosTotal);
+      _setText(hoja, 14, row, v.liquidado ? 'SÍ' : 'NO');
+      _setText(hoja, 15, row, v.estado.etiqueta);
 
       row++;
     }
 
     xu.autoFitColumnas(hoja, headers.length, row);
+  }
+
+  /// Suma de los km de los tramos del viaje, resolviendo cada tramo por su
+  /// tarifa del catálogo ([ResolverProvincias.kmDe]). null si NINGÚN tramo
+  /// tiene km cargado (la celda queda en blanco); si algunos tienen y otros
+  /// no, suma los que tienen.
+  static int? _kmTotalViaje(Viaje v, ResolverProvincias provincias) {
+    int? total;
+    for (final t in v.tramos) {
+      final k = provincias.kmDe(t);
+      if (k != null) total = (total ?? 0) + k;
+    }
+    return total;
   }
 
   static void _llenarHojaAdelantos(

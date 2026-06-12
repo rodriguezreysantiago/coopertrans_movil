@@ -17,6 +17,7 @@ import 'package:coopertrans_movil/features/logistica/models/viaje.dart';
 import 'package:coopertrans_movil/features/logistica/services/liquidacion_service.dart'
     show EmpleadoLiquidacion;
 import 'package:coopertrans_movil/features/logistica/services/report_planilla_chofer.dart';
+import 'package:coopertrans_movil/features/logistica/services/report_liquidacion.dart';
 import 'package:coopertrans_movil/features/reports/services/excel_utils.dart'
     as xu;
 
@@ -425,6 +426,121 @@ void main() {
     });
   });
 
+  group('cuaderno: KM + fecha de descarga (columnas P-Q)', () {
+    test('header P/Q + km del tramo y fecha de descarga, sin mover N/O', () {
+      final ubic = [
+        UbicacionLogistica.fromMap(
+            'U1', {'nombre': 'B.BLANCA', 'provincia': 'Buenos Aires'}),
+        UbicacionLogistica.fromMap(
+            'U2', {'nombre': 'NECOCHEA', 'provincia': 'Buenos Aires'}),
+      ];
+      final tarifas = [
+        TarifaLogistica.fromMap('T1', {
+          'ubicacion_origen_id': 'U1',
+          'ubicacion_destino_id': 'U2',
+          'km': 540,
+        }),
+      ];
+      final wb = ReportPlanillaChofer.construir(
+        viajes: [
+          viajeDe(id: 'V1', montoVecchi: 100, tramos: [
+            TramoViaje(
+              id: 't1',
+              tarifaId: 'T1',
+              tarifaSnapshot: snapTn(),
+              fechaCarga: DateTime(2026, 5, 2),
+              fechaDescarga: DateTime(2026, 5, 4),
+              kgCargados: 30000,
+              kgDescargados: 30000,
+            ),
+          ]),
+        ],
+        adelantos: const [],
+        empleados: const {
+          '123': EmpleadoLiquidacion(
+              dni: '123', nombre: 'DIAZ MARIO', empresaCuit: null),
+        },
+        mes: DateTime(2026, 5, 1),
+        provincias: ResolverProvincias(tarifas: tarifas, ubicaciones: ubic),
+      );
+      final s = ex.Excel.decodeBytes(wb.excel.save()!).sheets['DIAZ MARIO']!;
+      // Columnas nuevas al final (P-Q).
+      expect(textoDe(s, 'P3'), 'KM');
+      expect(textoDe(s, 'Q3'), 'F. DESC');
+      expect(numeroDe(s, 'P4'), 540); // km del tramo (de la tarifa)
+      expect(textoDe(s, 'Q4'), '04/05/2026'); // fecha de descarga del tramo
+      // Las columnas con fórmula NO se movieron (siguen en N/O).
+      expect(textoDe(s, 'N3'), 'GANANCIA');
+      expect(textoDe(s, 'O3'), 'GASTOS');
+      expect(formulaDe(s, 'N4'), 'FLOOR((K4*M4*18%)/1000,5)');
+    });
+  });
+
+  group('anexo VIAJES: KM (suma de tramos) + FECHA DESCARGA', () {
+    test('header + fila con km total y fecha de descarga del último tramo', () {
+      final ubic = [
+        UbicacionLogistica.fromMap(
+            'U1', {'nombre': 'B.BLANCA', 'provincia': 'Buenos Aires'}),
+        UbicacionLogistica.fromMap(
+            'U2', {'nombre': 'NECOCHEA', 'provincia': 'Buenos Aires'}),
+      ];
+      final resolver = ResolverProvincias(
+        tarifas: [
+          TarifaLogistica.fromMap('T1', {
+            'ubicacion_origen_id': 'U1',
+            'ubicacion_destino_id': 'U2',
+            'km': 300,
+          }),
+          TarifaLogistica.fromMap('T2', {
+            'ubicacion_origen_id': 'U1',
+            'ubicacion_destino_id': 'U2',
+            'km': 200,
+          }),
+        ],
+        ubicaciones: ubic,
+      );
+      final viaje = viajeDe(
+        id: 'V1',
+        montoVecchi: 1000,
+        tramos: [
+          TramoViaje(
+            id: 't1',
+            tarifaId: 'T1',
+            tarifaSnapshot: snapTn(),
+            fechaCarga: DateTime(2026, 5, 2),
+            fechaDescarga: DateTime(2026, 5, 3),
+            kgDescargados: 30000,
+          ),
+          TramoViaje(
+            id: 't2',
+            tarifaId: 'T2',
+            tarifaSnapshot: snapTn(),
+            fechaCarga: DateTime(2026, 5, 3),
+            fechaDescarga: DateTime(2026, 5, 5),
+            kgDescargados: 28000,
+          ),
+        ],
+      );
+      final excel = ex.Excel.createExcel();
+      ReportLiquidacionService.llenarHojaViajes(
+        excel,
+        viajes: [viaje],
+        empleados: const {
+          '123': EmpleadoLiquidacion(
+              dni: '123', nombre: 'DIAZ MARIO', empresaCuit: null),
+        },
+        provincias: resolver,
+      );
+      final s = excel['VIAJES'];
+      // Headers: B = FECHA DESCARGA, I = KM.
+      expect(textoDe(s, 'B1'), 'FECHA DESCARGA');
+      expect(textoDe(s, 'I1'), 'KM');
+      // Fila de datos (row 2): km total = 300 + 200; descarga = último tramo.
+      expect(numeroDe(s, 'I2'), 500);
+      expect(textoDe(s, 'B2'), '05/05/2026');
+    });
+  });
+
   group('nombreHojaSeguro', () {
     test('saca caracteres inválidos para nombre de hoja', () {
       expect(
@@ -517,6 +633,26 @@ void main() {
       final t = tramoCon(tarifaId: 'NO_EXISTE', origen: 'DESCONOCIDA');
       expect(resolver.origenDe(t), '');
       expect(ResolverProvincias.vacio().origenDe(t), '');
+    });
+
+    test('kmDe: tarifaId → km del catálogo; sin km / sin tarifa → null', () {
+      // T1 del fixture NO tiene km cargado → null.
+      expect(resolver.kmDe(tramoCon(tarifaId: 'T1')), isNull);
+      // Tarifa con km → lo devuelve.
+      final conKm = ResolverProvincias(
+        tarifas: [
+          TarifaLogistica.fromMap('TK', {
+            'ubicacion_origen_id': 'U1',
+            'ubicacion_destino_id': 'U2',
+            'km': 450,
+          }),
+        ],
+        ubicaciones: ubicaciones,
+      );
+      expect(conKm.kmDe(tramoCon(tarifaId: 'TK')), 450);
+      // Tarifa inexistente o resolver vacío → null (no hay fallback por etiqueta).
+      expect(conKm.kmDe(tramoCon(tarifaId: 'NO_EXISTE')), isNull);
+      expect(ResolverProvincias.vacio().kmDe(tramoCon(tarifaId: 'TK')), isNull);
     });
   });
 

@@ -378,7 +378,7 @@ class ReportPlanillaChofer {
     final filaOtrosTit = filaDatosFin + 2; // 1 fila de aire; 1-based
     final filaOtrosIni = filaOtrosTit + 1;
     final filaOtrosFin = filaOtrosTit + nOtros;
-    _setMerged(hoja, 0, filaOtrosTit - 1, 14, filaOtrosTit - 1,
+    _setMerged(hoja, 0, filaOtrosTit - 1, 16, filaOtrosTit - 1,
         ex.TextCellValue('OTROS VIAJES (EN CURSO / PLANEADOS)'),
         _estilo(bold: true, gris: true, align: ex.HorizontalAlign.Center));
     final stMontoBold = _estilo(bold: true, monto: true);
@@ -501,6 +501,20 @@ class ReportPlanillaChofer {
     final gastos = t?.gastosTotal ?? 0;
     _set(hoja, 14, r, gastos == 0 ? null : ex.DoubleCellValue(gastos),
         stMonto);
+
+    // P-Q (agregado 2026-06-11): km del tramo (de la tarifa del catálogo,
+    // por tarifaId) + fecha de descarga del tramo. Van al final para no
+    // mover las columnas con fórmula (N/O).
+    final km = t == null ? null : provincias.kmDe(t);
+    _set(hoja, 15, r, km == null ? null : ex.IntCellValue(km), stCentrado);
+    _set(
+        hoja,
+        16,
+        r,
+        t?.fechaDescarga == null
+            ? null
+            : ex.TextCellValue(AppFormatters.formatearFecha(t!.fechaDescarga!)),
+        stCentrado);
   }
 
   /// Encabezado común del cuaderno (filas 1-3), reutilizado por las
@@ -520,13 +534,13 @@ class ReportPlanillaChofer {
     // Fila 1: banner gris MES / CHOFER.
     _setMerged(hoja, 0, 0, 4, 0, ex.TextCellValue('MES: $mesAnio'), stTitulo);
     _set(hoja, 5, 0, ex.TextCellValue('CHOFER:'), stTitulo);
-    _setMerged(hoja, 6, 0, 14, 0, chofer, stTitulo);
+    _setMerged(hoja, 6, 0, 16, 0, chofer, stTitulo);
 
     // Fila 2: súper-header de las dos secciones.
     final stSuper =
         _estilo(bold: true, gris: true, align: ex.HorizontalAlign.Center);
     _setMerged(hoja, 0, 1, 2, 1, ex.TextCellValue('ADELANTOS'), stSuper);
-    _setMerged(hoja, 3, 1, 14, 1, ex.TextCellValue('VIAJES'), stSuper);
+    _setMerged(hoja, 3, 1, 16, 1, ex.TextCellValue('VIAJES'), stSuper);
 
     // Fila 3: headers de columna.
     final stHeader =
@@ -536,11 +550,15 @@ class ReportPlanillaChofer {
     }
   }
 
-  /// Headers de las 15 columnas del cuaderno (A..O).
+  /// Headers de las 17 columnas del cuaderno (A..Q). KM y F. DESC se
+  /// agregaron al FINAL (P-Q) a propósito: así GANANCIA (N) y GASTOS (O)
+  /// no se corren y todas las fórmulas vivas del pie/RESUMEN/CONSULTA
+  /// (ancladas a esas letras) siguen intactas. Pedido Santiago 2026-06-11.
   static const List<String> _headersColumna = [
     'FECHA', 'RECIBO', 'IMPORTE', // A-C adelantos
     'FECHA', 'REMITO', 'MERCADERÍA', 'ORIGEN', 'PROV.', 'DESTINO',
     'PROV.', 'KG', 'DIF. KG', 'TARIFA', 'GANANCIA', 'GASTOS', // D-O viaje
+    'KM', 'F. DESC', // P-Q km del tramo + fecha de descarga
   ];
 
   /// Anchos de las 15 columnas (parejos, sin la separadora rara del
@@ -550,6 +568,7 @@ class ReportPlanillaChofer {
       11.0, 9.0, 12.0, // A-C adelantos
       11.0, 10.0, 15.0, 18.0, 8.0, 18.0, 8.0, // D-J
       9.0, 8.0, 11.0, 12.0, 10.0, // K-O
+      8.0, 11.0, // P-Q km + fecha descarga
     ];
     for (var c = 0; c < anchos.length; c++) {
       hoja.setColumnWidth(c, anchos[c]);
@@ -616,7 +635,7 @@ class ReportPlanillaChofer {
     // sección es fijo.
     void espejar(int fIni, int fFin) {
       for (var f = fIni; f <= fFin; f++) {
-        for (var c = 1; c <= 15; c++) {
+        for (var c = 1; c <= 17; c++) {
           final ref = _refIndirect(_colLetra(c), f);
           final formula = 'IF(INDIRECT($ref)=0,"",INDIRECT($ref))';
           _set(hoja, c - 1, f - 1, ex.FormulaCellValue(formula),
@@ -626,7 +645,7 @@ class ReportPlanillaChofer {
     }
 
     espejar(4, filaDatosFin);
-    _setMerged(hoja, 0, filaOtrosTit - 1, 14, filaOtrosTit - 1,
+    _setMerged(hoja, 0, filaOtrosTit - 1, 16, filaOtrosTit - 1,
         ex.TextCellValue('OTROS VIAJES (EN CURSO / PLANEADOS)'),
         _estilo(bold: true, gris: true, align: ex.HorizontalAlign.Center));
     espejar(filaOtrosIni, filaOtrosFin);
@@ -679,6 +698,8 @@ class ReportPlanillaChofer {
       case 5: // E remito
       case 8: // H prov origen
       case 10: // J prov destino
+      case 16: // P km del tramo
+      case 17: // Q fecha de descarga
         return _estilo(align: ex.HorizontalAlign.Center);
       default: // F G I — texto
         return _estilo();
@@ -911,15 +932,23 @@ class _MetaHojaChofer {
 ///
 /// Las provincias se abrevian al estilo de la planilla vieja
 /// ("BS.AS", "STA FE", "NQN") vía [abreviarProvincia].
+///
+/// Además resuelve los **km del recorrido** del tramo por su `tarifaId`
+/// (mismo catálogo de tarifas) vía [kmDe] — se cargan a mano en la tarifa.
 class ResolverProvincias {
   final Map<String, ({String origen, String destino})> _porTarifa;
   final Map<String, String> _porNombreUbicacion;
 
-  ResolverProvincias._(this._porTarifa, this._porNombreUbicacion);
+  /// Km del recorrido por id de tarifa (del mismo catálogo). null = la
+  /// tarifa no tiene km cargado. Sale de `TarifaLogistica.km` — ver [kmDe].
+  final Map<String, int?> _kmPorTarifa;
+
+  ResolverProvincias._(
+      this._porTarifa, this._porNombreUbicacion, this._kmPorTarifa);
 
   /// Resolver sin catálogos — todas las provincias salen vacías. Para
   /// cuando el fetch de catálogos falla (offline) o en tests.
-  factory ResolverProvincias.vacio() => ResolverProvincias._({}, {});
+  factory ResolverProvincias.vacio() => ResolverProvincias._({}, {}, {});
 
   factory ResolverProvincias({
     required List<TarifaLogistica> tarifas,
@@ -934,13 +963,15 @@ class ResolverProvincias {
       if (clave.isNotEmpty) porNombre[clave] = prov;
     }
     final porTarifa = <String, ({String origen, String destino})>{};
+    final kmPorTarifa = <String, int?>{};
     for (final t in tarifas) {
       porTarifa[t.id] = (
         origen: provPorUbicacionId[t.ubicacionOrigenId] ?? '',
         destino: provPorUbicacionId[t.ubicacionDestinoId] ?? '',
       );
+      kmPorTarifa[t.id] = t.km;
     }
-    return ResolverProvincias._(porTarifa, porNombre);
+    return ResolverProvincias._(porTarifa, porNombre, kmPorTarifa);
   }
 
   String origenDe(TramoViaje t) =>
@@ -950,6 +981,12 @@ class ResolverProvincias {
   String destinoDe(TramoViaje t) =>
       _porTarifa[t.tarifaId]?.destino ??
       _porEtiqueta(t.tarifaSnapshot.destinoEtiqueta);
+
+  /// Km del recorrido del tramo: resuelto por la tarifa del catálogo
+  /// (`tarifaId` → `TarifaLogistica.km`). null si la tarifa fue eliminada
+  /// o no tiene km cargado. No hay fallback por etiqueta — el km no se
+  /// puede inferir del nombre de la ubicación.
+  int? kmDe(TramoViaje t) => _kmPorTarifa[t.tarifaId];
 
   String _porEtiqueta(String etiqueta) {
     final clave =
