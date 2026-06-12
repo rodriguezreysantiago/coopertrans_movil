@@ -1,4 +1,4 @@
-# Compila el instalador .exe de Coopertrans Móvil con Inno Setup.
+﻿# Compila el instalador .exe de Coopertrans Móvil con Inno Setup.
 #
 # Pre-requisitos:
 #   - Inno Setup instalado: winget install JRSoftware.InnoSetup

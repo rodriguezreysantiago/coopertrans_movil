@@ -1,4 +1,4 @@
-# Publica el APK firmado de la tablet KIOSK (Gomeria) como asset del GitHub
+﻿# Publica el APK firmado de la tablet KIOSK (Gomeria) como asset del GitHub
 # Release del tag actual. Es lo que habilita el auto-update SILENCIOSO de la
 # tablet Device Owner: la app (AndroidUpdateService) lee releases/latest, busca
 # el asset .apk, lo baja y lo instala sola.
