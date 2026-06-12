@@ -26,14 +26,16 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   la versión pre-fix (entrada 2026-06-07).
 - [ ] **Validación visual pendiente**: Gomería (stock oculto + conteo a ciegas)
   y módulo Vacaciones (Gantt + saldos; 3 proporcionales de 1er año a mano).
-- [ ] **Buzón de discrepancias** — REVISADO 2026-06-11, 6 pendientes con veredicto
-  (cruzados contra v3 + GPS): CAROLA ×2 (CIERTO — GPS confirma 26 min parado
-  18:51-19:17, se cierra con el v3 de mañana), ALTAMIRANDA (esperar v3), FERNANDEZ
-  (no es bug — admite el exceso, criterio), GODOY (falso positivo: descanso
-  nocturno, cerrar), GONZALEZ (pausa 12 min bajo umbral, cerrar). **Falta**: que
-  Santiago los cierre en "Reportes de choferes", o re-correr
-  `cerrar_reportes_resueltos_por_v3.js --aplicar` MAÑANA (con el v3 del 11/6
-  armado) → cierra CAROLA/ALTAMIRANDA solos + dispara su devolución por WhatsApp.
+- [ ] **Buzón de discrepancias — cierre AUTOMÁTICO (CF `cerrarReportesJornadaDiario`,
+  08:00 ART, ACTIVA 2026-06-11)**: cruza los reclamos directos de jornada pendientes
+  vs v3 + GPS y los resuelve solos — CIERTO (v3 confirma o GPS detenido → "tenías
+  razón"), NO_CIERTO (GPS lo muestra andando → "el GPS te registra a X km/h, no
+  figura parada"), o los deja MANUAL si hay hueco de señal / sin hora concreta
+  (FERNANDEZ). El veredicto dispara la devolución por WhatsApp. Kill-switch:
+  `META/config_cierre_reportes.activo=false`. **Seguimiento**: 1ra corrida real
+  = 2026-06-12 08:00 (procesa CAROLA/ALTAMIRANDA/FERNANDEZ con el v3 del 11/6) →
+  revisar el log + lo que mandó. GODOY/GONZALEZ (auto de paradas) siguen siendo
+  manual (fuera del alcance del cron).
 - [ ] **Vigilador v3**: monitorear los primeros resúmenes diarios a Molina
   (v3 es la fuente oficial desde 2026-06-07) + release de las pantallas
   nuevas de jornada (gráfico velocidad + selector rango, 2026-06-10).
