@@ -1398,6 +1398,47 @@ function _tokenFuzzyMatch(qt, nomTokens) {
   );
 }
 
+/** Clave fonética del español para matchear nombres garabateados por la
+ *  transcripción de audio. Colapsa las equivalencias que más rompen el match:
+ *   - b ≈ v (mismo sonido)
+ *   - ll ≈ y
+ *   - ge/gi ≈ je/ji
+ *   - la JOTA y la H: la transcripción de voz las pierde o las cambia entre sí
+ *     (BAJENETA → "Bahena"/"Baeta"/"Vageneta"). Las removemos para el match.
+ *   - c/z ≈ s (seseo), qu ≈ k
+ *   - letras repetidas colapsadas (ACKERMANN ≈ AKERMAN).
+ *  Sobre-generaliza a propósito (es solo un fallback que SIEMPRE pide
+ *  confirmación); ej. "Jara"→"ara". Caso real: auditoría de chats 2026-06-12. */
+function _foneticaEs(s) {
+  return _normNombre(s)
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/v/g, 'b')
+    .replace(/ll/g, 'y')
+    .replace(/g([ei])/g, 'j$1')
+    .replace(/[hj]/g, '')
+    .replace(/qu/g, 'k')
+    .replace(/c([ei])/g, 's$1')
+    .replace(/[zc]/g, 's')
+    .replace(/(.)\1+/g, '$1');
+}
+
+/** ¿`qt` matchea fonéticamente algún token del nombre? Misma lógica de umbral
+ *  que `_tokenFuzzyMatch` pero sobre la clave fonética. */
+function _tokenFoneticoMatch(qt, nomTokens) {
+  const qf = _foneticaEs(qt);
+  if (!qf) return false;
+  // Más permisivo que el fuzzy normal: la transcripción de audio se come
+  // sílabas ("Bahena" perdió el "net" de BAJENETA). Como esta pasada SIEMPRE
+  // pide confirmación y corre última, podemos arriesgar un umbral mayor.
+  const umbral = qf.length >= 5 ? 2 : qf.length >= 3 ? 1 : 0;
+  return nomTokens.some((nt) => {
+    const nf = _foneticaEs(nt);
+    if (umbral === 0) return nf === qf;
+    return Math.abs(nf.length - qf.length) <= umbral && _levenshtein(qf, nf) <= umbral;
+  });
+}
+
 /** Resuelve un chofer/empleado por nombre. {ok,dni,data} | {ok:false,...}.
  *  soloActivos=true descarta empleados dados de baja (lo usa Cachatore). */
 async function _resolverChoferPorNombre(db, query, soloChofer, soloActivos = false) {
@@ -1441,6 +1482,21 @@ async function _resolverChoferPorNombre(db, query, soloChofer, soloActivos = fal
       if (!_pasaFiltroRol(data)) return false;
       const nomTokens = _normNombre(data.NOMBRE).split(' ').filter(Boolean);
       return qTokens.every((t) => _tokenFuzzyMatch(t, nomTokens));
+    });
+    porFuzzy = matches.length > 0;
+  }
+  // Fallback FONÉTICO: si ni el exacto ni el fuzzy encontraron a nadie,
+  // probamos por equivalencias fonéticas del español (b≈v, ll≈y, ge/gi≈je/ji,
+  // y la jota/h que la transcripción de audio pierde o cambia). Caso real
+  // (auditoría 2026-06-12): "Bahena"/"Baeta"/"Vageneta" por audio = BAJENETA.
+  // Como sobre-generaliza, el resultado SIEMPRE pasa por la confirmación de
+  // abajo (porFuzzy) — nunca resuelve datos/acciones en silencio.
+  if (matches.length === 0) {
+    matches = snap.docs.filter((d) => {
+      const data = d.data();
+      if (!_pasaFiltroRol(data)) return false;
+      const nomTokens = _normNombre(data.NOMBRE).split(' ').filter(Boolean);
+      return qTokens.every((t) => _tokenFoneticoMatch(t, nomTokens));
     });
     porFuzzy = matches.length > 0;
   }
@@ -3287,6 +3343,8 @@ module.exports = {
   _getEmpleadosDocs,
   _conversarGemini,
   _conversarRobusto,
+  _foneticaEs,
+  _resolverChoferPorNombre,
   _resetRateLimit: () => _rlPorClave.clear(),
   _resetHistorial: () => _histPorClave.clear(),
 };

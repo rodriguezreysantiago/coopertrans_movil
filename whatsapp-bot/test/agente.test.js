@@ -1191,6 +1191,36 @@ describe('agente — mejoras 2026-06-06 (fuzzy + jornada pasada + adelantos emit
     assert.strictEqual(r.nombre, 'PEREZ JUAN'); // exacto, sin fuzzy a "PERES"
   });
 
+  // ── Mejora 2b: matching FONÉTICO para nombres garabateados por el audio ──
+  // Caso real (auditoría 2026-06-12): el supervisor mandó audios y la
+  // transcripción devolvió "Bahena"/"Baeta"/"Vageneta" por BAJENETA.
+  test('_foneticaEs colapsa b/v, jota y h muda (BAJENETA ≈ Vageneta)', () => {
+    assert.strictEqual(agente._foneticaEs('BAJENETA'), agente._foneticaEs('Vageneta'));
+    assert.strictEqual(agente._foneticaEs('BAJENETA'), 'baeneta');
+    assert.strictEqual(agente._foneticaEs('Vageneta'), 'baeneta');
+  });
+
+  for (const variante of ['Bahena', 'Baeta', 'Vageneta', 'baeneta']) {
+    test(`fonético: "${variante}" (audio) sugiere BAJENETA para confirmar`, async () => {
+      const db = dbMix({ empleados: [
+        { id: '20366458558', data: { NOMBRE: 'BAJENETA JULIAN ISMAEL', ROL: 'CHOFER', ACTIVO: true, CUIL: '20366458558', VEHICULO: 'AH628EG', ENGANCHE: 'AG173MR' } },
+        { id: '99', data: { NOMBRE: 'GOMEZ JUAN', ROL: 'CHOFER', ACTIVO: true } },
+      ] });
+      const r = await agente._ejecutarTool(db, 'info_chofer', { rol: 'SUPERVISOR' }, { query: variante });
+      // Aproximado → pide confirmar (no resuelve datos en silencio), sugiriendo al correcto.
+      assert.strictEqual(r.ok, false);
+      assert.strictEqual(r.sugerencia, 'BAJENETA JULIAN ISMAEL');
+    });
+  }
+
+  test('info_chofer devuelve `linea` lista (NOMBRE - CUIL - Unidad - Enganche)', async () => {
+    const db = dbMix({ empleados: [
+      { id: '20366458558', data: { NOMBRE: 'BAJENETA JULIAN ISMAEL', ROL: 'CHOFER', ACTIVO: true, CUIL: '20366458558', VEHICULO: 'AH628EG', ENGANCHE: 'AG173MR' } },
+    ] });
+    const r = await agente._ejecutarTool(db, 'info_chofer', { rol: 'SUPERVISOR' }, { query: 'bajeneta' });
+    assert.strictEqual(r.linea, 'BAJENETA JULIAN ISMAEL - 20366458558 - AH628EG - AG173MR');
+  });
+
   test('jornada_de con dia="ayer" trae la jornada cerrada de ese día', async () => {
     const ayer = new Date(Date.now() - 24 * 3600 * 1000);
     const db = dbMix({
