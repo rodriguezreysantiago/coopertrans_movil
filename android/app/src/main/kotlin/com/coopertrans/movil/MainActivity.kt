@@ -14,12 +14,24 @@ import android.view.WindowManager
 import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugins.GeneratedPluginRegistrant
 
 class MainActivity : FlutterActivity() {
 
+    /**
+     * Modo mantenimiento: cuando un admin sale del kiosk para revisar algo, se
+     * pone en true y `onResume` deja de re-bloquear. Es de instancia (no
+     * persiste): si la app se reinicia o la tablet rebootea, vuelve a false y el
+     * kiosk se re-arma solo. Así un olvido de "Volver al kiosk" se corrige con
+     * un reinicio.
+     */
+    @Volatile
+    private var modoMantenimiento = false
+
     companion object {
         private const val TAG = "Kiosk"
+        private const val CONTROL_CHANNEL = "com.coopertrans.movil/kiosk_control"
         // El alias HOME que arranca la app al bootear (queda disabled en el
         // manifest y SOLO lo habilitamos en runtime si somos Device Owner, así
         // los celulares de los choferes comunes NO ven a Coopertrans ofrecida
@@ -47,8 +59,9 @@ class MainActivity : FlutterActivity() {
         super.onResume()
         // `startLockTask()` se llama acá (no en onCreate): el lock task mode
         // sólo se puede iniciar con la activity ya en foreground. Idempotente —
-        // si ya estamos en lock task, no hace nada.
-        iniciarLockTaskSiCorresponde()
+        // si ya estamos en lock task, no hace nada. NO re-bloqueamos si un admin
+        // pidió salir a mantenimiento.
+        if (!modoMantenimiento) iniciarLockTaskSiCorresponde()
         // En `onResume` también re-aplicamos los flags de ventana: cuando el
         // admin activa "Pantalla Fija" del sistema con la app ya abierta (modo
         // kiosk BLANDO, sin Device Owner), `onCreate` ya pasó y no detectamos
@@ -65,6 +78,65 @@ class MainActivity : FlutterActivity() {
         // teléfono que no sea Device Owner, el canal responde esDeviceOwner=false
         // y el updater de Dart no hace nada.
         KioskUpdateChannel.register(flutterEngine, this)
+        // Canal de control del kiosk: salida a mantenimiento de un admin
+        // (necesita la Activity para start/stopLockTask, por eso vive acá y no
+        // en KioskUpdateChannel que usa applicationContext).
+        registrarCanalControl(flutterEngine)
+    }
+
+    private fun registrarCanalControl(engine: FlutterEngine) {
+        MethodChannel(engine.dartExecutor.binaryMessenger, CONTROL_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "estaEnMantenimiento" -> result.success(modoMantenimiento)
+                    "salirAMantenimiento" -> {
+                        entrarMantenimiento()
+                        result.success(true)
+                    }
+                    "volverAlKiosk" -> {
+                        salirMantenimiento()
+                        result.success(true)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+    }
+
+    private fun adminComponent() = ComponentName(this, KioskDeviceAdminReceiver::class.java)
+
+    /**
+     * Salida a mantenimiento (la dispara un admin desde el panel, con
+     * contraseña). Suelta el lock task y re-habilita la barra de estado para que
+     * el admin pueda navegar a Ajustes, WiFi, etc. NO desactiva el Device Owner
+     * (eso es irreversible sin factory reset) — sólo afloja el encierro hasta
+     * que el admin vuelve al kiosk o reinicia la tablet.
+     */
+    private fun entrarMantenimiento() {
+        if (!esDeviceOwner()) return
+        modoMantenimiento = true
+        try {
+            dpm()?.setStatusBarDisabled(adminComponent(), false)
+        } catch (e: Exception) {
+            Log.w(TAG, "re-habilitar barra de estado falló: ${e.message}")
+        }
+        try {
+            stopLockTask()
+            Log.i(TAG, "modo mantenimiento ON — lock task soltado")
+        } catch (e: Exception) {
+            Log.w(TAG, "stopLockTask falló: ${e.message}")
+        }
+    }
+
+    /** Vuelve al kiosk: re-bloquea y vuelve a ocultar la barra de estado. */
+    private fun salirMantenimiento() {
+        modoMantenimiento = false
+        try {
+            dpm()?.setStatusBarDisabled(adminComponent(), true)
+        } catch (e: Exception) {
+            Log.w(TAG, "ocultar barra de estado falló: ${e.message}")
+        }
+        iniciarLockTaskSiCorresponde()
+        Log.i(TAG, "modo mantenimiento OFF — kiosk re-armado")
     }
 
     // ─────────────────────────────────────────────────────────────────────

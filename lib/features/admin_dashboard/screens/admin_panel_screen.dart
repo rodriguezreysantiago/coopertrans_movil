@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/capabilities.dart';
+import '../../../core/services/kiosk_service.dart';
 import '../../../core/services/prefs_service.dart';
+import '../../auth/services/auth_service.dart';
 import '../../../core/theme/app_breakpoints.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -116,6 +118,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                           _Saludo(grande: esDesktop),
                           const SizedBox(height: AppSpacing.xl),
                           ..._bento(stats, esDesktop),
+                          // Solo se muestra en la tablet kiosk (Device Owner) y
+                          // a un admin — en cualquier otro lado se auto-oculta.
+                          const _KioskMaintenanceCard(),
                           const SizedBox(height: AppSpacing.xl),
                           _footer(),
                         ],
@@ -818,6 +823,203 @@ class _SaludoState extends State<_Saludo> {
           style: widget.grande ? AppType.h1 : AppType.h2,
         ),
       ],
+    );
+  }
+}
+
+// =============================================================================
+// MODO KIOSK — salida a mantenimiento (solo tablet Device Owner + rol admin)
+// =============================================================================
+
+/// Card que deja a un admin "aflojar" el kiosk de la tablet de Gomería para
+/// revisar algo (WiFi, Ajustes), confirmando con su contraseña. Se auto-oculta
+/// si no es la tablet kiosk o el usuario no es admin. NO desactiva el Device
+/// Owner — solo suelta el lock task hasta que el admin vuelve al kiosk o
+/// reinicia la tablet. Ver project_kiosk_tablet_gomeria.
+class _KioskMaintenanceCard extends StatefulWidget {
+  const _KioskMaintenanceCard();
+
+  @override
+  State<_KioskMaintenanceCard> createState() => _KioskMaintenanceCardState();
+}
+
+class _KioskMaintenanceCardState extends State<_KioskMaintenanceCard> {
+  bool _resuelto = false;
+  bool _mostrar = false; // es kiosk (Device Owner) + rol admin
+  bool _enMantenimiento = false;
+  bool _ocupado = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolver();
+  }
+
+  Future<void> _resolver() async {
+    final esKiosk = await KioskService.esDeviceOwner();
+    final esAdmin = PrefsService.rol == AppRoles.admin;
+    final mostrar = esKiosk && esAdmin;
+    final enMant = mostrar ? await KioskService.estaEnMantenimiento() : false;
+    if (!mounted) return;
+    setState(() {
+      _resuelto = true;
+      _mostrar = mostrar;
+      _enMantenimiento = enMant;
+    });
+  }
+
+  Future<void> _salirAMantenimiento() async {
+    final ok = await _confirmarPassword();
+    if (ok != true || !mounted) return;
+    setState(() => _ocupado = true);
+    try {
+      await KioskService.salirAMantenimiento();
+      if (!mounted) return;
+      setState(() => _enMantenimiento = true);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+          'Modo mantenimiento activo. Para volver al kiosk tocá "Volver al modo '
+          'kiosk" o reiniciá la tablet.',
+        ),
+      ));
+    } finally {
+      if (mounted) setState(() => _ocupado = false);
+    }
+  }
+
+  Future<void> _volverAlKiosk() async {
+    setState(() => _ocupado = true);
+    try {
+      await KioskService.volverAlKiosk();
+      if (!mounted) return;
+      setState(() => _enMantenimiento = false);
+    } finally {
+      if (mounted) setState(() => _ocupado = false);
+    }
+  }
+
+  /// Pide la contraseña del admin logueado y la valida server-side reusando el
+  /// login (mismo DNI). Devuelve true si es correcta.
+  Future<bool?> _confirmarPassword() {
+    final ctrl = TextEditingController();
+    return showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) {
+        bool verificando = false;
+        String? error;
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            Future<void> verificar() async {
+              setLocal(() {
+                verificando = true;
+                error = null;
+              });
+              final res = await AuthService().login(
+                dni: PrefsService.dni,
+                password: ctrl.text,
+              );
+              if (!dialogCtx.mounted) return;
+              if (res.success) {
+                Navigator.of(dialogCtx).pop(true);
+              } else {
+                setLocal(() {
+                  verificando = false;
+                  error = res.message ?? 'Contraseña incorrecta.';
+                });
+              }
+            }
+
+            return AlertDialog(
+              title: const Text('Confirmar contraseña de admin'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Para salir del kiosk a mantenimiento, ingresá tu contraseña '
+                    'de admin.',
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  TextField(
+                    controller: ctrl,
+                    obscureText: true,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'Contraseña',
+                      errorText: error,
+                    ),
+                    onSubmitted: (_) => verificando ? null : verificar(),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: verificando
+                      ? null
+                      : () => Navigator.of(dialogCtx).pop(false),
+                  child: const Text('Cancelar'),
+                ),
+                TextButton(
+                  onPressed: verificando ? null : verificar,
+                  child: verificando
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Confirmar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_resuelto || !_mostrar) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.md),
+      child: AppCard(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  _enMantenimiento ? Icons.lock_open : Icons.lock_outline,
+                  size: 14,
+                  color: _enMantenimiento ? AppColors.warning : AppColors.brand,
+                ),
+                const SizedBox(width: 8),
+                Text('MODO KIOSK',
+                    style: AppType.eyebrow.copyWith(color: AppColors.brand)),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              _enMantenimiento
+                  ? 'Mantenimiento activo: la tablet está desbloqueada. Cuando '
+                      'termines, volvé al kiosk (o reiniciá la tablet).'
+                  : 'La tablet está bloqueada en la app. Para revisar algo (WiFi, '
+                      'Ajustes), salí a mantenimiento con tu contraseña.',
+              style: AppType.body.copyWith(height: 1.4),
+            ),
+            const SizedBox(height: AppSpacing.md),
+            AppButton.secondary(
+              label: _enMantenimiento
+                  ? 'Volver al modo kiosk'
+                  : 'Salir a mantenimiento',
+              icon: _enMantenimiento ? Icons.lock_outline : Icons.lock_open,
+              onPressed: _ocupado
+                  ? null
+                  : (_enMantenimiento ? _volverAlKiosk : _salirAMantenimiento),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
