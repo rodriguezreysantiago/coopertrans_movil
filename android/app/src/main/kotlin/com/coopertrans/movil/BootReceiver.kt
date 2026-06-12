@@ -1,5 +1,6 @@
 package com.coopertrans.movil
 
+import android.app.admin.DevicePolicyManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -52,6 +53,19 @@ class BootReceiver : BroadcastReceiver() {
             action != "android.intent.action.QUICKBOOT_POWERON" &&
             action != Intent.ACTION_LOCKED_BOOT_COMPLETED
         ) {
+            return
+        }
+
+        // GUARD kiosk: solo auto-lanzamos en la tablet dedicada (Device Owner).
+        // En el celular de un chofer común la app NO es Device Owner, así que
+        // tras reiniciar el teléfono NO se abre sola (antes sí lo hacía — era
+        // una molestia menor aceptada; ahora que sabemos distinguir el kiosk la
+        // sacamos). `isDeviceOwnerApp` es legible incluso en Direct Boot porque
+        // el estado de Device Owner vive en storage device-encrypted.
+        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE)
+            as? DevicePolicyManager
+        if (dpm?.isDeviceOwnerApp(context.packageName) != true) {
+            Log.i(TAG, "boot ($action) ignorado: no es la tablet kiosk (Device Owner)")
             return
         }
         Log.i(TAG, "boot detectado ($action), agendando lanzamiento con reintentos")

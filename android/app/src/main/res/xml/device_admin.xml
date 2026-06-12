@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Políticas del Device Admin del modo kiosk DURO (tablet de Gomería).
+    Referenciado por KioskDeviceAdminReceiver via meta-data en el manifest.
+
+    Las políticas acá declaradas son las "clásicas" de DeviceAdmin (password,
+    lock, wipe, keyguard). El control de kiosk en sí (setLockTaskPackages,
+    startLockTask, addPersistentPreferredActivity, addUserRestriction,
+    setStatusBarDisabled) NO requiere declararse acá: esas APIs sólo exigen
+    que la app sea Device Owner, cosa que se logra con el provisioning por ADB.
+    Declaramos un set razonable igualmente por compatibilidad.
+-->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies>
+        <limit-password />
+        <watch-login />
+        <reset-password />
+        <force-lock />
+        <wipe-data />
+        <disable-keyguard-features />
+    </uses-policies>
+</device-admin>

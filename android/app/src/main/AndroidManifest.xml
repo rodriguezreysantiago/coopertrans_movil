@@ -167,11 +167,42 @@
             </intent-filter>
         </receiver>
 
-        <!-- Activity-alias LEGACY (kiosk via "Default Home"). Quedó
-             deshabilitado y se mantiene SOLO por compat de PCs/tablets que
-             alguna vez lo hayan habilitado con ADB. El approach actual
-             (BootReceiver arriba) no lo necesita. NO borrar sin revisar que
-             ninguna tablet de campo lo tenga activo. -->
+        <!-- ════════════════════════════════════════════════════════════════
+             KIOSK DURO (Device Owner) — tablet de Gomería.
+             ────────────────────────────────────────────────────────────────
+             KioskDeviceAdminReceiver es el componente al que apunta el
+             provisioning por ADB (una vez por tablet, reseteada de fábrica y
+             SIN cuenta de Google):
+
+               adb shell dpm set-device-owner \
+                 com.coopertrans.movil/.KioskDeviceAdminReceiver
+
+             Una vez Device Owner, MainActivity entra en lock task mode REAL
+             (sobrevive reinicios, el operador no puede salir) y se fija como
+             Home preferido. NO afecta a celulares de choferes comunes: si la
+             app no es Device Owner, MainActivity no toca nada.
+
+             El permiso BIND_DEVICE_ADMIN lo exige el sistema para el receiver.
+             ════════════════════════════════════════════════════════════════ -->
+        <receiver
+            android:name=".KioskDeviceAdminReceiver"
+            android:exported="true"
+            android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data
+                android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Activity-alias del kiosk via "Default Home". Queda DISABLED en el
+             manifest; MainActivity lo habilita en runtime SOLO si la app es
+             Device Owner (así los choferes comunes nunca ven a Coopertrans
+             ofrecida como launcher). El Device Owner lo fija como Home
+             preferido programáticamente — Knox NO lo bloquea por ese camino,
+             al revés que el intento manual de "Default Home". NO borrar sin
+             revisar que ninguna tablet de campo lo tenga activo. -->
         <activity-alias
             android:name="com.coopertrans.movil.KioskHomeAlias"
             android:targetActivity=".MainActivity"
