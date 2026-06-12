@@ -595,7 +595,14 @@ class _RutaOrigenDestino extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.arrow_forward, color: c.textMuted, size: 16),
-              if (ods != null) ...[
+              // Km del recorrido. El valor cargado a mano en la tarifa es el
+              // autoritativo; si no hay, caemos a la distancia estimada por
+              // coordenadas (geodésica/OSRM) cuando ambas ubicaciones tienen
+              // lat/lng.
+              if (tarifa.km != null) ...[
+                const SizedBox(height: 2),
+                _KmManualTexto(km: tarifa.km!),
+              ] else if (ods != null) ...[
                 const SizedBox(height: 2),
                 _DistanciaTexto(origen: ods!.origen, destino: ods!.destino),
               ],
@@ -826,6 +833,30 @@ class _DistanciaTexto extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// =============================================================================
+// KM MANUAL — distancia del recorrido cargada a mano en la tarifa
+// =============================================================================
+
+/// Km del recorrido cargados a mano en la tarifa (autoritativos). Se muestran
+/// en lugar de la distancia estimada por coordenadas cuando el operador los
+/// cargó. Entero con separador de miles AR (ej. "1.450 km").
+class _KmManualTexto extends StatelessWidget {
+  final int km;
+  const _KmManualTexto({required this.km});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    return Text(
+      '${AppFormatters.formatearMiles(km)} km',
+      style: AppType.monoSm.copyWith(
+        color: c.textSecondary,
+        fontWeight: FontWeight.w600,
+      ),
     );
   }
 }

@@ -27,6 +27,7 @@ TarifaLogistica _tarifa({
   UnidadTarifa unidad = UnidadTarifa.porTonelada,
   double tarifaRealPlana = 0,
   double tarifaChoferPlana = 0,
+  int? km,
 }) {
   return TarifaLogistica(
     id: 'T1',
@@ -39,6 +40,7 @@ TarifaLogistica _tarifa({
     empresaDestinoNombre: 'DESTINO SA',
     ubicacionDestinoId: 'ud',
     ubicacionDestinoEtiqueta: 'Olavarría',
+    km: km,
     flete: FleteLogistica.origen,
     unidadTarifa: unidad,
     tarifaReal: tarifaRealPlana,
@@ -534,6 +536,57 @@ void main() {
       );
       expect(r2.tarifaChofer, r1.tarifaChofer);
       expect(r2.montoFijoChofer, r1.montoFijoChofer);
+    });
+  });
+
+  group('TarifaLogistica — km del recorrido (identidad, no versionado)', () {
+    test('fromMap lee km entero; toMap lo persiste (round-trip)', () {
+      final t = _tarifa(
+        vigenciasReal: [_vReal(DateTime(2026, 1, 1))],
+        vigenciasChofer: [_vChofer(DateTime(2026, 1, 1))],
+        km: 450,
+      );
+      expect(t.km, 450);
+      expect(t.toMap()['km'], 450);
+      // Round-trip completo: re-parsear el map preserva el km.
+      expect(TarifaLogistica.fromMap('T1', t.toMap()).km, 450);
+    });
+
+    test('km null no se escribe en el map y se relee como null', () {
+      final t = _tarifa(
+        vigenciasReal: [_vReal(DateTime(2026, 1, 1))],
+        vigenciasChofer: [_vChofer(DateTime(2026, 1, 1))],
+      );
+      expect(t.km, isNull);
+      expect(t.toMap().containsKey('km'), isFalse);
+      expect(TarifaLogistica.fromMap('T1', t.toMap()).km, isNull);
+    });
+
+    test('fromMap castea un km guardado como double a int', () {
+      // Firestore puede devolver un entero como double (450.0).
+      final t = TarifaLogistica.fromMap('T1', const {
+        'tipo_carga': 'PROPIA',
+        'km': 450.0,
+        'tarifa_real': 100,
+        'tarifa_chofer': 40,
+      });
+      expect(t.km, 450);
+      expect(t.km, isA<int>());
+    });
+
+    test('el km NO se mete en las vigencias (es identidad, no precio)', () {
+      final t = _tarifa(
+        vigenciasReal: [_vReal(DateTime(2026, 1, 1), real: 100)],
+        vigenciasChofer: [_vChofer(DateTime(2026, 1, 1), chofer: 40)],
+        km: 450,
+      );
+      final map = t.toMap();
+      for (final v in (map['vigencias_real'] as List)) {
+        expect((v as Map).containsKey('km'), isFalse);
+      }
+      for (final v in (map['vigencias'] as List)) {
+        expect((v as Map).containsKey('km'), isFalse);
+      }
     });
   });
 }

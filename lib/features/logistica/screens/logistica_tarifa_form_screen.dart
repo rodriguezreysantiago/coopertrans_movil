@@ -79,6 +79,10 @@ class _LogisticaTarifaFormScreenState extends State<LogisticaTarifaFormScreen> {
 
   FleteLogistica _flete = FleteLogistica.origen;
   UnidadTarifa _unidad = UnidadTarifa.porTonelada;
+
+  /// Km del recorrido origen→destino (opcional). Identidad de la ruta, no del
+  /// precio — se guarda plano en la tarifa, no en las vigencias. Entero AR.
+  final _kmCtrl = TextEditingController();
   final _tarifaRealCtrl = TextEditingController();
   final _tarifaChoferCtrl = TextEditingController();
 
@@ -136,6 +140,7 @@ class _LogisticaTarifaFormScreenState extends State<LogisticaTarifaFormScreen> {
       _tipoCarga = t.tipoCarga;
       _flete = t.flete;
       _unidad = t.unidadTarifa;
+      _kmCtrl.text = t.km != null ? AppFormatters.formatearMiles(t.km!) : '';
       _tarifaRealCtrl.text = AppFormatters.formatearMonto(t.tarifaReal);
       _tarifaChoferCtrl.text = AppFormatters.formatearMonto(t.tarifaChofer);
       if (t.montoFijoChofer != null) {
@@ -206,6 +211,7 @@ class _LogisticaTarifaFormScreenState extends State<LogisticaTarifaFormScreen> {
   void dispose() {
     _comisionCtrl.dispose();
     _montoFijoDadorCtrl.dispose();
+    _kmCtrl.dispose();
     _tarifaRealCtrl.dispose();
     _tarifaChoferCtrl.dispose();
     _montoFijoChoferCtrl.dispose();
@@ -441,6 +447,25 @@ class _LogisticaTarifaFormScreenState extends State<LogisticaTarifaFormScreen> {
                 valor: _unidad,
                 etiquetaFn: (u) => u.etiqueta,
                 onChange: (u) => setState(() => _unidad = u),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              // KM del recorrido (opcional). Identidad de la ruta: la distancia
+              // del tramo origen→destino. NO se versiona con el precio. Si las
+              // dos ubicaciones tienen coordenadas la lista igual estima la
+              // distancia, pero este valor manual es el autoritativo (rutas sin
+              // coords cargadas, o km reales distintos a la línea recta/OSRM).
+              TextField(
+                controller: _kmCtrl,
+                keyboardType: TextInputType.number,
+                inputFormatters: [AppFormatters.inputMiles],
+                style: AppType.mono
+                    .copyWith(color: c.text, fontWeight: FontWeight.w600),
+                decoration: _inputDecoration(
+                  context,
+                  labelText: 'Kilómetros del recorrido (opcional)',
+                  hintText: 'Ej. 450',
+                  suffixText: 'km',
+                ),
               ),
             ],
           ),
@@ -716,6 +741,10 @@ class _LogisticaTarifaFormScreenState extends State<LogisticaTarifaFormScreen> {
       }
     }
 
+    // Km del recorrido (opcional). Identidad de la ruta — entero o null. El
+    // formatter de entrada solo admite dígitos, así que nunca es negativo.
+    final km = AppFormatters.parsearMiles(_kmCtrl.text);
+
     setState(() => _guardando = true);
     try {
       if (_esEdicion) {
@@ -742,6 +771,8 @@ class _LogisticaTarifaFormScreenState extends State<LogisticaTarifaFormScreen> {
             'ubicacion_destino_id': _ubicDestino!.id,
             'ubicacion_destino_etiqueta':
                 '${_ubicDestino!.nombre} (${_ubicDestino!.localidad})',
+            // Km de la ruta (identidad, no versionado). null = lo limpia.
+            'km': km,
             'flete': _flete.codigo,
             'unidad_tarifa': _unidad.codigo,
             // El producto se incluye en la edición (null = lo limpia).
@@ -772,6 +803,7 @@ class _LogisticaTarifaFormScreenState extends State<LogisticaTarifaFormScreen> {
           tarifaReal: tarifaReal,
           tarifaChofer: tarifaChofer,
           montoFijoChofer: montoFijoChofer,
+          km: km,
           producto: _producto,
           notas: _notasCtrl.text,
         );

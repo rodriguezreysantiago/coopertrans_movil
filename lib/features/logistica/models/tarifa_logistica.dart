@@ -310,6 +310,14 @@ class TarifaLogistica {
   final String ubicacionDestinoId;
   final String ubicacionDestinoEtiqueta;
 
+  /// Kilómetros del recorrido origen→destino (distancia del tramo). Identidad
+  /// de la RUTA, no del precio → NO se versiona en las vigencias (un cambio de
+  /// tarifa no cambia la distancia). Opcional (las tarifas viejas no lo traen):
+  /// null = sin cargar. Lo carga el operador a mano y es el valor autoritativo
+  /// de distancia; la lista solo estima por coordenadas/OSRM cuando esto es
+  /// null. Entero en km.
+  final int? km;
+
   /// Etiqueta de ubicación origen sin los paréntesis al final ni del
   /// medio. La etiqueta cruda del catálogo viene con la localidad
   /// anexa entre paréntesis (ej. "BAHIA BLANCA - PROFERTIL (BAHIA
@@ -415,6 +423,7 @@ class TarifaLogistica {
     required this.empresaDestinoNombre,
     required this.ubicacionDestinoId,
     required this.ubicacionDestinoEtiqueta,
+    this.km,
     required this.flete,
     required this.unidadTarifa,
     required this.tarifaReal,
@@ -554,6 +563,7 @@ class TarifaLogistica {
       ubicacionDestinoId: (d['ubicacion_destino_id'] ?? '').toString(),
       ubicacionDestinoEtiqueta:
           (d['ubicacion_destino_etiqueta'] ?? '').toString(),
+      km: (d['km'] as num?)?.toInt(),
       flete: FleteLogistica.fromCodigo(d['flete']?.toString()),
       unidadTarifa: UnidadTarifa.fromCodigo(d['unidad_tarifa']?.toString()),
       tarifaReal: (d['tarifa_real'] as num?)?.toDouble() ?? 0,
@@ -682,6 +692,7 @@ class TarifaLogistica {
       'empresa_destino_nombre': empresaDestinoNombre,
       'ubicacion_destino_id': ubicacionDestinoId,
       'ubicacion_destino_etiqueta': ubicacionDestinoEtiqueta,
+      if (km != null) 'km': km,
       'flete': flete.codigo,
       'unidad_tarifa': unidadTarifa.codigo,
       'tarifa_real': tarifaReal,

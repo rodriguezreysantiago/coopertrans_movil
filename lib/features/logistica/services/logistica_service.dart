@@ -423,6 +423,7 @@ class LogisticaService {
     required double tarifaReal,
     required double tarifaChofer,
     double? montoFijoChofer,
+    int? km,
     String? producto,
     String? notas,
   }) async {
@@ -454,6 +455,12 @@ class LogisticaService {
     if (montoFijoChofer != null && montoFijoChofer <= 0) {
       throw ArgumentError(
           'El monto fijo del chofer debe ser mayor a 0 (dejá vacío para usar el 18%).');
+    }
+    // Km del recorrido (opcional, identidad de la ruta). El formatter de
+    // entrada solo admite dígitos, pero validamos por las dudas (la service
+    // puede llamarse desde otro flujo).
+    if (km != null && km < 0) {
+      throw ArgumentError('Los kilómetros no pueden ser negativos.');
     }
 
     // Primeras vigencias del historial — los importes del alta, vigentes desde
@@ -501,6 +508,7 @@ class LogisticaService {
       'empresa_destino_nombre': empresaDestinoNombre,
       'ubicacion_destino_id': ubicacionDestinoId,
       'ubicacion_destino_etiqueta': ubicacionDestinoEtiqueta,
+      if (km != null) 'km': km,
       'flete': flete.codigo,
       'unidad_tarifa': unidadTarifa.codigo,
       'tarifa_real': tarifaReal,
