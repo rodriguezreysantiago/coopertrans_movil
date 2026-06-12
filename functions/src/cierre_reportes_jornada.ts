@@ -16,12 +16,13 @@
 //        evidencia ("el GPS te registra a X km/h a las HH:MM").
 //      - HUECO de señal / ambiguo / sin hora concreta → null (revisión manual).
 //
-// Rollout seguro: flag `META/config_cierre_reportes.activo` (default false =
-// modo "dry-run": loguea qué haría pero NO escribe ni manda). Pasar a true para
-// activar el cierre + las devoluciones reales.
+// Automático (pedido Santiago 2026-06-11): cierra + contesta directo, sin paso de
+// validación previa. Kill-switch SIN redeploy: poner
+// `META/config_cierre_reportes.activo = false` lo apaga (vuelve a solo loguear sin
+// tocar nada). Sin ese doc — o con activo:true — corre normal.
 //
-// Pedido Santiago 2026-06-11: contestarle a TODOS (tuvieran razón o no) para
-// cerrar el loop y desincentivar reclamos inventados.
+// El objetivo: contestarle a TODOS los reclamos (tuvieran razón o no) para cerrar
+// el loop y desincentivar reclamos inventados.
 
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import * as logger from "firebase-functions/logger";
@@ -118,8 +119,8 @@ export function v3ConfirmaPausa(
   const cand = pausas.filter((p) => p.durSeg >= DUR_MIN_PAUSA_SEG);
   if (cand.length === 0) return { confirma: false, nota: "" };
   const notaDe = (p: PausaV3) =>
-    `el registro del día confirma tu pausa de ${hhmm(p.inicioMs)} a ` +
-    `${hhmm(p.finMs)} (${Math.round(p.durSeg / 60)} min)`;
+    `El registro del día confirma tu pausa de ${hhmm(p.inicioMs)} a ` +
+    `${hhmm(p.finMs)} (${Math.round(p.durSeg / 60)} min).`;
 
   for (const claim of horasDelReclamo(detalle)) {
     const claimMs = msDeHoraArt(fechaArt, claim.h, claim.min);
@@ -163,7 +164,7 @@ export function analizarGpsVentana(
     if (hasta - desde >= DUR_MIN_PAUSA_SEG * 1000) {
       return {
         resultado: "detenido",
-        nota: `el GPS confirma que estuviste detenido de ${hhmm(desde)} a ${hhmm(hasta)}`,
+        nota: `El GPS confirma que estuviste detenido de ${hhmm(desde)} a ${hhmm(hasta)}.`,
       };
     }
   }
@@ -178,8 +179,8 @@ export function analizarGpsVentana(
     return {
       resultado: "movimiento",
       nota:
-        `el GPS te registra en movimiento en esa franja (a las ${cuando} ` +
-        `ibas a ${Math.round(velMax)} km/h), no figura una parada ahí`,
+        `El GPS te registra en movimiento en esa franja (a las ${cuando} ` +
+        `ibas a ${Math.round(velMax)} km/h); no figura una parada ahí.`,
     };
   }
 
@@ -211,9 +212,10 @@ export function decidirCierre(p: {
 async function cierreActivo(): Promise<boolean> {
   try {
     const snap = await db.collection("META").doc("config_cierre_reportes").get();
-    return snap.exists && snap.data()?.activo === true;
+    // Activo por default; SOLO se apaga con el kill-switch explícito activo:false.
+    return !(snap.exists && snap.data()?.activo === false);
   } catch {
-    return false; // ante duda, dry-run
+    return false; // si no se puede leer el flag, no arriesgamos esta corrida
   }
 }
 
@@ -276,7 +278,7 @@ export const cerrarReportesJornadaDiario = onSchedule(
   { schedule: "0 8 * * *", timeZone: TZ },
   async () => {
     const activo = await cierreActivo();
-    const modo = activo ? "ACTIVO" : "DRY-RUN";
+    const modo = activo ? "ACTIVO" : "APAGADO";
     const snap = await db
       .collection("REPORTES_DISCREPANCIA")
       .where("estado", "==", "pendiente")
