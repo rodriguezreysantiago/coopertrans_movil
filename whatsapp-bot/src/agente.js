@@ -1623,20 +1623,30 @@ async function _toolInfoChofer(db, args) {
   const r = await _resolverChoferPorNombre(db, args && args.query, false);
   if (!r.ok) return r;
   const data = r.data;
+  const nombre = data.NOMBRE || r.dni;
+  const cuil = data.CUIL || null;
+  const unidad = _patenteValida(data.VEHICULO) || null;
+  const enganche = _patenteValida(data.ENGANCHE) || null;
   return {
-    nombre: data.NOMBRE || r.dni,
+    nombre,
     dni: r.dni,
     // CUIL: lo piden los supervisores para cargas en sistemas externos (pedido
     // reiterado de Errazu, auditoría 2026-06-11). info_chofer NO está disponible
     // para el rol CHOFER (solo gestión: SUPERVISOR/ADMIN), así que exponerlo acá
     // no filtra el CUIL de un chofer a otro.
-    cuil: data.CUIL || null,
+    cuil,
     rol: data.ROL || null,
     activo: data.ACTIVO !== false,
     telefono: data.TELEFONO || null,
-    unidad: _patenteValida(data.VEHICULO) || null,
-    enganche: _patenteValida(data.ENGANCHE) || null,
+    unidad,
+    enganche,
     licencia_vence: _fechaIso(data.VENCIMIENTO_LICENCIA_DE_CONDUCIR),
+    // Línea lista para relevar TAL CUAL cuando piden "los datos" de un chofer:
+    // formato fijo que pedían los supervisores (NOMBRE - CUIL - Unidad -
+    // Enganche). Evita la pelea de formato recurrente — Errazu peleó ~20
+    // mensajes el 12/6 porque el modelo metía rol/activo/teléfono/licencia y
+    // relleno. Con la `linea` + la regla del prompt, el modelo solo la releva.
+    linea: `${nombre} - ${cuil || 's/CUIL'} - ${unidad || 's/unidad'} - ${enganche || 's/enganche'}`,
   };
 }
 
@@ -2681,6 +2691,12 @@ function _systemPrompt(persona) {
       '  "donde anda balbiano" → donde_esta(query: "balbiano"). "info de fernandez,',
       '  dice que tiene fin de jornada" → jornada_de(query: "fernandez") (ignorá',
       '  el ruido alrededor del nombre, lo importante es el chofer + la tool).',
+      '- Cuando te piden los "datos" de uno o varios choferes (típico de los',
+      '  supervisores para cargar en otros sistemas), devolvé el campo `linea`',
+      '  de info_chofer TAL CUAL, una por chofer, sin agregar NADA: ni rol, ni',
+      '  si está activo, ni teléfono, ni licencia, ni frases de relleno ("acá',
+      '  tenés...", "de fulano:", "*"). Solo las líneas, una abajo de la otra.',
+      '  Si te piden EXPRESAMENTE un dato extra (licencia, teléfono), ahí sí.',
       ...comun,
     ].join('\n');
   }
