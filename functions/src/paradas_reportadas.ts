@@ -56,9 +56,16 @@ export interface PausaV3Lite {
   cierraBloque: boolean;
 }
 
+/** Turno v3 (subset del REGISTRO_JORNADAS): solo sus bordes. */
+export interface TurnoV3Lite {
+  inicioMs: number;
+  finMs: number;
+}
+
 /** Veredicto del cruce de UNA parada reportada contra las pausas v3 del día. */
 export type Veredicto =
   | { estado: "confirmada_v3"; pausa: PausaV3Lite; razon: string }
+  | { estado: "confirmada_fin_turno"; finTurnoMs: number; razon: string }
   | { estado: "no_vista_v3"; razon: string };
 
 /** Ventanas de match (mismas constantes que el script
@@ -67,6 +74,18 @@ export const TOL_HORA_EXPLICITA_MS = 20 * 60 * 1000;
 export const VENTANA_RECIENCIA_ANTES_MS = 90 * 60 * 1000;
 export const VENTANA_RECIENCIA_DESPUES_MS = 30 * 60 * 1000;
 export const DUR_MIN_PAUSA_OPERATIVA_SEG = 15 * 60;
+/** Tolerancia para matchear la parada reportada contra el FIN de un turno
+ *  (descanso de fin de jornada). Más amplia que la de pausas: el chofer
+ *  redondea el "ya terminé" y v3 marca el fin en el último movimiento. */
+export const TOL_FIN_TURNO_MS = 45 * 60 * 1000;
+
+/** HH:MM ART de un timestamp en ms. */
+function _hhmmArt(ms: number): string {
+  return new Intl.DateTimeFormat("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    hour: "2-digit", minute: "2-digit",
+  }).format(new Date(ms));
+}
 
 /**
  * Cruza UNA parada reportada contra las pausas v3 del día y devuelve un
@@ -83,32 +102,46 @@ export const DUR_MIN_PAUSA_OPERATIVA_SEG = 15 * 60;
  */
 export function cruzarUnaParada(
   parada: ParadaReportadaLite,
-  pausas: PausaV3Lite[]
+  pausas: PausaV3Lite[],
+  turnos: TurnoV3Lite[] = []
 ): Veredicto {
   if (parada.inicioMs == null) {
     return { estado: "no_vista_v3", razon: "parada sin hora de inicio parseable" };
   }
+  const inicio = parada.inicioMs;
+  // 1. ¿Coincide con una pausa v3 ≥ 15 min (±20 min del inicio reportado)?
   const candidatas = pausas.filter((p) => p.durSeg >= DUR_MIN_PAUSA_OPERATIVA_SEG);
-  if (candidatas.length === 0) {
-    return { estado: "no_vista_v3", razon: "v3 no detectó pausas ≥ 15 min ese día" };
-  }
-  const tol = TOL_HORA_EXPLICITA_MS;
-  const match = candidatas.find((p) =>
-    Math.abs(p.inicioMs - (parada.inicioMs as number)) <= tol
+  const match = candidatas.find(
+    (p) => Math.abs(p.inicioMs - inicio) <= TOL_HORA_EXPLICITA_MS
   );
   if (match) {
-    const hhmm = (ms: number) =>
-      new Intl.DateTimeFormat("es-AR", {
-        timeZone: "America/Argentina/Buenos_Aires",
-        hour: "2-digit", minute: "2-digit",
-      }).format(new Date(ms));
     return {
       estado: "confirmada_v3",
       pausa: match,
       razon:
-        `v3 detectó pausa ${hhmm(match.inicioMs)}→${hhmm(match.finMs)} ` +
+        `v3 detectó pausa ${_hhmmArt(match.inicioMs)}→${_hhmmArt(match.finMs)} ` +
         `(${Math.round(match.durSeg / 60)} min, ${match.origen}, conf=${match.confianza})`,
     };
+  }
+  // 2. ¿Coincide con el FIN de un turno? El v3 corta el turno en el descanso de
+  //    fin de jornada → ese descanso NO se lista como `pausa`, pero es una
+  //    parada REAL y conocida. Sin esto, los choferes que avisan su parada de
+  //    fin de turno (o el descanso nocturno) generaban una falsa alarma
+  //    "v3 no la vio" a la oficina (auditoría 2026-06-12: ~5 de 7 reportes
+  //    pendientes eran esto, no fallas de detección del v3).
+  const finTurno = turnos.find((t) => Math.abs(t.finMs - inicio) <= TOL_FIN_TURNO_MS);
+  if (finTurno) {
+    return {
+      estado: "confirmada_fin_turno",
+      finTurnoMs: finTurno.finMs,
+      razon:
+        `coincide con el fin de jornada (${_hhmmArt(finTurno.finMs)}); el ` +
+        "descanso de fin de turno no se lista como pausa pero es real",
+    };
+  }
+  // 3. No vista.
+  if (candidatas.length === 0) {
+    return { estado: "no_vista_v3", razon: "v3 no detectó pausas ≥ 15 min ese día" };
   }
   return {
     estado: "no_vista_v3",
@@ -124,11 +157,12 @@ export function cruzarUnaParada(
  */
 export function cruzarParadasConJornadas(
   paradas: ParadaReportadaLite[],
-  pausas: PausaV3Lite[]
+  pausas: PausaV3Lite[],
+  turnos: TurnoV3Lite[] = []
 ): Array<{ parada: ParadaReportadaLite; veredicto: Veredicto }> {
   return paradas.map((p) => ({
     parada: p,
-    veredicto: cruzarUnaParada(p, pausas),
+    veredicto: cruzarUnaParada(p, pausas, turnos),
   }));
 }
 
@@ -157,15 +191,25 @@ function mapearParada(
   };
 }
 
-/** Lee TODAS las pausas v3 del chofer en una fecha ART (pueden ser 1+ turnos). */
-async function cargarPausasV3(dni: string, fechaArt: string): Promise<PausaV3Lite[]> {
+/** Lee las pausas v3 Y los bordes de turno del chofer en una fecha ART (pueden
+ *  ser 1+ turnos). Los turnos se usan para reconocer el descanso de fin de
+ *  jornada, que v3 no lista como `pausa`. */
+async function cargarRegistroV3(
+  dni: string,
+  fechaArt: string
+): Promise<{ pausas: PausaV3Lite[]; turnos: TurnoV3Lite[] }> {
   const snap = await db.collection("REGISTRO_JORNADAS")
     .where("chofer_dni", "==", dni)
     .where("fecha", "==", fechaArt)
     .get();
   const out: PausaV3Lite[] = [];
+  const turnos: TurnoV3Lite[] = [];
   for (const d of snap.docs) {
-    for (const p of ((d.data().pausas as unknown[]) || [])) {
+    const data = d.data();
+    const it = data.inicio_turno as { toMillis?: () => number } | undefined;
+    const ft = data.fin_turno as { toMillis?: () => number } | undefined;
+    turnos.push({ inicioMs: it?.toMillis?.() ?? 0, finMs: ft?.toMillis?.() ?? 0 });
+    for (const p of ((data.pausas as unknown[]) || [])) {
       const pp = p as Record<string, unknown>;
       const ini = pp.inicio as { toMillis?: () => number } | undefined;
       const fin = pp.fin as { toMillis?: () => number } | undefined;
@@ -180,7 +224,8 @@ async function cargarPausasV3(dni: string, fechaArt: string): Promise<PausaV3Lit
       });
     }
   }
-  return out.sort((a, b) => a.inicioMs - b.inicioMs);
+  out.sort((a, b) => a.inicioMs - b.inicioMs);
+  return { pausas: out, turnos };
 }
 
 /** Persiste el resultado del cruce sobre el doc de PARADAS_REPORTADAS + escala
@@ -255,12 +300,18 @@ export async function procesarParadasPendientes(
     // Solo paradas cuyo día ya pasó (v3 ya tiene que estar escrita).
     if (parada.fecha > hastaFechaArt) continue;
     try {
-      const pausas = await cargarPausasV3(parada.choferDni, parada.fecha);
-      const veredicto = cruzarUnaParada(parada, pausas);
+      const { pausas, turnos } = await cargarRegistroV3(
+        parada.choferDni, parada.fecha
+      );
+      const veredicto = cruzarUnaParada(parada, pausas, turnos);
       await persistirVeredicto(parada, veredicto);
       procesadas++;
-      if (veredicto.estado === "confirmada_v3") confirmadas++;
-      else {
+      if (
+        veredicto.estado === "confirmada_v3" ||
+        veredicto.estado === "confirmada_fin_turno"
+      ) {
+        confirmadas++;
+      } else {
         noVistas++;
         escaladas++;
       }

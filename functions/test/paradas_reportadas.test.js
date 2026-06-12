@@ -87,6 +87,46 @@ describe('cruzarUnaParada — happy paths', () => {
   });
 });
 
+function turno(finOffsetMin, durMin = 480) {
+  return {
+    inicioMs: BASE + (finOffsetMin - durMin) * MIN_MS,
+    finMs: BASE + finOffsetMin * MIN_MS,
+  };
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Veredicto CONFIRMADA_FIN_TURNO (descanso de fin de jornada)
+// ══════════════════════════════════════════════════════════════════════
+
+describe('cruzarUnaParada — confirmada_fin_turno', () => {
+  test('parada coincide con el fin de un turno (±45 min) → confirmada_fin_turno', () => {
+    const p = paradaReportada(600); // "paré (fin de jornada) a las +600 min"
+    // v3 NO lista el descanso de fin de turno como pausa, pero el turno terminó ahí.
+    const v = cruzarUnaParada(p, [], [turno(595)]);
+    assert.strictEqual(v.estado, 'confirmada_fin_turno');
+    assert.strictEqual(v.finTurnoMs, BASE + 595 * MIN_MS);
+    assert.match(v.razon, /fin de jornada/i);
+  });
+
+  test('fin de turno lejos (>45 min) NO confirma → no_vista_v3', () => {
+    const p = paradaReportada(600);
+    const v = cruzarUnaParada(p, [], [turno(540)]); // 60 min antes, fuera de ±45
+    assert.strictEqual(v.estado, 'no_vista_v3');
+  });
+
+  test('la pausa v3 explícita gana sobre el fin de turno si ambas matchean', () => {
+    const p = paradaReportada(600);
+    const v = cruzarUnaParada(p, [pausa(598, 30)], [turno(600)]);
+    assert.strictEqual(v.estado, 'confirmada_v3');
+  });
+
+  test('sin turnos (llamada de 2 args, back-compat) → comportamiento anterior', () => {
+    const p = paradaReportada(600);
+    const v = cruzarUnaParada(p, []);
+    assert.strictEqual(v.estado, 'no_vista_v3');
+  });
+});
+
 // ══════════════════════════════════════════════════════════════════════
 // Veredictos NO_VISTA
 // ══════════════════════════════════════════════════════════════════════
