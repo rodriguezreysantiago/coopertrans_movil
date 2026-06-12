@@ -752,6 +752,75 @@ void main() {
     });
   });
 
+  // ─── Regresión auditoría 2026-06-12: sentinel pct=0 en recálculo ───
+  //
+  // Un viaje "todo fijo" persiste comision_chofer_pct = 0.0 (el sentinel
+  // "no aplica" del test de arriba). El recálculo masivo por cambio de
+  // vigencia re-alimenta ese valor a calcularTodoMultiTramo; si la
+  // vigencia nueva pasa los tramos de fijo → por-unidad, un 0.0 literal
+  // produce pago chofer $0 (0.0 no es null → el `?? 18` no activa).
+  // ViajesService._recalcularViajesConTarifa mapea 0 → null por eso.
+  // Estos tests clavan las DOS invariantes de las que depende ese fix.
+  group('calcularTodoMultiTramo — sentinel pct=0 vs default (regresión \$0)', () {
+    TramoViaje tramoPct() => const TramoViaje(
+          id: 't',
+          tarifaId: 'fake',
+          tarifaSnapshot: TarifaSnapshot(
+            origenEtiqueta: 'O',
+            destinoEtiqueta: 'D',
+            empresaOrigenNombre: 'EO',
+            empresaDestinoNombre: 'ED',
+            unidadTarifa: UnidadTarifa.porViaje,
+            tarifaReal: 200000,
+            tarifaChofer: 100000,
+            // SIN montoFijoChofer: la vigencia nueva es por-unidad.
+          ),
+        );
+
+    test('comisionPct 0.0 literal sobre tramos por-unidad → pago \$0 '
+        '(el peligro que el fix evita)', () {
+      final m = CalculosViaje.calcularTodoMultiTramo(
+        tramos: [tramoPct()],
+        comisionPct: 0.0,
+      );
+      expect(m.montoChofer, 0, reason: '0.0 NO dispara el default ?? 18');
+      expect(m.montoChoferRedondeado, 0);
+    });
+
+    test('comisionPct null sobre los mismos tramos → aplica el 18% default '
+        '(lo que el recálculo debe pasar cuando el pct guardado es 0)', () {
+      final m = CalculosViaje.calcularTodoMultiTramo(
+        tramos: [tramoPct()],
+        comisionPct: null,
+      );
+      // 18% × 100.000 = 18.000 (ya múltiplo de 5).
+      expect(m.montoChofer, closeTo(18000, 0.01));
+      expect(m.montoChoferRedondeado, 18000);
+      expect(m.comisionChoferPct, 18);
+    });
+
+    test('el mapping del fix (pct > 0 ? pct : null) preserva un pct real', () {
+      // Mismo mapping que usa ViajesService._recalcularViajesConTarifa.
+      double? mapear(double pctGuardado) =>
+          pctGuardado > 0 ? pctGuardado : null;
+
+      // pct legítimo (18) pasa intacto…
+      final conPct = CalculosViaje.calcularTodoMultiTramo(
+        tramos: [tramoPct()],
+        comisionPct: mapear(18),
+      );
+      expect(conPct.montoChoferRedondeado, 18000);
+
+      // …y el sentinel 0 cae al default en vez de zerear el pago.
+      final conSentinel = CalculosViaje.calcularTodoMultiTramo(
+        tramos: [tramoPct()],
+        comisionPct: mapear(0.0),
+      );
+      expect(conSentinel.montoChoferRedondeado, 18000,
+          reason: 'el sentinel "todo fijo" no debe convertirse en 0% real');
+    });
+  });
+
   // ─── Compat hacia atrás del modelo Viaje (Santiago 2026-05-11) ───
   group('Viaje compat hacia atrás (single-tramo viejo → multi-tramo)', () {
     test('Viaje.fromMap construye 1 tramo a partir de campos planos', () {

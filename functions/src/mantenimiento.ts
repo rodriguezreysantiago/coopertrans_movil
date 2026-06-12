@@ -124,6 +124,12 @@ export const backupFirestoreScheduled = onSchedule(
     // SITRACK_POSICIONES, BOT_SILENCIADOS_CHOFER. Si Firestore perdia
     // data, no habia recovery de la liquidacion/viajes/conducta.
     //
+    // Auditoria 2026-06-12: el patron se repitio — faltaban
+    // REGISTRO_JORNADAS (fuente oficial v3), ZONA_DESCARGA_HISTORICO,
+    // PARADAS_REPORTADAS, REPORTES_DISCREPANCIA, VOLVO_JORNADAS_HISTORICO
+    // + gomeria v2 (GOMERIA_*), VACACIONES, AGENTE_CONVERSACIONES,
+    // ZONAS_DESCARGA, SITRACK_IBUTTONS_HISTORICO y CACHATORE_OBJETIVOS.
+    //
     // Se mantiene como lista explicita (no `collectionIds: []` que
     // exportaria todas) para tener control auditable + costo predecible.
     // Cualquier coleccion nueva debe sumarse aca.
@@ -143,7 +149,18 @@ export const backupFirestoreScheduled = onSchedule(
       "VOLVO_SCORES_DIARIOS",
       "SITRACK_POSICIONES",
       "SITRACK_EVENTOS",
+      "SITRACK_IBUTTONS_HISTORICO",
       "JORNADAS",
+      // Jornadas v3 + reclamos (auditoria 2026-06-12: faltaban — el
+      // registro OFICIAL de jornadas que va a Molina y los reclamos de
+      // choferes eran irrecuperables en un DR)
+      "REGISTRO_JORNADAS",
+      "PARADAS_REPORTADAS",
+      "REPORTES_DISCREPANCIA",
+      "VOLVO_JORNADAS_HISTORICO",
+      // Descargas YPF (geocercas dibujadas a mano + historico)
+      "ZONAS_DESCARGA",
+      "ZONA_DESCARGA_HISTORICO",
       // Logistica + Viajes + Adelantos
       "EMPRESAS_LOGISTICA",
       "UBICACIONES_LOGISTICA",
@@ -151,7 +168,9 @@ export const backupFirestoreScheduled = onSchedule(
       "VIAJES_LOGISTICA",
       "ADELANTOS_CHOFER",
       "BORRADORES_VIAJE",
-      // Gomeria
+      // RRHH
+      "VACACIONES",
+      // Gomeria (modelo viejo CUBIERTAS_* + modelo nuevo GOMERIA_*)
       "CUBIERTAS_MARCAS",
       "CUBIERTAS_MODELOS",
       "CUBIERTAS",
@@ -161,10 +180,17 @@ export const backupFirestoreScheduled = onSchedule(
       "CUBIERTAS_POSICIONES_ACTIVAS",
       "CUBIERTAS_ACTIVAS",
       "CUBIERTAS_PROVEEDORES",
+      "GOMERIA_MONTAJES",
+      "GOMERIA_STOCK_MOVIMIENTOS",
+      "GOMERIA_CONTEOS",
+      "GOMERIA_POSICIONES_ACTIVAS",
+      // Cachatore (objetivos configurados; ESTADO/TURNOS son efimeros)
+      "CACHATORE_OBJETIVOS",
       // Bot WhatsApp + control + logs
       "COLA_WHATSAPP",
       "AVISOS_AUTOMATICOS_HISTORICO",
       "RESPUESTAS_BOT_AMBIGUAS",
+      "AGENTE_CONVERSACIONES",
       "BOT_HEALTH",
       "BOT_CONTROL",
       "BOT_EVENTOS",

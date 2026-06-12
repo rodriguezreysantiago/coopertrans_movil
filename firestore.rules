@@ -507,6 +507,19 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // AGENTE_CONVERSACIONES — auditoría de chats del agente IA (Gemini).
+    // El bot la escribe vía Admin SDK (agente.js, con `expira_en` TTL 60d);
+    // la lee el dashboard "Agente IA" del panel admin
+    // (AgenteConversacionesService.streamUltimos). Faltaba este bloque y
+    // toda query del dashboard caía al catch-all `if false` →
+    // permission-denied en producción (auditoría 2026-06-12). Contiene
+    // DNI + teléfono + texto de las consultas de choferes: solo
+    // admin/supervisor.
+    match /AGENTE_CONVERSACIONES/{doc} {
+      allow read: if isAdminOrSupervisor();
+      allow write: if false;
+    }
+
     // ========================================================================
     // BOT_CONTROL — kill-switch del bot (pausar / reanudar desde la app)
     // ========================================================================

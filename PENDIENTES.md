@@ -15,14 +15,17 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ### Operativo / corto plazo
 - [ ] **AUDITORÍA TOTAL 2026-06-12** (`docs/auditorias/2026-06-12_reporte.md` + anexo):
-  7 bugs ALTA confirmados adversarialmente. Los 2 urgentes: **credenciales Sitrack en el
-  repo público** (rotar la contraseña expuesta en el portal + purgar docs + Push Protection) y
-  **recálculo de tarifas puede dejar pago chofer en $0** (`viajes_service.dart:531`,
-  fix one-liner). Después: regla AGENTE_CONVERSACIONES, backup sin 5 colecciones,
-  fecha Timestamp/String en telemetría, kmUnidadAlMontar de gomería, política de
-  privacidad. El reporte trae plan estratégico en 4 fases (Fase 2 = features de ROI
-  directo: rentabilidad por tarifa, robo de gasoil, viajes sin facturar, detention YPF,
-  informe ejecutivo mensual).
+  7 bugs ALTA confirmados adversarialmente. **Hecho el 2026-06-12**: Push Protection +
+  Secret Scanning activados en GitHub; fix comisión $0 en recálculo (`viajes_service.dart`
+  + 3 tests de regresión — espera release de la app); regla AGENTE_CONVERSACIONES +
+  TTL `expira_en` (rules + indexes DEPLOYADOS — dashboard del agente funciona de nuevo);
+  backup completado con 16 colecciones faltantes (function DEPLOYADA — verificar el
+  export del próximo domingo). **Abierto**: credenciales Sitrack siguen en el historial
+  público (no se pueden rotar — riesgo aceptado; evaluar purga de los 3 docs igual),
+  fecha Timestamp/String en telemetría (#5), kmUnidadAlMontar de gomería (#6), política
+  de privacidad (#7), y los media/baja del reporte. El plan estratégico en 4 fases vive
+  en el reporte (Fase 2 = features de ROI directo: rentabilidad por tarifa, robo de
+  gasoil, viajes sin facturar, detention YPF, informe ejecutivo mensual).
 - [ ] **macOS**: confirmar el estado del re-submit a Apple post-fix del
   entitlement (rechazo 2026-06-06, fix hecho ese día — ver entrada).
 - [ ] **Play Store**: confirmar que el AAB de la serie vigente (1.2.24) esté

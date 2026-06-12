@@ -528,7 +528,14 @@ class ViajesService {
             estado: v.estado,
             motivoCancelacion: v.motivoCancelacion,
             fechaPostergadoA: v.fechaPostergadoA,
-            comisionPct: v.comisionChoferPct,
+            // comision_chofer_pct == 0.0 es el sentinel "todo fijo — no
+            // aplica" que reporta calcularTodoMultiTramo cuando ningún
+            // tramo usa porcentaje. Si esta vigencia hace transicionar
+            // tramos de fijo → por-unidad, ese 0.0 NO es una comisión
+            // real: pasarlo tal cual da pago chofer $0 (0.0 no es null,
+            // el `?? 18` aguas abajo no se activa). Null → default 18%.
+            comisionPct:
+                v.comisionChoferPct > 0 ? v.comisionChoferPct : null,
             actualizadoPorDni: porDni,
           ),
         );
