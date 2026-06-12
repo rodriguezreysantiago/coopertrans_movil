@@ -196,6 +196,13 @@
             </intent-filter>
         </receiver>
 
+        <!-- Resultado de la instalación silenciosa del auto-update kiosk
+             (Fase 2). PackageInstaller.commit() lo usa como IntentSender. No
+             exportado: solo lo dispara el sistema para nuestra propia sesión. -->
+        <receiver
+            android:name=".KioskInstallResultReceiver"
+            android:exported="false" />
+
         <!-- Activity-alias del kiosk via "Default Home". Queda DISABLED en el
              manifest; MainActivity lo habilita en runtime SOLO si la app es
              Device Owner (así los choferes comunes nunca ven a Coopertrans

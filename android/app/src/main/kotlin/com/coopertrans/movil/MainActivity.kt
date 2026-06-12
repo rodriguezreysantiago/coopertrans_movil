@@ -61,6 +61,10 @@ class MainActivity : FlutterActivity() {
         // Esto asegura que todos los plugins (como Firestore) se registren
         // correctamente en el hilo principal de la aplicación.
         GeneratedPluginRegistrant.registerWith(flutterEngine)
+        // Canal del auto-update silencioso del kiosk (Fase 2). En cualquier
+        // teléfono que no sea Device Owner, el canal responde esDeviceOwner=false
+        // y el updater de Dart no hace nada.
+        KioskUpdateChannel.register(flutterEngine, this)
     }
 
     // ─────────────────────────────────────────────────────────────────────

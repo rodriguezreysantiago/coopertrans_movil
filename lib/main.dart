@@ -15,6 +15,7 @@ import 'core/services/app_logger.dart';
 import 'core/services/prefs_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/windows_update_service.dart';
+import 'core/services/android_update_service.dart';
 import 'routing/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/platform_chrome.dart';
@@ -161,6 +162,12 @@ void main() async {
   // la ventana del launcher PowerShell. Idempotente, no-op fuera de Windows o si
   // la app corre desde el build dir de dev. Fire-and-forget: NO bloquea arranque.
   WindowsUpdateService.instance.iniciar();
+
+  // Android: auto-update SILENCIOSO, SOLO en la tablet kiosk de Gomería
+  // (Device Owner). Chequea el mismo GitHub Release que Windows, baja el .apk
+  // y lo instala sin prompt. En cualquier otro teléfono es no-op total (el
+  // canal nativo responde esDeviceOwner=false). Fire-and-forget.
+  AndroidUpdateService.instance.iniciar();
 
   if (sentryDsn.isEmpty) {
     AppLogger.log('SENTRY_DSN vacío → Sentry deshabilitado (modo dev)');
