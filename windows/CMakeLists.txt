@@ -22,6 +22,13 @@ set(CMAKE_POLICY_VERSION_MINIMUM 3.5 CACHE STRING "" FORCE)
 set(CMAKE_SUPPRESS_DEVELOPER_WARNINGS ON CACHE BOOL "" FORCE)
 add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
 
+# Silenciar LNK4078: "varias secciones '.voltbl' con atributos diferentes".
+# Es un warning BENIGNO del linker al mezclar objetos compilados con distinta
+# config/version de toolchain (nuestro codigo + MSVCRT + SDKs nativos
+# prebuildeados de Firebase/Sentry). El linker fusiona las secciones .voltbl
+# sin afectar al ejecutable. /IGNORE:4078 lo oculta para no ensuciar el log.
+add_link_options("/IGNORE:4078")
+
 # Define build configuration option.
 get_property(IS_MULTICONFIG GLOBAL PROPERTY GENERATOR_IS_MULTI_CONFIG)
 if(IS_MULTICONFIG)
