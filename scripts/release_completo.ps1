@@ -10,6 +10,7 @@
 #   .\scripts\release_completo.ps1 -SkipAndroid     # solo Windows
 #   .\scripts\release_completo.ps1 -SkipWeb         # no actualiza la web
 #   .\scripts\release_completo.ps1 -SkipLocalUpdate # no actualiza tu PC
+#   .\scripts\release_completo.ps1 -SkipKiosk       # no publica el APK kiosk
 #   .\scripts\release_completo.ps1 -DryRun          # muestra qué haría
 #
 # Flujo:
@@ -20,6 +21,8 @@
 #   5. build_installer.ps1 (Inno Setup, .exe firmado).
 #   6. git push (incluye el bump y todo lo previo).
 #   7. release_app.ps1 (zip + .exe → GitHub Release, auto-update Win).
+#  7b. release_kiosk_apk.ps1 (APK firmado → mismo GitHub Release; la
+#      tablet kiosk de Gomería se actualiza sola). Best-effort.
 #   8. release_android.ps1 -PlayStore (AAB para Play Console).
 #   9. App web: flutter build web + subir SOLO /sistema por FTP a
 #      cooper-trans.com.ar/sistema/ (best-effort: si falla o no está el
@@ -36,6 +39,7 @@ param(
     [switch]$SkipAndroid,
     [switch]$SkipWeb,
     [switch]$SkipLocalUpdate,
+    [switch]$SkipKiosk,
     [switch]$DryRun
 )
 
@@ -170,6 +174,27 @@ if (-not $SkipAndroid) {
     $releaseAndroidScript = Join-Path $repoRoot 'scripts\release_android.ps1'
     & $releaseAndroidScript -PlayStore
     if ($LASTEXITCODE -ne 0) { throw "release_android.ps1 fallo" }
+}
+
+# ─── 7b. APK kiosk (tablet Gomeria, auto-update silencioso) ──────
+# Sube el APK firmado al GitHub Release del tag (que release_app.ps1 acaba de
+# crear/actualizar arriba) para que la tablet kiosk de Gomeria (Device Owner) se
+# actualice sola. Ver project_kiosk_tablet_gomeria. Best-effort: si la subida
+# falla, NO aborta el release de Win/Android ya publicado (la tablet siempre se
+# puede actualizar a mano con `adb install -r`). Gated por -SkipKiosk/-SkipAndroid.
+if (-not $SkipAndroid -and -not $SkipKiosk) {
+    Write-Host ""
+    Write-Host "[7b/8] release_kiosk_apk.ps1 (APK tablet kiosk)..." -ForegroundColor Cyan
+    try {
+        $releaseKioskScript = Join-Path $repoRoot 'scripts\release_kiosk_apk.ps1'
+        & $releaseKioskScript
+        if ($LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }
+        Write-Host "  OK - APK kiosk publicado en el GitHub Release." -ForegroundColor Green
+    } catch {
+        Write-Host "  AVISO: release_kiosk_apk.ps1 fallo: $_" -ForegroundColor Yellow
+        Write-Host "  (El release Win/Android NO se ve afectado. Actualiza la tablet" -ForegroundColor DarkGray
+        Write-Host "   a mano: adb install -r build\app\outputs\flutter-apk\app-release.apk)" -ForegroundColor DarkGray
+    }
 }
 
 # ─── 8b. App web -> cooper-trans.com.ar/sistema/ ─────────────────
