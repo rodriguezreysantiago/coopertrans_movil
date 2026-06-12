@@ -235,8 +235,26 @@ export const zonaDescargaPoller = onSchedule(
       }
 
       const ahora = Timestamp.now();
-      const batch = db.batch();
+      // Batch con flush preventivo: Firestore admite 500 ops por commit y
+      // este cron acumulaba TODOS los pasos (4, 4b y 5) en un batch unico —
+      // con suficientes zonas activas/solapadas moria con INVALID_ARGUMENT
+      // y el seguimiento de descargas se frenaba por completo (auditoria
+      // 2026-06-12). Mismo patron que sitrackEventosPoller (sitrack.ts).
+      // Nota: el par historico+delete del paso 5 puede quedar repartido en
+      // dos commits — es seguro: el histId es deterministico (set
+      // idempotente) y el delete re-aplica en la corrida siguiente.
+      let batch = db.batch();
       let writes = 0;
+      let opsEnBatch = 0;
+      const registrarWrite = async () => {
+        writes++;
+        opsEnBatch++;
+        if (opsEnBatch >= 400) {
+          await batch.commit();
+          batch = db.batch();
+          opsEnBatch = 0;
+        }
+      };
       const stats = {
         entradas: 0, salidas: 0, archivados: 0, dentro: 0,
         entradasPorEvento: 0, // entradas que el snapshot habría perdido
@@ -264,7 +282,7 @@ export const zonaDescargaPoller = onSchedule(
                 ...(pos.driverDni ? { chofer_dni: pos.driverDni } : {}),
                 ...(pos.driverNombre ? { chofer_nombre: pos.driverNombre } : {}),
               }, { merge: true });
-              writes++;
+              await registrarWrite();
             } else {
               // Entrada nueva
               stats.entradas++;
@@ -279,7 +297,7 @@ export const zonaDescargaPoller = onSchedule(
                 chofer_dni: pos.driverDni ?? null,
                 chofer_nombre: pos.driverNombre ?? null,
               });
-              writes++;
+              await registrarWrite();
             }
           }
         }
@@ -312,7 +330,7 @@ export const zonaDescargaPoller = onSchedule(
               ...(ultimo.driverNombre ?
                 { chofer_nombre: ultimo.driverNombre } : {}),
             }, { merge: true });
-            writes++;
+            await registrarWrite();
           } else {
             // Entrada nueva que el snapshot se había perdido.
             stats.entradas++;
@@ -329,7 +347,7 @@ export const zonaDescargaPoller = onSchedule(
               chofer_nombre: ultimo.driverNombre ?? null,
               origen_entrada: "evento",
             });
-            writes++;
+            await registrarWrite();
           }
         }
       }
@@ -394,11 +412,11 @@ export const zonaDescargaPoller = onSchedule(
             ultimo_lng: data.ultimo_lng ?? null,
             archivado_en: FieldValue.serverTimestamp(),
           });
-          writes++;
+          await registrarWrite();
         }
         // En cualquier caso (haya o no archivado), sacar de la cola.
         batch.delete(db.collection("ZONA_DESCARGA_COLA").doc(docId));
-        writes++;
+        await registrarWrite();
 
         // Reentradas: si dentro de REENTRADA_TOLERANCIA_MS la misma
         // patente vuelve a la misma zona, la próxima iteración del cron
@@ -408,7 +426,7 @@ export const zonaDescargaPoller = onSchedule(
         // doble descarga, hacemos el join en una próxima iteración.
       }
 
-      if (writes > 0) await batch.commit();
+      if (opsEnBatch > 0) await batch.commit();
       logger.info("[zonaDescargaPoller] OK", { writes, stats });
     } catch (e) {
       logger.error("[zonaDescargaPoller] error", {

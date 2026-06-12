@@ -29,15 +29,19 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   hardening del cierre de reclamos DEPLOYADO (kill-switch fail-open + idempotencia
   diaria + timeout 540s/512MiB); `.limit(2000)` + aviso de truncado en el mapa Volvo;
   unicode minus normalizado en vértices de geocercas + validator que avisa líneas no
-  parseadas. **Abierto**: correr `node scripts/backfill_km_montajes.js --commit`
-  (el dry-run ya validó: 510 candidatos, 500 resueltos con telemetría del mismo día,
-  10 sin dato — la escritura solo llena nulls, no pisa nada); credenciales Sitrack
-  siguen en el historial público (no se pueden rotar — riesgo aceptado; evaluar purga
-  de los 3 docs igual); y los media/baja restantes del reporte (#8 viaje duplicado,
-  #13 null-safety jornada_dia, #15 chunking zonas, READMEs). El plan estratégico en
-  4 fases vive en el reporte (Fase 2 = features de ROI directo: rentabilidad por
-  tarifa, robo de gasoil, viajes sin facturar, detention YPF, informe ejecutivo
-  mensual).
+  parseadas. Cierre del lote (2026-06-12, noche): backfill de gomería APLICADO
+  (500/510 montajes con base real de telemetría del mismo día — semáforo activo
+  apenas salga release); #13 null-safety jornada_dia (patrón v3); #15 chunking del
+  batch de zonas (flush a 400 ops, DEPLOYADO); README regenerado desde el código
+  (24 crons reales con horarios, 16 onCall, 2 triggers, 24 features, módulos
+  functions al día — el catálogo viejo tenía 9 crons faltantes y un trigger que ya
+  no existe). **Abierto**: credenciales Sitrack en el historial público (no se
+  pueden rotar — riesgo aceptado; evaluar purga de los 3 docs igual); #8 viaje
+  duplicado por remito fallido (decisión de diseño pendiente: ¿subir remito antes
+  de crear el doc, o flujo "retomar guardado"?); #12 tests de firestore.rules
+  (infra Fase 1 del plan). El plan estratégico en 4 fases vive en el reporte
+  (Fase 2 = features de ROI directo: rentabilidad por tarifa, robo de gasoil,
+  viajes sin facturar, detention YPF, informe ejecutivo mensual).
 - [ ] **macOS**: confirmar el estado del re-submit a Apple post-fix del
   entitlement (rechazo 2026-06-06, fix hecho ese día — ver entrada).
 - [ ] **Play Store**: confirmar que el AAB de la serie vigente (1.2.24) esté

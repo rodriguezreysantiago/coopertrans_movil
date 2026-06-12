@@ -54,14 +54,19 @@ El primer arranque pide escanear un QR desde el celular descartable. La sesión 
 coopertrans_movil/
 ├── lib/                  # App Flutter
 │   ├── core/             # services, constants, theme
-│   ├── features/         # admin_dashboard, auth, employees, vehicles,
-│   │                     # expirations, revisions, reports, whatsapp_bot,
-│   │                     # checklist, sync_dashboard, home, gomeria,
-│   │                     # logistica, eco_driving, fleet_map, asignaciones
+│   ├── features/         # 24 módulos: admin_dashboard, administracion,
+│   │                     # asignaciones, auditoria_asignaciones, auth,
+│   │                     # cachatore, checklist, eco_driving, employees,
+│   │                     # empresas_empleadoras, expirations, fleet_map,
+│   │                     # gomeria, home, icm, jornada_historico, logistica,
+│   │                     # registro_jornadas, reports, revisions, vehicles,
+│   │                     # vista_ejecutiva, whatsapp_bot, zonas_descarga
 │   ├── routing/          # app_router.dart
 │   └── shared/           # widgets, utils
 ├── functions/            # Cloud Functions (TypeScript Node 22)
 ├── whatsapp-bot/         # Bot Node.js (whatsapp-web.js + firebase-admin)
+├── cachatore/            # Sniper de turnos YPF (Python, servicio en la PC dedicada)
+├── sitrack_sync/, volvo_sync/  # Scrapers Python (ICM Sitrack / taller Volvo)
 ├── scripts/              # Migraciones one-shot (Python + Node) + release pipeline
 ├── android/, ios/, web/, windows/
 ├── firebase.json         # firebase deploy --only firestore:rules / functions
@@ -101,47 +106,61 @@ Las capabilities cliente viven en `lib/core/services/capabilities.dart`. Los che
 
 Todas en `southamerica-east1`.
 
-**onCall (RPC desde el cliente)**
+**onCall (RPC desde el cliente)** — 16 al 2026-06-12
 - `loginConDni` — auth con DNI + password (bcrypt + rate limit + custom token con claims).
 - `actualizarRolEmpleado` — cambio de rol que refresca custom claim + libera unidades.
-- `renombrarEmpleadoDni` — rename atómico de DNI con cascade a colecciones referenciadas.
+- `renombrarEmpleadoDni` — rename de DNI con cascade a colecciones referenciadas.
+- `cambiarContrasenaChofer` / `resetearContrasenaEmpleadoAdmin` / `revocarSesionEmpleado` — credenciales y sesión.
 - `volvoProxy` — proxy autenticado a Volvo Connect API.
 - `auditLogWrite` — bitácora de acciones admin (whitelist server-side).
+- `asignarNumeroReciboAdelanto` — numerador secuencial de recibos de adelanto.
+- `procesarJornadaHoyChofer` / `procesarJornadaHoyChoferV3` — recálculo on-demand de la jornada del día.
+- `cruzarParadasReportadasManual` — corrida manual del cruce paradas↔v3.
+- `backfillHistoricoDescargas` / `backfillHistoricoIButtons` / `backfillJornadas` / `backfillRegistrosV3` — backfills manuales.
 
-**onSchedule (crons)** — última actualización 2026-05-18
+**onSchedule (crons)** — 24, regenerado desde el código el 2026-06-12
 
 Pollers de APIs externas:
-- `telemetriaSnapshotScheduled` (cada 6h) — escribe a `TELEMETRIA_HISTORICO`.
+- `telemetriaSnapshotScheduled` (cada 6h) — odómetro+combustible → `TELEMETRIA_HISTORICO`.
 - `volvoAlertasPoller` (cada 5 min) — Vehicle Alerts API Volvo → `VOLVO_ALERTAS`.
 - `volvoScoresPoller` (04:00 ART) — Group Scores API → `VOLVO_SCORES_DIARIOS`.
+- `estadoVolvoPoller` (cada 5 min) — snapshot rFMS (tell-tales, niveles, horas) → `VOLVO_ESTADO`.
 - `sitrackPosicionPoller` (cada 5 min) — Sitrack → `SITRACK_POSICIONES` + drift detection + aviso "pasá el iButton" con throttle 30 min.
-- `sitrackEventosPoller` (cada 5 min) — Sitrack `/files/reports` → `SITRACK_EVENTOS` (1400+ tipos de evento crudos para análisis).
+- `sitrackEventosPoller` (cada 5 min) — Sitrack `/files/reports` → `SITRACK_EVENTOS` (eventos crudos, TTL 90 días).
 
-Vigilador jornada v2 (refactor 2026-05-15, reemplaza al v1):
-- `vigiladorJornadaChofer` (cada 5 min) — tracking de bloques 3×4h (3h45 manejo + 15 min pausa) + descanso 8h + veda nocturna → escribe a `JORNADAS` (no más `JORNADAS_CHOFER` legacy) + encola avisos al chofer. **Avisos de jornada por MANEJO NETO acumulado** (heads-up 11h, límite firme 12h — fix 2026-05-19; antes era por `bloques_completos >= 3`, que daba falsos positivos). Lógica de decisión en `evaluarTickJornada` (pura, 21 tests).
-- `procesarSilenciadosExpirados` (cada 1h) — limpia silenciamientos vencidos en `BOT_SILENCIADOS_CHOFER`.
+Jornadas (v2 en vivo + v3 oficial + reclamos):
+- `vigiladorJornadaChofer` (cada 5 min) — v2 EN VIVO: bloques 3×4h + descanso 8h + veda nocturna → `JORNADAS` + avisos al chofer por manejo neto (heads-up 11h, límite 12h). Lógica pura en `evaluarTickJornada`.
+- `registrarJornadasV3Diario` (06:45 ART) — v3 OFICIAL a posteriori: reconstruye los turnos de ayer → `REGISTRO_JORNADAS` (fuente del resumen a Molina).
+- `reconstruirJornadasDiario` (06:30 ART) — jornadas históricas por día → `VOLVO_JORNADAS_HISTORICO`.
+- `reconstruirHistoricoIButtonsDiario` (06:00 ART) — tramos chofer↔patente por iButton → `SITRACK_IBUTTONS_HISTORICO`.
+- `cruzarParadasReportadasV3Diario` (07:00 ART) — cruza `PARADAS_REPORTADAS` del chofer contra el v3.
+- `cerrarReportesJornadaDiario` (08:00 ART) — cierra reclamos de jornada con veredicto CIERTO/NO_CIERTO/MANUAL cruzando v3 + GPS; el veredicto dispara la devolución WhatsApp. Kill-switch en `META/config_cierre_reportes`.
 
-Resúmenes diarios a Vecchi:
-- `resumenBotDiario` (08:00 ART) — estado del bot al admin.
-- `resumenDriftsAsignacionesDiario` (08:00 ART) — drifts (chofer manejó patente no asignada) al admin.
-- `resumenExcesosJornadaDiario` (08:00 ART) — excesos del vigilador v2 al jefe Seg e Higiene.
-- `resumenConductaManejoDiario` (08:00 ART) — Sitrack peligrosos + Volvo AEBS/ESP únicos + sobrevelocidad cartográfica detallada por chofer a Molina.
+Descargas YPF:
+- `zonaDescargaPoller` (cada 5 min) — presencia en geocercas → `ZONA_DESCARGA_COLA` (cola en vivo) + `ZONA_DESCARGA_HISTORICO`.
+- `backfillDescargasDiario` (04:30 ART) — repesca descargas desde `SITRACK_EVENTOS` (más completo que el poller).
+
+Resúmenes diarios 08:00 ART:
+- `resumenBotDiario` — estado del bot al admin.
+- `resumenDriftsAsignacionesDiario` — drifts (chofer manejó patente no asignada) al admin.
+- `resumenExcesosJornadaDiario` — excesos de jornada (fuente v3) al jefe Seg e Higiene.
+- `resumenConductaManejoDiario` — Sitrack peligrosos + Volvo AEBS/ESP + sobrevelocidad por chofer a Molina.
+- `resumenMantenimientoVehiculosDiario` — parte de mantenimiento (tell-tales/AdBlue/service) a Emmanuel.
 
 Dashboard:
-- `recomputeDashboardStats` (cada 5 min) — agregado para tablero admin → `STATS/dashboard`.
+- `recomputeDashboardStats` (cada 30 min) — agregado para tablero admin → `STATS/dashboard`.
 
 Salud + mantenimiento:
-- `botHealthWatchdog` (cada 15 min) — alerta si el bot WhatsApp no heartbeatea.
-- `purgarColaWhatsappAntigua` (diario) — cleanup de docs viejos en `COLA_WHATSAPP` con estado ENVIADO/ERROR.
-- `backupFirestoreScheduled` (domingo 06:00 ART) — export semanal a `gs://coopertrans-movil-backups`.
+- `botHealthWatchdog` (cada 15 min) — bot sin heartbeat → alerta TELEGRAM fuera de banda.
+- `procesarSilenciadosExpirados` (cada 10 min) — limpia silenciamientos vencidos en `BOT_SILENCIADOS_CHOFER`.
+- `purgarColaWhatsappAntigua` (04:00 ART) — cleanup de `COLA_WHATSAPP` (ENVIADO/ERROR viejos).
+- `backupFirestoreScheduled` (domingo 06:00 ART) — export semanal a `gs://coopertrans-movil-backups` (lista explícita de colecciones — al crear una colección nueva, sumarla ahí).
 
-(Cron eliminado en refactor v2: `avisoFinJornadaNocturna` — la veda nocturna 00:00 ART ahora se detecta en tiempo real por `vigiladorJornadaChofer`.)
+> **Estructura (split completado 2026-05-19)**: `functions/src/index.ts` es un entry point puro (~45 LOC). La lógica vive en módulos temáticos: `comun.ts`/`setup.ts`/`helpers.ts` (compartidos), `auth.ts`, `audit.ts`, `volvo.ts`, `volvo_estado.ts`, `volvo_mantenimiento.ts`, `volvo_telltales.ts`, `telemetria.ts`, `sitrack.ts`, `mantenimiento.ts`, `resumenes_diarios.ts`, `jornadas_v2.ts`, `jornadas_v3.ts` (+`_batch`), `jornada_historico.ts`, `cierre_reportes_jornada.ts`, `paradas_reportadas.ts`, `reportes_discrepancia.ts`, `historico_descargas.ts`, `historico_ibuttons.ts`, `zonas_descarga.ts`, `dashboard_stats.ts`, `cleanup_y_recibos.ts`, `excluidos.ts`, `canales_pausados.ts`, `bot_alerta_externa.ts`. Importar SIEMPRE de `./comun`, nunca de `./index`.
 
-> **Estructura (split completado 2026-05-19)**: `functions/src/index.ts` es un entry point puro (6884 → 45 LOC, solo `import "./setup"` + re-exports). La lógica vive en módulos temáticos: `auth.ts`, `audit.ts`, `comun.ts` (helpers compartidos), `volvo.ts`, `telemetria.ts`, `sitrack.ts`, `icm.ts`, `mantenimiento.ts`, `resumenes_diarios.ts`, `jornadas_v2.ts`, `dashboard_stats.ts`, `cleanup_y_recibos.ts`. Ver `project_split_functions_index.md`.
-
-**onDocumentCreated (triggers)**
-- `onAlertaVolvoCreated` — al crear alerta Volvo, encola WhatsApp al chofer (con blacklist mantenimiento + throttle 10/h/chofer + silenciamiento universal).
-- `onAlertaVolvoMantenimientoCreated` — persiste eventos de mantenimiento sin encolar (los recoge el bot 1 vez/día).
+**Triggers de Firestore**
+- `onAlertaVolvoCreated` (onDocumentCreated) — al crear alerta Volvo, encola WhatsApp al chofer (blacklist mantenimiento + bypass seguridad a Molina + throttle + silenciamiento).
+- `onReporteDiscrepanciaRevisado` (onDocumentUpdated) — al setearse el veredicto de un reclamo, encola la devolución WhatsApp al chofer (idempotente por doc-ID determinístico).
 
 Deploy:
 ```powershell

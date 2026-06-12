@@ -78,8 +78,13 @@ class JornadaDia {
       patentePrincipal: (m['patente_principal'] as String?) ?? '',
       patentes: (m['patentes'] as List?)?.cast<String>() ?? const [],
       fecha: (m['fecha'] as String?) ?? '',
-      inicio: (m['inicio'] as Timestamp).toDate(),
-      fin: (m['fin'] as Timestamp).toDate(),
+      // Cast NULLABLE con fallback (mismo patrón que el modelo v3 hermano,
+      // registro_jornada.dart): un doc con el campo ausente no debe tirar
+      // TypeError y romper la pantalla entera del StreamBuilder.
+      inicio: (m['inicio'] as Timestamp?)?.toDate() ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      fin: (m['fin'] as Timestamp?)?.toDate() ??
+          DateTime.fromMillisecondsSinceEpoch(0),
       manejoMin: (m['manejo_min'] as num?)?.toInt() ?? 0,
       paradasMin: (m['paradas_min'] as num?)?.toInt() ?? 0,
       kmTotal: (m['km_total'] as num?)?.toInt() ?? 0,
@@ -116,8 +121,10 @@ class TramoManejo {
   });
 
   factory TramoManejo.fromMap(Map<String, dynamic> m) => TramoManejo(
-        desde: (m['desde'] as Timestamp).toDate(),
-        hasta: (m['hasta'] as Timestamp).toDate(),
+        desde: (m['desde'] as Timestamp?)?.toDate() ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        hasta: (m['hasta'] as Timestamp?)?.toDate() ??
+            DateTime.fromMillisecondsSinceEpoch(0),
         duracionMin: (m['duracion_min'] as num?)?.toInt() ?? 0,
         kmAprox: (m['km_aprox'] as num?)?.toInt() ?? 0,
         velocidadMax: (m['velocidad_max'] as num?)?.toInt() ?? 0,
@@ -151,8 +158,10 @@ class Parada {
   });
 
   factory Parada.fromMap(Map<String, dynamic> m) => Parada(
-        desde: (m['desde'] as Timestamp).toDate(),
-        hasta: (m['hasta'] as Timestamp).toDate(),
+        desde: (m['desde'] as Timestamp?)?.toDate() ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        hasta: (m['hasta'] as Timestamp?)?.toDate() ??
+            DateTime.fromMillisecondsSinceEpoch(0),
         duracionMin: (m['duracion_min'] as num?)?.toInt() ?? 0,
         lat: (m['lat'] as num?)?.toDouble(),
         lng: (m['lng'] as num?)?.toDouble(),
