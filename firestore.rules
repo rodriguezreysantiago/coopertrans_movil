@@ -440,9 +440,17 @@ service cloud.firestore {
     // oficial con la ponderación por segmento vial que Sitrack tiene y
     // nosotros no. Escala invertida (más bajo = mejor). Lectura: los mismos
     // roles que ven el módulo ICM. Cliente solo lee.
+    // Subcolección `infracciones_chofer/{scopeId}` (hardening 1 MiB 2026-06-13):
+    // las infracciones individuales por chofer se movieron del doc principal a
+    // esta subcolección para no chocar el límite de 1 MiB. Mismos lectores que
+    // el doc; escribe solo el scraper (Admin SDK, saltea rules).
     match /ICM_OFICIAL/{periodo} {
       allow read: if isAdminOrSupervisor() || isSegHigiene();
       allow write: if false;
+      match /infracciones_chofer/{scopeId} {
+        allow read: if isAdminOrSupervisor() || isSegHigiene();
+        allow write: if false;
+      }
     }
 
     // ICM_OFICIAL_SEMANAL — mismo ICM oficial de Sitrack pero por SEMANA
@@ -452,6 +460,10 @@ service cloud.firestore {
     match /ICM_OFICIAL_SEMANAL/{semana} {
       allow read: if isAdminOrSupervisor() || isSegHigiene();
       allow write: if false;
+      match /infracciones_chofer/{scopeId} {
+        allow read: if isAdminOrSupervisor() || isSegHigiene();
+        allow write: if false;
+      }
     }
 
     // ICM_OFICIAL_CIERRE / ICM_OFICIAL_CIERRE_SEMANAL — snapshots INMUTABLES
@@ -462,10 +474,18 @@ service cloud.firestore {
     match /ICM_OFICIAL_CIERRE/{periodo} {
       allow read: if isAdminOrSupervisor() || isSegHigiene();
       allow write: if false;
+      match /infracciones_chofer/{scopeId} {
+        allow read: if isAdminOrSupervisor() || isSegHigiene();
+        allow write: if false;
+      }
     }
     match /ICM_OFICIAL_CIERRE_SEMANAL/{semana} {
       allow read: if isAdminOrSupervisor() || isSegHigiene();
       allow write: if false;
+      match /infracciones_chofer/{scopeId} {
+        allow read: if isAdminOrSupervisor() || isSegHigiene();
+        allow write: if false;
+      }
     }
 
     // ========================================================================

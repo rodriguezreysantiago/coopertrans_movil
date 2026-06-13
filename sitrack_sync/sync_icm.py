@@ -224,18 +224,35 @@ migrar a subcolección antes de seguir creciendo."""
 
 
 def _enriquecer_con_infracciones(page, client_id, grant, doc, desde, hasta):
-    """Para cada chofer activo del doc, llama get_infractions(scopeId) y
-    guarda el array en `doc['choferes'][i]['infracciones']`. Choferes sin
-    actividad o sin scope_id quedan con la lista vacía. Logueamos progreso
-    cada 10 choferes (con 50 puede demorar ~1 min).
+    """Para cada chofer activo, llama get_infractions(scopeId).
 
-    Cap de MAX_INFRAC_POR_CHOFER por chofer (las más recientes según las
-    devuelve Sitrack). Si alguno supera el cap, log warning para alertar."""
+    HARDENING 1 MiB (2026-06-13): antes embebía el array en
+    `doc['choferes'][i]['infracciones']`, lo que hacía crecer el doc mensual
+    hasta rozar el límite de 1 MiB de Firestore (si se pasa, el .set FALLA y se
+    pierde el número oficial del mes). Ahora NO embebe: DEVUELVE un dict
+    `{scope_id(str): {scope_id, dni, nombre, infracciones[]}}` para que el caller
+    lo escriba en la subcolección `infracciones_chofer/{scope_id}`. El doc
+    principal queda liviano (choferes con dni/score/severidad, sin el array).
+
+    Cap de MAX_INFRAC_POR_CHOFER por chofer. La clave es `scope_id` (no `dni`,
+    que Sitrack a veces manda vacío). Si alguno supera el cap, log warning."""
+    infrac_por_scope = {}
     if not doc or not doc.get("choferes"):
-        return
+        return infrac_por_scope
     activos = [c for c in doc["choferes"]
                if c.get("severidad") != "UNAVAILABLE_NO_ACTIVITY"
                and int(c.get("scope_id") or 0) > 0]
+    # Aviso (review 2026-06-13): un chofer ACTIVO sin scope_id no puede tener
+    # subcolección de infracciones (el detalle queda vacío). No afecta el número
+    # oficial (icm_general/score), pero conviene detectarlo si Sitrack deja de
+    # mandar el scopeId.
+    sin_scope = [c for c in doc["choferes"]
+                 if c.get("severidad") != "UNAVAILABLE_NO_ACTIVITY"
+                 and int(c.get("scope_id") or 0) <= 0]
+    if sin_scope:
+        nombres = ", ".join(c.get("nombre", "?") for c in sin_scope[:5])
+        print(f"      ⚠ {len(sin_scope)} chofer(es) activo(s) SIN scope_id "
+              f"(quedan sin detalle de infracciones): {nombres}")
     print(f"      → trayendo infracciones individuales de "
           f"{len(activos)} chofer(es) activo(s)…")
     total_infrac = 0
@@ -251,7 +268,13 @@ def _enriquecer_con_infracciones(page, client_id, grant, doc, desde, hasta):
             print(f"        ⚠ {c.get('nombre')}: {len(items)} infrac. "
                   f"(capeado a {MAX_INFRAC_POR_CHOFER})")
             items = items[:MAX_INFRAC_POR_CHOFER]
-        c["infracciones"] = items
+        # NO se embebe en el doc — se junta por scope_id para la subcolección.
+        infrac_por_scope[str(c["scope_id"])] = {
+            "scope_id": c["scope_id"],
+            "dni": c.get("dni", ""),
+            "nombre": c.get("nombre", ""),
+            "infracciones": items,
+        }
         total_infrac += len(items)
         if (idx + 1) % 10 == 0:
             print(f"        ({idx+1}/{len(activos)} procesados, "
@@ -260,6 +283,32 @@ def _enriquecer_con_infracciones(page, client_id, grant, doc, desde, hasta):
         page.wait_for_timeout(120)
     suf = f" ({capeados} chofer(es) capeados al tope)" if capeados else ""
     print(f"      ← total {total_infrac} infracciones individuales mapeadas{suf}")
+    return infrac_por_scope
+
+
+def _persistir_infracciones_subcol(db, coleccion, periodo, infrac_por_scope):
+    """Escribe las infracciones por chofer en la subcolección
+    `coleccion/periodo/infracciones_chofer/{scope_id}` (batched). Hardening 1 MiB
+    (2026-06-13): saca el peso del doc principal. La app lee el detalle de un
+    chofer desde acá (con fallback al array embebido de docs viejos). Idempotente
+    (set por scope_id)."""
+    if not infrac_por_scope:
+        return
+    base = (db.collection(coleccion).document(periodo)
+            .collection("infracciones_chofer"))
+    batch = db.batch()
+    n = 0
+    for scope_id, payload in infrac_por_scope.items():
+        batch.set(base.document(str(scope_id)), {
+            **payload, "sincronizado_en": firestore.SERVER_TIMESTAMP,
+        })
+        n += 1
+        if n % 450 == 0:  # límite de 500 ops/batch en Firestore
+            batch.commit()
+            batch = db.batch()
+    if n % 450 != 0:  # evita un commit de batch vacío si n fue múltiplo exacto
+        batch.commit()
+    print(f"      subcol infracciones_chofer: {len(infrac_por_scope)} chofer(es)")
 
 
 def _persistir(raw_driver, raw_holder, raw_hotspots, periodo, desde, hasta,
@@ -284,11 +333,14 @@ def _persistir(raw_driver, raw_holder, raw_hotspots, periodo, desde, hasta,
         print(f"      peor: {peor['icm']:.2f} {peor['severidad_label']} "
               f"{peor['nombre']}")
     # Enriquecer con infracciones individuales por chofer (1 fetch por activo).
-    _enriquecer_con_infracciones(page, client_id, grant, doc, desde, hasta)
+    # Van a la subcolección (no embebidas en el doc) — hardening 1 MiB.
+    infrac_por_scope = _enriquecer_con_infracciones(
+        page, client_id, grant, doc, desde, hasta)
     if commit:
         db.collection(coleccion).document(periodo).set({
             **doc, "sincronizado_en": firestore.SERVER_TIMESTAMP,
         })
+        _persistir_infracciones_subcol(db, coleccion, periodo, infrac_por_scope)
         print(f"      COMMIT OK -> {coleccion}/{periodo}")
     return True
 
@@ -304,8 +356,21 @@ def _cerrar_si_falta(page, client_id, grant, db, coleccion, periodo, desde,
     enriquecimiento que la corrida diaria del período en curso) para que el
     snapshot sea autónomo y la app pueda mostrar el detalle aunque Sitrack
     pierda la data."""
-    if commit and db.collection(coleccion).document(periodo).get().exists:
-        return  # ya congelado — no tocar
+    doc_ref = db.collection(coleccion).document(periodo)
+    doc_existe = False
+    if commit:
+        doc_existe = doc_ref.get().exists
+        if doc_existe:
+            # Recuperación (review 2026-06-13): si el doc ya está congelado PERO
+            # la subcolección quedó vacía (una corrida previa escribió el doc y
+            # falló antes de la subcol), NO re-escribimos el doc inmutable pero sí
+            # completamos la subcolección (idempotente, no toca el número oficial).
+            subcol_vacia = len(
+                doc_ref.collection("infracciones_chofer").limit(1).get()) == 0
+            if not subcol_vacia:
+                return  # doc + subcol OK — nada que hacer
+            print(f"  [cierre {coleccion}/{periodo}] doc congelado pero subcol "
+                  f"VACÍA — completo solo la subcolección (no re-escribo el doc)")
     drv = _fetch_ranking(page, client_id, "scopeDriver", grant, desde, hasta)
     if not (drv or {}).get("rankingItemsByScope"):
         print(f"  [cierre {coleccion}/{periodo}] sin data ({desde}→{hasta}) — salteado")
@@ -317,14 +382,21 @@ def _cerrar_si_falta(page, client_id, grant, db, coleccion, periodo, desde,
     print(f"  [cierre {coleccion}/{periodo}] {desde}→{hasta} ICM {doc['icm_general']} "
           f"activos {doc['choferes_activos']}/{doc['choferes_total']} | "
           f"hotspots {len(doc['infracciones_heatmap'])}")
-    _enriquecer_con_infracciones(page, client_id, grant, doc, desde, hasta)
+    infrac_por_scope = _enriquecer_con_infracciones(
+        page, client_id, grant, doc, desde, hasta)
     if commit:
-        db.collection(coleccion).document(periodo).set({
-            **doc,
-            "sincronizado_en": firestore.SERVER_TIMESTAMP,
-            "congelado": True,
-        })
-        print(f"      CIERRE CONGELADO -> {coleccion}/{periodo}")
+        if not doc_existe:
+            doc_ref.set({
+                **doc,
+                "sincronizado_en": firestore.SERVER_TIMESTAMP,
+                "congelado": True,
+            })
+            print(f"      CIERRE CONGELADO -> {coleccion}/{periodo}")
+        # Subcolección: en doc nuevo va junto al cierre; en recuperación va sola
+        # (el doc inmutable no se toca). Firestore no copia subcolecciones.
+        _persistir_infracciones_subcol(db, coleccion, periodo, infrac_por_scope)
+        if doc_existe:
+            print(f"      subcol del cierre COMPLETADA -> {coleccion}/{periodo}")
     else:
         print("      (dry-run: no congela)")
 

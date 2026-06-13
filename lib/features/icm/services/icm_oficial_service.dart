@@ -207,9 +207,14 @@ class IcmOficialChofer {
   final int conduccionAgresiva;
   final String severidad; // crudo Sitrack
   final String severidadLabel; // ES (viene del doc)
+  /// scopeId de Sitrack — clave estable del chofer (el `dni` a veces viene
+  /// vacío). Es el id del doc en la subcolección `infracciones_chofer/{scopeId}`.
+  final int scopeId;
   /// Infracciones individuales del chofer en el período (capeado a 100 por
-  /// el scraper para no explotar el límite de 1 MB del doc). Vacío si el
-  /// período se cargó antes del cambio 2026-05-23.
+  /// el scraper). Desde 2026-06-13 viven en la subcolección
+  /// `infracciones_chofer/{scopeId}` (hardening 1 MiB) y este campo viene VACÍO
+  /// en docs nuevos → usar `IcmOficialService.cargarInfraccionesChofer`. Los
+  /// docs viejos (pre-2026-06-13) las traen acá embebidas (fallback).
   final List<InfraccionIndividual> infracciones;
 
   const IcmOficialChofer({
@@ -227,6 +232,7 @@ class IcmOficialChofer {
     required this.conduccionAgresiva,
     required this.severidad,
     required this.severidadLabel,
+    this.scopeId = 0,
     this.infracciones = const [],
   });
 
@@ -235,6 +241,7 @@ class IcmOficialChofer {
     return IcmOficialChofer(
       dni: _s(m['dni']),
       nombre: _s(m['nombre']),
+      scopeId: _i(m['scope_id']),
       icm: _d(m['icm']),
       icmUrbano: _d(m['icm_urbano']),
       icmNoUrbano: _d(m['icm_no_urbano']),
@@ -542,5 +549,32 @@ class IcmOficialService {
       excluirDni: excluirDni,
       excluirPatente: excluirPatente,
     );
+  }
+
+  /// Carga las infracciones individuales de un chofer desde la subcolección
+  /// `{coleccion}/{periodo}/infracciones_chofer/{scopeId}` (hardening 1 MiB
+  /// 2026-06-13). Devuelve `[]` si el doc no existe — caso de un período viejo
+  /// que trae las infracciones embebidas en el doc principal (ahí se usa
+  /// `chofer.infracciones` directo). El caller hace el dual-read: embebido
+  /// primero, esta subcolección como fuente para los docs nuevos.
+  static Future<List<InfraccionIndividual>> cargarInfraccionesChofer(
+    FirebaseFirestore db,
+    String periodo,
+    int scopeId, {
+    String coleccionFirestore = coleccion,
+  }) async {
+    if (scopeId <= 0) return const [];
+    final snap = await db
+        .collection(coleccionFirestore)
+        .doc(periodo)
+        .collection('infracciones_chofer')
+        .doc(scopeId.toString())
+        .get();
+    if (!snap.exists) return const [];
+    final raw = (snap.data()?['infracciones'] as List?) ?? const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => InfraccionIndividual.fromMap(e.cast<String, dynamic>()))
+        .toList();
   }
 }

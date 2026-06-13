@@ -16,8 +16,10 @@ import 'package:coopertrans_movil/core/theme/app_typography.dart';
 ///   - ICM urbano vs no-urbano (dónde maneja peor).
 ///   - Desglose de infracciones (altas / medias / leves) + excesos de
 ///     velocidad + conducción agresiva.
-///   - **Detalle de infracciones** (desde `chofer.infracciones`, que el
-///     scraper trae con `get_infractions(scopeId)` de Sitrack): tabla
+///   - **Detalle de infracciones** (dual-read: `chofer.infracciones` embebido
+///     en docs viejos, o la subcolección `infracciones_chofer/{scopeId}` en la
+///     forma nueva — hardening 1 MiB 2026-06-13; el scraper las trae con
+///     `get_infractions(scopeId)` de Sitrack): tabla
 ///     con las MISMAS columnas que muestra el modal de Sitrack
 ///     (vehículo + tipo + fecha + ubicación + vel.permitida + pico +
 ///     tiempo + puntaje).
@@ -69,12 +71,30 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
     final empSnap =
         await db.collection(AppCollections.empleados).doc(dni).get();
     final nombreEmp = (empSnap.data()?['NOMBRE'] ?? '').toString().trim();
+
+    final actual = _buscar(periodos[0], dni);
+    final anterior = _buscar(periodos[1], dni);
+
+    // Infracciones del chofer mostrado (actual ?? anterior). Dual-read: si el
+    // doc trae el array embebido (período viejo), se usa; si viene vacío (forma
+    // nueva, hardening 1 MiB 2026-06-13), se leen de la subcolección
+    // infracciones_chofer/{scopeId}.
+    final mostrado = actual ?? anterior;
+    final periodoMostrado = actual != null ? idActual : idAnterior;
+    var infracciones =
+        mostrado?.infracciones ?? const <InfraccionIndividual>[];
+    if (mostrado != null && infracciones.isEmpty && mostrado.scopeId > 0) {
+      infracciones = await IcmOficialService.cargarInfraccionesChofer(
+        db, periodoMostrado, mostrado.scopeId);
+    }
+
     return _DetalleData(
-      actual: _buscar(periodos[0], dni),
-      anterior: _buscar(periodos[1], dni),
+      actual: actual,
+      anterior: anterior,
       idActual: idActual,
       idAnterior: idAnterior,
       nombreEmpleado: nombreEmp,
+      infracciones: infracciones,
     );
   }
 
@@ -208,7 +228,7 @@ class _IcmDetalleChoferScreenState extends State<IcmDetalleChoferScreen> {
                 const SizedBox(height: AppSpacing.xl),
                 const AppEyebrow('Detalle de infracciones'),
                 const SizedBox(height: AppSpacing.sm),
-                _ListaInfracciones(infracciones: c.infracciones),
+                _ListaInfracciones(infracciones: data.infracciones),
                 const SizedBox(height: AppSpacing.lg),
                 const _NotaFuente(),
               ],
@@ -226,6 +246,9 @@ class _DetalleData {
   final String idActual;
   final String idAnterior;
   final String nombreEmpleado;
+  /// Infracciones individuales del chofer mostrado, ya resueltas (embebido del
+  /// doc viejo, o subcolección infracciones_chofer en la forma nueva).
+  final List<InfraccionIndividual> infracciones;
 
   const _DetalleData({
     required this.actual,
@@ -233,6 +256,7 @@ class _DetalleData {
     required this.idActual,
     required this.idAnterior,
     required this.nombreEmpleado,
+    this.infracciones = const [],
   });
 }
 

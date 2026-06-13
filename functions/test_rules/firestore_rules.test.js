@@ -98,6 +98,11 @@ before(async () => {
     await setDoc(doc(d, 'EMPLEADOS', DNI_CHOFER, 'credenciales', 'main'), {
       hash: 'hash-bcrypt', formato: 'bcrypt',
     });
+    // ICM oficial + subcolección de infracciones por chofer (hardening 1MiB).
+    await setDoc(doc(d, 'ICM_OFICIAL', '2026-05'), { icm_general: 5.0 });
+    await setDoc(
+      doc(d, 'ICM_OFICIAL', '2026-05', 'infracciones_chofer', '777'),
+      { scope_id: 777, infracciones: [] });
   });
 });
 
@@ -206,6 +211,25 @@ describe('Credenciales — hash de contraseña aislado (hardening 2026-06-13)', 
   test('NADIE borra la credencial desde el cliente', () =>
     assertFails(deleteDoc(doc(db('11111111', 'ADMIN'),
       'EMPLEADOS', DNI_CHOFER, 'credenciales', 'main'))));
+});
+
+describe('ICM oficial — subcolección infracciones_chofer (hardening 1MiB)', () => {
+  // Las infracciones individuales se movieron del doc a la subcolección; mismos
+  // lectores que el doc oficial (admin/sup/seg), escribe solo el scraper.
+  test('admin lee el doc ICM_OFICIAL', () =>
+    assertSucceeds(getDoc(doc(db('11111111', 'ADMIN'), 'ICM_OFICIAL', '2026-05'))));
+  test('SEG_HIGIENE lee la subcolección infracciones_chofer', () =>
+    assertSucceeds(getDoc(doc(db('44444444', 'SEG_HIGIENE'),
+      'ICM_OFICIAL', '2026-05', 'infracciones_chofer', '777'))));
+  test('el chofer NO lee la subcolección infracciones_chofer', () =>
+    assertFails(getDoc(doc(db(DNI_CHOFER, 'CHOFER'),
+      'ICM_OFICIAL', '2026-05', 'infracciones_chofer', '777'))));
+  test('GOMERIA NO lee la subcolección (no ve ICM)', () =>
+    assertFails(getDoc(doc(db('33333333', 'GOMERIA'),
+      'ICM_OFICIAL', '2026-05', 'infracciones_chofer', '777'))));
+  test('nadie escribe la subcolección desde el cliente (la escribe el scraper Admin SDK)', () =>
+    assertFails(setDoc(doc(db('11111111', 'ADMIN'),
+      'ICM_OFICIAL', '2026-05', 'infracciones_chofer', '888'), { scope_id: 888 })));
 });
 
 describe('GOMERIA — acceso acotado a su módulo', () => {

@@ -115,9 +115,10 @@ def parsear_chofer(item: dict) -> dict:
         "conduccion_agresiva": int(_num(item.get("scoreAggressiveActivityCount"))),
         "severidad": sev,
         "severidad_label": SEVERIDAD_ES.get(sev, sev or "—"),
-        # infracciones[] se llena en sync_icm.py después con el endpoint
-        # get_infractions(scopeId). Acá lo dejamos vacío como contrato.
-        "infracciones": [],
+        # Las infracciones individuales NO van en el doc del chofer (hardening
+        # 1 MiB 2026-06-13): sync_icm.py las escribe en la subcolección
+        # infracciones_chofer/{scope_id}. La app las lee de ahí (con fallback al
+        # array embebido en docs viejos pre-2026-06-13).
     }
 
 
