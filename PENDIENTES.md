@@ -49,12 +49,24 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   google-cloud → grpc/protobuf/uuid. Explotabilidad real BAJA (el bot/functions
   son CLIENTES de las APIs de Google, no servidores expuestos; son advisories
   server/parser-side). Dependabot security-update no puede parchear transitivas
-  sin el padre → los runs fallan. **Fix consolidado**: bumpear **firebase-admin
-  13→14** en functions Y bot (un MAJOR — hacerlo deliberado con `npm test` de
-  ambos + tsc como red, NO a ciegas). Dependabot lo va a proponer en el PR
-  mensual del grupo npm (CI-gateado). Alternativa: dismissear las alertas como
-  riesgo transitivo tolerable (decisión tuya). El Python usa firebase-admin
-  7.4.0 (paquete distinto, no afectado por esto).
+  sin el padre → los runs fallan.
+  **INTENTO 2026-06-13 (firebase-admin 13→14): BLOQUEADO POR UPSTREAM.**
+  firebase-functions (última = 7.2.5) tiene peer `firebase-admin ^11||^12||^13`
+  — NO acepta 14, y NO existe release de firebase-functions que lo soporte aún.
+  Adoptar admin 14 = correr combo no soportado por upstream en las functions de
+  plata/jornadas/auth (+ admin 14 dropea Node 18/20: rompería el bot en la
+  dedicada, que corre Node 18+). Además el bump NO limpiaba todo (quedaban 8
+  moderate de qs/uuid/protobufjs vía @google-cloud/storage). Probado y
+  REVERTIDO al known-good (admin 13.10, 373 tests verdes).
+  **Decisión recomendada**: como las 4 advisories son NO explotables en nuestro
+  contexto (app B2B interna, Google es el "servidor", ningún input atacante
+  llega a esos paths) y forzar `overrides` de grpc-js bajo Firestore es riesgo
+  de transporte en prod >> riesgo del advisory → **dismissear las alertas como
+  riesgo tolerable** (`gh api .../dependabot/alerts/{n} -f state=dismissed
+  -f dismissed_reason=tolerable_risk`) Y/O esperar a que firebase-functions
+  publique soporte de admin 14 (Dependabot ofrecerá el bump alineado, CI-gateado).
+  NO forzar overrides de grpc-js. El Python usa firebase-admin 7.4.0 (paquete
+  distinto, no afectado).
 - [ ] **CRON DE LOS CRONS (Fase 1 del plan — ACTIVO desde 2026-06-12)**: los 25
   onSchedule registran latido en `CRON_HEALTH/{id}` (wrapper `onScheduleConLatido`
   en comun.ts) y `cronWatchdog` (cada 3 h, `cron_health.ts`) avisa por Telegram +
