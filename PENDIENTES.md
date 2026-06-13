@@ -33,8 +33,23 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
      cron.js), jornada (functions) y devolución de reclamos.
   4. **Release** de la app (sube el handler). Después: tappear un link de prueba
      en Android e iOS para confirmar que abre la app (no el browser).
-  **Vertical 2 (push FCM: turnos + failover + sesión)** queda PENDIENTE — es la
-  segunda mitad de la feature (decisión Santiago: deep links primero).
+  **Vertical 2 (push FCM: turnos + failover + sesión)**: **fundación backend HECHA
+  y DEPLOYADA** (commit `4dcb62e`): `push.ts` con `enviarPush` (resuelve tokens de
+  `EMPLEADOS/{dni}/dispositivos`, multicast FCM, poda muertos) + cola `COLA_PUSH`
+  multi-productor + trigger `procesarColaPush` + rules + TTL + tests. Inerte hasta
+  que la app registre tokens. **Falta**:
+  1. **App `PushService`** (Flutter, ships con release): `firebase_messaging` +
+     pedir permiso + token → `EMPLEADOS/{dni}/dispositivos/{installId}` + refresh +
+     foreground (mostrar notif local) + tap → ruta (reusa `DeepLinkService.rutaDeDestino`)
+     + background handler. **OJO**: `firebase_messaging` NO soporta Windows desktop
+     → guards de plataforma + `flutter build windows` de verificación (la app admin
+     es Windows y está LIVE).
+  2. **Nativo iOS**: Push Notifications capability + Background Modes (remote
+     notification) + **APNs Auth Key (.p8) cargada en Firebase Console** (sin esto
+     el push NO llega a iPhone). Android: `POST_NOTIFICATIONS` en el manifest (13+).
+  3. **Wiring de los 3 productores** → `encolarPush()` / `COLA_PUSH`: turno del
+     cachatore (Python nube.py), failover de críticos cuando el bot cae
+     (bot_alerta_externa.ts), cambio de rol/sesión (auth.ts).
 - [ ] **LOTE FASE 1 INFRA (2026-06-12, noche — revisado adversarialmente antes de prod)**:
   (a) **Backup DIARIO** (era semanal — RPO 7d→1d) con **auto-verificación anti-drift**:
   compara `collectionIds` vs `listCollections()` real y Telegram si algo quedó sin
