@@ -283,6 +283,25 @@ function _vencimientosDeVehiculo(data) {
   return out;
 }
 
+// Papeles LABORALES de la empresa empleadora (doc EMPRESAS_EMPLEADORAS/{cuit}).
+// Espejo de AppDocsEmpresa (lib/core/constants/app_constants.dart). SCVO se
+// muestra al chofer como "Seguro de Vida".
+const LABELS_VENC_EMPRESA = {
+  VENCIMIENTO_POLIZA_ART: 'Póliza ART',
+  VENCIMIENTO_FORMULARIO_931: 'Formulario 931',
+  VENCIMIENTO_SCVO: 'Seguro de Vida',
+  VENCIMIENTO_LIBRE_DE_DEUDA_SINDICAL: 'Libre de deuda sindical',
+};
+
+function _vencimientosDeEmpresa(data) {
+  const out = [];
+  for (const [campo, etiqueta] of Object.entries(LABELS_VENC_EMPRESA)) {
+    const iso = _fechaIso(data[campo]);
+    if (iso) out.push({ papel: etiqueta, vence: iso });
+  }
+  return out;
+}
+
 const RE_PATENTE = /^[A-Z]{2,3}\d{3}[A-Z]{0,3}$/;
 
 // Trata los centinelas de "sin asignar" como vacío. La app guarda VEHICULO/
@@ -307,6 +326,16 @@ const TOOLS_CHOFER = [
       'pregunta (licencia, preocupacional, manejo defensivo) y de su unidad ' +
       'asignada (RTO, seguro, extintores). Usala cuando pregunten cuándo se ' +
       'les vence algo o si tienen algo por vencer.',
+    params: {},
+  },
+  {
+    name: 'papeles_empresa',
+    description:
+      'Devuelve los papeles LABORALES de la empresa empleadora del chofer que ' +
+      'pregunta: Póliza ART, Formulario 931, Seguro de Vida (SCVO) y Libre de ' +
+      'deuda sindical, con su fecha de vencimiento. Son los papeles de la ' +
+      'empresa (no del camión ni personales). Usala si preguntan por el ART, ' +
+      'el 931, el seguro de vida o los papeles de la empresa.',
     params: {},
   },
   {
@@ -943,6 +972,39 @@ async function _toolMisVencimientos(db, persona) {
       papelesChofer.length === 0 && papelesUnidad.length === 0
         ? 'No hay fechas de vencimiento cargadas para este chofer ni su unidad.'
         : undefined,
+  };
+}
+
+// Papeles laborales de la empresa empleadora del chofer (ART, 931, SCVO, libre
+// deuda). Decisión Santiago 2026-06-13: se exponen por WhatsApp (antes el módulo
+// EMPRESAS_EMPLEADORAS era "sin WhatsApp", solo read-only in-app).
+async function _toolPapelesEmpresa(db, persona) {
+  const data = persona.data || {};
+  // CUIT denormalizado en el empleado; fallback: dígitos del string EMPRESA
+  // (formato 'NOMBRE: (CUIT)').
+  const cuit = String(data.EMPRESA_CUIT || '').replace(/\D/g, '') ||
+    String(data.EMPRESA || '').replace(/\D/g, '');
+  if (!cuit) {
+    return { nota: 'Este chofer no tiene empresa empleadora cargada.' };
+  }
+  let papeles = [];
+  let empresa = null;
+  try {
+    const snap = await db.collection('EMPRESAS_EMPLEADORAS').doc(cuit).get();
+    if (snap.exists) {
+      const e = snap.data();
+      empresa = e.RAZON_SOCIAL || e.NOMBRE || e.razon_social || null;
+      papeles = _vencimientosDeEmpresa(e);
+    }
+  } catch (e) {
+    log.warn(`[agente] papeles empresa ${cuit}: ${e.message}`);
+  }
+  return {
+    empresa: empresa || `CUIT ${cuit}`,
+    papeles_de_la_empresa: papeles,
+    nota: papeles.length === 0
+      ? 'No hay fechas de vencimiento cargadas para los papeles de la empresa.'
+      : undefined,
   };
 }
 
@@ -2606,6 +2668,8 @@ async function _ejecutarTool(db, nombre, persona, args) {
   switch (nombre) {
     case 'mis_vencimientos':
       return await _toolMisVencimientos(db, persona);
+    case 'papeles_empresa':
+      return await _toolPapelesEmpresa(db, persona);
     case 'mi_unidad':
       return await _toolMiUnidad(db, persona);
     case 'buscar_vencimientos':

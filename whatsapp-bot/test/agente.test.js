@@ -339,6 +339,30 @@ describe('agente._ejecutarTool — contra Firestore mockeado', () => {
     assert.ok(r.papeles_de_la_unidad.some((p) => p.papel === 'RTO'));
   });
 
+  test('papeles_empresa (chofer): docs laborales de su empresa por CUIT', async () => {
+    const persona = {
+      rol: 'CHOFER', dni: '30111222',
+      data: { NOMBRE: 'PEREZ', EMPRESA_CUIT: '30712345678' },
+    };
+    // El doc(id).get() del mock lee de `vehiculos[id]` (acá, la empresa por CUIT).
+    const db = dbMock({ vehiculos: { '30712345678': {
+      RAZON_SOCIAL: 'VECCHI SRL',
+      VENCIMIENTO_POLIZA_ART: '15-07-2026',
+      VENCIMIENTO_FORMULARIO_931: '10-06-2026',
+    } } });
+    const r = await agente._ejecutarTool(db, 'papeles_empresa', persona);
+    assert.strictEqual(r.empresa, 'VECCHI SRL');
+    assert.ok(r.papeles_de_la_empresa.some(
+      (p) => p.papel === 'Póliza ART' && p.vence === '2026-07-15'));
+    assert.ok(r.papeles_de_la_empresa.some((p) => p.papel === 'Formulario 931'));
+  });
+
+  test('papeles_empresa: chofer sin empresa → nota, sin romper', async () => {
+    const persona = { rol: 'CHOFER', dni: '30111222', data: { NOMBRE: 'PEREZ' } };
+    const r = await agente._ejecutarTool(dbMock({}), 'papeles_empresa', persona);
+    assert.ok(r.nota && /empresa/i.test(r.nota));
+  });
+
   // Mock mínimo que captura el .set() (el dbMock global solo lee).
   function dbConWrites(writes) {
     return {
