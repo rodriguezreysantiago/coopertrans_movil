@@ -14,6 +14,16 @@ es el historial (sus "PENDIENTE" viejos pueden estar resueltos — ante la duda,
 manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ### Operativo / corto plazo
+- [~] **REPORTE ESTADÍA PLANTAS YPF (Fase 2 "detention report", 2026-06-13)**: sobre
+  `ZONA_DESCARGA_HISTORICO`. **Backend DEPLOYADO**: callable `reporteEstadiaYpf`
+  (admin/sup, rango ISO, cap 92d) + cron `resumenEstadiaYpfSemanal` (lunes 08:00 ART,
+  resumen de la semana anterior por WhatsApp al destinatario `reporteEstadiaYpf`
+  fallback Santiago + STATS/reporte_estadia_ypf). Métricas: por planta
+  (promedio/máx/n/% sobre umbral), top unidades retenidas, por franja. Lógica pura
+  testeada (410 tests); revisado adversarialmente (fixes: fecha ART en callable,
+  idempotencia semanal, cap de rango, throw en día desconocido). **PENDIENTE: la
+  PANTALLA** (admin, llama la callable / lee STATS) **va al próximo release** — es la
+  parte interactiva para mostrar/negociar con YPF. 1er resumen automático: lunes que viene.
 - [~] **ICM infracciones → subcolección (Fase 3 auditoría, 2026-06-13)**: el doc
   mensual `ICM_OFICIAL/{periodo}` rozaba 1 MiB (840-875 KB) por las infracciones
   embebidas por chofer → riesgo de FALLA de escritura del número oficial. Movidas a
@@ -141,7 +151,11 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   release si se quiere redirigir a Errazu). **Seguimiento**: validar el primer
   episodio real y calibrar el umbral con datos (después de 1-2 semanas de
   ZONA_DESCARGA_HISTORICO se puede elegir percentil por zona).
-- [ ] **DEPENDABOT: alertas de seguridad en deps TRANSITIVAS de firebase-admin**
+- [x] **DEPENDABOT ✅ CERRADO (2026-06-13)**: las 4 alertas transitivas
+  (@grpc/grpc-js high + protobufjs/qs/uuid medium) están **dismisseadas como
+  `tolerable_risk`** — 0 alertas abiertas. Contexto/análisis abajo (se mantiene
+  por si reaparecen al bumpear firebase-admin).
+- [ ] **DEPENDABOT (contexto): alertas de seguridad en deps TRANSITIVAS de firebase-admin**
   (aparecen como runs rojos de "Dependabot Updates" — NO es el CI, que está
   verde 5/5). Cluster: `@grpc/grpc-js` (high, DoS), `protobufjs`/`qs`/`uuid`
   (medium, DoS/bounds) — TODAS transitivas vía firebase-admin 13.10 →

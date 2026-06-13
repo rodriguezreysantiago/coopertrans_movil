@@ -85,3 +85,7 @@ export * from "./failover_bot";
 // 90 días — prueba re-procesable ante disputa laboral / auditoría YPF. Ver
 // archivo_frio.ts.
 export * from "./archivo_frio";
+// Reporte de estadía en plantas YPF (Fase 2 "detention report"): callable
+// on-demand + cron semanal por WhatsApp, sobre ZONA_DESCARGA_HISTORICO. Ver
+// reporte_estadia.ts.
+export * from "./reporte_estadia";

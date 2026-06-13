@@ -129,6 +129,7 @@ async function _cargarDestinatarios(): Promise<Record<string, unknown>> {
  *   - vencimientosProximosConsolidado (Giagante)
  *   - cachatoreEncargado (Errazu)
  *   - colaCreciente (admin del bot)
+ *   - colaPlantaExcedida, reporteEstadiaYpf (estadía YPF — fallback Santiago)
  */
 export async function obtenerDestinatarioDni(
   key: string,

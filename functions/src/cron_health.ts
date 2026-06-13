@@ -75,6 +75,8 @@ export const REGISTRO_CRONES: Record<string, { maxStaleMin: number }> = {
   censoColeccionesMensual: { maxStaleMin: 33 * 24 * 60 },
   // Mensual (día 5, 04:00) — archivo frío de SITRACK_EVENTOS a GCS
   archivarEventosSitrackFrio: { maxStaleMin: 33 * 24 * 60 },
+  // Semanal (lunes 08:00) — reporte de estadía en plantas YPF
+  resumenEstadiaYpfSemanal: { maxStaleMin: 8 * 24 * 60 },
 };
 
 // ─── Tipos puros ─────────────────────────────────────────────────────────────
