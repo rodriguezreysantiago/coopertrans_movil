@@ -36,6 +36,21 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   idempotencia semanal, cap de rango, throw en día desconocido). **PENDIENTE: la
   PANTALLA** (admin, llama la callable / lee STATS) **va al próximo release** — es la
   parte interactiva para mostrar/negociar con YPF. 1er resumen automático: lunes que viene.
+- [x] **SECRET MANAGER = FUENTE ÚNICA + bootstrap multi-PC (Fase 3 auditoría, 2026-06-13, HECHO)**:
+  los secrets vivían como archivos sueltos en un Drive personal (sin audit log ni
+  rotación). Ahora la fuente única es **GCP Secret Manager** (`coopertrans-movil`).
+  Script `scripts/bootstrap_secretos.ps1` (manifest-driven, base64 byte-exacto):
+  `-Subir` (vault→SM idempotente), default=bootstrap (SM→PC, `-Categoria
+  dedicada|infra|build|all`), `-Verificar` (hash). **20 archivos-secreto SUBIDOS**
+  (SA Firebase, .env bot, cachatore, FTP, Sentry, firebase-tools, keystore Android +
+  iOS/macOS .p8/.p12/provisioning); verificado 20/20 hash + round-trip byte-exacto.
+  Los 6 de VALOR de las functions (SITRACK/VOLVO/TELEGRAM, raw) NO se tocan. Excepción
+  honesta: la sesión WhatsApp (`.wwebjs_auth`) NO va a SM (queda en Drive). Excluido el
+  proyecto ajeno `secrets sport-manager/`. Revisado adversarialmente (3 lentes, 15
+  findings: 5 ALTA aplicados — `.env.bak` gitignored, exit 1 si falta algo, guardrail
+  BOT_PC_ID por hostname, chequeo keystore storeFile, doc divergencia SM/Drive).
+  RUNBOOK: `docs/RUNBOOK_secret_manager.md`. **El Drive queda de backup** (no se borró
+  nada). PENDIENTE OPCIONAL: migrar build secrets de Xcode Cloud / retirar el Drive.
 - [~] **ICM infracciones → subcolección (Fase 3 auditoría, 2026-06-13)**: el doc
   mensual `ICM_OFICIAL/{periodo}` rozaba 1 MiB (840-875 KB) por las infracciones
   embebidas por chofer → riesgo de FALLA de escritura del número oficial. Movidas a

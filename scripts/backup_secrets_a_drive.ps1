@@ -11,6 +11,12 @@
 # Politica multi-PC 2026-05-28 -- corolario operativo del refactor de
 # secrets en Drive.
 #
+# IMPORTANTE (Secret Manager = fuente unica, 2026-06-13): este backup va al
+# DRIVE, NO a Secret Manager. Si rotas un secret de la dedicada (claves YPF,
+# .env del bot, SAK), corre TAMBIEN  scripts\bootstrap_secretos.ps1 -Subir
+# -Categoria dedicada  para que SM no quede atras. -Verificar detecta la brecha.
+# (No se automatiza aca: esta task corre como SYSTEM, sin gcloud autenticado.)
+#
 # USO:
 #   .\backup_secrets_a_drive.ps1                # corrida normal
 #   .\backup_secrets_a_drive.ps1 -DryRun        # mostrar sin copiar

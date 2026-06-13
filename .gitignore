@@ -93,6 +93,7 @@ installer/VERSION.txt
 
 # Entorno y Seguridad Coopertrans Móvil
 serviceAccountKey.json
+secretos_restaurados/
 *.jks
 *.p12
 *.key
@@ -100,6 +101,8 @@ serviceAccountKey.json
 *.mobileprovision
 *.provisionprofile
 .env
+*.env.bak
+.env.bak
 cachatore/service.env
 secrets.json
 !secrets.example.json
