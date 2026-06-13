@@ -102,6 +102,19 @@ coopertrans_movil/
 
 Las capabilities cliente viven en `lib/core/services/capabilities.dart`. Los chequeos server-side están en `firestore.rules` con helpers `isAdmin()`, `isSupervisor()`, `isAdminOrSupervisor()`, `puedeOperarGomeria()`, `puedeVerVolvoTableros()`.
 
+**Tests de las rules** (auditoría 2026-06-12 — las 1.500+ líneas tenían cero red):
+- `cd functions && npm test` corre, entre otros, la **vacuna estática**
+  (`test/colecciones_vs_rules.test.js`): toda colección de `AppCollections`
+  debe tener match block en las rules (el bug AGENTE_CONVERSACIONES no puede
+  repetirse) + el catch-all deny debe existir.
+- `cd functions && npm run test:rules` levanta el **emulador de Firestore** y
+  corre `functions/test_rules/` (34 asserts): legajo propio vs ajeno, whitelist
+  self-service del chofer (TELEFONO sí / CONTRASEÑA no), anti-escalada del
+  supervisor (ACTIVO/ROL/CONTRASEÑA), ownership de jornadas v3, plata solo
+  admin/supervisor, write-false de las colecciones server-only. Requiere
+  **Java** (Temurin 21, instalado 2026-06-12) — correrla antes de deployar
+  cambios de rules.
+
 ## Cloud Functions
 
 Todas en `southamerica-east1`.

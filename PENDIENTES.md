@@ -48,8 +48,13 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   no existe). **Abierto**: credenciales Sitrack en el historial público (no se
   pueden rotar — riesgo aceptado; evaluar purga de los 3 docs igual); #8 viaje
   duplicado por remito fallido (decisión de diseño pendiente: ¿subir remito antes
-  de crear el doc, o flujo "retomar guardado"?); #12 tests de firestore.rules
-  (infra Fase 1 del plan). El plan estratégico en 4 fases vive en el reporte
+  de crear el doc, o flujo "retomar guardado"?). **#12 CERRADO (2026-06-12,
+  noche)**: tests de firestore.rules en dos capas — vacuna estática
+  AppCollections↔rules dentro de `npm test` (345 tests functions) + suite de
+  emulador `npm run test:rules` (34 asserts: whitelist self-service, anti-escalada
+  supervisor, ownership jornadas, plata, server-only). Java Temurin 21 instalado
+  para el emulador. Correr `test:rules` antes de deployar cambios de rules
+  (queda pendiente automatizarlo en CI). El plan estratégico en 4 fases vive en el reporte
   (Fase 2 = features de ROI directo: rentabilidad por tarifa, robo de gasoil,
   viajes sin facturar, detention YPF, informe ejecutivo mensual).
 - [ ] **macOS**: confirmar el estado del re-submit a Apple post-fix del

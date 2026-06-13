@@ -20,7 +20,8 @@ module.exports = tseslint.config(
     ignores: [
       "lib/**",        // output del compilador
       "generated/**",
-      "test/**",       // tests usan node:test simple, no requieren
+      "test/**",
+      "test_rules/**", // mismo motivo que test/ (node:test plano, fuera de tsconfig)       // tests usan node:test simple, no requieren
                        // lint typescript-aware (su parser exige que
                        // los archivos estén en tsconfig.json, y no
                        // queremos meter test/ ahí porque eso compila

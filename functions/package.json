@@ -5,12 +5,13 @@
     "lint": "eslint .",
     "build": "tsc",
     "build:watch": "tsc --watch",
-    "test": "npm run build && node --test",
+    "test": "npm run build && node --test \"test/*.test.js\"",
     "serve": "npm run build && firebase emulators:start --only functions",
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test:rules": "cd .. && firebase emulators:exec --only firestore \"node --test functions/test_rules/firestore_rules.test.js\""
   },
   "engines": {
     "node": "22"
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@types/bcryptjs": "^3.0.0",
     "eslint": "^9.39.4",
     "eslint-plugin-import": "^2.32.0",
