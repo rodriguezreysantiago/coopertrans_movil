@@ -97,6 +97,7 @@ export const EXCLUIDAS_DEL_BACKUP = new Set<string>([
   "ASIGNACIONES_LOCKS", // lock TOCTOU de asignaciones
   "GOMERIA_RETIROS_LOCK", // lock de retiro de cubiertas
   "META_BYPASS_SEGURIDAD", // throttle 6h del aviso de bypass de seguridad
+  "COLA_PUSH", // cola efimera de push FCM (procesada + TTL 7d)
 ]);
 
 /** Colecciones reales que no estan ni respaldadas ni whitelisteadas.

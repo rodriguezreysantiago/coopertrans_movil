@@ -162,6 +162,17 @@ service cloud.firestore {
                 || request.resource.data.ARCHIVO_PERFIL is string));
     }
 
+    // EMPLEADOS/{dni}/dispositivos — tokens FCM para push (Vertical 2, 2026-06-13).
+    // El chofer escribe/borra SUS propios tokens desde la app (registro +
+    // refresh). Admin/supervisor leen (futura vista de dispositivos). El
+    // envío de push lo hace la CF por Admin SDK (no pasa por estas rules).
+    // No se mete en el whitelist self-service de EMPLEADOS para no tocar esa
+    // superficie endurecida.
+    match /EMPLEADOS/{dni}/dispositivos/{doc} {
+      allow read: if isSelf(dni) || isAdminOrSupervisor();
+      allow write: if isSelf(dni);
+    }
+
     // ========================================================================
     // VEHICULOS — cualquier logueado lee, solo admin escribe
     // ========================================================================
@@ -280,6 +291,13 @@ service cloud.firestore {
       // El bot bypasea con Admin SDK; las rules valen solo para clientes.
       // Admin y supervisor pueden ver/encolar/reintentar/eliminar.
       allow read, write: if isAdminOrSupervisor();
+    }
+
+    // COLA_PUSH — cola de push FCM (Vertical 2, 2026-06-13). La escriben las
+    // CF (TS) y el cachatore (Python) por Admin SDK; el trigger procesarColaPush
+    // la consume. El cliente NO la toca.
+    match /COLA_PUSH/{doc} {
+      allow read, write: if false;
     }
 
     // ========================================================================

@@ -73,3 +73,7 @@ export * from "./cron_health";
 // STATS/censo_{mes} + diff vs mes anterior → WhatsApp (crecimientos >40% y
 // colecciones nuevas resaltados). Ver censo_colecciones.ts.
 export * from "./censo_colecciones";
+// Push FCM (Vertical 2 deep-links+push): cola COLA_PUSH multi-productor →
+// trigger procesarColaPush resuelve tokens (EMPLEADOS/{dni}/dispositivos) y
+// envía, podando los muertos. Ver push.ts.
+export * from "./push";

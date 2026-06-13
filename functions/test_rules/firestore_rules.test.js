@@ -91,6 +91,7 @@ before(async () => {
     await setDoc(doc(d, 'CRON_HEALTH', 'sitrackPosicionPoller'), {
       ultimo_ok: new Date(),
     });
+    await setDoc(doc(d, 'COLA_PUSH', 'p1'), { dni: DNI_CHOFER, titulo: 'x' });
   });
 });
 
@@ -150,6 +151,25 @@ describe('CHOFER — jornadas y plata', () => {
     assertFails(getDoc(doc(db(DNI_CHOFER, 'CHOFER'), 'ADELANTOS_CHOFER', 'a1'))));
   test('NO lee las conversaciones del agente IA', () =>
     assertFails(getDoc(doc(db(DNI_CHOFER, 'CHOFER'), 'AGENTE_CONVERSACIONES', 'c1'))));
+});
+
+describe('Push — tokens de dispositivo y COLA_PUSH', () => {
+  test('el chofer registra SU propio token de dispositivo (FCM)', () =>
+    assertSucceeds(setDoc(
+      doc(db(DNI_CHOFER, 'CHOFER'),
+        'EMPLEADOS', DNI_CHOFER, 'dispositivos', 'install-1'),
+      { token: 'fcm-abc', plataforma: 'android' })));
+  test('el chofer NO registra un token en el legajo de otro', () =>
+    assertFails(setDoc(
+      doc(db(DNI_CHOFER, 'CHOFER'),
+        'EMPLEADOS', DNI_OTRO, 'dispositivos', 'install-x'),
+      { token: 'fcm-xyz' })));
+  test('COLA_PUSH es server-only: ni el admin la lee/escribe desde el cliente',
+    async () => {
+      await assertFails(getDoc(doc(db('11111111', 'ADMIN'), 'COLA_PUSH', 'p1')));
+      await assertFails(setDoc(doc(db('11111111', 'ADMIN'), 'COLA_PUSH', 'p2'),
+        { dni: DNI_CHOFER, titulo: 'x' }));
+    });
 });
 
 describe('GOMERIA — acceso acotado a su módulo', () => {
