@@ -27,10 +27,10 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
        - `DD:83:AF:CA:…:87:64` = **app-signing key de Play** (Google re-firma el AAB)
          → instalaciones desde Play. Sacada de Play Console → keymanagement.
      App Links autoVerify aprueba ambos caminos. No queda nada pendiente en Android.
-  2. **iOS**: Xcode → Runner → Signing & Capabilities → **+ Associated Domains** →
-     `applinks:coopertrans-movil.web.app` (Xcode escribe el pbxproj + habilita la
-     capability en el App ID + regenera el provisioning profile). El entitlements
-     ya está creado para que lo reuse.
+  2. **iOS Associated Domains**: ✅ **CERRADO (2026-06-13)**. Capability habilitada
+     en el **App ID** `com.coopertrans.movil` (developer.apple.com → Identifiers).
+     El entitlements del repo ya declara `applinks:coopertrans-movil.web.app`; Xcode
+     Cloud regenera el provisioning en el próximo build de release.
   3. **Bot/functions appendeando los links a los avisos** (hacer JUNTO al release,
      no antes — si no, los choferes reciben links que caen en la página de fallback
      hasta que actualicen): footer `/app/ir/{destino}` en vencimientos (bot
@@ -49,20 +49,27 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   `POST_NOTIFICATIONS` + iOS Info.plist UIBackgroundModes ya en el repo.
   **Falta para que el push LLEGUE a los teléfonos**:
   1. **Release de la app** (sube el `PushService`).
-  2. **iOS (Xcode/Apple, una vez)**: Signing & Capabilities → **+ Push Notifications**
-     (escribe `aps-environment` + actualiza el provisioning) + **subir la APNs Auth
-     Key (.p8) a Firebase Console** (Project Settings → Cloud Messaging). SIN la APNs
-     key el push NO llega a iPhone. Android ya funciona (google-services.json).
+  2. **iOS (Apple/Firebase, una vez)**: ✅ **CERRADO (2026-06-13)**. (a) Capability
+     **Push Notifications** habilitada en el App ID `com.coopertrans.movil`. (b) **APNs
+     Auth Key** generada (`3FQKMB32HK`, Team `34NKYGL9KM`, Sandbox & Production, Team
+     Scoped All Topics) y **subida a Firebase Cloud Messaging en AMBAS filas**
+     (desarrollo + producción). El `.p8` está respaldado en el vault
+     (`secrets/secrets-ios/AuthKey_3FQKMB32HK.p8` + nota). Android ya funcionaba
+     (google-services.json). Falta solo el **release** que sube el `PushService`.
   3. **Productores → `COLA_PUSH`**: ✅ LOS 3 HECHOS. Turno del cachatore (nube.py,
      `ba0adae`) + cambio de rol/sesión (auth.ts, DEPLOYADO `ba0adae`) + **failover
      de críticos** (`failoverCriticosBot`, DEPLOYADO `b6c0436`): cada 10 min, si el
      bot está caído, pushea los avisos críticos pendientes al chofer + escala a
      Santiago por Telegram. La escalación Telegram FUNCIONA YA (cierra el agujero
      #1 de resiliencia de la auditoría); el push es inerte hasta tener tokens.
-  **ESTADO: toda la feature deep-links+push está CONSTRUIDA (backend + 3 productores
-  + app cliente + deep links). Solo falta el release + los 2 pasos iOS externos (cap
-  Push + APNs key) y los de deep links (~~SHA-256 Android ✅~~, cap Associated Domains
-  iOS, appendear links a los avisos) para que llegue end-to-end a los teléfonos.**
+  **ESTADO (2026-06-13): toda la feature deep-links+push está CONSTRUIDA (backend +
+  3 productores + app cliente + deep links) y TODA la config externa de Apple/Google
+  está CERRADA: ~~SHA-256 Android ✅~~, ~~Associated Domains iOS ✅~~, ~~Push
+  Notifications cap iOS ✅~~, ~~APNs Auth Key en Firebase ✅~~. Solo quedan 2 cosas,
+  AMBAS al momento del release: (1) appendear los links `/app/ir/{destino}` a los
+  avisos (bot/functions) y (2) el RELEASE de la app (sube el handler + PushService).
+  Hasta el release, todo el push está inerte (no hay tokens registrados) y los deep
+  links caen en la página de fallback.**
 - [ ] **LOTE FASE 1 INFRA (2026-06-12, noche — revisado adversarialmente antes de prod)**:
   (a) **Backup DIARIO** (era semanal — RPO 7d→1d) con **auto-verificación anti-drift**:
   compara `collectionIds` vs `listCollections()` real y Telegram si algo quedó sin
