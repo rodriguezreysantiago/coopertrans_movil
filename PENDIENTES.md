@@ -23,8 +23,9 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   deploy rules. Revisado adversarialmente (5 lentes); fix de 1 BLOQUEANTE (lockout en
   rename si fallaba la copia de credencial). **Cliente** (alta por batch) commiteado,
   se activa con el **próximo release** (hasta entonces el login consolida a los nuevos).
-  PENDIENTE menor (decisión de negocio): ¿`resetearContrasenaEmpleadoAdmin` debe
-  seguir permitiendo que un SUPERVISOR resetee la pass de un ADMIN? (pre-existente).
+  Extra (2026-06-13, DEPLOYADO): un SUPERVISOR ya NO puede resetear la pass de un
+  ADMIN (`puedeResetearPassword` + guard en `resetearContrasenaEmpleadoAdmin`) —
+  cerrado el vector de escalada pre-existente que marcó la revisión.
 - [ ] **DEEP LINKS — Vertical 1 (commit `0df2549`, 2026-06-13): infra + handler LISTOS,
   falta ACTIVAR**. Cada aviso de WhatsApp podrá abrir la app en la pantalla exacta
   (`coopertrans-movil.web.app/app/ir/{destino}`; destinos: jornada, vencimientos,
