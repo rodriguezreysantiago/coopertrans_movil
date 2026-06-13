@@ -81,3 +81,7 @@ export * from "./push";
 // push al chofer + escalación Telegram a Santiago de los pendientes críticos.
 // Ver failover_bot.ts.
 export * from "./failover_bot";
+// Archivo frío mensual de SITRACK_EVENTOS a GCS (clase ARCHIVE) antes del TTL de
+// 90 días — prueba re-procesable ante disputa laboral / auditoría YPF. Ver
+// archivo_frio.ts.
+export * from "./archivo_frio";

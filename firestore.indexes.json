@@ -9,6 +9,14 @@
       ]
     },
     {
+      "collectionGroup": "SITRACK_EVENTOS",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "report_date", "order": "ASCENDING" },
+        { "fieldPath": "recibido_en", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "VOLVO_SCORES_DIARIOS",
       "queryScope": "COLLECTION",
       "fields": [

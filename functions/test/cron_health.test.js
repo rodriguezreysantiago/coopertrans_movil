@@ -168,10 +168,11 @@ describe('construirMensajeIncidentes', () => {
 });
 
 describe('REGISTRO_CRONES — consistencia con el código real', () => {
-  test('los 26 onSchedule del codebase están registrados', () => {
+  test('los 27 onSchedule del codebase están registrados', () => {
     // Censo del 2026-06-12 (README "regenerado desde el código") +
-    // censoColeccionesMensual + failoverCriticosBot (2026-06-13). Si se
-    // agrega un cron nuevo, este test recuerda sumarlo al registro.
+    // censoColeccionesMensual + failoverCriticosBot (2026-06-13) +
+    // archivarEventosSitrackFrio (2026-06-13). Si se agrega un cron nuevo,
+    // este test recuerda sumarlo al registro.
     const esperados = [
       'backfillDescargasDiario', 'backupFirestoreScheduled',
       'botHealthWatchdog', 'censoColeccionesMensual',
@@ -185,7 +186,7 @@ describe('REGISTRO_CRONES — consistencia con el código real', () => {
       'resumenMantenimientoVehiculosDiario', 'sitrackEventosPoller',
       'sitrackPosicionPoller', 'telemetriaSnapshotScheduled',
       'vigiladorJornadaChofer', 'volvoAlertasPoller', 'volvoScoresPoller',
-      'zonaDescargaPoller',
+      'zonaDescargaPoller', 'archivarEventosSitrackFrio',
     ];
     for (const id of esperados) {
       assert.ok(REGISTRO_CRONES[id], `falta ${id} en REGISTRO_CRONES`);

@@ -73,6 +73,8 @@ export const REGISTRO_CRONES: Record<string, { maxStaleMin: number }> = {
   backupFirestoreScheduled: { maxStaleMin: 26 * 60 },
   // Mensual (día 1, 03:30) — 33 días de tolerancia
   censoColeccionesMensual: { maxStaleMin: 33 * 24 * 60 },
+  // Mensual (día 5, 04:00) — archivo frío de SITRACK_EVENTOS a GCS
+  archivarEventosSitrackFrio: { maxStaleMin: 33 * 24 * 60 },
 };
 
 // ─── Tipos puros ─────────────────────────────────────────────────────────────
