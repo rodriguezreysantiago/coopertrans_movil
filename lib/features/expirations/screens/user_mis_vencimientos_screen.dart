@@ -15,6 +15,7 @@ import '../../../shared/constants/app_colors.dart';
 import '../../../shared/utils/app_feedback.dart';
 import '../../../shared/utils/fecha_input_formatter.dart';
 import '../../../shared/utils/formatters.dart';
+import '../../../shared/services/papeles_offline_service.dart';
 import '../../../shared/utils/ocr_service.dart';
 import '../../../shared/widgets/app_widgets.dart';
 import '../../checklist/screens/user_checklist_form_screen.dart';
@@ -49,6 +50,50 @@ class _UserMisVencimientosScreenState
   /// chofer con red lenta).
   bool _conexionLenta = false;
   Timer? _slowConnTimer;
+
+  /// Se dispara UNA vez (cuando llega la data con red) para pre-descargar los
+  /// PDF/fotos de los documentos al cache local — así el chofer los puede mostrar
+  /// en un control de ruta SIN señal. Ver PapelesOfflineService.
+  bool _precacheDisparado = false;
+
+  /// Junta las URLs de archivo (`ARCHIVO_*`) de un doc de Firestore.
+  static List<String> _urlsArchivo(Map<String, dynamic>? m) {
+    if (m == null) return const [];
+    final out = <String>[];
+    m.forEach((k, v) {
+      if (k.startsWith('ARCHIVO_') && v is String && v.startsWith('http')) {
+        out.add(v);
+      }
+    });
+    return out;
+  }
+
+  /// Pre-descarga (best-effort, en background) los archivos de los papeles del
+  /// chofer: personales (su legajo) + del tractor/enganche + de su empresa.
+  Future<void> _precachearDocs(
+    Map<String, dynamic> data,
+    String pVehiculo,
+    String pEnganche,
+    String cuitEmpresa,
+  ) async {
+    final urls = <String>{}..addAll(_urlsArchivo(data));
+    final db = FirebaseFirestore.instance;
+    Future<void> sumarDoc(String col, String id) async {
+      final limpio = id.trim();
+      if (limpio.isEmpty || limpio == '-' || limpio.toUpperCase() == 'SIN ASIGNAR') {
+        return;
+      }
+      try {
+        final s = await db.collection(col).doc(limpio).get();
+        if (s.exists) urls.addAll(_urlsArchivo(s.data()));
+      } catch (_) {/* best-effort */}
+    }
+
+    await sumarDoc('VEHICULOS', pVehiculo);
+    await sumarDoc('VEHICULOS', pEnganche);
+    await sumarDoc('EMPRESAS_EMPLEADORAS', cuitEmpresa);
+    if (urls.isNotEmpty) await PapelesOfflineService.precachear(urls);
+  }
 
   @override
   void initState() {
@@ -459,6 +504,15 @@ class _UserMisVencimientosScreenState
           final pEnganche = (data['ENGANCHE'] ?? '').toString().trim();
           final cuitEmpresa = AppEmpresasEmpleadoras.cuitDeStringEmpresa(
               (data['EMPRESA'] ?? '').toString());
+
+          // Una sola vez, en background: pre-descarga los archivos al cache
+          // local para poder mostrarlos offline en un control de ruta.
+          if (!_precacheDisparado) {
+            _precacheDisparado = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _precachearDocs(data, pVehiculo, pEnganche, cuitEmpresa ?? '');
+            });
+          }
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(

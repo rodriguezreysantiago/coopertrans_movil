@@ -20,9 +20,12 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   controles del equipo" tractor+enganche RTO/seguro). No se construyó duplicado. El
   net-new fue el **bot tool `papeles_empresa`** (DEPLOYADO por git→dedicada): el chofer
   pregunta por WhatsApp el ART/931/seguro de vida de su empresa (on-demand, NO viola
-  el "no push proactivo" de 2026-05-08). **PENDIENTE OPCIONAL**: offline de los
-  ARCHIVOS (que el chofer muestre los PDF en un control sin señal — hoy los datos los
-  cachea Firestore, los archivos no). +2 tests bot (121/121).
+  el "no push proactivo" de 2026-05-08). +2 tests bot (121/121). **OFFLINE DE ARCHIVOS
+  ✅ (2026-06-13)**: `PapelesOfflineService` (cache persistente dio+path_provider, sin
+  libs nuevas, clave sha256(url), prune 180d); el viewer (`preview_screen`) sirve PDF/
+  fotos cache-first (offline-capable); `user_mis_vencimientos_screen` pre-descarga todos
+  los archivos (legajo+tractor+enganche+empresa) al abrir con red. Revisado (fix de 1
+  MEDIA: visor de imagen memoiza la descarga). **VA AL PRÓXIMO RELEASE** (es cliente).
 - [~] **REPORTE ESTADÍA PLANTAS YPF (Fase 2 "detention report", 2026-06-13)**: sobre
   `ZONA_DESCARGA_HISTORICO`. **Backend DEPLOYADO**: callable `reporteEstadiaYpf`
   (admin/sup, rango ISO, cap 92d) + cron `resumenEstadiaYpfSemanal` (lunes 08:00 ART,

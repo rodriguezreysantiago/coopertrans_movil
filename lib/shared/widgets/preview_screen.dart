@@ -1,12 +1,12 @@
 import 'dart:typed_data';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../constants/app_colors.dart';
+import '../services/papeles_offline_service.dart';
 
 import 'package:coopertrans_movil/core/theme/app_spacing.dart';
 import 'package:coopertrans_movil/core/theme/app_typography.dart';
@@ -114,36 +114,10 @@ class PreviewScreen extends StatelessWidget {
   // ===========================================================================
   // VISOR DE IMÁGENES con zoom interactivo
   // ===========================================================================
-  Widget _buildImageViewer(BuildContext context) {
-    return InteractiveViewer(
-      panEnabled: true,
-      minScale: 0.5,
-      maxScale: 5.0,
-      child: Center(
-        child: Image.network(
-          url,
-          fit: BoxFit.contain,
-          loadingBuilder: (context, child, progress) {
-            if (progress == null) return child;
-            return Center(
-              child: CircularProgressIndicator(
-                value: progress.expectedTotalBytes != null
-                    ? progress.cumulativeBytesLoaded /
-                        progress.expectedTotalBytes!
-                    : null,
-                color: Theme.of(context).colorScheme.primary,
-                strokeWidth: 2,
-              ),
-            );
-          },
-          errorBuilder: (context, error, stackTrace) =>
-              _buildErrorPlaceholder('La imagen no está disponible'),
-        ),
-      ),
-    );
-  }
+  // Cache-first (offline). Stateful para NO recrear la descarga en cada rebuild.
+  Widget _buildImageViewer(BuildContext context) => _ImagenOfflineViewer(url: url);
 
-  Widget _buildErrorPlaceholder(String mensaje) {
+  static Widget _buildErrorPlaceholder(String mensaje) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -196,23 +170,14 @@ class _PdfViewerRobustoState extends State<_PdfViewerRobusto> {
   }
 
   Future<Uint8List> _bajarPdf() async {
-    final resp = await Dio().get<List<int>>(
+    // Cache-first (offline en un control de ruta): si ya se descargó antes con
+    // red, lo sirve desde disco sin conexión; si no y hay red, lo baja + cachea.
+    return PapelesOfflineService.bytes(
       widget.url,
-      options: Options(
-        responseType: ResponseType.bytes,
-        receiveTimeout: const Duration(minutes: 3),
-      ),
-      onReceiveProgress: (recibido, total) {
-        if (total > 0 && mounted) {
-          setState(() => _progreso = recibido / total);
-        }
+      onProgreso: (p) {
+        if (mounted) setState(() => _progreso = p);
       },
     );
-    final bytes = resp.data;
-    if (bytes == null || bytes.isEmpty) {
-      throw Exception('La descarga vino vacía.');
-    }
-    return Uint8List.fromList(bytes);
   }
 
   PdfViewerParams get _params => PdfViewerParams(
@@ -301,6 +266,67 @@ class _PdfViewerRobustoState extends State<_PdfViewerRobusto> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// =============================================================================
+// VISOR DE IMAGEN OFFLINE — cache-first, descarga memoizada (no re-baja)
+// =============================================================================
+// Stateful a propósito: si fuera un FutureBuilder inline en el StatelessWidget,
+// cada rebuild (zoom/pan del InteractiveViewer, rotación) recrearía el Future y
+// re-descargaría / parpadearía. Memoizamos la descarga en initState.
+class _ImagenOfflineViewer extends StatefulWidget {
+  final String url;
+  const _ImagenOfflineViewer({required this.url});
+
+  @override
+  State<_ImagenOfflineViewer> createState() => _ImagenOfflineViewerState();
+}
+
+class _ImagenOfflineViewerState extends State<_ImagenOfflineViewer> {
+  late final Future<Uint8List> _bytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _bytes = PapelesOfflineService.bytes(widget.url);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: _bytes,
+      builder: (ctx, snap) {
+        if (snap.connectionState != ConnectionState.done) {
+          return Center(
+            child: CircularProgressIndicator(
+              color: Theme.of(context).colorScheme.primary,
+              strokeWidth: 2,
+            ),
+          );
+        }
+        if (snap.hasError || snap.data == null) {
+          return PreviewScreen._buildErrorPlaceholder(
+            'La imagen no está disponible sin conexión (abrila con red al menos '
+            'una vez para guardarla).',
+          );
+        }
+        return InteractiveViewer(
+          panEnabled: true,
+          minScale: 0.5,
+          maxScale: 5.0,
+          child: Center(
+            child: Image.memory(
+              snap.data!,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) =>
+                  PreviewScreen._buildErrorPlaceholder(
+                      'La imagen no está disponible'),
+            ),
+          ),
+        );
+      },
     );
   }
 }
