@@ -109,7 +109,21 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
   bool _guardando = false;
   String? _errorCarga;
 
-  bool get _esEdicion => widget.viajeId != null;
+  /// Retomar guardado (auditoría 2026-06-12, #8): si `crearViaje` ya corrió
+  /// OK pero un paso POSTERIOR falló (subida de remito, asociación de
+  /// adelantos), acá queda el id del doc YA creado. Desde ese instante el
+  /// form opera en modo edición sobre ese id: el próximo GUARDAR completa
+  /// lo pendiente sin pasar por el chequeo de duplicados ni crear un
+  /// segundo doc (antes: el operador reintentaba, el dialog de duplicados
+  /// le preguntaba "¿es un viaje distinto?" y confirmando creaba el
+  /// duplicado). Si en vez de reintentar CIERRA el form, el viaje huérfano
+  /// queda visible en la lista y se completa entrando a Editar — el
+  /// borrador no se borra hasta el guardado completo.
+  String? _viajeIdRetomado;
+
+  bool get _esEdicion => widget.viajeId != null || _viajeIdRetomado != null;
+
+  String get _viajeIdEfectivo => widget.viajeId ?? _viajeIdRetomado!;
 
   // ─── Auto-guardar borrador ───
   // Timer debounced que persiste el estado del form a
@@ -747,7 +761,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
       String viajeId;
       if (_esEdicion) {
         await ViajesService.actualizarViaje(
-          viajeId: widget.viajeId!,
+          viajeId: _viajeIdEfectivo,
           tramos: tramosViaje,
           choferDni: _choferDni!,
           choferNombre: _choferNombre,
@@ -772,7 +786,7 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
           fechaPostergadoA: _fechaPostergadoA,
           actualizadoPorDni: dniActual,
         );
-        viajeId = widget.viajeId!;
+        viajeId = _viajeIdEfectivo;
       } else {
         viajeId = await ViajesService.crearViaje(
           tramos: tramosViaje,
@@ -797,6 +811,9 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
           fechaPostergadoA: _fechaPostergadoA,
           creadoPorDni: dniActual,
         );
+        // Desde este punto el doc EXISTE en Firestore: cualquier fallo de
+        // los pasos siguientes debe RETOMAR sobre este id, jamás re-crear.
+        _viajeIdRetomado = viajeId;
       }
 
       // Subir remitos pendientes de los tramos (los que el operador
@@ -884,15 +901,26 @@ class _LogisticaViajeFormScreenState extends State<LogisticaViajeFormScreen> {
       if (!mounted) return;
       AppFeedback.successOn(
         messenger,
-        _esEdicion ? 'Viaje actualizado.' : 'Viaje creado.',
+        // OJO: con _esEdicion acá un alta retomada diría "actualizado".
+        // El mensaje refleja la INTENCIÓN original del operador.
+        widget.viajeId != null ? 'Viaje actualizado.' : 'Viaje creado.',
       );
       Navigator.of(context).pop();
     } catch (e, s) {
       if (mounted) {
+        // El setState además re-pinta el título como "Editar viaje" si el
+        // alta quedó a medias (_esEdicion ya cambió) — refuerza que el
+        // viaje existe.
         setState(() => _guardando = false);
+        final altaQuedoAMedias =
+            widget.viajeId == null && _viajeIdRetomado != null;
         AppFeedback.errorTecnicoOn(
           messenger,
-          usuario: 'No se pudo guardar el viaje. Probá de nuevo.',
+          usuario: altaQuedoAMedias
+              ? 'El viaje YA quedó guardado, pero falló un paso posterior '
+                  '(remito o adelantos). Tocá GUARDAR de nuevo para '
+                  'completarlo — no se va a duplicar.'
+              : 'No se pudo guardar el viaje. Probá de nuevo.',
           tecnico: e,
           stack: s,
         );
