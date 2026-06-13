@@ -30,13 +30,13 @@ versionable**, así que **NO va a Secret Manager**. Sigue respaldada en el Drive
 
 ---
 
-## Las 20 secrets (categorías)
+## Las 21 secrets (categorías)
 
 | Categoría | Secrets | Destino al restaurar |
 |---|---|---|
 | **dedicada** (runtime bot/scrapers) | `SA_FIREBASE_ADMIN`, `WHATSAPP_BOT_ENV`, `CACHATORE_CLAVES`, `CACHATORE_SERVICE_ENV` | rutas reales del repo (`serviceAccountKey.json`, `whatsapp-bot\.env`, `cachatore\…`) |
 | **infra** | `FTP_DATOS`, `SENTRY_AUTH_TOKEN`, `SENTRY_CLIRC`, `FIREBASE_TOOLS_TOKEN` | `secretos_restaurados\…` (gitignored) |
-| **build** | `ANDROID_KEYSTORE`, `ANDROID_KEY_PROPERTIES`, `IOS_APNS_AUTHKEY_*` (×2), `IOS_DIST_P12`, `IOS_PROVISION_*` (×3), `MACOS_P12`, `MACOS_KEY`, `MACOS_P12_PASSWORD`, `MACOS_PROVISION` | keystore→`android\`; resto→`secretos_restaurados\{ios,macos}\` |
+| **build** | `ANDROID_KEYSTORE`, `ANDROID_KEY_PROPERTIES`, `IOS_APNS_AUTHKEY_*` (×2), `IOS_DIST_P12`, `IOS_DIST_CERT_P12_PASSWORD`, `IOS_PROVISION_*` (×3), `MACOS_P12`, `MACOS_KEY`, `MACOS_P12_PASSWORD`, `MACOS_PROVISION` | keystore→`android\`; resto→`secretos_restaurados\{ios,macos}\` |
 
 `secretos_restaurados/` está en `.gitignore` — nunca se commitea.
 
@@ -93,6 +93,37 @@ Agregá una fila al `$Manifest` (Secret/Vault/Target/Cat) y corré `-Subir`.
 ```
 
 ---
+
+## Xcode Cloud (iOS) — espejo sincronizado
+
+**Xcode Cloud NO puede leer Secret Manager** (corre en infra de Apple). Los 5 secrets
+de firma iOS viven como **env vars del workflow** en App Store Connect (los consume
+`ios/ci_scripts/ci_post_clone.sh`). Secret Manager es la **copia maestra**; Xcode Cloud
+es un espejo que se sincroniza a mano cuando rota (el cert vence 1×/año; los profiles casi nunca).
+
+| env var del workflow (Secret en ASC) | Secret Manager | nota |
+|---|---|---|
+| `IOS_DIST_CERT_P12_BASE64` | `IOS_DIST_P12` | base64 del .p12 (= valor a pegar) |
+| `IOS_DIST_CERT_P12_PASSWORD` | `IOS_DIST_CERT_P12_PASSWORD` | password del .p12 (valor crudo, sin newline) |
+| `IOS_DIST_PROFILE_BASE64` | `IOS_PROVISION_APPSTORE` | provisioning App Store |
+| `IOS_ADHOC_PROFILE_BASE64` | `IOS_PROVISION_ADHOC` | provisioning Ad Hoc |
+| `IOS_DEV_PROFILE_BASE64` | `IOS_PROVISION_DEV` | provisioning Development |
+
+### Sincronizar / rotar el cert o un profile
+1. Actualizá el material en el vault (regenerar cert/profile según el README de
+   `secrets-ios/`) y corré `.\scripts\bootstrap_secretos.ps1 -Subir`.
+2. Generá los valores listos para pegar:
+   ```powershell
+   .\scripts\bootstrap_secretos.ps1 -XcodeCloud
+   ```
+   Escribe cada env var a `secretos_restaurados\xcode_cloud\<ENVVAR>.txt` (gitignored).
+3. App Store Connect → Xcode Cloud → tu workflow → **Environment Variables**: pegá cada
+   `.txt` en su env var, marcando **Secret**. **No agregues newline.**
+4. Dispará un build de prueba. **Borrá `secretos_restaurados\xcode_cloud\`** al terminar.
+
+> No se automatiza vía App Store Connect API: el soporte para *escribir* secret env vars
+> es limitado y requeriría una ASC API key (otro secret). Para una rotación anual, el
+> paste manual es más robusto.
 
 ## Coexistencia con el Drive
 El Drive **sigue** como backup (no se borró nada). `backup_secrets_a_drive.ps1` mantiene

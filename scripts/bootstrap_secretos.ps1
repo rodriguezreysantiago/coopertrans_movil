@@ -25,6 +25,7 @@
 #   .\scripts\bootstrap_secretos.ps1 -Categoria dedicada   # solo runtime (bot/scrapers)
 #   .\scripts\bootstrap_secretos.ps1 -Categoria build      # solo secrets de build (keystore/iOS/macOS)
 #   .\scripts\bootstrap_secretos.ps1 -Verificar            # compara hash SM vs vault
+#   .\scripts\bootstrap_secretos.ps1 -XcodeCloud           # emite los env vars iOS para pegar en Xcode Cloud
 #
 # Categorias: dedicada (runtime PC dedicada) | infra (FTP/Sentry/CLI) |
 #             build (keystore Android + iOS/macOS) | all (default).
@@ -45,6 +46,7 @@
 param(
     [switch]$Subir,
     [switch]$Verificar,
+    [switch]$XcodeCloud,
     [switch]$DryRun,
     [ValidateSet('all', 'dedicada', 'infra', 'build')]
     [string]$Categoria = 'all',
@@ -83,6 +85,7 @@ $Manifest = @(
     @{ Secret = 'IOS_APNS_AUTHKEY_3FQKMB32HK';  Vault = 'secrets-ios\AuthKey_3FQKMB32HK.p8';                       Target = 'secretos_restaurados\ios\AuthKey_3FQKMB32HK.p8';             Cat = 'build' }
     @{ Secret = 'IOS_APNS_AUTHKEY_7K3A7243WL';  Vault = 'secrets-ios\AuthKey_7K3A7243WL.p8';                       Target = 'secretos_restaurados\ios\AuthKey_7K3A7243WL.p8';             Cat = 'build' }
     @{ Secret = 'IOS_DIST_P12';                 Vault = 'secrets-ios\coopertrans_dist.p12';                        Target = 'secretos_restaurados\ios\coopertrans_dist.p12';              Cat = 'build' }
+    @{ Secret = 'IOS_DIST_CERT_P12_PASSWORD';   Vault = 'secrets-ios\dist_p12_password.txt';                       Target = 'secretos_restaurados\ios\dist_p12_password.txt';            Cat = 'build' }
     @{ Secret = 'IOS_PROVISION_APPSTORE';       Vault = 'secrets-ios\Coopertrans_Movil_App_Store.mobileprovision'; Target = 'secretos_restaurados\ios\Coopertrans_Movil_App_Store.mobileprovision'; Cat = 'build' }
     @{ Secret = 'IOS_PROVISION_ADHOC';          Vault = 'secrets-ios\Coopertrans_Movil_Ad_Hoc.mobileprovision';    Target = 'secretos_restaurados\ios\Coopertrans_Movil_Ad_Hoc.mobileprovision';    Cat = 'build' }
     @{ Secret = 'IOS_PROVISION_DEV';            Vault = 'secrets-ios\Coopertrans_Movil_Development.mobileprovision'; Target = 'secretos_restaurados\ios\Coopertrans_Movil_Development.mobileprovision'; Cat = 'build' }
@@ -91,6 +94,19 @@ $Manifest = @(
     @{ Secret = 'MACOS_KEY';                    Vault = 'secrets-macos\CoopertransMac.key';                        Target = 'secretos_restaurados\macos\CoopertransMac.key';              Cat = 'build' }
     @{ Secret = 'MACOS_P12_PASSWORD';           Vault = 'secrets-macos\p12_password.txt';                          Target = 'secretos_restaurados\macos\p12_password.txt';                Cat = 'build' }
     @{ Secret = 'MACOS_PROVISION';              Vault = 'secrets-macos\Coopertrans_Movil_Mac_App_Store.provisionprofile'; Target = 'secretos_restaurados\macos\Coopertrans_Movil_Mac_App_Store.provisionprofile'; Cat = 'build' }
+)
+
+# --- Mapa Xcode Cloud: env var del workflow <-> secret en SM (para -XcodeCloud) -
+# Xcode Cloud NO lee de Secret Manager (corre en infra de Apple): estos valores
+# se pegan a mano en App Store Connect -> Xcode Cloud -> workflow -> Environment.
+# SM es la copia maestra. Decode=$true -> el env var quiere el valor CRUDO (no el
+# base64): el password. Los demas quieren el base64 tal cual (lo que ya guarda SM).
+$XcodeCloudMap = @(
+    @{ EnvVar = 'IOS_DIST_CERT_P12_BASE64';   Secret = 'IOS_DIST_P12';              Decode = $false }
+    @{ EnvVar = 'IOS_DIST_CERT_P12_PASSWORD'; Secret = 'IOS_DIST_CERT_P12_PASSWORD'; Decode = $true }
+    @{ EnvVar = 'IOS_DIST_PROFILE_BASE64';    Secret = 'IOS_PROVISION_APPSTORE';    Decode = $false }
+    @{ EnvVar = 'IOS_ADHOC_PROFILE_BASE64';   Secret = 'IOS_PROVISION_ADHOC';       Decode = $false }
+    @{ EnvVar = 'IOS_DEV_PROFILE_BASE64';     Secret = 'IOS_PROVISION_DEV';         Decode = $false }
 )
 
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
@@ -153,6 +169,43 @@ if (-not (Get-Command gcloud -ErrorAction SilentlyContinue)) {
     Write-Host "ERROR: no encuentro 'gcloud' en el PATH." -ForegroundColor Red
     Write-Host "       Instala el Google Cloud SDK y corre 'gcloud auth login'." -ForegroundColor Yellow
     exit 1
+}
+
+# =============================================================================
+# MODO XCODE CLOUD: emite los env vars del workflow listos para pegar.
+# =============================================================================
+# Xcode Cloud NO puede leer Secret Manager: saca los valores de SM y los deja en
+# archivos (gitignored) para pegar a mano en App Store Connect. SM = copia maestra.
+if ($XcodeCloud) {
+    $outDir = Join-Path $RepoRoot 'secretos_restaurados\xcode_cloud'
+    if (-not (Test-Path -LiteralPath $outDir)) { New-Item -ItemType Directory -Path $outDir -Force | Out-Null }
+    Write-Host "[xcode-cloud] env vars del workflow (Secret Manager -> archivos para pegar)" -ForegroundColor Cyan
+    Write-Host "  Carpeta: $outDir" -ForegroundColor DarkGray
+    Write-Host "  (gitignored; BORRALA al terminar de pegar en App Store Connect)" -ForegroundColor Yellow
+    Write-Host ""
+    $falt = 0
+    foreach ($m in $XcodeCloudMap) {
+        $b64 = Get-SecretB64 $m.Secret
+        if (-not $b64) {
+            Write-Host "  ! $($m.EnvVar) <- SM:$($m.Secret): sin version accesible" -ForegroundColor Red
+            $falt++; continue
+        }
+        $file = Join-Path $outDir "$($m.EnvVar).txt"
+        if ($m.Decode) {
+            $bytes = [Convert]::FromBase64String($b64)
+            [System.IO.File]::WriteAllBytes($file, $bytes)            # valor crudo, sin newline
+            $len = $bytes.Length
+        } else {
+            [System.IO.File]::WriteAllText($file, $b64, $Utf8NoBom)   # base64 tal cual
+            $len = $b64.Length
+        }
+        Write-Host ("  OK {0,-28} <- SM:{1,-26} ({2} chars)" -f $m.EnvVar, $m.Secret, $len) -ForegroundColor Green
+    }
+    Write-Host ""
+    Write-Host "Pegar cada .txt en: App Store Connect -> Xcode Cloud -> (tu workflow) ->" -ForegroundColor Cyan
+    Write-Host "  Environment Variables, marcando cada uno como 'Secret'. NO agregar newline." -ForegroundColor Cyan
+    if ($falt -gt 0) { exit 1 }
+    exit 0
 }
 
 # --- Filtro por categoria ----------------------------------------------------
