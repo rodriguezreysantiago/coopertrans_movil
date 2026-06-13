@@ -164,10 +164,14 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   batch de zonas (flush a 400 ops, DEPLOYADO); README regenerado desde el código
   (24 crons reales con horarios, 16 onCall, 2 triggers, 24 features, módulos
   functions al día — el catálogo viejo tenía 9 crons faltantes y un trigger que ya
-  no existe). **Abierto**: credenciales Sitrack en el historial público (no se
-  pueden rotar — riesgo aceptado; evaluar purga de los 3 docs igual); #8 viaje
-  duplicado por remito fallido (decisión de diseño pendiente: ¿subir remito antes
-  de crear el doc, o flujo "retomar guardado"?). **#12 CERRADO (2026-06-12,
+  no existe). **Credenciales texto plano PURGADAS del árbol** (2026-06-13, `3f69a6b`):
+  Sitrack (usuario+pass en SITRACK_DEPLOY.md/EMAIL_SITRACK_API.md/ESTADO_PROYECTO.md)
+  + la pass de auto-login de Windows de la dedicada (habilitar_autologin.ps1). El
+  historial git las conserva igual. **⚠️ HALLAZGO**: la pass de Windows de la
+  dedicada era la MISMA `Cooper01` que la de Sitrack (reúso). La de Sitrack NO se
+  puede rotar, pero **la de Windows de la dedicada SÍ — conviene cambiarla** (es la
+  PC always-on con el bot + Tailscale + service account, y quedó en el historial
+  público). #8 viaje duplicado por remito fallido: RESUELTO con "retomar guardado". **#12 CERRADO (2026-06-12,
   noche)**: tests de firestore.rules en dos capas — vacuna estática
   AppCollections↔rules dentro de `npm test` (345 tests functions) + suite de
   emulador `npm run test:rules` (34 asserts: whitelist self-service, anti-escalada
