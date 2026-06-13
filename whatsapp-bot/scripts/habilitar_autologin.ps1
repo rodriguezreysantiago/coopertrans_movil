@@ -13,7 +13,7 @@
 # pass - auto-login solo aplica al boot de consola.
 #
 # USO:
-#   .\habilitar_autologin.ps1 -Password 'Cooper01'
+#   .\habilitar_autologin.ps1 -Password '<password-de-windows>'
 #
 #   Si omitis -Password, el script lo prompteea de forma segura
 #   (Read-Host -AsSecureString, no aparece en el historial).

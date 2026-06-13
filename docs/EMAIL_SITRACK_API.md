@@ -23,7 +23,7 @@ Buenos días,
 
 Soy el responsable informático de la integración API de SITRACK con
 nuestra aplicación de gestión de flota en VECCHI ARIEL Y VECCHI
-GRACIELA SRL (cuenta cliente con usuario web service "ws41629VecchiSRL").
+GRACIELA SRL (cuenta cliente con su usuario web service — ver vault).
 
 Tenemos en curso una integración usando los siguientes endpoints de la
 plataforma clásica AR (externalappgw.ar.sitrack.com):

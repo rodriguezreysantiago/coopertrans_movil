@@ -11,10 +11,12 @@ Cloud Function `sitrackPosicionPoller` las lee al arrancar.
 
 ```bash
 firebase functions:secrets:set SITRACK_USERNAME
-# Cuando te pida el valor, pegá: ws41629VecchiSRL
+# Cuando te pida el valor, pegá el usuario web service de Sitrack
+# (NO se documenta acá — pedíselo a Santiago / vault del Drive).
 
 firebase functions:secrets:set SITRACK_PASSWORD
-# Cuando te pida el valor, pegá: Cooper01
+# Cuando te pida el valor, pegá la contraseña de Sitrack
+# (NO se documenta acá — vault del Drive; ya vive en Secret Manager).
 ```
 
 Verificá que quedaron creados:
