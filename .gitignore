@@ -100,8 +100,9 @@ serviceAccountKey.json
 *.mobileprovision
 *.provisionprofile
 .env
+cachatore/service.env
 secrets.json
-!secrets.example.jsonfirepit-log.txt
+!secrets.example.json
 firepit-log.txt
 
 # Carpetas de secrets locales del pipeline de release (iOS + macOS).

@@ -29,6 +29,11 @@ $Script   = "vigia.py"
 $LogsDir  = Join-Path $Dir "logs"
 $LogFile  = Join-Path $LogsDir "vigia.log"
 
+# Master del env extra del servicio (Healthchecks ping URL, etc). Drive primero
+# (editable desde cualquier PC), fallback local. Ver service.env.example.
+$DriveServiceEnv = "G:\Mi unidad\ClaudeCodeSync\secrets\cachatore\service.env"
+$LocalServiceEnv = Join-Path $Dir "service.env"
+
 function Fail($msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
 
 # --- admin? ---
@@ -90,6 +95,66 @@ if (-not $existe) {
 & $nssm set $Servicio AppStopMethodConsole 5000     # Ctrl-C ordenado antes de matar
 & $nssm set $Servicio AppExit Default Restart       # si se cae, reinicia
 & $nssm set $Servicio AppRestartDelay 5000
+
+# --- Env extra (Healthchecks ping URL, etc) en AppEnvironmentExtra -----------
+# Se lee del master (Drive primero, fallback local) y se aplica en CADA install
+# o -Reinstalar. Asi un reinstall NUNCA apaga el monitoreo en silencio: si el
+# master falta, AVISA fuerte (no queda mudo). AppEnvironmentExtra REEMPLAZA el
+# bloque entero, pero el vigia no tiene otras env extra -> es seguro.
+$envSrc = $null
+if     (Test-Path -LiteralPath $DriveServiceEnv) { $envSrc = $DriveServiceEnv }
+elseif (Test-Path -LiteralPath $LocalServiceEnv) { $envSrc = $LocalServiceEnv }
+
+if ($envSrc) {
+  $pares  = @()
+  $claves = @()
+  foreach ($linea in (Get-Content -LiteralPath $envSrc -Encoding UTF8)) {
+    $l = $linea.Trim()
+    if ($l -eq '' -or $l.StartsWith('#')) { continue }
+    $eq = $l.IndexOf('=')
+    if ($eq -lt 1) {                       # sin '=' o '=' al inicio -> malformada
+      Write-Host "AVISO: linea ignorada en service.env (sin KEY=): '$l'" -ForegroundColor Yellow
+      continue
+    }
+    $k = $l.Substring(0, $eq).Trim()
+    $v = $l.Substring($eq + 1).Trim()
+    if ($k) { $pares += "$k=$v"; $claves += $k }
+  }
+  if ($pares.Count -gt 0) {
+    # Array -> PowerShell expande cada "KEY=VALUE" como arg posicional (forma
+    # multi-valor de NSSM). Values con espacios NO estan blindados (las URLs/
+    # tokens no llevan), pero VERIFICAMOS el resultado abajo por las dudas.
+    & $nssm set $Servicio AppEnvironmentExtra $pares | Out-Null
+    Write-Host ("AppEnvironmentExtra: " + $pares.Count + " var(s) desde $envSrc") -ForegroundColor Green
+
+    # Read-back: confirmar que NSSM persistio CADA clave (no confiar a ciegas:
+    # algunas versiones de nssm descartan args multi-valor en silencio).
+    $persistido = (& $nssm get $Servicio AppEnvironmentExtra 2>$null | Out-String)
+    $faltan = @()
+    foreach ($c in $claves) {
+      if ($persistido -notmatch ('(?m)^\s*' + [regex]::Escape($c) + '\s*=')) { $faltan += $c }
+    }
+    if ($faltan.Count -gt 0) {
+      Write-Host "*** AVISO MONITOREO: nssm NO persistio: $($faltan -join ', ')" -ForegroundColor Red
+      Write-Host "    El dead-man's switch puede quedar PARCIAL/APAGADO. Seteala a mano:" -ForegroundColor Red
+      Write-Host "      nssm set $Servicio AppEnvironmentExtra <KEY=VALUE>" -ForegroundColor Red
+    } else {
+      foreach ($c in $claves) { Write-Host ("    OK $c=<set>") -ForegroundColor DarkGray }
+    }
+  } else {
+    Write-Host "AVISO: $envSrc existe pero no tiene lineas KEY=VALUE; no toco AppEnvironmentExtra." -ForegroundColor Yellow
+  }
+} else {
+  Write-Host ""
+  Write-Host "***************************************************************" -ForegroundColor Red
+  Write-Host "*** AVISO MONITOREO: no encontre service.env (Drive ni local)." -ForegroundColor Red
+  Write-Host "*** El vigia queda SIN HEALTHCHECKS_PING_URL_VIGIA:"            -ForegroundColor Red
+  Write-Host "*** dead-man's switch EXTERNO APAGADO (caida silenciosa)."      -ForegroundColor Red
+  Write-Host "*** Crealo en: $DriveServiceEnv"                                -ForegroundColor Red
+  Write-Host "***   HEALTHCHECKS_PING_URL_VIGIA=https://hc-ping.com/<uuid>"   -ForegroundColor Red
+  Write-Host "***   (plantilla: cachatore\service.env.example)"              -ForegroundColor Red
+  Write-Host "***************************************************************" -ForegroundColor Red
+}
 
 & $nssm start $Servicio 2>$null | Out-Null
 Start-Sleep -Seconds 2
