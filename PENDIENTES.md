@@ -14,6 +14,19 @@ es el historial (sus "PENDIENTE" viejos pueden estar resueltos — ante la duda,
 manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ### Operativo / corto plazo
+- [~] **ICM infracciones → subcolección (Fase 3 auditoría, 2026-06-13)**: el doc
+  mensual `ICM_OFICIAL/{periodo}` rozaba 1 MiB (840-875 KB) por las infracciones
+  embebidas por chofer → riesgo de FALLA de escritura del número oficial. Movidas a
+  subcolección `{col}/{periodo}/infracciones_chofer/{scope_id}` (doc principal queda
+  ~90 KB). **Server DEPLOYADO** (scraper `sync_icm.py`+`parser.py` por git→dedicada
+  auto-update; rules de la subcol deployadas). **Cliente** (dual-read del detalle en
+  `icm_detalle_chofer_screen`) **va al próximo RELEASE** — interim: el detalle de
+  meses nuevos muestra 0 infracciones individuales, score/ranking intactos. SIN
+  migración (docs viejos embebidos siguen legibles por fallback; el scraper reescribe
+  el mes actual). Revisado adversarialmente (Python/Dart/rules); fix de 1 ALTA
+  (recuperación de subcol en cierre fallido). **PENDIENTE verificar**: tras la próxima
+  corrida del scraper, confirmar que `ICM_OFICIAL/2026-06` bajó de tamaño + tiene la
+  subcol `infracciones_chofer`.
 - [x] **ARCHIVO FRÍO de SITRACK_EVENTOS → GCS (Fase 3 auditoría, 2026-06-13, DEPLOYADO)**:
   cron mensual `archivarEventosSitrackFrio` (día 5, 04:00 ART) exporta los eventos
   crudos a NDJSON en el bucket dedicado `coopertrans-movil-archivo-frio` (STANDARD →
