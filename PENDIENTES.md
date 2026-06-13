@@ -14,6 +14,17 @@ es el historial (sus "PENDIENTE" viejos pueden estar resueltos — ante la duda,
 manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ### Operativo / corto plazo
+- [x] **HARDENING CONTRASEÑA → subcolección (2026-06-13, DEPLOYADO)**: el hash de
+  contraseña se movió de `EMPLEADOS/{dni}.CONTRASEÑA` (legible por isSelf/admin →
+  brute-force offline) a `EMPLEADOS/{dni}/credenciales/main` con rule `read:if false`.
+  auth.ts lee subcol→fallback y consolida stragglers; login/cambio/reset/rename
+  adaptados; `migrarCredencialesEmpleados` (callable idempotente). **Rollout hecho**:
+  deploy functions → migración (85/85, 0 errores; 58 bcrypt + 27 SHA-256 dormidos) →
+  deploy rules. Revisado adversarialmente (5 lentes); fix de 1 BLOQUEANTE (lockout en
+  rename si fallaba la copia de credencial). **Cliente** (alta por batch) commiteado,
+  se activa con el **próximo release** (hasta entonces el login consolida a los nuevos).
+  PENDIENTE menor (decisión de negocio): ¿`resetearContrasenaEmpleadoAdmin` debe
+  seguir permitiendo que un SUPERVISOR resetee la pass de un ADMIN? (pre-existente).
 - [ ] **DEEP LINKS — Vertical 1 (commit `0df2549`, 2026-06-13): infra + handler LISTOS,
   falta ACTIVAR**. Cada aviso de WhatsApp podrá abrir la app en la pantalla exacta
   (`coopertrans-movil.web.app/app/ir/{destino}`; destinos: jornada, vencimientos,
