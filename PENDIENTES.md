@@ -14,6 +14,16 @@ es el historial (sus "PENDIENTE" viejos pueden estar resueltos — ante la duda,
 manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ### Operativo / corto plazo
+- [ ] **ALERTA DE COLA EXCEDIDA EN PLANTA (Fase 2 — ACTIVA desde 2026-06-12,
+  noche)**: el `zonaDescargaPoller` avisa por WhatsApp cuando una unidad lleva
+  más del umbral DENTRO de una geocerca sin salir (default 120 min; 1 aviso por
+  estadía; incluye el caso GPS-dormido-adentro). Config sin redeploy:
+  `META/config_alerta_cola` {activo, umbral_min}. Destinatario: key M5
+  `colaPlantaExcedida` (fallback = Santiago; la key NUEVA todavía no aparece en
+  el catálogo de la pantalla Destinatarios — agregarla a la UI con el próximo
+  release si se quiere redirigir a Errazu). **Seguimiento**: validar el primer
+  episodio real y calibrar el umbral con datos (después de 1-2 semanas de
+  ZONA_DESCARGA_HISTORICO se puede elegir percentil por zona).
 - [ ] **CRON DE LOS CRONS (Fase 1 del plan — ACTIVO desde 2026-06-12)**: los 24
   onSchedule registran latido en `CRON_HEALTH/{id}` (wrapper `onScheduleConLatido`
   en comun.ts) y `cronWatchdog` (cada 3 h, `cron_health.ts`) avisa por Telegram +

@@ -156,7 +156,7 @@ Jornadas (v2 en vivo + v3 oficial + reclamos):
 - `cerrarReportesJornadaDiario` (08:00 ART) — cierra reclamos de jornada con veredicto CIERTO/NO_CIERTO/MANUAL cruzando v3 + GPS; el veredicto dispara la devolución WhatsApp. Kill-switch en `META/config_cierre_reportes`.
 
 Descargas YPF:
-- `zonaDescargaPoller` (cada 5 min) — presencia en geocercas → `ZONA_DESCARGA_COLA` (cola en vivo) + `ZONA_DESCARGA_HISTORICO`.
+- `zonaDescargaPoller` (cada 5 min) — presencia en geocercas → `ZONA_DESCARGA_COLA` (cola en vivo) + `ZONA_DESCARGA_HISTORICO`. Incluye la **alerta de cola excedida**: unidad > umbral adentro sin salir → WhatsApp consolidado (1 vez por estadía; config en `META/config_alerta_cola` {activo, umbral_min}, default 120 min; destinatario key `colaPlantaExcedida`, fallback admin).
 - `backfillDescargasDiario` (04:30 ART) — repesca descargas desde `SITRACK_EVENTOS` (más completo que el poller).
 
 Resúmenes diarios 08:00 ART:

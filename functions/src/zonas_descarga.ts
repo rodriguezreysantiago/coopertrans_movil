@@ -25,8 +25,11 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 
 import { db } from "./setup";
 import { adquirirLockTick,
+  MANTENIMIENTO_DESTINATARIO_DNI,
+  obtenerDestinatarioDni,
   onScheduleConLatido,
 } from "./comun";
+import { expiraEnMin } from "./helpers";
 
 // NOTA: reentradas espurias (la misma unidad sale y vuelve en <2 min,
 // típico cuando pierde GPS por un túnel o da una vuelta) actualmente
@@ -97,6 +100,93 @@ export function unidadEnZona(
     return puntoEnPoligono(lat, lng, zona.vertices!);
   }
   return false;
+}
+
+// ─── Alerta de cola excedida (detention en vivo — Fase 2 del plan) ──────────
+// Si una unidad lleva más del umbral DENTRO de una zona sin salir, se avisa
+// por WhatsApp: o hay demora real de la planta (dato para negociar turnos)
+// o el GPS quedó dormido adentro. Una alerta por EPISODIO de estadía: el
+// mark `alerta_cola_ms` guarda el entrada_ts alertado — si la unidad sale
+// y vuelve a entrar, es episodio nuevo y puede volver a alertar.
+// Config sin redeploy: META/config_alerta_cola {activo, umbral_min}.
+
+export const ALERTA_COLA_UMBRAL_DEFAULT_MIN = 120;
+
+export interface EstadoEnCola {
+  docId: string;
+  patente: string;
+  choferNombre: string | null;
+  nombreZona: string;
+  entradaMs: number;
+  /** entrada_ts (ms) del episodio YA alertado; null si nunca se alertó. */
+  alertaColaMs: number | null;
+}
+
+/** Unidades sobre el umbral que todavía no fueron alertadas por ESTE
+ *  episodio. PURA — tests en test/cola_excedida.test.js. */
+export function detectarColasExcedidas(
+  ahoraMs: number,
+  enCola: EstadoEnCola[],
+  umbralMin: number,
+): EstadoEnCola[] {
+  const limiteMs = umbralMin * 60 * 1000;
+  return enCola.filter((u) =>
+    ahoraMs - u.entradaMs > limiteMs && u.alertaColaMs !== u.entradaMs);
+}
+
+function hhmmArt(ms: number): string {
+  return new Date(ms).toLocaleTimeString("es-AR", {
+    timeZone: "America/Argentina/Buenos_Aires",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+/** Mensaje consolidado (una línea por unidad excedida). PURA. */
+export function construirMensajeColaExcedida(
+  excedidas: EstadoEnCola[],
+  ahoraMs: number,
+  umbralMin: number,
+): string {
+  const lineas = excedidas.map((u) => {
+    const min = Math.round((ahoraMs - u.entradaMs) / 60000);
+    const dur = min >= 60 ?
+      `${Math.floor(min / 60)} h ${min % 60} min` : `${min} min`;
+    const chofer = u.choferNombre ? ` (${u.choferNombre})` : "";
+    return `• ${u.patente}${chofer} — ${dur} en ${u.nombreZona} ` +
+      `(entró ${hhmmArt(u.entradaMs)})`;
+  });
+  return [
+    "⏱️ *Cola excedida en planta*",
+    ...lineas,
+    "",
+    `Umbral: ${umbralMin} min. Puede ser demora real de la planta o GPS ` +
+      "dormido adentro — verificar antes de reclamar.",
+  ].join("\n");
+}
+
+async function configAlertaCola(): Promise<{
+  activo: boolean; umbralMin: number;
+}> {
+  try {
+    const snap = await db.collection("META").doc("config_alerta_cola").get();
+    const m = snap.data() ?? {};
+    return {
+      // Activo por default; SOLO lo apaga el kill-switch explícito.
+      activo: m.activo !== false,
+      umbralMin: typeof m.umbral_min === "number" && m.umbral_min > 0 ?
+        m.umbral_min : ALERTA_COLA_UMBRAL_DEFAULT_MIN,
+    };
+  } catch (e) {
+    // Fail-open con defaults — un error de lectura del flag no es el
+    // kill-switch (lección del #11 de la auditoría 2026-06-12).
+    logger.warn(
+      "[zonaDescargaPoller] error leyendo config_alerta_cola — uso defaults",
+      { error: (e as Error).message },
+    );
+    return { activo: true, umbralMin: ALERTA_COLA_UMBRAL_DEFAULT_MIN };
+  }
 }
 
 // ─── Cron principal ──────────────────────────────────────────────
@@ -260,6 +350,7 @@ export const zonaDescargaPoller = onScheduleConLatido(
       const stats = {
         entradas: 0, salidas: 0, archivados: 0, dentro: 0,
         entradasPorEvento: 0, // entradas que el snapshot habría perdido
+        alertasCola: 0, // unidades sobre el umbral alertadas este tick
       };
 
       // ─── 4) Detectar adentro/afuera por (unidad × zona) ───────
@@ -378,6 +469,8 @@ export const zonaDescargaPoller = onScheduleConLatido(
         ...posiciones.map((p) => p.patente),
         ...eventosRecientesPorPatente.keys(),
       ]);
+      // Para que el paso 5b no alerte por unidades que SALEN este tick.
+      const salidasDocIds = new Set<string>();
       for (const [docId, data] of colaActual.entries()) {
         if (visitadosCola.has(docId)) continue;
         const ultPosTs = data.ultima_pos_ts as Timestamp | undefined;
@@ -389,6 +482,7 @@ export const zonaDescargaPoller = onScheduleConLatido(
         }
 
         stats.salidas++;
+        salidasDocIds.add(docId);
         const entradaTs = data.entrada_ts as Timestamp;
         const salidaTs = ultPosTs ?? ahora;
         const duracionMs = salidaTs.toMillis() - entradaTs.toMillis();
@@ -428,7 +522,90 @@ export const zonaDescargaPoller = onScheduleConLatido(
         // doble descarga, hacemos el join en una próxima iteración.
       }
 
+      // ─── 5b) Alerta de cola excedida (detention en vivo) ──────
+      // Con la cola ya en memoria (cero reads extra), detectar unidades
+      // que llevan más del umbral adentro y avisar una vez por episodio.
+      // Incluye a propósito las que están "esperando" con GPS dormido
+      // (paso 5 las saltea) — ese es justamente uno de los casos a mirar.
+      const ahoraDetMs = Date.now();
+      const enCola: EstadoEnCola[] = [];
+      for (const [docId, data] of colaActual.entries()) {
+        if (salidasDocIds.has(docId)) continue; // acaba de salir
+        const entradaTs = data.entrada_ts as Timestamp | undefined;
+        if (!entradaTs) continue;
+        enCola.push({
+          docId,
+          patente: (data.patente as string) ?? docId,
+          choferNombre: (data.chofer_nombre as string) ?? null,
+          nombreZona: (data.nombre_zona as string) ??
+            (data.slug_zona as string) ?? "?",
+          entradaMs: entradaTs.toMillis(),
+          alertaColaMs: typeof data.alerta_cola_ms === "number" ?
+            data.alerta_cola_ms : null,
+        });
+      }
+      let excedidas: EstadoEnCola[] = [];
+      let umbralUsadoMin = ALERTA_COLA_UMBRAL_DEFAULT_MIN;
+      if (enCola.length > 0) {
+        const cfg = await configAlertaCola();
+        if (cfg.activo) {
+          umbralUsadoMin = cfg.umbralMin;
+          excedidas = detectarColasExcedidas(ahoraDetMs, enCola, cfg.umbralMin);
+          for (const u of excedidas) {
+            stats.alertasCola++;
+            // El mark viaja en el MISMO batch que el resto del tick.
+            batch.set(db.collection("ZONA_DESCARGA_COLA").doc(u.docId), {
+              alerta_cola_ms: u.entradaMs,
+            }, { merge: true });
+            await registrarWrite();
+          }
+        }
+      }
+
       if (opsEnBatch > 0) await batch.commit();
+
+      // El aviso va DESPUÉS de commitear los marks: si el commit falla, el
+      // próximo tick reintenta todo; si el envío falla con marks escritos,
+      // se pierde el aviso de ese episodio (queda en el log) — preferible
+      // a duplicar spam al destinatario.
+      if (excedidas.length > 0) {
+        try {
+          const dni = await obtenerDestinatarioDni(
+            "colaPlantaExcedida", MANTENIMIENTO_DESTINATARIO_DNI,
+          );
+          const emp = await db.collection("EMPLEADOS").doc(dni).get();
+          const tel = (emp.data()?.TELEFONO ?? "").toString().trim();
+          if (tel) {
+            await db.collection("COLA_WHATSAPP").add({
+              telefono: tel,
+              mensaje: construirMensajeColaExcedida(
+                excedidas, ahoraDetMs, umbralUsadoMin,
+              ),
+              estado: "PENDIENTE",
+              encolado_en: FieldValue.serverTimestamp(),
+              expira_en: expiraEnMin(60), // time-sensitive: 1 h y muere
+              enviado_en: null,
+              error: null,
+              intentos: 0,
+              origen: "cola_planta_excedida",
+              destinatario_coleccion: "EMPLEADOS",
+              destinatario_id: dni,
+              campo_base: "COLA_PLANTA",
+              admin_dni: "BOT",
+              admin_nombre: "Poller descargas",
+            });
+          } else {
+            logger.warn(
+              "[zonaDescargaPoller] destinatario de cola excedida sin TELEFONO",
+              { dni },
+            );
+          }
+        } catch (e) {
+          logger.error("[zonaDescargaPoller] no se pudo encolar la alerta de cola", {
+            error: (e as Error).message,
+          });
+        }
+      }
       logger.info("[zonaDescargaPoller] OK", { writes, stats });
     } catch (e) {
       logger.error("[zonaDescargaPoller] error", {
