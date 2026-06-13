@@ -88,9 +88,13 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   stack, majors Firebase ignorados). (f) **Coverage** medido e informativo en los 4 jobs
   del CI. (g) **Bump actions a Node 24** (checkout/setup-node/setup-python v6, gitleaks
   v3) + `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` — adelanta el cambio que GitHub fuerza el
-  16/6. (h) **Drill de restore** documentado en RUNBOOK (DRILL #1 pendiente de correr).
-  **Seguimiento**: ~~crear los checks de Healthchecks ✅ (hecho 2026-06-13)~~; correr el
-  drill de restore 1 vez; validar el primer censo (1/jul) y el primer backup diario.
+  16/6. (h) **Drill de restore** documentado en RUNBOOK + **DRILL #1 ✅ CORRIDO
+  (2026-06-13)**: restauré el backup de hoy (245 MiB, 200.817 docs, 54 colecciones)
+  al emulador local y verifiqué integridad. Backup CONFIRMADO restaurable. Detectó
+  2 gotchas (cp -r saltea archivos → usar rsync; el emulador necesita wrapper) ahora
+  documentados en el RUNBOOK.
+  **Seguimiento**: ~~crear los checks de Healthchecks ✅~~; ~~correr el drill de restore
+  1 vez ✅ (DRILL #1, 2026-06-13)~~; validar el primer censo (1/jul) y el primer backup diario.
 - [ ] **ALERTA DE COLA EXCEDIDA EN PLANTA (Fase 2 — ACTIVA desde 2026-06-12,
   noche)**: el `zonaDescargaPoller` avisa por WhatsApp cuando una unidad lleva
   más del umbral DENTRO de una geocerca sin salir (default 120 min; 1 aviso por

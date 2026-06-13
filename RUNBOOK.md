@@ -772,31 +772,47 @@ Desde 2026-05-03 el backup corre **en la nube**, sin depender de ninguna PC. Es 
 - **Auto-verificación anti-drift (2026-06-12)**: antes de cada export, la function compara `collectionIds` contra las colecciones REALES de la base (`listCollections()`); lo que no esté ni respaldado ni whitelisteado como efímero (`EXCLUIDAS_DEL_BACKUP`) dispara un **Telegram** para clasificarlo. El inventario quedó corto 3 veces (2026-05-18, 2026-06-12 ×2 — la última: los ICM oficiales de YPF) — ya no puede pasar en silencio. Estado del último export en `STATS/ultimo_backup`.
 - **Salud**: registra latido en `CRON_HEALTH` y lo vigila `cronWatchdog` (tolerancia 26 h).
 
-### Drill de restore — ENSAYAR la restauración (pendiente de primera corrida)
+### Drill de restore — ENSAYAR la restauración (DRILL #1 ✅ corrido 2026-06-13)
 
-Un backup que jamás se restauró es una promesa, no un plan. El drill completo (hacerlo UNA vez y anotar cuánto tardó acá abajo):
+Un backup que jamás se restauró es una promesa, no un plan. El drill completo (anotar cuánto tardó acá abajo). **Dos gotchas confirmados en el DRILL #1 — leer los comentarios antes de correr.**
 
 ```powershell
 # 1. Elegir el export más reciente:
 gcloud storage ls gs://coopertrans-movil-backups
 
 # 2. OPCIÓN A — restore al EMULADOR local (gratis, no toca nada):
-#    a. Bajar el export:
-gcloud storage cp -r gs://coopertrans-movil-backups/auto-YYYY-MM-DD_HHMM C:\Temp\restore_drill
-#    b. Levantar el emulador importándolo:
-firebase emulators:start --only firestore --import C:\Temp\restore_drill
-#    c. Smoke test: abrir http://127.0.0.1:4000 (UI del emulador si está
-#       habilitada) o correr un script de lectura apuntando al emulador
-#       ($env:FIRESTORE_EMULATOR_HOST="127.0.0.1:8080") y verificar que
-#       EMPLEADOS / VIAJES_LOGISTICA / REGISTRO_JORNADAS tienen los datos.
+#    a. Bajar el export. ⚠️ GOTCHA #1 (DRILL #1): `gcloud storage cp -r` SALTEA
+#       archivos en silencio (en el drill bajó 1490 de 1493 sin error). USAR rsync
+#       y VERIFICAR que el conteo matchee, si no el import del emulador explota con
+#       "FileNotFoundException ...export_metadata / output-NNNN".
+gcloud storage rsync -r gs://coopertrans-movil-backups/auto-YYYY-MM-DD_HHMM C:\Temp\restore_drill\firestore_export
+#       Verificar: (ls -r del bucket | contar) debe == (Get-ChildItem -Recurse -File | count)
+#    b. ⚠️ GOTCHA #2 (DRILL #1): el emulador NO importa un export crudo de GCS;
+#       espera SU formato. Hay que envolverlo: poner el export en una subcarpeta
+#       `firestore_export\` y crear al lado un `firebase-export-metadata.json`:
+#         { "version":"<firebase-tools>", "firestore": {
+#             "version":"<jar emulador, ej 1.21.0>", "path":"firestore_export",
+#             "metadata_file":"firestore_export/auto-YYYY-MM-DD_HHMM.overall_export_metadata" } }
+#    c. Levantar el emulador importando la carpeta CONTENEDORA (la del .json):
+firebase emulators:start --only firestore --import C:\Temp\restore_drill --project coopertrans-movil
+#    d. Smoke test: correr un script con firebase-admin apuntando al emulador
+#       ($env:FIRESTORE_EMULATOR_HOST="127.0.0.1:8080"; NODE_PATH=functions\node_modules)
+#       que liste colecciones + cuente docs + muestre EMPLEADOS/VIAJES_LOGISTICA/
+#       REGISTRO_JORNADAS. (El error NoClassDefFoundError LegacySystemExit en el log
+#       es solo del PATH de salida tras un fatal; si el import OK, no aparece.)
+#    e. Apagar: Stop-Process del java en :8080 y del arbol de firebase.cmd.
 
 # 3. OPCIÓN B — restore a un proyecto staging real (más fiel, requiere
 #    crear coopertrans-staging una vez):
 gcloud firestore import gs://coopertrans-movil-backups/auto-YYYY-MM-DD_HHMM `
   --project=coopertrans-staging
 
-# 4. Anotar acá: fecha del drill, opción usada, cuánto tardó, qué falló.
-#    DRILL #1: __________ (pendiente)
+# 4. RESULTADO DEL DRILL:
+#    DRILL #1: 2026-06-13 — OPCIÓN A (emulador). Export auto-2026-06-13_0600
+#      (245 MiB, 1493 archivos, 68 kinds). Descarga ~13s + import ~12s. Smoke test:
+#      54 colecciones top-level, 200.817 docs restaurados, muestras EMPLEADOS/
+#      VIAJES_LOGISTICA/REGISTRO_JORNADAS con datos íntegros. RTO efectivo (sin
+#      contar los 2 gotchas de arriba): ~3-4 min. Backup CONFIRMADO restaurable.
 ```
 
 ⚠️ **JAMÁS** `gcloud firestore import` contra `coopertrans-movil` salvo catástrofe real confirmada — el import PISA los docs existentes con los del backup.
