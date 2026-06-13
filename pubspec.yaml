@@ -36,6 +36,14 @@ dependencies:
   url_launcher: ^6.3.1
   file_picker: ^11.0.0
 
+  # ================= DEEP LINKS =================
+  # App Links (Android) / Universal Links (iOS) sobre
+  # coopertrans-movil.web.app/app/ir/{destino}. Cada aviso de WhatsApp abre
+  # la app en la pantalla pertinente. Puro Dart + canal de plataforma; en
+  # Windows/web es no-op (DeepLinkService traga el error). Ver
+  # lib/core/services/deep_link_service.dart.
+  app_links: ^6.3.0
+
   # ⚠️ SOLO WINDOWS DESKTOP — necesarias para que file_picker y otros
   # plugins resuelvan correctamente en target Windows. Si en algún
   # momento la app deja de tener target Windows, se pueden eliminar.

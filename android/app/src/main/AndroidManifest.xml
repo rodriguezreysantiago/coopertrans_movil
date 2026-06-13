@@ -111,6 +111,21 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+
+            <!-- App Links (deep links verificados) — abre la app directo en
+                 la pantalla del aviso. autoVerify pide a Android que valide
+                 contra https://coopertrans-movil.web.app/.well-known/assetlinks.json
+                 (que debe tener el SHA-256 del cert de firma de Play). Solo
+                 el prefijo /app/ir para no interceptar /privacidad, /soporte,
+                 etc. del mismo dominio. Lo consume DeepLinkService. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="https"
+                      android:host="coopertrans-movil.web.app"
+                      android:pathPrefix="/app/ir"/>
+            </intent-filter>
         </activity>
 
         <!-- ════════════════════════════════════════════════════════════════

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Universal Links: abre la app en coopertrans-movil.web.app/app/ir/*.
+	     Para que funcione hace falta (una vez, en la cuenta Apple):
+	       1. Xcode → Runner → Signing & Capabilities → + Capability →
+	          "Associated Domains" → agregar `applinks:coopertrans-movil.web.app`.
+	          (Xcode escribe el CODE_SIGN_ENTITLEMENTS en el pbxproj y habilita
+	          la capability en el App ID + regenera el provisioning profile.)
+	       2. Confirmar que el .well-known/apple-app-site-association ya está
+	          publicado (sí: https://coopertrans-movil.web.app/.well-known/apple-app-site-association).
+	     Este archivo queda listo para que Xcode lo reuse. -->
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:coopertrans-movil.web.app</string>
+	</array>
+</dict>
+</plist>

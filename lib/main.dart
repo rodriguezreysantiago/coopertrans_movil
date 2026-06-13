@@ -14,6 +14,7 @@ import 'firebase_options.dart';
 import 'core/services/app_logger.dart';
 import 'core/services/prefs_service.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/deep_link_service.dart';
 import 'core/services/windows_update_service.dart';
 import 'core/services/android_update_service.dart';
 import 'routing/app_router.dart';
@@ -492,23 +493,27 @@ class _LogisticaAppState extends State<LogisticaApp> {
       context.read<VehiculoProvider>().init();
     });
 
+    // Notificaciones locales tappeadas → navegar. Usa el MISMO mapa de
+    // destinos que los deep links (DeepLinkService.rutaDeDestino), así el
+    // vocabulario de payloads/keywords es único.
     NotificationService.selectNotificationStream.stream
         .listen((String? payload) {
-      if (payload == null) return;
-      final nav = navigatorKey.currentState;
-      if (nav == null) return;
-      if (payload == 'vencimiento') {
-        nav.pushNamed(AppRoutes.misVencimientos);
-      } else if (payload == 'admin_revision') {
-        nav.pushNamed(AppRoutes.adminRevisiones);
-      }
+      final ruta = DeepLinkService.rutaDeDestino(payload);
+      if (ruta != null) navigatorKey.currentState?.pushNamed(ruta);
     });
+
+    // Deep links (App Links / Universal Links): cada aviso de WhatsApp abre
+    // la app en la pantalla pertinente. No-op en Windows/web.
+    DeepLinkService.iniciar(
+      (ruta) => navigatorKey.currentState?.pushNamed(ruta),
+    );
   }
 
   @override
   void dispose() {
     // El stop del AutoSync lo maneja el provider tree.
     NotificationService.dispose();
+    DeepLinkService.dispose();
     super.dispose();
   }
 

@@ -1,0 +1,18 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["34NKYGL9KM.com.coopertrans.movil"],
+        "components": [
+          {
+            "/": "/app/ir/*",
+            "comment": "Deep links de Coopertrans Movil (Universal Links iOS)"
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["34NKYGL9KM.com.coopertrans.movil"]
+  }
+}
