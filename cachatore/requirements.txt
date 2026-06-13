@@ -1,6 +1,6 @@
 # Deps del cachatore (sniper de turnos YPF). Reproducibilidad multi-PC +
 # job python del CI (corre test_vigia + test_iturnos con estas versiones,
 # las mismas del venv de la dedicada al 2026-06-12).
-beautifulsoup4==4.14.3
+beautifulsoup4==4.15.0
 curl_cffi==0.15.0
 firebase-admin==7.4.0
