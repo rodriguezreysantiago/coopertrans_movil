@@ -42,6 +42,19 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   release si se quiere redirigir a Errazu). **Seguimiento**: validar el primer
   episodio real y calibrar el umbral con datos (después de 1-2 semanas de
   ZONA_DESCARGA_HISTORICO se puede elegir percentil por zona).
+- [ ] **DEPENDABOT: alertas de seguridad en deps TRANSITIVAS de firebase-admin**
+  (aparecen como runs rojos de "Dependabot Updates" — NO es el CI, que está
+  verde 5/5). Cluster: `@grpc/grpc-js` (high, DoS), `protobufjs`/`qs`/`uuid`
+  (medium, DoS/bounds) — TODAS transitivas vía firebase-admin 13.10 →
+  google-cloud → grpc/protobuf/uuid. Explotabilidad real BAJA (el bot/functions
+  son CLIENTES de las APIs de Google, no servidores expuestos; son advisories
+  server/parser-side). Dependabot security-update no puede parchear transitivas
+  sin el padre → los runs fallan. **Fix consolidado**: bumpear **firebase-admin
+  13→14** en functions Y bot (un MAJOR — hacerlo deliberado con `npm test` de
+  ambos + tsc como red, NO a ciegas). Dependabot lo va a proponer en el PR
+  mensual del grupo npm (CI-gateado). Alternativa: dismissear las alertas como
+  riesgo transitivo tolerable (decisión tuya). El Python usa firebase-admin
+  7.4.0 (paquete distinto, no afectado por esto).
 - [ ] **CRON DE LOS CRONS (Fase 1 del plan — ACTIVO desde 2026-06-12)**: los 25
   onSchedule registran latido en `CRON_HEALTH/{id}` (wrapper `onScheduleConLatido`
   en comun.ts) y `cronWatchdog` (cada 3 h, `cron_health.ts`) avisa por Telegram +
