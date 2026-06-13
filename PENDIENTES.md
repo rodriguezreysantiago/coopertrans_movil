@@ -24,6 +24,21 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   cron nuevo: wrapper + entrada en `REGISTRO_CRONES` (hay test que lo exige).
   Rentabilidad por tarifa y alerta de robo de gasoil quedaron PENDIENTES a pedido
   de Santiago (2026-06-12).
+- [ ] **ROTAR LA PASS DEL .p12 DE iOS**: gitleaks encontró
+  `IOS_DIST_CERT_P12_PASSWORD` en texto plano en ESTADO_PROYECTO.md (repo
+  público; ya REDACTADA del árbol 2026-06-12, pero el historial la conserva).
+  El .p12 está solo en Drive `secrets-ios/` → riesgo moderado. Rotación (sin
+  Mac): `openssl pkcs12` re-export del .p12 con clave nueva → actualizar la
+  env var `IOS_DIST_CERT_P12_PASSWORD` en el workflow de Xcode Cloud → subir
+  el .p12 nuevo al Drive. 10 minutos.
+- [ ] **CI ampliado (2026-06-12, noche)**: job `python` (cachatore 73 tests +
+  parsers ICM/Volvo 9+9 — corrían solo a mano en la dedicada) + job `gitleaks`
+  (secretos en cada push; `.gitleaks.toml` con falsos positivos triagados:
+  API keys cliente Firebase + Podfile.lock; `.gitleaksignore` con el histórico
+  aceptado). Ruleset de main completado con `deletion` (ya tenía
+  non_fast_forward + PR + status checks + linear history). requirements.txt
+  materializados en cachatore/ y los 2 sync/. **Seguimiento**: confirmar el
+  primer run verde de los 2 jobs nuevos.
 - [ ] **AUDITORÍA TOTAL 2026-06-12** (`docs/auditorias/2026-06-12_reporte.md` + anexo):
   7 bugs ALTA confirmados adversarialmente. **Hecho el 2026-06-12**: Push Protection +
   Secret Scanning activados en GitHub; fix comisión $0 en recálculo (`viajes_service.dart`

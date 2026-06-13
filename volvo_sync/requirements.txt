@@ -1,0 +1,7 @@
+# Deps de sync_taller.py (scraper taller Volvo). El parser y sus tests son
+# stdlib puro — esto es solo para CORRER el sync en una PC nueva.
+# La dedicada instala sin pin (docs/SCRAPERS_DEDICADA.md); se pinea solo
+# firebase-admin (mismo que cachatore). Post-install:
+#   python -m playwright install chromium
+firebase-admin==7.4.0
+playwright

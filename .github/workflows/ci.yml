@@ -128,6 +128,55 @@ jobs:
             node --check "$f"
           done
 
+  python:
+    # Los tests Python corrían SOLO a mano en la PC dedicada (auditoría
+    # 2026-06-12): una regresión del sniper de turnos o de los parsers
+    # ICM/Volvo entraba silenciosa vía el auto-update de 5 min.
+    name: Python (cachatore + parsers)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: cachatore/requirements.txt
+
+      - name: Deps del cachatore
+        run: pip install -r cachatore/requirements.txt
+
+      - name: Tests cachatore (sniper YPF)
+        working-directory: cachatore
+        run: python -m unittest test_vigia test_iturnos
+
+      - name: Tests parser ICM Sitrack (stdlib puro)
+        working-directory: sitrack_sync
+        run: python test_parser.py
+
+      - name: Tests parser taller Volvo (stdlib puro)
+        working-directory: volvo_sync
+        run: python test_parser.py
+
+  gitleaks:
+    # Escaneo de secretos en los commits nuevos de cada push/PR. La config
+    # (.gitleaks.toml) permite los falsos positivos conocidos (API keys
+    # cliente de Firebase, Podfile.lock) y .gitleaksignore documenta los
+    # hallazgos históricos aceptados. Complementa el Push Protection de
+    # GitHub (activado 2026-06-12) con reglas genéricas de entropía.
+    name: Gitleaks (secretos)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   functions:
     name: Cloud Functions (build + lint)
     runs-on: ubuntu-latest

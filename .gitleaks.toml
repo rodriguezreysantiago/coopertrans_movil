@@ -1,0 +1,29 @@
+# Config de gitleaks (escaneo de secretos — CI job `gitleaks` + corridas locales).
+#
+# Allowlist de FALSOS POSITIVOS conocidos (triage 2026-06-12, 32 findings):
+#   - lib/firebase_options.dart + google-services.json: API keys CLIENTE de
+#     Firebase — públicas por diseño (van embebidas en cada APK/IPA; la
+#     seguridad la dan las rules + el backend, no el secreto de la key).
+#   - Podfile.lock: checksums de pods que matchean el patrón generic-api-key.
+#   - CODE_REVIEW_2026-04-29.md: nombre de variable (_consecutive401s) que
+#     parece key pero es código.
+#
+# Los hallazgos REALES del historial NO van acá: quedan documentados en
+# PENDIENTES.md (credenciales Sitrack — riesgo aceptado, no rotables — y la
+# pass del .p12 iOS, redactada del árbol 2026-06-12 y pendiente de rotación).
+# El job de CI escanea solo los commits NUEVOS de cada push, así que el
+# historial viejo no lo pone rojo; este archivo evita que los falsos
+# positivos ensucien ediciones futuras de esos archivos.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Falsos positivos conocidos (ver encabezado)"
+paths = [
+  '''lib/firebase_options\.dart''',
+  '''android/app/google-services\.json''',
+  '''ios/Podfile\.lock''',
+  '''macos/Podfile\.lock''',
+  '''CODE_REVIEW_2026-04-29\.md''',
+]
