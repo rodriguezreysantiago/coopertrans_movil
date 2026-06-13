@@ -20,6 +20,7 @@ const {
   sha256Hex,
   hashId,
   validarInputLogin,
+  puedeResetearPassword,
 } = require('../lib/index');
 
 // HttpsError de firebase-functions/v2/https tiene .code que combina
@@ -30,6 +31,29 @@ function esHttpsError(err, codigoEsperado) {
   return err && typeof err.code === 'string' &&
     err.code.endsWith(codigoEsperado);
 }
+
+describe('puedeResetearPassword', () => {
+  test('ADMIN puede resetear a cualquiera (incluido otro ADMIN)', () => {
+    assert.strictEqual(puedeResetearPassword('ADMIN', 'ADMIN'), true);
+    assert.strictEqual(puedeResetearPassword('ADMIN', 'CHOFER'), true);
+    assert.strictEqual(puedeResetearPassword('ADMIN', 'SUPERVISOR'), true);
+  });
+  test('SUPERVISOR puede resetear a no-admins', () => {
+    assert.strictEqual(puedeResetearPassword('SUPERVISOR', 'CHOFER'), true);
+    assert.strictEqual(puedeResetearPassword('SUPERVISOR', 'GOMERIA'), true);
+    assert.strictEqual(puedeResetearPassword('SUPERVISOR', 'SUPERVISOR'), true);
+  });
+  test('SUPERVISOR NO puede resetear a un ADMIN (decisión 2026-06-13)', () => {
+    assert.strictEqual(puedeResetearPassword('SUPERVISOR', 'ADMIN'), false);
+    // robusto a mayúsculas/minúsculas
+    assert.strictEqual(puedeResetearPassword('supervisor', 'admin'), false);
+    assert.strictEqual(puedeResetearPassword('SUPERVISOR', 'Admin'), false);
+  });
+  test('otros roles (o vacío) no pueden resetear', () => {
+    assert.strictEqual(puedeResetearPassword('CHOFER', 'CHOFER'), false);
+    assert.strictEqual(puedeResetearPassword('', 'ADMIN'), false);
+  });
+});
 
 describe('esBcrypt', () => {
   test('reconoce prefijos bcrypt estandar ($2a$, $2b$, $2y$)', () => {

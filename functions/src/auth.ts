@@ -517,6 +517,23 @@ export const resetearContrasenaEmpleadoAdmin = onCall(
       throw new HttpsError("not-found", `Empleado ${dni} no encontrado.`);
     }
 
+    // Un SUPERVISOR NO puede resetear la contraseña de un ADMIN (decisión
+    // Santiago 2026-06-13): evita que tome control de una cuenta admin. Solo
+    // un ADMIN puede resetear a otro ADMIN.
+    const rolObjetivo = (snap.data()?.ROL ?? "").toString();
+    if (!puedeResetearPassword(rolCaller ?? "", rolObjetivo)) {
+      logger.warn("[resetearContrasenaEmpleadoAdmin] denegado (supervisor → admin)", {
+        callerHash: hashId(request.auth.uid),
+        objetivoHash: hashId(dni),
+        rolCaller: rolCaller ?? "no-rol",
+        rolObjetivo: rolObjetivo || "no-rol",
+      });
+      throw new HttpsError(
+        "permission-denied",
+        "Un supervisor no puede resetear la contraseña de un administrador.",
+      );
+    }
+
     // Persistir en la subcolección credenciales (y borrar el campo legacy).
     const nuevoHash = await bcrypt.hash(nueva, 10);
     await escribirHashCredencial(dni, nuevoHash, "bcrypt");
@@ -1282,6 +1299,23 @@ export async function verificarPassword(
   }
   // Fallback legacy: SHA-256 hex.
   return sha256Hex(password) === storedHash;
+}
+
+/**
+ * ¿Puede `rolCaller` resetear la contraseña de un empleado con `rolObjetivo`?
+ * ADMIN puede a cualquiera. SUPERVISOR a cualquiera MENOS a un ADMIN — evita que
+ * un supervisor tome control de una cuenta admin reseteándole la pass (decisión
+ * Santiago 2026-06-13). Cualquier otro rol: no. PURA — testeada en helpers.test.js.
+ */
+export function puedeResetearPassword(
+  rolCaller: string,
+  rolObjetivo: string,
+): boolean {
+  const caller = (rolCaller ?? "").toUpperCase();
+  const objetivo = (rolObjetivo ?? "").toUpperCase();
+  if (caller === "ADMIN") return true;
+  if (caller === "SUPERVISOR") return objetivo !== "ADMIN";
+  return false;
 }
 
 export function esBcrypt(hash: string): boolean {
