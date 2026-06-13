@@ -14,6 +14,17 @@ es el historial (sus "PENDIENTE" viejos pueden estar resueltos — ante la duda,
 manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ### Operativo / corto plazo
+- [x] **ARCHIVO FRÍO de SITRACK_EVENTOS → GCS (Fase 3 auditoría, 2026-06-13, DEPLOYADO)**:
+  cron mensual `archivarEventosSitrackFrio` (día 5, 04:00 ART) exporta los eventos
+  crudos a NDJSON en el bucket dedicado `coopertrans-movil-archivo-frio` (STANDARD →
+  ARCHIVE a 30d por lifecycle, SIN borrado) ANTES del TTL de 90d — prueba re-procesable
+  ante disputa laboral / auditoría YPF. Catch-up M-1+M-2 (trackeado en
+  STATS/archivo_frio_eventos.meses) + eventos sin-fecha por recibido_en (best-effort,
+  índice compuesto). Revisado adversarialmente (3 lentes: 2 ALTA + 1 MEDIA aplicados).
+  Setup one-time HECHO (bucket + IAM objectAdmin al SA + índice). **Test-run real OK**:
+  Mayo archivado 74.968 eventos (== conteo Firestore, sin pérdida); Abril=0 (correcto,
+  el poller arrancó 2026-05-13). Re-disparar manual:
+  `gcloud scheduler jobs run firebase-schedule-archivarEventosSitrackFrio-southamerica-east1 --location=southamerica-east1`.
 - [x] **HARDENING CONTRASEÑA → subcolección (2026-06-13, DEPLOYADO)**: el hash de
   contraseña se movió de `EMPLEADOS/{dni}.CONTRASEÑA` (legible por isSelf/admin →
   brute-force offline) a `EMPLEADOS/{dni}/credenciales/main` con rule `read:if false`.

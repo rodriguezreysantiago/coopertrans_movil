@@ -866,6 +866,47 @@ gcloud storage ls gs://coopertrans-movil-backups
 
 **Costo**: ~3 centavos USD/mes para una flota chica. El export en sí es gratis; solo paga storage en GCS.
 
+### Archivo frío de SITRACK_EVENTOS (prueba legal re-procesable)
+
+Los eventos crudos de Sitrack tienen TTL de 90 días — pero son la base de jornadas/
+ICM/descargas y la prueba ante una disputa laboral / auditoría YPF. La function
+`archivarEventosSitrackFrio` (día 5 de cada mes, 04:00 ART) exporta los meses
+cerrados a `gs://coopertrans-movil-archivo-frio/sitrack-eventos/{YYYY-MM}.ndjson`
+ANTES de que el TTL los borre. Archiva M-1 (siempre) + M-2 (catch-up si una corrida
+falló), trackea los meses en `STATS/archivo_frio_eventos.meses`.
+
+**Setup one-time (hecho 2026-06-13)** — bucket SIN borrado, ARCHIVE por lifecycle:
+
+```powershell
+gcloud storage buckets create gs://coopertrans-movil-archivo-frio `
+  --project=coopertrans-movil --location=southamerica-east1 `
+  --uniform-bucket-level-access --default-storage-class=STANDARD
+'{"lifecycle":{"rule":[{"action":{"type":"SetStorageClass","storageClass":"ARCHIVE"},"condition":{"age":30}}]}}' | Out-File -Encoding ascii lc.json
+gcloud storage buckets update gs://coopertrans-movil-archivo-frio --lifecycle-file=lc.json
+Remove-Item lc.json
+gcloud storage buckets add-iam-policy-binding gs://coopertrans-movil-archivo-frio `
+  --member="serviceAccount:808925655961-compute@developer.gserviceaccount.com" `
+  --role="roles/storage.objectAdmin"
+firebase deploy --only firestore:indexes   # índice (report_date, recibido_en) para eventos sin fecha
+```
+
+**Re-disparar manual** (ej. tras una corrida fallida — hay ~25 días de margen al TTL
+para recuperar M-2):
+
+```powershell
+gcloud scheduler jobs run firebase-schedule-archivarEventosSitrackFrio-southamerica-east1 `
+  --location=southamerica-east1
+firebase functions:log --only archivarEventosSitrackFrio --lines 30
+gcloud storage ls -l gs://coopertrans-movil-archivo-frio/sitrack-eventos/
+```
+
+**Re-procesar un mes** (NDJSON = un evento JSON por línea, Timestamps en ISO-8601 UTC):
+`gcloud storage cp gs://coopertrans-movil-archivo-frio/sitrack-eventos/2026-05.ndjson .`
+y parsear con `jq` / Python / lo que sea. El `_id` de cada línea es el report_id.
+
+**Costo**: ~25 MB/mes en ARCHIVE → centavos al año. El watchdog de crons avisa si la
+function muere (tolerancia 33 días).
+
 ### Restaurar Firestore desde backup (disaster recovery)
 
 Si pasa lo peor (un admin borra docs por error, una migración corrompe data, ataque, etc.):
