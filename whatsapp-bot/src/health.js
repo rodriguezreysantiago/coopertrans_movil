@@ -419,7 +419,23 @@ function iniciar(db, firestoreModule, whatsappModule) {
 
   _timer = setInterval(() => {
     _escribirSerializado();
+    _pingHealthchecks();
   }, intervaloSeg * 1000);
+}
+
+// Dead-man's switch EXTERNO (Healthchecks.io, opt-in 2026-06-12): si la env
+// HEALTHCHECKS_PING_URL está seteada, cada heartbeat también pingea esa URL.
+// Razón: el watchdog de Cloud Functions detecta el bot caído leyendo
+// BOT_HEALTH — pero si lo caído fuera Firebase, el Scheduler o la PC entera
+// (luz, disco), esta pata avisa desde infraestructura de un TERCERO.
+// Sin la env var es NO-OP total. Fire-and-forget: jamás afecta al bot.
+function _pingHealthchecks() {
+  const url = process.env.HEALTHCHECKS_PING_URL;
+  if (!url) return;
+  try {
+    fetch(url, { method: 'GET', signal: AbortSignal.timeout(5000) })
+      .catch(() => { /* best-effort: sin salida a internet no es culpa del bot */ });
+  } catch (_) { /* idem */ }
 }
 
 // Serializa las escrituras de heartbeat para evitar que dos calls

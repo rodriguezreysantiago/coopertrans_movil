@@ -21,13 +21,20 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Node 24 forzado DESDE YA (GitHub lo hace default el 2026-06-16 y elimina
+# Node 20 el 2026-09-16): si una action no banca Node 24, queremos verlo
+# hoy en verde/rojo y no descubrirlo el lunes. Bumps 2026-06-12: checkout
+# v6, setup-node v6, setup-python v6, gitleaks v3 (drop-in, solo runtime).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   flutter:
     name: Flutter (analyze + test)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # Fetch full history para que el git diff contra el commit base
           # del PR/push detecte correctamente las líneas nuevas (sin
@@ -52,8 +59,24 @@ jobs:
       - name: Flutter analyze
         run: flutter analyze
 
-      - name: Flutter test
-        run: flutter test
+      - name: Flutter test (con cobertura)
+        run: flutter test --coverage
+
+      - name: Resumen de cobertura
+        # Suma LH/LF del lcov y lo publica en el summary del job. SOLO
+        # informativo — este step NUNCA debe romper el job (de ahí los
+        # `|| echo 0` en cada pipeline: con `pipefail` activo de GitHub, un
+        # grep sin matches rompería el `$(...)`; y el guard `LF -gt 0` evita
+        # la división por cero del awk).
+        run: |
+          LF=$(grep -h '^LF:' coverage/lcov.info 2>/dev/null | cut -d: -f2 | paste -sd+ | bc || echo 0)
+          LH=$(grep -h '^LH:' coverage/lcov.info 2>/dev/null | cut -d: -f2 | paste -sd+ | bc || echo 0)
+          if [ "${LF:-0}" -gt 0 ]; then
+            PCT=$(awk "BEGIN{printf \"%.1f\", 100*$LH/$LF}")
+            echo "### 📊 Cobertura Flutter: ${PCT}% (${LH}/${LF} líneas)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### 📊 Cobertura Flutter: sin datos de lcov" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: No nuevos colors hardcoded
         # Falla si en este commit se INTRODUCEN nuevos usos de
@@ -106,9 +129,9 @@ jobs:
       run:
         working-directory: whatsapp-bot
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: npm
@@ -119,6 +142,12 @@ jobs:
 
       - name: npm test
         run: npm test
+
+      - name: Cobertura (node --experimental-test-coverage)
+        # Informativo: tabla nativa de Node 22 al summary del job.
+        run: |
+          node --test --experimental-test-coverage 2>&1 | grep '^#' | tail -40 > cov.txt || true
+          { echo "### 📊 Cobertura Bot"; echo '```'; cat cov.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: node --check (sintaxis de cada modulo)
         # Defensa extra: aunque los tests cubren los modulos importantes,
@@ -136,9 +165,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -147,9 +176,13 @@ jobs:
       - name: Deps del cachatore
         run: pip install -r cachatore/requirements.txt
 
-      - name: Tests cachatore (sniper YPF)
+      - name: Tests cachatore (sniper YPF, con cobertura)
         working-directory: cachatore
-        run: python -m unittest test_vigia test_iturnos
+        run: |
+          pip install coverage
+          coverage run --source=. -m unittest test_vigia test_iturnos
+          coverage report > cov.txt || true
+          { echo "### 📊 Cobertura cachatore"; echo '```'; tail -15 cov.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Tests parser ICM Sitrack (stdlib puro)
         working-directory: sitrack_sync
@@ -169,11 +202,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -185,9 +218,9 @@ jobs:
       run:
         working-directory: functions
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: npm
@@ -215,3 +248,10 @@ jobs:
         # Tests de los handlers completos (callable functions) requieren
         # firebase-functions-test SDK + mocks -- queda para futura iteracion.
         run: npm test
+
+      - name: Cobertura (node --experimental-test-coverage)
+        # Informativo: la cobertura se mide sobre lib/ COMPILADO (refleja
+        # que parte del backend ejercitan los tests).
+        run: |
+          node --test --experimental-test-coverage "test/*.test.js" 2>&1 | grep '^#' | tail -45 > cov.txt || true
+          { echo "### 📊 Cobertura Functions (sobre lib/ compilado)"; echo '```'; cat cov.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

@@ -14,6 +14,24 @@ es el historial (sus "PENDIENTE" viejos pueden estar resueltos — ante la duda,
 manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ### Operativo / corto plazo
+- [ ] **LOTE FASE 1 INFRA (2026-06-12, noche — revisado adversarialmente antes de prod)**:
+  (a) **Backup DIARIO** (era semanal — RPO 7d→1d) con **auto-verificación anti-drift**:
+  compara `collectionIds` vs `listCollections()` real y Telegram si algo quedó sin
+  clasificar; chequeo estático da 0 gaps (65 colecciones clasificadas). Estado en
+  `STATS/ultimo_backup`. DEPLOYADO. (b) **Censo mensual** (`censoColeccionesMensual`,
+  día 1 03:30) → `STATS/censo_{mes}` + diff vs mes anterior → WhatsApp (crecimientos
+  >40% o ≥10x, colecciones nuevas). DEPLOYADO. (c) **Healthchecks.io** cableado en el
+  bot (`HEALTHCHECKS_PING_URL`) y el vigía (`HEALTHCHECKS_PING_URL_VIGIA`, en hilo
+  daemon) — **TENÉS QUE crear los checks gratis en healthchecks.io y pegar las URLs en
+  los .env** (sin la env var es no-op; ver .env.example). (d) **Budget GCP $50** con
+  alertas 50/90/100% a tu mail (+ tripwire pre-existente de $10). (e) **Dependabot**
+  alerts + security-fixes ON + `.github/dependabot.yml` (updates mensuales agrupados por
+  stack, majors Firebase ignorados). (f) **Coverage** medido e informativo en los 4 jobs
+  del CI. (g) **Bump actions a Node 24** (checkout/setup-node/setup-python v6, gitleaks
+  v3) + `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24` — adelanta el cambio que GitHub fuerza el
+  16/6. (h) **Drill de restore** documentado en RUNBOOK (DRILL #1 pendiente de correr).
+  **Seguimiento**: crear los checks de Healthchecks; correr el drill de restore 1 vez;
+  validar el primer censo (1/jul) y el primer backup diario.
 - [ ] **ALERTA DE COLA EXCEDIDA EN PLANTA (Fase 2 — ACTIVA desde 2026-06-12,
   noche)**: el `zonaDescargaPoller` avisa por WhatsApp cuando una unidad lleva
   más del umbral DENTRO de una geocerca sin salir (default 120 min; 1 aviso por
@@ -24,11 +42,11 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   release si se quiere redirigir a Errazu). **Seguimiento**: validar el primer
   episodio real y calibrar el umbral con datos (después de 1-2 semanas de
   ZONA_DESCARGA_HISTORICO se puede elegir percentil por zona).
-- [ ] **CRON DE LOS CRONS (Fase 1 del plan — ACTIVO desde 2026-06-12)**: los 24
+- [ ] **CRON DE LOS CRONS (Fase 1 del plan — ACTIVO desde 2026-06-12)**: los 25
   onSchedule registran latido en `CRON_HEALTH/{id}` (wrapper `onScheduleConLatido`
   en comun.ts) y `cronWatchdog` (cada 3 h, `cron_health.ts`) avisa por Telegram +
   WhatsApp (key `mantenimientoBot`) si un cron está muerto (tolerancia por
-  cadencia: pollers 3 h, diarios 26 h, backup 8 días) o su última corrida falló.
+  cadencia: pollers 3 h, diarios 26 h, censo 33 días) o su última corrida falló.
   Anti-spam 24 h por cron; silencio = OK. **Seguimiento**: validar el primer
   episodio real (o forzar uno pausando un cron en Cloud Scheduler). Al crear un
   cron nuevo: wrapper + entrada en `REGISTRO_CRONES` (hay test que lo exige).

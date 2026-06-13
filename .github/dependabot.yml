@@ -1,0 +1,82 @@
+# Dependabot — updates de dependencias agrupados, UNA tanda por mes y por
+# stack (5 ecosistemas). Cada PR llega pre-validado por el CI completo
+# (Flutter + bot + functions + Python + gitleaks): mergear es 1 click
+# informado. SIN auto-merge a propósito — siempre revisa un humano.
+#
+# Pins que Dependabot NO debe tocar (decisiones documentadas del proyecto):
+#   - firebase_storage: pineado EXACTO 13.0.4 — 13.1+ rompe el build
+#     Windows (C2039 UseEmulator). NO subir hasta fix upstream.
+#   - majors de cloud_firestore / firebase_core / firebase_auth /
+#     firebase_crashlytics: el plugin C++ de Windows tiene bugs conocidos
+#     por versión — los majors se adoptan a mano con smoke test local.
+#
+# Las alertas de SEGURIDAD van aparte (Dependabot alerts + security fixes,
+# activadas 2026-06-12) y no respetan este schedule: si hay CVE, avisa ya.
+
+version: 2
+updates:
+  - package-ecosystem: pub
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      flutter-deps:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: firebase_storage
+      - dependency-name: cloud_firestore
+        update-types: ["version-update:semver-major"]
+      - dependency-name: firebase_core
+        update-types: ["version-update:semver-major"]
+      - dependency-name: firebase_auth
+        update-types: ["version-update:semver-major"]
+      - dependency-name: firebase_crashlytics
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: npm
+    directory: /functions
+    schedule:
+      interval: monthly
+    groups:
+      functions-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: npm
+    directory: /whatsapp-bot
+    schedule:
+      interval: monthly
+    groups:
+      bot-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /cachatore
+    schedule:
+      interval: monthly
+    groups:
+      cachatore-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /sitrack_sync
+    schedule:
+      interval: monthly
+    groups:
+      sync-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: pip
+    directory: /volvo_sync
+    schedule:
+      interval: monthly
+    groups:
+      sync-deps:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

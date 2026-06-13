@@ -81,13 +81,46 @@ import {
 //
 // Restauración (cuando un day pasa lo peor): ver RUNBOOK sección
 // "Disaster recovery — restaurar Firestore desde backup".
+// Colecciones REALES que deliberadamente NO se backupean (efimeras,
+// regenerables o legacy). Todo lo que exista en la base y no este ni aca
+// ni en collectionIds dispara el Telegram de "sin clasificar".
+export const EXCLUIDAS_DEL_BACKUP = new Set<string>([
+  "CRON_HEALTH", // latidos de crons — se regeneran solos en minutos
+  "ZONA_DESCARGA_COLA", // cola EN VIVO de descargas — efimera por diseño
+  "VOLVO_ESTADO", // snapshot rFMS cada 5 min — se regenera solo
+  "CACHATORE_ESTADO", // latido del vigia — efimero
+  "CACHATORE_TURNOS", // espejo de iTurnos — re-scrapeable del portal
+  "CACHATORE_CHEQUEOS", // chequeos one-shot del vigia con TTL — efimero
+  "BOT_ACUSES", // acks efimeros del bot
+  "JORNADAS_CHOFER", // legacy vigilador v1 (superada por JORNADAS + v3)
+  // Locks y markers de throttle/dedup — regenerables, sin valor de recovery
+  "ASIGNACIONES_LOCKS", // lock TOCTOU de asignaciones
+  "GOMERIA_RETIROS_LOCK", // lock de retiro de cubiertas
+  "META_BYPASS_SEGURIDAD", // throttle 6h del aviso de bypass de seguridad
+]);
+
+/** Colecciones reales que no estan ni respaldadas ni whitelisteadas.
+ *  PURA — tests en test/backup_verificacion.test.js. */
+export function coleccionesSinClasificar(
+  reales: string[],
+  respaldadas: string[],
+  excluidas: Set<string>,
+): string[] {
+  const resp = new Set(respaldadas);
+  return reales.filter((c) => !resp.has(c) && !excluidas.has(c)).sort();
+}
+
 export const backupFirestoreScheduled = onScheduleConLatido(
   "backupFirestoreScheduled",
   {
-    schedule: "0 6 * * 0",
+    // DIARIO desde 2026-06-12 (era semanal): el RPO de 7 dias era una
+    // semana de liquidaciones/jornadas perdibles. Con lifecycle de 30
+    // dias en el bucket son ~30 exports rotando (~USD 1-2/mes).
+    schedule: "0 6 * * *",
     timeZone: "America/Argentina/Buenos_Aires",
     timeoutSeconds: 540,
     memory: "256MiB",
+    secrets: [telegramBotToken, telegramChatId],
   },
   async () => {
     const projectId = process.env.GCLOUD_PROJECT || "coopertrans-movil";
@@ -186,8 +219,11 @@ export const backupFirestoreScheduled = onScheduleConLatido(
       "GOMERIA_STOCK_MOVIMIENTOS",
       "GOMERIA_CONTEOS",
       "GOMERIA_POSICIONES_ACTIVAS",
-      // Cachatore (objetivos configurados; ESTADO/TURNOS son efimeros)
+      // Cachatore (objetivos + config; ESTADO/TURNOS/CHEQUEOS son efimeros)
       "CACHATORE_OBJETIVOS",
+      "CACHATORE_CONFIG",
+      // Taller Volvo (scrapeado por volvo_sync; historico de service)
+      "VEHICULOS_TALLER",
       // Bot WhatsApp + control + logs
       "COLA_WHATSAPP",
       "AVISOS_AUTOMATICOS_HISTORICO",
@@ -203,6 +239,15 @@ export const backupFirestoreScheduled = onScheduleConLatido(
       "CUBIERTAS_KM_PENDIENTES",
       "LOGIN_ATTEMPTS_IP",
       "PASS_CHANGE_ATTEMPTS",
+      // ICM oficial YPF (auditoria 2026-06-12, TERCERA vez que el
+      // inventario quedo corto: el numero OFICIAL + los cierres
+      // INMUTABLES de premios/castigos no se backupeaban)
+      "ICM_OFICIAL",
+      "ICM_OFICIAL_SEMANAL",
+      "ICM_OFICIAL_CIERRE",
+      "ICM_OFICIAL_CIERRE_SEMANAL",
+      // Espejo historico de WhatsApp (30 dias TTL — auditoria de envios)
+      "WHATSAPP_HISTORICO",
       // Auditoria + sistema
       "AUDITORIA_ACCIONES",
       "LOGIN_ATTEMPTS",
@@ -210,6 +255,41 @@ export const backupFirestoreScheduled = onScheduleConLatido(
       "STATS",
       "META",
     ];
+
+    // Auto-verificacion ANTI-DRIFT (la causa raiz de las 3 veces): antes
+    // de exportar comparamos la lista contra las colecciones REALES de la
+    // base. Lo que no este ni respaldado ni whitelisteado como efimero
+    // dispara un Telegram para clasificarlo — el inventario ya no puede
+    // quedar corto en silencio.
+    let sinClasificar: string[] = [];
+    try {
+      const reales = (await db.listCollections()).map((c) => c.id);
+      sinClasificar = coleccionesSinClasificar(
+        reales, collectionIds, EXCLUIDAS_DEL_BACKUP,
+      );
+      if (sinClasificar.length > 0) {
+        logger.warn(
+          "[backupFirestoreScheduled] colecciones SIN CLASIFICAR",
+          { sinClasificar },
+        );
+        await enviarTelegram(
+          telegramBotToken.value(),
+          telegramChatId.value(),
+          `🗄️ <b>Backup Firestore</b>: ${sinClasificar.length} colección(es) ` +
+            "sin clasificar (ni en el backup ni whitelisteadas como " +
+            "efímeras):\n" +
+            sinClasificar.map((c) => `• ${c}`).join("\n") +
+            "\n\nSumarlas a collectionIds o a EXCLUIDAS_DEL_BACKUP en " +
+            "functions/src/mantenimiento.ts. El export de hoy salió " +
+            "igual, SIN ellas.",
+        );
+      }
+    } catch (e) {
+      // La verificacion es best-effort: si falla, el export sale igual.
+      logger.warn("[backupFirestoreScheduled] no se pudo verificar inventario", {
+        error: (e as Error).message,
+      });
+    }
 
     logger.info("[backupFirestoreScheduled] inicio", {
       outputUriPrefix,
@@ -233,6 +313,24 @@ export const backupFirestoreScheduled = onScheduleConLatido(
       logger.info("[backupFirestoreScheduled] export iniciado en background", {
         operationName: operation.name,
       });
+      // Estado visible desde el panel (y para el drill de restore: el
+      // nombre de la operacion sirve para chequear como termino con
+      // `gcloud firestore operations describe`). En su PROPIO try/catch: el
+      // export YA arrancó OK, un fallo transitorio al escribir STATS no
+      // debe re-lanzar y marcar el run como FAILED (el backup salió igual).
+      try {
+        await db.collection("STATS").doc("ultimo_backup").set({
+          iniciado_en: FieldValue.serverTimestamp(),
+          operacion: operation.name ?? null,
+          colecciones: collectionIds.length,
+          sin_clasificar: sinClasificar,
+          destino: outputUriPrefix,
+        }, { merge: true });
+      } catch (e) {
+        logger.warn("[backupFirestoreScheduled] no se pudo escribir STATS", {
+          error: (e as Error).message,
+        });
+      }
     } catch (err) {
       // Concurrencia: si el export anterior aun no termino (poco probable
       // con schedule semanal, pero defensivo si Firestore quedo lento),
@@ -253,6 +351,23 @@ export const backupFirestoreScheduled = onScheduleConLatido(
           code,
           message: msg,
         });
+        // Con schedule DIARIO esto es más probable que con el semanal
+        // (un export que tardó >24h, o dos disparos pegados). Dejamos
+        // rastro FUERA DE BANDA: si pasa varios días seguidos, algo está
+        // mal con los exports y no quiero enterarme recién en un DR.
+        try {
+          await enviarTelegram(
+            telegramBotToken.value(),
+            telegramChatId.value(),
+            "⚠️ <b>Backup Firestore SALTADO</b>: el export anterior todavía " +
+              "está en curso. Si se repite varios días, revisar el estado " +
+              "con <code>gcloud firestore operations list</code>.",
+          );
+        } catch (e) {
+          logger.warn("[backupFirestoreScheduled] no se pudo avisar el skip", {
+            error: (e as Error).message,
+          });
+        }
         return;
       }
       logger.error("[backupFirestoreScheduled] export FALLÓ", {

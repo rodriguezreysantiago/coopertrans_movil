@@ -764,11 +764,42 @@ Hay dos backups críticos: **Firestore** (datos del negocio) y **`.wwebjs_auth/`
 
 ### Backup Firestore — automático cloud-side (`backupFirestoreScheduled`)
 
-Desde 2026-05-03 el backup corre **en la nube**, sin depender de ninguna PC. Es la Cloud Function `backupFirestoreScheduled` (en `functions/src/index.ts`) con trigger `onSchedule` semanal:
+Desde 2026-05-03 el backup corre **en la nube**, sin depender de ninguna PC. Es la Cloud Function `backupFirestoreScheduled` (en `functions/src/mantenimiento.ts`):
 
-- **Frecuencia**: domingos 06:00 ART (poco tráfico).
-- **Output**: `gs://coopertrans-movil-backups/auto-{YYYY-MM-DD}_{HHMM}/` con todas las colecciones operativas (16 colecciones — ver lista en el código).
-- **Retención**: 30 días, gestionada por Object Lifecycle del bucket (sin código).
+- **Frecuencia**: **DIARIO 06:00 ART** (desde 2026-06-12 — era semanal; el RPO de 7 días era una semana de liquidaciones perdibles).
+- **Output**: `gs://coopertrans-movil-backups/auto-{YYYY-MM-DD}_{HHMM}/` con todas las colecciones operativas (~60 — ver `collectionIds` en el código).
+- **Retención**: 30 días, gestionada por Object Lifecycle del bucket (sin código). Con frecuencia diaria son ~30 exports rotando (~USD 1-2/mes).
+- **Auto-verificación anti-drift (2026-06-12)**: antes de cada export, la function compara `collectionIds` contra las colecciones REALES de la base (`listCollections()`); lo que no esté ni respaldado ni whitelisteado como efímero (`EXCLUIDAS_DEL_BACKUP`) dispara un **Telegram** para clasificarlo. El inventario quedó corto 3 veces (2026-05-18, 2026-06-12 ×2 — la última: los ICM oficiales de YPF) — ya no puede pasar en silencio. Estado del último export en `STATS/ultimo_backup`.
+- **Salud**: registra latido en `CRON_HEALTH` y lo vigila `cronWatchdog` (tolerancia 26 h).
+
+### Drill de restore — ENSAYAR la restauración (pendiente de primera corrida)
+
+Un backup que jamás se restauró es una promesa, no un plan. El drill completo (hacerlo UNA vez y anotar cuánto tardó acá abajo):
+
+```powershell
+# 1. Elegir el export más reciente:
+gcloud storage ls gs://coopertrans-movil-backups
+
+# 2. OPCIÓN A — restore al EMULADOR local (gratis, no toca nada):
+#    a. Bajar el export:
+gcloud storage cp -r gs://coopertrans-movil-backups/auto-YYYY-MM-DD_HHMM C:\Temp\restore_drill
+#    b. Levantar el emulador importándolo:
+firebase emulators:start --only firestore --import C:\Temp\restore_drill
+#    c. Smoke test: abrir http://127.0.0.1:4000 (UI del emulador si está
+#       habilitada) o correr un script de lectura apuntando al emulador
+#       ($env:FIRESTORE_EMULATOR_HOST="127.0.0.1:8080") y verificar que
+#       EMPLEADOS / VIAJES_LOGISTICA / REGISTRO_JORNADAS tienen los datos.
+
+# 3. OPCIÓN B — restore a un proyecto staging real (más fiel, requiere
+#    crear coopertrans-staging una vez):
+gcloud firestore import gs://coopertrans-movil-backups/auto-YYYY-MM-DD_HHMM `
+  --project=coopertrans-staging
+
+# 4. Anotar acá: fecha del drill, opción usada, cuánto tardó, qué falló.
+#    DRILL #1: __________ (pendiente)
+```
+
+⚠️ **JAMÁS** `gcloud firestore import` contra `coopertrans-movil` salvo catástrofe real confirmada — el import PISA los docs existentes con los del backup.
 
 **Setup operativo (one-time — hacé esto la primera vez)**:
 

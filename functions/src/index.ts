@@ -69,3 +69,7 @@ export * from "./cierre_reportes_jornada";
 // onSchedule contra su cadencia esperada y avisa por Telegram + WhatsApp si
 // alguno está muerto o viene fallando. Ver cron_health.ts.
 export * from "./cron_health";
+// Censo mensual de colecciones (día 1, 03:30 ART): count() de toda la base →
+// STATS/censo_{mes} + diff vs mes anterior → WhatsApp (crecimientos >40% y
+// colecciones nuevas resaltados). Ver censo_colecciones.ts.
+export * from "./censo_colecciones";

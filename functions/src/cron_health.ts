@@ -68,8 +68,10 @@ export const REGISTRO_CRONES: Record<string, { maxStaleMin: number }> = {
   resumenExcesosJornadaDiario: { maxStaleMin: 26 * 60 },
   resumenConductaManejoDiario: { maxStaleMin: 26 * 60 },
   resumenMantenimientoVehiculosDiario: { maxStaleMin: 26 * 60 },
-  // Semanal (domingo 06:00) — 8 días
-  backupFirestoreScheduled: { maxStaleMin: 8 * 24 * 60 },
+  // Diario desde 2026-06-12 (era semanal) — 26 h como los demás diarios
+  backupFirestoreScheduled: { maxStaleMin: 26 * 60 },
+  // Mensual (día 1, 03:30) — 33 días de tolerancia
+  censoColeccionesMensual: { maxStaleMin: 33 * 24 * 60 },
 };
 
 // ─── Tipos puros ─────────────────────────────────────────────────────────────

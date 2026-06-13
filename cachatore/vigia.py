@@ -388,6 +388,35 @@ def _heartbeat(modo: str, targets: dict, salud: dict = None):
         nube.escribir_estado_bot(modo, len(targets), pendientes, salud=salud)
     except Exception as e:
         log("LOG", "sistema", f"no pude escribir latido: {e}")
+    _ping_healthchecks()
+
+
+def _ping_healthchecks():
+    """Dead-man's switch EXTERNO (Healthchecks.io, opt-in 2026-06-12).
+
+    Si la env HEALTHCHECKS_PING_URL_VIGIA esta seteada, cada latido tambien
+    pingea esa URL. Cubre lo que el aviso de salud por WhatsApp no puede:
+    la PC dedicada entera muerta (luz, disco, NSSM en crash-loop) — el aviso
+    sale de infraestructura de un TERCERO. Sin la env var es NO-OP total.
+
+    El ping corre en un HILO DAEMON: urlopen es sincrono y bloquearia el
+    loop del sniper hasta 5s si Healthchecks no responde — justo cuando hay
+    problemas de conectividad. El monitoreo no puede degradar lo que
+    monitorea. stdlib puro; jamas tira.
+    """
+    url = os.environ.get("HEALTHCHECKS_PING_URL_VIGIA", "").strip()
+    if not url:
+        return
+    def _do():
+        try:
+            import urllib.request
+            urllib.request.urlopen(url, timeout=5)
+        except Exception:
+            pass  # best-effort: sin salida a internet no es culpa del vigia
+    try:
+        threading.Thread(target=_do, daemon=True).start()
+    except Exception:
+        pass
 
 
 # ---- login (con reintento por los blips de Cloudflare) --------------------

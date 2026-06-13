@@ -33,7 +33,7 @@ flutter run -d windows
 #
 # `serviceAccountKey.json` SÍ sigue siendo necesario para correr
 # scripts de admin (`scripts/*.js` y `scripts/*.py`) y para el bot
-# de WhatsApp. NO está en git — copiarlo desde Bitwarden, o regenerar
+# de WhatsApp. NO está en git — copiarlo desde el Drive (ClaudeCodeSync/secrets/firebase/), o regenerar
 # desde Firebase Console → Project Settings → Service accounts.
 ```
 
@@ -131,7 +131,7 @@ Todas en `southamerica-east1`.
 - `cruzarParadasReportadasManual` — corrida manual del cruce paradas↔v3.
 - `backfillHistoricoDescargas` / `backfillHistoricoIButtons` / `backfillJornadas` / `backfillRegistrosV3` — backfills manuales.
 
-**onSchedule (crons)** — 25, regenerado desde el código el 2026-06-12
+**onSchedule (crons)** — 26, regenerado desde el código el 2026-06-12
 
 > **Salud de crons**: cada cron registra su latido en `CRON_HEALTH/{id}`
 > (wrapper `onScheduleConLatido` de `comun.ts`) y `cronWatchdog` (cada 3 h,
@@ -171,10 +171,11 @@ Dashboard:
 
 Salud + mantenimiento:
 - `cronWatchdog` (cada 3 h) — el "cron de los crons": latidos de `CRON_HEALTH` vs cadencia esperada → Telegram + WhatsApp.
+- `censoColeccionesMensual` (día 1, 03:30 ART) — count() de toda la base → `STATS/censo_{mes}` + diff vs mes anterior → WhatsApp (crecimientos >40% y colecciones nuevas resaltados).
 - `botHealthWatchdog` (cada 15 min) — bot sin heartbeat → alerta TELEGRAM fuera de banda.
 - `procesarSilenciadosExpirados` (cada 10 min) — limpia silenciamientos vencidos en `BOT_SILENCIADOS_CHOFER`.
 - `purgarColaWhatsappAntigua` (04:00 ART) — cleanup de `COLA_WHATSAPP` (ENVIADO/ERROR viejos).
-- `backupFirestoreScheduled` (domingo 06:00 ART) — export semanal a `gs://coopertrans-movil-backups` (lista explícita de colecciones — al crear una colección nueva, sumarla ahí).
+- `backupFirestoreScheduled` (DIARIO 06:00 ART desde 2026-06-12) — export a `gs://coopertrans-movil-backups` con **auto-verificación anti-drift**: compara la lista contra `listCollections()` real y avisa por Telegram si una colección quedó sin clasificar (ni backup ni whitelist de efímeras). Estado en `STATS/ultimo_backup`.
 
 > **Estructura (split completado 2026-05-19)**: `functions/src/index.ts` es un entry point puro (~45 LOC). La lógica vive en módulos temáticos: `comun.ts`/`setup.ts`/`helpers.ts` (compartidos), `auth.ts`, `audit.ts`, `volvo.ts`, `volvo_estado.ts`, `volvo_mantenimiento.ts`, `volvo_telltales.ts`, `telemetria.ts`, `sitrack.ts`, `mantenimiento.ts`, `resumenes_diarios.ts`, `jornadas_v2.ts`, `jornadas_v3.ts` (+`_batch`), `jornada_historico.ts`, `cierre_reportes_jornada.ts`, `paradas_reportadas.ts`, `reportes_discrepancia.ts`, `historico_descargas.ts`, `historico_ibuttons.ts`, `zonas_descarga.ts`, `dashboard_stats.ts`, `cleanup_y_recibos.ts`, `excluidos.ts`, `canales_pausados.ts`, `bot_alerta_externa.ts`. Importar SIEMPRE de `./comun`, nunca de `./index`.
 
