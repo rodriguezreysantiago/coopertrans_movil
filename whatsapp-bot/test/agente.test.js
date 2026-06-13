@@ -346,7 +346,7 @@ describe('agente._ejecutarTool — contra Firestore mockeado', () => {
     };
     // El doc(id).get() del mock lee de `vehiculos[id]` (acá, la empresa por CUIT).
     const db = dbMock({ vehiculos: { '30712345678': {
-      RAZON_SOCIAL: 'VECCHI SRL',
+      nombre: 'VECCHI SRL',
       VENCIMIENTO_POLIZA_ART: '15-07-2026',
       VENCIMIENTO_FORMULARIO_931: '10-06-2026',
     } } });

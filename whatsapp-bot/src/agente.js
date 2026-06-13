@@ -993,7 +993,7 @@ async function _toolPapelesEmpresa(db, persona) {
     const snap = await db.collection('EMPRESAS_EMPLEADORAS').doc(cuit).get();
     if (snap.exists) {
       const e = snap.data();
-      empresa = e.RAZON_SOCIAL || e.NOMBRE || e.razon_social || null;
+      empresa = e.nombre || e.RAZON_SOCIAL || e.NOMBRE || null;
       papeles = _vencimientosDeEmpresa(e);
     }
   } catch (e) {
