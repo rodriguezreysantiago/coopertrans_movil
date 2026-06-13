@@ -168,14 +168,14 @@ describe('construirMensajeIncidentes', () => {
 });
 
 describe('REGISTRO_CRONES — consistencia con el código real', () => {
-  test('los 25 onSchedule del codebase están registrados', () => {
+  test('los 26 onSchedule del codebase están registrados', () => {
     // Censo del 2026-06-12 (README "regenerado desde el código") +
-    // censoColeccionesMensual (mismo día). Si se agrega un cron nuevo,
-    // este test recuerda sumarlo al registro.
+    // censoColeccionesMensual + failoverCriticosBot (2026-06-13). Si se
+    // agrega un cron nuevo, este test recuerda sumarlo al registro.
     const esperados = [
       'backfillDescargasDiario', 'backupFirestoreScheduled',
       'botHealthWatchdog', 'censoColeccionesMensual',
-      'cerrarReportesJornadaDiario',
+      'cerrarReportesJornadaDiario', 'failoverCriticosBot',
       'cruzarParadasReportadasV3Diario', 'estadoVolvoPoller',
       'procesarSilenciadosExpirados', 'purgarColaWhatsappAntigua',
       'recomputeDashboardStats', 'reconstruirHistoricoIButtonsDiario',

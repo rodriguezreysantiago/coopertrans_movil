@@ -51,6 +51,7 @@ export const REGISTRO_CRONES: Record<string, { maxStaleMin: number }> = {
   // Cada 10-30 min
   procesarSilenciadosExpirados: { maxStaleMin: 180 },
   botHealthWatchdog: { maxStaleMin: 180 },
+  failoverCriticosBot: { maxStaleMin: 180 },
   recomputeDashboardStats: { maxStaleMin: 240 },
   // Cada 6 h
   telemetriaSnapshotScheduled: { maxStaleMin: 13 * 60 },

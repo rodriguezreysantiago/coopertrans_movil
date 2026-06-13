@@ -77,3 +77,7 @@ export * from "./censo_colecciones";
 // trigger procesarColaPush resuelve tokens (EMPLEADOS/{dni}/dispositivos) y
 // envía, podando los muertos. Ver push.ts.
 export * from "./push";
+// Failover de avisos críticos cuando el bot WhatsApp está caído (cada 10 min):
+// push al chofer + escalación Telegram a Santiago de los pendientes críticos.
+// Ver failover_bot.ts.
+export * from "./failover_bot";

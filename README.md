@@ -131,7 +131,7 @@ Todas en `southamerica-east1`.
 - `cruzarParadasReportadasManual` — corrida manual del cruce paradas↔v3.
 - `backfillHistoricoDescargas` / `backfillHistoricoIButtons` / `backfillJornadas` / `backfillRegistrosV3` — backfills manuales.
 
-**onSchedule (crons)** — 26, regenerado desde el código el 2026-06-12
+**onSchedule (crons)** — 27, regenerado desde el código el 2026-06-12
 
 > **Salud de crons**: cada cron registra su latido en `CRON_HEALTH/{id}`
 > (wrapper `onScheduleConLatido` de `comun.ts`) y `cronWatchdog` (cada 3 h,
@@ -171,6 +171,7 @@ Dashboard:
 
 Salud + mantenimiento:
 - `cronWatchdog` (cada 3 h) — el "cron de los crons": latidos de `CRON_HEALTH` vs cadencia esperada → Telegram + WhatsApp.
+- `failoverCriticosBot` (cada 10 min) — si el bot WhatsApp está caído, reenvía por PUSH al chofer los avisos críticos pendientes de `COLA_WHATSAPP` + escala a Santiago por Telegram. Inerte hasta que la app registre tokens.
 - `censoColeccionesMensual` (día 1, 03:30 ART) — count() de toda la base → `STATS/censo_{mes}` + diff vs mes anterior → WhatsApp (crecimientos >40% y colecciones nuevas resaltados).
 - `botHealthWatchdog` (cada 15 min) — bot sin heartbeat → alerta TELEGRAM fuera de banda.
 - `procesarSilenciadosExpirados` (cada 10 min) — limpia silenciamientos vencidos en `BOT_SILENCIADOS_CHOFER`.
