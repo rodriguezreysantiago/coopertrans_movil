@@ -20,15 +20,13 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   equipo, perfil, home). Hosting `.well-known` DEPLOYADO y verificado (200). App
   handler (`DeepLinkService`) + manifest Android + entitlements iOS en el repo,
   **viajan con el próximo release**. Pasos para que funcione de verdad:
-  1. **Android SHA-256**: ✅ PARCIAL (2026-06-13). El SHA-256 del **upload key**
-     (sacado del keystore con keytool: `CA:DB:96:7C:…:8B:E9`) ya está en
-     `assetlinks.json` y DEPLOYADO — sirve para probar deep links con un **APK de
-     release instalado a mano**. ⏳ **FALTA para producción**: el SHA-256 del
-     **"Certificado de la clave de firma de apps" de Play** (Google re-firma el AAB)
-     — agregarlo como 2ª entrada del array `sha256_cert_fingerprints` y redeployar
-     hosting. Está en Play Console → Integridad de la app → Firma de apps (si no
-     aparece en el menú, puede ser permisos de la cuenta). Sin esa 2ª huella, los
-     App Links NO verifican en las instalaciones desde Play.
+  1. **Android SHA-256**: ✅ **CERRADO (2026-06-13)**. Las **2 huellas** están en
+     `assetlinks.json`, DEPLOYADAS y validadas por la **API oficial de Digital Asset
+     Links de Google** (2 statements OK):
+       - `CA:DB:96:7C:…:8B:E9` = **upload key** (keystore, keytool) → APK de release a mano.
+       - `DD:83:AF:CA:…:87:64` = **app-signing key de Play** (Google re-firma el AAB)
+         → instalaciones desde Play. Sacada de Play Console → keymanagement.
+     App Links autoVerify aprueba ambos caminos. No queda nada pendiente en Android.
   2. **iOS**: Xcode → Runner → Signing & Capabilities → **+ Associated Domains** →
      `applinks:coopertrans-movil.web.app` (Xcode escribe el pbxproj + habilita la
      capability en el App ID + regenera el provisioning profile). El entitlements
@@ -63,8 +61,8 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
      #1 de resiliencia de la auditoría); el push es inerte hasta tener tokens.
   **ESTADO: toda la feature deep-links+push está CONSTRUIDA (backend + 3 productores
   + app cliente + deep links). Solo falta el release + los 2 pasos iOS externos (cap
-  Push + APNs key) y los de deep links (SHA-256 Android, cap Associated Domains iOS,
-  appendear links a los avisos) para que llegue end-to-end a los teléfonos.**
+  Push + APNs key) y los de deep links (~~SHA-256 Android ✅~~, cap Associated Domains
+  iOS, appendear links a los avisos) para que llegue end-to-end a los teléfonos.**
 - [ ] **LOTE FASE 1 INFRA (2026-06-12, noche — revisado adversarialmente antes de prod)**:
   (a) **Backup DIARIO** (era semanal — RPO 7d→1d) con **auto-verificación anti-drift**:
   compara `collectionIds` vs `listCollections()` real y Telegram si algo quedó sin
