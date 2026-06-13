@@ -14,6 +14,27 @@ es el historial (sus "PENDIENTE" viejos pueden estar resueltos — ante la duda,
 manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ### Operativo / corto plazo
+- [ ] **DEEP LINKS — Vertical 1 (commit `0df2549`, 2026-06-13): infra + handler LISTOS,
+  falta ACTIVAR**. Cada aviso de WhatsApp podrá abrir la app en la pantalla exacta
+  (`coopertrans-movil.web.app/app/ir/{destino}`; destinos: jornada, vencimientos,
+  equipo, perfil, home). Hosting `.well-known` DEPLOYADO y verificado (200). App
+  handler (`DeepLinkService`) + manifest Android + entitlements iOS en el repo,
+  **viajan con el próximo release**. Pasos para que funcione de verdad:
+  1. **Android SHA-256**: Play Console → Integridad de la app → "Certificado de la
+     clave de firma de apps" → copiar el SHA-256 → reemplazar el placeholder en
+     `public/.well-known/assetlinks.json` → `firebase deploy --only hosting`.
+  2. **iOS**: Xcode → Runner → Signing & Capabilities → **+ Associated Domains** →
+     `applinks:coopertrans-movil.web.app` (Xcode escribe el pbxproj + habilita la
+     capability en el App ID + regenera el provisioning profile). El entitlements
+     ya está creado para que lo reuse.
+  3. **Bot/functions appendeando los links a los avisos** (hacer JUNTO al release,
+     no antes — si no, los choferes reciben links que caen en la página de fallback
+     hasta que actualicen): footer `/app/ir/{destino}` en vencimientos (bot
+     cron.js), jornada (functions) y devolución de reclamos.
+  4. **Release** de la app (sube el handler). Después: tappear un link de prueba
+     en Android e iOS para confirmar que abre la app (no el browser).
+  **Vertical 2 (push FCM: turnos + failover + sesión)** queda PENDIENTE — es la
+  segunda mitad de la feature (decisión Santiago: deep links primero).
 - [ ] **LOTE FASE 1 INFRA (2026-06-12, noche — revisado adversarialmente antes de prod)**:
   (a) **Backup DIARIO** (era semanal — RPO 7d→1d) con **auto-verificación anti-drift**:
   compara `collectionIds` vs `listCollections()` real y Telegram si algo quedó sin
