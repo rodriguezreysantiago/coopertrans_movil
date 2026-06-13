@@ -47,13 +47,14 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   2. **Nativo iOS**: Push Notifications capability + Background Modes (remote
      notification) + **APNs Auth Key (.p8) cargada en Firebase Console** (sin esto
      el push NO llega a iPhone). Android: `POST_NOTIFICATIONS` en el manifest (13+).
-  3. **Productores → `COLA_PUSH`**: ✅ turno del cachatore (nube.py, `ba0adae`) +
-     ✅ cambio de rol/sesión (auth.ts `actualizarRolEmpleado`, DEPLOYADO `ba0adae`).
-     ⏳ **Failover de críticos cuando el bot cae**: NO hecho — requiere construir
-     ANTES el mecanismo de failover en sí (leer COLA_WHATSAPP pendiente de orígenes
-     críticos cuando `BOT_HEALTH` está caído y reenviar), que es la propuesta
-     "Failover Telegram de críticos" de la Fase 3. Cuando se construya, sumarle el
-     `encolarPush` en paralelo al Telegram.
+  3. **Productores → `COLA_PUSH`**: ✅ LOS 3 HECHOS. Turno del cachatore (nube.py,
+     `ba0adae`) + cambio de rol/sesión (auth.ts, DEPLOYADO `ba0adae`) + **failover
+     de críticos** (`failoverCriticosBot`, DEPLOYADO `b6c0436`): cada 10 min, si el
+     bot está caído, pushea los avisos críticos pendientes al chofer + escala a
+     Santiago por Telegram. La escalación Telegram FUNCIONA YA (cierra el agujero
+     #1 de resiliencia de la auditoría); el push es inerte hasta tener tokens.
+     **Solo falta la capa app (1) + el nativo iOS (2) para que el push llegue a
+     los teléfonos.**
 - [ ] **LOTE FASE 1 INFRA (2026-06-12, noche — revisado adversarialmente antes de prod)**:
   (a) **Backup DIARIO** (era semanal — RPO 7d→1d) con **auto-verificación anti-drift**:
   compara `collectionIds` vs `listCollections()` real y Telegram si algo quedó sin
