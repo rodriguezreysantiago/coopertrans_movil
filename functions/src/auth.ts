@@ -30,6 +30,7 @@ import * as crypto from "crypto";
 
 import { db, auth, MAX_INTENTOS_FALLIDOS, BLOQUEO_DURACION_MS } from "./setup";
 import { hashId } from "./comun";
+import { encolarPush } from "./push";
 
 // ============================================================================
 // loginConDni
@@ -693,6 +694,22 @@ export const actualizarRolEmpleado = onCall(
         logger.info("[actualizarRolEmpleado] tokens revocados, usuario debera re-loguear", {
           dniHash: hashId(dni),
         });
+        // Push para que el afectado reabra la app y re-loguee con el rol
+        // nuevo (su JWT viejo ya no sirve). Best-effort + inerte hasta que
+        // la app registre tokens; no debe romper el cambio de rol.
+        try {
+          await encolarPush({
+            dni,
+            titulo: "Tu acceso fue actualizado",
+            cuerpo: "Volvé a abrir la app para continuar.",
+            destino: "home",
+            origen: "cambio_sesion",
+          });
+        } catch (ePush) {
+          logger.warn("[actualizarRolEmpleado] no se pudo encolar push", {
+            error: (ePush as Error).message,
+          });
+        }
       } catch (e) {
         logger.warn("[actualizarRolEmpleado] no se pudo revocar tokens", {
           dniHash: hashId(dni),

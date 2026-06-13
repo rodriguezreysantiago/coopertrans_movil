@@ -298,6 +298,31 @@ def encolar_whatsapp(telefono, mensaje, origen="cachatore", expira_min=None):
     db.collection(COL_COLA).add(doc)
 
 
+COL_PUSH = "COLA_PUSH"
+
+
+def encolar_push(dni, titulo, cuerpo, destino=None, origen="cachatore_turno"):
+    """Encola un push FCM. Lo consume la CF `procesarColaPush`, que resuelve
+    los tokens de EMPLEADOS/{dni}/dispositivos y envía (podando los muertos).
+    Complementa al WhatsApp: el push tiene latencia de segundos, clave para
+    la ventana de minutos de un turno. INERTE hasta que la app registre
+    tokens (sin tokens → no-op silencioso). TTL 7 días para no acumular."""
+    if not dni:
+        return
+    db = choferes._db()
+    db.collection(COL_PUSH).add({
+        "dni": str(dni),
+        "titulo": titulo,
+        "cuerpo": cuerpo,
+        "destino": destino,
+        "data": None,
+        "origen": origen,
+        "estado": "PENDIENTE",
+        "creado_en": firestore.SERVER_TIMESTAMP,
+        "expira_en": datetime.now(timezone.utc) + timedelta(days=7),
+    })
+
+
 # Salud técnica del vigía → mismo destinatario que la regla 'mantenimientoBot'
 # del catálogo M5 ("Bot WhatsApp: caídas, recuperaciones, salud") = Santiago.
 # Overrideable desde la app vía META/destinatarios_notificacion.
@@ -345,13 +370,20 @@ def avisar_turno(chofer_dni, chofer_nombre, cuando, evento):
     if evento == "reagendado":
         msg_chofer = (f"{hola}te reprogramamos el turno de carga YPF: "
                       f"ahora es *{cuando}*.\n\n_Coopertrans Móvil_")
+        push_cuerpo = f"Te reprogramamos el turno: ahora {cuando}."
     elif evento == "cancelado":
         msg_chofer = (f"{hola}te avisamos que tu turno de carga YPF "
                       f"(*{cuando}*) fue CANCELADO.\n\n_Coopertrans Móvil_")
+        push_cuerpo = f"Tu turno YPF ({cuando}) fue cancelado."
     else:
         msg_chofer = (f"{hola}te conseguimos turno de carga YPF para "
                       f"*{cuando}*.\n\n_Coopertrans Móvil_")
+        push_cuerpo = f"Tenés turno de carga YPF para {cuando}."
     encolar_whatsapp(_telefono_de(db, chofer_dni), msg_chofer)
+    # Push paralelo al chofer (ventana de minutos del turno; el push llega
+    # en segundos sin depender de la cola del bot). Inerte hasta el release.
+    encolar_push(chofer_dni, "Turno YPF", push_cuerpo,
+                 destino="home", origen="cachatore_turno")
     # M9 — pausa por canal. La pausa silencia SOLO el aviso al encargado;
     # el chofer siempre recibe el aviso de su turno (es crítico).
     if not canales_pausados.esta_canal_pausado("cachatoreEncargado"):
