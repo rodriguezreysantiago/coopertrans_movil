@@ -15,6 +15,7 @@ import 'core/services/app_logger.dart';
 import 'core/services/prefs_service.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/deep_link_service.dart';
+import 'core/services/push_service.dart';
 import 'core/services/windows_update_service.dart';
 import 'core/services/android_update_service.dart';
 import 'routing/app_router.dart';
@@ -507,6 +508,14 @@ class _LogisticaAppState extends State<LogisticaApp> {
     DeepLinkService.iniciar(
       (ruta) => navigatorKey.currentState?.pushNamed(ruta),
     );
+
+    // Push FCM: handlers + tap→pantalla (mismo resolver que los deep links).
+    // No-op en Windows/web. El registro del token va tras login
+    // (auth_service) y acá si ya hay sesión persistida.
+    PushService.init((ruta) => navigatorKey.currentState?.pushNamed(ruta));
+    if (PrefsService.dni.isNotEmpty) {
+      PushService.vincularConUsuario(PrefsService.dni);
+    }
   }
 
   @override

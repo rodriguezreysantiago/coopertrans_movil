@@ -106,6 +106,12 @@ dependencies:
   # Permite cerrar las firestore.rules con `request.auth.uid` (= DNI)
   # y `isAdmin()`.
   firebase_auth: ^6.0.0
+  # Firebase Cloud Messaging (push del Vertical 2 deep-links+push). SOLO
+  # Android/iOS — NO soporta Windows/web, por eso PushService chequea la
+  # plataforma antes de instanciarlo (la app admin corre en Windows). El
+  # backend (functions/src/push.ts) envía; la app registra el token en
+  # EMPLEADOS/{dni}/dispositivos. Ver lib/core/services/push_service.dart.
+  firebase_messaging: ^16.2.0
   # In-app update alerts via Firebase App Distribution (Android only).
   # Solo activo en builds distribuidos por App Distribution — en debug es no-op.
   # ================= ARCHIVOS =================

@@ -241,6 +241,38 @@ class NotificationService {
     );
   }
 
+  /// Muestra una notificación local genérica — para los push FCM recibidos
+  /// en FOREGROUND (con la app abierta el SO no los muestra solo). El
+  /// `payload` (keyword de destino) lo consume `selectNotificationStream`
+  /// al tappear, que navega vía el mismo resolver que los deep links.
+  static Future<void> mostrarPush({
+    required String titulo,
+    required String cuerpo,
+    String? payload,
+  }) async {
+    if (kIsWeb) return;
+    const NotificationDetails platformDetails = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'push_canal',
+        'Avisos push',
+        channelDescription: 'Notificaciones push de Coopertrans Móvil',
+        importance: Importance.max,
+        priority: Priority.high,
+      ),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentSound: true,
+      ),
+    );
+    await _notificationsPlugin.show(
+      id: _idDeterministico('push_${titulo}_$cuerpo'),
+      title: titulo,
+      body: cuerpo,
+      notificationDetails: platformDetails,
+      payload: payload,
+    );
+  }
+
   // ===========================================================================
   // RECORDATORIOS AGENDADOS (vencimientos del chofer)
   // ===========================================================================

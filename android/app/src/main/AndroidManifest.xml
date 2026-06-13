@@ -83,6 +83,10 @@
     <!-- C�mara: image_picker la usa cuando el chofer/admin elige
          "Tomar foto con la c�mara" para subir comprobantes o foto de perfil. -->
     <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- Push FCM (Android 13+): permiso runtime para mostrar notificaciones.
+         PushService.init() dispara el prompt con requestPermission(). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application

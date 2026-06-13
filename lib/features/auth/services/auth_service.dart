@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/services/prefs_service.dart';
+import '../../../core/services/push_service.dart';
 
 class LoginResult {
   final bool success;
@@ -183,6 +184,10 @@ class AuthService {
         apodo: apodo,
         rol: rol,
       );
+
+      // Registrar el token FCM de este dispositivo para el usuario logueado
+      // (push del Vertical 2). No-op en Windows/web; best-effort.
+      unawaited(PushService.vincularConUsuario(cleanDni));
 
       // 5) Pre-warm del cache de Firestore: leemos el legajo del chofer
       //    una vez después del login para que el cache offline quede

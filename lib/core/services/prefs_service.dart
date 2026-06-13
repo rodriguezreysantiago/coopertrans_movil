@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,6 +42,13 @@ class PrefsService {
   /// La contraseña NO se guarda nunca (eso sería un riesgo de seguridad).
   static const String _keyLastDni = 'lastDni';
 
+  /// ID de instalación: identificador aleatorio ESTABLE por instalación de
+  /// la app (no es el DNI ni el token FCM). Se usa como doc id en
+  /// EMPLEADOS/{dni}/dispositivos/{installId} para que un refresh del token
+  /// FCM actualice el MISMO doc (sin acumular tokens muertos). Persistente
+  /// en secure storage; se genera una vez.
+  static const String _keyInstallId = 'install_id';
+
   /// Flag de migración: si está, ya copiamos los valores viejos.
   /// Persistimos en secure storage para que sea idempotente entre
   /// reinstalaciones (si el secure storage se borra, la migración
@@ -62,6 +71,7 @@ class PrefsService {
   static String _rol = '';
   static bool _isLoggedIn = false;
   static String _lastDni = '';
+  static String _installId = '';
 
   /// Inicializar antes del runApp. Lee todos los valores a memoria.
   /// Si es la primera ejecución después del upgrade, migra los datos
@@ -76,7 +86,20 @@ class PrefsService {
     _lastDni = await _secure.read(key: _keyLastDni) ?? '';
     final loggedRaw = await _secure.read(key: _keyIsLoggedIn);
     _isLoggedIn = loggedRaw == 'true';
+
+    // Install id: generar una vez y persistir.
+    _installId = await _secure.read(key: _keyInstallId) ?? '';
+    if (_installId.isEmpty) {
+      final r = Random.secure();
+      _installId = List.generate(
+        16, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0'),
+      ).join();
+      await _secure.write(key: _keyInstallId, value: _installId);
+    }
   }
+
+  /// ID estable de esta instalación (ver [_keyInstallId]).
+  static String get installId => _installId;
 
   /// Migración one-shot: si todavía no marcamos como migrado y existe
   /// SharedPreferences viejo con datos, los copia a secure storage y
