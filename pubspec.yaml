@@ -14,13 +14,13 @@ dependencies:
 
   # ================= UI / TIPOGRAFÍA =================
   # Refactor Núcleo (jun 2026): Geist + Geist Mono vía google_fonts.
-  google_fonts: ^6.2.1
+  google_fonts: ^8.1.0
 
   # ================= DESKTOP (Windows/macOS/Linux) =================
   # Ventana nativa: tamaño mínimo, título y fondo near-black (sin flash blanco
   # al abrir). Solo desktop — conditional import en core/window/desktop_window
   # → window_manager (importa dart:io) nunca entra al build web.
-  window_manager: ^0.4.2
+  window_manager: ^0.5.1
 
   # ================= ESTADO GLOBAL =================
   provider: ^6.1.2   # ✅ AGREGADO
@@ -34,7 +34,7 @@ dependencies:
   shared_preferences: ^2.3.2
   path_provider: ^2.1.5
   url_launcher: ^6.3.1
-  file_picker: ^11.0.0
+  file_picker: ^12.0.0-beta.1
 
   # ================= DEEP LINKS =================
   # App Links (Android) / Universal Links (iOS) sobre
@@ -42,13 +42,13 @@ dependencies:
   # la app en la pantalla pertinente. Puro Dart + canal de plataforma; en
   # Windows/web es no-op (DeepLinkService traga el error). Ver
   # lib/core/services/deep_link_service.dart.
-  app_links: ^6.3.0
+  app_links: ^7.1.2
 
   # ⚠️ SOLO WINDOWS DESKTOP — necesarias para que file_picker y otros
   # plugins resuelvan correctamente en target Windows. Si en algún
   # momento la app deja de tener target Windows, se pueden eliminar.
   ffi: ^2.1.2
-  win32: ^5.5.4
+  win32: ^6.3.0
 
   # ================= REPORTE Y DATOS =================
   excel: ^4.0.6
@@ -71,23 +71,23 @@ dependencies:
   # ================= GRÁFICOS =================
   # Para los gráficos del módulo ICM (línea histórica, barras por tipo,
   # pie de categorías). MIT, sin telemetría, ~250 KB.
-  fl_chart: ^0.69.0
+  fl_chart: ^1.2.0
 
   # ================= NOTIFICACIONES =================
-  flutter_local_notifications: ^21.0.0
+  flutter_local_notifications: ^22.0.0
   # `timezone` viene transitiva con flutter_local_notifications pero la
   # declaramos explícita porque la usamos en NotificationService para
   # agendar recordatorios de vencimientos del chofer.
   timezone: ^0.11.0
-  share_plus: ^12.0.0
+  share_plus: ^13.1.0
 
   # ================= LOCALIZACIÓN =================
   flutter_localizations:
     sdk: flutter
 
   # ================= FIREBASE =================
-  firebase_core: ^4.0.0
-  cloud_firestore: ^6.0.0
+  firebase_core: ^4.10.0
+  cloud_firestore: ^6.5.0
   # Pinned EXACT a 13.0.4 (sin caret): firebase_storage 13.1.0+ tiene un
   # bug de Windows desktop (PR flutterfire#18030) — agregaron una llamada
   # a `Storage::UseEmulator()` en el plugin C++ que NO existe en la
@@ -95,24 +95,24 @@ dependencies:
   # `error C2039: "UseEmulator"`. 13.0.4 es la última versión sin esa
   # llamada y sigue compatible con firebase_core 4.5.0. Volver a ^13 cuando
   # se publique un fix upstream.
-  firebase_storage: 13.0.4
+  firebase_storage: 13.4.2
   # Crashlytics: solo se inicializa en Android/iOS (Web/Windows nativo
   # no son soportados — el AppLogger hace la decisión en runtime).
-  firebase_crashlytics: ^5.0.0
+  firebase_crashlytics: ^5.2.3
   # Firebase Auth: el login real se hace contra una Cloud Function
   # (`loginConDni`) que valida bcrypt server-side y emite un custom
   # token. La function se llama por HTTPS directo con dio (porque
   # el plugin `cloud_functions` no tiene implementación Windows).
   # Permite cerrar las firestore.rules con `request.auth.uid` (= DNI)
   # y `isAdmin()`.
-  firebase_auth: ^6.0.0
+  firebase_auth: ^6.5.2
   # In-app update alerts via Firebase App Distribution (Android only).
   # Solo activo en builds distribuidos por App Distribution — en debug es no-op.
   # ================= ARCHIVOS =================
   image_picker: ^1.2.2
   # `flutter_pdfview` se removió (2026-04-28): la previsualización
   # de PDFs se hace con pdfrx (preview_screen.dart).
-  pdfrx: ^1.0.10
+  pdfrx: ^2.4.4
   # `pdf` (alias dart_pdf) para GENERAR PDFs (no leer — eso lo hace
   # pdfrx). Se usa en el comprobante de adelanto del viaje (layout
   # A4 duplicado: el operador imprime, corta al medio, una mitad
@@ -137,7 +137,7 @@ dependencies:
   # Migramos `dni`/`nombre`/`rol`/`isLoggedIn`/`lastDni` desde
   # SharedPreferences (texto plano) a este storage para defender en
   # profundidad contra acceso físico al disco.
-  flutter_secure_storage: ^10.0.0
+  flutter_secure_storage: ^10.3.1
 
   # ================= UI EXTRAS =================
   table_calendar: ^3.1.2  # Vista calendario mensual para auditoría de vencimientos
@@ -155,7 +155,7 @@ dependencies:
   # Solo lo usamos en Android/iOS — en Windows desktop el plugin
   # no expone GPS (no hay GPS estándar en PCs); el operador puede
   # mover el mapa a mano o pegar coords manuales.
-  geolocator: ^14.0.0
+  geolocator: ^14.0.3
 
   # ================= OCR =================
   # Reconocimiento de texto on-device (sin envío a servidores).
@@ -175,19 +175,19 @@ dependencies:
   # "com.coopertrans.movil@<version>+<build>". Era transitive de
   # sentry_flutter, lo promovemos a explícito (mismo pin que ya estaba
   # en pubspec.lock).
-  package_info_plus: ^9.0.1
+  package_info_plus: ^10.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^4.0.0
+  flutter_lints: ^6.0.0
   flutter_launcher_icons: ^0.14.4
   # fake_cloud_firestore: emulador in-memory de Firestore para tests
   # de services que leen/escriben docs. NO requiere proceso emulator
   # aparte (a diferencia de firebase emulators:start) — corre todo en
   # el mismo isolate del test. Usado por icm_calculator_flujo_test.
   # Auditoría 2026-05-18: agregado al volcar tests de lógica de negocio.
-  fake_cloud_firestore: ^4.0.0
+  fake_cloud_firestore: ^4.1.1
 
 # Configuracion de iconos de launcher (Android + iOS + macOS).
 # Para regenerar despues de cambiar la imagen fuente:
