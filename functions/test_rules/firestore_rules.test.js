@@ -92,6 +92,12 @@ before(async () => {
       ultimo_ok: new Date(),
     });
     await setDoc(doc(d, 'COLA_PUSH', 'p1'), { dni: DNI_CHOFER, titulo: 'x' });
+    // Credencial aislada (hardening 2026-06-13): el hash vive en la subcolección
+    // con read:if false. Se seedea para que los tests de "no se puede leer"
+    // sean significativos (aunque read:false falla exista o no el doc).
+    await setDoc(doc(d, 'EMPLEADOS', DNI_CHOFER, 'credenciales', 'main'), {
+      hash: 'hash-bcrypt', formato: 'bcrypt',
+    });
   });
 });
 
@@ -170,6 +176,36 @@ describe('Push — tokens de dispositivo y COLA_PUSH', () => {
       await assertFails(setDoc(doc(db('11111111', 'ADMIN'), 'COLA_PUSH', 'p2'),
         { dni: DNI_CHOFER, titulo: 'x' }));
     });
+});
+
+describe('Credenciales — hash de contraseña aislado (hardening 2026-06-13)', () => {
+  // CORE del hardening: el hash vive en EMPLEADOS/{dni}/credenciales/main con
+  // read:if false → NADIE lo lee desde el cliente, se cierra el brute-force
+  // offline. Lectura/escritura server-side va por Admin SDK (bypassea rules).
+  test('el chofer NO lee su propia credencial (read:if false)', () =>
+    assertFails(getDoc(doc(db(DNI_CHOFER, 'CHOFER'),
+      'EMPLEADOS', DNI_CHOFER, 'credenciales', 'main'))));
+  test('el ADMIN tampoco lee la credencial (read:if false para TODOS)', () =>
+    assertFails(getDoc(doc(db('11111111', 'ADMIN'),
+      'EMPLEADOS', DNI_CHOFER, 'credenciales', 'main'))));
+  test('el SUPERVISOR tampoco lee la credencial', () =>
+    assertFails(getDoc(doc(db('55555555', 'SUPERVISOR'),
+      'EMPLEADOS', DNI_CHOFER, 'credenciales', 'main'))));
+  test('admin/supervisor SÍ crean la credencial inicial (alta del empleado)', () =>
+    assertSucceeds(setDoc(doc(db('55555555', 'SUPERVISOR'),
+      'EMPLEADOS', '77777777', 'credenciales', 'main'),
+    { hash: 'h-inicial', formato: 'bcrypt' })));
+  test('el chofer NO crea credenciales (ni la suya)', () =>
+    assertFails(setDoc(doc(db(DNI_CHOFER, 'CHOFER'),
+      'EMPLEADOS', DNI_CHOFER, 'credenciales', 'main'),
+    { hash: 'elegido-por-atacante' })));
+  test('NADIE actualiza la credencial desde el cliente (el cambio va por callable)', () =>
+    assertFails(updateDoc(doc(db('55555555', 'SUPERVISOR'),
+      'EMPLEADOS', DNI_CHOFER, 'credenciales', 'main'),
+    { hash: 'pisado' })));
+  test('NADIE borra la credencial desde el cliente', () =>
+    assertFails(deleteDoc(doc(db('11111111', 'ADMIN'),
+      'EMPLEADOS', DNI_CHOFER, 'credenciales', 'main'))));
 });
 
 describe('GOMERIA — acceso acotado a su módulo', () => {

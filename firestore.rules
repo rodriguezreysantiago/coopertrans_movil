@@ -107,15 +107,14 @@ service cloud.firestore {
       // unidad (tractor/enganche). Sin esto el hub tira permission-denied al
       // hacer el .get() de la colección (bug RIOS GABRIEL, 2026-06-03).
       //
-      // NOTA SOBRE CONTRASEÑA (auditoria 2026-05-17): Firestore NO
-      // soporta field-level security. La rule permite al chofer leer
-      // SU doc entero, incluido el hash bcrypt. Si un chofer hostil
-      // toma el JWT y baja su doc, podria hacer brute-force OFFLINE
-      // contra el hash (bcrypt cost 10 ≈ 100ms/intento — viable para
-      // passwords debiles). MITIGACION FUTURA: mover CONTRASEÑA a
-      // subcoleccion `EMPLEADOS/{dni}/credenciales/main` con
-      // `read: if false`. Por ahora, la validacion de password fuerza
-      // minimo 6 chars al alta + comentario aqui para no olvidar.
+      // NOTA SOBRE CONTRASEÑA (auditoria 2026-05-17 / IMPLEMENTADO 2026-06-13):
+      // Firestore NO soporta field-level security, así que mientras el hash
+      // vivía en este doc, el dueño (isSelf) y admin/sup/seg/gomería podían
+      // LEERLO y hacer brute-force OFFLINE. RESUELTO: el hash se movió a la
+      // subcolección `EMPLEADOS/{dni}/credenciales/main` con `read: if false`
+      // (ver el match más abajo). Este doc principal YA NO contiene el campo
+      // CONTRASEÑA para empleados migrados; las funciones de login/cambio/reset
+      // leen y escriben la subcolección vía Admin SDK.
       allow read: if isAdminOrSupervisor() || isSegHigiene()
         || isGomeria() || isSelf(dni);
       // Crear: admin/supervisor. Borrar (delete real): solo ADMIN — la baja
@@ -171,6 +170,21 @@ service cloud.firestore {
     match /EMPLEADOS/{dni}/dispositivos/{doc} {
       allow read: if isSelf(dni) || isAdminOrSupervisor();
       allow write: if isSelf(dni);
+    }
+
+    // EMPLEADOS/{dni}/credenciales/main — hash de contraseña AISLADO (hardening
+    // 2026-06-13). Firestore no tiene seguridad por-campo: mientras el hash vivía
+    // en el doc principal de EMPLEADOS, el dueño (isSelf) y los roles admin/sup/
+    // seg/gomería podían LEERLO y hacer brute-force OFFLINE. Movido acá con
+    // read:false → NADIE lo lee desde el cliente. Las Cloud Functions (login /
+    // cambiarContrasenaChofer / resetearContrasenaEmpleadoAdmin / migración)
+    // usan Admin SDK y bypassean estas rules. El cliente SOLO necesita CREAR el
+    // hash inicial en el alta del empleado (admin/supervisor); todo cambio
+    // posterior va por callable server-side (no update/delete desde cliente).
+    match /EMPLEADOS/{dni}/credenciales/{doc} {
+      allow read: if false;
+      allow create: if isAdminOrSupervisor();
+      allow update, delete: if false;
     }
 
     // ========================================================================

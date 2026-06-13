@@ -33,6 +33,87 @@ import { hashId } from "./comun";
 import { encolarPush } from "./push";
 
 // ============================================================================
+// Credenciales — hash de contraseña aislado en subcolección (hardening 2026-06-13)
+// ============================================================================
+//
+// El hash vive en EMPLEADOS/{dni}/credenciales/main (rule `read: if false`) en
+// vez del doc principal, para que NADIE lo lea desde el cliente y haga
+// brute-force offline. Estas funciones corren en Cloud Functions (Admin SDK,
+// bypassean las rules). `leerHashCredencial` mantiene FALLBACK al campo legacy
+// `EMPLEADOS/{dni}.CONTRASEÑA` para empleados aún no migrados (forward-compat).
+// `escribirHashCredencial` consolida en la subcolección Y borra el campo viejo,
+// cerrando el vector para ese empleado en cuanto loguea / cambia / resetea.
+
+const SUBCOL_CREDENCIALES = "credenciales";
+const DOC_CREDENCIAL = "main";
+
+function refCredencial(dni: string): DocumentReference {
+  return db
+    .collection("EMPLEADOS").doc(dni)
+    .collection(SUBCOL_CREDENCIALES).doc(DOC_CREDENCIAL);
+}
+
+/**
+ * Lee el hash de contraseña de un empleado. Fuente nueva:
+ * `EMPLEADOS/{dni}/credenciales/main.hash`. Si no está, FALLBACK al campo
+ * legacy `CONTRASEÑA` del doc principal (forward-compat durante la migración).
+ * `empleadoData` es el `.data()` del doc principal ya leído por el caller
+ * (evita una segunda lectura). `origen` permite al caller decidir si hay que
+ * consolidar un straggler a la subcolección.
+ */
+async function leerHashCredencial(
+  dni: string,
+  empleadoData: Record<string, unknown>,
+): Promise<{ hash: string; origen: "subcoleccion" | "legacy" | "" }> {
+  try {
+    const credSnap = await refCredencial(dni).get();
+    if (credSnap.exists) {
+      const h = (credSnap.data()?.hash ?? "").toString();
+      if (h) return { hash: h, origen: "subcoleccion" };
+    }
+  } catch (e) {
+    // Si la subcolección no se puede leer (transitorio), caemos al fallback
+    // en vez de romper el login. `tipo` permite alertar en Cloud Monitoring:
+    // si esto se vuelve recurrente, los empleados YA migrados (sin campo legacy)
+    // quedarían sin hash → conviene una alerta sobre este string.
+    logger.warn("[cred] fallo lectura subcoleccion, uso fallback legacy", {
+      tipo: "cred_subcol_read_error",
+      dniHash: hashId(dni),
+      error: (e as Error).message,
+    });
+  }
+  const legacy = (empleadoData["CONTRASEÑA"] ?? "").toString();
+  if (legacy) return { hash: legacy, origen: "legacy" };
+  return { hash: "", origen: "" };
+}
+
+/**
+ * Persiste el hash en la subcolección (read:false) y BORRA el campo legacy
+ * `CONTRASEÑA` del doc principal — atómico vía batch. Tras esto, el hash deja
+ * de ser legible desde el cliente. Requiere que `EMPLEADOS/{dni}` exista
+ * (siempre es así en login/cambio/reset, que lo leen antes).
+ */
+async function escribirHashCredencial(
+  dni: string,
+  hash: string,
+  formato: "bcrypt",
+): Promise<void> {
+  const batch = db.batch();
+  batch.set(
+    refCredencial(dni),
+    { hash, formato, actualizado_en: FieldValue.serverTimestamp() },
+    { merge: true },
+  );
+  // El delete del campo legacy es IDEMPOTENTE: FieldValue.delete() sobre un
+  // campo que ya no existe (empleado ya consolidado) es un no-op, no tira.
+  batch.update(
+    db.collection("EMPLEADOS").doc(dni),
+    { "CONTRASEÑA": FieldValue.delete() },
+  );
+  await batch.commit();
+}
+
+// ============================================================================
 // loginConDni
 // ============================================================================
 
@@ -133,7 +214,10 @@ export const loginConDni = onCall(
     }
 
     // ─── Verificación de contraseña ────────────────────────────────
-    const storedHash = (empleado["CONTRASEÑA"] ?? "").toString();
+    // Hash desde la subcolección credenciales/main (fallback al campo legacy
+    // para empleados aún no migrados).
+    const { hash: storedHash, origen: origenHash } =
+      await leerHashCredencial(dni, empleado);
     if (!storedHash) {
       logger.warn("[login] empleado sin hash de contraseña", { dni });
       throw new HttpsError(
@@ -171,18 +255,26 @@ export const loginConDni = onCall(
       throw new HttpsError("permission-denied", "Usuario o contraseña incorrectos.");
     }
 
-    // ─── Migración silenciosa SHA-256 → bcrypt ─────────────────────
-    if (esLegacy(storedHash)) {
-      // No bloqueamos el login si falla.
+    // ─── Consolidación a la subcolección credenciales (hardening 2026-06-13) ──
+    // Dos casos, ambos best-effort (no bloquean el login si fallan):
+    //   1. Hash SHA-256 legacy → re-hashear a bcrypt.
+    //   2. Hash ya bcrypt pero todavía en el campo viejo (origen "legacy",
+    //      ej. empleado creado por una app vieja) → moverlo tal cual.
+    // En ambos, escribirHashCredencial deja el hash en la subcolección y borra
+    // el campo `CONTRASEÑA` del doc principal → cierra el vector de lectura.
+    const debeConsolidar = esLegacy(storedHash) || origenHash === "legacy";
+    if (debeConsolidar) {
       try {
-        const nuevoHash = await bcrypt.hash(password, 10);
-        await docRef.update({
-          "CONTRASEÑA": nuevoHash,
-          "hash_migrado_a_bcrypt": FieldValue.serverTimestamp(),
+        const hashFinal = esLegacy(storedHash) ?
+          await bcrypt.hash(password, 10) :
+          storedHash;
+        await escribirHashCredencial(dni, hashFinal, "bcrypt");
+        logger.info("[login] credencial consolidada en subcolección", {
+          dniHash: hashId(dni),
+          reHasheado: esLegacy(storedHash),
         });
-        logger.info("[login] hash migrado a bcrypt", { dniHash: hashId(dni) });
       } catch (e) {
-        logger.warn("[login] migración silenciosa falló (no bloquea)", {
+        logger.warn("[login] consolidación de credencial falló (no bloquea)", {
           dniHash: hashId(dni),
           error: (e as Error).message,
         });
@@ -321,8 +413,8 @@ export const cambiarContrasenaChofer = onCall(
       throw new HttpsError("not-found", "Legajo no encontrado.");
     }
     const data = snap.data() ?? {};
-    const hashActualRaw = data["CONTRASEÑA"];
-    const hashActual = typeof hashActualRaw === "string" ? hashActualRaw : "";
+    // Hash actual desde la subcolección credenciales (fallback al campo legacy).
+    const { hash: hashActual } = await leerHashCredencial(uid, data);
     if (hashActual.length === 0) {
       throw new HttpsError(
         "failed-precondition",
@@ -351,12 +443,10 @@ export const cambiarContrasenaChofer = onCall(
       );
     }
 
-    // Hashear la nueva con bcrypt cost 10 y persistir.
+    // Hashear la nueva con bcrypt cost 10 y persistir en la subcolección
+    // credenciales (esto además borra el campo legacy del doc principal).
     const nuevoHash = await bcrypt.hash(nueva, 10);
-    await ref.update({
-      "CONTRASEÑA": nuevoHash,
-      "fecha_ultima_actualizacion": FieldValue.serverTimestamp(),
-    });
+    await escribirHashCredencial(uid, nuevoHash, "bcrypt");
     // Reset del contador de intentos tras cambio exitoso (best-effort).
     try {
       await intentosPassRef.delete();
@@ -427,11 +517,9 @@ export const resetearContrasenaEmpleadoAdmin = onCall(
       throw new HttpsError("not-found", `Empleado ${dni} no encontrado.`);
     }
 
+    // Persistir en la subcolección credenciales (y borrar el campo legacy).
     const nuevoHash = await bcrypt.hash(nueva, 10);
-    await ref.update({
-      "CONTRASEÑA": nuevoHash,
-      "fecha_ultima_actualizacion": FieldValue.serverTimestamp(),
-    });
+    await escribirHashCredencial(dni, nuevoHash, "bcrypt");
 
     // Revocar tokens del afectado para forzar re-login con la pass nueva.
     // Si el usuario nunca tuvo Auth account (raro pero pasa con empleados
@@ -451,6 +539,87 @@ export const resetearContrasenaEmpleadoAdmin = onCall(
       dniHash: hashId(dni),
     });
     return { ok: true };
+  },
+);
+
+// ============================================================================
+// migrarCredencialesEmpleados — backfill one-time: CONTRASEÑA → subcolección
+// ============================================================================
+//
+// Mueve el hash del campo legacy `EMPLEADOS/{dni}.CONTRASEÑA` a la subcolección
+// `EMPLEADOS/{dni}/credenciales/main` (read:if false) y borra el campo legacy,
+// cerrando el vector de lectura para TODOS los empleados existentes de una.
+// Idempotente: si la subcolección ya tiene hash, solo limpia el campo legacy
+// remanente. Solo ADMIN. `dryRun:true` cuenta sin escribir. (Los hashes
+// SHA-256 legacy se copian tal cual; el próximo login los re-hashea a bcrypt.)
+export const migrarCredencialesEmpleados = onCall(
+  { timeoutSeconds: 300, memory: "512MiB" },
+  async (request) => {
+    const rolCaller = request.auth?.token?.rol;
+    if (!request.auth || rolCaller !== "ADMIN") {
+      throw new HttpsError(
+        "permission-denied",
+        "Solo ADMIN puede migrar credenciales.",
+      );
+    }
+    // Tolera el booleano true y el string "true" (cliente mal implementado que
+    // serializa el flag como string no debe disparar una migración real por error).
+    const dryRun =
+      request.data?.dryRun === true || request.data?.dryRun === "true";
+
+    const snap = await db.collection("EMPLEADOS").get();
+    let conLegacy = 0;
+    let migrados = 0;       // copiado a subcolección (+ borrado legacy)
+    let yaEnSubcol = 0;     // ya estaba en subcolección (solo borrado legacy)
+    let errores = 0;
+
+    for (const doc of snap.docs) {
+      const legacy = (doc.data()?.["CONTRASEÑA"] ?? "").toString();
+      // Salta sin campo legacy O con valor vacío/whitespace: NO migramos un hash
+      // vacío (borrar el campo dejaría al empleado sin nada). `!legacy` cubre '';
+      // el `.trim()` cubre whitespace-only.
+      if (!legacy || !legacy.trim()) continue;
+      conLegacy++;
+      if (dryRun) continue;
+      try {
+        const credRef = refCredencial(doc.id);
+        const credSnap = await credRef.get();
+        const yaTiene =
+          credSnap.exists &&
+          (credSnap.data()?.hash ?? "").toString().length > 0;
+        const batch = db.batch();
+        if (!yaTiene) {
+          batch.set(credRef, {
+            hash: legacy,
+            formato: esBcrypt(legacy) ? "bcrypt" : "sha256",
+            actualizado_en: FieldValue.serverTimestamp(),
+            migrado_desde_legacy_en: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+        batch.update(doc.ref, { "CONTRASEÑA": FieldValue.delete() });
+        await batch.commit();
+        // Contadores DESPUÉS del commit: si el commit falla cae al catch como
+        // error y NO se cuenta como migrado (evita el reporte optimista).
+        if (yaTiene) yaEnSubcol++; else migrados++;
+      } catch (e) {
+        errores++;
+        logger.warn("[migrarCredenciales] error en empleado", {
+          dniHash: hashId(doc.id),
+          error: (e as Error).message,
+        });
+      }
+    }
+
+    const resumen = {
+      totalEmpleados: snap.size,
+      conLegacy,
+      migrados,
+      yaEnSubcol,
+      errores,
+      dryRun,
+    };
+    logger.info("[migrarCredenciales] resumen", resumen);
+    return resumen;
   },
 );
 
@@ -867,6 +1036,51 @@ export const renombrarEmpleadoDni = onCall(
     }
     const cascada: CascadaResult[] = [];
 
+    // ─── Step 2a: mover la credencial (subcolección credenciales/main) ───────
+    // CRÍTICO (BLOQUEANTE detectado en review 2026-06-13): Firestore NO copia
+    // subcolecciones al copiar el doc, ni las borra al borrar el doc padre.
+    // Para un empleado MIGRADO el hash vive SOLO en credenciales/main → si la
+    // copia falla y igual borramos el doc viejo (Step 3), queda LOCKOUT TOTAL.
+    // Por eso: si la credencial existe y NO la podemos copiar, ABORTAMOS el
+    // renombrado (rollback del doc nuevo ya creado) antes de tocar nada
+    // destructivo. Para un empleado NO migrado el hash viaja en el campo legacy
+    // dentro de dataNuevo (spread de dataViejo) → la ausencia de subcol no rompe
+    // el login (leerHashCredencial cae al fallback). Admin SDK → bypassea rules.
+    let credViejoSnap: FirebaseFirestore.DocumentSnapshot;
+    try {
+      credViejoSnap = await refCredencial(dniViejo).get();
+    } catch (e) {
+      // No pudimos ni LEER la credencial vieja → no sabemos si está migrado.
+      // No arriesgamos un lockout: rollback del doc nuevo y abortamos.
+      try { await refNuevo.delete(); } catch { /* best-effort rollback */ }
+      logger.error("[renombrarEmpleadoDni] no pude leer credencial vieja, abortado", {
+        dniViejoHash: hashId(dniViejo), error: (e as Error).message,
+      });
+      throw new HttpsError(
+        "internal",
+        "No se pudo leer la credencial del empleado; renombrado abortado. Reintentá.",
+      );
+    }
+    if (credViejoSnap.exists) {
+      try {
+        await refCredencial(dniNuevo).set(credViejoSnap.data() ?? {});
+        cascada.push({ coleccion: "credenciales", actualizados: 1, error: null });
+      } catch (e) {
+        try { await refNuevo.delete(); } catch { /* best-effort rollback */ }
+        logger.error("[renombrarEmpleadoDni] fallo copia de credencial, abortado", {
+          dniViejoHash: hashId(dniViejo), error: (e as Error).message,
+        });
+        throw new HttpsError(
+          "internal",
+          "No se pudo copiar la credencial del empleado; renombrado abortado " +
+          "para no dejarlo sin acceso. Reintentá.",
+        );
+      }
+    } else {
+      // No migrado: el hash legacy viaja en dataNuevo (spread) → login por fallback.
+      cascada.push({ coleccion: "credenciales", actualizados: 0, error: null });
+    }
+
     async function actualizarReferencias(
       coleccion: string,
       campo: string,
@@ -968,7 +1182,16 @@ export const renombrarEmpleadoDni = onCall(
       });
     }
 
-    // ─── Step 3: borrar el doc viejo ───────────────────────────────
+    // ─── Step 3: borrar el doc viejo + su credencial huérfana ──────────────
+    // (borrar el doc padre NO borra subcolecciones — hay que borrar la
+    // credencial vieja explícitamente, si no queda como dato huérfano.)
+    try {
+      await refCredencial(dniViejo).delete();
+    } catch (e) {
+      logger.warn("[renombrarEmpleadoDni] no pude borrar credencial vieja", {
+        dniViejoHash: hashId(dniViejo), error: (e as Error).message,
+      });
+    }
     await refViejo.delete();
 
     logger.info("[renombrarEmpleadoDni] OK", {

@@ -124,10 +124,14 @@ class _AdminPersonalFormScreenState
       final passwordHash =
           PasswordHasher.hashBcrypt(_passCtrl.text.trim());
 
-      await FirebaseFirestore.instance
+      // Hardening 2026-06-13: el hash NO va en el doc principal (legible por
+      // isSelf/admin → brute-force offline) sino en la subcolección aislada
+      // credenciales/main (rule read:if false). Batch atómico: legajo + credencial.
+      final empRef = FirebaseFirestore.instance
           .collection(AppCollections.empleados)
-          .doc(dni)
-          .set({
+          .doc(dni);
+      final batch = FirebaseFirestore.instance.batch();
+      batch.set(empRef, {
         'NOMBRE': _nombreCtrl.text.trim().toUpperCase(),
         // Apodo opcional — vacío se guarda como null para distinguirlo
         // de string vacío del lado del bot/cron.
@@ -153,7 +157,6 @@ class _AdminPersonalFormScreenState
         'IBUTTON': _iButtonCtrl.text.trim().isEmpty
             ? null
             : _iButtonCtrl.text.trim().toUpperCase(),
-        'CONTRASEÑA': passwordHash,
         'ROL': _rol,
         'AREA': _area,
         'EMPRESA': _empresa,
@@ -175,6 +178,14 @@ class _AdminPersonalFormScreenState
         'fecha_creacion': FieldValue.serverTimestamp(),
         'ultima_modificacion': FieldValue.serverTimestamp(),
       });
+      // El hash de la contraseña inicial va a la subcolección aislada (no al
+      // doc principal). En el alta, la rule permite create a admin/supervisor.
+      batch.set(empRef.collection('credenciales').doc('main'), {
+        'hash': passwordHash,
+        'formato': 'bcrypt',
+        'actualizado_en': FieldValue.serverTimestamp(),
+      });
+      await batch.commit();
 
       // Audit log fire-and-forget: el admin ya tiene su feedback
       // visual; si falla el log, no rompemos el flujo.
