@@ -37,24 +37,28 @@ manda esta lista). Actualizar acá cuando algo se cierra o se abre.
   y DEPLOYADA** (commit `4dcb62e`): `push.ts` con `enviarPush` (resuelve tokens de
   `EMPLEADOS/{dni}/dispositivos`, multicast FCM, poda muertos) + cola `COLA_PUSH`
   multi-productor + trigger `procesarColaPush` + rules + TTL + tests. Inerte hasta
-  que la app registre tokens. **Falta**:
-  1. **App `PushService`** (Flutter, ships con release): `firebase_messaging` +
-     pedir permiso + token → `EMPLEADOS/{dni}/dispositivos/{installId}` + refresh +
-     foreground (mostrar notif local) + tap → ruta (reusa `DeepLinkService.rutaDeDestino`)
-     + background handler. **OJO**: `firebase_messaging` NO soporta Windows desktop
-     → guards de plataforma + `flutter build windows` de verificación (la app admin
-     es Windows y está LIVE).
-  2. **Nativo iOS**: Push Notifications capability + Background Modes (remote
-     notification) + **APNs Auth Key (.p8) cargada en Firebase Console** (sin esto
-     el push NO llega a iPhone). Android: `POST_NOTIFICATIONS` en el manifest (13+).
+  que la app registre tokens. **App `PushService` HECHO** (`3b54e3a`):
+  firebase_messaging ^16.2.0 + permisos + token → `EMPLEADOS/{dni}/dispositivos/{installId}`
+  + refresh + foreground (notif local) + tap → ruta (reusa el resolver de deep links).
+  Guardado por plataforma (no-op Windows/web); **`flutter build windows --release`
+  VERIFICADO OK** (no se repite el C2039 de firebase_storage). Android
+  `POST_NOTIFICATIONS` + iOS Info.plist UIBackgroundModes ya en el repo.
+  **Falta para que el push LLEGUE a los teléfonos**:
+  1. **Release de la app** (sube el `PushService`).
+  2. **iOS (Xcode/Apple, una vez)**: Signing & Capabilities → **+ Push Notifications**
+     (escribe `aps-environment` + actualiza el provisioning) + **subir la APNs Auth
+     Key (.p8) a Firebase Console** (Project Settings → Cloud Messaging). SIN la APNs
+     key el push NO llega a iPhone. Android ya funciona (google-services.json).
   3. **Productores → `COLA_PUSH`**: ✅ LOS 3 HECHOS. Turno del cachatore (nube.py,
      `ba0adae`) + cambio de rol/sesión (auth.ts, DEPLOYADO `ba0adae`) + **failover
      de críticos** (`failoverCriticosBot`, DEPLOYADO `b6c0436`): cada 10 min, si el
      bot está caído, pushea los avisos críticos pendientes al chofer + escala a
      Santiago por Telegram. La escalación Telegram FUNCIONA YA (cierra el agujero
      #1 de resiliencia de la auditoría); el push es inerte hasta tener tokens.
-     **Solo falta la capa app (1) + el nativo iOS (2) para que el push llegue a
-     los teléfonos.**
+  **ESTADO: toda la feature deep-links+push está CONSTRUIDA (backend + 3 productores
+  + app cliente + deep links). Solo falta el release + los 2 pasos iOS externos (cap
+  Push + APNs key) y los de deep links (SHA-256 Android, cap Associated Domains iOS,
+  appendear links a los avisos) para que llegue end-to-end a los teléfonos.**
 - [ ] **LOTE FASE 1 INFRA (2026-06-12, noche — revisado adversarialmente antes de prod)**:
   (a) **Backup DIARIO** (era semanal — RPO 7d→1d) con **auto-verificación anti-drift**:
   compara `collectionIds` vs `listCollections()` real y Telegram si algo quedó sin
