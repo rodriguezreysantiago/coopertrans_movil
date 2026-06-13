@@ -14,6 +14,15 @@ es el historial (sus "PENDIENTE" viejos pueden estar resueltos — ante la duda,
 manda esta lista). Actualizar acá cuando algo se cierra o se abre.
 
 ### Operativo / corto plazo
+- [~] **"MIS PAPELES" (Fase 2, 2026-06-13)**: HALLAZGO — la **pantalla ya existía**
+  (`user_mis_vencimientos_screen`: 3 secciones con archivos — "Licencias y carnets"
+  personal, "Coberturas laborales" empresa ART/F.931/SCVO/Libre Deuda, "Papeles y
+  controles del equipo" tractor+enganche RTO/seguro). No se construyó duplicado. El
+  net-new fue el **bot tool `papeles_empresa`** (DEPLOYADO por git→dedicada): el chofer
+  pregunta por WhatsApp el ART/931/seguro de vida de su empresa (on-demand, NO viola
+  el "no push proactivo" de 2026-05-08). **PENDIENTE OPCIONAL**: offline de los
+  ARCHIVOS (que el chofer muestre los PDF en un control sin señal — hoy los datos los
+  cachea Firestore, los archivos no). +2 tests bot (121/121).
 - [~] **REPORTE ESTADÍA PLANTAS YPF (Fase 2 "detention report", 2026-06-13)**: sobre
   `ZONA_DESCARGA_HISTORICO`. **Backend DEPLOYADO**: callable `reporteEstadiaYpf`
   (admin/sup, rango ISO, cap 92d) + cron `resumenEstadiaYpfSemanal` (lunes 08:00 ART,
